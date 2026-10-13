@@ -18753,3 +18753,17 @@ reuse, so production keeps the simpler independently owned plans.
   A 64--512 KiB-only policy screened every row at `0.945x--0.995x`, exposing a
   larger branch/layout cost than the saved growth allocations. No source
   remains; adaptive candidate capacity is retained.
+
+- Added an explicit lazy ratio mode for LZMA-Alone and XZ without replacing the
+  default greedy APIs. XZ exposes allocating/into/append lazy functions,
+  incremental `.parser = .lazy`, and a CLI selector; narrow dictionaries reuse
+  the existing lazy planner while wide dictionaries use one-byte lookahead in
+  their retained hash state. Lazy code lives in dedicated text sections, and a
+  same-executable `--lazy-control` benchmark removes linker-layout ambiguity.
+  Fifteen fixed-CPU-2 pairs reduce JSON from 2,948 to 2,740 bytes (7.06%) at
+  0.8560x geometric greedy throughput while still reaching 1.095x liblzma
+  preset-1 speed. Binary falls 70,764→70,632 bytes at 0.7026x speed; text and
+  wide128 do not shrink, so lazy remains opt-in. Gain one beats gain two
+  (2,740 versus 2,868 JSON bytes). LZMA 105/105, XZ 115/115, AArch64 compile,
+  external CLI differential, and the nine-row gate pass. Evidence is in
+  `docs/performance/xz-lazy-parser-x86.md` and its JSON record.

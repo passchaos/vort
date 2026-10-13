@@ -170,6 +170,25 @@ def main() -> None:
         if xz_tool is not None:
             subprocess.run([xz_tool, "--test", str(dictionary_large)], check=True)
 
+        lazy_source = temp / "text.source"
+        lazy_archive = temp / "text.lazy.vort.xz"
+        run(
+            args.cli,
+            "encode-xz-file",
+            str(lazy_source),
+            str(lazy_archive),
+            "crc32",
+            "1048576",
+            "none",
+            "32768",
+            "lazy",
+        )
+        lazy_bytes = lazy_archive.read_bytes()
+        if lzma.decompress(lazy_bytes, format=lzma.FORMAT_XZ) != lazy_source.read_bytes():
+            raise AssertionError("Python could not decode Vort lazy XZ output")
+        if xz_tool is not None:
+            subprocess.run([xz_tool, "--test", str(lazy_archive)], check=True)
+
         first = lzma.compress(b"first XZ member\n" * 97, check=lzma.CHECK_CRC32)
         second_payload = bytes(range(251)) * 313
         second = lzma.compress(second_payload, check=lzma.CHECK_CRC64)
@@ -417,6 +436,7 @@ def main() -> None:
         f"filter_cases={len(filter_cases)} writer_modes=2 multiblock_count={multiblock_count}"
         f" dictionary_cases=1 dictionary_default={len(default_bytes)}"
         f" dictionary_large={len(large_bytes)} dictionary_saved={dictionary_saved}"
+        f" parser_cases=1 lazy_bytes={len(lazy_bytes)}"
         f" modern_filter_cases={len(modern_filter_cases)}"
         f" modern_7zip={modern_seven_zip_tool is not None}"
     )

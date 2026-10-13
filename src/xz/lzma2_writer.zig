@@ -7,6 +7,7 @@ const lzma_property: u8 = 0x5d;
 pub const dictionary_property: u8 = 0;
 pub const dictionary_size: usize = 4096;
 pub const max_dictionary_size: usize = lzma_encoder.max_dictionary_size;
+pub const Parser = enum { greedy, lazy };
 
 /// Return the smallest LZMA2 dictionary property whose advertised size covers
 /// `requested_size`. Requests above 65,535 bytes select the LZMA-specific wide
@@ -77,6 +78,22 @@ pub fn appendCompressedPayloadWithDictionarySize(
     input: []const u8,
     requested_dictionary_size: usize,
 ) !usize {
+    return appendCompressedPayloadWithOptions(
+        allocator,
+        out,
+        input,
+        requested_dictionary_size,
+        .greedy,
+    );
+}
+
+pub fn appendCompressedPayloadWithOptions(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    input: []const u8,
+    requested_dictionary_size: usize,
+    parser: Parser,
+) !usize {
     _ = try dictionaryProperty(requested_dictionary_size);
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(allocator);
@@ -93,6 +110,10 @@ pub fn appendCompressedPayloadWithDictionarySize(
     defer if (wide_planner) |*planner| planner.deinit();
     const lzma_options = lzma_encoder.EncodeOptions{
         .dictionary_size = requested_dictionary_size,
+        .mode = switch (parser) {
+            .greedy => .greedy,
+            .lazy => .lazy,
+        },
     };
     var model = try lzma_encoder.initModel(lzma_options);
     var model_valid = false;
@@ -118,7 +139,10 @@ pub fn appendCompressedPayloadWithDictionarySize(
         else
             0;
         if (wide_planner) |*planner| {
-            const plan = try planner.planChunk(input, offset, offset + chunk_len);
+            const plan = switch (parser) {
+                .greedy => try planner.planChunk(input, offset, offset + chunk_len),
+                .lazy => try planner.planChunkLazy(input, offset, offset + chunk_len),
+            };
             _ = try lzma_encoder.encodeChunkAppendWithModel(
                 allocator,
                 &candidate,

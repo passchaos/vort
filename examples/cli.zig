@@ -2766,9 +2766,9 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode an exact-size raw MicroLZMA stream
         \\  size-lzma-file <path> [max_output]
         \\                              Decode and report an LZMA-Alone stream's size
-        \\  encode-xz-stored-file <in> <out> [none|crc32|crc64|sha256] [block_size] [filters] [dictionary_size]
+        \\  encode-xz-stored-file <in> <out> [none|crc32|crc64|sha256] [block_size] [filters] [dictionary_size] [greedy|lazy]
         \\                              Encode deterministic XZ with uncompressed LZMA2 chunks
-        \\  encode-xz-file <in> <out> [none|crc32|crc64|sha256] [block_size] [filters] [dictionary_size]
+        \\  encode-xz-file <in> <out> [none|crc32|crc64|sha256] [block_size] [filters] [dictionary_size] [greedy|lazy]
         \\                              Encode deterministic XZ with compressed-or-stored LZMA2 chunks
         \\  decode-xz-file <in> <out> [max_output]
         \\                              Decode one XZ/LZMA2 stream with check validation
@@ -3745,6 +3745,7 @@ fn encodeXzFile(
     var filter_storage: [3]vort.XzFilter = undefined;
     const xz_filters = try filters_cli.parse(args.next(), &filter_storage);
     const dictionary_size = try parseBlockLen(args.next(), 4096);
+    const parser = try parseXzParser(args.next());
     const input = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
     defer init.gpa.free(input);
     const options = vort.XzEncodeOptions{
@@ -3755,16 +3756,19 @@ fn encodeXzFile(
     };
     const encoded = if (stored_only)
         try vort.encodeXzStoredAlloc(init.gpa, input, options)
-    else
-        try vort.encodeXzAlloc(init.gpa, input, options);
+    else switch (parser) {
+        .greedy => try vort.encodeXzAlloc(init.gpa, input, options),
+        .lazy => try vort.encodeXzLazyAlloc(init.gpa, input, options),
+    };
     defer init.gpa.free(encoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
-    try stdout.print("xz_mode={s} input_bytes={d} compressed_bytes={d} blocks={d} dictionary={d} path={s}\n", .{
+    try stdout.print("xz_mode={s} input_bytes={d} compressed_bytes={d} blocks={d} dictionary={d} parser={s} path={s}\n", .{
         if (stored_only) "stored" else "compressed",
         input.len,
         encoded.len,
         if (input.len == 0) 0 else 1 + (input.len - 1) / block_size,
         dictionary_size,
+        @tagName(parser),
         output_path,
     });
 }
@@ -3776,6 +3780,13 @@ fn parseXzCheck(text: ?[]const u8) !vort.XzCheck {
     if (std.mem.eql(u8, value, "crc64")) return .crc64;
     if (std.mem.eql(u8, value, "sha256")) return .sha256;
     return error.InvalidChecksumMode;
+}
+
+fn parseXzParser(text: ?[]const u8) !vort.XzEncodeParser {
+    const value = text orelse return .greedy;
+    if (std.mem.eql(u8, value, "greedy")) return .greedy;
+    if (std.mem.eql(u8, value, "lazy")) return .lazy;
+    return error.InvalidParserMode;
 }
 
 fn parseLzmaSizeMode(text: ?[]const u8) !vort.LzmaSizeMode {

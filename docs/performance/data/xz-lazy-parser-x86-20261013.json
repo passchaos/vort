@@ -1,0 +1,80 @@
+{
+  "date": "2026-10-13",
+  "decision": "retained_as_explicit_ratio_mode",
+  "host": {
+    "architecture": "x86_64",
+    "cpu": "Intel Core i7-10700K",
+    "pinned_cpu": 2,
+    "zig": "0.16.0",
+    "mode": "ReleaseFast",
+    "liblzma_version": "5.2.5",
+    "reference_preset": 1
+  },
+  "executable_sha256": "cda49cf2c1818a78e6e514395dfbd1613eb462dfaa8f8c315d8d536ca9be1f33",
+  "method": {
+    "command": "taskset -c 2 BINARY [--lazy-control] --case CASE --iterations 5 --rounds 3 --csv OUTPUT",
+    "pairs": 15,
+    "same_executable": true
+  },
+  "results": {
+    "text256k_lazy": {
+      "greedy_bytes": 268,
+      "lazy_bytes": 268,
+      "speed_ratio_median": 0.915517127753,
+      "speed_ratio_geometric_mean": 0.913311781,
+      "wins": 0,
+      "control_ns": [7464414, 7473695, 7493699, 7466610, 7467364, 7476982, 7466383, 7703230, 7446007, 7440116, 7436638, 7457615, 7428462, 7483399, 7442226],
+      "lazy_ns": [8166659, 8160192, 8155836, 8158300, 8406999, 8156761, 8127406, 8145522, 8133116, 8144066, 8152248, 8496254, 8131855, 8134064, 8127916]
+    },
+    "json256k_lazy": {
+      "greedy_bytes": 2948,
+      "lazy_bytes": 2740,
+      "size_reduction_percent": 7.0556,
+      "speed_ratio_median": 0.853014702228,
+      "speed_ratio_geometric_mean": 0.856019929,
+      "wins": 0,
+      "control_ns": [9395791, 9418419, 9990196, 9532664, 9383034, 9375717, 9545118, 9376125, 9643414, 10042009, 9388064, 9402122, 9608634, 9543759, 9380970],
+      "lazy_ns": [11020931, 11151769, 10986359, 10990119, 11580909, 11142352, 10998797, 11765147, 11146934, 10998397, 11005747, 11188819, 10981033, 10995002, 11124200]
+    },
+    "binary256k_lazy": {
+      "greedy_bytes": 70764,
+      "lazy_bytes": 70632,
+      "size_reduction_percent": 0.1865,
+      "speed_ratio_median": 0.703390848794,
+      "speed_ratio_geometric_mean": 0.702606706,
+      "wins": 0,
+      "control_ns": [85923511, 85620721, 85834167, 85708636, 86285356, 86248789, 86420388, 85368814, 85978144, 85751104, 85694406, 86348762, 86479249, 85900838, 85512249],
+      "lazy_ns": [122156140, 121868481, 122721443, 124301419, 122426111, 122546001, 122375943, 121953912, 121683674, 121123278, 122144458, 122885486, 122352214, 122036235, 122142766]
+    },
+    "wide128k_lazy": {
+      "greedy_bytes": 131188,
+      "lazy_bytes": 131188,
+      "speed_ratio_median": 0.995232134382,
+      "speed_ratio_geometric_mean": 0.994693051,
+      "wins": 3,
+      "control_ns": [60217603, 58550233, 59001729, 59214970, 58665945, 56477024, 56286775, 56869938, 56689543, 56289428, 56270263, 56304415, 56309175, 56348169, 56299929],
+      "lazy_ns": [59319113, 58855117, 59284389, 61248316, 60013644, 56805429, 56583912, 56583858, 56547556, 56479020, 56543046, 56567808, 56489180, 56561669, 56584999]
+    }
+  },
+  "reference_snapshot": {
+    "json_lazy_bytes": 2740,
+    "liblzma_json_bytes": 1420,
+    "size_over_reference": 1.929577,
+    "json_lazy_mib_s": 111.465,
+    "liblzma_json_mib_s": 101.752,
+    "vort_over_reference": 1.095460
+  },
+  "parameter_screen": {
+    "lazy_min_gain_2_bytes": 2868,
+    "lazy_min_gain_1_bytes": 2740,
+    "selected": 1
+  },
+  "validation": {
+    "lzma_tests": "105/105",
+    "xz_tests": "115/115",
+    "aarch64_releasefast_compile": "passed",
+    "xz_diff": "passed with parser_cases=1",
+    "benchmark_gate": "9/9 cases",
+    "full_repository_test": "not run"
+  }
+}

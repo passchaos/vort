@@ -51,6 +51,14 @@ const encoded = try vort.encodeXzAlloc(allocator, input, .{
     .filters = &filter_chain,
 });
 defer allocator.free(encoded);
+
+const ratio_encoded = try vort.encodeXzLazyAlloc(allocator, input, .{
+    .check = .crc64,
+    .block_size = 1024 * 1024,
+    .dictionary_size = 128 * 1024,
+    .filters = &filter_chain,
+});
+defer allocator.free(ratio_encoded);
 ```
 
 `XzIncrementalDecoder` exposes the same validation through a caller-driven,
@@ -145,6 +153,7 @@ CLI validation surfaces:
 ```sh
 zig build run -- encode-xz-file input.bin output.xz crc64 1048576 x86,delta:4
 zig build run -- encode-xz-file input.bin output-128k.xz crc64 1048576 none 131072
+zig build run -- encode-xz-file input.bin output-lazy.xz crc64 1048576 none 131072 lazy
 zig build run -- encode-xz-stored-file input.bin output.xz crc64 1048576 x86,delta:4
 zig build run -- encode-xz-file input.bin output.xz crc64 1048576 arm64:4096
 zig build run -- encode-xz-file input.bin output.xz crc64 1048576 riscv:4096
@@ -178,6 +187,11 @@ control `1` or `0xe0`, while later stored/compressed chunks use `2` or `0xc0`.
 Consecutive compressed chunks also retain LZMA probability state and recent
 distances through control `0x80`; after a stored fallback, control `0xa0`
 resets that state without redundantly resending unchanged properties.
+The public lazy APIs add one-byte lookahead for callers prioritizing ratio;
+incremental XZ selects the same path with `.parser = .lazy`, while greedy stays
+the default. Symbol-progressive LZMA-Alone incremental encoding deliberately
+rejects lazy mode because it cannot promise the required next byte at every
+caller split.
 This lets a match cross a 64 KiB chunk boundary without making chunks dependent
 on hidden state outside their XZ block. Deeper lazy/optimal parsing and larger
 dictionary properties remain later ratio and performance work.

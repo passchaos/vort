@@ -4,8 +4,8 @@ Vort provides dependency-free encoding and decoding for the legacy `.lzma` /
 LZMA-Alone format. It parses and emits the 13-byte properties header, validates
 `lc`/`lp`/`pb`, normalizes the minimum dictionary size, and supports both
 declared and unknown (`0xffffffffffffffff`) uncompressed sizes. The encoder
-uses bounded greedy match finding, new/repeated distance coding, and the normal
-LZMA range-coded literal contexts.
+uses bounded greedy or one-byte-lookahead lazy match finding, new/repeated
+distance coding, and the normal LZMA range-coded literal contexts.
 
 ```zig
 const header = try vort.parseLzmaHeader(compressed);
@@ -17,6 +17,7 @@ defer allocator.free(decoded);
 
 const encoded = try vort.encodeLzmaAlloc(allocator, input, .{
     .dictionary_size = 32 * 1024,
+    .mode = .lazy, // .greedy remains the default
     .size_mode = .end_marker,
 });
 defer allocator.free(encoded);
@@ -64,8 +65,8 @@ Available APIs:
 - `LzmaIncrementalDecoder` for fragmented caller input/output, resettable
   state, snapshots, diagnostics, and exact output pledges;
 - `encodeLzmaAlloc`, `encodeLzmaInto`, and transactional `encodeLzmaAppend`;
-- known-size and end-marker writer modes with configurable LZMA properties and
-  a bounded dictionary.
+- known-size and end-marker writer modes with configurable LZMA properties,
+  bounded dictionaries, and greedy/lazy one-shot parsing.
 
 ZIP method 14 uses a related raw LZMA payload with a ZIP-specific properties
 prefix and mandatory end marker. Vort reads and writes those entries through
@@ -114,8 +115,9 @@ zig build run-zip-diff
 LZMA-Alone does not carry an integrity checksum. Known-size streams are checked
 against their declared output size, while unknown-size streams require the
 range-coder end marker. Applications that require corruption detection should
-use XZ or a checksummed container such as ZIP. The current encoder uses a
-bounded greedy parser; deeper parsing remains future ratio work. The decoder's
+use XZ or a checksummed container such as ZIP. The current encoder offers
+bounded greedy and lazy parsers; deeper price-modeled parsing remains future
+ratio work. The decoder's
 local circular dictionary keeps lookbehind validation tied to the declared
 window while safely handling outputs larger than that window.
 
@@ -152,6 +154,9 @@ defer encoder.deinit();
 The encoder supports unknown-size end-marker streams, pledged end-marker or
 known-size streams, zero-output backpressure, input/output limits, resettable
 retained input/history/token/output scratch, and detailed token counters.
+This symbol-progressive API supports literal-only and greedy modes. Lazy mode
+is one-shot-only because arbitrary caller splits cannot guarantee its required
+next-byte lookahead without changing backpressure semantics.
 LZMA-Alone has no block-level sync-flush marker and no standardized
 concatenation boundary, so this API intentionally exposes `finish` and `reset`
 but not a misleading flush/next-stream operation. A 40,000-byte repeated

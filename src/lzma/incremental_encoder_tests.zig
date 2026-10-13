@@ -105,6 +105,10 @@ test "LZMA incremental encoder enforces options input and pledged sizes" {
         error.InvalidLzmaOptions,
         lzma.IncrementalEncoder.initWithOptions(std.testing.allocator, .{ .max_pending_output_len = 0 }),
     );
+    try std.testing.expectError(
+        error.InvalidLzmaOptions,
+        lzma.IncrementalEncoder.initWithOptions(std.testing.allocator, .{ .mode = .lazy }),
+    );
 
     var pending_limited = try lzma.IncrementalEncoder.initWithOptions(std.testing.allocator, .{
         .max_pending_output_len = 8,

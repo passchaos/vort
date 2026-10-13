@@ -32,6 +32,26 @@ test "XZ incremental compressed encoder is byte exact across tiny buffers" {
     const decoded = try xz.decodeAlloc(std.testing.allocator, incremental);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
+
+    const lazy_options = xz.EncodeOptions{
+        .check = options.check,
+        .block_size = options.block_size,
+        .dictionary_size = options.dictionary_size,
+        .filters = options.filters,
+    };
+    const lazy_one_shot = try xz.encodeLazyAlloc(std.testing.allocator, input, lazy_options);
+    defer std.testing.allocator.free(lazy_one_shot);
+    var lazy_encoder = try xz.IncrementalEncoder.initExactSize(std.testing.allocator, .{
+        .check = lazy_options.check,
+        .block_size = lazy_options.block_size,
+        .dictionary_size = lazy_options.dictionary_size,
+        .parser = .lazy,
+        .filters = lazy_options.filters,
+    }, input.len);
+    defer lazy_encoder.deinit();
+    const lazy_incremental = try encodeSplit(&lazy_encoder, input, 3, 9);
+    defer std.testing.allocator.free(lazy_incremental);
+    try std.testing.expectEqualSlices(u8, lazy_one_shot, lazy_incremental);
 }
 
 test "XZ incremental stored encoder matches one-shot and empty streams" {

@@ -279,6 +279,7 @@ pub const Encoder = struct {
                         .max_match = lz77.max_match_len,
                     },
                 ),
+                .lazy => return error.InvalidLzmaOptions,
             };
             try self.tokens.append(self.allocator, token.token);
             consumed = std.math.add(usize, consumed, token.consumed) catch
@@ -354,6 +355,7 @@ pub const Encoder = struct {
 
 fn validateOptions(options: Encoder.Options, expected_input_len: ?usize) Encoder.Error!void {
     try writer.validateCoreOptions(options.properties, options.dictionary_size);
+    if (options.mode == .lazy) return error.InvalidLzmaOptions;
     if (options.input_buffer_len == 0 or options.max_pending_output_len == 0)
         return error.InvalidLzmaOptions;
     if (options.mode == .greedy and options.input_buffer_len <= lz77.max_match_len)

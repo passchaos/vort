@@ -8,7 +8,17 @@ import csv
 from pathlib import Path
 
 
-EXPECTED = {"text256k", "json256k", "binary256k", "wide128k", "wide1m"}
+EXPECTED = {
+    "text256k",
+    "text256k_lazy",
+    "json256k",
+    "json256k_lazy",
+    "binary256k",
+    "binary256k_lazy",
+    "wide128k",
+    "wide128k_lazy",
+    "wide1m",
+}
 
 
 def main() -> None:
@@ -24,6 +34,8 @@ def main() -> None:
     if len(version) != 1 or not next(iter(version)):
         raise SystemExit("missing or inconsistent liblzma version")
     for row in rows:
+        if row["lazy_control"] != "false":
+            raise SystemExit(f"{row['case']}: gate unexpectedly used lazy control")
         for field in (
             "input_bytes",
             "vort_bytes",
@@ -47,6 +59,12 @@ def main() -> None:
         if len(row["input_sha256"]) != 64:
             raise SystemExit(f"{row['case']}: invalid input hash")
     by_name = {row["case"]: row for row in rows}
+    for name in ("text256k", "json256k", "binary256k", "wide128k"):
+        lazy_name = f"{name}_lazy"
+        if by_name[lazy_name]["parser"] != "lazy":
+            raise SystemExit(f"{lazy_name}: lazy parser not selected")
+        if int(by_name[lazy_name]["vort_bytes"]) > int(by_name[name]["vort_bytes"]):
+            raise SystemExit(f"{lazy_name}: lazy parser enlarged greedy output")
     if int(by_name["wide128k"]["vort_bytes"]) >= int(by_name["wide128k"]["input_bytes"]):
         raise SystemExit("wide128k did not benefit from the configured dictionary")
     if int(by_name["wide1m"]["vort_bytes"]) >= int(by_name["wide1m"]["input_bytes"]):

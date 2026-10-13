@@ -30,6 +30,7 @@ pub const Encoder = struct {
         check: writer.Check = .crc64,
         block_size: usize = 1024 * 1024,
         dictionary_size: usize = 4096,
+        parser: writer.Parser = .greedy,
         filters: []const writer.Filter = &.{},
         payload_encoding: writer.PayloadEncoding = .compressed,
         max_input_len: usize = std.math.maxInt(usize),
@@ -256,13 +257,22 @@ pub const Encoder = struct {
         if (self.plain.items.len == 0) return error.InvalidBlockPlan;
         if (self.records.items.len >= self.options.max_block_count)
             return error.OutputLimitExceeded;
-        const record = try writer.appendBlock(
-            self.allocator,
-            &self.pending,
-            self.plain.items,
-            self.options.writerOptions(),
-            self.options.payload_encoding,
-        );
+        const record = if (self.options.payload_encoding == .compressed and
+            self.options.parser == .lazy)
+            try writer.appendBlockLazy(
+                self.allocator,
+                &self.pending,
+                self.plain.items,
+                self.options.writerOptions(),
+            )
+        else
+            try writer.appendBlock(
+                self.allocator,
+                &self.pending,
+                self.plain.items,
+                self.options.writerOptions(),
+                self.options.payload_encoding,
+            );
         try self.checkPendingLimit();
         try self.records.append(self.allocator, record);
         self.plain.clearRetainingCapacity();

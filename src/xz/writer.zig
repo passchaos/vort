@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const container = @import("container.zig");
 const filters = @import("filters.zig");
 const lzma_encoder = @import("../lzma/encoder.zig");
@@ -7,6 +8,14 @@ const lzma2_writer = @import("lzma2_writer.zig");
 pub const Error = container.Error || lzma_encoder.Error;
 pub const Check = container.Check;
 pub const Filter = filters.Filter;
+pub const Parser = lzma2_writer.Parser;
+
+const lazy_text_section = switch (builtin.object_format) {
+    .elf => ".vort_xz_lazy",
+    .macho => "__TEXT,__vort_xz_lazy",
+    .coff => ".text$vort_xz_lazy",
+    else => ".text",
+};
 
 pub const EncodeOptions = struct {
     check: Check = .crc64,
@@ -31,6 +40,35 @@ pub fn encodeAlloc(allocator: std.mem.Allocator, input: []const u8, options: Enc
     errdefer output.deinit(allocator);
     _ = try encodeAppend(allocator, &output, input, options);
     return output.toOwnedSlice(allocator);
+}
+
+pub fn encodeLazyAlloc(allocator: std.mem.Allocator, input: []const u8, options: EncodeOptions) ![]u8 {
+    var output: std.ArrayList(u8) = .empty;
+    errdefer output.deinit(allocator);
+    _ = try encodeLazyAppend(allocator, &output, input, options);
+    return output.toOwnedSlice(allocator);
+}
+
+pub fn encodeLazyInto(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    output: []u8,
+    options: EncodeOptions,
+) !usize {
+    const encoded = try encodeLazyAlloc(allocator, input, options);
+    defer allocator.free(encoded);
+    if (output.len < encoded.len) return error.OutputTooSmall;
+    @memcpy(output[0..encoded.len], encoded);
+    return encoded.len;
+}
+
+pub fn encodeLazyAppend(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    input: []const u8,
+    options: EncodeOptions,
+) !usize {
+    return encodeLazyWithPayload(allocator, out, input, options);
 }
 
 pub fn encodeInto(
@@ -118,6 +156,37 @@ fn encodeWithPayload(
     return encoded.items.len;
 }
 
+noinline fn encodeLazyWithPayload(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    input: []const u8,
+    options: EncodeOptions,
+) linksection(lazy_text_section) !usize {
+    try validateOptions(options);
+
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(allocator);
+    try appendStreamHeader(allocator, &encoded, options.check);
+
+    var records: std.ArrayList(BlockRecord) = .empty;
+    defer records.deinit(allocator);
+    var input_offset: usize = 0;
+    while (input_offset < input.len) {
+        const block_len = @min(options.block_size, input.len - input_offset);
+        const block = input[input_offset..][0..block_len];
+        try records.append(
+            allocator,
+            try appendBlockLazy(allocator, &encoded, block, options),
+        );
+        input_offset += block_len;
+    }
+
+    try appendStreamEnd(allocator, &encoded, options.check, records.items);
+    try out.ensureUnusedCapacity(allocator, encoded.items.len);
+    out.appendSliceAssumeCapacity(encoded.items);
+    return encoded.items.len;
+}
+
 pub fn validateOptions(options: EncodeOptions) Error!void {
     if (options.block_size == 0) return error.InvalidBlockPlan;
     _ = try lzma2_writer.dictionaryProperty(options.dictionary_size);
@@ -174,6 +243,55 @@ pub fn appendBlock(
             options.dictionary_size,
         ),
     };
+    const padding_len = (4 - ((header_size + packed_size) % 4)) % 4;
+    try output.appendNTimes(allocator, 0, padding_len);
+    try appendCheck(allocator, output, options.check, input);
+    const unpadded_size = std.math.add(
+        u64,
+        @as(u64, @intCast(header_size + packed_size)),
+        check_size,
+    ) catch return error.IntegerOverflow;
+    std.debug.assert(output.items.len > block_start);
+    return .{
+        .unpadded_size = unpadded_size,
+        .uncompressed_size = try usizeToVli(input.len),
+    };
+}
+
+pub noinline fn appendBlockLazy(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    input: []const u8,
+    options: EncodeOptions,
+) linksection(lazy_text_section) !BlockRecord {
+    if (input.len == 0 or input.len > options.block_size) return error.InvalidBlockPlan;
+    try filters.validateChain(options.filters);
+    const dictionary_property = try lzma2_writer.dictionaryProperty(options.dictionary_size);
+    const check_size = try checkSize(options.check);
+    const block_start = output.items.len;
+    const header_size = try appendBlockHeader(
+        allocator,
+        output,
+        options.filters,
+        dictionary_property,
+    );
+    var filtered_storage: ?[]u8 = null;
+    defer if (filtered_storage) |bytes| allocator.free(bytes);
+    const filtered = if (options.filters.len == 0)
+        input
+    else blk: {
+        const bytes = try allocator.dupe(u8, input);
+        filtered_storage = bytes;
+        filters.encodeChain(bytes, options.filters);
+        break :blk bytes;
+    };
+    const packed_size = try lzma2_writer.appendCompressedPayloadWithOptions(
+        allocator,
+        output,
+        filtered,
+        options.dictionary_size,
+        .lazy,
+    );
     const padding_len = (4 - ((header_size + packed_size) % 4)) % 4;
     try output.appendNTimes(allocator, 0, padding_len);
     try appendCheck(allocator, output, options.check, input);
@@ -345,6 +463,17 @@ test "XZ compressed writer selects match coding and round trips filters" {
     const decoded = try container.decodeAlloc(allocator, encoded);
     defer allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
+    const lazy = try encodeLazyAlloc(allocator, input, .{
+        .check = .crc32,
+        .block_size = 8192,
+        .dictionary_size = 128 * 1024,
+        .filters = &chain,
+    });
+    defer allocator.free(lazy);
+    try std.testing.expect(lazy.len <= encoded.len);
+    const lazy_decoded = try container.decodeAlloc(allocator, lazy);
+    defer allocator.free(lazy_decoded);
+    try std.testing.expectEqualSlices(u8, input, lazy_decoded);
     const info = try container.inspect(allocator, encoded);
     try std.testing.expectEqual(@as(u64, 128 * 1024), info.max_dictionary_size);
 

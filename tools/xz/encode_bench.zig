@@ -8,12 +8,14 @@ const Options = struct {
     rounds: usize = 3,
     only_case: ?[]const u8 = null,
     csv_path: ?[]const u8 = null,
+    lazy_control: bool = false,
 };
 
 const Case = struct {
     name: []const u8,
     input: []const u8,
     dictionary_size: usize,
+    parser: vort.XzEncodeParser = .greedy,
 };
 
 const Sample = struct { ns: u64, mix: usize };
@@ -45,16 +47,20 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(wide1m);
     const cases = [_]Case{
         .{ .name = "text256k", .input = text, .dictionary_size = 128 * 1024 },
+        .{ .name = "text256k_lazy", .input = text, .dictionary_size = 128 * 1024, .parser = .lazy },
         .{ .name = "json256k", .input = json, .dictionary_size = 128 * 1024 },
+        .{ .name = "json256k_lazy", .input = json, .dictionary_size = 128 * 1024, .parser = .lazy },
         .{ .name = "binary256k", .input = binary, .dictionary_size = 128 * 1024 },
+        .{ .name = "binary256k_lazy", .input = binary, .dictionary_size = 128 * 1024, .parser = .lazy },
         .{ .name = "wide128k", .input = wide128, .dictionary_size = 128 * 1024 },
+        .{ .name = "wide128k_lazy", .input = wide128, .dictionary_size = 128 * 1024, .parser = .lazy },
         .{ .name = "wide1m", .input = wide1m, .dictionary_size = 1024 * 1024 },
     };
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
     try csv.writer.print(
-        "case,reference_version,preset,dictionary_bytes,input_bytes,input_sha256,vort_bytes,reference_bytes,size_over_reference,iterations,rounds,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,{s}\n",
+        "case,reference_version,preset,parser,lazy_control,dictionary_bytes,input_bytes,input_sha256,vort_bytes,reference_bytes,size_over_reference,iterations,rounds,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,{s}\n",
         .{benchmark_provenance.csv_columns},
     );
     var selected: usize = 0;
@@ -62,7 +68,7 @@ pub fn main(init: std.process.Init) !void {
         if (options.only_case) |wanted|
             if (!std.mem.eql(u8, wanted, case.name)) continue;
         selected += 1;
-        const vort_encoded = try encodeVort(init.gpa, case);
+        const vort_encoded = try encodeVort(init.gpa, case, options.lazy_control);
         defer init.gpa.free(vort_encoded);
         const reference_encoded = try runtime.encodeAlloc(init.gpa, case.input, 1);
         defer init.gpa.free(reference_encoded);
@@ -74,15 +80,18 @@ pub fn main(init: std.process.Init) !void {
             case,
             options.iterations,
             options.rounds,
+            options.lazy_control,
         );
         const bytes = case.input.len * options.iterations;
         const vort_rate = mibPerSecond(bytes, sample.vort.ns);
         const reference_rate = mibPerSecond(bytes, sample.reference.ns);
         try csv.writer.print(
-            "{s},{s},1,{d},{d},{s},{d},{d},{d:.6},{d},{d},{d},{d},{d:.3},{d:.3},{d:.6},{d}",
+            "{s},{s},1,{s},{},{d},{d},{s},{d},{d},{d:.6},{d},{d},{d},{d},{d:.3},{d:.3},{d:.6},{d}",
             .{
                 case.name,
                 runtime.version(),
+                @tagName(case.parser),
+                options.lazy_control,
                 case.dictionary_size,
                 case.input.len,
                 &benchmark_provenance.sha256Hex(case.input),
@@ -124,18 +133,24 @@ fn parseOptions(args: *std.process.Args.Iterator) !Options {
             options.only_case = args.next() orelse return error.MissingCorpusPath;
         } else if (std.mem.eql(u8, arg, "--csv")) {
             options.csv_path = args.next() orelse return error.MissingCorpusPath;
+        } else if (std.mem.eql(u8, arg, "--lazy-control")) {
+            options.lazy_control = true;
         } else return error.UnknownArgument;
     }
     if (options.iterations == 0 or options.rounds == 0) return error.InvalidBlockPlan;
     return options;
 }
 
-fn encodeVort(allocator: std.mem.Allocator, case: Case) ![]u8 {
-    return vort.encodeXzAlloc(allocator, case.input, .{
+fn encodeVort(allocator: std.mem.Allocator, case: Case, lazy_control: bool) ![]u8 {
+    const options = vort.XzEncodeOptions{
         .check = .crc64,
         .block_size = 2 * 1024 * 1024,
         .dictionary_size = case.dictionary_size,
-    });
+    };
+    return switch (if (lazy_control) vort.XzEncodeParser.greedy else case.parser) {
+        .greedy => vort.encodeXzAlloc(allocator, case.input, options),
+        .lazy => vort.encodeXzLazyAlloc(allocator, case.input, options),
+    };
 }
 
 fn verifyBoth(
@@ -161,19 +176,20 @@ fn measureInterleaved(
     case: Case,
     iterations: usize,
     rounds: usize,
+    lazy_control: bool,
 ) !struct { vort: Sample, reference: Sample } {
     var best_vort = Sample{ .ns = std.math.maxInt(u64), .mix = 0 };
     var best_reference = best_vort;
     for (0..rounds) |round| {
         const vort_first = round & 1 == 0;
         const first = if (vort_first)
-            try measureVort(io, allocator, case, iterations)
+            try measureVort(io, allocator, case, iterations, lazy_control)
         else
             try measureReference(io, allocator, runtime, case, iterations);
         const second = if (vort_first)
             try measureReference(io, allocator, runtime, case, iterations)
         else
-            try measureVort(io, allocator, case, iterations);
+            try measureVort(io, allocator, case, iterations, lazy_control);
         const vort_sample = if (vort_first) first else second;
         const reference_sample = if (vort_first) second else first;
         if (vort_sample.ns < best_vort.ns) best_vort = vort_sample;
@@ -187,11 +203,12 @@ fn measureVort(
     allocator: std.mem.Allocator,
     case: Case,
     iterations: usize,
+    lazy_control: bool,
 ) !Sample {
     var mix: usize = 0;
     const start = std.Io.Clock.awake.now(io);
     for (0..iterations) |_| {
-        const encoded = try encodeVort(allocator, case);
+        const encoded = try encodeVort(allocator, case, lazy_control);
         mix +%= encoded.len;
         allocator.free(encoded);
     }

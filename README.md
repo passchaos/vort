@@ -286,8 +286,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   none/CRC-32/CRC-64/SHA-256 checks, multi-block and concatenated-stream
   handling, bounded APIs and metadata inspection, plus deterministic
   filter-aware XZ writing with greedy LZMA matches, repeat distances, a stored
-  fallback, and caller-selected 4 KiB...1 MiB cross-chunk LZMA2
-  dictionary reuse across compressed and stored chunks, plus block-bounded
+  fallback, caller-selected 4 KiB...1 MiB cross-chunk LZMA2 dictionary reuse,
+  and separate greedy/lazy ratio encode APIs, plus block-bounded
   caller-output incremental decoding with
   arbitrary input fragmentation, zero-output backpressure, stream padding,
   concatenated members, independent compressed/decoded/dictionary/Index
@@ -506,6 +506,7 @@ zig build run -- inspect-xz-file /tmp/readme.xz
 zig build run-xz-diff
 zig build -Doptimize=ReleaseFast run-xz-encode-bench-gate
 zig build -Doptimize=ReleaseFast run-xz-encode-bench -- --iterations 3 --rounds 5
+zig build run -- encode-xz-file README.md /tmp/readme-lazy.xz crc64 1048576 none 131072 lazy
 zig build run -- decode-lzma-file /tmp/archive.lzma /tmp/archive.out 67108864 67108864
 zig build run -- size-lzma-file /tmp/archive.lzma 67108864
 zig build run-lzma-diff

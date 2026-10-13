@@ -1,7 +1,15 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const lz77 = @import("../lz77.zig");
 const range_encoder = @import("range_encoder.zig");
 const wide_match = @import("wide_match.zig");
+
+const lazy_text_section = switch (builtin.object_format) {
+    .elf => ".vort_lzma_lazy",
+    .macho => "__TEXT,__vort_lzma_lazy",
+    .coff => ".text$vort_lzma_lazy",
+    else => ".text",
+};
 
 pub const Error = lz77.Error || error{InvalidLzmaOptions};
 
@@ -14,6 +22,7 @@ pub const Properties = struct {
 pub const Mode = enum {
     literal_only,
     greedy,
+    lazy,
 };
 
 pub const EncodeOptions = struct {
@@ -384,7 +393,7 @@ pub fn encodeChunkAppendWithModel(
     wide_plan: ?WideStreamPlan,
     model: *Model,
 ) !usize {
-    if (options.mode != .greedy or
+    if ((options.mode != .greedy and options.mode != .lazy) or
         model.dictionary_size != options.dictionary_size or
         !std.meta.eql(model.properties, options.properties))
         return error.InvalidLzmaOptions;
@@ -499,6 +508,17 @@ fn encodeChunkAppendWithDictionaryStatsAndPlan(
                 );
             }
         },
+        .lazy => try encodeLazyPlan(
+            allocator,
+            model,
+            &range,
+            input,
+            active_dictionary,
+            stream_start,
+            &stats,
+            options,
+            prepared_wide_plan,
+        ),
     }
     if (options.end_marker) {
         const end_position = std.math.add(usize, stream_start, input.len) catch
@@ -541,6 +561,53 @@ fn encodeGreedyPlan(
         stats,
     );
     if (consumed != input.len) return error.InvalidMatch;
+}
+
+noinline fn encodeLazyPlan(
+    allocator: std.mem.Allocator,
+    model: *Model,
+    range: *range_encoder.Encoder,
+    input: []const u8,
+    dictionary: []const u8,
+    stream_start: usize,
+    stats: *EncodeStats,
+    options: EncodeOptions,
+    prepared_wide_plan: ?WideStreamPlan,
+) linksection(lazy_text_section) !void {
+    if (prepared_wide_plan) |plan| {
+        return encodeGreedyPlan(
+            model,
+            range,
+            input,
+            dictionary,
+            plan.tokens,
+            stream_start,
+            stats,
+            plan.stats,
+        );
+    }
+    if (options.dictionary_size > std.math.maxInt(u16))
+        return error.InvalidLzmaOptions;
+    var plan = try lz77.lazyGreedyPlanAllocWithDictionary(allocator, input, dictionary, .{
+        .window_len = options.dictionary_size,
+        .max_chain = 64,
+        .nice_len = 64,
+        .max_candidates = 4,
+        .lazy_min_gain = 1,
+        .min_match = 3,
+        .max_match = lz77.max_match_len,
+    });
+    defer plan.deinit(allocator);
+    return encodeGreedyPlan(
+        model,
+        range,
+        input,
+        dictionary,
+        plan.tokens,
+        stream_start,
+        stats,
+        plan.stats,
+    );
 }
 
 fn byteAt(dictionary: []const u8, input: []const u8, position: usize) u8 {

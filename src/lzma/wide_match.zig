@@ -117,6 +117,58 @@ pub const StreamPlanner = struct {
         self.next_position = end;
         return .{ .tokens = self.tokens.items, .stats = stats };
     }
+
+    /// One-byte lazy variant for ratio-oriented LZMA2 chunks. The current
+    /// position is inserted before probing the next position, matching the
+    /// established narrow dictionary planner's candidate visibility.
+    pub fn planChunkLazy(
+        self: *StreamPlanner,
+        input: []const u8,
+        start: usize,
+        end: usize,
+    ) !StreamPlan {
+        if (start != self.next_position or end < start or end > input.len or
+            end - start > 65_536) return error.InvalidBlockPlan;
+        try self.tokens.ensureTotalCapacity(self.allocator, end - start);
+        self.tokens.clearRetainingCapacity();
+        var stats: lz77.PlanStats = .{};
+        var position = start;
+        const options = Options{ .window_len = self.window_len };
+        while (position < end) {
+            const best = findBestStream(self, input, position, end, options);
+            if (!accept(best)) {
+                self.tokens.appendAssumeCapacity(.{ .literal = input[position] });
+                stats.literals += 1;
+                insertStream(self, input, position);
+                position += 1;
+                continue;
+            }
+
+            insertStream(self, input, position);
+            if (position + 1 < end) {
+                const next = findBestStream(self, input, position + 1, end, options);
+                if (accept(next) and next.length >= best.length + 1) {
+                    self.tokens.appendAssumeCapacity(.{ .literal = input[position] });
+                    stats.literals += 1;
+                    position += 1;
+                    continue;
+                }
+            }
+
+            self.tokens.appendAssumeCapacity(.{ .match = .{
+                .length = @intCast(best.length),
+                .distance = @intCast(best.distance),
+            } });
+            stats.matches += 1;
+            stats.matched_bytes += best.length;
+            const match_end = position + best.length;
+            position += 1;
+            while (position < match_end) : (position += 1)
+                insertStream(self, input, position);
+        }
+        self.next_position = end;
+        return .{ .tokens = self.tokens.items, .stats = stats };
+    }
 };
 
 const Candidate = struct {
@@ -428,6 +480,43 @@ test "LZMA streaming wide planner indexes one block once across chunks" {
     const rebuilt_positions = (chunk_len - 2) + (chunk_len * 2 - 2) + (128 * 1024 + 8192 - 2);
     try std.testing.expectEqual(@as(usize, 335_866), rebuilt_positions);
     try std.testing.expect(rebuilt_positions > planner.indexed_positions * 2);
+}
+
+test "LZMA streaming wide lazy planner replays chunk history" {
+    const chunk_len = 65_536;
+    const input = try std.testing.allocator.alloc(u8, chunk_len * 2 + 8192);
+    defer std.testing.allocator.free(input);
+    for (input[0 .. chunk_len * 2], 0..) |*byte, index|
+        byte.* = @truncate(index * 37 + index / 17);
+    @memcpy(input[chunk_len * 2 ..], input[0..8192]);
+
+    var greedy = try StreamPlanner.init(std.testing.allocator, 128 * 1024, input.len);
+    defer greedy.deinit();
+    _ = try greedy.planChunk(input, 0, chunk_len);
+    _ = try greedy.planChunk(input, chunk_len, chunk_len * 2);
+    const greedy_third = try greedy.planChunk(input, chunk_len * 2, input.len);
+    const greedy_count = greedy_third.stats.tokenCount();
+
+    var lazy = try StreamPlanner.init(std.testing.allocator, 128 * 1024, input.len);
+    defer lazy.deinit();
+    _ = try lazy.planChunkLazy(input, 0, chunk_len);
+    _ = try lazy.planChunkLazy(input, chunk_len, chunk_len * 2);
+    const lazy_third = try lazy.planChunkLazy(input, chunk_len * 2, input.len);
+    try std.testing.expect(lazy_third.stats.tokenCount() <= greedy_count + 1);
+
+    var output: std.ArrayList(u8) = .empty;
+    defer output.deinit(std.testing.allocator);
+    try output.appendSlice(std.testing.allocator, input[0 .. chunk_len * 2]);
+    for (lazy_third.tokens) |token| switch (token) {
+        .literal => |byte| try output.append(std.testing.allocator, byte),
+        .match => |match| for (0..match.length) |_| {
+            try output.append(
+                std.testing.allocator,
+                output.items[output.items.len - @as(usize, match.distance)],
+            );
+        },
+    };
+    try std.testing.expectEqualSlices(u8, input, output.items);
 }
 
 test "LZMA streaming wide planner releases every allocation failure" {

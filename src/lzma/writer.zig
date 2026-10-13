@@ -197,6 +197,19 @@ test "LZMA-Alone writer round trips known-size and end-marker streams" {
     }
 }
 
+test "LZMA-Alone lazy writer round trips ratio-oriented input" {
+    const decoder = @import("decoder.zig");
+    const input = ("{\"service\":\"vort\",\"status\":\"ok\",\"message\":\"lazy LZMA ratio\"}\n" ** 1024);
+    const greedy = try encodeAlloc(std.testing.allocator, input, .{ .mode = .greedy });
+    defer std.testing.allocator.free(greedy);
+    const lazy = try encodeAlloc(std.testing.allocator, input, .{ .mode = .lazy });
+    defer std.testing.allocator.free(lazy);
+    const decoded = try decoder.decodeAlloc(std.testing.allocator, lazy);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+    try std.testing.expect(lazy.len <= greedy.len);
+}
+
 test "LZMA-Alone writer handles empty input and transactional output" {
     const decoder = @import("decoder.zig");
     inline for (.{ SizeMode.known, SizeMode.end_marker }) |size_mode| {
