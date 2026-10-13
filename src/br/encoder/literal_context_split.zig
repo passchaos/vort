@@ -141,8 +141,10 @@ const TreeScoreCache = struct {
     occupied: [tree_score_cache_words]u64 = @splat(0),
     hits: usize = 0,
     misses: usize = 0,
+    cold_misses: usize = 0,
+    conflict_misses: usize = 0,
 
-    fn get(self: *TreeScoreCache, histogram: *const [256]u32) ?u64 {
+    fn get(self: *TreeScoreCache, comptime classify_misses: bool, histogram: *const [256]u32) ?u64 {
         const hash = treeHistogramHash(histogram);
         const slot: usize = @intCast(hash & (tree_score_cache_capacity - 1));
         const word = slot >> 6;
@@ -154,7 +156,8 @@ const TreeScoreCache = struct {
                 self.hits += 1;
                 return entry.bit_cost;
             }
-        }
+            if (classify_misses) self.conflict_misses += 1;
+        } else if (classify_misses) self.cold_misses += 1;
         self.misses += 1;
         return null;
     }
@@ -656,10 +659,12 @@ fn clusterContexts(
     const prior_cache_hits = if (profiled) score_cache.hits else 0;
     const prior_tree_hits = if (profiled) tree_score_cache.hits else 0;
     const prior_tree_misses = if (profiled) tree_score_cache.misses else 0;
+    const prior_tree_cold_misses = if (profiled) tree_score_cache.cold_misses else 0;
+    const prior_tree_conflict_misses = if (profiled) tree_score_cache.conflict_misses else 0;
     const candidate_bits = score_cache.get(&context_map, tree_count) orelse blk: {
         var bits: u64 = 0;
         for (tree_histograms[0..tree_count]) |*histogram| {
-            const tree_bits = tree_score_cache.get(histogram) orelse score: {
+            const tree_bits = tree_score_cache.get(profiled, histogram) orelse score: {
                 const computed = try treeBitCost(allocator, histogram);
                 tree_score_cache.put(histogram, computed);
                 break :score computed;
@@ -679,6 +684,8 @@ fn clusterContexts(
             profiler.profile.score_cache_misses += 1;
         profiler.profile.tree_score_cache_hits += tree_score_cache.hits - prior_tree_hits;
         profiler.profile.tree_score_cache_misses += tree_score_cache.misses - prior_tree_misses;
+        profiler.profile.tree_score_cache_cold_misses += tree_score_cache.cold_misses - prior_tree_cold_misses;
+        profiler.profile.tree_score_cache_conflict_misses += tree_score_cache.conflict_misses - prior_tree_conflict_misses;
     }
     const savings = baseline_bits -| candidate_bits;
     if (savings < min_payload_savings_bits) return null;
@@ -1118,12 +1125,14 @@ test "literal context tree score cache hits and rejects collisions" {
     histogram_a[29] = 41;
     histogram_a[201] = 9;
     var cache: TreeScoreCache = .{};
-    try std.testing.expectEqual(@as(?u64, null), cache.get(&histogram_a));
+    try std.testing.expectEqual(@as(?u64, null), cache.get(true, &histogram_a));
     const expected = try treeBitCost(std.testing.allocator, &histogram_a);
     cache.put(&histogram_a, expected);
-    try std.testing.expectEqual(@as(?u64, expected), cache.get(&histogram_a));
+    try std.testing.expectEqual(@as(?u64, expected), cache.get(true, &histogram_a));
     try std.testing.expectEqual(@as(usize, 1), cache.hits);
     try std.testing.expectEqual(@as(usize, 1), cache.misses);
+    try std.testing.expectEqual(@as(usize, 1), cache.cold_misses);
+    try std.testing.expectEqual(@as(usize, 0), cache.conflict_misses);
 
     var high_slot_histogram = histogram_a;
     while (treeHistogramHash(&high_slot_histogram) & (tree_score_cache_capacity - 1) < 64)
@@ -1132,7 +1141,10 @@ test "literal context tree score cache hits and rejects collisions" {
     const high_slot_cost = try treeBitCost(std.testing.allocator, &high_slot_histogram);
     high_slot_cache.put(&high_slot_histogram, high_slot_cost);
     try std.testing.expect(high_slot_cache.occupied[1] != 0);
-    try std.testing.expectEqual(@as(?u64, high_slot_cost), high_slot_cache.get(&high_slot_histogram));
+    try std.testing.expectEqual(
+        @as(?u64, high_slot_cost),
+        high_slot_cache.get(true, &high_slot_histogram),
+    );
 
     var histogram_b = histogram_a;
     histogram_b[29] -= 1;
@@ -1148,9 +1160,11 @@ test "literal context tree score cache hits and rejects collisions" {
         .bit_cost = expected,
     };
     collision.occupied[word] = @as(u64, 1) << bit;
-    try std.testing.expectEqual(@as(?u64, null), collision.get(&histogram_b));
+    try std.testing.expectEqual(@as(?u64, null), collision.get(true, &histogram_b));
     try std.testing.expectEqual(@as(usize, 0), collision.hits);
     try std.testing.expectEqual(@as(usize, 1), collision.misses);
+    try std.testing.expectEqual(@as(usize, 0), collision.cold_misses);
+    try std.testing.expectEqual(@as(usize, 1), collision.conflict_misses);
 }
 
 test "literal context sparse tree aggregation matches dense reference" {

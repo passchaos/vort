@@ -19,6 +19,7 @@ COLUMNS = [
     "suffix_payload_scores", "suffix_payload_reuses", "cluster_trials", "cluster_rounds",
     "assignment_contexts", "assignment_comparisons", "score_cache_hits", "score_cache_misses",
     "tree_score_cache_hits", "tree_score_cache_misses",
+    "tree_score_cache_cold_misses", "tree_score_cache_conflict_misses",
     "analysis_ns", "baseline_ns", "suffix_ns", "sparse_ns", "cluster_ns", "cluster_init_ns",
     "cluster_prepare_ns", "cluster_assignment_ns", "cluster_finalize_ns", "cluster_score_ns",
     "stage_ns", "cluster_stage_ns", "total_ns", "unattributed_ns", "cluster_unattributed_ns",
@@ -87,6 +88,10 @@ def main() -> int:
         tree_scored = integer(row, "tree_score_cache_hits") + integer(row, "tree_score_cache_misses")
         assert tree_scored > 0, row
         assert integer(row, "tree_score_cache_misses") > 0, row
+        assert integer(row, "tree_score_cache_misses") == (
+            integer(row, "tree_score_cache_cold_misses") +
+            integer(row, "tree_score_cache_conflict_misses")
+        ), row
         for key in TOP_STAGES + CLUSTER_STAGES + ["stage_ns", "cluster_stage_ns", "total_ns"]:
             assert integer(row, key) > 0, (key, row)
         assert integer(row, "stage_ns") == sum(integer(row, key) for key in TOP_STAGES), row

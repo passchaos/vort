@@ -97,3 +97,23 @@ At 64 slots, hits rose to 1,460 and exact scoring fell to 20.654 ms. Moving to
 pairs, reducing their median from 241.014 ms to 239.949 ms (`1.004x`). The
 extra roughly 65 KiB therefore clears both stage and complete-encoder evidence;
 larger capacities remain unjustified until another measured sweep.
+
+## Associativity and miss classification follow-up
+
+The profile schema now separates empty-slot and occupied-slot misses while the
+ordinary encoder retains only its established hit/miss counters. On the
+fixed-CPU-2 ten-iteration `source32k` run, direct-mapped 128 slots reported
+1,870 empty-slot misses and 1,030 conflicts. Conflicts were therefore 35.5% of
+misses, enough to justify one equal-memory associativity experiment.
+
+A 64-set, two-way cache raised hits from 1,750 to 1,900 and reduced the staged
+exact-score sample from roughly 19.912 to 19.791 ms. The complete encoder
+rejected it: two-way won only 2/11 alternating 20-iteration pairs and regressed
+the median from 240.427 ms to 241.644 ms. The extra second-way probe and
+replacement path cost more than the 150 additional hits saved. The candidate
+was removed and direct mapping retained.
+
+A second control removed all cache counters from the production specialization.
+It won only 4/11 pairs and moved the median from 240.107 ms to 240.421 ms, so it
+was also removed. Only cold/conflict classification is compile-time profile-only;
+the previously validated production hit/miss update and code shape remain.

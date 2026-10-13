@@ -36,6 +36,7 @@ pub fn main(init: std.process.Init) !void {
             "suffix_payload_scores,suffix_payload_reuses,cluster_trials,cluster_rounds," ++
             "assignment_contexts,assignment_comparisons,score_cache_hits,score_cache_misses," ++
             "tree_score_cache_hits,tree_score_cache_misses," ++
+            "tree_score_cache_cold_misses,tree_score_cache_conflict_misses," ++
             "analysis_ns,baseline_ns,suffix_ns,sparse_ns,cluster_ns,cluster_init_ns," ++
             "cluster_prepare_ns,cluster_assignment_ns,cluster_finalize_ns,cluster_score_ns," ++
             "stage_ns,cluster_stage_ns,total_ns,unattributed_ns,cluster_unattributed_ns,{s}\n",
@@ -55,7 +56,7 @@ pub fn main(init: std.process.Init) !void {
             return error.InvalidBlockPlan;
         try csv.writer.print(
             "{s},{d},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}," ++
-                "{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}",
+                "{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}",
             .{
                 case.name,
                 profile.input_bytes,
@@ -82,6 +83,8 @@ pub fn main(init: std.process.Init) !void {
                 profile.score_cache_misses,
                 profile.tree_score_cache_hits,
                 profile.tree_score_cache_misses,
+                profile.tree_score_cache_cold_misses,
+                profile.tree_score_cache_conflict_misses,
             },
         );
         try csv.writer.print(

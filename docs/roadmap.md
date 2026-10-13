@@ -19318,6 +19318,17 @@ reuse, so production keeps the simpler independently owned plans.
   checksum 134,745; Node, libbrotli/progressive, cross-architecture, and
   ReleaseFast gates remain mandatory.
 
+- Classified direct tree-cache misses without changing the established
+  production counter path. A fixed-CPU-2 `source32k` profile split 2,900 misses
+  into 1,870 empty-slot and 1,030 conflict misses (35.5% conflicts). An
+  equal-memory 64-set/two-way candidate improved hits 1,750→1,900 and slightly
+  reduced isolated exact scoring, but lost the complete encoder: only 2/11
+  alternating pairs won and the median regressed 240.427→241.644 ms. Removing
+  all production cache counters also lost (4/11 wins, 240.107→240.421 ms).
+  Both candidates were removed. Cold/conflict counters remain compile-time
+  profile-only, while the validated 128-slot direct map and its ordinary
+  hit/miss layout remain production.
+
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository
   dictionary, source, README, roadmap, and small-corpus payloads; optional
