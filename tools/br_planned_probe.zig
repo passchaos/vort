@@ -69,7 +69,7 @@ pub fn main(init: std.process.Init) !void {
         const encoded = try vort.brEncodePlannedStreamRatioAlloc(init.gpa, payload);
         defer init.gpa.free(encoded);
         const summary = try vort.brSummarizeStreamAlloc(init.gpa, encoded);
-        if (summary.max_command_block_types != 3 or
+        if (summary.max_command_block_types != 6 or
             summary.max_distance_block_types != 2 or
             summary.max_distance_context_trees != 2) return error.InvalidBlockPlan;
         try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
@@ -98,6 +98,27 @@ pub fn main(init: std.process.Init) !void {
     }
     if (std.mem.eql(u8, mode, "four-command-types")) {
         const fixture = try vort.br.IncrementalTestSupport.encodeFourCommandTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "five-command-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeFiveCommandTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "six-command-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeSixCommandTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "six-region-clustered-command-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeSixRegionClusteredCommandTypes(init.gpa);
         defer init.gpa.free(fixture.encoded);
         defer init.gpa.free(fixture.payload);
         try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);

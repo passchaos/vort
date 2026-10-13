@@ -18885,3 +18885,26 @@ reuse, so production keeps the simpler independently owned plans.
   differential, AArch64 ReleaseFast compile, and 9-row planned encode gate
   pass. Neither the complete upstream matrix nor the full repository test graph
   was run.
+
+- Generalized Brotli command splitting from fixed two-to-four-region shapes to
+  the same bounded two-to-six-region model. Five compact prefix histograms now
+  support every five/six-region boundary subset and cyclic tree period from two
+  through the region count. Fixed-point entropy chooses one dynamic shape;
+  exact 704-symbol Huffman payload cost must clear the established 4,096-bit
+  multi-tree gate and lead every fixed proposal by 1,024 bits before a complete
+  wire is materialized. Production command frequency, alphabet, code-length,
+  encoder, block-length, tree, and header storage now scales to six types, with
+  up to five standard implicit next-type transitions. Deterministic fixtures
+  select 310,323-byte five-tree, 336,608-byte six-tree, and 475,069-byte
+  six-region/three-tree streams, decoding through Vort, Node, runtime libbrotli
+  1.0.9, and the 17-byte-input/31-byte-output progressive path to
+  1,173,248/1,332,992/1,072,640 bytes. Allocation-failure injection covers the
+  dynamic candidate. The repository `dictionary.bin` ratio row now naturally
+  selects six command types instead of three and shrinks 56,263→56,103 bytes,
+  providing a real non-fixture win. The default upstream matrix includes the
+  three new shapes, raising the expected `planned_command_split_cases` counter
+  from five to eight; a focused flag validates only this family. Twelve scorer
+  tests, old/new production writer tests, complete Node planned differential,
+  focused libbrotli/progressive differential, AArch64 ReleaseFast compile, and
+  9-row planned encode gate pass. Neither the complete upstream matrix nor the
+  full repository test graph was run.

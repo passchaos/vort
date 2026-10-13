@@ -152,6 +152,34 @@ def main() -> int:
     if actual != expected:
         raise SystemExit("four-command-types: node output mismatch")
     print(f"brotli planned four-command-types node diff: encoded={len(encoded)} decoded={len(actual)}")
+    dynamic_command_insert_lens = (
+        outer_insert_lens,
+        middle_insert_lens,
+        (18, 20, 22, 24, 26, 28, 30, 32),
+        (2, 4, 6, 8, 10, 12, 14, 16),
+        (3, 5, 7, 9, 11, 13, 15, 17),
+        (6, 10, 14, 18, 22, 26, 30, 34),
+    )
+    dynamic_command_copy_lens = (2, 40, 6, 258, 12, 80)
+    dynamic_command_byte_bases = (0, 64, 128, 192, 32, 224)
+    dynamic_command_cases = (
+        ("five-command-types", (0, 1, 2, 3, 4, 4)),
+        ("six-command-types", (0, 1, 2, 3, 4, 5)),
+        ("six-region-clustered-command-types", (0, 1, 2, 0, 1, 2)),
+    )
+    for mode, region_types in dynamic_command_cases:
+        expected = bytearray()
+        for i in range(12288):
+            tree = region_types[i // 2048]
+            insert_len = dynamic_command_insert_lens[tree][i & 7]
+            copy_len = dynamic_command_copy_lens[tree]
+            byte = dynamic_command_byte_bases[tree] + (i & 15)
+            expected.extend(bytes([byte]) * (insert_len + copy_len))
+        encoded = subprocess.check_output([sys.argv[1], mode])
+        actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+        if actual != expected:
+            raise SystemExit(f"{mode}: node output mismatch")
+        print(f"brotli planned {mode} node diff: encoded={len(encoded)} decoded={len(actual)}")
     expected = b"a" * (64 * 1024 + 8192 * 4)
     encoded = subprocess.check_output([sys.argv[1], "four-distance-types"])
     actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout

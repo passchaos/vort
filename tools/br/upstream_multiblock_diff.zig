@@ -36,6 +36,7 @@ pub fn main(init: std.process.Init) !void {
     var only_four_distance_types = false;
     var only_distance_clusters = false;
     var only_dynamic_distance_types = false;
+    var only_dynamic_command_types = false;
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--real-file")) {
             try real_files.append(init.gpa, args.next() orelse return error.MissingCorpusPath);
@@ -50,6 +51,8 @@ pub fn main(init: std.process.Init) !void {
             only_distance_clusters = true;
         } else if (std.mem.eql(u8, arg, "--only-dynamic-distance-types")) {
             only_dynamic_distance_types = true;
+        } else if (std.mem.eql(u8, arg, "--only-dynamic-command-types")) {
+            only_dynamic_command_types = true;
         } else return error.UnknownArgument;
     }
 
@@ -57,7 +60,7 @@ pub fn main(init: std.process.Init) !void {
     defer reference.deinit();
     const focused_mode_count = @as(usize, @intFromBool(only_four_command_types)) +
         @intFromBool(only_four_distance_types) + @intFromBool(only_distance_clusters) +
-        @intFromBool(only_dynamic_distance_types);
+        @intFromBool(only_dynamic_distance_types) + @intFromBool(only_dynamic_command_types);
     if (focused_mode_count > 1) return error.InvalidBlockPlan;
     if (only_four_command_types) {
         if (real_files.items.len != 0) return error.InvalidBlockPlan;
@@ -143,6 +146,29 @@ pub fn main(init: std.process.Init) !void {
         var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
         try stdout.interface.print(
             "br_upstream_dynamic_distance_types=ok five_bytes={d} six_bytes={d} clustered_bytes={d} reference_version={x}\n",
+            .{ five.encoded.len, six.encoded.len, clustered.encoded.len, reference.version() },
+        );
+        try stdout.interface.flush();
+        return;
+    }
+    if (only_dynamic_command_types) {
+        if (real_files.items.len != 0) return error.InvalidBlockPlan;
+        const five = try vort.br.IncrementalTestSupport.encodeFiveCommandTypes(init.gpa);
+        defer init.gpa.free(five.encoded);
+        defer init.gpa.free(five.payload);
+        try validatePlannedCommandFixture(init.gpa, reference, five, 5);
+        const six = try vort.br.IncrementalTestSupport.encodeSixCommandTypes(init.gpa);
+        defer init.gpa.free(six.encoded);
+        defer init.gpa.free(six.payload);
+        try validatePlannedCommandFixture(init.gpa, reference, six, 6);
+        const clustered = try vort.br.IncrementalTestSupport.encodeSixRegionClusteredCommandTypes(init.gpa);
+        defer init.gpa.free(clustered.encoded);
+        defer init.gpa.free(clustered.payload);
+        try validatePlannedCommandFixture(init.gpa, reference, clustered, 3);
+        var buffer: [256]u8 = undefined;
+        var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
+        try stdout.interface.print(
+            "br_upstream_dynamic_command_types=ok five_bytes={d} six_bytes={d} clustered_bytes={d} reference_version={x}\n",
             .{ five.encoded.len, six.encoded.len, clustered.encoded.len, reference.version() },
         );
         try stdout.interface.flush();
@@ -1120,6 +1146,21 @@ pub fn main(init: std.process.Init) !void {
     if (!std.mem.eql(u8, planned_four_command.payload, planned_four_command_decoded)) return error.ReferenceDecodeFailed;
     try decodeProgressChunks(init.gpa, planned_four_command.encoded, planned_four_command.payload, 16, 17, 31);
     planned_command_split_cases += 1;
+    const planned_five_command = try vort.br.IncrementalTestSupport.encodeFiveCommandTypes(init.gpa);
+    defer init.gpa.free(planned_five_command.encoded);
+    defer init.gpa.free(planned_five_command.payload);
+    try validatePlannedCommandFixture(init.gpa, reference, planned_five_command, 5);
+    planned_command_split_cases += 1;
+    const planned_six_command = try vort.br.IncrementalTestSupport.encodeSixCommandTypes(init.gpa);
+    defer init.gpa.free(planned_six_command.encoded);
+    defer init.gpa.free(planned_six_command.payload);
+    try validatePlannedCommandFixture(init.gpa, reference, planned_six_command, 6);
+    planned_command_split_cases += 1;
+    const planned_six_clustered_command = try vort.br.IncrementalTestSupport.encodeSixRegionClusteredCommandTypes(init.gpa);
+    defer init.gpa.free(planned_six_clustered_command.encoded);
+    defer init.gpa.free(planned_six_clustered_command.payload);
+    try validatePlannedCommandFixture(init.gpa, reference, planned_six_clustered_command, 3);
+    planned_command_split_cases += 1;
     const long_window_gap = 80 * 1024;
     const long_window_repeat = 12 * 1024;
     const long_window_payload = try init.gpa.alloc(u8, long_window_gap + long_window_repeat);
@@ -1394,6 +1435,21 @@ pub fn main(init: std.process.Init) !void {
         .{ cases_run, one_shot_cases, large_window_decode_cases, broad_generated_cases, broad_progressive_cases, real_file_cases, real_progressive_cases, real_options.len, real_quality_mask, real_mode_mask, real_window_mask, planned_window_cases, planned_literal_split_cases, planned_command_split_cases, planned_distance_split_cases, planned_chunked_window_cases, planned_large_window_cases, planned_metadata_cases, planned_extended_dictionary_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, high_tree_truncation_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, operation_schedule_cases, reference.version() },
     );
     try stdout.interface.flush();
+}
+
+fn validatePlannedCommandFixture(
+    allocator: std.mem.Allocator,
+    reference: libbrotli.Runtime,
+    fixture: anytype,
+    expected_type_count: usize,
+) !void {
+    const summary = try vort.brSummarizeStreamAlloc(allocator, fixture.encoded);
+    if (summary.max_command_block_types != expected_type_count) return error.ReferenceEncodeFailed;
+    const decoded = try allocator.alloc(u8, fixture.payload.len);
+    defer allocator.free(decoded);
+    try reference.decode(fixture.encoded, decoded);
+    if (!std.mem.eql(u8, fixture.payload, decoded)) return error.ReferenceDecodeFailed;
+    try decodeProgressChunks(allocator, fixture.encoded, fixture.payload, 16, 17, 31);
 }
 
 fn validatePlannedDistanceFixture(

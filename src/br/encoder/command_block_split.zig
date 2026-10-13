@@ -5,6 +5,7 @@ const alphabet_size: usize = 704;
 const min_block_commands: usize = 1024;
 const max_split_commands: usize = 32 * 1024;
 const candidate_count: usize = 5;
+pub const max_regions: usize = candidate_count + 1;
 const min_estimated_savings_bits: u64 = 2048;
 const min_entropy_proposal_savings_bits: u64 = min_estimated_savings_bits * 3 / 4;
 // A three-tree command header adds one complete command tree plus a second
@@ -18,6 +19,7 @@ const min_clustered_over_two_savings_bits: u64 = 128;
 const min_alternating_four_over_two_savings_bits: u64 = 256;
 const min_reuse_first_four_over_three_savings_bits: u64 = 128;
 const min_four_over_best_savings_bits: u64 = 1024;
+const min_dynamic_over_best_savings_bits: u64 = 1024;
 const entropy_fraction_bits: u6 = 8;
 const entropy_scale: u64 = 1 << entropy_fraction_bits;
 
@@ -34,29 +36,46 @@ pub const Result = struct {
     split: usize,
     second_split: ?usize = null,
     third_split: ?usize = null,
+    fourth_split: ?usize = null,
+    fifth_split: ?usize = null,
     alternate_two_types: bool = false,
     reuse_first_for_fourth: bool = false,
+    cycle_type_count: ?usize = null,
     savings_bits: u64,
 
     pub fn regionCount(self: Result) usize {
-        return if (self.third_split != null) 4 else if (self.second_split != null) 3 else 2;
+        return if (self.fifth_split != null)
+            6
+        else if (self.fourth_split != null)
+            5
+        else if (self.third_split != null)
+            4
+        else if (self.second_split != null)
+            3
+        else
+            2;
     }
 
     pub fn typeCount(self: Result) usize {
-        return if (self.alternate_two_types) 2 else if (self.reuse_first_for_fourth) 3 else self.regionCount();
+        return self.cycle_type_count orelse if (self.alternate_two_types) 2 else if (self.reuse_first_for_fourth) 3 else self.regionCount();
     }
 
     pub fn blockIndex(self: Result, command_index: usize) usize {
-        if (command_index < self.split) return 0;
-        if (self.second_split) |second| {
-            if (command_index < second) return 1;
-            if (self.third_split) |third| {
-                if (self.alternate_two_types) return if (command_index < third) 0 else 1;
-                return if (command_index < third) 2 else if (self.reuse_first_for_fourth) 0 else 3;
-            }
-            return if (self.alternate_two_types) 0 else 2;
-        }
-        return 1;
+        var region: usize = 0;
+        while (region + 1 < self.regionCount() and command_index >= self.boundary(region))
+            region += 1;
+        return region % self.typeCount();
+    }
+
+    pub fn boundary(self: Result, index: usize) usize {
+        return switch (index) {
+            0 => self.split,
+            1 => self.second_split orelse unreachable,
+            2 => self.third_split orelse unreachable,
+            3 => self.fourth_split orelse unreachable,
+            4 => self.fifth_split orelse unreachable,
+            else => unreachable,
+        };
     }
 };
 
@@ -67,6 +86,7 @@ pub const Proposals = struct {
     alternating_four: ?Result = null,
     reuse_first_four: ?Result = null,
     four: ?Result = null,
+    dynamic: ?Result = null,
 };
 
 pub const Accumulator = struct {
@@ -388,6 +408,100 @@ fn chooseFromHistograms(total: *const [alphabet_size]u32, prefixes: *const [cand
             };
         }
     }
+    var fixed_best_savings = proposals.two.?.savings_bits;
+    inline for (.{ proposals.three, proposals.clustered, proposals.alternating_four, proposals.reuse_first_four, proposals.four }) |proposal| {
+        if (proposal) |active| fixed_best_savings = @max(fixed_best_savings, active.savings_bits);
+    }
+    var best_dynamic_entropy = baseline_entropy;
+    var best_dynamic_mask: u5 = 0;
+    var best_dynamic_type_count: usize = 0;
+    for (1..@as(usize, 1) << candidate_count) |mask_value| {
+        const mask: u5 = @intCast(mask_value);
+        const boundary_count: usize = @popCount(mask);
+        if (boundary_count < 4) continue;
+        const region_count = boundary_count + 1;
+        var selected_indexes: [candidate_count]usize = @splat(0);
+        var selected_count: usize = 0;
+        for (0..candidate_count) |candidate_index| {
+            if (mask & (@as(u5, 1) << @intCast(candidate_index)) == 0) continue;
+            selected_indexes[selected_count] = candidate_index;
+            selected_count += 1;
+        }
+        var regions: [max_regions][alphabet_size]u32 = @splat(@splat(0));
+        var previous: [alphabet_size]u32 = @splat(0);
+        for (0..boundary_count) |region| {
+            const prefix = prefixes[selected_indexes[region]];
+            for (&regions[region], &prefix, &previous) |*out, through, before|
+                out.* = @as(u32, through) - before;
+            for (&previous, &prefix) |*out, through| out.* = through;
+        }
+        for (&regions[region_count - 1], total, &previous) |*out, all, before|
+            out.* = all - before;
+        for (2..region_count + 1) |type_count| {
+            var pooled: [max_regions][alphabet_size]u32 = @splat(@splat(0));
+            for (regions[0..region_count], 0..) |region_frequencies, region| {
+                for (&pooled[region % type_count], &region_frequencies) |*out, frequency|
+                    out.* += frequency;
+            }
+            var candidate_entropy: u64 = 0;
+            for (pooled[0..type_count]) |*frequencies|
+                candidate_entropy += entropyBitsQ8(frequencies);
+            if (candidate_entropy < best_dynamic_entropy) {
+                best_dynamic_entropy = candidate_entropy;
+                best_dynamic_mask = mask;
+                best_dynamic_type_count = type_count;
+            }
+        }
+    }
+    if (best_dynamic_mask != 0 and
+        baseline_entropy - best_dynamic_entropy >= 2 * min_entropy_proposal_savings_bits * entropy_scale)
+    {
+        const boundary_count: usize = @popCount(best_dynamic_mask);
+        const region_count = boundary_count + 1;
+        var boundaries: [candidate_count]usize = @splat(0);
+        var selected_indexes: [candidate_count]usize = @splat(0);
+        var selected_count: usize = 0;
+        for (0..candidate_count) |candidate_index| {
+            if (best_dynamic_mask & (@as(u5, 1) << @intCast(candidate_index)) == 0) continue;
+            boundaries[selected_count] = targets[candidate_index];
+            selected_indexes[selected_count] = candidate_index;
+            selected_count += 1;
+        }
+        var pooled: [max_regions][alphabet_size]u32 = @splat(@splat(0));
+        var previous: [alphabet_size]u32 = @splat(0);
+        for (0..region_count) |region| {
+            var frequencies: [alphabet_size]u32 = undefined;
+            if (region + 1 < region_count) {
+                const prefix = prefixes[selected_indexes[region]];
+                for (&frequencies, &prefix, &previous) |*out, through, before|
+                    out.* = @as(u32, through) - before;
+                for (&previous, &prefix) |*out, through| out.* = through;
+            } else for (&frequencies, total, &previous) |*out, all, before|
+                out.* = all - before;
+            for (&pooled[region % best_dynamic_type_count], &frequencies) |*out, frequency|
+                out.* += frequency;
+        }
+        var dynamic_bits: u64 = 0;
+        for (pooled[0..best_dynamic_type_count]) |*frequencies| {
+            const lengths = huffman.treeCodeLengths(alphabet_size, frequencies, 15);
+            dynamic_bits += weightedBits(frequencies, &lengths);
+        }
+        const savings = baseline_bits -| dynamic_bits;
+        if (savings >= 2 * min_estimated_savings_bits and
+            savings -| fixed_best_savings >= min_dynamic_over_best_savings_bits)
+        {
+            var result = Result{
+                .split = boundaries[0],
+                .cycle_type_count = best_dynamic_type_count,
+                .savings_bits = savings,
+            };
+            if (boundary_count >= 2) result.second_split = boundaries[1];
+            if (boundary_count >= 3) result.third_split = boundaries[2];
+            if (boundary_count >= 4) result.fourth_split = boundaries[3];
+            if (boundary_count >= 5) result.fifth_split = boundaries[4];
+            proposals.dynamic = result;
+        }
+    }
     return proposals;
 }
 
@@ -541,6 +655,37 @@ test "command block split selects four distinct symbol regions" {
     try std.testing.expectEqual(@as(usize, 1), proposal.blockIndex(proposal.split));
     try std.testing.expectEqual(@as(usize, 2), proposal.blockIndex(proposal.second_split.?));
     try std.testing.expectEqual(@as(usize, 3), proposal.blockIndex(proposal.third_split.?));
+}
+
+test "command block split selects five independent regions" {
+    var symbols: [12_288]u16 = undefined;
+    const boundaries = [4]usize{ 2048, 4096, 6144, 8192 };
+    for (&symbols, 0..) |*symbol, i| {
+        const region: usize = if (i < boundaries[0]) 0 else if (i < boundaries[1]) 1 else if (i < boundaries[2]) 2 else if (i < boundaries[3]) 3 else 4;
+        symbol.* = @intCast(region * 130 + (i & 7));
+    }
+    var accumulator = Accumulator.init(symbols.len).?;
+    for (symbols) |symbol| try std.testing.expect(accumulator.add(symbol));
+    const result = accumulator.finishProposals().dynamic orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqual(@as(usize, 5), result.regionCount());
+    try std.testing.expectEqual(@as(usize, 5), result.typeCount());
+    for (0..5) |region|
+        try std.testing.expectEqual(region, result.blockIndex(if (region == 0) 0 else result.boundary(region - 1)));
+}
+
+test "command block split cycles three trees across six regions" {
+    var symbols: [12_288]u16 = undefined;
+    for (&symbols, 0..) |*symbol, i| {
+        const region = i / 2048;
+        symbol.* = @intCast((region % 3) * 300 + (i & 7));
+    }
+    var accumulator = Accumulator.init(symbols.len).?;
+    for (symbols) |symbol| try std.testing.expect(accumulator.add(symbol));
+    const result = accumulator.finishProposals().dynamic orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqual(@as(usize, 6), result.regionCount());
+    try std.testing.expectEqual(@as(usize, 3), result.typeCount());
+    for (0..6) |region|
+        try std.testing.expectEqual(region % 3, result.blockIndex(region * 2048));
 }
 
 test "command block split rejects stationary and small streams" {
