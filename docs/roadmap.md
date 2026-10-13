@@ -19254,6 +19254,21 @@ reuse, so production keeps the simpler independently owned plans.
   libbrotli/progressive differential, and nine-row ReleaseFast gate remain
   green.
 
+- Reused exact suffix tree-payload costs across empty literal contexts. When a
+  cutoff advances over a context with no literals, the left/right histograms
+  are unchanged; the selector now retains their two exact Huffman wire costs
+  while still applying and comparing the distinct context-map cost for every
+  cutoff. A sparse-context oracle checks every valid cutoff against independent
+  tree rebuilding and requires empty gaps to reduce the number of payload
+  computations. Three fixed-CPU-2 ReleaseFast `source32k` samples at five
+  iterations reduced the ratio median from 64.361 ms to 61.160 ms (`1.052x`).
+  An alternating fixed-CPU A/B over 11 pairs and 20 iterations per process
+  favored payload reuse in all 11 pairs, with medians of 257.822 ms versus
+  244.739 ms (`1.053x`). Relative to the original 130.426 ms dense clustering
+  path, cumulative speedup is about `2.133x`; output remains 6,474 bytes with
+  checksum 134,695. The Node matrix, eight-case libbrotli/progressive
+  differential, and nine-row ReleaseFast gate remain green.
+
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository
   dictionary, source, README, roadmap, and small-corpus payloads; optional

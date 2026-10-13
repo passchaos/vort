@@ -275,17 +275,20 @@ fn chooseModeFromHistograms(
 ) !Proposals {
     var left: [256]u32 = @splat(0);
     var left_count: usize = 0;
+    var payload_bits: ?u64 = null;
     var best: ?Candidate = null;
     for (1..64) |cutoff| {
-        for (&left, &by_context[cutoff - 1]) |*sum, count| sum.* += count;
-        for (by_context[cutoff - 1]) |count| left_count += count;
+        var context_count: usize = 0;
+        for (&left, &by_context[cutoff - 1]) |*sum, count| {
+            sum.* += count;
+            context_count += count;
+        }
+        left_count += context_count;
         if (left_count == 0 or left_count == literal_count) continue;
-        var right: [256]u32 = undefined;
-        for (&right, total, &left) |*remaining, all, used| remaining.* = all - used;
+        if (context_count != 0 or payload_bits == null)
+            payload_bits = try suffixPayloadBitCost(allocator, total, &left);
         const candidate = Candidate.suffix(mode, @intCast(cutoff), 0);
-        const left_bits = try treeBitCost(allocator, &left);
-        const right_bits = try treeBitCost(allocator, &right);
-        const candidate_bits = left_bits + right_bits + suffix_map_costs[cutoff];
+        const candidate_bits = payload_bits.? + suffix_map_costs[cutoff];
         const savings = baseline_bits -| candidate_bits;
         if (savings < min_payload_savings_bits) continue;
         if (best == null or savings > best.?.savings_bits) {
@@ -318,6 +321,18 @@ fn chooseModeFromHistograms(
         }
     }
     return proposals;
+}
+
+fn suffixPayloadBitCost(
+    allocator: std.mem.Allocator,
+    total: *const [256]u32,
+    left: *const [256]u32,
+) !u64 {
+    var right: [256]u32 = undefined;
+    for (&right, total, left) |*remaining, all, used| remaining.* = all - used;
+    const left_bits = try treeBitCost(allocator, left);
+    const right_bits = try treeBitCost(allocator, &right);
+    return left_bits + right_bits;
 }
 
 fn retainBetter(slot: *?Candidate, candidate: ?Candidate) void {
@@ -760,6 +775,42 @@ test "literal context suffix map costs match independent planning" {
         const plan = try context_map_encoder.choose(std.testing.allocator, &candidate.context_map, candidate.tree_count);
         try std.testing.expectEqual(plan.bit_cost, costs[cutoff]);
     }
+}
+
+test "literal context suffix payload reuse matches independent scoring" {
+    var contexts: ContextHistograms = @splat(@splat(0));
+    contexts[7][11] = 32;
+    contexts[19][23] = 48;
+    contexts[43][37] = 64;
+    var total: [256]u32 = @splat(0);
+    for (contexts) |histogram| {
+        for (&total, histogram) |*sum, frequency| sum.* += frequency;
+    }
+    const literal_count: usize = histogramCount(&total);
+
+    var left: [256]u32 = @splat(0);
+    var left_count: usize = 0;
+    var cached: ?u64 = null;
+    var valid_cutoffs: usize = 0;
+    var recomputed: usize = 0;
+    for (1..64) |cutoff| {
+        var context_count: usize = 0;
+        for (&left, &contexts[cutoff - 1]) |*sum, frequency| {
+            sum.* += frequency;
+            context_count += frequency;
+        }
+        left_count += context_count;
+        if (left_count == 0 or left_count == literal_count) continue;
+        valid_cutoffs += 1;
+        if (context_count != 0 or cached == null) {
+            cached = try suffixPayloadBitCost(std.testing.allocator, &total, &left);
+            recomputed += 1;
+        }
+        const independent = try suffixPayloadBitCost(std.testing.allocator, &total, &left);
+        try std.testing.expectEqual(independent, cached.?);
+    }
+    try std.testing.expect(valid_cutoffs > recomputed);
+    try std.testing.expectEqual(@as(usize, 2), recomputed);
 }
 
 test "literal context scored map cache hits and rejects collisions" {
