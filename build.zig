@@ -1894,6 +1894,10 @@ pub fn build(b: *std.Build) void {
     const br_context_tree_report_gate_smoke = b.addSystemCommand(&.{ "python3", "tools/br/context_tree_report_gate_smoke.py" });
     const br_context_tree_report_gate_smoke_step = b.step("run-br-context-tree-report-gate-smoke", "Validate Brotli context-tree report gate negatives");
     br_context_tree_report_gate_smoke_step.dependOn(&br_context_tree_report_gate_smoke.step);
+    const br_context_tree_report_dir_smoke = b.addSystemCommand(&.{ "python3", "tools/br/context_tree_report_dir_smoke.py" });
+    br_context_tree_report_dir_smoke.addArtifactArg(br_context_tree_report_exe);
+    const br_context_tree_report_dir_smoke_step = b.step("run-br-context-tree-report-dir-smoke", "Validate bounded Brotli context-tree directory discovery");
+    br_context_tree_report_dir_smoke_step.dependOn(&br_context_tree_report_dir_smoke.step);
     const br_context_tree_dashboard = b.addSystemCommand(&.{
         "python3",    "tools/br/context_tree_dashboard.py",
         "--csv",      "zig-out/vort-br-context-tree-report.csv",
@@ -5497,6 +5501,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(br_upstream_multiblock_diff_step);
     ci_smoke_step.dependOn(br_context_tree_report_gate_step);
     ci_smoke_step.dependOn(br_context_tree_report_gate_smoke_step);
+    ci_smoke_step.dependOn(br_context_tree_report_dir_smoke_step);
     ci_smoke_step.dependOn(br_context_tree_dashboard_gate_step);
     ci_smoke_step.dependOn(br_context_tree_dashboard_gate_smoke_step);
     ci_smoke_step.dependOn(br_real_corpus_diff_step);

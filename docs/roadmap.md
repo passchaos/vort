@@ -19164,3 +19164,12 @@ reuse, so production keeps the simpler independently owned plans.
   provenance, and rendered headings; another six negative cases cover schema,
   row/distribution drift, missing UTF8 evidence, dictionary-tree regression,
   and non-ReleaseFast provenance.
+  A bounded directory smoke runs twice over the repository corpus, requires
+  stable sorted names/hashes/sizes for exactly two discovered files, and rejects
+  a zero file limit. An optional 24-file/32 KiB-prefix dashboard over the local
+  Zstd source tree produced 30 rows total: ten single-tree, nineteen 2--4-tree,
+  and one 9--16-tree result, with no real row above 16 trees and a 0.332888
+  weighted size ratio. High-tree candidates remain enabled because the
+  deterministic 35/64-tree oracles prove reachable profitable shapes; the
+  existing one/two/four-round budget bounds their cost rather than pruning them
+  from this limited source-only sample.

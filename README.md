@@ -528,6 +528,7 @@ zig build run-br-planned-node-diff
 zig build -Doptimize=ReleaseFast run-br-planned-encode-bench-gate
 zig build -Doptimize=ReleaseFast run-br-context-tree-report
 zig build -Doptimize=ReleaseFast run-br-context-tree-report-gate
+zig build run-br-context-tree-report-dir-smoke
 zig build -Doptimize=ReleaseFast run-br-context-tree-dashboard-gate
 # Optional deterministic directory discovery, bounded by file count and prefix:
 zig build -Doptimize=ReleaseFast run-br-context-tree-report -- \
