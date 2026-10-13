@@ -19153,6 +19153,18 @@ reuse, so production keeps the simpler independently owned plans.
   libbrotli/progressive differential, and nine-row ReleaseFast gate remain
   green.
 
+- Restricted each prepared tree symbol-cost table to the global active literal
+  alphabet shared by all four context modes. Sparse assignment can only request
+  those symbols, so inactive slots remain intentionally uninitialized while a
+  256-symbol boundary test proves the complete byte alphabet still works. The
+  dense/reference/prepared oracle remains exact. Three independent fixed-CPU-2
+  ReleaseFast `source32k` samples at five iterations reduced the ratio median
+  from 86.848 ms to 85.558 ms (`1.015x`), with all samples between 85.23 and
+  85.58 ms. Relative to the original 130.426 ms dense clustering path, the
+  retained pipeline is now about `1.524x` faster; output remains 6,474 bytes
+  with checksum 134,695. The Node matrix, eight-case libbrotli/progressive
+  differential, and nine-row ReleaseFast gate remain green.
+
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository
   dictionary, source, README, roadmap, and small-corpus payloads; optional

@@ -64,6 +64,10 @@ const SparseContext = struct {
     total: u32,
 };
 const SparseContexts = [64]SparseContext;
+const ActiveSymbols = struct {
+    symbols: [256]u8,
+    len: u16,
+};
 const Analysis = struct {
     by_mode: [mode_count]ContextHistograms,
     total: [256]u32,
@@ -96,6 +100,8 @@ pub noinline fn chooseProposals(allocator: std.mem.Allocator, input: []const u8,
     const analysis = try collectAnalysis(allocator, input, commands) orelse return .{};
     defer allocator.destroy(analysis);
     const baseline_bits = try treeBitCost(allocator, &analysis.total);
+    var active_symbols: ActiveSymbols = undefined;
+    buildActiveSymbols(&analysis.total, &active_symbols);
     var proposals: Proposals = .{};
     for (&analysis.by_mode, 0..) |*by_context, mode_value| {
         const mode_proposals = try chooseModeFromHistograms(
@@ -105,6 +111,7 @@ pub noinline fn chooseProposals(allocator: std.mem.Allocator, input: []const u8,
             &analysis.total,
             analysis.literal_count,
             baseline_bits,
+            &active_symbols,
             true,
             max_trees,
         );
@@ -184,6 +191,8 @@ fn chooseModeProposals(allocator: std.mem.Allocator, input: []const u8, commands
     if (literal_count < min_literal_count) return .{};
 
     const baseline_bits = try treeBitCost(allocator, &total);
+    var active_symbols: ActiveSymbols = undefined;
+    buildActiveSymbols(&total, &active_symbols);
     return chooseModeFromHistograms(
         allocator,
         mode,
@@ -191,6 +200,7 @@ fn chooseModeProposals(allocator: std.mem.Allocator, input: []const u8, commands
         &total,
         literal_count,
         baseline_bits,
+        &active_symbols,
         include_clusters,
         max_tree_count,
     );
@@ -203,6 +213,7 @@ fn chooseModeFromHistograms(
     total: *const [256]u32,
     literal_count: usize,
     baseline_bits: u64,
+    active_symbols: *const ActiveSymbols,
     include_clusters: bool,
     max_tree_count: usize,
 ) !Proposals {
@@ -241,6 +252,7 @@ fn chooseModeFromHistograms(
                 mode,
                 by_context,
                 &sparse_contexts,
+                active_symbols,
                 baseline_bits,
                 requested_tree_count,
                 seed,
@@ -266,6 +278,7 @@ fn clusterContexts(
     mode: u2,
     by_context: *const [64][256]u32,
     sparse_contexts: *const SparseContexts,
+    active_symbols: *const ActiveSymbols,
     baseline_bits: u64,
     requested_tree_count: usize,
     seed: Seed,
@@ -298,7 +311,7 @@ fn clusterContexts(
         var tree_totals: [max_trees]u32 = @splat(0);
         aggregateTreesSparse(by_context, sparse_contexts, &context_map, requested_tree_count, &tree_histograms, &tree_totals);
         var symbol_costs: [max_trees][256]u16 = undefined;
-        prepareAssignmentCosts(&tree_histograms, &tree_totals, requested_tree_count, &symbol_costs);
+        prepareAssignmentCosts(&tree_histograms, &tree_totals, requested_tree_count, active_symbols, &symbol_costs);
         var changed = false;
         for (populated[0..populated_count]) |context| {
             var best_tree: usize = 0;
@@ -402,18 +415,29 @@ fn buildSparseContexts(histograms: *const ContextHistograms, sparse_contexts: *S
     }
 }
 
+fn buildActiveSymbols(total: *const [256]u32, active: *ActiveSymbols) void {
+    active.len = 0;
+    for (total, 0..) |frequency, symbol| {
+        if (frequency == 0) continue;
+        active.symbols[active.len] = @intCast(symbol);
+        active.len += 1;
+    }
+}
+
 fn prepareAssignmentCosts(
     tree_histograms: *const [max_trees][256]u32,
     tree_totals: *const [max_trees]u32,
     tree_count: usize,
+    active_symbols: *const ActiveSymbols,
     costs: *[max_trees][256]u16,
 ) void {
     for (tree_histograms[0..tree_count], tree_totals[0..tree_count], costs[0..tree_count]) |*tree, tree_total, *tree_costs| {
         const model_log = fastLog2Q8(tree_total + 256);
-        for (tree, tree_costs) |modeled, *cost| {
+        for (active_symbols.symbols[0..active_symbols.len]) |symbol| {
+            const modeled = tree[symbol];
             const symbol_cost = model_log - fastLog2Q8(modeled + 1);
             std.debug.assert(symbol_cost <= std.math.maxInt(u16));
-            cost.* = @intCast(symbol_cost);
+            tree_costs[symbol] = @intCast(symbol_cost);
         }
     }
 }
@@ -574,7 +598,9 @@ test "literal context prepared assignment costs match reference" {
         }
     }
     var costs: [max_trees][256]u16 = undefined;
-    prepareAssignmentCosts(&trees, &totals, 4, &costs);
+    var active_symbols: ActiveSymbols = undefined;
+    buildActiveSymbols(&context, &active_symbols);
+    prepareAssignmentCosts(&trees, &totals, 4, &active_symbols, &costs);
     var contexts: ContextHistograms = @splat(@splat(0));
     contexts[0] = context;
     var sparse_contexts: SparseContexts = undefined;
@@ -586,6 +612,19 @@ test "literal context prepared assignment costs match reference" {
         try std.testing.expectEqual(reference, prepared);
         try std.testing.expectEqual(reference, sparse);
     }
+}
+
+test "literal context active alphabet covers all byte symbols" {
+    var total: [256]u32 = @splat(1);
+    var active: ActiveSymbols = undefined;
+    buildActiveSymbols(&total, &active);
+    try std.testing.expectEqual(@as(u16, 256), active.len);
+    for (active.symbols, 0..) |symbol, expected|
+        try std.testing.expectEqual(@as(u8, @intCast(expected)), symbol);
+    total[17] = 0;
+    buildActiveSymbols(&total, &active);
+    try std.testing.expectEqual(@as(u16, 255), active.len);
+    try std.testing.expect(std.mem.indexOfScalar(u8, active.symbols[0..active.len], 17) == null);
 }
 
 test "literal context sparse tree aggregation matches dense reference" {
