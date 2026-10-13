@@ -763,6 +763,33 @@ pub const IncrementalTestSupport = struct {
         return .{ .encoded = encoded, .payload = payload };
     }
 
+    /// Build five literal regions with five independent Huffman trees.
+    pub fn encodeFiveLiteralTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, dynamic_literal_payload_len);
+        errdefer allocator.free(payload);
+        fillFiveLiteralFixture(payload);
+        const encoded = try encodeSelectedLiteralSplitFixtureAlloc(allocator, payload);
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build six literal regions with six independent Huffman trees.
+    pub fn encodeSixLiteralTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, dynamic_literal_payload_len);
+        errdefer allocator.free(payload);
+        fillSixLiteralFixture(payload);
+        const encoded = try encodeSelectedLiteralSplitFixtureAlloc(allocator, payload);
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build six literal regions whose three trees cycle A-B-C-A-B-C.
+    pub fn encodeSixRegionClusteredLiteralTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, dynamic_literal_payload_len);
+        errdefer allocator.free(payload);
+        fillSixRegionClusteredLiteralFixture(payload);
+        const encoded = try encodeSelectedLiteralSplitFixtureAlloc(allocator, payload);
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
     /// Build a four-region production stream whose two command tree types
     /// alternate A-B-A-B across three consecutive implicit type switches.
     pub fn encodeAlternatingCommandTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
@@ -3823,6 +3850,15 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
             best_stats = four_literal_stats;
         } else allocator.free(four_literal_candidate);
     }
+    if (literal_splits.dynamic) |dynamic_literal| {
+        var dynamic_literal_stats = baseline_stats;
+        const dynamic_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &dynamic_literal_stats, options, baseline.use_recent_distances, dynamic_literal, command_split, distance_split);
+        if (dynamic_literal_candidate.len < best.len) {
+            allocator.free(best);
+            best = dynamic_literal_candidate;
+            best_stats = dynamic_literal_stats;
+        } else allocator.free(dynamic_literal_candidate);
+    }
     if (symbol_splits.command.clustered) |clustered| {
         var clustered_stats = baseline_stats;
         const clustered_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &clustered_stats, options, baseline.use_recent_distances, literal_split, clustered, distance_split);
@@ -4107,13 +4143,20 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     if (commands.len == 0) return error.InvalidBlockPlan;
     if (options.literal_split != null and options.use_utf8_text_contexts) return error.InvalidBlockPlan;
     if (options.literal_split) |split| {
-        if (split.split == 0) return error.InvalidBlockPlan;
-        if (split.second_split) |second| {
-            if (second <= split.split) return error.InvalidBlockPlan;
-            if (split.third_split) |third| {
-                if (split.alternate_two_types and split.reuse_first_for_fourth or third <= second) return error.InvalidBlockPlan;
-            } else if (split.reuse_first_for_fourth) return error.InvalidBlockPlan;
-        } else if (split.third_split != null or split.alternate_two_types or split.reuse_first_for_fourth) return error.InvalidBlockPlan;
+        if (split.split == 0 or split.typeCount() < 2 or split.typeCount() > split.regionCount()) return error.InvalidBlockPlan;
+        if (split.cycle_type_count != null and (split.alternate_two_types or split.reuse_first_for_fourth)) return error.InvalidBlockPlan;
+        if (split.cycle_type_count == null and split.alternate_two_types and split.reuse_first_for_fourth) return error.InvalidBlockPlan;
+        if (split.alternate_two_types and split.regionCount() > 4) return error.InvalidBlockPlan;
+        if (split.reuse_first_for_fourth and split.regionCount() != 4) return error.InvalidBlockPlan;
+        if (split.second_split == null and (split.third_split != null or split.fourth_split != null or split.fifth_split != null)) return error.InvalidBlockPlan;
+        if (split.third_split == null and (split.fourth_split != null or split.fifth_split != null)) return error.InvalidBlockPlan;
+        if (split.fourth_split == null and split.fifth_split != null) return error.InvalidBlockPlan;
+        var previous: usize = 0;
+        for (0..split.regionCount() - 1) |boundary_index| {
+            const boundary = split.boundary(boundary_index);
+            if (boundary <= previous) return error.InvalidBlockPlan;
+            previous = boundary;
+        }
     }
     // This writer currently fixes NPOSTFIX=0, whose four-bit NDIRECT field
     // directly represents values 0...15.
@@ -4159,7 +4202,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     // additional dense histograms unless a ratio candidate requests context
     // trees; the ordinary ratio path benefits too when it keeps one tree.
     if (options.use_utf8_text_contexts) @memset(&literal_context_frequencies, @splat(0));
-    var literal_block_frequencies: [4][256]u32 = undefined;
+    var literal_block_frequencies: [literal_block_split.max_regions][256]u32 = undefined;
     if (options.literal_split != null) @memset(&literal_block_frequencies, @splat(0));
     var command_frequencies: [704]u32 = undefined;
     var command_alphabet: command_plan.PrefixAlphabet = undefined;
@@ -4236,9 +4279,8 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     if (options.literal_split == null and literal_alphabet.len == 0)
         try literal_alphabet.recordByteFrequency(&literal_frequencies, &literal_seen, 0);
     if (options.literal_split) |split| {
-        if (literal_index <= split.split) return error.InvalidBlockPlan;
-        if (split.second_split) |second| if (literal_index <= second) return error.InvalidBlockPlan;
-        if (split.third_split) |third| if (literal_index <= third) return error.InvalidBlockPlan;
+        for (0..split.regionCount() - 1) |boundary_index|
+            if (literal_index <= split.boundary(boundary_index)) return error.InvalidBlockPlan;
     }
     const same_last_distance_plan = if (has_same_last_candidate)
         try chooseSameLastDistancePlan(
@@ -4264,7 +4306,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     if (io) |active| stats.frequency_ns = elapsedNs(frequency_start.?, active);
     const alphabet_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     var literal_context_alphabets: [2]command_plan.PrefixAlphabetFor(256) = undefined;
-    var literal_block_alphabets: [4]command_plan.PrefixAlphabetFor(256) = undefined;
+    var literal_block_alphabets: [literal_block_split.max_regions]command_plan.PrefixAlphabetFor(256) = undefined;
     var command_block_alphabets: [command_block_split.max_regions]command_plan.PrefixAlphabet = undefined;
     var distance_block_alphabets: [distance_block_split.max_regions]command_plan.PrefixAlphabetFor(planned_distance_alphabet_size) = undefined;
     var distance_alphabet: command_plan.PrefixAlphabetFor(planned_distance_alphabet_size) = if (has_same_last_candidate) prepared_distance_alphabet else undefined;
@@ -4323,7 +4365,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         break :blk lengths;
     } else undefined;
     const literal_block_lengths = if (options.literal_split) |split| blk: {
-        var lengths: [4][256]u4 = undefined;
+        var lengths: [literal_block_split.max_regions][256]u4 = undefined;
         for (lengths[0..split.typeCount()], literal_block_alphabets[0..split.typeCount()], literal_block_frequencies[0..split.typeCount()]) |*tree_lengths, *alphabet, *frequencies|
             tree_lengths.* = try alphabet.codeLengths(frequencies);
         break :blk lengths;
@@ -4389,7 +4431,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         try initPlannedLiteralEncoder(&literal_context_lengths[1], &literal_context_alphabets[1]),
     } else undefined;
     const literal_block_encoders = if (options.literal_split) |split| blk: {
-        var encoders: [4]huffman.HuffmanTable(256).Encoder = undefined;
+        var encoders: [literal_block_split.max_regions]huffman.HuffmanTable(256).Encoder = undefined;
         for (encoders[0..split.typeCount()], literal_block_lengths[0..split.typeCount()], literal_block_alphabets[0..split.typeCount()]) |*active_encoder, *tree_lengths, *alphabet|
             active_encoder.* = try initPlannedLiteralEncoder(tree_lengths, alphabet);
         break :blk encoders;
@@ -4462,13 +4504,9 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         try writeCommandLengthExtras(allocator, writer, encoding, command.insert_len, command.copy_len);
         for (input[command.insert_start..][0..command.insert_len], command.insert_start..) |literal, position| {
             if (options.literal_split) |split| {
-                if (literal_index == split.split) try literal_split_code.writeLength(allocator, writer, 1);
-                if (split.second_split) |second| if (literal_index == second) {
-                    try literal_split_code.writeLength(allocator, writer, 2);
-                };
-                if (split.third_split) |third| if (literal_index == third) {
-                    try literal_split_code.writeLength(allocator, writer, 3);
-                };
+                for (0..split.regionCount() - 1) |boundary_index|
+                    if (literal_index == split.boundary(boundary_index))
+                        try literal_split_code.writeLength(allocator, writer, boundary_index + 1);
                 const block_index = split.blockIndex(literal_index);
                 const encoder = &literal_block_encoders[block_index];
                 if (encoder.bits[literal] != 0) try writer.writeHuffmanBits(allocator, encoder.codes[literal], encoder.bits[literal]);
@@ -14824,6 +14862,50 @@ fn fillFourLiteralFixture(payload: []u8) void {
     }
 }
 
+const dynamic_literal_payload_len = 12_288;
+const dynamic_literal_region_len = dynamic_literal_payload_len / 6;
+const dynamic_literal_byte_bases = [6]u8{ 0, 48, 96, 144, 192, 224 };
+
+fn fillFiveLiteralFixture(payload: []u8) void {
+    fillDynamicLiteralFixture(payload, &.{ 0, 1, 2, 3, 4, 4 });
+}
+
+fn fillSixLiteralFixture(payload: []u8) void {
+    fillDynamicLiteralFixture(payload, &.{ 0, 1, 2, 3, 4, 5 });
+}
+
+fn fillSixRegionClusteredLiteralFixture(payload: []u8) void {
+    fillDynamicLiteralFixture(payload, &.{ 0, 1, 2, 0, 1, 2 });
+}
+
+fn fillDynamicLiteralFixture(payload: []u8, region_types: *const [6]usize) void {
+    std.debug.assert(payload.len == dynamic_literal_payload_len);
+    for (payload, 0..) |*byte, i| {
+        const tree_index = region_types[i / dynamic_literal_region_len];
+        byte.* = dynamic_literal_byte_bases[tree_index] + @as(u8, @intCast(i & 15));
+    }
+}
+
+fn encodeSelectedLiteralSplitFixtureAlloc(allocator: std.mem.Allocator, payload: []const u8) Error![]u8 {
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const baseline = try encodeCommandPlanWithOptionsAlloc(allocator, payload, &commands, null, &stats, .{});
+    errdefer allocator.free(baseline);
+    const selected = try encodeEntropySplitCandidateAlloc(
+        allocator,
+        payload,
+        &commands,
+        &stats,
+        .{ .try_literal_split = true },
+        .{ .encoded = baseline, .use_recent_distances = false },
+    );
+    if (selected) |encoded| {
+        allocator.free(baseline);
+        return encoded;
+    }
+    return baseline;
+}
+
 test "br planned wire emits four literal tree types in A-B-C-D order" {
     var payload: [four_literal_payload_len]u8 = undefined;
     fillFourLiteralFixture(&payload);
@@ -14887,12 +14969,83 @@ test "br four literal tree candidate cleans up allocation failures" {
     );
 }
 
+test "br planned wire supports five and six literal regions" {
+    const Shape = enum { five, six, six_clustered };
+    const cases = .{
+        .{ .shape = Shape.five, .region_count = @as(usize, 5), .type_count = @as(usize, 5) },
+        .{ .shape = Shape.six, .region_count = @as(usize, 6), .type_count = @as(usize, 6) },
+        .{ .shape = Shape.six_clustered, .region_count = @as(usize, 6), .type_count = @as(usize, 3) },
+    };
+    inline for (cases) |case| {
+        const payload = try std.testing.allocator.alloc(u8, dynamic_literal_payload_len);
+        defer std.testing.allocator.free(payload);
+        switch (case.shape) {
+            .five => fillFiveLiteralFixture(payload),
+            .six => fillSixLiteralFixture(payload),
+            .six_clustered => fillSixRegionClusteredLiteralFixture(payload),
+        }
+        const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+        const proposals = literal_block_split.chooseProposals(payload, &commands, null);
+        const proposal = proposals.dynamic orelse return error.TestUnexpectedResult;
+        try std.testing.expectEqual(case.region_count, proposal.regionCount());
+        try std.testing.expectEqual(case.type_count, proposal.typeCount());
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const forced = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, &commands, null, &stats, .{ .literal_split = proposal });
+        defer std.testing.allocator.free(forced);
+        const selected = try encodeSelectedLiteralSplitFixtureAlloc(std.testing.allocator, payload);
+        defer std.testing.allocator.free(selected);
+        try std.testing.expectEqualSlices(u8, forced, selected);
+        const summary = try summarizeStream(selected);
+        try std.testing.expectEqual(case.type_count, summary.max_literal_block_types);
+        try std.testing.expectEqual(case.type_count, summary.max_literal_context_trees);
+        const decoded = try decodeStreamAllocExactSize(std.testing.allocator, selected, payload.len);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
+}
+
+test "br six-region literal candidate cleans up allocation failures" {
+    const payload = try std.testing.allocator.alloc(u8, dynamic_literal_payload_len);
+    defer std.testing.allocator.free(payload);
+    fillSixRegionClusteredLiteralFixture(payload);
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = payload.len }};
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const baseline = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, &commands, null, &stats, .{});
+    defer std.testing.allocator.free(baseline);
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, input: []const u8, plan: []const command_plan.Command, base: []u8) !void {
+            var candidate_stats: encoder_stats.PlannedEncodeStats = .{};
+            const candidate = try encodeEntropySplitCandidateAlloc(
+                allocator,
+                input,
+                plan,
+                &candidate_stats,
+                .{ .try_literal_split = true },
+                .{ .encoded = base, .use_recent_distances = false },
+            );
+            defer if (candidate) |encoded| allocator.free(encoded);
+            try std.testing.expect(candidate != null);
+            const summary = try summarizeStreamAlloc(allocator, candidate.?);
+            try std.testing.expectEqual(@as(usize, 3), summary.max_literal_block_types);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{ payload, commands[0..], baseline },
+    );
+}
+
 test "br literal block length code rejects invalid four-way splits" {
     try std.testing.expectError(error.InvalidBlockPlan, LiteralBlockLengthCode.init(.{ .split = 1024, .third_split = 3072, .savings_bits = 0 }, 4096));
     try std.testing.expectError(error.InvalidBlockPlan, LiteralBlockLengthCode.init(.{ .split = 1024, .second_split = 2048, .third_split = 2048, .alternate_two_types = true, .savings_bits = 0 }, 4096));
     try std.testing.expectError(error.InvalidBlockPlan, LiteralBlockLengthCode.init(.{ .split = 1024, .second_split = 2048, .third_split = 3072, .alternate_two_types = true, .reuse_first_for_fourth = true, .savings_bits = 0 }, 4096));
     try std.testing.expectError(error.InvalidBlockPlan, LiteralBlockLengthCode.init(.{ .split = 1024, .second_split = 2048, .third_split = 4096, .alternate_two_types = true, .savings_bits = 0 }, 4096));
     try std.testing.expectError(error.InvalidBlockPlan, LiteralBlockLengthCode.init(.{ .split = 1024, .second_split = 2048, .reuse_first_for_fourth = true, .savings_bits = 0 }, 4096));
+    try std.testing.expectError(error.InvalidBlockPlan, LiteralBlockLengthCode.init(.{ .split = 512, .second_split = 1024, .third_split = 1536, .fourth_split = 1536, .savings_bits = 0 }, 4096));
+    try std.testing.expectError(error.InvalidBlockPlan, LiteralBlockLengthCode.init(.{ .split = 512, .second_split = 1024, .third_split = 1536, .fifth_split = 2560, .savings_bits = 0 }, 4096));
+    try std.testing.expectError(error.InvalidBlockPlan, LiteralBlockLengthCode.init(.{ .split = 1024, .cycle_type_count = 1, .savings_bits = 0 }, 4096));
+    try std.testing.expectError(error.InvalidBlockPlan, LiteralBlockLengthCode.init(.{ .split = 1024, .cycle_type_count = 3, .savings_bits = 0 }, 4096));
 }
 
 const three_command_region_count = 6144;
@@ -25518,36 +25671,27 @@ const DistanceBlockLengthCode = struct {
 const LiteralBlockLengthCode = struct {
     alphabet: command_plan.PrefixAlphabetFor(26),
     lengths: [26]u4,
-    block_lengths: [4]BlockLengthEncoding,
+    block_lengths: [literal_block_split.max_regions]BlockLengthEncoding,
     block_count: usize,
     type_count: usize,
 
     fn init(split: literal_block_split.Result, literal_count: usize) Error!LiteralBlockLengthCode {
-        if (split.split == 0 or split.split >= literal_count) return error.InvalidBlockPlan;
-        var block_lengths: [4]BlockLengthEncoding = undefined;
-        block_lengths[0] = blockLengthEncoding(split.split) orelse return error.InvalidBlockPlan;
         const block_count = split.regionCount();
-        if (split.second_split) |second| {
-            if (second <= split.split or second >= literal_count)
-                return error.InvalidBlockPlan;
-            block_lengths[1] = blockLengthEncoding(second - split.split) orelse
-                return error.InvalidBlockPlan;
-            if (split.third_split) |third| {
-                if (split.alternate_two_types and split.reuse_first_for_fourth or third <= second or third >= literal_count)
-                    return error.InvalidBlockPlan;
-                block_lengths[2] = blockLengthEncoding(third - second) orelse
-                    return error.InvalidBlockPlan;
-                block_lengths[3] = blockLengthEncoding(literal_count - third) orelse
-                    return error.InvalidBlockPlan;
-            } else {
-                if (split.reuse_first_for_fourth) return error.InvalidBlockPlan;
-                block_lengths[2] = blockLengthEncoding(literal_count - second) orelse
-                    return error.InvalidBlockPlan;
-            }
-        } else {
-            if (split.third_split != null or split.alternate_two_types or split.reuse_first_for_fourth) return error.InvalidBlockPlan;
-            block_lengths[1] = blockLengthEncoding(literal_count - split.split) orelse
-                return error.InvalidBlockPlan;
+        if (split.typeCount() < 2 or split.typeCount() > block_count) return error.InvalidBlockPlan;
+        if (split.cycle_type_count != null and (split.alternate_two_types or split.reuse_first_for_fourth)) return error.InvalidBlockPlan;
+        if (split.cycle_type_count == null and split.alternate_two_types and split.reuse_first_for_fourth) return error.InvalidBlockPlan;
+        if (split.alternate_two_types and block_count > 4) return error.InvalidBlockPlan;
+        if (split.reuse_first_for_fourth and block_count != 4) return error.InvalidBlockPlan;
+        if (split.second_split == null and (split.third_split != null or split.fourth_split != null or split.fifth_split != null)) return error.InvalidBlockPlan;
+        if (split.third_split == null and (split.fourth_split != null or split.fifth_split != null)) return error.InvalidBlockPlan;
+        if (split.fourth_split == null and split.fifth_split != null) return error.InvalidBlockPlan;
+        var block_lengths: [literal_block_split.max_regions]BlockLengthEncoding = undefined;
+        var previous: usize = 0;
+        for (0..block_count) |region| {
+            const end = if (region + 1 == block_count) literal_count else split.boundary(region);
+            if (end <= previous or end > literal_count) return error.InvalidBlockPlan;
+            block_lengths[region] = blockLengthEncoding(end - previous) orelse return error.InvalidBlockPlan;
+            previous = end;
         }
         var frequencies: [26]u32 = @splat(0);
         for (block_lengths[0..block_count]) |encoding| frequencies[encoding.symbol] += 1;
@@ -25738,8 +25882,8 @@ fn blockLengthEncoding(len: usize) ?BlockLengthEncoding {
 fn writePlannedCompressedHeaderLiteralBlocks(
     allocator: std.mem.Allocator,
     writer: *BitWriter,
-    literal_alphabets: *const [4]command_plan.PrefixAlphabetFor(256),
-    literal_lengths: *const [4][256]u4,
+    literal_alphabets: *const [literal_block_split.max_regions]command_plan.PrefixAlphabetFor(256),
+    literal_lengths: *const [literal_block_split.max_regions][256]u4,
     split_code: *const LiteralBlockLengthCode,
     ndirect: u7,
     command_alphabet: *const command_plan.PrefixAlphabet,
@@ -25775,6 +25919,7 @@ fn writeLiteralBlockContextMap(allocator: std.mem.Allocator, writer: *BitWriter,
         2 => writeTwoLiteralBlockContextMap(allocator, writer),
         3 => writeLiteralBlockSwitchThreeTypesContextMap(allocator, writer),
         4 => writeFourLiteralBlockContextMap(allocator, writer),
+        5, 6 => writeWideLiteralBlockContextMap(allocator, writer, type_count),
         else => error.InvalidBlockPlan,
     };
 }
@@ -25807,6 +25952,20 @@ fn writeFourLiteralBlockContextMap(allocator: std.mem.Allocator, writer: *BitWri
     const codes = [4]u2{ 0, 2, 1, 3 };
     for (0..4) |tree|
         for (0..64) |_| try writer.writeBits(allocator, codes[tree], 2);
+    try writer.writeBits(allocator, 0, 1); // IMTF = false
+}
+
+fn writeWideLiteralBlockContextMap(allocator: std.mem.Allocator, writer: *BitWriter, type_count: usize) Error!void {
+    if (type_count != 5 and type_count != 6) return error.InvalidBlockPlan;
+    try writer.writeBits(allocator, 0, 1); // RLEMAX = 0
+    const lengths: [6]u4 = if (type_count == 5)
+        .{ 2, 2, 2, 3, 3, 0 }
+    else
+        .{ 2, 2, 3, 3, 3, 3 };
+    try complex_prefix.write(allocator, writer, type_count, &lengths);
+    const encoder = try huffman.HuffmanTable(6).Encoder.init(&lengths);
+    for (0..type_count) |tree|
+        for (0..64) |_| try writer.writeHuffmanBits(allocator, encoder.codes[tree], encoder.bits[tree]);
     try writer.writeBits(allocator, 0, 1); // IMTF = false
 }
 

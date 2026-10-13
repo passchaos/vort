@@ -152,6 +152,22 @@ def main() -> int:
     if actual != expected:
         raise SystemExit("four-command-types: node output mismatch")
     print(f"brotli planned four-command-types node diff: encoded={len(encoded)} decoded={len(actual)}")
+    dynamic_literal_cases = (
+        ("five-literal-types", (0, 1, 2, 3, 4, 4)),
+        ("six-literal-types", (0, 1, 2, 3, 4, 5)),
+        ("six-region-clustered-literal-types", (0, 1, 2, 0, 1, 2)),
+    )
+    literal_bases = (0, 48, 96, 144, 192, 224)
+    for mode, region_types in dynamic_literal_cases:
+        expected = bytearray(12288)
+        for i in range(len(expected)):
+            tree = region_types[i // 2048]
+            expected[i] = literal_bases[tree] + (i & 15)
+        encoded = subprocess.check_output([sys.argv[1], mode])
+        actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+        if actual != expected:
+            raise SystemExit(f"{mode}: node output mismatch")
+        print(f"brotli planned {mode} node diff: encoded={len(encoded)} decoded={len(actual)}")
     dynamic_command_insert_lens = (
         outer_insert_lens,
         middle_insert_lens,

@@ -103,6 +103,27 @@ pub fn main(init: std.process.Init) !void {
         try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
         return;
     }
+    if (std.mem.eql(u8, mode, "five-literal-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeFiveLiteralTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "six-literal-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeSixLiteralTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "six-region-clustered-literal-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeSixRegionClusteredLiteralTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
     if (std.mem.eql(u8, mode, "five-command-types")) {
         const fixture = try vort.br.IncrementalTestSupport.encodeFiveCommandTypes(init.gpa);
         defer init.gpa.free(fixture.encoded);

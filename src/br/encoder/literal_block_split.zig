@@ -15,6 +15,7 @@ const candidate_fractions = [_]struct { numerator: usize, denominator: usize }{
     .{ .numerator = 5, .denominator = 6 },
 };
 const candidate_count: usize = candidate_fractions.len;
+pub const max_regions: usize = 6;
 const min_estimated_savings_bits: u64 = 2048;
 const min_entropy_proposal_savings_bits: u64 = min_estimated_savings_bits * 3 / 4;
 const min_clustered_over_two_savings_bits: u64 = 128;
@@ -22,6 +23,7 @@ const min_three_over_two_savings_bits: u64 = 1024;
 const min_alternating_four_over_best_savings_bits: u64 = 256;
 const min_reuse_first_four_over_best_savings_bits: u64 = 128;
 const min_four_over_best_savings_bits: u64 = 1024;
+const min_dynamic_over_best_savings_bits: u64 = 1024;
 const entropy_fraction_bits: u6 = 8;
 const entropy_scale: u64 = 1 << entropy_fraction_bits;
 
@@ -38,29 +40,46 @@ pub const Result = struct {
     split: usize,
     second_split: ?usize = null,
     third_split: ?usize = null,
+    fourth_split: ?usize = null,
+    fifth_split: ?usize = null,
     alternate_two_types: bool = false,
     reuse_first_for_fourth: bool = false,
+    cycle_type_count: ?usize = null,
     savings_bits: u64,
 
     pub fn regionCount(self: Result) usize {
-        return if (self.third_split != null) 4 else if (self.second_split != null) 3 else 2;
+        return if (self.fifth_split != null)
+            6
+        else if (self.fourth_split != null)
+            5
+        else if (self.third_split != null)
+            4
+        else if (self.second_split != null)
+            3
+        else
+            2;
     }
 
     pub fn typeCount(self: Result) usize {
-        return if (self.alternate_two_types) 2 else if (self.reuse_first_for_fourth) 3 else self.regionCount();
+        return self.cycle_type_count orelse if (self.alternate_two_types) 2 else if (self.reuse_first_for_fourth) 3 else self.regionCount();
     }
 
     pub fn blockIndex(self: Result, literal_index: usize) usize {
-        if (literal_index < self.split) return 0;
-        if (self.second_split) |second| {
-            if (literal_index < second) return 1;
-            if (self.third_split) |third| {
-                if (self.alternate_two_types) return if (literal_index < third) 0 else 1;
-                return if (literal_index < third) 2 else if (self.reuse_first_for_fourth) 0 else 3;
-            }
-            return if (self.alternate_two_types) 0 else 2;
-        }
-        return 1;
+        var region: usize = 0;
+        while (region + 1 < self.regionCount() and literal_index >= self.boundary(region))
+            region += 1;
+        return region % self.typeCount();
+    }
+
+    pub fn boundary(self: Result, index: usize) usize {
+        return switch (index) {
+            0 => self.split,
+            1 => self.second_split orelse unreachable,
+            2 => self.third_split orelse unreachable,
+            3 => self.fourth_split orelse unreachable,
+            4 => self.fifth_split orelse unreachable,
+            else => unreachable,
+        };
     }
 };
 
@@ -71,6 +90,7 @@ pub const Proposals = struct {
     alternating_four: ?Result = null,
     reuse_first_four: ?Result = null,
     four: ?Result = null,
+    dynamic: ?Result = null,
 };
 
 /// Choose one literal-stream boundary for a two-type Brotli entropy split.
@@ -370,6 +390,108 @@ pub fn chooseProposals(input: []const u8, commands: []const command_plan.Command
             };
         }
     }
+    var fixed_best_savings = proposals.two.?.savings_bits;
+    inline for (.{ proposals.three, proposals.clustered, proposals.alternating_four, proposals.reuse_first_four, proposals.four }) |proposal| {
+        if (proposal) |active| fixed_best_savings = @max(fixed_best_savings, active.savings_bits);
+    }
+    var best_dynamic_entropy = baseline_entropy;
+    var best_dynamic_mask: u8 = 0;
+    var best_dynamic_type_count: usize = 0;
+    const mask_limit = @as(usize, 1) << @intCast(target_len);
+    for (1..mask_limit) |mask_value| {
+        const mask: u8 = @intCast(mask_value);
+        const boundary_count: usize = @popCount(mask);
+        if (boundary_count < 4 or boundary_count >= max_regions) continue;
+        const region_count = boundary_count + 1;
+        var selected_indexes: [candidate_count]usize = @splat(0);
+        var selected_count: usize = 0;
+        for (0..target_len) |candidate_index| {
+            if (mask & (@as(u8, 1) << @intCast(candidate_index)) == 0) continue;
+            selected_indexes[selected_count] = candidate_index;
+            selected_count += 1;
+        }
+        var regions: [max_regions][256]u32 = @splat(@splat(0));
+        var previous: [256]u32 = @splat(0);
+        var valid = true;
+        var previous_boundary: usize = 0;
+        for (0..boundary_count) |region| {
+            const boundary = targets[selected_indexes[region]];
+            if (boundary - previous_boundary < min_block_literals) valid = false;
+            previous_boundary = boundary;
+            const prefix = prefix_snapshots[selected_indexes[region]];
+            for (&regions[region], &prefix, &previous) |*out, through, before|
+                out.* = through - before;
+            previous = prefix;
+        }
+        if (total_literals - previous_boundary < min_block_literals) valid = false;
+        if (!valid) continue;
+        for (&regions[region_count - 1], &total_frequencies, &previous) |*out, all, before|
+            out.* = all - before;
+        for (2..region_count + 1) |type_count| {
+            var pooled: [max_regions][256]u32 = @splat(@splat(0));
+            for (regions[0..region_count], 0..) |region_frequencies, region| {
+                for (&pooled[region % type_count], &region_frequencies) |*out, frequency|
+                    out.* += frequency;
+            }
+            var candidate_entropy: u64 = 0;
+            for (pooled[0..type_count]) |*frequencies|
+                candidate_entropy += entropyBitsQ8(frequencies);
+            if (candidate_entropy < best_dynamic_entropy) {
+                best_dynamic_entropy = candidate_entropy;
+                best_dynamic_mask = mask;
+                best_dynamic_type_count = type_count;
+            }
+        }
+    }
+    if (best_dynamic_mask != 0 and
+        baseline_entropy - best_dynamic_entropy >= 2 * min_entropy_proposal_savings_bits * entropy_scale)
+    {
+        const boundary_count: usize = @popCount(best_dynamic_mask);
+        const region_count = boundary_count + 1;
+        var boundaries: [max_regions - 1]usize = @splat(0);
+        var selected_indexes: [candidate_count]usize = @splat(0);
+        var selected_count: usize = 0;
+        for (0..target_len) |candidate_index| {
+            if (best_dynamic_mask & (@as(u8, 1) << @intCast(candidate_index)) == 0) continue;
+            boundaries[selected_count] = targets[candidate_index];
+            selected_indexes[selected_count] = candidate_index;
+            selected_count += 1;
+        }
+        var pooled: [max_regions][256]u32 = @splat(@splat(0));
+        var previous: [256]u32 = @splat(0);
+        for (0..region_count) |region| {
+            var frequencies: [256]u32 = undefined;
+            if (region + 1 < region_count) {
+                const prefix = prefix_snapshots[selected_indexes[region]];
+                for (&frequencies, &prefix, &previous) |*out, through, before|
+                    out.* = through - before;
+                previous = prefix;
+            } else for (&frequencies, &total_frequencies, &previous) |*out, all, before|
+                out.* = all - before;
+            for (&pooled[region % best_dynamic_type_count], &frequencies) |*out, frequency|
+                out.* += frequency;
+        }
+        var dynamic_bits: u64 = 0;
+        for (pooled[0..best_dynamic_type_count]) |*frequencies| {
+            const lengths = huffman.treeCodeLengths(256, frequencies, 15);
+            dynamic_bits += weightedBits(frequencies, &lengths);
+        }
+        const savings = baseline_bits -| dynamic_bits;
+        if (savings >= 2 * min_estimated_savings_bits and
+            savings -| fixed_best_savings >= min_dynamic_over_best_savings_bits)
+        {
+            var result = Result{
+                .split = boundaries[0],
+                .cycle_type_count = best_dynamic_type_count,
+                .savings_bits = savings,
+            };
+            if (boundary_count >= 2) result.second_split = boundaries[1];
+            if (boundary_count >= 3) result.third_split = boundaries[2];
+            if (boundary_count >= 4) result.fourth_split = boundaries[3];
+            if (boundary_count >= 5) result.fifth_split = boundaries[4];
+            proposals.dynamic = result;
+        }
+    }
     return proposals;
 }
 
@@ -525,6 +647,35 @@ test "literal block split selects four distinct regions" {
     try std.testing.expectEqual(@as(usize, 1), four.blockIndex(four.split));
     try std.testing.expectEqual(@as(usize, 2), four.blockIndex(four.second_split.?));
     try std.testing.expectEqual(@as(usize, 3), four.blockIndex(four.third_split.?));
+}
+
+test "literal block split selects five independent regions" {
+    var input: [12_288]u8 = undefined;
+    const boundaries = [4]usize{ 2048, 4096, 6144, 8192 };
+    for (&input, 0..) |*byte, i| {
+        const region: usize = if (i < boundaries[0]) 0 else if (i < boundaries[1]) 1 else if (i < boundaries[2]) 2 else if (i < boundaries[3]) 3 else 4;
+        byte.* = @intCast(region * 48 + (i & 15));
+    }
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = input.len }};
+    const result = chooseProposals(&input, &commands, null).dynamic orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqual(@as(usize, 5), result.regionCount());
+    try std.testing.expectEqual(@as(usize, 5), result.typeCount());
+    for (0..5) |region|
+        try std.testing.expectEqual(region, result.blockIndex(if (region == 0) 0 else result.boundary(region - 1)));
+}
+
+test "literal block split cycles three trees across six regions" {
+    var input: [12_288]u8 = undefined;
+    for (&input, 0..) |*byte, i| {
+        const region = i / 2048;
+        byte.* = @intCast((region % 3) * 96 + (i & 15));
+    }
+    const commands = [_]command_plan.Command{.{ .insert_start = 0, .insert_len = input.len }};
+    const result = chooseProposals(&input, &commands, null).dynamic orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqual(@as(usize, 6), result.regionCount());
+    try std.testing.expectEqual(@as(usize, 3), result.typeCount());
+    for (0..6) |region|
+        try std.testing.expectEqual(region % 3, result.blockIndex(region * 2048));
 }
 
 test "literal block split fixed-point logarithm tracks powers and mantissas" {

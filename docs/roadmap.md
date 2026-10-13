@@ -18908,3 +18908,27 @@ reuse, so production keeps the simpler independently owned plans.
   focused libbrotli/progressive differential, AArch64 ReleaseFast compile, and
   9-row planned encode gate pass. Neither the complete upstream matrix nor the
   full repository test graph was run.
+
+- Generalized Brotli literal splitting from fixed two-to-four-region shapes to
+  the same bounded two-to-six-region model, completing a uniform multi-region
+  surface across literal, command, and distance entropy families. The literal
+  scorer retains its seven sixth/quarter/third/half candidate boundaries but
+  enumerates only subsets producing five or six regions, then evaluates cyclic
+  tree periods from two through the region count. Fixed-point entropy chooses
+  one shape; exact 256-symbol Huffman payload cost must clear the 4,096-bit
+  multi-tree gate and lead every fixed proposal by 1,024 bits before a complete
+  wire is encoded. Production literal frequency, alphabet, code-length,
+  encoder, block-length, tree, and context-map storage now scales to six types.
+  Five-/six-symbol literal context maps use valid complex Huffman prefixes and
+  emit all 64 contexts for every type. Deterministic fixtures select 6,290-byte
+  five-tree, 6,330-byte six-tree, and 6,221-byte six-region/three-tree streams;
+  Vort, Node, runtime libbrotli 1.0.9, and the 17-byte-input/31-byte-output
+  progressive decoder reproduce each 12,288-byte payload. Allocation-failure
+  injection covers the dynamic candidate, while existing ordinary ratio rows
+  remain byte-size stable. The default upstream matrix includes the three new
+  shapes, raising the expected `planned_literal_split_cases` counter from six
+  to nine; a focused flag validates only this family. Thirteen scorer tests,
+  old/new writer and boundary tests, complete Node planned differential,
+  focused libbrotli/progressive differential, AArch64 ReleaseFast compile, and
+  9-row planned encode gate pass. Neither the complete upstream matrix nor the
+  full repository test graph was run.
