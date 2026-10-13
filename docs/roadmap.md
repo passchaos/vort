@@ -19177,6 +19177,20 @@ reuse, so production keeps the simpler independently owned plans.
   matrix, eight-case libbrotli/progressive differential, and nine-row ReleaseFast
   gate remain green.
 
+- Added a per-mode exact-score cache for clustered context maps. The 22 bounded
+  target/seed trials use a 64-bit FNV fingerprint as a fast filter, but a hit is
+  accepted only after tree-count and full 64-byte map equality, so collisions
+  cannot alter selection. Repeated maps reuse all literal-tree prefix/payload
+  and context-map scoring. A focused oracle requires a second identical trial
+  to hit with unchanged savings and injects a deliberate hash collision that
+  must miss. Three independent fixed-CPU-2 ReleaseFast `source32k` samples at
+  five iterations reduced the ratio median from 84.251 ms to 82.800 ms
+  (`1.018x`), with samples from 82.53 to 83.22 ms. Relative to the original
+  130.426 ms dense clustering path, cumulative speedup is about `1.575x`;
+  output remains 6,474 bytes with checksum 134,695. The Node matrix, eight-case
+  libbrotli/progressive differential, and nine-row ReleaseFast gate remain
+  green.
+
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository
   dictionary, source, README, roadmap, and small-corpus payloads; optional

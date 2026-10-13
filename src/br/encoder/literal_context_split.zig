@@ -69,6 +69,42 @@ const ActiveSymbols = struct {
     len: u16,
 };
 const SuffixMapCosts = [64]u64;
+const scored_map_capacity: usize = 22;
+const ScoredMapEntry = struct {
+    hash: u64,
+    tree_count: u7,
+    context_map: [64]u8,
+    bit_cost: u64,
+};
+const ScoredMapCache = struct {
+    entries: [scored_map_capacity]ScoredMapEntry = undefined,
+    len: usize = 0,
+    hits: usize = 0,
+
+    fn get(self: *ScoredMapCache, context_map: *const [64]u8, tree_count: usize) ?u64 {
+        const hash = contextMapHash(context_map, tree_count);
+        for (self.entries[0..self.len]) |entry| {
+            if (entry.hash == hash and entry.tree_count == tree_count and
+                std.mem.eql(u8, &entry.context_map, context_map))
+            {
+                self.hits += 1;
+                return entry.bit_cost;
+            }
+        }
+        return null;
+    }
+
+    fn put(self: *ScoredMapCache, context_map: *const [64]u8, tree_count: usize, bit_cost: u64) void {
+        std.debug.assert(self.len < self.entries.len);
+        self.entries[self.len] = .{
+            .hash = contextMapHash(context_map, tree_count),
+            .tree_count = @intCast(tree_count),
+            .context_map = context_map.*,
+            .bit_cost = bit_cost,
+        };
+        self.len += 1;
+    }
+};
 const Analysis = struct {
     by_mode: [mode_count]ContextHistograms,
     total: [256]u32,
@@ -251,6 +287,7 @@ fn chooseModeFromHistograms(
     if (!include_clusters) return proposals;
     var sparse_contexts: SparseContexts = undefined;
     buildSparseContexts(by_context, &sparse_contexts);
+    var score_cache: ScoredMapCache = .{};
     for ([_]usize{ 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64 }) |requested_tree_count| {
         if (requested_tree_count > max_tree_count) continue;
         for ([_]Seed{ .ordered, .interleaved }) |seed| {
@@ -260,6 +297,7 @@ fn chooseModeFromHistograms(
                 by_context,
                 &sparse_contexts,
                 active_symbols,
+                &score_cache,
                 baseline_bits,
                 requested_tree_count,
                 seed,
@@ -278,6 +316,13 @@ fn retainBetter(slot: *?Candidate, candidate: ?Candidate) void {
         slot.* = proposed;
 }
 
+fn contextMapHash(context_map: *const [64]u8, tree_count: usize) u64 {
+    var hash: u64 = 0xcbf2_9ce4_8422_2325;
+    hash = (hash ^ @as(u64, @intCast(tree_count))) *% 0x0000_0100_0000_01b3;
+    for (context_map) |tree| hash = (hash ^ @as(u64, tree)) *% 0x0000_0100_0000_01b3;
+    return hash;
+}
+
 const Seed = enum { ordered, interleaved };
 
 fn clusterContexts(
@@ -286,6 +331,7 @@ fn clusterContexts(
     by_context: *const [64][256]u32,
     sparse_contexts: *const SparseContexts,
     active_symbols: *const ActiveSymbols,
+    score_cache: *ScoredMapCache,
     baseline_bits: u64,
     requested_tree_count: usize,
     seed: Seed,
@@ -361,12 +407,15 @@ fn clusterContexts(
         }
     }
 
-    var candidate_bits: u64 = 0;
-    for (tree_histograms[0..tree_count]) |*histogram| {
-        candidate_bits += try treeBitCost(allocator, histogram);
-    }
-    const map_plan = try context_map_encoder.choose(allocator, &context_map, tree_count);
-    candidate_bits += map_plan.bit_cost;
+    const candidate_bits = score_cache.get(&context_map, tree_count) orelse blk: {
+        var bits: u64 = 0;
+        for (tree_histograms[0..tree_count]) |*histogram|
+            bits += try treeBitCost(allocator, histogram);
+        const map_plan = try context_map_encoder.choose(allocator, &context_map, tree_count);
+        bits += map_plan.bit_cost;
+        score_cache.put(&context_map, tree_count, bits);
+        break :blk bits;
+    };
     const savings = baseline_bits -| candidate_bits;
     if (savings < min_payload_savings_bits) return null;
     return .{
@@ -652,6 +701,57 @@ test "literal context suffix map costs match independent planning" {
         const plan = try context_map_encoder.choose(std.testing.allocator, &candidate.context_map, candidate.tree_count);
         try std.testing.expectEqual(plan.bit_cost, costs[cutoff]);
     }
+}
+
+test "literal context scored map cache hits and rejects collisions" {
+    var contexts: ContextHistograms = @splat(@splat(0));
+    var total: [256]u32 = @splat(0);
+    for (&contexts, 0..) |*histogram, context| {
+        const symbol = context % 4;
+        histogram[symbol] = 32;
+        total[symbol] += 32;
+    }
+    var sparse_contexts: SparseContexts = undefined;
+    buildSparseContexts(&contexts, &sparse_contexts);
+    var active_symbols: ActiveSymbols = undefined;
+    buildActiveSymbols(&total, &active_symbols);
+    const baseline_bits = try treeBitCost(std.testing.allocator, &total);
+    var cache: ScoredMapCache = .{};
+    const first = try clusterContexts(
+        std.testing.allocator,
+        literal_context.mode_lsb6,
+        &contexts,
+        &sparse_contexts,
+        &active_symbols,
+        &cache,
+        baseline_bits,
+        4,
+        .interleaved,
+    ) orelse return error.TestUnexpectedResult;
+    const second = try clusterContexts(
+        std.testing.allocator,
+        literal_context.mode_lsb6,
+        &contexts,
+        &sparse_contexts,
+        &active_symbols,
+        &cache,
+        baseline_bits,
+        4,
+        .interleaved,
+    ) orelse return error.TestUnexpectedResult;
+    try std.testing.expect(Candidate.eql(first, second));
+    try std.testing.expectEqual(first.savings_bits, second.savings_bits);
+    try std.testing.expectEqual(@as(usize, 1), cache.len);
+    try std.testing.expectEqual(@as(usize, 1), cache.hits);
+
+    const map_a: [64]u8 = @splat(0);
+    var map_b = map_a;
+    map_b[63] = 1;
+    var collision: ScoredMapCache = .{};
+    collision.put(&map_a, 2, 123);
+    collision.entries[0].hash = contextMapHash(&map_b, 2);
+    try std.testing.expectEqual(@as(?u64, null), collision.get(&map_b, 2));
+    try std.testing.expectEqual(@as(usize, 0), collision.hits);
 }
 
 test "literal context sparse tree aggregation matches dense reference" {
