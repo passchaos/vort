@@ -1864,6 +1864,36 @@ pub fn build(b: *std.Build) void {
     br_planned_encode_bench_gate.step.dependOn(&run_br_planned_encode_bench_csv.step);
     const br_planned_encode_bench_gate_step = b.step("run-br-planned-encode-bench-gate", "Validate planner-backed Brotli encode A/B CSV");
     br_planned_encode_bench_gate_step.dependOn(&br_planned_encode_bench_gate.step);
+    const br_context_tree_report_exe = b.addExecutable(.{
+        .name = "vort-br-context-tree-report",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/context_tree_report.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
+            },
+        }),
+    });
+    const run_br_context_tree_report = b.addRunArtifact(br_context_tree_report_exe);
+    if (b.args) |args| run_br_context_tree_report.addArgs(args);
+    const br_context_tree_report_step = b.step("run-br-context-tree-report", "Report Brotli ratio context-tree choices");
+    br_context_tree_report_step.dependOn(&run_br_context_tree_report.step);
+    const run_br_context_tree_report_csv = b.addRunArtifact(br_context_tree_report_exe);
+    run_br_context_tree_report_csv.addArgs(&.{ "--csv", "zig-out/vort-br-context-tree-report.csv" });
+    const br_context_tree_report_gate = b.addSystemCommand(&.{
+        "python3", "tools/br/context_tree_report_gate.py",
+        "--csv",   "zig-out/vort-br-context-tree-report.csv",
+    });
+    br_context_tree_report_gate.addArg("--executable");
+    br_context_tree_report_gate.addArtifactArg(br_context_tree_report_exe);
+    br_context_tree_report_gate.step.dependOn(&run_br_context_tree_report_csv.step);
+    const br_context_tree_report_gate_step = b.step("run-br-context-tree-report-gate", "Validate Brotli context-tree report coverage");
+    br_context_tree_report_gate_step.dependOn(&br_context_tree_report_gate.step);
+    const br_context_tree_report_gate_smoke = b.addSystemCommand(&.{ "python3", "tools/br/context_tree_report_gate_smoke.py" });
+    const br_context_tree_report_gate_smoke_step = b.step("run-br-context-tree-report-gate-smoke", "Validate Brotli context-tree report gate negatives");
+    br_context_tree_report_gate_smoke_step.dependOn(&br_context_tree_report_gate_smoke.step);
     const run_br_planned_encode_path_csv = b.addRunArtifact(br_planned_encode_bench_exe);
     run_br_planned_encode_path_csv.addArgs(&.{
         "--iterations", "10",
@@ -5324,6 +5354,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&br_planned_corpus_exe.step);
     check_step.dependOn(&br_planned_probe_exe.step);
     check_step.dependOn(&br_planned_encode_bench_exe.step);
+    check_step.dependOn(&br_context_tree_report_exe.step);
     check_step.dependOn(&br_planned_chunks_bench_exe.step);
     check_step.dependOn(&br_planned_stage_profile_exe.step);
     check_step.dependOn(&br_ratio_stage_profile_exe.step);
@@ -5444,6 +5475,8 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(br_record_optimal_shape_gate_step);
     ci_smoke_step.dependOn(br_planned_chunks_bench_gate_step);
     ci_smoke_step.dependOn(br_upstream_multiblock_diff_step);
+    ci_smoke_step.dependOn(br_context_tree_report_gate_step);
+    ci_smoke_step.dependOn(br_context_tree_report_gate_smoke_step);
     ci_smoke_step.dependOn(br_real_corpus_diff_step);
     ci_smoke_step.dependOn(br_progressive_copy_bench_gate_step);
     ci_smoke_step.dependOn(br_progressive_huffman_bench_gate_step);

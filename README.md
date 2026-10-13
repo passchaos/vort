@@ -526,6 +526,8 @@ zig build run-br-stored-corpus
 zig build run-br-literal-cli-diff
 zig build run-br-planned-node-diff
 zig build -Doptimize=ReleaseFast run-br-planned-encode-bench-gate
+zig build -Doptimize=ReleaseFast run-br-context-tree-report
+zig build -Doptimize=ReleaseFast run-br-context-tree-report-gate
 zig build -Doptimize=ReleaseFast run-br-ratio-stage-profile-gate
 zig build -Doptimize=ReleaseFast run-br-planned-chunks-bench-gate
 zig build -Doptimize=ReleaseFast run-br-upstream-multiblock-diff
