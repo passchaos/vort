@@ -126,7 +126,11 @@ const ScoredMapCache = struct {
         self.len += 1;
     }
 };
-const tree_score_cache_capacity: usize = 64;
+const tree_score_cache_capacity: usize = 128;
+const tree_score_cache_words: usize = (tree_score_cache_capacity + 63) / 64;
+comptime {
+    std.debug.assert(std.math.isPowerOfTwo(tree_score_cache_capacity));
+}
 const TreeScoreEntry = struct {
     hash: u64,
     histogram: [256]u32,
@@ -134,15 +138,17 @@ const TreeScoreEntry = struct {
 };
 const TreeScoreCache = struct {
     entries: [tree_score_cache_capacity]TreeScoreEntry = undefined,
-    occupied: u64 = 0,
+    occupied: [tree_score_cache_words]u64 = @splat(0),
     hits: usize = 0,
     misses: usize = 0,
 
     fn get(self: *TreeScoreCache, histogram: *const [256]u32) ?u64 {
         const hash = treeHistogramHash(histogram);
-        const slot: u6 = @truncate(hash);
-        const mask = @as(u64, 1) << slot;
-        if (self.occupied & mask != 0) {
+        const slot: usize = @intCast(hash & (tree_score_cache_capacity - 1));
+        const word = slot >> 6;
+        const bit: u6 = @truncate(slot);
+        const mask = @as(u64, 1) << bit;
+        if (self.occupied[word] & mask != 0) {
             const entry = &self.entries[slot];
             if (entry.hash == hash and std.mem.eql(u32, &entry.histogram, histogram)) {
                 self.hits += 1;
@@ -155,13 +161,15 @@ const TreeScoreCache = struct {
 
     fn put(self: *TreeScoreCache, histogram: *const [256]u32, bit_cost: u64) void {
         const hash = treeHistogramHash(histogram);
-        const slot: u6 = @truncate(hash);
+        const slot: usize = @intCast(hash & (tree_score_cache_capacity - 1));
+        const word = slot >> 6;
+        const bit: u6 = @truncate(slot);
         self.entries[slot] = .{
             .hash = hash,
             .histogram = histogram.*,
             .bit_cost = bit_cost,
         };
-        self.occupied |= @as(u64, 1) << slot;
+        self.occupied[word] |= @as(u64, 1) << bit;
     }
 };
 const Analysis = struct {
@@ -1117,18 +1125,29 @@ test "literal context tree score cache hits and rejects collisions" {
     try std.testing.expectEqual(@as(usize, 1), cache.hits);
     try std.testing.expectEqual(@as(usize, 1), cache.misses);
 
+    var high_slot_histogram = histogram_a;
+    while (treeHistogramHash(&high_slot_histogram) & (tree_score_cache_capacity - 1) < 64)
+        high_slot_histogram[0] += 1;
+    var high_slot_cache: TreeScoreCache = .{};
+    const high_slot_cost = try treeBitCost(std.testing.allocator, &high_slot_histogram);
+    high_slot_cache.put(&high_slot_histogram, high_slot_cost);
+    try std.testing.expect(high_slot_cache.occupied[1] != 0);
+    try std.testing.expectEqual(@as(?u64, high_slot_cost), high_slot_cache.get(&high_slot_histogram));
+
     var histogram_b = histogram_a;
     histogram_b[29] -= 1;
     histogram_b[30] += 1;
     const hash_b = treeHistogramHash(&histogram_b);
-    const slot: u6 = @truncate(hash_b);
+    const slot: usize = @intCast(hash_b & (tree_score_cache_capacity - 1));
+    const word = slot >> 6;
+    const bit: u6 = @truncate(slot);
     var collision: TreeScoreCache = .{};
     collision.entries[slot] = .{
         .hash = hash_b,
         .histogram = histogram_a,
         .bit_cost = expected,
     };
-    collision.occupied = @as(u64, 1) << slot;
+    collision.occupied[word] = @as(u64, 1) << bit;
     try std.testing.expectEqual(@as(?u64, null), collision.get(&histogram_b));
     try std.testing.expectEqual(@as(usize, 0), collision.hits);
     try std.testing.expectEqual(@as(usize, 1), collision.misses);

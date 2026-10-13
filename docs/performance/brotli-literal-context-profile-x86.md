@@ -70,23 +70,30 @@ production regression from the compile-time instrumentation split.
 
 ## Exact single-tree score cache follow-up
 
-The first optimization driven by this profile added a 64-slot direct-mapped
+The first optimization driven by this profile added a 128-slot direct-mapped
 cache per RFC mode for final single-tree Huffman wire costs. Each entry stores
 the complete 256-bin histogram. A 64-bit hash selects one slot, but reuse is
 accepted only after both hash and full histogram equality; collisions simply
 overwrite or miss and cannot change selection. The bounded table occupies
-roughly 65 KiB while its mode is being evaluated.
+roughly 130 KiB while its mode is being evaluated.
 
-On the same fixed-CPU-2 ten-iteration profile, `source32k` produced 1,460 tree
-hits and 3,190 misses, a 31.4% hit rate. The exact-score stage fell from
-23.103 ms to 20.654 ms (`1.119x`), cluster time fell from 32.591 ms to
-29.781 ms (`1.094x`), and complete profiled search fell from 61.029 ms to
-58.397 ms (`1.045x`). `source16k` exact scoring improved by `1.128x`; the
-short `source4k` total remained noise-level despite a 40.8% cache hit rate.
+On the same fixed-CPU-2 ten-iteration profile, `source32k` produced 1,750 tree
+hits and 2,900 misses, a 37.6% hit rate. The exact-score stage fell from
+23.103 ms to 20.046 ms (`1.153x`), cluster time fell from 32.591 ms to
+29.142 ms (`1.118x`), and complete profiled search measured 58.747 ms versus
+the 61.029 ms baseline (`1.039x`).
 
 The authoritative uninstrumented control alternated the pre-cache and cached
-binaries for eleven fixed-CPU-2 pairs at 20 iterations. The cache won 10/11
-pairs and reduced the median from 242.704 ms to 240.065 ms (`1.011x`) with
+binaries for eleven fixed-CPU-2 pairs at 20 iterations. The cache won 11/11
+pairs and reduced the median from 243.309 ms to 240.427 ms (`1.012x`) with
 identical 6,475-byte output and checksum 134,745. Focused tests require a true
 hit after insertion and inject a matching hash with a different histogram that
 must miss, preserving the same collision-safety rule as the complete-map cache.
+
+A bounded capacity sweep rejected both neighboring sizes. At 32 slots, the
+`source32k` hit count fell to 1,170/4,650 and exact scoring rose to 22.413 ms.
+At 64 slots, hits rose to 1,460 and exact scoring fell to 20.654 ms. Moving to
+128 slots yielded the figures above and won 8/11 direct 64-versus-128 process
+pairs, reducing their median from 241.014 ms to 239.949 ms (`1.004x`). The
+extra roughly 65 KiB therefore clears both stage and complete-encoder evidence;
+larger capacities remain unjustified until another measured sweep.

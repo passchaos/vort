@@ -19305,18 +19305,18 @@ reuse, so production keeps the simpler independently owned plans.
   are recorded in `docs/performance/brotli-literal-context-profile-x86.md`.
 
 - Added a bounded exact cache for individual clustered literal-tree scores.
-  Each RFC mode owns 64 direct-mapped slots (about 65 KiB); FNV-64 selects the
+  Each RFC mode owns 128 direct-mapped slots (about 130 KiB); FNV-64 selects the
   slot, while reuse requires the hash and complete 256-bin histogram to match.
   Slot collisions only replace or miss and therefore cannot alter candidate
   costs. Focused coverage requires a real hit and an injected same-hash,
-  different-histogram miss. On the fixed-CPU-2 ten-iteration profile,
-  `source32k` hit 1,460 of 4,650 tree lookups (31.4%): final exact scoring fell
-  23.103→20.654 ms (`1.119x`), cluster time fell 32.591→29.781 ms (`1.094x`),
-  and complete profiled search fell 61.029→58.397 ms (`1.045x`). Eleven
-  alternating uninstrumented 20-iteration pairs favored the cache in 10 cases,
-  reducing the median from 242.704 ms to 240.065 ms (`1.011x`). The same current
-  input remains 6,475 bytes with checksum 134,745; Node, libbrotli/progressive,
-  cross-architecture, and ReleaseFast gates remain mandatory.
+  different-histogram miss. A 32/64/128-slot sweep selected 128: `source32k`
+  hit 1,750 of 4,650 tree lookups (37.6%), final exact scoring fell
+  23.103→20.046 ms (`1.153x`), and cluster time fell 32.591→29.142 ms
+  (`1.118x`). It beat 64 slots in 8/11 direct pairs (`1.004x` median) and the
+  no-cache binary in all 11 longer pairs, reducing the median from 243.309 ms
+  to 240.427 ms (`1.012x`). The same current input remains 6,475 bytes with
+  checksum 134,745; Node, libbrotli/progressive, cross-architecture, and
+  ReleaseFast gates remain mandatory.
 
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository
