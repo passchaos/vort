@@ -13,6 +13,7 @@ const pattern = @import("br/pattern.zig");
 const command_plan = @import("br/encoder/command_plan.zig");
 const literal_context = @import("br/encoder/literal_context.zig");
 const literal_context_split = @import("br/encoder/literal_context_split.zig");
+const context_map_encoder = @import("br/encoder/context_map.zig");
 const long_distance = @import("br/encoder/long_distance.zig");
 const short_match_candidates = @import("br/encoder/short_match_candidates.zig");
 const encoder_distance = @import("br/encoder/distance.zig");
@@ -582,6 +583,7 @@ test {
     _ = command_plan;
     _ = literal_context;
     _ = literal_context_split;
+    _ = context_map_encoder;
     _ = long_distance;
     _ = short_match_candidates;
     _ = encoder_distance;
@@ -16232,7 +16234,7 @@ test "br ratio planner selects a profitable six-type command entropy split" {
     const payload = @embedFile("br/dictionary.bin");
     const encoded = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
     defer std.testing.allocator.free(encoded);
-    try std.testing.expect(encoded.len <= 54_889);
+    try std.testing.expect(encoded.len <= 54_887);
     const summary = try summarizeStreamAlloc(std.testing.allocator, encoded);
     try std.testing.expectEqual(@as(usize, 6), summary.max_command_block_types);
     try std.testing.expectEqual(@as(usize, 2), summary.max_distance_block_types);
@@ -26348,28 +26350,14 @@ fn writeLiteralContextMap(allocator: std.mem.Allocator, writer: *BitWriter, cand
     if (candidate.suffixCutoff()) |cutoff| return writeLiteralSuffixContextMap(allocator, writer, cutoff);
     if (candidate.tree_count < 2 or candidate.tree_count > literal_context_split.max_trees)
         return error.InvalidBlockPlan;
-    var frequencies: [literal_context_split.max_trees]u32 = @splat(0);
+    var used: [literal_context_split.max_trees]bool = @splat(false);
     for (candidate.context_map) |tree| {
         if (tree >= candidate.tree_count) return error.InvalidBlockPlan;
-        frequencies[tree] += 1;
+        used[tree] = true;
     }
-    for (frequencies[0..candidate.tree_count]) |frequency| if (frequency == 0) return error.InvalidBlockPlan;
-    var alphabet: command_plan.PrefixAlphabetFor(literal_context_split.max_trees) = undefined;
-    try command_plan.alphabetFromFrequenciesInto(literal_context_split.max_trees, &alphabet, &frequencies);
-    const lengths = try alphabet.codeLengths(&frequencies);
-    try writer.writeBits(allocator, 0, 1); // RLEMAX = 0.
-    try writePrefixSymbolsWithLengths(allocator, writer, candidate.tree_count, &alphabet, &lengths);
-    const encoder = if (alphabet.len > 4)
-        try huffman.HuffmanTable(literal_context_split.max_trees).Encoder.init(&lengths)
-    else
-        undefined;
-    for (candidate.context_map) |tree| {
-        if (alphabet.len <= 4) {
-            const code = alphabet.simpleCode(tree) orelse return error.InvalidBlockPlan;
-            try writer.writeHuffmanBits(allocator, code.code, code.bits);
-        } else try writer.writeHuffmanBits(allocator, encoder.codes[tree], encoder.bits[tree]);
-    }
-    try writer.writeBits(allocator, 0, 1); // IMTF = false.
+    for (used[0..candidate.tree_count]) |is_used| if (!is_used) return error.InvalidBlockPlan;
+    const plan = try context_map_encoder.choose(allocator, &candidate.context_map, candidate.tree_count);
+    try context_map_encoder.write(allocator, writer, &plan);
 }
 
 fn writeUtf8TextContextMap(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {

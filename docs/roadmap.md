@@ -19062,3 +19062,17 @@ reuse, so production keeps the simpler independently owned plans.
   and the 17-byte-input/31-byte-output progressive decoder reproduce arbitrary
   4/8/16/64-tree maps (`literal_context_cases=8`). The nine-row ReleaseFast
   planned-encode gate remains green.
+
+- Added exact context-map wire planning for the complete 2...64-tree encoder.
+  A dedicated module evaluates plain and move-to-front symbol streams with
+  every zero-run prefix depth 0...6. Each of the 14 candidates rebuilds its
+  actual Huffman alphabet and includes the RLE flag/depth, simple-or-complex
+  prefix header, Huffman payload, run extra bits, and IMTF trailer in its exact
+  bit cost; a counting-writer oracle requires that estimate to equal emission
+  bit for bit. The retained suffix-specialized map remains available, while
+  general maps now select MTF/RLE only when strictly smaller. Clustered-range
+  unit coverage requires MTF plus zero-run coding, and libbrotli 1.0.9 plus the
+  17-byte-input/31-byte-output progressive decoder validate grouped 4/8/16-tree
+  maps alongside the plain 64-tree complex map (`literal_context_cases=8`).
+  The repository dictionary wire falls from 54,889 to 54,887 bytes, and the
+  nine-row ReleaseFast planned-encode gate remains green.

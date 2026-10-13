@@ -90,7 +90,7 @@ pub fn main(init: std.process.Init) !void {
         }
         var context_map: [64]u8 = undefined;
         for ([_]u7{ 4, 8, 16, 64 }) |tree_count| {
-            for (&context_map, 0..) |*tree, context| tree.* = @intCast(context % tree_count);
+            for (&context_map, 0..) |*tree, context| tree.* = @intCast(context * tree_count / context_map.len);
             const clustered = try vort.br.IncrementalTestSupport.encodeLiteralContextMap(
                 init.gpa,
                 &payload,
