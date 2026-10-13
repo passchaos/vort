@@ -158,6 +158,18 @@ def main() -> int:
     if actual != expected:
         raise SystemExit("four-distance-types: node output mismatch")
     print(f"brotli planned four-distance-types node diff: encoded={len(encoded)} decoded={len(actual)}")
+    distance_cluster_cases = (
+        ("clustered-distance-types", 64 * 1024 + 12288 * 4),
+        ("alternating-distance-types", 64 * 1024 + 8192 * 4),
+        ("reuse-first-three-distance-types", 64 * 1024 + 8192 * 4),
+    )
+    for mode, decoded_len in distance_cluster_cases:
+        expected = b"a" * decoded_len
+        encoded = subprocess.check_output([sys.argv[1], mode])
+        actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+        if actual != expected:
+            raise SystemExit(f"{mode}: node output mismatch")
+        print(f"brotli planned {mode} node diff: encoded={len(encoded)} decoded={len(actual)}")
     state = 0x12345678
     random_tail = bytearray(512)
     for i in range(len(random_tail)):

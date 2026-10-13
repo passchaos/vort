@@ -812,6 +812,40 @@ pub const IncrementalTestSupport = struct {
         return .{ .encoded = encoded, .payload = payload };
     }
 
+    /// Build three distance-symbol regions whose two tree types follow A-B-A.
+    pub fn encodeClusteredDistanceTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, clustered_distance_payload_len);
+        errdefer allocator.free(payload);
+        const commands = try allocator.alloc(command_plan.Command, clustered_distance_command_count);
+        defer allocator.free(commands);
+        fillClusteredDistanceFixture(payload, commands);
+        const encoded = try encodeSelectedDistanceSplitFixtureAlloc(allocator, payload, commands);
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build four distance-symbol regions whose two tree types follow A-B-A-B.
+    pub fn encodeAlternatingDistanceTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, alternating_distance_payload_len);
+        errdefer allocator.free(payload);
+        const commands = try allocator.alloc(command_plan.Command, alternating_distance_command_count);
+        defer allocator.free(commands);
+        fillAlternatingDistanceFixture(payload, commands);
+        const encoded = try encodeSelectedDistanceSplitFixtureAlloc(allocator, payload, commands);
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
+    /// Build four distance-symbol regions whose three tree types follow
+    /// A-B-C-A, exercising the implicit wrap from type two back to zero.
+    pub fn encodeReuseFirstOfThreeDistanceTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, reuse_first_distance_payload_len);
+        errdefer allocator.free(payload);
+        const commands = try allocator.alloc(command_plan.Command, reuse_first_distance_command_count);
+        defer allocator.free(commands);
+        fillReuseFirstDistanceFixture(payload, commands);
+        const encoded = try encodeSelectedDistanceSplitFixtureAlloc(allocator, payload, commands);
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
     /// Build a one-byte stream whose 256 command trees make the compressed
     /// header exceed the decoder's built-in 16 KiB staging buffer. Callers can
     /// use this to exercise explicit `compressed_header_scratch` storage.
@@ -3768,6 +3802,33 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
             best_stats = two_distance_stats;
         } else allocator.free(two_distance_candidate);
     };
+    if (distance_splits.clustered) |clustered_distance| {
+        var clustered_distance_stats = baseline_stats;
+        const clustered_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &clustered_distance_stats, options, baseline.use_recent_distances, literal_split, command_split, clustered_distance);
+        if (clustered_distance_candidate.len < best.len) {
+            allocator.free(best);
+            best = clustered_distance_candidate;
+            best_stats = clustered_distance_stats;
+        } else allocator.free(clustered_distance_candidate);
+    }
+    if (distance_splits.alternating_four) |alternating_distance| {
+        var alternating_distance_stats = baseline_stats;
+        const alternating_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &alternating_distance_stats, options, baseline.use_recent_distances, literal_split, command_split, alternating_distance);
+        if (alternating_distance_candidate.len < best.len) {
+            allocator.free(best);
+            best = alternating_distance_candidate;
+            best_stats = alternating_distance_stats;
+        } else allocator.free(alternating_distance_candidate);
+    }
+    if (distance_splits.reuse_first_four) |reused_distance| {
+        var reused_distance_stats = baseline_stats;
+        const reused_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &reused_distance_stats, options, baseline.use_recent_distances, literal_split, command_split, reused_distance);
+        if (reused_distance_candidate.len < best.len) {
+            allocator.free(best);
+            best = reused_distance_candidate;
+            best_stats = reused_distance_stats;
+        } else allocator.free(reused_distance_candidate);
+    }
     if (distance_splits.four) |four_distance| {
         var four_distance_stats = baseline_stats;
         const four_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &four_distance_stats, options, baseline.use_recent_distances, literal_split, command_split, four_distance);
@@ -3986,8 +4047,10 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         if (split.split == 0) return error.InvalidBlockPlan;
         if (split.second_split) |second| {
             if (second <= split.split) return error.InvalidBlockPlan;
-            if (split.third_split) |third| if (third <= second) return error.InvalidBlockPlan;
-        } else if (split.third_split != null) return error.InvalidBlockPlan;
+            if (split.third_split) |third| {
+                if (split.alternate_two_types and split.reuse_first_for_fourth or third <= second) return error.InvalidBlockPlan;
+            } else if (split.reuse_first_for_fourth) return error.InvalidBlockPlan;
+        } else if (split.third_split != null or split.alternate_two_types or split.reuse_first_for_fourth) return error.InvalidBlockPlan;
     }
     var literal_frequencies: [256]u32 = if (options.optimize_literal_tree_wire) @splat(0) else undefined;
     var literal_seen: [4]u64 = @splat(0);
@@ -4121,7 +4184,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     } else if (!has_same_last_candidate)
         try command_alphabet.sortByFrequencies(&command_frequencies);
     if (options.distance_split != null) {
-        for (distance_block_alphabets[0..options.distance_split.?.regionCount()], distance_block_frequencies[0..options.distance_split.?.regionCount()]) |*alphabet, *frequencies|
+        for (distance_block_alphabets[0..options.distance_split.?.typeCount()], distance_block_frequencies[0..options.distance_split.?.typeCount()]) |*alphabet, *frequencies|
             try command_plan.alphabetFromFrequenciesInto(planned_distance_alphabet_size, alphabet, frequencies);
     } else if (!has_same_last_candidate)
         try command_plan.alphabetFromFrequenciesInto(planned_distance_alphabet_size, &distance_alphabet, &distance_frequencies);
@@ -4137,7 +4200,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     } else command_alphabet.len;
     stats.distance_symbol_count = if (options.distance_split) |split| blk: {
         var symbol_count: usize = 0;
-        for (distance_block_alphabets[0..split.regionCount()]) |alphabet| symbol_count += alphabet.len;
+        for (distance_block_alphabets[0..split.typeCount()]) |alphabet| symbol_count += alphabet.len;
         break :blk symbol_count;
     } else distance_alphabet.len;
     if (io) |active| stats.alphabet_ns = elapsedNs(alphabet_start.?, active);
@@ -4194,7 +4257,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         undefined;
     const distance_block_lengths = if (options.distance_split != null) blk: {
         var lengths: [4][planned_distance_alphabet_size]u4 = undefined;
-        for (lengths[0..options.distance_split.?.regionCount()], distance_block_alphabets[0..options.distance_split.?.regionCount()], distance_block_frequencies[0..options.distance_split.?.regionCount()]) |*tree_lengths, *alphabet, *frequencies|
+        for (lengths[0..options.distance_split.?.typeCount()], distance_block_alphabets[0..options.distance_split.?.typeCount()], distance_block_frequencies[0..options.distance_split.?.typeCount()]) |*tree_lengths, *alphabet, *frequencies|
             tree_lengths.* = if (alphabet.len <= 4) @splat(0) else try alphabet.codeLengths(frequencies);
         break :blk lengths;
     } else undefined;
@@ -4210,7 +4273,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     } else null;
     const distance_split_code = if (options.distance_split) |split| try DistanceBlockLengthCode.init(split, distance_index) else undefined;
     const distance_split_header: ?DistanceBlockSplitHeader = if (options.distance_split) |split| .{
-        .block_count = split.regionCount(),
+        .type_count = split.typeCount(),
         .alphabets = &distance_block_alphabets,
         .lengths = &distance_block_lengths,
         .split_code = &distance_split_code,
@@ -4257,7 +4320,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         try huffman.HuffmanTable(planned_distance_alphabet_size).Encoder.init(&distance_lengths);
     const distance_block_encoders = if (options.distance_split) |split| blk: {
         var encoders: [4]huffman.HuffmanTable(planned_distance_alphabet_size).Encoder = undefined;
-        for (encoders[0..split.regionCount()], distance_block_alphabets[0..split.regionCount()], distance_block_lengths[0..split.regionCount()]) |*encoder, *alphabet, *lengths|
+        for (encoders[0..split.typeCount()], distance_block_alphabets[0..split.typeCount()], distance_block_lengths[0..split.typeCount()]) |*encoder, *alphabet, *lengths|
             encoder.* = if (alphabet.len <= 4) .{} else if (alphabet.len <= 64)
                 try huffman.HuffmanTable(planned_distance_alphabet_size).Encoder.initSparseTrusted(lengths, alphabet.symbols[0..alphabet.len])
             else
@@ -14924,17 +14987,64 @@ const four_distance_values = [4][8]usize{
     .{ 32_768, 36_864, 40_960, 45_056, 49_152, 53_248, 57_344, 61_440 },
 };
 
+const clustered_distance_command_count = 12_288;
+const clustered_distance_first_split = clustered_distance_command_count / 3;
+const clustered_distance_second_split = clustered_distance_command_count * 2 / 3;
+const clustered_distance_payload_len = four_distance_seed_len + clustered_distance_command_count * four_distance_copy_len;
+const alternating_distance_command_count = four_distance_command_count;
+const alternating_distance_payload_len = four_distance_payload_len;
+const reuse_first_distance_command_count = four_distance_command_count;
+const reuse_first_distance_payload_len = four_distance_payload_len;
+
 fn fillFourDistanceFixture(payload: []u8, commands: []command_plan.Command) void {
-    std.debug.assert(payload.len == four_distance_payload_len);
-    std.debug.assert(commands.len == four_distance_command_count);
+    fillDistanceTypeFixture(
+        payload,
+        commands,
+        &.{ four_distance_first_split, four_distance_second_split, four_distance_third_split },
+        &.{ 0, 1, 2, 3 },
+    );
+}
+
+fn fillClusteredDistanceFixture(payload: []u8, commands: []command_plan.Command) void {
+    fillDistanceTypeFixture(
+        payload,
+        commands,
+        &.{ clustered_distance_first_split, clustered_distance_second_split },
+        &.{ 0, 3, 0 },
+    );
+}
+
+fn fillAlternatingDistanceFixture(payload: []u8, commands: []command_plan.Command) void {
+    fillDistanceTypeFixture(
+        payload,
+        commands,
+        &.{ four_distance_first_split, four_distance_second_split, four_distance_third_split },
+        &.{ 0, 3, 0, 3 },
+    );
+}
+
+fn fillReuseFirstDistanceFixture(payload: []u8, commands: []command_plan.Command) void {
+    fillDistanceTypeFixture(
+        payload,
+        commands,
+        &.{ four_distance_first_split, four_distance_second_split, four_distance_third_split },
+        &.{ 0, 1, 3, 0 },
+    );
+}
+
+fn fillDistanceTypeFixture(payload: []u8, commands: []command_plan.Command, boundaries: []const usize, region_types: []const usize) void {
+    std.debug.assert(payload.len == four_distance_seed_len + commands.len * four_distance_copy_len);
+    std.debug.assert(region_types.len == boundaries.len + 1);
     @memset(payload, 'a');
+    var region: usize = 0;
     for (commands, 0..) |*command, i| {
-        const region: usize = if (i < four_distance_first_split) 0 else if (i < four_distance_second_split) 1 else if (i < four_distance_third_split) 2 else 3;
+        if (region < boundaries.len and i == boundaries[region]) region += 1;
+        const tree_index = region_types[region];
         command.* = .{
             .insert_start = if (i == 0) 0 else four_distance_seed_len + i * four_distance_copy_len,
             .insert_len = if (i == 0) four_distance_seed_len else 0,
             .copy_len = four_distance_copy_len,
-            .distance = four_distance_values[region][i & 7],
+            .distance = four_distance_values[tree_index][i & 7],
             .has_copy = true,
         };
     }
@@ -14964,14 +15074,14 @@ fn encodeSelectedDistanceSplitFixtureAlloc(allocator: std.mem.Allocator, payload
     return baseline;
 }
 
-fn fourDistanceFixtureProposals(commands: []const command_plan.Command) Error!distance_block_split.Proposals {
-    if (commands.len != four_distance_command_count) return error.InvalidBlockPlan;
-    var symbols: [four_distance_command_count]u16 = undefined;
-    for (commands, &symbols) |command, *symbol| {
+fn distanceFixtureProposals(commands: []const command_plan.Command) Error!distance_block_split.Proposals {
+    if (commands.len > clustered_distance_command_count) return error.InvalidBlockPlan;
+    var symbols: [clustered_distance_command_count]u16 = undefined;
+    for (commands, symbols[0..commands.len]) |command, *symbol| {
         const distance = encoder_distance.encode(commandWireDistance(command), 15) orelse return error.InvalidBlockPlan;
         symbol.* = distance.symbol;
     }
-    return distance_block_split.chooseProposals(&symbols);
+    return distance_block_split.chooseProposals(symbols[0..commands.len]);
 }
 
 test "br planned wire uses three and four distinct distance types" {
@@ -14980,7 +15090,7 @@ test "br planned wire uses three and four distinct distance types" {
     const commands = try std.testing.allocator.alloc(command_plan.Command, four_distance_command_count);
     defer std.testing.allocator.free(commands);
     fillFourDistanceFixture(payload, commands);
-    const proposals = try fourDistanceFixtureProposals(commands);
+    const proposals = try distanceFixtureProposals(commands);
     const three = proposals.three orelse return error.TestUnexpectedResult;
     const four = proposals.four orelse return error.TestUnexpectedResult;
     var stats: encoder_stats.PlannedEncodeStats = .{};
@@ -15010,6 +15120,70 @@ test "br planned wire uses three and four distinct distance types" {
     const decoded = try decodeStreamAllocExactSize(std.testing.allocator, selected, payload.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "br planned wire clusters repeated distance tree types" {
+    const Shape = enum { clustered, alternating, reuse_first };
+    const cases = .{
+        .{ .shape = Shape.clustered, .payload_len = clustered_distance_payload_len, .command_count = clustered_distance_command_count, .type_count = @as(usize, 2) },
+        .{ .shape = Shape.alternating, .payload_len = alternating_distance_payload_len, .command_count = alternating_distance_command_count, .type_count = @as(usize, 2) },
+        .{ .shape = Shape.reuse_first, .payload_len = reuse_first_distance_payload_len, .command_count = reuse_first_distance_command_count, .type_count = @as(usize, 3) },
+    };
+    inline for (cases) |case| {
+        const payload = try std.testing.allocator.alloc(u8, case.payload_len);
+        defer std.testing.allocator.free(payload);
+        const commands = try std.testing.allocator.alloc(command_plan.Command, case.command_count);
+        defer std.testing.allocator.free(commands);
+        switch (case.shape) {
+            .clustered => fillClusteredDistanceFixture(payload, commands),
+            .alternating => fillAlternatingDistanceFixture(payload, commands),
+            .reuse_first => fillReuseFirstDistanceFixture(payload, commands),
+        }
+        const proposals = try distanceFixtureProposals(commands);
+        const proposal = switch (case.shape) {
+            .clustered => proposals.clustered,
+            .alternating => proposals.alternating_four,
+            .reuse_first => proposals.reuse_first_four,
+        } orelse return error.TestUnexpectedResult;
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const forced = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, commands, null, &stats, .{
+            .distance_split = proposal,
+            .optimize_same_last_distance = false,
+        });
+        defer std.testing.allocator.free(forced);
+        const selected = try encodeSelectedDistanceSplitFixtureAlloc(std.testing.allocator, payload, commands);
+        defer std.testing.allocator.free(selected);
+        try std.testing.expectEqualSlices(u8, forced, selected);
+        const summary = try summarizeStream(selected);
+        try std.testing.expectEqual(case.type_count, summary.max_distance_block_types);
+        try std.testing.expectEqual(case.type_count, summary.max_distance_context_trees);
+        const decoded = try decodeStreamAllocExactSize(std.testing.allocator, selected, payload.len);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
+}
+
+test "br clustered distance candidate cleans up allocation failures" {
+    const payload = try std.testing.allocator.alloc(u8, clustered_distance_payload_len);
+    defer std.testing.allocator.free(payload);
+    const commands = try std.testing.allocator.alloc(command_plan.Command, clustered_distance_command_count);
+    defer std.testing.allocator.free(commands);
+    fillClusteredDistanceFixture(payload, commands);
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const baseline = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, commands, null, &stats, .{ .optimize_same_last_distance = false });
+    defer std.testing.allocator.free(baseline);
+
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, input: []const u8, plan: []const command_plan.Command, unsplit: []u8) !void {
+            var candidate_stats: encoder_stats.PlannedEncodeStats = .{};
+            const candidate = try encodeEntropySplitCandidateAlloc(allocator, input, plan, &candidate_stats, .{ .try_distance_split = true }, .{ .encoded = unsplit, .use_recent_distances = false });
+            defer if (candidate) |encoded| allocator.free(encoded);
+            try std.testing.expect(candidate != null);
+            const summary = try summarizeStreamAlloc(allocator, candidate.?);
+            try std.testing.expectEqual(@as(usize, 2), summary.max_distance_block_types);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{ payload, commands, baseline });
 }
 
 test "br four-type distance candidate cleans up allocation failures" {
@@ -25145,7 +25319,7 @@ const CommandBlockSplitHeader = struct {
 };
 
 const DistanceBlockSplitHeader = struct {
-    block_count: usize,
+    type_count: usize,
     alphabets: *const [4]command_plan.PrefixAlphabetFor(planned_distance_alphabet_size),
     lengths: *const [4][planned_distance_alphabet_size]u4,
     split_code: *const DistanceBlockLengthCode,
@@ -25169,8 +25343,8 @@ fn writePlannedCommandTrees(allocator: std.mem.Allocator, writer: *BitWriter, al
 
 fn writeDistanceBlockSwitchHeader(allocator: std.mem.Allocator, writer: *BitWriter, split: ?DistanceBlockSplitHeader) Error!void {
     if (split) |header| {
-        try writeBlockTypeCount(allocator, writer, @intCast(header.block_count));
-        try writeSimpleSingleSymbolPrefixRuntime(allocator, writer, header.block_count + 2, 1);
+        try writeBlockTypeCount(allocator, writer, @intCast(header.type_count));
+        try writeSimpleSingleSymbolPrefixRuntime(allocator, writer, header.type_count + 2, 1);
         try writePrefixSymbolsWithLengths(allocator, writer, 26, &header.split_code.alphabet, &header.split_code.lengths);
         try header.split_code.writeLength(allocator, writer, 0);
     } else try writeBlockTypeCount(allocator, writer, 1);
@@ -25178,10 +25352,10 @@ fn writeDistanceBlockSwitchHeader(allocator: std.mem.Allocator, writer: *BitWrit
 
 fn writeDistanceTreeContextMap(allocator: std.mem.Allocator, writer: *BitWriter, split: ?DistanceBlockSplitHeader) Error!void {
     if (split == null) return writeBlockTypeCount(allocator, writer, 1);
-    try writeBlockTypeCount(allocator, writer, @intCast(split.?.block_count));
-    if (split.?.block_count == 3) return writeThreeDistanceBlockContextMap(allocator, writer);
-    if (split.?.block_count == 4) return writeFourDistanceBlockContextMap(allocator, writer);
-    if (split.?.block_count != 2) return error.InvalidBlockPlan;
+    try writeBlockTypeCount(allocator, writer, @intCast(split.?.type_count));
+    if (split.?.type_count == 3) return writeThreeDistanceBlockContextMap(allocator, writer);
+    if (split.?.type_count == 4) return writeFourDistanceBlockContextMap(allocator, writer);
+    if (split.?.type_count != 2) return error.InvalidBlockPlan;
     // Eight entries: block type 0 uses tree 0 for all four contexts; block
     // type 1 uses tree 1. With IMTF the latter becomes [1,0,0,0].
     try writer.writeBits(allocator, 1, 1); // use RLE for zeros
@@ -25225,7 +25399,7 @@ fn writeFourDistanceBlockContextMap(allocator: std.mem.Allocator, writer: *BitWr
 
 fn writePlannedDistanceTrees(allocator: std.mem.Allocator, writer: *BitWriter, alphabet_size: usize, alphabet: *const command_plan.PrefixAlphabetFor(planned_distance_alphabet_size), lengths: *const [planned_distance_alphabet_size]u4, split: ?DistanceBlockSplitHeader) Error!void {
     if (split) |header| {
-        for (0..header.block_count) |tree|
+        for (0..header.type_count) |tree|
             try writePrefixSymbolsWithLengths(allocator, writer, alphabet_size, &header.alphabets[tree], &header.lengths[tree]);
     } else try writePrefixSymbolsWithLengths(allocator, writer, alphabet_size, alphabet, lengths);
 }

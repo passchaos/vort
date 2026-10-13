@@ -18837,3 +18837,26 @@ reuse, so production keeps the simpler independently owned plans.
   libbrotli/progressive differential, AArch64 ReleaseFast compile, and 9-row
   planned encode gate pass. Neither the complete upstream matrix nor the full
   repository test graph was run.
+
+- Completed the bounded Brotli distance clustering family with A-B-A,
+  A-B-A-B, and A-B-C-A tree reuse. Pair scoring now pools matching outer
+  regions, while triple scoring evaluates alternating two-tree and
+  first-of-three reuse beside the independent four-tree proposal. Every region
+  still contains at least 512 explicit distance symbols; clustered A-B-A must
+  beat the two-region estimate by 128 bits, A-B-A-B must beat the best lower
+  form by 256 bits, and A-B-C-A uses a 128-bit lead after clearing the existing
+  4,400-bit multi-tree gate. All proposals remain subject to complete-wire
+  byte-size arbitration. Production block indexing distinguishes region count
+  from tree count, so the standard implicit transitions wrap 0→1→0,
+  0→1→0→1, or 0→1→2→0 while block-length coding still covers every region.
+  Deterministic fixtures select 13,537-byte A-B-A, 12,920-byte A-B-A-B, and
+  7,807-byte A-B-C-A streams for 114,688/98,304/98,304 decoded bytes. Vort,
+  Node, runtime libbrotli 1.0.9, and the 17-byte-input/31-byte-output
+  progressive decoder reproduce each payload; allocation-failure injection
+  covers clustered candidate cleanup. The default upstream matrix includes all
+  three cases, raising the expected `planned_distance_split_cases` counter from
+  two to five, and a focused flag validates only this family. Nine distance
+  scorer tests, production writer tests, complete Node planned differential,
+  focused libbrotli/progressive differential, AArch64 ReleaseFast compile, and
+  9-row planned encode gate pass. Neither the complete upstream matrix nor the
+  full repository test graph was run.

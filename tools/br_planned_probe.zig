@@ -110,6 +110,27 @@ pub fn main(init: std.process.Init) !void {
         try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
         return;
     }
+    if (std.mem.eql(u8, mode, "clustered-distance-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeClusteredDistanceTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "alternating-distance-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeAlternatingDistanceTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "reuse-first-three-distance-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeReuseFirstOfThreeDistanceTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
     if (std.mem.eql(u8, mode, "incremental-planned")) {
         var payload: [1024]u8 = undefined;
         @memset(payload[0..512], 'a');
