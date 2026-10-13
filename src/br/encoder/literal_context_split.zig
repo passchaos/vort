@@ -858,6 +858,17 @@ fn treeBitCostProfiled(
         profiler.profile.tree_alphabet_ns +%= profiler.elapsedNs(alphabet_start);
         profiler.profile.tree_score_calls += 1;
         profiler.profile.tree_active_entries += alphabet.len;
+        const bucket: usize = if (alphabet.len <= 4)
+            0
+        else if (alphabet.len <= 16)
+            1
+        else if (alphabet.len <= 32)
+            2
+        else if (alphabet.len <= 64)
+            3
+        else
+            4;
+        profiler.profile.tree_active_buckets[bucket] += 1;
     }
     const lengths_start = if (profiled) profiler.now() else {};
     const lengths = try alphabet.codeLengths(frequencies);
@@ -993,6 +1004,9 @@ test "literal context profile reports stable stage accounting" {
         profile.tree_score_calls,
         profile.tree_simple_scores + profile.tree_complex_scores,
     );
+    var bucket_total: usize = 0;
+    for (profile.tree_active_buckets) |count| bucket_total += count;
+    try std.testing.expectEqual(profile.tree_score_calls, bucket_total);
     try std.testing.expect(profile.treeScoreStageNs() <= profile.cluster_score_ns);
     try std.testing.expect(profile.stageNs() <= profile.total_ns);
     try std.testing.expect(profile.clusterStageNs() <= profile.cluster_ns);

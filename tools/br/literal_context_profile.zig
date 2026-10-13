@@ -37,7 +37,7 @@ pub fn main(init: std.process.Init) !void {
             "assignment_contexts,assignment_comparisons,score_cache_hits,score_cache_misses," ++
             "tree_score_cache_hits,tree_score_cache_misses," ++
             "tree_score_cache_cold_misses,tree_score_cache_conflict_misses," ++
-            "tree_score_calls,tree_simple_scores,tree_complex_scores,tree_active_entries," ++
+            "tree_score_calls,tree_simple_scores,tree_complex_scores,tree_active_entries,tree_active_buckets," ++
             "analysis_ns,baseline_ns,suffix_ns,sparse_ns,cluster_ns,cluster_init_ns," ++
             "cluster_prepare_ns,cluster_assignment_ns,cluster_finalize_ns,cluster_score_ns," ++
             "tree_alphabet_ns,tree_lengths_ns,tree_weighted_ns,tree_prefix_ns,tree_score_stage_ns," ++
@@ -95,6 +95,8 @@ pub fn main(init: std.process.Init) !void {
                 profile.tree_active_entries,
             },
         );
+        try csv.writer.writeByte(',');
+        try writeHistogram(&csv.writer, &profile.tree_active_buckets);
         try csv.writer.print(
             ",{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}",
             .{
@@ -131,6 +133,13 @@ pub fn main(init: std.process.Init) !void {
         var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
         try stdout.interface.writeAll(csv.written());
         try stdout.interface.flush();
+    }
+}
+
+fn writeHistogram(writer: *std.Io.Writer, values: []const usize) !void {
+    for (values, 0..) |value, index| {
+        if (index != 0) try writer.writeByte(';');
+        try writer.print("{d}", .{value});
     }
 }
 

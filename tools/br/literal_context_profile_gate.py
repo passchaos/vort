@@ -20,7 +20,7 @@ COLUMNS = [
     "assignment_contexts", "assignment_comparisons", "score_cache_hits", "score_cache_misses",
     "tree_score_cache_hits", "tree_score_cache_misses",
     "tree_score_cache_cold_misses", "tree_score_cache_conflict_misses",
-    "tree_score_calls", "tree_simple_scores", "tree_complex_scores", "tree_active_entries",
+    "tree_score_calls", "tree_simple_scores", "tree_complex_scores", "tree_active_entries", "tree_active_buckets",
     "analysis_ns", "baseline_ns", "suffix_ns", "sparse_ns", "cluster_ns", "cluster_init_ns",
     "cluster_prepare_ns", "cluster_assignment_ns", "cluster_finalize_ns", "cluster_score_ns",
     "tree_alphabet_ns", "tree_lengths_ns", "tree_weighted_ns", "tree_prefix_ns", "tree_score_stage_ns",
@@ -40,6 +40,13 @@ def integer(row: dict[str, str], key: str) -> int:
         return int(row[key])
     except (KeyError, ValueError) as exc:
         raise AssertionError(f"invalid {key}: {row}") from exc
+
+
+def histogram(row: dict[str, str], key: str, length: int) -> list[int]:
+    values = [int(value) for value in row[key].split(";")]
+    assert len(values) == length, (key, row[key])
+    assert all(value >= 0 for value in values), (key, row[key])
+    return values
 
 
 def validate_candidate(row: dict[str, str], prefix: str) -> None:
@@ -98,6 +105,11 @@ def main() -> int:
         assert integer(row, "tree_score_calls") == integer(row, "tree_score_cache_misses"), row
         assert integer(row, "tree_simple_scores") + integer(row, "tree_complex_scores") == integer(row, "tree_score_calls"), row
         assert integer(row, "tree_active_entries") >= integer(row, "tree_score_calls"), row
+        active_buckets = histogram(row, "tree_active_buckets", 5)
+        assert sum(active_buckets) == integer(row, "tree_score_calls"), row
+        minimum_entries = sum(count * minimum for count, minimum in zip(active_buckets, (1, 5, 17, 33, 65)))
+        maximum_entries = sum(count * maximum for count, maximum in zip(active_buckets, (4, 16, 32, 64, 256)))
+        assert minimum_entries <= integer(row, "tree_active_entries") <= maximum_entries, row
         for key in TOP_STAGES + CLUSTER_STAGES + TREE_SCORE_STAGES + ["stage_ns", "cluster_stage_ns", "tree_score_stage_ns", "total_ns"]:
             assert integer(row, key) > 0, (key, row)
         assert integer(row, "stage_ns") == sum(integer(row, key) for key in TOP_STAGES), row

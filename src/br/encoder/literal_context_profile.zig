@@ -32,6 +32,7 @@ pub const Profile = struct {
     tree_simple_scores: usize = 0,
     tree_complex_scores: usize = 0,
     tree_active_entries: usize = 0,
+    tree_active_buckets: [5]usize = @splat(0),
 
     analysis_ns: u64 = 0,
     baseline_ns: u64 = 0,
@@ -99,6 +100,8 @@ pub const Profile = struct {
             "tree_prefix_ns",
             "total_ns",
         }) |field| @field(self, field) +%= @field(sample, field);
+        for (&self.tree_active_buckets, sample.tree_active_buckets) |*total, count|
+            total.* += count;
     }
 };
 

@@ -46,6 +46,7 @@ def main() -> int:
         ("full_mode", "9"),
         ("cluster_score_ns", "1"),
         ("tree_score_calls", "1"),
+        ("tree_active_buckets", "1;2"),
         ("optimize", "Debug"),
     ):
         changed = [row.copy() for row in rows]

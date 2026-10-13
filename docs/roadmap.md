@@ -19293,7 +19293,7 @@ reuse, so production keeps the simpler independently owned plans.
   reassignment, compaction, and final exact scoring. It also records proposal
   shapes, trials, rounds, comparisons, and exact-score cache hits/misses. The
   three-row CSV gate checks ReleaseFast provenance, deterministic geometry,
-  nested timing totals, and `source32k` stage dominance; seven negative fixtures
+  nested timing totals, and `source32k` stage dominance; eight negative fixtures
   reject missing rows, counter/timing drift, invalid modes, false dominance,
   and Debug evidence. A fixed-CPU-2 ten-iteration run selected 2/10/10 trees
   for `source32k`: suffix and clustering consumed 43.4%/53.4% of total search
@@ -19339,7 +19339,16 @@ reuse, so production keeps the simpler independently owned plans.
   simple and 2,790 complex trees with 121,250 active entries. Of 12.800 ms
   attributed inside `treeBitCost`, alphabet construction used 18.1%, Huffman
   length generation 57.4%, weighted payload 2.3%, and prefix wire scoring
-  22.2%. Length generation is now the evidence-backed next target.
+  22.2%. Active-size buckets were 110/540/500/1,050/700 calls for
+  1–4/5–16/17–32/33–64/65–256 symbols. Length generation is now the
+  evidence-backed next target.
+
+- Rejected adaptive 16/32/64-capacity `small_huffman` instances. The size
+  histogram showed 1,040 calls could use smaller-than-64 scratch, but the
+  additional code and dispatch increased the fixed profile's length stage
+  7.069→7.525 ms and won only 4/7 complete-encoder pairs; their median
+  regressed 242.188→242.715 ms. The helper and all production changes were
+  removed, leaving only the active-size histogram and rejection evidence.
 
 - Rejected the first evidence-driven length-builder candidate. Narrowing the
   `small_huffman` node-weight scratch from `u64` to guarded `u32` improved the

@@ -27,7 +27,7 @@ specialization records:
 
 The CSV gate validates three source sizes, ReleaseFast provenance, candidate
 ranges, deterministic counters, nested timing totals, and the dominant
-`source32k` cluster stage. A seven-case negative smoke rejects missing rows,
+`source32k` cluster stage. An eight-case negative smoke rejects missing rows,
 counter drift, timing drift, invalid modes, false stage dominance, and
 non-ReleaseFast provenance.
 
@@ -135,6 +135,14 @@ prefix wire costing 22.2%. `source16k` independently placed length generation
 at 56.4%. The next optimization target is therefore the <=64-active-symbol
 length builder or a proven reuse surface around it; another dense payload loop
 rewrite cannot materially move the complete search.
+
+Active-size buckets for `source32k` were 110/540/500/1,050/700 calls for
+1–4, 5–16, 17–32, 33–64, and 65–256 symbols respectively. An adaptive
+`small_huffman` candidate therefore instantiated capacities 16/32/64 for the
+2,090 calls eligible for the fast builder. Despite covering 1,040 calls with
+smaller scratch, it increased the fixed profile's length stage from 7.069 to
+7.525 ms and won only 4/7 complete-encoder pairs; their median regressed from
+242.188 to 242.715 ms. The extra code instances and dispatch were removed.
 
 The first length-builder candidate narrowed `small_huffman` node weights from
 `u64` to `u32` after an exact total-frequency guard, retaining package-merge
