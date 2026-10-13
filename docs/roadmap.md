@@ -18767,3 +18767,10 @@ reuse, so production keeps the simpler independently owned plans.
   (2,740 versus 2,868 JSON bytes). LZMA 105/105, XZ 115/115, AArch64 compile,
   external CLI differential, and the nine-row gate pass. Evidence is in
   `docs/performance/xz-lazy-parser-x86.md` and its JSON record.
+
+- Length-capping the XZ wide lazy lookahead was screened and removed. Caps of
+  16 and 32 bytes both reduce JSON savings from 2,740 to 2,888 bytes and binary
+  from 70,632 to 70,740 bytes. Cap 16 raises JSON/binary lazy throughput to
+  `0.936x`/`0.996x` of greedy; cap 32 is slower with identical output. The key
+  JSON choices start above 32-byte current matches, so future pruning must use
+  LZMA-aware prices instead of an unconditional length ceiling.

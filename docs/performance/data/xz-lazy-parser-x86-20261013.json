@@ -69,6 +69,21 @@
     "lazy_min_gain_1_bytes": 2740,
     "selected": 1
   },
+  "rejected_lookahead_caps": {
+    "max_current_match_16": {
+      "json_bytes": 2888,
+      "binary_bytes": 70740,
+      "json_lazy_over_greedy_speed": 0.9361,
+      "binary_lazy_over_greedy_speed": 0.9959
+    },
+    "max_current_match_32": {
+      "json_bytes": 2888,
+      "binary_bytes": 70740,
+      "json_lazy_over_greedy_speed": 0.9295,
+      "binary_lazy_over_greedy_speed": 0.9951
+    },
+    "decision": "removed because both caps lost 148 bytes of JSON savings versus full lookahead; cap 32 was strictly slower than cap 16"
+  },
   "validation": {
     "lzma_tests": "105/105",
     "xz_tests": "115/115",

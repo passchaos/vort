@@ -40,6 +40,14 @@ text and the far-distance control do not shrink. Future ratio work needs
 LZMA-aware price modeling or a deeper optimal parser rather than more
 unconditional lookahead.
 
+Two lookahead caps were screened and removed. Limiting next-position searches
+to current matches of at most 16 or 32 bytes improved JSON lazy/greedy speed to
+`0.936x`/`0.930x` and binary to roughly `0.996x`, but both produced 2,888 JSON
+bytes and 70,740 binary bytes. They lose 148 bytes of JSON savings versus full
+lookahead; cap 32 is slower than cap 16 with identical output. The important
+JSON decisions therefore begin above 32-byte current matches, so a future speed
+optimization needs price-based pruning rather than a length ceiling.
+
 ## Validation
 
 - LZMA focused suite: 105/105.
