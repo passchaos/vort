@@ -27,7 +27,7 @@ specialization records:
 
 The CSV gate validates three source sizes, ReleaseFast provenance, candidate
 ranges, deterministic counters, nested timing totals, and the dominant
-`source32k` cluster stage. A six-case negative smoke rejects missing rows,
+`source32k` cluster stage. A seven-case negative smoke rejects missing rows,
 counter drift, timing drift, invalid modes, false stage dominance, and
 non-ReleaseFast provenance.
 
@@ -117,3 +117,30 @@ A second control removed all cache counters from the production specialization.
 It won only 4/11 pairs and moved the median from 240.107 ms to 240.421 ms, so it
 was also removed. Only cold/conflict classification is compile-time profile-only;
 the previously validated production hit/miss update and code shape remain.
+
+## Tree-score miss substage breakdown
+
+The profiled specialization now decomposes every real tree-cache miss into
+active-alphabet construction, Huffman length generation, weighted payload
+cost, and simple/complex prefix wire cost. The production specialization has
+no added clocks or substage counters. The CSV gate requires call counts to
+equal cache misses, simple plus complex trees to equal calls, nested timing
+totals to close, and Huffman length generation to dominate `source32k`.
+
+The fixed-CPU-2 ten-iteration run scored 2,900 cache misses containing 110
+simple and 2,790 complex trees with 121,250 aggregate active entries. Of the
+12.800 ms attributed inside `treeBitCost`, alphabet construction used 18.1%,
+Huffman length generation 57.4%, weighted payload accumulation 2.3%, and
+prefix wire costing 22.2%. `source16k` independently placed length generation
+at 56.4%. The next optimization target is therefore the <=64-active-symbol
+length builder or a proven reuse surface around it; another dense payload loop
+rewrite cannot materially move the complete search.
+
+The first length-builder candidate narrowed `small_huffman` node weights from
+`u64` to `u32` after an exact total-frequency guard, retaining package-merge
+fallback for wider inputs. It improved the fixed profile's `source32k` length
+stage from roughly 7.350 to 7.049 ms (`1.043x`), but the authoritative complete
+encoder rejected it: only 4/11 alternating 20-iteration pairs won and the
+median regressed from 241.440 to 242.398 ms. The candidate and its extra guard
+were removed. Future length work must improve generated layout and complete
+encoding, not merely shrink the isolated queue scratch.

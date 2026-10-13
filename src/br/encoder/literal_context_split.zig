@@ -665,7 +665,7 @@ fn clusterContexts(
         var bits: u64 = 0;
         for (tree_histograms[0..tree_count]) |*histogram| {
             const tree_bits = tree_score_cache.get(profiled, histogram) orelse score: {
-                const computed = try treeBitCost(allocator, histogram);
+                const computed = try treeBitCostProfiled(profiled, allocator, histogram, profiler);
                 tree_score_cache.put(histogram, computed);
                 break :score computed;
             };
@@ -842,17 +842,40 @@ fn assignmentLog2Q8(value: u32) u64 {
 }
 
 fn treeBitCost(allocator: std.mem.Allocator, frequencies: *const [256]u32) !u64 {
+    return treeBitCostProfiled(false, allocator, frequencies, {});
+}
+
+fn treeBitCostProfiled(
+    comptime profiled: bool,
+    allocator: std.mem.Allocator,
+    frequencies: *const [256]u32,
+    profiler: if (profiled) *ProfileTimer else void,
+) !u64 {
+    const alphabet_start = if (profiled) profiler.now() else {};
     var alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
     try command_plan.alphabetFromFrequenciesInto(256, &alphabet, frequencies);
+    if (profiled) {
+        profiler.profile.tree_alphabet_ns +%= profiler.elapsedNs(alphabet_start);
+        profiler.profile.tree_score_calls += 1;
+        profiler.profile.tree_active_entries += alphabet.len;
+    }
+    const lengths_start = if (profiled) profiler.now() else {};
     const lengths = try alphabet.codeLengths(frequencies);
+    if (profiled) profiler.profile.tree_lengths_ns +%= profiler.elapsedNs(lengths_start);
+    const weighted_start = if (profiled) profiler.now() else {};
     var cost = weightedBits(frequencies, &lengths);
+    if (profiled) profiler.profile.tree_weighted_ns +%= profiler.elapsedNs(weighted_start);
+    const prefix_start = if (profiled) profiler.now() else {};
     if (alphabet.len <= 4) {
         cost += 4 + @as(u64, alphabet.len) * 8 + @intFromBool(alphabet.len == 4);
+        if (profiled) profiler.profile.tree_simple_scores += 1;
     } else {
         var highest: usize = 0;
         for (alphabet.symbols[0..alphabet.len]) |symbol| highest = @max(highest, symbol);
         cost += try complex_prefix.bitCost(allocator, 256, &lengths, highest + 1);
+        if (profiled) profiler.profile.tree_complex_scores += 1;
     }
+    if (profiled) profiler.profile.tree_prefix_ns +%= profiler.elapsedNs(prefix_start);
     return cost;
 }
 
@@ -965,6 +988,12 @@ test "literal context profile reports stable stage accounting" {
     try std.testing.expect(profile.score_cache_hits + profile.score_cache_misses > 0);
     try std.testing.expect(profile.score_cache_hits + profile.score_cache_misses <= profile.cluster_trials);
     try std.testing.expect(profile.tree_score_cache_hits + profile.tree_score_cache_misses > 0);
+    try std.testing.expectEqual(profile.tree_score_cache_misses, profile.tree_score_calls);
+    try std.testing.expectEqual(
+        profile.tree_score_calls,
+        profile.tree_simple_scores + profile.tree_complex_scores,
+    );
+    try std.testing.expect(profile.treeScoreStageNs() <= profile.cluster_score_ns);
     try std.testing.expect(profile.stageNs() <= profile.total_ns);
     try std.testing.expect(profile.clusterStageNs() <= profile.cluster_ns);
 }

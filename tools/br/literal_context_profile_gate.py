@@ -20,8 +20,10 @@ COLUMNS = [
     "assignment_contexts", "assignment_comparisons", "score_cache_hits", "score_cache_misses",
     "tree_score_cache_hits", "tree_score_cache_misses",
     "tree_score_cache_cold_misses", "tree_score_cache_conflict_misses",
+    "tree_score_calls", "tree_simple_scores", "tree_complex_scores", "tree_active_entries",
     "analysis_ns", "baseline_ns", "suffix_ns", "sparse_ns", "cluster_ns", "cluster_init_ns",
     "cluster_prepare_ns", "cluster_assignment_ns", "cluster_finalize_ns", "cluster_score_ns",
+    "tree_alphabet_ns", "tree_lengths_ns", "tree_weighted_ns", "tree_prefix_ns", "tree_score_stage_ns",
     "stage_ns", "cluster_stage_ns", "total_ns", "unattributed_ns", "cluster_unattributed_ns",
 ] + PROVENANCE_COLUMNS
 CASES = {"source4k": 4 * 1024, "source16k": 16 * 1024, "source32k": 32 * 1024}
@@ -30,6 +32,7 @@ CLUSTER_STAGES = [
     "cluster_init_ns", "cluster_prepare_ns", "cluster_assignment_ns",
     "cluster_finalize_ns", "cluster_score_ns",
 ]
+TREE_SCORE_STAGES = ["tree_alphabet_ns", "tree_lengths_ns", "tree_weighted_ns", "tree_prefix_ns"]
 
 
 def integer(row: dict[str, str], key: str) -> int:
@@ -92,10 +95,15 @@ def main() -> int:
             integer(row, "tree_score_cache_cold_misses") +
             integer(row, "tree_score_cache_conflict_misses")
         ), row
-        for key in TOP_STAGES + CLUSTER_STAGES + ["stage_ns", "cluster_stage_ns", "total_ns"]:
+        assert integer(row, "tree_score_calls") == integer(row, "tree_score_cache_misses"), row
+        assert integer(row, "tree_simple_scores") + integer(row, "tree_complex_scores") == integer(row, "tree_score_calls"), row
+        assert integer(row, "tree_active_entries") >= integer(row, "tree_score_calls"), row
+        for key in TOP_STAGES + CLUSTER_STAGES + TREE_SCORE_STAGES + ["stage_ns", "cluster_stage_ns", "tree_score_stage_ns", "total_ns"]:
             assert integer(row, key) > 0, (key, row)
         assert integer(row, "stage_ns") == sum(integer(row, key) for key in TOP_STAGES), row
         assert integer(row, "cluster_stage_ns") == sum(integer(row, key) for key in CLUSTER_STAGES), row
+        assert integer(row, "tree_score_stage_ns") == sum(integer(row, key) for key in TREE_SCORE_STAGES), row
+        assert integer(row, "tree_score_stage_ns") <= integer(row, "cluster_score_ns"), row
         assert integer(row, "stage_ns") + integer(row, "unattributed_ns") == integer(row, "total_ns"), row
         assert integer(row, "cluster_stage_ns") + integer(row, "cluster_unattributed_ns") == integer(row, "cluster_ns"), row
 
@@ -106,7 +114,10 @@ def main() -> int:
     cluster_score = integer(source32, "cluster_score_ns")
     assert cluster_score == max(integer(source32, key) for key in CLUSTER_STAGES), source32
     assert cluster_score * 2 > integer(source32, "cluster_ns"), source32
-    print("br_literal_context_profile_gate=ok rows=3 dominant=cluster_score_ns")
+    tree_lengths = integer(source32, "tree_lengths_ns")
+    assert tree_lengths == max(integer(source32, key) for key in TREE_SCORE_STAGES), source32
+    assert tree_lengths * 2 > integer(source32, "tree_score_stage_ns"), source32
+    print("br_literal_context_profile_gate=ok rows=3 dominant=cluster_score_ns/tree_lengths_ns")
     return 0
 
 

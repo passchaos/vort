@@ -19293,7 +19293,7 @@ reuse, so production keeps the simpler independently owned plans.
   reassignment, compaction, and final exact scoring. It also records proposal
   shapes, trials, rounds, comparisons, and exact-score cache hits/misses. The
   three-row CSV gate checks ReleaseFast provenance, deterministic geometry,
-  nested timing totals, and `source32k` stage dominance; six negative fixtures
+  nested timing totals, and `source32k` stage dominance; seven negative fixtures
   reject missing rows, counter/timing drift, invalid modes, false dominance,
   and Debug evidence. A fixed-CPU-2 ten-iteration run selected 2/10/10 trees
   for `source32k`: suffix and clustering consumed 43.4%/53.4% of total search
@@ -19328,6 +19328,26 @@ reuse, so production keeps the simpler independently owned plans.
   Both candidates were removed. Cold/conflict counters remain compile-time
   profile-only, while the validated 128-slot direct map and its ordinary
   hit/miss layout remain production.
+
+- Extended the literal-context profiler through real tree-cache misses. It now
+  separates active-alphabet construction, Huffman length generation, weighted
+  payload accumulation, and prefix wire scoring while the production
+  specialization retains no new clocks or substage counters. Gate invariants
+  bind tree-score calls to cache misses, simple plus complex counts to calls,
+  active-entry bounds, and nested timing totals; the negative smoke also
+  rejects counter drift. On fixed-CPU-2 `source32k`, 2,900 misses comprised 110
+  simple and 2,790 complex trees with 121,250 active entries. Of 12.800 ms
+  attributed inside `treeBitCost`, alphabet construction used 18.1%, Huffman
+  length generation 57.4%, weighted payload 2.3%, and prefix wire scoring
+  22.2%. Length generation is now the evidence-backed next target.
+
+- Rejected the first evidence-driven length-builder candidate. Narrowing the
+  `small_huffman` node-weight scratch from `u64` to guarded `u32` improved the
+  isolated `source32k` length stage 7.350→7.049 ms (`1.043x`), with existing
+  package-merge fallback preserving wider totals. Complete encoding reversed
+  the result: only 4/11 fixed-CPU alternating pairs won and the median regressed
+  241.440→242.398 ms. The implementation and guard were removed; only the
+  profiler, gate, and rejection evidence remain.
 
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository

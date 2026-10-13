@@ -28,6 +28,10 @@ pub const Profile = struct {
     tree_score_cache_misses: usize = 0,
     tree_score_cache_cold_misses: usize = 0,
     tree_score_cache_conflict_misses: usize = 0,
+    tree_score_calls: usize = 0,
+    tree_simple_scores: usize = 0,
+    tree_complex_scores: usize = 0,
+    tree_active_entries: usize = 0,
 
     analysis_ns: u64 = 0,
     baseline_ns: u64 = 0,
@@ -39,6 +43,10 @@ pub const Profile = struct {
     cluster_assignment_ns: u64 = 0,
     cluster_finalize_ns: u64 = 0,
     cluster_score_ns: u64 = 0,
+    tree_alphabet_ns: u64 = 0,
+    tree_lengths_ns: u64 = 0,
+    tree_weighted_ns: u64 = 0,
+    tree_prefix_ns: u64 = 0,
     total_ns: u64 = 0,
 
     pub fn stageNs(self: Profile) u64 {
@@ -50,6 +58,11 @@ pub const Profile = struct {
         return self.cluster_init_ns + self.cluster_prepare_ns +
             self.cluster_assignment_ns + self.cluster_finalize_ns +
             self.cluster_score_ns;
+    }
+
+    pub fn treeScoreStageNs(self: Profile) u64 {
+        return self.tree_alphabet_ns + self.tree_lengths_ns +
+            self.tree_weighted_ns + self.tree_prefix_ns;
     }
 
     pub fn addSample(self: *Profile, sample: Profile) void {
@@ -66,6 +79,10 @@ pub const Profile = struct {
             "tree_score_cache_misses",
             "tree_score_cache_cold_misses",
             "tree_score_cache_conflict_misses",
+            "tree_score_calls",
+            "tree_simple_scores",
+            "tree_complex_scores",
+            "tree_active_entries",
             "analysis_ns",
             "baseline_ns",
             "suffix_ns",
@@ -76,6 +93,10 @@ pub const Profile = struct {
             "cluster_assignment_ns",
             "cluster_finalize_ns",
             "cluster_score_ns",
+            "tree_alphabet_ns",
+            "tree_lengths_ns",
+            "tree_weighted_ns",
+            "tree_prefix_ns",
             "total_ns",
         }) |field| @field(self, field) +%= @field(sample, field);
     }
