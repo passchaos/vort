@@ -627,7 +627,7 @@ pub const IncrementalTestSupport = struct {
         allocator: std.mem.Allocator,
         payload: []const u8,
         mode: u2,
-        tree_count: u5,
+        tree_count: u7,
         context_map: [64]u8,
     ) Error![]u8 {
         if (payload.len == 0 or mode > literal_context.mode_signed or tree_count < 2 or tree_count > literal_context_split.max_trees)
@@ -3803,7 +3803,7 @@ const PreferredCommandPlan = struct {
     encoded: []u8,
     use_recent_distances: bool,
     literal_context_candidate: ?literal_context_split.Candidate = null,
-    alternate_literal_context_candidates: [2]literal_context_split.Candidate = undefined,
+    alternate_literal_context_candidates: [3]literal_context_split.Candidate = undefined,
     alternate_literal_context_count: u2 = 0,
     alternate_plain_literals: bool = false,
     literal_split_utf8_cutoff: ?u6 = null,
@@ -3832,17 +3832,18 @@ fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const 
     errdefer allocator.free(selected);
     var selected_stats = primary_stats;
     var selected_context = primary_context;
-    var alternate_contexts: [2]literal_context_split.Candidate = undefined;
+    var alternate_contexts: [3]literal_context_split.Candidate = undefined;
     var alternate_context_count: usize = 0;
     var alternate_plain = false;
     var literal_split_utf8_cutoff: ?u6 = if (primary_context) |candidate| candidate.suffixCutoff() else null;
     const adaptive_contexts = if (options.try_recent_distances)
-        [2]?literal_context_split.Candidate{
+        [3]?literal_context_split.Candidate{
             literal_context_split.chooseSuffix(input, commands),
+            literal_context_split.chooseUpTo(input, commands, 16),
             literal_context_split.choose(input, commands),
         }
     else
-        [2]?literal_context_split.Candidate{ null, null };
+        [3]?literal_context_split.Candidate{ null, null, null };
     for (adaptive_contexts, 0..) |adaptive_context_optional, proposal_index| {
         if (adaptive_context_optional) |adaptive_context| {
             var duplicate = if (selected_context) |current| literal_context_split.Candidate.eql(adaptive_context, current) else false;
@@ -24892,11 +24893,11 @@ test "br planned writer emits every RFC literal context mode" {
     }
 }
 
-test "br planned writer emits arbitrary four eight and sixteen tree literal context maps" {
+test "br planned writer emits arbitrary four eight sixteen and sixty-four tree literal context maps" {
     var input: [512]u8 = undefined;
     for (&input, 0..) |*byte, index| byte.* = @truncate(index * 73 + index / 7);
     var context_map: [64]u8 = undefined;
-    for ([_]u5{ 4, 8, 16 }) |tree_count| {
+    for ([_]u7{ 4, 8, 16, 64 }) |tree_count| {
         for (&context_map, 0..) |*tree, context| tree.* = @intCast(context % tree_count);
         const encoded = try IncrementalTestSupport.encodeLiteralContextMap(
             std.testing.allocator,
@@ -24954,7 +24955,7 @@ test "br ratio candidate selects a smaller adaptive literal context wire" {
     });
     defer std.testing.allocator.free(adaptive.encoded);
     const candidate = adaptive.literal_context_candidate orelse return error.TestUnexpectedResult;
-    try std.testing.expectEqual(@as(u5, 16), candidate.tree_count);
+    try std.testing.expectEqual(@as(u7, 35), candidate.tree_count);
     try std.testing.expect(adaptive.encoded.len < plain.len);
     const summary = try summarizeStream(adaptive.encoded);
     try std.testing.expectEqual(input.len, summary.literal_context_mode_bytes[candidate.mode]);

@@ -15,8 +15,8 @@ major gaps before Vort can claim broad industry-best parity:
   vetted static-dictionary subset. Ratio mode now also has bounded two-to-six
   region literal, command, and distance entropy splitting with cyclic tree
   reuse, but still lacks libbrotli's complete adaptive multi-type block
-  splitting and clustering, full 64-context clustering, and the complete
-  quality/ratio range.
+  splitting and clustering, libbrotli-class adaptive context clustering, and
+  the complete quality/ratio range.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
   entropy block switching, static dictionaries, consecutive compressed
@@ -19047,3 +19047,18 @@ reuse, so production keeps the simpler independently owned plans.
   (`literal_context_cases=7`). The repository dictionary row falls another 20
   bytes from 54,909 to 54,889, or 687 bytes/1.24% below the pre-clustering
   55,576-byte wire. The nine-row ReleaseFast planned-encode gate remains green.
+
+- Completed the literal-context encoder's useful RFC range through 64 trees.
+  `tree_count` now uses `u7`; candidate targets add 24/32/48/64 beside the
+  existing 2/3/4/6/8/12/16 family, and every histogram, alphabet, Huffman,
+  encoder, and remap workspace spans all 64 contexts. To bound proposal cost,
+  candidates through 16 retain four reassignment rounds, 24/32 use two, and
+  48/64 use one; exact Huffman payload scoring and complete-wire arbitration
+  remain unchanged. A deterministic oracle assigns every LSB6 context to its
+  own tree, while an ordinary English fixture selects 35 populated trees after
+  empty-cluster compaction. Suffix, <=16-tree, and <=64-tree winners survive to
+  every entropy-split trial, so the higher ceiling preserves the established
+  54,889-byte dictionary wire instead of regressing it. Vort, libbrotli 1.0.9,
+  and the 17-byte-input/31-byte-output progressive decoder reproduce arbitrary
+  4/8/16/64-tree maps (`literal_context_cases=8`). The nine-row ReleaseFast
+  planned-encode gate remains green.
