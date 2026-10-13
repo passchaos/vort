@@ -60,6 +60,7 @@ const mode_count: usize = 4;
 const ContextHistograms = [64][256]u32;
 const SparseContext = struct {
     symbols: [256]u8,
+    frequencies: [256]u32,
     len: u16,
     total: u32,
 };
@@ -296,7 +297,6 @@ fn chooseModeFromHistograms(
             const clustered = try clusterContexts(
                 allocator,
                 mode,
-                by_context,
                 &sparse_contexts,
                 active_symbols,
                 &score_cache,
@@ -330,7 +330,6 @@ const Seed = enum { ordered, interleaved };
 fn clusterContexts(
     allocator: std.mem.Allocator,
     mode: u2,
-    by_context: *const [64][256]u32,
     sparse_contexts: *const SparseContexts,
     active_symbols: *const ActiveSymbols,
     score_cache: *ScoredMapCache,
@@ -363,16 +362,16 @@ fn clusterContexts(
         1;
     var tree_histograms: TreeHistograms = @splat(@splat(0));
     var tree_totals: TreeTotals = @splat(0);
-    aggregateTreesSparse(by_context, sparse_contexts, &context_map, requested_tree_count, &tree_histograms, &tree_totals);
+    aggregateTreesSparse(sparse_contexts, &context_map, requested_tree_count, &tree_histograms, &tree_totals);
     for (0..cluster_iterations) |_| {
         var symbol_costs: [max_trees][256]u16 = undefined;
         prepareAssignmentCosts(&tree_histograms, &tree_totals, requested_tree_count, active_symbols, &symbol_costs);
         var changed = false;
         for (populated[0..populated_count]) |context| {
             var best_tree: usize = 0;
-            var best_cost = assignmentCostSparse(&by_context[context], &sparse_contexts[context], &symbol_costs[0]);
+            var best_cost = assignmentCostSparse(&sparse_contexts[context], &symbol_costs[0]);
             for (1..requested_tree_count) |tree| {
-                const cost = assignmentCostSparse(&by_context[context], &sparse_contexts[context], &symbol_costs[tree]);
+                const cost = assignmentCostSparse(&sparse_contexts[context], &symbol_costs[tree]);
                 if (cost < best_cost) {
                     best_cost = cost;
                     best_tree = tree;
@@ -384,7 +383,6 @@ fn clusterContexts(
                 // the frequencies here only prepares the exact histogram for
                 // the next round, without changing any decision in this one.
                 moveContextSparse(
-                    &by_context[context],
                     &sparse_contexts[context],
                     previous_tree,
                     best_tree,
@@ -438,24 +436,22 @@ fn clusterContexts(
 }
 
 fn aggregateTreesSparse(
-    by_context: *const ContextHistograms,
     sparse_contexts: *const SparseContexts,
     context_map: *const [64]u8,
     tree_count: usize,
     tree_histograms: *[max_trees][256]u32,
     tree_totals: *[max_trees]u32,
 ) void {
-    for (by_context, sparse_contexts, context_map) |*histogram, *sparse, tree_u8| {
+    for (sparse_contexts, context_map) |*sparse, tree_u8| {
         const tree: usize = tree_u8;
         std.debug.assert(tree < tree_count);
-        for (sparse.symbols[0..sparse.len]) |symbol|
-            tree_histograms[tree][symbol] += histogram[symbol];
+        for (sparse.symbols[0..sparse.len], sparse.frequencies[0..sparse.len]) |symbol, frequency|
+            tree_histograms[tree][symbol] += frequency;
         tree_totals[tree] += sparse.total;
     }
 }
 
 fn moveContextSparse(
-    histogram: *const [256]u32,
     sparse: *const SparseContext,
     previous_tree: usize,
     next_tree: usize,
@@ -463,8 +459,7 @@ fn moveContextSparse(
     tree_totals: *TreeTotals,
 ) void {
     std.debug.assert(previous_tree != next_tree);
-    for (sparse.symbols[0..sparse.len]) |symbol| {
-        const frequency = histogram[symbol];
+    for (sparse.symbols[0..sparse.len], sparse.frequencies[0..sparse.len]) |symbol, frequency| {
         std.debug.assert(tree_histograms[previous_tree][symbol] >= frequency);
         tree_histograms[previous_tree][symbol] -= frequency;
         tree_histograms[next_tree][symbol] += frequency;
@@ -496,6 +491,7 @@ fn buildSparseContexts(histograms: *const ContextHistograms, sparse_contexts: *S
         for (histogram, 0..) |frequency, symbol| {
             if (frequency == 0) continue;
             sparse.symbols[sparse.len] = @intCast(symbol);
+            sparse.frequencies[sparse.len] = frequency;
             sparse.len += 1;
             sparse.total += frequency;
         }
@@ -546,10 +542,10 @@ fn assignmentCostPrepared(context: *const [256]u32, symbol_costs: *const [256]u1
     return cost;
 }
 
-fn assignmentCostSparse(context: *const [256]u32, sparse: *const SparseContext, symbol_costs: *const [256]u16) u64 {
+fn assignmentCostSparse(sparse: *const SparseContext, symbol_costs: *const [256]u16) u64 {
     var cost: u64 = 0;
-    for (sparse.symbols[0..sparse.len]) |symbol|
-        cost += @as(u64, context[symbol]) * symbol_costs[symbol];
+    for (sparse.symbols[0..sparse.len], sparse.frequencies[0..sparse.len]) |symbol, frequency|
+        cost += @as(u64, frequency) * symbol_costs[symbol];
     return cost;
 }
 
@@ -704,7 +700,7 @@ test "literal context prepared assignment costs match reference" {
     for (0..4) |tree| {
         const reference = assignmentCostReference(&context, &trees[tree], totals[tree]);
         const prepared = assignmentCostPrepared(&context, &costs[tree]);
-        const sparse = assignmentCostSparse(&context, &sparse_contexts[0], &costs[tree]);
+        const sparse = assignmentCostSparse(&sparse_contexts[0], &costs[tree]);
         try std.testing.expectEqual(reference, prepared);
         try std.testing.expectEqual(reference, sparse);
     }
@@ -751,7 +747,6 @@ test "literal context scored map cache hits and rejects collisions" {
     const first = try clusterContexts(
         std.testing.allocator,
         literal_context.mode_lsb6,
-        &contexts,
         &sparse_contexts,
         &active_symbols,
         &cache,
@@ -762,7 +757,6 @@ test "literal context scored map cache hits and rejects collisions" {
     const second = try clusterContexts(
         std.testing.allocator,
         literal_context.mode_lsb6,
-        &contexts,
         &sparse_contexts,
         &active_symbols,
         &cache,
@@ -803,7 +797,7 @@ test "literal context sparse tree aggregation matches dense reference" {
     var dense_totals: [max_trees]u32 = @splat(0);
     var sparse_totals: [max_trees]u32 = @splat(0);
     aggregateTreesDense(&contexts, &context_map, 7, &dense_trees, &dense_totals);
-    aggregateTreesSparse(&contexts, &sparse_contexts, &context_map, 7, &sparse_trees, &sparse_totals);
+    aggregateTreesSparse(&sparse_contexts, &context_map, 7, &sparse_trees, &sparse_totals);
     try std.testing.expectEqualSlices(u32, dense_totals[0..7], sparse_totals[0..7]);
     for (0..7) |tree|
         try std.testing.expectEqualSlices(u32, &dense_trees[tree], &sparse_trees[tree]);
@@ -823,13 +817,12 @@ test "literal context incremental tree moves match full aggregation" {
     buildSparseContexts(&contexts, &sparse_contexts);
     var incremental_trees: TreeHistograms = @splat(@splat(0));
     var incremental_totals: TreeTotals = @splat(0);
-    aggregateTreesSparse(&contexts, &sparse_contexts, &context_map, 7, &incremental_trees, &incremental_totals);
+    aggregateTreesSparse(&sparse_contexts, &context_map, 7, &incremental_trees, &incremental_totals);
     for (0..64) |context| {
         if (context % 3 != 0) continue;
         const previous_tree: usize = context_map[context];
         const next_tree = (previous_tree + 3) % 7;
         moveContextSparse(
-            &contexts[context],
             &sparse_contexts[context],
             previous_tree,
             next_tree,

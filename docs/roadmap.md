@@ -19206,6 +19206,22 @@ reuse, so production keeps the simpler independently owned plans.
   checksum 134,695. The Node matrix, eight-case libbrotli/progressive
   differential, and nine-row ReleaseFast gate remain green.
 
+- Stored literal frequencies beside symbol IDs in each bounded sparse context
+  view. Clustering assignment, aggregation, and incremental tree moves now walk
+  contiguous symbol/frequency prefixes instead of using every symbol as an
+  index back into the 1 KiB dense context histogram; the frozen dense tables
+  remain the canonical source when each view is built. Existing dense versus
+  prepared/sparse cost, aggregation, and incremental-move oracles require
+  exact per-tree totals and every frequency bin to remain unchanged. Three
+  fixed-CPU-2 ReleaseFast `source32k` samples at five iterations reduced the
+  ratio median from 69.234 ms to 68.322 ms (`1.013x`). An alternating fixed-CPU
+  A/B over 11 pairs and 20 iterations per process favored the contiguous view
+  in 10 pairs, with medians of 275.276 ms versus 273.161 ms (`1.008x`). Relative
+  to the original 130.426 ms dense clustering path, cumulative speedup is about
+  `1.909x`; output remains 6,474 bytes with checksum 134,695. The Node matrix,
+  eight-case libbrotli/progressive differential, and nine-row ReleaseFast gate
+  remain green.
+
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository
   dictionary, source, README, roadmap, and small-corpus payloads; optional
