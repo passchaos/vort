@@ -96,6 +96,13 @@ pub fn main(init: std.process.Init) !void {
         try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
         return;
     }
+    if (std.mem.eql(u8, mode, "four-command-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeFourCommandTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
     if (std.mem.eql(u8, mode, "incremental-planned")) {
         var payload: [1024]u8 = undefined;
         @memset(payload[0..512], 'a');

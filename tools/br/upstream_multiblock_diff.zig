@@ -32,17 +32,41 @@ pub fn main(init: std.process.Init) !void {
     var real_files: std.ArrayList([]const u8) = .empty;
     defer real_files.deinit(init.gpa);
     var real_limit: usize = 2 * 1024 * 1024;
+    var only_four_command_types = false;
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--real-file")) {
             try real_files.append(init.gpa, args.next() orelse return error.MissingCorpusPath);
         } else if (std.mem.eql(u8, arg, "--real-limit")) {
             real_limit = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10);
             if (real_limit == 0) return error.InvalidBlockPlan;
+        } else if (std.mem.eql(u8, arg, "--only-four-command-types")) {
+            only_four_command_types = true;
         } else return error.UnknownArgument;
     }
 
     var reference = try libbrotli.Runtime.open();
     defer reference.deinit();
+    if (only_four_command_types) {
+        if (real_files.items.len != 0) return error.InvalidBlockPlan;
+        const fixture = try vort.br.IncrementalTestSupport.encodeFourCommandTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        const summary = try vort.brSummarizeStreamAlloc(init.gpa, fixture.encoded);
+        if (summary.max_command_block_types != 4) return error.ReferenceEncodeFailed;
+        const decoded = try init.gpa.alloc(u8, fixture.payload.len);
+        defer init.gpa.free(decoded);
+        try reference.decode(fixture.encoded, decoded);
+        if (!std.mem.eql(u8, fixture.payload, decoded)) return error.ReferenceDecodeFailed;
+        try decodeProgressChunks(init.gpa, fixture.encoded, fixture.payload, 16, 17, 31);
+        var buffer: [256]u8 = undefined;
+        var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
+        try stdout.interface.print(
+            "br_upstream_four_command_types=ok encoded_bytes={d} decoded_bytes={d} command_types={d} reference_version={x}\n",
+            .{ fixture.encoded.len, fixture.payload.len, summary.max_command_block_types, reference.version() },
+        );
+        try stdout.interface.flush();
+        return;
+    }
 
     const text = "The quick brown fox jumps over the lazy dog. " ** 64;
     const json = "{\"service\":\"vort\",\"status\":\"ok\",\"value\":12345}\n" ** 48;
@@ -961,6 +985,17 @@ pub fn main(init: std.process.Init) !void {
     try reference.decode(planned_reuse_first_three.encoded, planned_reuse_first_three_decoded);
     if (!std.mem.eql(u8, planned_reuse_first_three.payload, planned_reuse_first_three_decoded)) return error.ReferenceDecodeFailed;
     try decodeProgressChunks(init.gpa, planned_reuse_first_three.encoded, planned_reuse_first_three.payload, 16, 17, 31);
+    planned_command_split_cases += 1;
+    const planned_four_command = try vort.br.IncrementalTestSupport.encodeFourCommandTypes(init.gpa);
+    defer init.gpa.free(planned_four_command.encoded);
+    defer init.gpa.free(planned_four_command.payload);
+    const planned_four_command_summary = try vort.brSummarizeStreamAlloc(init.gpa, planned_four_command.encoded);
+    if (planned_four_command_summary.max_command_block_types != 4) return error.ReferenceEncodeFailed;
+    const planned_four_command_decoded = try init.gpa.alloc(u8, planned_four_command.payload.len);
+    defer init.gpa.free(planned_four_command_decoded);
+    try reference.decode(planned_four_command.encoded, planned_four_command_decoded);
+    if (!std.mem.eql(u8, planned_four_command.payload, planned_four_command_decoded)) return error.ReferenceDecodeFailed;
+    try decodeProgressChunks(init.gpa, planned_four_command.encoded, planned_four_command.payload, 16, 17, 31);
     planned_command_split_cases += 1;
     const long_window_gap = 80 * 1024;
     const long_window_repeat = 12 * 1024;

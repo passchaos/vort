@@ -17,6 +17,7 @@ const min_three_over_two_savings_bits: u64 = 1024;
 const min_clustered_over_two_savings_bits: u64 = 128;
 const min_alternating_four_over_two_savings_bits: u64 = 256;
 const min_reuse_first_four_over_three_savings_bits: u64 = 128;
+const min_four_over_best_savings_bits: u64 = 1024;
 const entropy_fraction_bits: u6 = 8;
 const entropy_scale: u64 = 1 << entropy_fraction_bits;
 
@@ -65,6 +66,7 @@ pub const Proposals = struct {
     clustered: ?Result = null,
     alternating_four: ?Result = null,
     reuse_first_four: ?Result = null,
+    four: ?Result = null,
 };
 
 pub const Accumulator = struct {
@@ -224,13 +226,16 @@ fn chooseFromHistograms(total: *const [alphabet_size]u32, prefixes: *const [cand
             proposals.three = .{ .split = targets[best_first_index], .second_split = targets[best_second_index], .savings_bits = savings };
     }
 
-    // Four-region refinements reuse either two trees as A-B-A-B or three trees
-    // as A-B-C-A. Every candidate includes the already-profitable two-way
-    // boundary, so five prefix histograms yield at most six triples.
+    // Four-region refinements reuse either two trees as A-B-A-B, three trees
+    // as A-B-C-A, or keep all four trees as A-B-C-D. Every candidate includes
+    // the already-profitable two-way boundary, so five prefix histograms yield
+    // at most six triples.
     var best_alternating_entropy = baseline_entropy;
     var best_alternating_indexes: [3]usize = @splat(candidate_count);
     var best_reuse_first_entropy = baseline_entropy;
     var best_reuse_first_indexes: [3]usize = @splat(candidate_count);
+    var best_four_entropy = baseline_entropy;
+    var best_four_indexes: [3]usize = @splat(candidate_count);
     for (0..candidate_count) |first_index| {
         for (first_index + 1..candidate_count) |second_index| {
             for (second_index + 1..candidate_count) |third_index| {
@@ -264,6 +269,13 @@ fn chooseFromHistograms(total: *const [alphabet_size]u32, prefixes: *const [cand
                 if (reuse_first_entropy < best_reuse_first_entropy) {
                     best_reuse_first_entropy = reuse_first_entropy;
                     best_reuse_first_indexes = .{ first_index, second_index, third_index };
+                }
+                const four_entropy = entropyBitsQ8(&prefixes[first_index]) +
+                    entropyBitsQ8(&second) + entropyBitsQ8(&third) +
+                    entropyBitsQ8(&fourth);
+                if (four_entropy < best_four_entropy) {
+                    best_four_entropy = four_entropy;
+                    best_four_indexes = .{ first_index, second_index, third_index };
                 }
             }
         }
@@ -328,6 +340,53 @@ fn chooseFromHistograms(total: *const [alphabet_size]u32, prefixes: *const [cand
                 .reuse_first_for_fourth = true,
                 .savings_bits = savings,
             };
+    }
+    if (best_four_indexes[0] != candidate_count and baseline_entropy - best_four_entropy >= 2 * min_entropy_proposal_savings_bits * entropy_scale) {
+        const first_index = best_four_indexes[0];
+        const second_index = best_four_indexes[1];
+        const third_index = best_four_indexes[2];
+        var first: [alphabet_size]u32 = undefined;
+        var second: [alphabet_size]u32 = undefined;
+        var third: [alphabet_size]u32 = undefined;
+        var fourth: [alphabet_size]u32 = undefined;
+        for (&first, &prefixes[first_index]) |*out, count| out.* = count;
+        for (&second, &third, &fourth, &prefixes[first_index], &prefixes[second_index], &prefixes[third_index], total) |*second_out, *third_out, *fourth_out, through_first, through_second, through_third, all| {
+            second_out.* = @as(u32, through_second) - through_first;
+            third_out.* = @as(u32, through_third) - through_second;
+            fourth_out.* = all - through_third;
+        }
+        const first_lengths = huffman.treeCodeLengths(alphabet_size, &first, 15);
+        const second_lengths = huffman.treeCodeLengths(alphabet_size, &second, 15);
+        const third_lengths = huffman.treeCodeLengths(alphabet_size, &third, 15);
+        const fourth_lengths = huffman.treeCodeLengths(alphabet_size, &fourth, 15);
+        const split_bits = weightedBits(&first, &first_lengths) +
+            weightedBits(&second, &second_lengths) +
+            weightedBits(&third, &third_lengths) +
+            weightedBits(&fourth, &fourth_lengths);
+        const savings = baseline_bits -| split_bits;
+        const refined_baseline = @max(
+            proposals.two.?.savings_bits,
+            @max(
+                if (proposals.clustered) |clustered| clustered.savings_bits else 0,
+                @max(
+                    if (proposals.three) |three| three.savings_bits else 0,
+                    @max(
+                        if (proposals.alternating_four) |alternating| alternating.savings_bits else 0,
+                        if (proposals.reuse_first_four) |reused| reused.savings_bits else 0,
+                    ),
+                ),
+            ),
+        );
+        if (savings >= 2 * min_estimated_savings_bits and
+            savings -| refined_baseline >= min_four_over_best_savings_bits)
+        {
+            proposals.four = .{
+                .split = targets[first_index],
+                .second_split = targets[second_index],
+                .third_split = targets[third_index],
+                .savings_bits = savings,
+            };
+        }
     }
     return proposals;
 }
@@ -462,6 +521,26 @@ test "command block split reuses the first of three types in region four" {
     try std.testing.expectEqual(@as(usize, 1), proposal.blockIndex(proposal.split));
     try std.testing.expectEqual(@as(usize, 2), proposal.blockIndex(proposal.second_split.?));
     try std.testing.expectEqual(@as(usize, 0), proposal.blockIndex(proposal.third_split.?));
+}
+
+test "command block split selects four distinct symbol regions" {
+    var symbols: [8192]u16 = undefined;
+    const first_split = symbols.len / 6;
+    const second_split = symbols.len * 2 / 6;
+    const third_split = symbols.len * 3 / 6;
+    for (&symbols, 0..) |*symbol, i| {
+        const region: usize = if (i < first_split) 0 else if (i < second_split) 1 else if (i < third_split) 2 else 3;
+        symbol.* = @intCast(region * 224 + (i & 7));
+    }
+    var accumulator = Accumulator.init(symbols.len).?;
+    for (symbols) |symbol| try std.testing.expect(accumulator.add(symbol));
+    const proposal = accumulator.finishProposals().four orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqual(@as(usize, 4), proposal.regionCount());
+    try std.testing.expectEqual(@as(usize, 4), proposal.typeCount());
+    try std.testing.expectEqual(@as(usize, 0), proposal.blockIndex(0));
+    try std.testing.expectEqual(@as(usize, 1), proposal.blockIndex(proposal.split));
+    try std.testing.expectEqual(@as(usize, 2), proposal.blockIndex(proposal.second_split.?));
+    try std.testing.expectEqual(@as(usize, 3), proposal.blockIndex(proposal.third_split.?));
 }
 
 test "command block split rejects stationary and small streams" {

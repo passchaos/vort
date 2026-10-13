@@ -18793,3 +18793,24 @@ reuse, so production keeps the simpler independently owned plans.
   and AArch64 ReleaseFast focused compilation pass; the full test graph was not
   run. Raw evidence is in
   `docs/performance/data/xz-static-price-x86-20261013.json`.
+
+- Completed the bounded four-region Brotli command family with an A-B-C-D
+  proposal using four independent command Huffman trees. The scorer reuses the
+  existing five compact prefix histograms and at-most-six boundary triples,
+  requires every triple to contain the already-profitable two-way boundary,
+  and admits the fourth tree only after at least 4,096 estimated payload bits
+  plus a 1,024-bit lead over every two-/three-/four-region reuse proposal. The
+  complete four-tree wire still competes by exact byte size before selection.
+  Production command frequency, alphabet, length, encoder, and header arrays
+  now scale to four types; block switches use the standard implicit
+  0→1→2→3 sequence. A deterministic 8,192-command fixture selects the four-tree
+  wire at 202,100 bytes, round trips to 1,451,383 bytes, survives every injected
+  allocation failure, and decodes independently through Node and libbrotli
+  1.1.0 plus Vort's 17-byte-input/31-byte-output progressive path. The default
+  upstream differential permanently includes the case and raises its expected
+  `planned_command_split_cases` counter to five; a new focused flag runs only
+  this external oracle for minimal validation. The 10 command-split planner
+  tests, related writer tests, complete Node planned differential, focused
+  libbrotli/progressive differential, AArch64 ReleaseFast compile, and 9-row
+  planned encode gate pass. Neither the complete upstream matrix nor the full
+  repository test graph was run.

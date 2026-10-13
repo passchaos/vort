@@ -787,6 +787,18 @@ pub const IncrementalTestSupport = struct {
         return .{ .encoded = encoded, .payload = payload };
     }
 
+    /// Build four command regions whose four tree types follow A-B-C-D,
+    /// exercising three consecutive implicit next-type transitions.
+    pub fn encodeFourCommandTypes(allocator: std.mem.Allocator) Error!struct { encoded: []u8, payload: []u8 } {
+        const payload = try allocator.alloc(u8, four_command_payload_len);
+        errdefer allocator.free(payload);
+        const commands = try allocator.alloc(command_plan.Command, four_command_count);
+        defer allocator.free(commands);
+        fillFourCommandFixture(payload, commands);
+        const encoded = try encodeSelectedCommandSplitFixtureAlloc(allocator, payload, commands);
+        return .{ .encoded = encoded, .payload = payload };
+    }
+
     /// Build a one-byte stream whose 256 command trees make the compressed
     /// header exceed the decoder's built-in 16 KiB staging buffer. Callers can
     /// use this to exercise explicit `compressed_header_scratch` storage.
@@ -3724,6 +3736,15 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
             best_stats = reused_stats;
         } else allocator.free(reused_candidate);
     }
+    if (symbol_splits.command.four) |four| {
+        var four_stats = baseline_stats;
+        const four_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &four_stats, options, baseline.use_recent_distances, literal_split, four, distance_split);
+        if (four_candidate.len < best.len) {
+            allocator.free(best);
+            best = four_candidate;
+            best_stats = four_stats;
+        } else allocator.free(four_candidate);
+    }
     if (best.len < baseline.encoded.len) {
         stats.* = best_stats;
         return best;
@@ -3925,8 +3946,8 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         if (split.second_split) |second| {
             if (second <= split.split or commands.len <= second) return error.InvalidBlockPlan;
             if (split.third_split) |third| {
-                if (split.alternate_two_types == split.reuse_first_for_fourth or third <= second or commands.len <= third) return error.InvalidBlockPlan;
-            }
+                if (split.alternate_two_types and split.reuse_first_for_fourth or third <= second or commands.len <= third) return error.InvalidBlockPlan;
+            } else if (split.reuse_first_for_fourth) return error.InvalidBlockPlan;
         } else if (split.third_split != null or split.alternate_two_types or split.reuse_first_for_fourth) return error.InvalidBlockPlan;
     }
     var literal_frequencies: [256]u32 = if (options.optimize_literal_tree_wire) @splat(0) else undefined;
@@ -3943,7 +3964,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     var command_frequencies: [704]u32 = undefined;
     var command_alphabet: command_plan.PrefixAlphabet = undefined;
     command_alphabet.len = 0;
-    var command_block_frequencies: [3][704]u32 = undefined;
+    var command_block_frequencies: [4][704]u32 = undefined;
     if (options.command_split != null) @memset(&command_block_frequencies, @splat(0));
     var distance_frequencies: [planned_distance_alphabet_size]u32 = @splat(0);
     var distance_block_frequencies: [2][planned_distance_alphabet_size]u32 = undefined;
@@ -4043,7 +4064,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     const alphabet_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     var literal_context_alphabets: [2]command_plan.PrefixAlphabetFor(256) = undefined;
     var literal_block_alphabets: [4]command_plan.PrefixAlphabetFor(256) = undefined;
-    var command_block_alphabets: [3]command_plan.PrefixAlphabet = undefined;
+    var command_block_alphabets: [4]command_plan.PrefixAlphabet = undefined;
     var distance_block_alphabets: [2]command_plan.PrefixAlphabetFor(planned_distance_alphabet_size) = undefined;
     var distance_alphabet: command_plan.PrefixAlphabetFor(planned_distance_alphabet_size) = if (has_same_last_candidate) prepared_distance_alphabet else undefined;
     if (options.literal_split == null) try literal_alphabet.sortByFrequencies(&literal_frequencies);
@@ -4115,7 +4136,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     else
         undefined;
     const command_block_lengths = if (options.command_split != null) blk: {
-        var lengths: [3][704]u4 = undefined;
+        var lengths: [4][704]u4 = undefined;
         for (lengths[0..options.command_split.?.typeCount()], command_block_alphabets[0..options.command_split.?.typeCount()], command_block_frequencies[0..options.command_split.?.typeCount()]) |*tree_lengths, *alphabet, *frequencies|
             tree_lengths.* = if (alphabet.len <= 4) @splat(0) else try alphabet.codeLengths(frequencies);
         break :blk lengths;
@@ -4177,7 +4198,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     else
         try huffman.HuffmanTable(704).Encoder.init(&command_lengths);
     const command_block_encoders = if (options.command_split != null) blk: {
-        var encoders: [3]huffman.HuffmanTable(704).Encoder = undefined;
+        var encoders: [4]huffman.HuffmanTable(704).Encoder = undefined;
         for (encoders[0..options.command_split.?.typeCount()], command_block_alphabets[0..options.command_split.?.typeCount()], command_block_lengths[0..options.command_split.?.typeCount()]) |*encoder, *alphabet, *lengths|
             encoder.* = if (alphabet.len <= 4) .{} else if (alphabet.len <= 64)
                 try huffman.HuffmanTable(704).Encoder.initSparseTrusted(lengths, alphabet.symbols[0..alphabet.len])
@@ -14781,6 +14802,64 @@ fn fillReuseFirstFourFixture(payload: []u8, commands: []command_plan.Command) vo
     std.debug.assert(position == payload.len);
 }
 
+const four_command_count = 8192;
+const four_command_first_split = four_command_count / 6;
+const four_command_second_split = four_command_count * 2 / 6;
+const four_command_third_split = four_command_count * 3 / 6;
+const four_command_insert_lens = [4][8]usize{
+    clustered_outer_insert_lens,
+    clustered_middle_insert_lens,
+    .{ 18, 20, 22, 24, 26, 28, 30, 32 },
+    .{ 2, 4, 6, 8, 10, 12, 14, 16 },
+};
+const four_command_copy_lens = [4]usize{ 2, 40, 6, 258 };
+const four_command_payload_len = commandFixtureRegionPayloadLen(
+    four_command_insert_lens[0],
+    four_command_copy_lens[0],
+    0,
+    four_command_first_split,
+) + commandFixtureRegionPayloadLen(
+    four_command_insert_lens[1],
+    four_command_copy_lens[1],
+    four_command_first_split,
+    four_command_second_split - four_command_first_split,
+) + commandFixtureRegionPayloadLen(
+    four_command_insert_lens[2],
+    four_command_copy_lens[2],
+    four_command_second_split,
+    four_command_third_split - four_command_second_split,
+) + commandFixtureRegionPayloadLen(
+    four_command_insert_lens[3],
+    four_command_copy_lens[3],
+    four_command_third_split,
+    four_command_count - four_command_third_split,
+);
+
+fn commandFixtureRegionPayloadLen(insert_lens: [8]usize, copy_len: usize, start: usize, count: usize) usize {
+    var cycle_sum: usize = 0;
+    for (insert_lens) |insert_len| cycle_sum += insert_len;
+    var total = count / insert_lens.len * (cycle_sum + insert_lens.len * copy_len);
+    for (0..count % insert_lens.len) |offset|
+        total += insert_lens[(start + offset) & (insert_lens.len - 1)] + copy_len;
+    return total;
+}
+
+fn fillFourCommandFixture(payload: []u8, commands: []command_plan.Command) void {
+    std.debug.assert(payload.len == four_command_payload_len);
+    std.debug.assert(commands.len == four_command_count);
+    var position: usize = 0;
+    for (commands, 0..) |*command, i| {
+        const region: usize = if (i < four_command_first_split) 0 else if (i < four_command_second_split) 1 else if (i < four_command_third_split) 2 else 3;
+        const insert_len = four_command_insert_lens[region][i & 7];
+        const copy_len = four_command_copy_lens[region];
+        const byte: u8 = @intCast(region * 64 + (i & 15));
+        @memset(payload[position..][0 .. insert_len + copy_len], byte);
+        command.* = .{ .insert_start = position, .insert_len = insert_len, .copy_len = copy_len, .distance = 1, .has_copy = true };
+        position += insert_len + copy_len;
+    }
+    std.debug.assert(position == payload.len);
+}
+
 fn encodeSelectedCommandSplitFixtureAlloc(allocator: std.mem.Allocator, payload: []const u8, commands: []const command_plan.Command) Error![]u8 {
     var stats: encoder_stats.PlannedEncodeStats = .{};
     const baseline = try encodeCommandPlanWithOptionsAlloc(allocator, payload, commands, null, &stats, .{});
@@ -14978,6 +15057,54 @@ test "br four-region three-type command candidate cleans up allocation failures"
     try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{ payload, commands, baseline_bytes });
 }
 
+test "br planned wire uses four distinct command types across four regions" {
+    const payload = try std.testing.allocator.alloc(u8, four_command_payload_len);
+    defer std.testing.allocator.free(payload);
+    const commands = try std.testing.allocator.alloc(command_plan.Command, four_command_count);
+    defer std.testing.allocator.free(commands);
+    fillFourCommandFixture(payload, commands);
+    var accumulator = command_block_split.Accumulator.init(commands.len).?;
+    for (commands) |command| {
+        const encoding = commandEntryForLengths(command.insert_len, command.copy_len) orelse return error.InvalidBlockPlan;
+        try std.testing.expect(accumulator.add(encoding.symbol));
+    }
+    const proposal = accumulator.finishProposals().four orelse return error.TestUnexpectedResult;
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const forced = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, commands, null, &stats, .{ .command_split = proposal });
+    defer std.testing.allocator.free(forced);
+    const selected = try encodeSelectedCommandSplitFixtureAlloc(std.testing.allocator, payload, commands);
+    defer std.testing.allocator.free(selected);
+    try std.testing.expectEqualSlices(u8, forced, selected);
+    const summary = try summarizeStream(selected);
+    try std.testing.expectEqual(@as(usize, 4), summary.max_command_block_types);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, selected, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "br four-type command candidate cleans up allocation failures" {
+    const payload = try std.testing.allocator.alloc(u8, four_command_payload_len);
+    defer std.testing.allocator.free(payload);
+    const commands = try std.testing.allocator.alloc(command_plan.Command, four_command_count);
+    defer std.testing.allocator.free(commands);
+    fillFourCommandFixture(payload, commands);
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const baseline_bytes = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload, commands, null, &stats, .{});
+    defer std.testing.allocator.free(baseline_bytes);
+
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, input: []const u8, plan: []const command_plan.Command, baseline: []u8) !void {
+            var candidate_stats: encoder_stats.PlannedEncodeStats = .{};
+            const candidate = try encodeEntropySplitCandidateAlloc(allocator, input, plan, &candidate_stats, .{ .try_command_split = true }, .{ .encoded = baseline, .use_recent_distances = false });
+            defer if (candidate) |encoded| allocator.free(encoded);
+            try std.testing.expect(candidate != null);
+            const summary = try summarizeStreamAlloc(allocator, candidate.?);
+            try std.testing.expectEqual(@as(usize, 4), summary.max_command_block_types);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{ payload, commands, baseline_bytes });
+}
+
 test "br command block length code rejects invalid three-way splits" {
     try std.testing.expectError(error.InvalidBlockPlan, CommandBlockLengthCode.init(.{ .split = 0, .second_split = 2048, .savings_bits = 0 }, 3072));
     try std.testing.expectError(error.InvalidBlockPlan, CommandBlockLengthCode.init(.{ .split = 1024, .second_split = 1024, .savings_bits = 0 }, 3072));
@@ -14990,6 +15117,9 @@ test "br command block length code rejects invalid three-way splits" {
     var stats: encoder_stats.PlannedEncodeStats = .{};
     try std.testing.expectError(error.InvalidBlockPlan, encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{
         .command_split = .{ .split = 1, .second_split = 2, .third_split = 3, .alternate_two_types = true, .reuse_first_for_fourth = true, .savings_bits = 0 },
+    }));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeCommandPlanWithOptionsAlloc(std.testing.allocator, &payload, &commands, null, &stats, .{
+        .command_split = .{ .split = 1, .second_split = 2, .reuse_first_for_fourth = true, .savings_bits = 0 },
     }));
 }
 
@@ -24823,8 +24953,8 @@ const CommandBlockLengthCode = struct {
 
 const CommandBlockSplitHeader = struct {
     block_count: usize,
-    alphabets: *const [3]command_plan.PrefixAlphabet,
-    lengths: *const [3][704]u4,
+    alphabets: *const [4]command_plan.PrefixAlphabet,
+    lengths: *const [4][704]u4,
     split_code: *const CommandBlockLengthCode,
 };
 
