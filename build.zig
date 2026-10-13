@@ -2025,6 +2025,40 @@ pub fn build(b: *std.Build) void {
     br_ratio_stage_profile_gate.step.dependOn(&run_br_ratio_stage_profile_csv.step);
     const br_ratio_stage_profile_gate_step = b.step("run-br-ratio-stage-profile-gate", "Validate Brotli ratio stage profile coverage and counters");
     br_ratio_stage_profile_gate_step.dependOn(&br_ratio_stage_profile_gate.step);
+    const br_literal_context_profile_exe = b.addExecutable(.{
+        .name = "vort-br-literal-context-profile",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/literal_context_profile.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
+            },
+        }),
+    });
+    const run_br_literal_context_profile = b.addRunArtifact(br_literal_context_profile_exe);
+    if (b.args) |args| run_br_literal_context_profile.addArgs(args);
+    const br_literal_context_profile_step = b.step("run-br-literal-context-profile", "Profile Brotli literal-context proposal substages");
+    br_literal_context_profile_step.dependOn(&run_br_literal_context_profile.step);
+    const run_br_literal_context_profile_csv = b.addRunArtifact(br_literal_context_profile_exe);
+    run_br_literal_context_profile_csv.addArgs(&.{ "--iterations", "3", "--csv", "zig-out/vort-br-literal-context-profile.csv" });
+    const br_literal_context_profile_gate = b.addSystemCommand(&.{ "python3", "tools/br/literal_context_profile_gate.py", "--csv", "zig-out/vort-br-literal-context-profile.csv", "--executable" });
+    br_literal_context_profile_gate.addArtifactArg(br_literal_context_profile_exe);
+    br_literal_context_profile_gate.step.dependOn(&run_br_literal_context_profile_csv.step);
+    const br_literal_context_profile_gate_step = b.step("run-br-literal-context-profile-gate", "Validate Brotli literal-context profile stages and counters");
+    br_literal_context_profile_gate_step.dependOn(&br_literal_context_profile_gate.step);
+    const br_literal_context_profile_gate_smoke = b.addSystemCommand(&.{
+        "python3",
+        "tools/br/literal_context_profile_gate_smoke.py",
+        "--csv",
+        "zig-out/vort-br-literal-context-profile.csv",
+        "--gate",
+        "tools/br/literal_context_profile_gate.py",
+    });
+    br_literal_context_profile_gate_smoke.step.dependOn(&run_br_literal_context_profile_csv.step);
+    const br_literal_context_profile_gate_smoke_step = b.step("run-br-literal-context-profile-gate-smoke", "Reject malformed Brotli literal-context profiles");
+    br_literal_context_profile_gate_smoke_step.dependOn(&br_literal_context_profile_gate_smoke.step);
     const br_planned_stage_bench_exe = b.addExecutable(.{
         .name = "vort-br-planned-stage-bench",
         .root_module = b.createModule(.{
@@ -5382,6 +5416,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&br_planned_chunks_bench_exe.step);
     check_step.dependOn(&br_planned_stage_profile_exe.step);
     check_step.dependOn(&br_ratio_stage_profile_exe.step);
+    check_step.dependOn(&br_literal_context_profile_exe.step);
     check_step.dependOn(&br_record_optimal_audit_exe.step);
     check_step.dependOn(&br_record_optimal_shape_exe.step);
     check_step.dependOn(&br_planned_stage_bench_exe.step);
@@ -5495,6 +5530,8 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(br_planned_corpus_step);
     ci_smoke_step.dependOn(br_planned_node_diff_step);
     ci_smoke_step.dependOn(br_ratio_stage_profile_gate_step);
+    ci_smoke_step.dependOn(br_literal_context_profile_gate_step);
+    ci_smoke_step.dependOn(br_literal_context_profile_gate_smoke_step);
     ci_smoke_step.dependOn(br_record_optimal_audit_step);
     ci_smoke_step.dependOn(br_record_optimal_shape_gate_step);
     ci_smoke_step.dependOn(br_planned_chunks_bench_gate_step);

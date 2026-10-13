@@ -4,10 +4,13 @@ const command_plan = @import("command_plan.zig");
 const complex_prefix = @import("complex_prefix.zig");
 const context_map_encoder = @import("context_map.zig");
 const literal_context = @import("literal_context.zig");
+const literal_context_profile = @import("literal_context_profile.zig");
 
 const min_literal_count: usize = 128;
 const min_payload_savings_bits: u64 = 128;
 pub const max_trees: usize = 64;
+pub const Profile = literal_context_profile.Profile;
+const ProfileTimer = literal_context_profile.Timer;
 
 /// One bounded multi-tree literal-context proposal. The complete Brotli writer
 /// still arbitrates this proposal by exact encoded byte length, so this module
@@ -160,6 +163,7 @@ pub noinline fn chooseProposals(allocator: std.mem.Allocator, input: []const u8,
     var proposals: Proposals = .{};
     for (&analysis.by_mode, 0..) |*by_context, mode_value| {
         const mode_proposals = try chooseModeFromHistograms(
+            false,
             allocator,
             @intCast(mode_value),
             by_context,
@@ -170,12 +174,125 @@ pub noinline fn chooseProposals(allocator: std.mem.Allocator, input: []const u8,
             &precomputed_suffix_map_costs,
             true,
             max_trees,
+            {},
         );
         retainBetter(&proposals.suffix, mode_proposals.suffix);
         retainBetter(&proposals.up_to_16, mode_proposals.up_to_16);
         retainBetter(&proposals.full, mode_proposals.full);
     }
     return proposals;
+}
+
+/// Profile the exact proposal search without adding clock reads or counters to
+/// the production `chooseProposals` specialization.
+pub fn profileSearch(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    io: std.Io,
+    iterations: usize,
+) !Profile {
+    if (iterations == 0) return error.InvalidBlockPlan;
+    var aggregate: Profile = .{};
+    var expected: ?Proposals = null;
+    for (0..iterations) |_| {
+        var sample: Profile = .{};
+        const proposals = try profileSearchOnce(allocator, input, commands, io, &sample);
+        if (expected) |prior| {
+            if (!proposalsEql(prior, proposals)) return error.InvalidBlockPlan;
+        } else {
+            expected = proposals;
+            aggregate.input_bytes = sample.input_bytes;
+            aggregate.literal_count = sample.literal_count;
+            aggregate.active_symbols = sample.active_symbols;
+        }
+        aggregate.addSample(sample);
+    }
+    aggregate.iterations = iterations;
+    setProfileShape(&aggregate, expected.?);
+    return aggregate;
+}
+
+fn profileSearchOnce(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    io: std.Io,
+    profile: *Profile,
+) !Proposals {
+    profile.* = .{ .input_bytes = input.len };
+    var profiler = ProfileTimer{ .io = io, .profile = profile };
+    const total_start = profiler.now();
+    const analysis_start = profiler.now();
+    const analysis = try collectAnalysis(allocator, input, commands) orelse {
+        profile.analysis_ns = profiler.elapsedNs(analysis_start);
+        profile.total_ns = profiler.elapsedNs(total_start);
+        return .{};
+    };
+    defer allocator.destroy(analysis);
+    profile.analysis_ns = profiler.elapsedNs(analysis_start);
+    profile.literal_count = analysis.literal_count;
+
+    const baseline_start = profiler.now();
+    const baseline_bits = try treeBitCost(allocator, &analysis.total);
+    var active_symbols: ActiveSymbols = undefined;
+    buildActiveSymbols(&analysis.total, &active_symbols);
+    profile.active_symbols = active_symbols.len;
+    profile.baseline_ns = profiler.elapsedNs(baseline_start);
+
+    var proposals: Proposals = .{};
+    for (&analysis.by_mode, 0..) |*by_context, mode_value| {
+        const mode_proposals = try chooseModeFromHistograms(
+            true,
+            allocator,
+            @intCast(mode_value),
+            by_context,
+            &analysis.total,
+            analysis.literal_count,
+            baseline_bits,
+            &active_symbols,
+            &precomputed_suffix_map_costs,
+            true,
+            max_trees,
+            &profiler,
+        );
+        retainBetter(&proposals.suffix, mode_proposals.suffix);
+        retainBetter(&proposals.up_to_16, mode_proposals.up_to_16);
+        retainBetter(&proposals.full, mode_proposals.full);
+    }
+    profile.total_ns = profiler.elapsedNs(total_start);
+    return proposals;
+}
+
+fn proposalsEql(a: Proposals, b: Proposals) bool {
+    inline for (.{ "suffix", "up_to_16", "full" }) |field| {
+        const left = @field(a, field);
+        const right = @field(b, field);
+        if ((left == null) != (right == null)) return false;
+        if (left) |candidate| {
+            if (!Candidate.eql(candidate, right.?) or
+                candidate.savings_bits != right.?.savings_bits) return false;
+        }
+    }
+    return true;
+}
+
+fn setProfileShape(profile: *Profile, proposals: Proposals) void {
+    if (proposals.suffix) |candidate| {
+        profile.suffix_tree_count = candidate.tree_count;
+        profile.suffix_mode = candidate.mode;
+        profile.suffix_savings_bits = candidate.savings_bits;
+    }
+    if (proposals.up_to_16) |candidate| {
+        profile.up_to_16_tree_count = candidate.tree_count;
+        profile.up_to_16_mode = candidate.mode;
+        profile.up_to_16_savings_bits = candidate.savings_bits;
+    }
+    if (proposals.full) |candidate| {
+        profile.full_tree_count = candidate.tree_count;
+        profile.full_mode = candidate.mode;
+        profile.full_savings_bits = candidate.savings_bits;
+    }
 }
 
 fn collectAnalysis(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command) !?*Analysis {
@@ -250,6 +367,7 @@ fn chooseModeProposals(allocator: std.mem.Allocator, input: []const u8, commands
     var active_symbols: ActiveSymbols = undefined;
     buildActiveSymbols(&total, &active_symbols);
     return chooseModeFromHistograms(
+        false,
         allocator,
         mode,
         &by_context,
@@ -260,10 +378,12 @@ fn chooseModeProposals(allocator: std.mem.Allocator, input: []const u8, commands
         &precomputed_suffix_map_costs,
         include_clusters,
         max_tree_count,
+        {},
     );
 }
 
 fn chooseModeFromHistograms(
+    comptime profiled: bool,
     allocator: std.mem.Allocator,
     mode: u2,
     by_context: *const ContextHistograms,
@@ -274,7 +394,9 @@ fn chooseModeFromHistograms(
     suffix_map_costs: *const SuffixMapCosts,
     include_clusters: bool,
     max_tree_count: usize,
+    profiler: if (profiled) *ProfileTimer else void,
 ) !Proposals {
+    const suffix_start = if (profiled) profiler.now() else {};
     var left: [256]u32 = @splat(0);
     var left_count: usize = 0;
     var payload_bits: ?u64 = null;
@@ -287,8 +409,10 @@ fn chooseModeFromHistograms(
         }
         left_count += context_count;
         if (left_count == 0 or left_count == literal_count) continue;
-        if (context_count != 0 or payload_bits == null)
+        if (context_count != 0 or payload_bits == null) {
             payload_bits = try suffixPayloadBitCost(allocator, total, &left);
+            if (profiled) profiler.profile.suffix_payload_scores += 1;
+        } else if (profiled) profiler.profile.suffix_payload_reuses += 1;
         const candidate = Candidate.suffix(mode, @intCast(cutoff), 0);
         const candidate_bits = payload_bits.? + suffix_map_costs[cutoff];
         const savings = baseline_bits -| candidate_bits;
@@ -299,16 +423,21 @@ fn chooseModeFromHistograms(
             best = retained;
         }
     }
+    if (profiled) profiler.profile.suffix_ns +%= profiler.elapsedNs(suffix_start);
 
     var proposals = Proposals{ .suffix = best, .up_to_16 = best, .full = best };
     if (!include_clusters) return proposals;
+    const sparse_start = if (profiled) profiler.now() else {};
     var sparse_contexts: SparseContexts = undefined;
     buildSparseContexts(by_context, &sparse_contexts);
+    if (profiled) profiler.profile.sparse_ns +%= profiler.elapsedNs(sparse_start);
     var score_cache: ScoredMapCache = .{};
     for ([_]usize{ 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64 }) |requested_tree_count| {
         if (requested_tree_count > max_tree_count) continue;
         for ([_]Seed{ .ordered, .interleaved }) |seed| {
-            const clustered = try clusterContexts(
+            const cluster_start = if (profiled) profiler.now() else {};
+            const clustered_optional = try clusterContexts(
+                profiled,
                 allocator,
                 mode,
                 &sparse_contexts,
@@ -317,7 +446,13 @@ fn chooseModeFromHistograms(
                 baseline_bits,
                 requested_tree_count,
                 seed,
-            ) orelse continue;
+                profiler,
+            );
+            if (profiled) {
+                profiler.profile.cluster_ns +%= profiler.elapsedNs(cluster_start);
+                profiler.profile.cluster_trials += 1;
+            }
+            const clustered = clustered_optional orelse continue;
             retainBetter(&proposals.full, clustered);
             if (requested_tree_count <= 16) retainBetter(&proposals.up_to_16, clustered);
         }
@@ -354,6 +489,7 @@ fn contextMapHash(context_map: *const [64]u8, tree_count: usize) u64 {
 const Seed = enum { ordered, interleaved };
 
 fn clusterContexts(
+    comptime profiled: bool,
     allocator: std.mem.Allocator,
     mode: u2,
     sparse_contexts: *const SparseContexts,
@@ -362,7 +498,9 @@ fn clusterContexts(
     baseline_bits: u64,
     requested_tree_count: usize,
     seed: Seed,
+    profiler: if (profiled) *ProfileTimer else void,
 ) !?Candidate {
+    const init_start = if (profiled) profiler.now() else {};
     var populated: [64]u8 = undefined;
     var populated_count: usize = 0;
     for (sparse_contexts, 0..) |sparse, context| {
@@ -370,7 +508,10 @@ fn clusterContexts(
         populated[populated_count] = @intCast(context);
         populated_count += 1;
     }
-    if (populated_count < requested_tree_count) return null;
+    if (populated_count < requested_tree_count) {
+        if (profiled) profiler.profile.cluster_init_ns +%= profiler.elapsedNs(init_start);
+        return null;
+    }
 
     var context_map: [64]u8 = @splat(0);
     for (populated[0..populated_count], 0..) |context, rank| {
@@ -390,9 +531,13 @@ fn clusterContexts(
     var tree_totals: TreeTotals = undefined;
     initializeTreeWorkspace(requested_tree_count, &tree_histograms, &tree_totals);
     aggregateTreesSparse(sparse_contexts, &context_map, requested_tree_count, &tree_histograms, &tree_totals);
+    if (profiled) profiler.profile.cluster_init_ns +%= profiler.elapsedNs(init_start);
     for (0..cluster_iterations) |_| {
+        const prepare_start = if (profiled) profiler.now() else {};
         var symbol_costs: [max_trees][256]u16 = undefined;
         prepareAssignmentCosts(&tree_histograms, &tree_totals, requested_tree_count, active_symbols, &symbol_costs);
+        if (profiled) profiler.profile.cluster_prepare_ns +%= profiler.elapsedNs(prepare_start);
+        const assignment_start = if (profiled) profiler.now() else {};
         var changed = false;
         for (populated[0..populated_count]) |context| {
             var best_tree: usize = 0;
@@ -420,9 +565,16 @@ fn clusterContexts(
                 changed = true;
             }
         }
+        if (profiled) {
+            profiler.profile.cluster_assignment_ns +%= profiler.elapsedNs(assignment_start);
+            profiler.profile.cluster_rounds += 1;
+            profiler.profile.assignment_contexts += populated_count;
+            profiler.profile.assignment_comparisons += populated_count * requested_tree_count;
+        }
         if (!changed) break;
     }
 
+    const finalize_start = if (profiled) profiler.now() else {};
     var remap: [max_trees]u8 = @splat(0xff);
     var tree_count: usize = 0;
     for (tree_totals[0..requested_tree_count], 0..) |total, tree| {
@@ -442,7 +594,10 @@ fn clusterContexts(
             tree.* = remap[tree.*];
         }
     }
+    if (profiled) profiler.profile.cluster_finalize_ns +%= profiler.elapsedNs(finalize_start);
 
+    const score_start = if (profiled) profiler.now() else {};
+    const prior_cache_hits = if (profiled) score_cache.hits else 0;
     const candidate_bits = score_cache.get(&context_map, tree_count) orelse blk: {
         var bits: u64 = 0;
         for (tree_histograms[0..tree_count]) |*histogram|
@@ -452,6 +607,13 @@ fn clusterContexts(
         score_cache.put(&context_map, tree_count, bits);
         break :blk bits;
     };
+    if (profiled) {
+        profiler.profile.cluster_score_ns +%= profiler.elapsedNs(score_start);
+        if (score_cache.hits != prior_cache_hits)
+            profiler.profile.score_cache_hits += 1
+        else
+            profiler.profile.score_cache_misses += 1;
+    }
     const savings = baseline_bits -| candidate_bits;
     if (savings < min_payload_savings_bits) return null;
     return .{
@@ -710,6 +872,29 @@ test "literal context single-pass analysis cleans up allocation failures" {
     );
 }
 
+test "literal context profile reports stable stage accounting" {
+    const input = ("the quick brown fox jumps over the lazy dog\n" ** 16) ++
+        ("THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG\n" ** 16);
+    const commands = [_]command_plan.Command{.{
+        .insert_start = 0,
+        .insert_len = input.len,
+    }};
+    const profile = try profileSearch(std.testing.allocator, input, &commands, std.testing.io, 2);
+    try std.testing.expectEqual(@as(usize, 2), profile.iterations);
+    try std.testing.expectEqual(input.len, profile.input_bytes);
+    try std.testing.expectEqual(input.len, profile.literal_count);
+    try std.testing.expect(profile.active_symbols > 0);
+    try std.testing.expect(profile.full_tree_count >= 2);
+    try std.testing.expect(profile.suffix_payload_scores > 0);
+    try std.testing.expect(profile.cluster_trials > 0);
+    try std.testing.expect(profile.cluster_rounds > 0);
+    try std.testing.expect(profile.assignment_comparisons >= profile.assignment_contexts);
+    try std.testing.expect(profile.score_cache_hits + profile.score_cache_misses > 0);
+    try std.testing.expect(profile.score_cache_hits + profile.score_cache_misses <= profile.cluster_trials);
+    try std.testing.expect(profile.stageNs() <= profile.total_ns);
+    try std.testing.expect(profile.clusterStageNs() <= profile.cluster_ns);
+}
+
 test "literal context prepared assignment costs match reference" {
     var trees: [max_trees][256]u32 = @splat(@splat(0));
     var totals: [max_trees]u32 = @splat(0);
@@ -819,6 +1004,7 @@ test "literal context scored map cache hits and rejects collisions" {
     const baseline_bits = try treeBitCost(std.testing.allocator, &total);
     var cache: ScoredMapCache = .{};
     const first = try clusterContexts(
+        false,
         std.testing.allocator,
         literal_context.mode_lsb6,
         &sparse_contexts,
@@ -827,8 +1013,10 @@ test "literal context scored map cache hits and rejects collisions" {
         baseline_bits,
         4,
         .interleaved,
+        {},
     ) orelse return error.TestUnexpectedResult;
     const second = try clusterContexts(
+        false,
         std.testing.allocator,
         literal_context.mode_lsb6,
         &sparse_contexts,
@@ -837,6 +1025,7 @@ test "literal context scored map cache hits and rejects collisions" {
         baseline_bits,
         4,
         .interleaved,
+        {},
     ) orelse return error.TestUnexpectedResult;
     try std.testing.expect(Candidate.eql(first, second));
     try std.testing.expectEqual(first.savings_bits, second.savings_bits);

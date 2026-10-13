@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+"""Validate the focused Brotli literal-context proposal profile."""
+
+import argparse
+import csv
+import hashlib
+import sys
+from pathlib import Path
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from benchmark_provenance_gate import PROVENANCE_COLUMNS, validate_provenance
+
+COLUMNS = [
+    "case", "input_bytes", "input_sha256", "iterations", "literal_count", "active_symbols",
+    "suffix_tree_count", "suffix_mode", "suffix_savings_bits",
+    "up_to_16_tree_count", "up_to_16_mode", "up_to_16_savings_bits",
+    "full_tree_count", "full_mode", "full_savings_bits",
+    "suffix_payload_scores", "suffix_payload_reuses", "cluster_trials", "cluster_rounds",
+    "assignment_contexts", "assignment_comparisons", "score_cache_hits", "score_cache_misses",
+    "analysis_ns", "baseline_ns", "suffix_ns", "sparse_ns", "cluster_ns", "cluster_init_ns",
+    "cluster_prepare_ns", "cluster_assignment_ns", "cluster_finalize_ns", "cluster_score_ns",
+    "stage_ns", "cluster_stage_ns", "total_ns", "unattributed_ns", "cluster_unattributed_ns",
+] + PROVENANCE_COLUMNS
+CASES = {"source4k": 4 * 1024, "source16k": 16 * 1024, "source32k": 32 * 1024}
+TOP_STAGES = ["analysis_ns", "baseline_ns", "suffix_ns", "sparse_ns", "cluster_ns"]
+CLUSTER_STAGES = [
+    "cluster_init_ns", "cluster_prepare_ns", "cluster_assignment_ns",
+    "cluster_finalize_ns", "cluster_score_ns",
+]
+
+
+def integer(row: dict[str, str], key: str) -> int:
+    try:
+        return int(row[key])
+    except (KeyError, ValueError) as exc:
+        raise AssertionError(f"invalid {key}: {row}") from exc
+
+
+def validate_candidate(row: dict[str, str], prefix: str) -> None:
+    trees = integer(row, f"{prefix}_tree_count")
+    mode = integer(row, f"{prefix}_mode")
+    savings = integer(row, f"{prefix}_savings_bits")
+    if trees == 0:
+        assert mode == 0 and savings == 0, (prefix, row)
+    else:
+        assert 2 <= trees <= 64, (prefix, row)
+        assert 0 <= mode <= 3, (prefix, row)
+        assert savings >= 128, (prefix, row)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--csv", type=Path, required=True)
+    parser.add_argument("--executable", type=Path)
+    args = parser.parse_args()
+    with args.csv.open(newline="") as file:
+        reader = csv.DictReader(file)
+        assert reader.fieldnames == COLUMNS, reader.fieldnames
+        rows = list(reader)
+    by_case = {row["case"]: row for row in rows}
+    assert len(rows) == len(CASES) and set(by_case) == set(CASES), sorted(by_case)
+    validate_provenance(rows, executable=args.executable, codec_thread_policy="single")
+    assert len({row["input_sha256"] for row in rows}) == len(rows), rows
+
+    for name, input_bytes in CASES.items():
+        row = by_case[name]
+        iterations = integer(row, "iterations")
+        assert integer(row, "input_bytes") == input_bytes, row
+        assert len(row["input_sha256"]) == hashlib.sha256().digest_size * 2, row
+        assert set(row["input_sha256"]) <= set("0123456789abcdef"), row
+        assert iterations > 0, row
+        assert 128 <= integer(row, "literal_count") <= input_bytes, row
+        assert 1 <= integer(row, "active_symbols") <= 256, row
+        for prefix in ("suffix", "up_to_16", "full"):
+            validate_candidate(row, prefix)
+        assert integer(row, "suffix_payload_scores") > 0, row
+        assert integer(row, "suffix_payload_reuses") > 0, row
+        assert integer(row, "cluster_trials") == 88 * iterations, row
+        assert integer(row, "cluster_rounds") >= integer(row, "cluster_trials"), row
+        assert integer(row, "assignment_contexts") > 0, row
+        assert integer(row, "assignment_comparisons") >= integer(row, "assignment_contexts"), row
+        scored = integer(row, "score_cache_hits") + integer(row, "score_cache_misses")
+        assert 0 < scored <= integer(row, "cluster_trials"), row
+        assert integer(row, "score_cache_misses") > 0, row
+        for key in TOP_STAGES + CLUSTER_STAGES + ["stage_ns", "cluster_stage_ns", "total_ns"]:
+            assert integer(row, key) > 0, (key, row)
+        assert integer(row, "stage_ns") == sum(integer(row, key) for key in TOP_STAGES), row
+        assert integer(row, "cluster_stage_ns") == sum(integer(row, key) for key in CLUSTER_STAGES), row
+        assert integer(row, "stage_ns") + integer(row, "unattributed_ns") == integer(row, "total_ns"), row
+        assert integer(row, "cluster_stage_ns") + integer(row, "cluster_unattributed_ns") == integer(row, "cluster_ns"), row
+
+    source32 = by_case["source32k"]
+    assert integer(source32, "suffix_tree_count") >= 2, source32
+    assert integer(source32, "full_tree_count") >= integer(source32, "suffix_tree_count"), source32
+    cluster_score = integer(source32, "cluster_score_ns")
+    assert cluster_score == max(integer(source32, key) for key in CLUSTER_STAGES), source32
+    assert cluster_score * 2 > integer(source32, "cluster_ns"), source32
+    print("br_literal_context_profile_gate=ok rows=3 dominant=cluster_score_ns")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

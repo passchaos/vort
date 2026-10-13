@@ -19285,6 +19285,25 @@ reuse, so production keeps the simpler independently owned plans.
   eight-case libbrotli/progressive differential, and nine-row ReleaseFast gate
   remain green.
 
+- Added a dedicated ReleaseFast literal-context proposal profiler because host
+  performance counters are unavailable. Normal encoding uses a compile-time
+  unprofiled specialization; the explicit public diagnostic separately times
+  fused analysis, baseline scoring, suffix scoring, sparse setup, and cluster
+  work, then divides cluster time into initialization, price preparation,
+  reassignment, compaction, and final exact scoring. It also records proposal
+  shapes, trials, rounds, comparisons, and exact-score cache hits/misses. The
+  three-row CSV gate checks ReleaseFast provenance, deterministic geometry,
+  nested timing totals, and `source32k` stage dominance; six negative fixtures
+  reject missing rows, counter/timing drift, invalid modes, false dominance,
+  and Debug evidence. A fixed-CPU-2 ten-iteration run selected 2/10/10 trees
+  for `source32k`: suffix and clustering consumed 43.4%/53.4% of total search
+  time, while final exact tree/context-map scoring consumed 70.9% of cluster
+  time versus 18.1% for assignment. Exact suffix plus final cluster scoring
+  therefore accounts for about 81% of attributed search time. A seven-pair
+  production-path control showed no instrumentation regression (four wins,
+  243.970 ms versus 242.437 ms medians). Commands, counters, and interpretation
+  are recorded in `docs/performance/brotli-literal-context-profile-x86.md`.
+
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository
   dictionary, source, README, roadmap, and small-corpus payloads; optional

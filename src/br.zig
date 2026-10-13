@@ -64,6 +64,7 @@ pub const Error = core.Error || std.mem.Allocator.Error;
 pub const default_incremental_compressed_header_bytes: usize = 16 * 1024;
 pub const PlannedEncodeStats = encoder_stats.PlannedEncodeStats;
 pub const RatioEncodeProfile = encoder_stats.RatioEncodeProfile;
+pub const LiteralContextProfile = literal_context_split.Profile;
 pub const PlannedCompressionLevel = enum { fast, balanced, ratio };
 pub const max_extended_dictionary_probes: u16 = 4096;
 pub const PlannedEncodeOptions = struct {
@@ -2608,6 +2609,36 @@ pub fn profilePlannedRatioBlockAlloc(allocator: std.mem.Allocator, input: []cons
     profile.selected_bytes = result.len;
     profile.total_ns = elapsedNs(total_start, io);
     return result;
+}
+
+/// Profile literal-context proposal search over the same bounded optimal command
+/// plan used by ratio encoding. The plan is built once outside the measured
+/// iterations so the result isolates context analysis and clustering.
+pub fn profileLiteralContextSearch(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    io: std.Io,
+    iterations: usize,
+) Error!LiteralContextProfile {
+    if (input.len < 4 * 1024 or input.len > 64 * 1024 or iterations == 0)
+        return error.InvalidBlockPlan;
+    const parser_options = PlannedParserOptions{
+        .window_len = @min(input.len, planner_max_backward_distance),
+        .max_chain = 512,
+        .nice_len = lz77.max_match_len,
+    };
+    const plan = try lz77.optimalPlanAlloc(allocator, input, .{
+        .window_len = @min(input.len, @min(parser_options.window_len, lz77.default_window_len)),
+        .max_chain = @min(parser_options.max_chain, 256),
+        .nice_len = parser_options.nice_len,
+        .max_candidates = 128,
+        .min_match = 4,
+        .max_match = lz77.max_match_len,
+    });
+    defer plan.deinit(allocator);
+    const commands = try command_plan.buildAlloc(allocator, input, plan.tokens);
+    defer commands.deinit(allocator);
+    return literal_context_split.profileSearch(allocator, input, commands.commands, io, iterations);
 }
 
 fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
