@@ -528,6 +528,10 @@ zig build run-br-planned-node-diff
 zig build -Doptimize=ReleaseFast run-br-planned-encode-bench-gate
 zig build -Doptimize=ReleaseFast run-br-context-tree-report
 zig build -Doptimize=ReleaseFast run-br-context-tree-report-gate
+zig build -Doptimize=ReleaseFast run-br-context-tree-dashboard-gate
+# Optional deterministic directory discovery, bounded by file count and prefix:
+zig build -Doptimize=ReleaseFast run-br-context-tree-report -- \
+  --dir ~/corpora/silesia --max-files 64 --limit 32768
 zig build -Doptimize=ReleaseFast run-br-ratio-stage-profile-gate
 zig build -Doptimize=ReleaseFast run-br-planned-chunks-bench-gate
 zig build -Doptimize=ReleaseFast run-br-upstream-multiblock-diff

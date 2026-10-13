@@ -21,11 +21,15 @@ const Case = struct {
 const Options = struct {
     csv_path: ?[]const u8 = null,
     limit: usize = 32 * 1024,
+    max_files: usize = 64,
     paths: std.ArrayList([]const u8) = .empty,
+    dirs: std.ArrayList([]const u8) = .empty,
 
     fn deinit(options: *Options, allocator: std.mem.Allocator) void {
         for (options.paths.items) |path| allocator.free(path);
+        for (options.dirs.items) |path| allocator.free(path);
         options.paths.deinit(allocator);
+        options.dirs.deinit(allocator);
     }
 };
 
@@ -53,6 +57,8 @@ pub fn main(init: std.process.Init) !void {
         const name = try std.fmt.allocPrint(init.gpa, "path-{d}", .{index});
         try appendFileCaseOwnedName(init, &cases, name, path, options.limit);
     }
+    for (options.dirs.items, 0..) |path, index|
+        try appendDirectoryCases(init, &cases, path, index, options.limit, options.max_files);
 
     var csv: std.Io.Writer.Allocating = .init(init.gpa);
     defer csv.deinit();
@@ -129,6 +135,40 @@ fn appendFileCaseOwnedName(init: std.process.Init, cases: *std.ArrayList(Case), 
     try cases.append(init.gpa, .{ .name = owned_name, .payload = payload, .owned = true });
 }
 
+fn appendDirectoryCases(
+    init: std.process.Init,
+    cases: *std.ArrayList(Case),
+    dir_path: []const u8,
+    dir_index: usize,
+    limit: usize,
+    max_files: usize,
+) !void {
+    var dir = try std.Io.Dir.cwd().openDir(init.io, dir_path, .{ .iterate = true });
+    defer dir.close(init.io);
+    var walker = try dir.walk(init.gpa);
+    defer walker.deinit();
+    var files: std.ArrayList([]u8) = .empty;
+    defer {
+        for (files.items) |path| init.gpa.free(path);
+        files.deinit(init.gpa);
+    }
+    while (try walker.next(init.io)) |entry| {
+        if (entry.kind != .file) continue;
+        const joined = try std.fs.path.join(init.gpa, &.{ dir_path, entry.path });
+        errdefer init.gpa.free(joined);
+        try files.append(init.gpa, joined);
+    }
+    std.mem.sort([]u8, files.items, {}, struct {
+        fn lessThan(_: void, a: []u8, b: []u8) bool {
+            return std.mem.lessThan(u8, a, b);
+        }
+    }.lessThan);
+    for (files.items[0..@min(files.items.len, max_files)], 0..) |path, file_index| {
+        const name = try std.fmt.allocPrint(init.gpa, "dir-{d}-{d}", .{ dir_index, file_index });
+        try appendFileCaseOwnedName(init, cases, name, path, limit);
+    }
+}
+
 fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) !Options {
     var options: Options = .{};
     errdefer options.deinit(allocator);
@@ -137,10 +177,14 @@ fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) 
             options.csv_path = args.next() orelse return error.MissingCorpusPath;
         } else if (std.mem.eql(u8, arg, "--limit")) {
             options.limit = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10);
+        } else if (std.mem.eql(u8, arg, "--max-files")) {
+            options.max_files = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10);
         } else if (std.mem.eql(u8, arg, "--path")) {
             try options.paths.append(allocator, try allocator.dupe(u8, args.next() orelse return error.MissingCorpusPath));
+        } else if (std.mem.eql(u8, arg, "--dir")) {
+            try options.dirs.append(allocator, try allocator.dupe(u8, args.next() orelse return error.MissingCorpusPath));
         } else return error.UnknownArgument;
     }
-    if (options.limit == 0) return error.InvalidBlockPlan;
+    if (options.limit == 0 or options.max_files == 0) return error.InvalidBlockPlan;
     return options;
 }

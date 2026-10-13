@@ -19154,3 +19154,13 @@ reuse, so production keeps the simpler independently owned plans.
   >=8-tree model, exact provenance, and source32k geometry; a six-case negative
   smoke covers missing/duplicate rows, bad hashes, invalid counts/model flags,
   and non-ReleaseFast evidence.
+  Deterministic `--dir` discovery recursively sorts paths and bounds both file
+  count and per-file prefix, while the no-directory path always falls back to
+  the six versioned repository cases. A companion Markdown/JSON dashboard
+  aggregates tree-count buckets, RFC mode bytes, per-case sizes, and provenance.
+  The current dashboard has two single-tree rows, three 2--4-tree rows, one
+  9--16-tree row, four context-model rows, and a 0.369765 weighted size ratio.
+  Its strict gate verifies schema, totals, distribution, dictionary coverage,
+  provenance, and rendered headings; another six negative cases cover schema,
+  row/distribution drift, missing UTF8 evidence, dictionary-tree regression,
+  and non-ReleaseFast provenance.

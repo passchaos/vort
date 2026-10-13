@@ -1894,6 +1894,26 @@ pub fn build(b: *std.Build) void {
     const br_context_tree_report_gate_smoke = b.addSystemCommand(&.{ "python3", "tools/br/context_tree_report_gate_smoke.py" });
     const br_context_tree_report_gate_smoke_step = b.step("run-br-context-tree-report-gate-smoke", "Validate Brotli context-tree report gate negatives");
     br_context_tree_report_gate_smoke_step.dependOn(&br_context_tree_report_gate_smoke.step);
+    const br_context_tree_dashboard = b.addSystemCommand(&.{
+        "python3",    "tools/br/context_tree_dashboard.py",
+        "--csv",      "zig-out/vort-br-context-tree-report.csv",
+        "--markdown", "zig-out/vort-br-context-tree-dashboard.md",
+        "--json",     "zig-out/vort-br-context-tree-dashboard.json",
+    });
+    br_context_tree_dashboard.step.dependOn(&run_br_context_tree_report_csv.step);
+    const br_context_tree_dashboard_step = b.step("run-br-context-tree-dashboard", "Write Brotli context-tree Markdown and JSON dashboard");
+    br_context_tree_dashboard_step.dependOn(&br_context_tree_dashboard.step);
+    const br_context_tree_dashboard_gate = b.addSystemCommand(&.{
+        "python3",    "tools/br/context_tree_dashboard_gate.py",
+        "--json",     "zig-out/vort-br-context-tree-dashboard.json",
+        "--markdown", "zig-out/vort-br-context-tree-dashboard.md",
+    });
+    br_context_tree_dashboard_gate.step.dependOn(br_context_tree_dashboard_step);
+    const br_context_tree_dashboard_gate_step = b.step("run-br-context-tree-dashboard-gate", "Validate Brotli context-tree dashboard artifacts");
+    br_context_tree_dashboard_gate_step.dependOn(&br_context_tree_dashboard_gate.step);
+    const br_context_tree_dashboard_gate_smoke = b.addSystemCommand(&.{ "python3", "tools/br/context_tree_dashboard_gate_smoke.py" });
+    const br_context_tree_dashboard_gate_smoke_step = b.step("run-br-context-tree-dashboard-gate-smoke", "Validate Brotli context-tree dashboard negatives");
+    br_context_tree_dashboard_gate_smoke_step.dependOn(&br_context_tree_dashboard_gate_smoke.step);
     const run_br_planned_encode_path_csv = b.addRunArtifact(br_planned_encode_bench_exe);
     run_br_planned_encode_path_csv.addArgs(&.{
         "--iterations", "10",
@@ -5477,6 +5497,8 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(br_upstream_multiblock_diff_step);
     ci_smoke_step.dependOn(br_context_tree_report_gate_step);
     ci_smoke_step.dependOn(br_context_tree_report_gate_smoke_step);
+    ci_smoke_step.dependOn(br_context_tree_dashboard_gate_step);
+    ci_smoke_step.dependOn(br_context_tree_dashboard_gate_smoke_step);
     ci_smoke_step.dependOn(br_real_corpus_diff_step);
     ci_smoke_step.dependOn(br_progressive_copy_bench_gate_step);
     ci_smoke_step.dependOn(br_progressive_huffman_bench_gate_step);
