@@ -29,12 +29,12 @@ extern fn vortBrStableFixedWidthRecord(input: [*]const u8, input_len: usize) cal
 extern fn vortBrRecordOptimalPlan(input: [*]const u8, input_len: usize, head: [*]u32, head_initialized: [*]u64, prev: [*]u32, costs: [*]u32, steps: [*]u32, tokens: [*]record_optimal_abi.Token, stats: *record_optimal_abi.Stats) callconv(.c) u8;
 extern fn vortBrRefineRecordDistances(input: [*]const u8, input_len: usize, tokens: [*]record_optimal_abi.Token, token_count: usize) callconv(.c) u8;
 const header_profile = @import("br/header_profile.zig");
-const incremental = @import("br/incremental/stream_decoder.zig");
 const incremental_tests = @import("br/incremental/tests.zig");
 const incremental_literal = @import("br/incremental/literal_decoder.zig");
 const incremental_literal_tests = @import("br/incremental/literal_tests.zig");
 const incremental_copy = @import("br/incremental/copy_decoder.zig");
 const incremental_copy_tests = @import("br/incremental/copy_tests.zig");
+const incremental_owned_copy = @import("br/incremental/owned_copy_decoder.zig");
 const incremental_rle = @import("br/incremental/rle_decoder.zig");
 const incremental_rle_tests = @import("br/incremental/rle_tests.zig");
 const incremental_stored = @import("br/incremental/stored/decoder.zig");
@@ -98,21 +98,15 @@ pub const DecodeOptions = struct {
     allow_large_window: bool = false,
 };
 
-const IncrementalCodec = struct {
-    pub const Error = br.Error;
-    pub const DecodeOptions = br.DecodeOptions;
-    pub fn decodedSizeLimited(stream: []const u8, limit: usize, options: br.DecodeOptions) br.Error!usize {
-        return br.decodedStreamSizeLimitedWithOptions(stream, limit, options);
-    }
-    pub fn decodeInto(stream: []const u8, output: []u8, options: br.DecodeOptions) br.Error!usize {
-        return br.decodeStreamIntoWithOptions(stream, output, options);
-    }
-};
-
 const br = @This();
-pub const IncrementalStreamDecoder = incremental.Decoder(IncrementalCodec);
 pub const IncrementalLiteralStreamDecoder = incremental_literal.Decoder(IncrementalLiteralCodec);
 pub const IncrementalCopyStreamDecoder = incremental_copy.Decoder(IncrementalCopyCodec);
+const IncrementalOwnedCodec = struct {
+    pub const Error = br.Error;
+    pub const DecodeOptions = br.DecodeOptions;
+    pub const ProgressiveDecoder = br.IncrementalCopyStreamDecoder;
+};
+pub const IncrementalStreamDecoder = incremental_owned_copy.Decoder(IncrementalOwnedCodec);
 pub const IncrementalRleStreamDecoder = incremental_rle.Decoder(IncrementalRleCodec);
 pub const IncrementalStoredStreamDecoder = incremental_stored.Decoder;
 
@@ -13411,26 +13405,26 @@ test "br large window decode is explicit and covers one-shot chunked and increme
         defer std.testing.allocator.free(chunked);
         try std.testing.expectEqualSlices(u8, expected, chunked);
 
-        var buffered = IncrementalStreamDecoder.initExactCompressedSize(std.testing.allocator, .{
+        var owned_progressive = IncrementalStreamDecoder.initExactCompressedSize(std.testing.allocator, .{
             .expected_output_len = expected.len,
             .decode = options,
         }, encoded.len);
-        defer buffered.deinit();
-        var buffered_output: [expected.len]u8 = undefined;
-        var buffered_input_offset: usize = 0;
-        var buffered_output_offset: usize = 0;
-        while (buffered.snapshot().phase != .done) {
-            const input_end = @min(encoded.len, buffered_input_offset + 1);
-            const output_end = @min(buffered_output.len, buffered_output_offset + 7);
-            const step = try buffered.step(
-                encoded[buffered_input_offset..input_end],
-                buffered_output[buffered_output_offset..output_end],
+        defer owned_progressive.deinit();
+        var owned_output: [expected.len]u8 = undefined;
+        var owned_input_offset: usize = 0;
+        var owned_output_offset: usize = 0;
+        while (owned_progressive.snapshot().phase != .done) {
+            const input_end = @min(encoded.len, owned_input_offset + 1);
+            const output_end = @min(owned_output.len, owned_output_offset + 7);
+            const step = try owned_progressive.step(
+                encoded[owned_input_offset..input_end],
+                owned_output[owned_output_offset..output_end],
             );
             try std.testing.expect(step.progress.input_read != 0 or step.progress.output_written != 0);
-            buffered_input_offset += step.progress.input_read;
-            buffered_output_offset += step.progress.output_written;
+            owned_input_offset += step.progress.input_read;
+            owned_output_offset += step.progress.output_written;
         }
-        try std.testing.expectEqualSlices(u8, expected, &buffered_output);
+        try std.testing.expectEqualSlices(u8, expected, &owned_output);
 
         var history: [expected.len]u8 = undefined;
         var progressive = IncrementalCopyStreamDecoder.initWithOptions(&history, .{

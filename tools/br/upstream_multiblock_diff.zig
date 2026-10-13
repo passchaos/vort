@@ -571,7 +571,7 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(chunked);
         if (!std.mem.eql(u8, chunked, large_window_payload)) return error.SizeMismatch;
 
-        try decodeLargeWindowBuffered(init.gpa, encoded, large_window_payload);
+        try decodeLargeWindowOwned(init.gpa, encoded, large_window_payload);
         try decodeLargeWindowProgressive(init.gpa, encoded, large_window_payload, @intCast(lgwin_usize));
         try reference.decodeLargeWindow(encoded, decoded);
         large_window_decode_cases += 1;
@@ -1494,6 +1494,7 @@ fn validatePlannedLiteralFixture(
     try reference.decode(fixture.encoded, decoded);
     if (!std.mem.eql(u8, fixture.payload, decoded)) return error.ReferenceDecodeFailed;
     try decodeProgressChunks(allocator, fixture.encoded, fixture.payload, 16, 17, 31);
+    try decodeOwnedProgressChunks(allocator, fixture.encoded, fixture.payload, 17, 31);
 }
 
 fn validatePlannedCommandFixture(
@@ -1509,6 +1510,7 @@ fn validatePlannedCommandFixture(
     try reference.decode(fixture.encoded, decoded);
     if (!std.mem.eql(u8, fixture.payload, decoded)) return error.ReferenceDecodeFailed;
     try decodeProgressChunks(allocator, fixture.encoded, fixture.payload, 16, 17, 31);
+    try decodeOwnedProgressChunks(allocator, fixture.encoded, fixture.payload, 17, 31);
 }
 
 fn validatePlannedDistanceFixture(
@@ -1526,6 +1528,7 @@ fn validatePlannedDistanceFixture(
     try reference.decode(fixture.encoded, decoded);
     if (!std.mem.eql(u8, fixture.payload, decoded)) return error.ReferenceDecodeFailed;
     try decodeProgressChunks(allocator, fixture.encoded, fixture.payload, 16, 17, 31);
+    try decodeOwnedProgressChunks(allocator, fixture.encoded, fixture.payload, 17, 31);
 }
 
 fn readFilePrefixAlloc(init: std.process.Init, path: []const u8, limit: usize) ![]u8 {
@@ -1668,7 +1671,30 @@ fn decodeProgressChunks(allocator: std.mem.Allocator, encoded: []const u8, expec
     return decodeProgressChunksWithHeaderScratch(allocator, encoded, expected, lgwin, input_chunk_len, output_chunk_len, &.{});
 }
 
-fn decodeLargeWindowBuffered(allocator: std.mem.Allocator, encoded: []const u8, expected: []const u8) !void {
+fn decodeOwnedProgressChunks(allocator: std.mem.Allocator, encoded: []const u8, expected: []const u8, input_chunk_len: usize, output_chunk_len: usize) !void {
+    var decoder = vort.BrotliIncrementalStreamDecoder.initExactCompressedSize(allocator, .{
+        .expected_output_len = expected.len,
+        .max_history_len = @max(1, @min(expected.len, (@as(usize, 1) << 24) - 16)),
+    }, encoded.len);
+    defer decoder.deinit();
+    const output = try allocator.alloc(u8, expected.len);
+    defer allocator.free(output);
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(encoded.len, input_offset + input_chunk_len);
+        const output_end = @min(output.len, output_offset + output_chunk_len);
+        const step = try decoder.step(encoded[input_offset..input_end], output[output_offset..output_end]);
+        if (step.progress.input_read == 0 and step.progress.output_written == 0) return error.ReferenceDecodeFailed;
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+    }
+    try decoder.finish();
+    if (input_offset != encoded.len or output_offset != expected.len or
+        !std.mem.eql(u8, output, expected)) return error.ReferenceDecodeFailed;
+}
+
+fn decodeLargeWindowOwned(allocator: std.mem.Allocator, encoded: []const u8, expected: []const u8) !void {
     var decoder = vort.BrotliIncrementalStreamDecoder.initExactCompressedSize(allocator, .{
         .expected_output_len = expected.len,
         .decode = .{ .allow_large_window = true },

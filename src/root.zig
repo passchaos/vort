@@ -670,11 +670,23 @@ test "root Brotli incremental decoder continues framed payloads" {
     var decoder = BrotliIncrementalStreamDecoder.initExactCompressedSize(std.testing.allocator, .{ .expected_output_len = 3 }, first.len);
     defer decoder.deinit();
     var output: [3]u8 = undefined;
-    _ = try decoder.step(first, &.{});
-    _ = try decoder.step("", &output);
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const step = try decoder.step(first[input_offset..], output[output_offset..]);
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+    }
+    try std.testing.expectEqualSlices(u8, "one", &output);
     try decoder.nextFrameExactCompressedSize(.{ .expected_output_len = 3 }, second.len);
-    _ = try decoder.step(second, &.{});
-    _ = try decoder.step("", &output);
+    input_offset = 0;
+    output_offset = 0;
+    while (decoder.snapshot().phase != .done) {
+        const step = try decoder.step(second[input_offset..], output[output_offset..]);
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+    }
+    try std.testing.expectEqualSlices(u8, "two", &output);
     try std.testing.expectEqual(@as(usize, 2), decoder.snapshot().frame_count);
 }
 

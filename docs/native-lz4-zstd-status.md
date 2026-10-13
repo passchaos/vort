@@ -185,6 +185,15 @@ header is rejected explicitly at the default bound and decodes through the
 external scratch path. The one-shot decoder continues to parse directly from
 input.
 
+`BrotliIncrementalStreamDecoder` now owns only a caller-bounded history ring
+and delegates directly to that symbol-progressive core. It no longer retains a
+complete compressed frame, performs a decoded-size preflight, or allocates a
+complete decoded frame before publishing output. Pledged compressed sizes,
+output limits, concatenated `nextFrame` accounting, Large Window opt-in,
+metadata capture, external header scratch, snapshots, and diagnostics remain
+on the public facade; `max_history_len` makes its only material owned codec
+state explicit.
+
 ## Next recommended work
 
 1. Add more public Zstd sequence fixtures for broader mixed-table transitions
@@ -192,5 +201,5 @@ input.
 2. Expand public API benchmarks cautiously, keeping Debug gate time bounded.
 3. Add differential/corpus dashboards that compare native LZ4/Zstd APIs against
    local reference tools/libraries without routing through CLI-only code paths.
-4. Continue moving incremental decoders from whole-frame validation toward
-   byte-progressive decompression while preserving the current diagnostics.
+4. Continue moving the remaining whole-block incremental codecs toward
+   byte-progressive decompression while preserving verification boundaries.

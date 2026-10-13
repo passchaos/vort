@@ -69,7 +69,7 @@ equivalent encoder quality or speed.
 The same required probe now adds six libbrotli-generated Large Window Brotli
 streams covering every 25...30-bit window supported by libbrotli 1.1.0. Legacy/default Vort APIs must
 reject their reserved RFC header, while explicit `BrotliDecodeOptions` paths
-decode them through allocating, caller-buffer, split-input, buffered-incremental,
+decode them through allocating, caller-buffer, split-input, owned-incremental,
 and byte-progressive APIs. The decoder uses the extension's 62-group wire
 alphabet width, applies upstream's per-NPOSTFIX/NDIRECT usable-symbol limit, and
 rejects decoded distances above `0x7ffffffc`. `StreamSummary.large_window`
@@ -18932,3 +18932,25 @@ reuse, so production keeps the simpler independently owned plans.
   focused libbrotli/progressive differential, AArch64 ReleaseFast compile, and
   9-row planned encode gate pass. Neither the complete upstream matrix nor the
   full repository test graph was run.
+
+- Replaced the public Brotli incremental decoder's complete-frame buffering
+  facade with an allocator-owning wrapper over the true symbol-progressive
+  compressed decoder. `BrotliIncrementalStreamDecoder` now retains no complete
+  compressed or decoded frame and publishes stored/compressed output before
+  `finish`; its only material owned codec state is an explicit bounded history
+  ring. Existing pledged/max compressed sizes, expected/max output, reset,
+  concatenated `nextFrame`, cumulative counters, phase diagnostics, Large
+  Window opt-in, metadata capture, and caller-owned oversized compressed-header
+  scratch remain available. New `max_history_len` bounds owned LZ77 state, while
+  the caller-history `BrotliIncrementalCopyStreamDecoder` remains the
+  allocation-free alternative. Focused tests require early compressed output,
+  retained-header bytes no larger than 16 KiB, one-/two-byte input and tiny
+  output fragmentation, stored/compressed frames, exact limits, truncation,
+  frame continuation, and cleanup at every injected allocation failure. The
+  public wrapper additionally decodes all nine dynamic 5/6-region
+  literal/command/distance fixtures with 17-byte input and 31-byte output,
+  alongside the existing caller-history and runtime libbrotli 1.0.9 oracles.
+  The obsolete whole-frame state machine was deleted. Brotli incremental focused
+  tests, Large Window focused tests, AArch64 ReleaseFast compilation, all three
+  dynamic-family differentials, and the planned encode gate pass; the complete
+  upstream matrix and full repository test graph were not run.
