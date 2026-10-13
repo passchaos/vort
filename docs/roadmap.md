@@ -19222,6 +19222,21 @@ reuse, so production keeps the simpler independently owned plans.
   eight-case libbrotli/progressive differential, and nine-row ReleaseFast gate
   remain green.
 
+- Bounded clustered tree-workspace initialization by the requested tree count.
+  Each RFC mode's 22 target/seed trials previously zeroed all 64 histogram rows
+  even for 2/3/4-tree candidates; they now clear only the live prefix, reducing
+  initialized rows from 1,408 to 438 per mode while retaining the same fixed
+  stack bound. A poison oracle requires every requested frequency/total slot to
+  become zero and every tail slot to remain untouched. Three fixed-CPU-2
+  ReleaseFast `source32k` samples at five iterations reduced the ratio median
+  from 68.420 ms to 64.499 ms (`1.061x`). An alternating fixed-CPU A/B over 11
+  pairs and 20 iterations per process favored the bounded initialization in all
+  11 pairs, with medians of 273.642 ms versus 258.122 ms (`1.060x`). Relative
+  to the original 130.426 ms dense clustering path, cumulative speedup is about
+  `2.022x`; output remains 6,474 bytes with checksum 134,695. The Node matrix,
+  eight-case libbrotli/progressive differential, and nine-row ReleaseFast gate
+  remain green.
+
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository
   dictionary, source, README, roadmap, and small-corpus payloads; optional

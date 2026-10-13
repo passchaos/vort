@@ -360,8 +360,9 @@ fn clusterContexts(
         2
     else
         1;
-    var tree_histograms: TreeHistograms = @splat(@splat(0));
-    var tree_totals: TreeTotals = @splat(0);
+    var tree_histograms: TreeHistograms = undefined;
+    var tree_totals: TreeTotals = undefined;
+    initializeTreeWorkspace(requested_tree_count, &tree_histograms, &tree_totals);
     aggregateTreesSparse(sparse_contexts, &context_map, requested_tree_count, &tree_histograms, &tree_totals);
     for (0..cluster_iterations) |_| {
         var symbol_costs: [max_trees][256]u16 = undefined;
@@ -433,6 +434,16 @@ fn clusterContexts(
         .context_map = context_map,
         .savings_bits = savings,
     };
+}
+
+fn initializeTreeWorkspace(
+    tree_count: usize,
+    tree_histograms: *TreeHistograms,
+    tree_totals: *TreeTotals,
+) void {
+    std.debug.assert(tree_count > 0 and tree_count <= max_trees);
+    @memset(tree_histograms[0..tree_count], @splat(0));
+    @memset(tree_totals[0..tree_count], 0);
 }
 
 fn aggregateTreesSparse(
@@ -838,6 +849,24 @@ test "literal context incremental tree moves match full aggregation" {
     try std.testing.expectEqualSlices(u32, rebuilt_totals[0..7], incremental_totals[0..7]);
     for (0..7) |tree|
         try std.testing.expectEqualSlices(u32, &rebuilt_trees[tree], &incremental_trees[tree]);
+}
+
+test "literal context tree workspace clears only requested prefix" {
+    const histogram_poison: u32 = 0xa5a5_a5a5;
+    const total_poison: u32 = 0x5a5a_5a5a;
+    var trees: TreeHistograms = @splat(@splat(histogram_poison));
+    var totals: TreeTotals = @splat(total_poison);
+    initializeTreeWorkspace(7, &trees, &totals);
+    for (trees[0..7], totals[0..7]) |tree, total| {
+        try std.testing.expectEqual(@as(u32, 0), total);
+        for (tree) |frequency|
+            try std.testing.expectEqual(@as(u32, 0), frequency);
+    }
+    for (trees[7..], totals[7..]) |tree, total| {
+        try std.testing.expectEqual(total_poison, total);
+        for (tree) |frequency|
+            try std.testing.expectEqual(histogram_poison, frequency);
+    }
 }
 
 test "literal context split rejects stationary literals" {
