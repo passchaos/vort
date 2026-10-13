@@ -15,8 +15,8 @@ major gaps before Vort can claim broad industry-best parity:
   vetted static-dictionary subset. Ratio mode now also has bounded two-to-six
   region literal, command, and distance entropy splitting with cyclic tree
   reuse, but still lacks libbrotli's complete adaptive multi-type block
-  splitting and clustering, multi-tree context clustering, and quality/ratio
-  range.
+  splitting and clustering, high-cardinality context clustering, and the full
+  quality/ratio range.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
   entropy block switching, static dictionaries, consecutive compressed
@@ -19001,3 +19001,21 @@ reuse, so production keeps the simpler independently owned plans.
   the lower half. A dedicated Brotli test target covers the codec's complete
   unit suite, while a focused libbrotli differential independently decodes all
   four generated modes and Vort's 17-byte-input/31-byte-output progressive path.
+
+- Generalized ratio-mode Brotli literal context modeling from one suffix pair
+  to arbitrary two-, three-, and four-tree maps. For each RFC context mode, a
+  bounded four-round clustering pass starts from both ordered and interleaved
+  seeds, assigns each populated context using smoothed cross-entropy, then
+  measures the retained map with exact Huffman payload lengths. Each additional
+  tree must predict another 128 saved bits, and the complete header, map, trees,
+  and payload still compete by exact bytes. The writer keeps the compact suffix
+  map for legacy two-tree candidates and emits a general canonical context map
+  otherwise. Suffix and clustered candidates remain alive through every
+  literal/command/distance entropy-split wire trial, preventing locally better
+  context models from hiding a better cross-product. The repository dictionary
+  ratio row falls from 55,576 to 55,210 bytes while preserving six command
+  types. Synthetic tests recover four interleaved context families and require
+  every RFC mode to produce a valid candidate; libbrotli 1.0.9 plus Vort's
+  17-byte-input/31-byte-output progressive decoder independently reproduce all
+  four suffix-mode fixtures and a non-contiguous four-tree map
+  (`literal_context_cases=5`).

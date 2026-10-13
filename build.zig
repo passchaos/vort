@@ -3930,7 +3930,7 @@ pub fn build(b: *std.Build) void {
     run_br_literal_context_modes_diff.addArg("--only-literal-context-modes");
     const br_literal_context_modes_diff_step = b.step(
         "run-br-literal-context-modes-diff",
-        "Validate all RFC Brotli literal context modes against libbrotli",
+        "Validate RFC Brotli literal context modes and clustered maps against libbrotli",
     );
     br_literal_context_modes_diff_step.dependOn(&run_br_literal_context_modes_diff.step);
 

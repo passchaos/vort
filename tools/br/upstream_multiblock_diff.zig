@@ -88,11 +88,30 @@ pub fn main(init: std.process.Init) !void {
             try decodeProgressChunks(init.gpa, encoded, &payload, 16, 17, 31);
             encoded_bytes += encoded.len;
         }
+        var context_map: [64]u8 = undefined;
+        for (&context_map, 0..) |*tree, context| tree.* = @intCast(context % 4);
+        const clustered = try vort.br.IncrementalTestSupport.encodeLiteralContextMap(
+            init.gpa,
+            &payload,
+            0,
+            4,
+            context_map,
+        );
+        defer init.gpa.free(clustered);
+        const clustered_summary = try vort.brSummarizeStream(clustered);
+        if (clustered_summary.max_literal_context_trees != 4 or
+            clustered_summary.literal_context_mode_bytes[0] != payload.len) return error.ReferenceEncodeFailed;
+        const clustered_decoded = try init.gpa.alloc(u8, payload.len);
+        defer init.gpa.free(clustered_decoded);
+        try reference.decode(clustered, clustered_decoded);
+        if (!std.mem.eql(u8, &payload, clustered_decoded)) return error.ReferenceDecodeFailed;
+        try decodeProgressChunks(init.gpa, clustered, &payload, 16, 17, 31);
+        encoded_bytes += clustered.len;
         var buffer: [256]u8 = undefined;
         var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
         try stdout.interface.print(
-            "br_upstream_literal_context_modes=ok cases=4 encoded_bytes={d} decoded_bytes={d} reference_version={x}\n",
-            .{ encoded_bytes, payload.len * 4, reference.version() },
+            "br_upstream_literal_context_modes=ok literal_context_cases=5 encoded_bytes={d} decoded_bytes={d} reference_version={x}\n",
+            .{ encoded_bytes, payload.len * 5, reference.version() },
         );
         try stdout.interface.flush();
         return;
