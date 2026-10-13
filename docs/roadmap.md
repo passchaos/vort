@@ -19191,6 +19191,21 @@ reuse, so production keeps the simpler independently owned plans.
   libbrotli/progressive differential, and nine-row ReleaseFast gate remain
   green.
 
+- Made clustered context-tree histograms incremental across reassignment
+  rounds. Each target/seed pair now performs one sparse initial aggregation;
+  because assignment prices stay frozen throughout a round, every changed
+  context can move its frequencies and total between trees without affecting
+  that round's decisions. The resulting state is already exact for the next
+  round and final scoring, replacing two to five complete rebuilds per trial.
+  A deterministic oracle applies multiple cross-tree moves and requires every
+  frequency bin and total to equal an independent dense rebuild. Three
+  fixed-CPU-2 ReleaseFast `source32k` samples at five iterations reduced the
+  ratio median from 82.455 ms to 68.478 ms (`1.204x`), with candidate samples
+  from 68.46 to 69.22 ms. Relative to the original 130.426 ms dense clustering
+  path, cumulative speedup is about `1.905x`; output remains 6,474 bytes with
+  checksum 134,695. The Node matrix, eight-case libbrotli/progressive
+  differential, and nine-row ReleaseFast gate remain green.
+
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository
   dictionary, source, README, roadmap, and small-corpus payloads; optional
