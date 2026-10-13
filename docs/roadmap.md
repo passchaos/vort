@@ -19089,3 +19089,15 @@ reuse, so production keeps the simpler independently owned plans.
   proposal and emission cannot diverge. The Node matrix preserves the 54,887-
   byte dictionary wire; libbrotli/progressive context fixtures fall another
   nine aggregate bytes, and the nine-row ReleaseFast gate remains green.
+
+- Collapsed the production ratio encoder's three independent literal-context
+  analyses into one `Proposals` pass. Each RFC mode now builds its 64x256
+  histogram and one-tree exact baseline once, then retains the best suffix,
+  <=16-tree, and <=64-tree result while visiting the candidate family. The
+  complete command plan is therefore scanned four times total instead of
+  twelve, without changing the three-stage exact-wire cross-product. An
+  equivalence oracle compares every combined proposal's mode, tree count,
+  64-entry map, and reported savings against independent legacy-style stage
+  selection. The Node matrix remains byte-identical, including the 54,887-byte
+  dictionary row; the eight-case libbrotli/progressive differential and the
+  nine-row ReleaseFast planned-encode gate remain green.

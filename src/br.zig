@@ -3838,11 +3838,15 @@ fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const 
     var alternate_context_count: usize = 0;
     var alternate_plain = false;
     var literal_split_utf8_cutoff: ?u6 = if (primary_context) |candidate| candidate.suffixCutoff() else null;
+    const context_proposals = if (options.try_recent_distances)
+        try literal_context_split.chooseProposals(allocator, input, commands)
+    else
+        literal_context_split.Proposals{};
     const adaptive_contexts = if (options.try_recent_distances)
         [3]?literal_context_split.Candidate{
-            try literal_context_split.chooseSuffix(allocator, input, commands),
-            try literal_context_split.chooseUpTo(allocator, input, commands, 16),
-            try literal_context_split.choose(allocator, input, commands),
+            context_proposals.suffix,
+            context_proposals.up_to_16,
+            context_proposals.full,
         }
     else
         [3]?literal_context_split.Candidate{ null, null, null };

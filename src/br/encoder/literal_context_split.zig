@@ -50,6 +50,12 @@ pub const Candidate = struct {
     }
 };
 
+pub const Proposals = struct {
+    suffix: ?Candidate = null,
+    up_to_16: ?Candidate = null,
+    full: ?Candidate = null,
+};
+
 /// Evaluate all four RFC 7932 literal context modes. Each mode gets its best
 /// contiguous two-tree partition plus bounded clustering through all 64 literal
 /// contexts
@@ -58,38 +64,57 @@ pub const Candidate = struct {
 /// context histogram from inflating the already large Brotli wire encoder
 /// frame.
 pub noinline fn choose(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command) !?Candidate {
-    return chooseWithClusters(allocator, input, commands, true, max_trees);
+    return (try chooseProposals(allocator, input, commands)).full;
 }
 
 pub noinline fn chooseUpTo(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, max_tree_count: usize) !?Candidate {
     if (max_tree_count < 2 or max_tree_count > max_trees) return null;
+    if (max_tree_count == 16) return (try chooseProposals(allocator, input, commands)).up_to_16;
+    if (max_tree_count == max_trees) return (try chooseProposals(allocator, input, commands)).full;
     return chooseWithClusters(allocator, input, commands, true, max_tree_count);
 }
 
 pub noinline fn chooseSuffix(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command) !?Candidate {
-    return chooseWithClusters(allocator, input, commands, false, 2);
+    return (try chooseProposals(allocator, input, commands)).suffix;
+}
+
+pub noinline fn chooseProposals(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command) !Proposals {
+    var proposals: Proposals = .{};
+    for (0..4) |mode_value| {
+        const mode_proposals = try chooseModeProposals(allocator, input, commands, @intCast(mode_value), true, max_trees);
+        retainBetter(&proposals.suffix, mode_proposals.suffix);
+        retainBetter(&proposals.up_to_16, mode_proposals.up_to_16);
+        retainBetter(&proposals.full, mode_proposals.full);
+    }
+    return proposals;
 }
 
 fn chooseWithClusters(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, include_clusters: bool, max_tree_count: usize) !?Candidate {
     var best: ?Candidate = null;
     for (0..4) |mode_value| {
-        const candidate = try chooseModeWithClusters(allocator, input, commands, @intCast(mode_value), include_clusters, max_tree_count) orelse continue;
-        if (best == null or candidate.savings_bits > best.?.savings_bits) best = candidate;
+        const mode_proposals = try chooseModeProposals(allocator, input, commands, @intCast(mode_value), include_clusters, max_tree_count);
+        const candidate = if (!include_clusters)
+            mode_proposals.suffix
+        else if (max_tree_count <= 16)
+            mode_proposals.up_to_16
+        else
+            mode_proposals.full;
+        retainBetter(&best, candidate);
     }
     return best;
 }
 
 fn chooseMode(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, mode: u2) !?Candidate {
-    return chooseModeWithClusters(allocator, input, commands, mode, true, max_trees);
+    return (try chooseModeProposals(allocator, input, commands, mode, true, max_trees)).full;
 }
 
-fn chooseModeWithClusters(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, mode: u2, include_clusters: bool, max_tree_count: usize) !?Candidate {
+fn chooseModeProposals(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, mode: u2, include_clusters: bool, max_tree_count: usize) !Proposals {
     var by_context: [64][256]u32 = @splat(@splat(0));
     var total: [256]u32 = @splat(0);
     var literal_count: usize = 0;
     for (commands) |command| {
-        const end = std.math.add(usize, command.insert_start, command.insert_len) catch return null;
-        if (end > input.len) return null;
+        const end = std.math.add(usize, command.insert_start, command.insert_len) catch return .{};
+        if (end > input.len) return .{};
         for (input[command.insert_start..end], command.insert_start..) |literal, position| {
             const previous = if (position == 0) 0 else input[position - 1];
             const second_previous = if (position < 2) 0 else input[position - 2];
@@ -99,7 +124,7 @@ fn chooseModeWithClusters(allocator: std.mem.Allocator, input: []const u8, comma
             literal_count += 1;
         }
     }
-    if (literal_count < min_literal_count) return null;
+    if (literal_count < min_literal_count) return .{};
 
     const baseline_bits = try treeBitCost(allocator, &total);
     var left: [256]u32 = @splat(0);
@@ -125,7 +150,8 @@ fn chooseModeWithClusters(allocator: std.mem.Allocator, input: []const u8, comma
         }
     }
 
-    if (!include_clusters) return best;
+    var proposals = Proposals{ .suffix = best, .up_to_16 = best, .full = best };
+    if (!include_clusters) return proposals;
     for ([_]usize{ 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64 }) |requested_tree_count| {
         if (requested_tree_count > max_tree_count) continue;
         for ([_]Seed{ .ordered, .interleaved }) |seed| {
@@ -137,12 +163,18 @@ fn chooseModeWithClusters(allocator: std.mem.Allocator, input: []const u8, comma
                 requested_tree_count,
                 seed,
             ) orelse continue;
-            if (best == null or clustered.savings_bits > best.?.savings_bits or
-                (clustered.savings_bits == best.?.savings_bits and clustered.tree_count < best.?.tree_count))
-                best = clustered;
+            retainBetter(&proposals.full, clustered);
+            if (requested_tree_count <= 16) retainBetter(&proposals.up_to_16, clustered);
         }
     }
-    return best;
+    return proposals;
+}
+
+fn retainBetter(slot: *?Candidate, candidate: ?Candidate) void {
+    const proposed = candidate orelse return;
+    if (slot.* == null or proposed.savings_bits > slot.*.?.savings_bits or
+        (proposed.savings_bits == slot.*.?.savings_bits and proposed.tree_count < slot.*.?.tree_count))
+        slot.* = proposed;
 }
 
 const Seed = enum { ordered, interleaved };
@@ -338,6 +370,29 @@ test "literal context split reports exact tree and map savings" {
     const map_plan = try context_map_encoder.choose(std.testing.allocator, &candidate.context_map, candidate.tree_count);
     candidate_bits += map_plan.bit_cost;
     try std.testing.expectEqual(baseline_bits - candidate_bits, candidate.savings_bits);
+}
+
+test "literal context proposals match independent stage selection" {
+    const input = ("the quick brown fox jumps over the lazy dog\n" ** 16) ++
+        ("THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG\n" ** 16);
+    const commands = [_]command_plan.Command{.{
+        .insert_start = 0,
+        .insert_len = input.len,
+    }};
+    const proposals = try chooseProposals(std.testing.allocator, input, &commands);
+    const independent = [_]?Candidate{
+        try chooseWithClusters(std.testing.allocator, input, &commands, false, 2),
+        try chooseWithClusters(std.testing.allocator, input, &commands, true, 16),
+        try chooseWithClusters(std.testing.allocator, input, &commands, true, max_trees),
+    };
+    const combined = [_]?Candidate{ proposals.suffix, proposals.up_to_16, proposals.full };
+    for (combined, independent) |actual, expected| {
+        try std.testing.expectEqual(expected == null, actual == null);
+        if (expected) |expected_candidate| {
+            try std.testing.expect(Candidate.eql(expected_candidate, actual.?));
+            try std.testing.expectEqual(expected_candidate.savings_bits, actual.?.savings_bits);
+        }
+    }
 }
 
 test "literal context split rejects stationary literals" {
