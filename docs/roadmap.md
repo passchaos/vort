@@ -15,7 +15,7 @@ major gaps before Vort can claim broad industry-best parity:
   vetted static-dictionary subset. Ratio mode now also has bounded two-to-six
   region literal, command, and distance entropy splitting with cyclic tree
   reuse, but still lacks libbrotli's complete adaptive multi-type block
-  splitting and clustering, high-cardinality context clustering, and the full
+  splitting and clustering, full 64-context clustering, and the complete
   quality/ratio range.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
@@ -19034,3 +19034,16 @@ reuse, so production keeps the simpler independently owned plans.
   new non-contiguous eight-tree complex-map fixture alongside the existing four
   RFC modes and four-tree map (`literal_context_cases=6`). The nine-row
   ReleaseFast planned-encode gate remains green.
+
+- Extended the same bounded literal-context pipeline from eight to sixteen
+  trees, adding 12- and 16-tree targets while preserving the established
+  2/3/4/6/8 candidates. The candidate count now uses `u5`; frequency,
+  alphabet, Huffman-length, encoder, and clustering workspaces all cover sixteen
+  independent trees. A deterministic interleaved oracle recovers sixteen LSB6
+  families exactly, and the production ratio path selects a sixteen-tree
+  English fixture. The arbitrary-map writer and decoder round trip 4/8/16-tree
+  maps; the 16-tree complex canonical context-map fixture also decodes through
+  libbrotli 1.0.9 and Vort's 17-byte-input/31-byte-output progressive path
+  (`literal_context_cases=7`). The repository dictionary row falls another 20
+  bytes from 54,909 to 54,889, or 687 bytes/1.24% below the pre-clustering
+  55,576-byte wire. The nine-row ReleaseFast planned-encode gate remains green.

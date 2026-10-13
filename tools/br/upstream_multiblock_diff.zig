@@ -89,7 +89,7 @@ pub fn main(init: std.process.Init) !void {
             encoded_bytes += encoded.len;
         }
         var context_map: [64]u8 = undefined;
-        for ([_]u4{ 4, 8 }) |tree_count| {
+        for ([_]u5{ 4, 8, 16 }) |tree_count| {
             for (&context_map, 0..) |*tree, context| tree.* = @intCast(context % tree_count);
             const clustered = try vort.br.IncrementalTestSupport.encodeLiteralContextMap(
                 init.gpa,
@@ -112,8 +112,8 @@ pub fn main(init: std.process.Init) !void {
         var buffer: [256]u8 = undefined;
         var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
         try stdout.interface.print(
-            "br_upstream_literal_context_modes=ok literal_context_cases=6 encoded_bytes={d} decoded_bytes={d} reference_version={x}\n",
-            .{ encoded_bytes, payload.len * 6, reference.version() },
+            "br_upstream_literal_context_modes=ok literal_context_cases=7 encoded_bytes={d} decoded_bytes={d} reference_version={x}\n",
+            .{ encoded_bytes, payload.len * 7, reference.version() },
         );
         try stdout.interface.flush();
         return;

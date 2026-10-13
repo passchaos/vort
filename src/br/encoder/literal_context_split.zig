@@ -5,7 +5,7 @@ const literal_context = @import("literal_context.zig");
 
 const min_literal_count: usize = 128;
 const min_payload_savings_bits: u64 = 128;
-pub const max_trees: usize = 8;
+pub const max_trees: usize = 16;
 const cluster_iterations: usize = 4;
 
 /// One bounded multi-tree literal-context proposal. The complete Brotli writer
@@ -13,7 +13,7 @@ const cluster_iterations: usize = 4;
 /// only needs to reject clearly unprofitable histogram shapes.
 pub const Candidate = struct {
     mode: u2,
-    tree_count: u4,
+    tree_count: u5,
     context_map: [64]u8,
     savings_bits: u64,
 
@@ -50,7 +50,7 @@ pub const Candidate = struct {
 };
 
 /// Evaluate all four RFC 7932 literal context modes. Each mode gets its best
-/// contiguous two-tree partition plus bounded clustering through eight trees
+/// contiguous two-tree partition plus bounded clustering through sixteen trees
 /// with both ordered and interleaved seeds.
 /// Keeping the search in a separate noinline routine prevents the 64 KiB
 /// context histogram from inflating the already large Brotli wire encoder
@@ -120,7 +120,7 @@ fn chooseModeWithClusters(input: []const u8, commands: []const command_plan.Comm
         best = Candidate.suffix(mode, best_cutoff, savings);
 
     if (!include_clusters) return best;
-    for ([_]usize{ 2, 3, 4, 6, 8 }) |requested_tree_count| {
+    for ([_]usize{ 2, 3, 4, 6, 8, 12, 16 }) |requested_tree_count| {
         for ([_]Seed{ .ordered, .interleaved }) |seed| {
             const clustered = clusterContexts(
                 mode,
@@ -350,7 +350,7 @@ test "literal context split clusters interleaved contexts into four trees" {
     }
     const candidate = chooseMode(input, commands, literal_context.mode_lsb6) orelse return error.TestUnexpectedResult;
     try std.testing.expectEqual(literal_context.mode_lsb6, candidate.mode);
-    try std.testing.expectEqual(@as(u4, 4), candidate.tree_count);
+    try std.testing.expectEqual(@as(u5, 4), candidate.tree_count);
     for (0..64) |context|
         try std.testing.expectEqual(@as(u8, @intCast(context % 4)), candidate.context_map[context]);
 }
@@ -377,7 +377,34 @@ test "literal context split clusters interleaved contexts into eight trees" {
     }
     const candidate = choose(input, commands) orelse return error.TestUnexpectedResult;
     try std.testing.expectEqual(literal_context.mode_lsb6, candidate.mode);
-    try std.testing.expectEqual(@as(u4, 8), candidate.tree_count);
+    try std.testing.expectEqual(@as(u5, 8), candidate.tree_count);
     for (0..64) |context|
         try std.testing.expectEqual(@as(u8, @intCast(context % 8)), candidate.context_map[context]);
+}
+
+test "literal context split clusters interleaved contexts into sixteen trees" {
+    const repetitions = 16;
+    const literal_count = 64 * repetitions;
+    const input = try std.testing.allocator.alloc(u8, literal_count * 2);
+    defer std.testing.allocator.free(input);
+    const commands = try std.testing.allocator.alloc(command_plan.Command, literal_count);
+    defer std.testing.allocator.free(commands);
+    var command_index: usize = 0;
+    for (0..64) |context| {
+        for (0..repetitions) |repetition| {
+            const position = command_index * 2 + 1;
+            input[position - 1] = @intCast(context);
+            input[position] = @intCast((context % 16) * 16 + repetition);
+            commands[command_index] = .{
+                .insert_start = position,
+                .insert_len = 1,
+            };
+            command_index += 1;
+        }
+    }
+    const candidate = choose(input, commands) orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqual(literal_context.mode_lsb6, candidate.mode);
+    try std.testing.expectEqual(@as(u5, 16), candidate.tree_count);
+    for (0..64) |context|
+        try std.testing.expectEqual(@as(u8, @intCast(context % 16)), candidate.context_map[context]);
 }

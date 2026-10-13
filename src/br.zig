@@ -627,7 +627,7 @@ pub const IncrementalTestSupport = struct {
         allocator: std.mem.Allocator,
         payload: []const u8,
         mode: u2,
-        tree_count: u4,
+        tree_count: u5,
         context_map: [64]u8,
     ) Error![]u8 {
         if (payload.len == 0 or mode > literal_context.mode_signed or tree_count < 2 or tree_count > literal_context_split.max_trees)
@@ -16231,7 +16231,7 @@ test "br ratio planner selects a profitable six-type command entropy split" {
     const payload = @embedFile("br/dictionary.bin");
     const encoded = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
     defer std.testing.allocator.free(encoded);
-    try std.testing.expect(encoded.len <= 54_909);
+    try std.testing.expect(encoded.len <= 54_889);
     const summary = try summarizeStreamAlloc(std.testing.allocator, encoded);
     try std.testing.expectEqual(@as(usize, 6), summary.max_command_block_types);
     try std.testing.expectEqual(@as(usize, 2), summary.max_distance_block_types);
@@ -24892,11 +24892,11 @@ test "br planned writer emits every RFC literal context mode" {
     }
 }
 
-test "br planned writer emits arbitrary four- and eight-tree literal context maps" {
+test "br planned writer emits arbitrary four eight and sixteen tree literal context maps" {
     var input: [512]u8 = undefined;
     for (&input, 0..) |*byte, index| byte.* = @truncate(index * 73 + index / 7);
     var context_map: [64]u8 = undefined;
-    for ([_]u4{ 4, 8 }) |tree_count| {
+    for ([_]u5{ 4, 8, 16 }) |tree_count| {
         for (&context_map, 0..) |*tree, context| tree.* = @intCast(context % tree_count);
         const encoded = try IncrementalTestSupport.encodeLiteralContextMap(
             std.testing.allocator,
@@ -24954,7 +24954,7 @@ test "br ratio candidate selects a smaller adaptive literal context wire" {
     });
     defer std.testing.allocator.free(adaptive.encoded);
     const candidate = adaptive.literal_context_candidate orelse return error.TestUnexpectedResult;
-    try std.testing.expectEqual(@as(u4, 8), candidate.tree_count);
+    try std.testing.expectEqual(@as(u5, 16), candidate.tree_count);
     try std.testing.expect(adaptive.encoded.len < plain.len);
     const summary = try summarizeStream(adaptive.encoded);
     try std.testing.expectEqual(input.len, summary.literal_context_mode_bytes[candidate.mode]);
