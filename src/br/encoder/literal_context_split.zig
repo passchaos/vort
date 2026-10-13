@@ -287,12 +287,14 @@ fn clusterContexts(
         var tree_histograms: [max_trees][256]u32 = @splat(@splat(0));
         var tree_totals: [max_trees]u32 = @splat(0);
         aggregateTrees(by_context, &context_map, requested_tree_count, &tree_histograms, &tree_totals);
+        var symbol_costs: [max_trees][256]u16 = undefined;
+        prepareAssignmentCosts(&tree_histograms, &tree_totals, requested_tree_count, &symbol_costs);
         var changed = false;
         for (populated[0..populated_count]) |context| {
             var best_tree: usize = 0;
-            var best_cost = assignmentCost(&by_context[context], &tree_histograms[0], tree_totals[0]);
+            var best_cost = assignmentCostPrepared(&by_context[context], &symbol_costs[0]);
             for (1..requested_tree_count) |tree| {
-                const cost = assignmentCost(&by_context[context], &tree_histograms[tree], tree_totals[tree]);
+                const cost = assignmentCostPrepared(&by_context[context], &symbol_costs[tree]);
                 if (cost < best_cost) {
                     best_cost = cost;
                     best_tree = tree;
@@ -360,7 +362,31 @@ fn aggregateTrees(
     }
 }
 
-fn assignmentCost(context: *const [256]u32, tree: *const [256]u32, tree_total: u32) u64 {
+fn prepareAssignmentCosts(
+    tree_histograms: *const [max_trees][256]u32,
+    tree_totals: *const [max_trees]u32,
+    tree_count: usize,
+    costs: *[max_trees][256]u16,
+) void {
+    for (tree_histograms[0..tree_count], tree_totals[0..tree_count], costs[0..tree_count]) |*tree, tree_total, *tree_costs| {
+        const model_log = fastLog2Q8(tree_total + 256);
+        for (tree, tree_costs) |modeled, *cost| {
+            const symbol_cost = model_log - fastLog2Q8(modeled + 1);
+            std.debug.assert(symbol_cost <= std.math.maxInt(u16));
+            cost.* = @intCast(symbol_cost);
+        }
+    }
+}
+
+fn assignmentCostPrepared(context: *const [256]u32, symbol_costs: *const [256]u16) u64 {
+    var cost: u64 = 0;
+    for (context, symbol_costs) |count, symbol_cost| {
+        if (count != 0) cost += @as(u64, count) * symbol_cost;
+    }
+    return cost;
+}
+
+fn assignmentCostReference(context: *const [256]u32, tree: *const [256]u32, tree_total: u32) u64 {
     const model_log = fastLog2Q8(tree_total + 256);
     var cost: u64 = 0;
     for (context, tree) |count, modeled| {
@@ -486,6 +512,27 @@ test "literal context single-pass analysis cleans up allocation failures" {
         Test.run,
         .{ input[0..], commands[0..] },
     );
+}
+
+test "literal context prepared assignment costs match reference" {
+    var trees: [max_trees][256]u32 = @splat(@splat(0));
+    var totals: [max_trees]u32 = @splat(0);
+    var context: [256]u32 = @splat(0);
+    for (0..4) |tree| {
+        for (0..256) |symbol| {
+            const frequency: u32 = @intCast((symbol * (tree + 3) + tree * 11) % 29);
+            trees[tree][symbol] = frequency;
+            totals[tree] += frequency;
+            if ((symbol + tree) % 7 == 0) context[symbol] = @intCast(symbol % 13 + 1);
+        }
+    }
+    var costs: [max_trees][256]u16 = undefined;
+    prepareAssignmentCosts(&trees, &totals, 4, &costs);
+    for (0..4) |tree|
+        try std.testing.expectEqual(
+            assignmentCostReference(&context, &trees[tree], totals[tree]),
+            assignmentCostPrepared(&context, &costs[tree]),
+        );
 }
 
 test "literal context split rejects stationary literals" {

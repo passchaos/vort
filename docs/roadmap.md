@@ -19114,3 +19114,15 @@ reuse, so production keeps the simpler independently owned plans.
   new owned analysis state. The Node matrix stays byte-identical at 54,887 bytes
   for the dictionary row; the eight-case libbrotli/progressive differential and
   nine-row ReleaseFast gate remain green.
+
+- Hoisted literal-context assignment prices out of the context/tree hot loop.
+  Each clustering round now builds one exact Q8 symbol-cost table per active
+  tree; every context comparison consumes only frequency-by-cost multiply-adds
+  instead of recomputing `fastLog2Q8(modeled + 1)` for the same tree symbol up
+  to 64 times. A deterministic dense-histogram oracle requires prepared and
+  reference assignment costs to match exactly for every tree. Three independent
+  fixed-CPU-2 ReleaseFast `source32k` samples at five iterations measured ratio
+  medians of 130.594 ms before and 130.426 ms after (`1.0013x`), with the same
+  6,474-byte wire and checksum 134,695. Treat this small non-interleaved screen
+  as throughput-neutral evidence, not a broad speed claim; the nine-row encode
+  gate, Node matrix, and eight-case libbrotli differential remain green.
