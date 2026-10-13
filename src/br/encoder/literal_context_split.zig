@@ -58,6 +58,12 @@ pub const Proposals = struct {
 
 const mode_count: usize = 4;
 const ContextHistograms = [64][256]u32;
+const SparseContext = struct {
+    symbols: [256]u8,
+    len: u16,
+    total: u32,
+};
+const SparseContexts = [64]SparseContext;
 const Analysis = struct {
     by_mode: [mode_count]ContextHistograms,
     total: [256]u32,
@@ -225,6 +231,8 @@ fn chooseModeFromHistograms(
 
     var proposals = Proposals{ .suffix = best, .up_to_16 = best, .full = best };
     if (!include_clusters) return proposals;
+    var sparse_contexts: SparseContexts = undefined;
+    buildSparseContexts(by_context, &sparse_contexts);
     for ([_]usize{ 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64 }) |requested_tree_count| {
         if (requested_tree_count > max_tree_count) continue;
         for ([_]Seed{ .ordered, .interleaved }) |seed| {
@@ -232,6 +240,7 @@ fn chooseModeFromHistograms(
                 allocator,
                 mode,
                 by_context,
+                &sparse_contexts,
                 baseline_bits,
                 requested_tree_count,
                 seed,
@@ -256,14 +265,15 @@ fn clusterContexts(
     allocator: std.mem.Allocator,
     mode: u2,
     by_context: *const [64][256]u32,
+    sparse_contexts: *const SparseContexts,
     baseline_bits: u64,
     requested_tree_count: usize,
     seed: Seed,
 ) !?Candidate {
     var populated: [64]u8 = undefined;
     var populated_count: usize = 0;
-    for (by_context, 0..) |histogram, context| {
-        if (histogramCount(&histogram) == 0) continue;
+    for (sparse_contexts, 0..) |sparse, context| {
+        if (sparse.total == 0) continue;
         populated[populated_count] = @intCast(context);
         populated_count += 1;
     }
@@ -292,9 +302,9 @@ fn clusterContexts(
         var changed = false;
         for (populated[0..populated_count]) |context| {
             var best_tree: usize = 0;
-            var best_cost = assignmentCostPrepared(&by_context[context], &symbol_costs[0]);
+            var best_cost = assignmentCostSparse(&by_context[context], &sparse_contexts[context], &symbol_costs[0]);
             for (1..requested_tree_count) |tree| {
-                const cost = assignmentCostPrepared(&by_context[context], &symbol_costs[tree]);
+                const cost = assignmentCostSparse(&by_context[context], &sparse_contexts[context], &symbol_costs[tree]);
                 if (cost < best_cost) {
                     best_cost = cost;
                     best_tree = tree;
@@ -323,8 +333,8 @@ fn clusterContexts(
         tree_count += 1;
     }
     if (tree_count < 2) return null;
-    for (&context_map, by_context) |*tree, histogram| {
-        if (histogramCount(&histogram) == 0) {
+    for (&context_map, sparse_contexts) |*tree, sparse| {
+        if (sparse.total == 0) {
             tree.* = 0;
         } else {
             tree.* = remap[tree.*];
@@ -362,6 +372,19 @@ fn aggregateTrees(
     }
 }
 
+fn buildSparseContexts(histograms: *const ContextHistograms, sparse_contexts: *SparseContexts) void {
+    for (histograms, sparse_contexts) |*histogram, *sparse| {
+        sparse.len = 0;
+        sparse.total = 0;
+        for (histogram, 0..) |frequency, symbol| {
+            if (frequency == 0) continue;
+            sparse.symbols[sparse.len] = @intCast(symbol);
+            sparse.len += 1;
+            sparse.total += frequency;
+        }
+    }
+}
+
 fn prepareAssignmentCosts(
     tree_histograms: *const [max_trees][256]u32,
     tree_totals: *const [max_trees]u32,
@@ -383,6 +406,13 @@ fn assignmentCostPrepared(context: *const [256]u32, symbol_costs: *const [256]u1
     for (context, symbol_costs) |count, symbol_cost| {
         if (count != 0) cost += @as(u64, count) * symbol_cost;
     }
+    return cost;
+}
+
+fn assignmentCostSparse(context: *const [256]u32, sparse: *const SparseContext, symbol_costs: *const [256]u16) u64 {
+    var cost: u64 = 0;
+    for (sparse.symbols[0..sparse.len]) |symbol|
+        cost += @as(u64, context[symbol]) * symbol_costs[symbol];
     return cost;
 }
 
@@ -528,11 +558,17 @@ test "literal context prepared assignment costs match reference" {
     }
     var costs: [max_trees][256]u16 = undefined;
     prepareAssignmentCosts(&trees, &totals, 4, &costs);
-    for (0..4) |tree|
-        try std.testing.expectEqual(
-            assignmentCostReference(&context, &trees[tree], totals[tree]),
-            assignmentCostPrepared(&context, &costs[tree]),
-        );
+    var contexts: ContextHistograms = @splat(@splat(0));
+    contexts[0] = context;
+    var sparse_contexts: SparseContexts = undefined;
+    buildSparseContexts(&contexts, &sparse_contexts);
+    for (0..4) |tree| {
+        const reference = assignmentCostReference(&context, &trees[tree], totals[tree]);
+        const prepared = assignmentCostPrepared(&context, &costs[tree]);
+        const sparse = assignmentCostSparse(&context, &sparse_contexts[0], &costs[tree]);
+        try std.testing.expectEqual(reference, prepared);
+        try std.testing.expectEqual(reference, sparse);
+    }
 }
 
 test "literal context split rejects stationary literals" {

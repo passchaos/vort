@@ -19126,3 +19126,16 @@ reuse, so production keeps the simpler independently owned plans.
   6,474-byte wire and checksum 134,695. Treat this small non-interleaved screen
   as throughput-neutral evidence, not a broad speed claim; the nine-row encode
   gate, Node matrix, and eight-case libbrotli differential remain green.
+
+- Replaced the remaining fixed 256-symbol context scan with one sparse active-
+  symbol view per literal context. The view stores only symbol IDs and reads
+  frequencies from the canonical dense histogram, so exact aggregation and
+  final Huffman scoring keep one source of truth while assignment work scales
+  with observed alphabet size. A dense/prepared/sparse oracle requires all
+  three Q8 costs to match exactly. Three independent fixed-CPU-2 ReleaseFast
+  `source32k` samples at five iterations moved the ratio median from 130.426 ms
+  to 97.921 ms (`1.332x`); every candidate sample was 97.5--98.2 ms, with the
+  same 6,474-byte wire and checksum 134,695. The reproducible command is
+  `taskset -c 2 zig build -Doptimize=ReleaseFast run-br-planned-encode-bench -- --case source32k --iterations 5`.
+  The Node matrix, eight-case libbrotli/progressive differential, and nine-row
+  ReleaseFast gate remain green.
