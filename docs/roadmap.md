@@ -18774,3 +18774,22 @@ reuse, so production keeps the simpler independently owned plans.
   `0.936x`/`0.996x` of greedy; cap 32 is slower with identical output. The key
   JSON choices start above 32-byte current matches, so future pruning must use
   LZMA-aware prices instead of an unconditional length ceiling.
+
+- Added a gated static LZMA price to the wide XZ lazy decision while preserving
+  every established one-byte length gain. The approximation compares literal,
+  length-tree, distance-slot, and direct-distance bit shapes over equal covered
+  horizons; it does not pretend to own adaptive probabilities or repeat state.
+  Only current distances above 4 KiB and at least nine times the next distance
+  reach the price calculation. Fifteen fixed-CPU-2 baseline/candidate/control
+  pairs shrink JSON 2,740→1,268 bytes (53.72%) while improving direct and
+  control-normalized throughput by `1.0276x`/`1.0362x`. The result is 10.70%
+  smaller than liblzma 5.2.5 preset 1 on that synthetic row, at `0.812x` its
+  throughput. Binary changes 70,632→70,628 bytes at `0.9991x` direct and
+  `1.0004x` normalized speed; text/wide sizes are unchanged and both speed up.
+  Ungated price evaluation was rejected at `0.9720x`/`0.9891x` old-lazy speed
+  on JSON/binary. Distance ratios eight and nine retained the 1,268-byte wire,
+  while ten regressed to 2,876 bytes, so the stricter wire-equivalent nine was
+  retained. LZMA 102/102, XZ 81/81, external XZ differential, nine-row gate,
+  and AArch64 ReleaseFast focused compilation pass; the full test graph was not
+  run. Raw evidence is in
+  `docs/performance/data/xz-static-price-x86-20261013.json`.

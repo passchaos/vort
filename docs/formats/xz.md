@@ -192,6 +192,12 @@ incremental XZ selects the same path with `.parser = .lazy`, while greedy stays
 the default. Symbol-progressive LZMA-Alone incremental encoding deliberately
 rejects lazy mode because it cannot promise the required next byte at every
 caller split.
+For wide dictionaries, lazy parsing preserves one-byte length gains and also
+uses a gated static LZMA cost estimate for far-current/near-next matches. The
+estimate covers literal, length-tree, distance-slot, and direct-distance bit
+shapes, but intentionally does not claim to track adaptive range probabilities
+or repeat-distance state.
 This lets a match cross a 64 KiB chunk boundary without making chunks dependent
-on hidden state outside their XZ block. Deeper lazy/optimal parsing and larger
-dictionary properties remain later ratio and performance work.
+on hidden state outside their XZ block. Adaptive price modeling, deeper optimal
+parsing, and larger dictionary properties remain later ratio and performance
+work.

@@ -116,8 +116,10 @@ LZMA-Alone does not carry an integrity checksum. Known-size streams are checked
 against their declared output size, while unknown-size streams require the
 range-coder end marker. Applications that require corruption detection should
 use XZ or a checksummed container such as ZIP. The current encoder offers
-bounded greedy and lazy parsers; deeper price-modeled parsing remains future
-ratio work. The decoder's
+bounded greedy and lazy parsers. Its wide-distance lazy path augments length
+gains with a gated static literal/length/distance price; adaptive probability
+and repeat-state pricing plus deeper optimal parsing remain future ratio work.
+The decoder's
 local circular dictionary keeps lookbehind validation tied to the declared
 window while safely handling outputs larger than that window.
 

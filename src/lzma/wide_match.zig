@@ -6,6 +6,8 @@ pub const max_window_len: usize = 1024 * 1024;
 pub const max_match_len: usize = 273;
 const min_match_len: usize = 3;
 const hash_table_size: usize = 1 << 16;
+const static_price_min_distance: usize = 4096;
+const static_price_min_distance_ratio: usize = 9;
 
 pub const Token = union(enum) {
     literal: u8,
@@ -147,7 +149,7 @@ pub const StreamPlanner = struct {
             insertStream(self, input, position);
             if (position + 1 < end) {
                 const next = findBestStream(self, input, position + 1, end, options);
-                if (accept(next) and next.length >= best.length + 1) {
+                if (accept(next) and preferLazy(best, next)) {
                     self.tokens.appendAssumeCapacity(.{ .literal = input[position] });
                     stats.literals += 1;
                     position += 1;
@@ -288,6 +290,65 @@ fn accept(candidate: Candidate) bool {
     return candidate.length >= 4 or candidate.distance <= 4096;
 }
 
+// These prices approximate a freshly initialized LZMA model. They deliberately
+// exclude adaptive probabilities and repeat-distance state: the match planner
+// does not own either, and using their static wire shape still distinguishes
+// the major length-tree and distance-tail costs that a length-only rule misses.
+fn literalPriceBits() usize {
+    return 9; // is_match plus eight literal-tree bits
+}
+
+fn lengthPriceBits(length: usize) usize {
+    std.debug.assert(length >= 2 and length <= max_match_len);
+    const symbol = length - 2;
+    if (symbol < 8) return 4; // choice plus low[3]
+    if (symbol < 16) return 5; // choice, choice2, and mid[3]
+    return 10; // choice, choice2, and high[8]
+}
+
+fn distancePriceBits(distance: usize) usize {
+    std.debug.assert(distance > 0);
+    const distance_minus_one = distance - 1;
+    const slot = staticDistanceSlot(distance_minus_one);
+    if (slot < 4) return 6;
+    const direct_bits = (slot >> 1) - 1;
+    return 6 + direct_bits;
+}
+
+fn staticDistanceSlot(distance_minus_one: usize) usize {
+    if (distance_minus_one < 4) return distance_minus_one;
+    const highest_bit = @bitSizeOf(usize) - 1 - @clz(distance_minus_one);
+    return (highest_bit << 1) |
+        (distance_minus_one >> @intCast(highest_bit - 1) & 1);
+}
+
+fn matchPriceBits(candidate: Candidate) usize {
+    std.debug.assert(accept(candidate));
+    return 2 + lengthPriceBits(candidate.length) +
+        distancePriceBits(candidate.distance); // is_match plus is_rep
+}
+
+fn preferLazyByStaticPrice(current: Candidate, next: Candidate) bool {
+    std.debug.assert(accept(current) and accept(next));
+    const current_coverage = current.length;
+    const lazy_coverage = next.length + 1;
+    const horizon = @max(current_coverage, lazy_coverage);
+    const current_price = matchPriceBits(current) +
+        (horizon - current_coverage) * literalPriceBits();
+    const lazy_price = literalPriceBits() + matchPriceBits(next) +
+        (horizon - lazy_coverage) * literalPriceBits();
+    return lazy_price < current_price;
+}
+
+fn preferLazy(current: Candidate, next: Candidate) bool {
+    std.debug.assert(accept(current) and accept(next));
+    if (next.length >= current.length + 1) return true;
+    if (current.distance <= static_price_min_distance or
+        current.distance / static_price_min_distance_ratio < next.distance)
+        return false;
+    return preferLazyByStaticPrice(current, next);
+}
+
 fn findBestStream(
     planner: *const StreamPlanner,
     input: []const u8,
@@ -390,6 +451,62 @@ fn byteAt(dictionary: []const u8, input: []const u8, position: usize) u8 {
         dictionary[position]
     else
         input[position - dictionary.len];
+}
+
+test "LZMA static lazy prices follow length and distance wire shapes" {
+    try std.testing.expectEqual(@as(usize, 9), literalPriceBits());
+    try std.testing.expectEqual(@as(usize, 4), lengthPriceBits(9));
+    try std.testing.expectEqual(@as(usize, 5), lengthPriceBits(10));
+    try std.testing.expectEqual(@as(usize, 5), lengthPriceBits(17));
+    try std.testing.expectEqual(@as(usize, 10), lengthPriceBits(18));
+    try std.testing.expectEqual(@as(usize, 10), lengthPriceBits(max_match_len));
+
+    try std.testing.expectEqual(@as(usize, 6), distancePriceBits(1));
+    try std.testing.expectEqual(@as(usize, 6), distancePriceBits(4));
+    try std.testing.expectEqual(@as(usize, 7), distancePriceBits(5));
+    try std.testing.expectEqual(@as(usize, 16), distancePriceBits(4096));
+    try std.testing.expectEqual(@as(usize, 21), distancePriceBits(65_537));
+}
+
+test "LZMA static price chooses lazy by total covered cost" {
+    // An equally long near match can beat a wide current match.
+    try std.testing.expect(preferLazyByStaticPrice(
+        .{ .length = 10, .distance = 1024 * 1024 },
+        .{ .length = 10, .distance = 1 },
+    ));
+    // One extra byte is insufficient when the next match has a costly tail.
+    try std.testing.expect(!preferLazyByStaticPrice(
+        .{ .length = 4, .distance = 1 },
+        .{ .length = 5, .distance = 1024 * 1024 },
+    ));
+    // Equal static prices preserve the current match deterministically.
+    try std.testing.expect(!preferLazyByStaticPrice(
+        .{ .length = 4, .distance = 1 },
+        .{ .length = 4, .distance = 1 },
+    ));
+}
+
+test "LZMA lazy decision preserves length gains and gates static prices" {
+    try std.testing.expect(preferLazy(
+        .{ .length = 4, .distance = 1 },
+        .{ .length = 5, .distance = 1024 * 1024 },
+    ));
+    try std.testing.expect(preferLazy(
+        .{ .length = 10, .distance = 90 * 1024 },
+        .{ .length = 10, .distance = 10 * 1024 },
+    ));
+    try std.testing.expect(!preferLazy(
+        .{ .length = 10, .distance = 8 * 1024 },
+        .{ .length = 10, .distance = 1024 },
+    ));
+    try std.testing.expect(!preferLazy(
+        .{ .length = 10, .distance = static_price_min_distance },
+        .{ .length = 10, .distance = 1 },
+    ));
+    try std.testing.expect(!preferLazy(
+        .{ .length = 10, .distance = 90 * 1024 - 1 },
+        .{ .length = 10, .distance = 10 * 1024 },
+    ));
 }
 
 test "LZMA wide dictionary planner emits and replays u32 distances" {
