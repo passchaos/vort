@@ -35,6 +35,7 @@ pub fn main(init: std.process.Init) !void {
     var only_four_command_types = false;
     var only_four_distance_types = false;
     var only_distance_clusters = false;
+    var only_dynamic_distance_types = false;
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--real-file")) {
             try real_files.append(init.gpa, args.next() orelse return error.MissingCorpusPath);
@@ -47,13 +48,16 @@ pub fn main(init: std.process.Init) !void {
             only_four_distance_types = true;
         } else if (std.mem.eql(u8, arg, "--only-distance-clusters")) {
             only_distance_clusters = true;
+        } else if (std.mem.eql(u8, arg, "--only-dynamic-distance-types")) {
+            only_dynamic_distance_types = true;
         } else return error.UnknownArgument;
     }
 
     var reference = try libbrotli.Runtime.open();
     defer reference.deinit();
     const focused_mode_count = @as(usize, @intFromBool(only_four_command_types)) +
-        @intFromBool(only_four_distance_types) + @intFromBool(only_distance_clusters);
+        @intFromBool(only_four_distance_types) + @intFromBool(only_distance_clusters) +
+        @intFromBool(only_dynamic_distance_types);
     if (focused_mode_count > 1) return error.InvalidBlockPlan;
     if (only_four_command_types) {
         if (real_files.items.len != 0) return error.InvalidBlockPlan;
@@ -117,6 +121,29 @@ pub fn main(init: std.process.Init) !void {
         try stdout.interface.print(
             "br_upstream_distance_clusters=ok clustered_bytes={d} alternating_bytes={d} reused_bytes={d} reference_version={x}\n",
             .{ clustered.encoded.len, alternating.encoded.len, reused.encoded.len, reference.version() },
+        );
+        try stdout.interface.flush();
+        return;
+    }
+    if (only_dynamic_distance_types) {
+        if (real_files.items.len != 0) return error.InvalidBlockPlan;
+        const five = try vort.br.IncrementalTestSupport.encodeFiveDistanceTypes(init.gpa);
+        defer init.gpa.free(five.encoded);
+        defer init.gpa.free(five.payload);
+        try validatePlannedDistanceFixture(init.gpa, reference, five, 5);
+        const six = try vort.br.IncrementalTestSupport.encodeSixDistanceTypes(init.gpa);
+        defer init.gpa.free(six.encoded);
+        defer init.gpa.free(six.payload);
+        try validatePlannedDistanceFixture(init.gpa, reference, six, 6);
+        const clustered = try vort.br.IncrementalTestSupport.encodeSixRegionClusteredDistanceTypes(init.gpa);
+        defer init.gpa.free(clustered.encoded);
+        defer init.gpa.free(clustered.payload);
+        try validatePlannedDistanceFixture(init.gpa, reference, clustered, 3);
+        var buffer: [256]u8 = undefined;
+        var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
+        try stdout.interface.print(
+            "br_upstream_dynamic_distance_types=ok five_bytes={d} six_bytes={d} clustered_bytes={d} reference_version={x}\n",
+            .{ five.encoded.len, six.encoded.len, clustered.encoded.len, reference.version() },
         );
         try stdout.interface.flush();
         return;
@@ -1033,6 +1060,21 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(planned_reused_distance.encoded);
     defer init.gpa.free(planned_reused_distance.payload);
     try validatePlannedDistanceFixture(init.gpa, reference, planned_reused_distance, 3);
+    planned_distance_split_cases += 1;
+    const planned_five_distance = try vort.br.IncrementalTestSupport.encodeFiveDistanceTypes(init.gpa);
+    defer init.gpa.free(planned_five_distance.encoded);
+    defer init.gpa.free(planned_five_distance.payload);
+    try validatePlannedDistanceFixture(init.gpa, reference, planned_five_distance, 5);
+    planned_distance_split_cases += 1;
+    const planned_six_distance = try vort.br.IncrementalTestSupport.encodeSixDistanceTypes(init.gpa);
+    defer init.gpa.free(planned_six_distance.encoded);
+    defer init.gpa.free(planned_six_distance.payload);
+    try validatePlannedDistanceFixture(init.gpa, reference, planned_six_distance, 6);
+    planned_distance_split_cases += 1;
+    const planned_six_clustered_distance = try vort.br.IncrementalTestSupport.encodeSixRegionClusteredDistanceTypes(init.gpa);
+    defer init.gpa.free(planned_six_clustered_distance.encoded);
+    defer init.gpa.free(planned_six_clustered_distance.payload);
+    try validatePlannedDistanceFixture(init.gpa, reference, planned_six_clustered_distance, 3);
     planned_distance_split_cases += 1;
     const planned_clustered = try vort.br.IncrementalTestSupport.encodeClusteredCommandTypes(init.gpa);
     defer init.gpa.free(planned_clustered.encoded);

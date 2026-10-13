@@ -18860,3 +18860,28 @@ reuse, so production keeps the simpler independently owned plans.
   focused libbrotli/progressive differential, AArch64 ReleaseFast compile, and
   9-row planned encode gate pass. Neither the complete upstream matrix nor the
   full repository test graph was run.
+
+- Generalized Brotli distance splitting from fixed two-to-four-region shapes
+  to a unified bounded two-to-six-region model. The existing five candidate
+  boundaries define six atomic intervals; for five/six-region candidates the
+  scorer enumerates every boundary subset and every cyclic tree period from two
+  through the region count. This covers independent A-B-C-D-E/F trees and
+  reusable sequences such as A-B-C-A-B-C without arbitrary per-symbol state.
+  Fixed-point entropy filters the search, exact Huffman payload cost must retain
+  the established 4,400-bit gate, and the best dynamic form must lead every
+  fixed proposal by another 1,024 bits before one complete-wire candidate is
+  encoded. `Result` and block-length coding now carry five boundaries, while
+  production frequency, alphabet, code-length, encoder, tree, and context-map
+  storage scale to six types. Five-/six-symbol distance context maps use valid
+  complex Huffman prefixes and assign all four contexts of each block type to
+  its selected tree. Deterministic fixtures select 18,583-byte five-tree,
+  18,846-byte six-tree, and 13,996-byte six-region/three-tree streams; Vort,
+  Node, runtime libbrotli 1.0.9, and the 17-byte-input/31-byte-output progressive
+  decoder reproduce all three 114,688-byte payloads. The default upstream
+  matrix includes them, raising the expected `planned_distance_split_cases`
+  counter from five to eight, while a focused flag validates only these dynamic
+  shapes. Eleven scorer tests, production writer and allocation-failure tests,
+  complete Node planned differential, focused libbrotli/progressive
+  differential, AArch64 ReleaseFast compile, and 9-row planned encode gate
+  pass. Neither the complete upstream matrix nor the full repository test graph
+  was run.
