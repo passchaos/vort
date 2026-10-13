@@ -19140,6 +19140,19 @@ reuse, so production keeps the simpler independently owned plans.
   The Node matrix, eight-case libbrotli/progressive differential, and nine-row
   ReleaseFast gate remain green.
 
+- Reused the same sparse context view for tree-histogram aggregation. Every
+  clustering round and final candidate now adds only active symbols to its
+  destination tree and reuses the precomputed context total, replacing the
+  former 64x256 dense merge. A seven-tree deterministic oracle requires every
+  frequency bin and tree total to match the dense reference. Three independent
+  fixed-CPU-2 ReleaseFast `source32k` samples at five iterations reduced the
+  ratio median from 97.921 ms to 86.848 ms (`1.128x`), with candidate samples
+  between 86.76 and 87.85 ms. Combined with the earlier dense-assignment
+  baseline, the retained clustering work is about `1.502x` faster; the wire
+  remains 6,474 bytes with checksum 134,695. The Node matrix, eight-case
+  libbrotli/progressive differential, and nine-row ReleaseFast gate remain
+  green.
+
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository
   dictionary, source, README, roadmap, and small-corpus payloads; optional

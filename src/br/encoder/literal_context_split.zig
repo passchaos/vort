@@ -296,7 +296,7 @@ fn clusterContexts(
     for (0..cluster_iterations) |_| {
         var tree_histograms: [max_trees][256]u32 = @splat(@splat(0));
         var tree_totals: [max_trees]u32 = @splat(0);
-        aggregateTrees(by_context, &context_map, requested_tree_count, &tree_histograms, &tree_totals);
+        aggregateTreesSparse(by_context, sparse_contexts, &context_map, requested_tree_count, &tree_histograms, &tree_totals);
         var symbol_costs: [max_trees][256]u16 = undefined;
         prepareAssignmentCosts(&tree_histograms, &tree_totals, requested_tree_count, &symbol_costs);
         var changed = false;
@@ -320,7 +320,7 @@ fn clusterContexts(
 
     var tree_histograms: [max_trees][256]u32 = @splat(@splat(0));
     var tree_totals: [max_trees]u32 = @splat(0);
-    aggregateTrees(by_context, &context_map, requested_tree_count, &tree_histograms, &tree_totals);
+    aggregateTreesSparse(by_context, sparse_contexts, &context_map, requested_tree_count, &tree_histograms, &tree_totals);
     var remap: [max_trees]u8 = @splat(0xff);
     var tree_count: usize = 0;
     for (tree_totals[0..requested_tree_count], 0..) |total, tree| {
@@ -357,7 +357,24 @@ fn clusterContexts(
     };
 }
 
-fn aggregateTrees(
+fn aggregateTreesSparse(
+    by_context: *const ContextHistograms,
+    sparse_contexts: *const SparseContexts,
+    context_map: *const [64]u8,
+    tree_count: usize,
+    tree_histograms: *[max_trees][256]u32,
+    tree_totals: *[max_trees]u32,
+) void {
+    for (by_context, sparse_contexts, context_map) |*histogram, *sparse, tree_u8| {
+        const tree: usize = tree_u8;
+        std.debug.assert(tree < tree_count);
+        for (sparse.symbols[0..sparse.len]) |symbol|
+            tree_histograms[tree][symbol] += histogram[symbol];
+        tree_totals[tree] += sparse.total;
+    }
+}
+
+fn aggregateTreesDense(
     by_context: *const [64][256]u32,
     context_map: *const [64]u8,
     tree_count: usize,
@@ -569,6 +586,30 @@ test "literal context prepared assignment costs match reference" {
         try std.testing.expectEqual(reference, prepared);
         try std.testing.expectEqual(reference, sparse);
     }
+}
+
+test "literal context sparse tree aggregation matches dense reference" {
+    var contexts: ContextHistograms = @splat(@splat(0));
+    var context_map: [64]u8 = undefined;
+    for (&contexts, &context_map, 0..) |*histogram, *tree, context| {
+        tree.* = @intCast(context % 7);
+        for (histogram, 0..) |*frequency, symbol| {
+            if ((symbol * 3 + context * 5) % 17 == 0) {
+                frequency.* = @intCast((symbol + context) % 11 + 1);
+            }
+        }
+    }
+    var sparse_contexts: SparseContexts = undefined;
+    buildSparseContexts(&contexts, &sparse_contexts);
+    var dense_trees: [max_trees][256]u32 = @splat(@splat(0));
+    var sparse_trees: [max_trees][256]u32 = @splat(@splat(0));
+    var dense_totals: [max_trees]u32 = @splat(0);
+    var sparse_totals: [max_trees]u32 = @splat(0);
+    aggregateTreesDense(&contexts, &context_map, 7, &dense_trees, &dense_totals);
+    aggregateTreesSparse(&contexts, &sparse_contexts, &context_map, 7, &sparse_trees, &sparse_totals);
+    try std.testing.expectEqualSlices(u32, dense_totals[0..7], sparse_totals[0..7]);
+    for (0..7) |tree|
+        try std.testing.expectEqualSlices(u32, &dense_trees[tree], &sparse_trees[tree]);
 }
 
 test "literal context split rejects stationary literals" {
