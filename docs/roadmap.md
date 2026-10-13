@@ -12,10 +12,11 @@ major gaps before Vort can claim broad industry-best parity:
 - Full libbrotli-class general-purpose compression is not implemented. The
   production encoder now covers stored streams, compressed-or-stored
   planner-backed LZ77/Huffman streams, bounded multi-meta-block input, and a
-  vetted static-dictionary subset. Ratio mode now also has bounded two-type
-  literal and distance entropy splits plus three-type command splitting, but
-  still lacks libbrotli's complete adaptive multi-type block splitting and
-  clustering, broader context modeling, and quality/ratio range.
+  vetted static-dictionary subset. Ratio mode now also has bounded two-to-six
+  region literal, command, and distance entropy splitting with cyclic tree
+  reuse, but still lacks libbrotli's complete adaptive multi-type block
+  splitting and clustering, multi-tree context clustering, and quality/ratio
+  range.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
   entropy block switching, static dictionaries, consecutive compressed
@@ -18986,3 +18987,17 @@ reuse, so production keeps the simpler independently owned plans.
   metadata, and raises `dictionary_cases` from one to two. Property boundary,
   real-distance, XZ focused, external differential, AArch64 ReleaseFast, and
   nine-row encode-gate checks pass; no full repository test was run.
+
+- Extended ratio-mode Brotli literal context modeling from one fixed UTF-8
+  suffix split to a bounded adaptive search across all four RFC 7932 modes:
+  LSB6, MSB6, UTF8, and Signed. Each mode builds its complete 64-context
+  histogram, chooses the best contiguous two-tree partition by exact Huffman
+  payload cost, and reaches the production writer only after a 128-bit payload
+  lead; the complete candidate wire must then beat the current winner byte for
+  byte. Context selection is preserved while command and distance block-split
+  candidates compete, and literal block splitting still disables context trees
+  before its own exact-wire arbitration. Context maps now cover every cutoff
+  1...63, using compact zero-run coding for the upper half and a direct map for
+  the lower half. A dedicated Brotli test target covers the codec's complete
+  unit suite, while a focused libbrotli differential independently decodes all
+  four generated modes and Vort's 17-byte-input/31-byte-output progressive path.

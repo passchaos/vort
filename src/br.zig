@@ -12,6 +12,7 @@ const command_lut = @import("br/command_lut.zig");
 const pattern = @import("br/pattern.zig");
 const command_plan = @import("br/encoder/command_plan.zig");
 const literal_context = @import("br/encoder/literal_context.zig");
+const literal_context_split = @import("br/encoder/literal_context_split.zig");
 const long_distance = @import("br/encoder/long_distance.zig");
 const short_match_candidates = @import("br/encoder/short_match_candidates.zig");
 const encoder_distance = @import("br/encoder/distance.zig");
@@ -580,6 +581,7 @@ test {
     _ = pattern;
     _ = command_plan;
     _ = literal_context;
+    _ = literal_context_split;
     _ = long_distance;
     _ = short_match_candidates;
     _ = encoder_distance;
@@ -598,6 +600,31 @@ test {
 pub const IncrementalTestSupport = struct {
     pub fn encodeStored(allocator: std.mem.Allocator, payload: []const u8) Error![]u8 {
         return encodeStoredStreamAlloc(allocator, payload);
+    }
+
+    /// Encode one insertion-only production stream with a caller-selected RFC
+    /// literal context mode. Differential tools use this narrow test surface to
+    /// prove all four wire modes against an independent decoder.
+    pub fn encodeLiteralContextMode(
+        allocator: std.mem.Allocator,
+        payload: []const u8,
+        mode: u2,
+        cutoff: u6,
+    ) Error![]u8 {
+        if (payload.len == 0 or mode > literal_context.mode_signed or cutoff == 0 or cutoff >= 64)
+            return error.InvalidBlockPlan;
+        const commands = [_]command_plan.Command{.{
+            .insert_start = 0,
+            .insert_len = payload.len,
+        }};
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        return encodeCommandPlanWithOptionsAlloc(allocator, payload, &commands, null, &stats, .{
+            .literal_context_candidate = .{
+                .mode = mode,
+                .cutoff = cutoff,
+                .savings_bits = 0,
+            },
+        });
     }
 
     /// Build a final Large Window stream with one explicit regular-distance
@@ -2921,6 +2948,7 @@ pub fn encodePlannedStreamLazyWithOptionsAlloc(allocator: std.mem.Allocator, inp
 const CommandPlanEncodeOptions = struct {
     use_recent_distances: bool = false,
     use_utf8_text_contexts: bool = false,
+    literal_context_candidate: ?literal_context_split.Candidate = null,
     literal_split: ?literal_block_split.Result = null,
     command_split: ?command_block_split.Result = null,
     distance_split: ?distance_block_split.Result = null,
@@ -3754,6 +3782,7 @@ fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, comma
 const PreferredCommandPlan = struct {
     encoded: []u8,
     use_recent_distances: bool,
+    literal_context_candidate: ?literal_context_split.Candidate = null,
 };
 
 /// Try Brotli's recent-distance symbols as a complete stream alternative. Tree
@@ -3763,32 +3792,75 @@ fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const 
     // A second full wire encode is worthwhile on ratio-sized plans with many
     // reusable distances, but would dominate latency for small inputs.
     const use_context = options.try_recent_distances and countReusableRecentDistances(commands) >= min_recent_distance_candidate_count;
+    const primary_context: ?literal_context_split.Candidate = if (use_context) .{
+        .mode = literal_context.mode_utf8,
+        .cutoff = 56,
+        .savings_bits = 0,
+    } else null;
     const primary_options = CommandPlanEncodeOptions{
         .use_recent_distances = use_context,
-        .use_utf8_text_contexts = use_context,
+        .literal_context_candidate = primary_context,
         .window_bits = options.window_bits,
         .metadata = options.metadata,
     };
-    if (!use_context) return .{
-        .encoded = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, io, stats, primary_options),
-        .use_recent_distances = false,
+    const initial_stats = stats.*;
+    var primary_stats = initial_stats;
+    var selected = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, io, &primary_stats, primary_options);
+    errdefer allocator.free(selected);
+    var selected_stats = primary_stats;
+    var selected_context = primary_context;
+    if (options.try_recent_distances) if (literal_context_split.choose(input, commands)) |adaptive_context| {
+        const differs = primary_context == null or
+            adaptive_context.mode != primary_context.?.mode or
+            adaptive_context.cutoff != primary_context.?.cutoff;
+        if (differs) {
+            var adaptive_stats = initial_stats;
+            const adaptive = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, io, &adaptive_stats, .{
+                .use_recent_distances = use_context,
+                .literal_context_candidate = adaptive_context,
+                .window_bits = options.window_bits,
+                .metadata = options.metadata,
+            });
+            if (adaptive.len < selected.len) {
+                allocator.free(selected);
+                selected = adaptive;
+                selected_stats = adaptive_stats;
+                selected_context = adaptive_context;
+            } else allocator.free(adaptive);
+        }
     };
-    const context_candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, io, stats, primary_options);
+    if (!use_context) {
+        stats.* = selected_stats;
+        return .{
+            .encoded = selected,
+            .use_recent_distances = false,
+            .literal_context_candidate = selected_context,
+        };
+    }
     // A result below this conservative ratio already wins by far more than the
     // few-byte regressions observed when switching command/literal alphabets.
     // Avoid materializing the explicit baseline in that common ratio-mode case.
-    if (byteRatioAtMost(context_candidate.len, input.len, 80)) return .{
-        .encoded = context_candidate,
-        .use_recent_distances = true,
-    };
-    errdefer allocator.free(context_candidate);
-    const baseline = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, io, stats, .{ .window_bits = options.window_bits, .metadata = options.metadata });
-    errdefer allocator.free(baseline);
-    if (context_candidate.len < baseline.len) {
-        allocator.free(baseline);
-        return .{ .encoded = context_candidate, .use_recent_distances = true };
+    if (byteRatioAtMost(selected.len, input.len, 80)) {
+        stats.* = selected_stats;
+        return .{
+            .encoded = selected,
+            .use_recent_distances = true,
+            .literal_context_candidate = selected_context,
+        };
     }
-    allocator.free(context_candidate);
+    var baseline_stats = initial_stats;
+    const baseline = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, io, &baseline_stats, .{ .window_bits = options.window_bits, .metadata = options.metadata });
+    if (selected.len < baseline.len) {
+        allocator.free(baseline);
+        stats.* = selected_stats;
+        return .{
+            .encoded = selected,
+            .use_recent_distances = true,
+            .literal_context_candidate = selected_context,
+        };
+    }
+    allocator.free(selected);
+    stats.* = baseline_stats;
     return .{ .encoded = baseline, .use_recent_distances = false };
 }
 
@@ -3798,8 +3870,12 @@ fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const 
 /// chooses the two- or three-command-type proposal before one full-wire trial
 /// and strict size arbitration against the chosen unsplit stream.
 fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions, baseline: PreferredCommandPlan) Error!?[]u8 {
+    const baseline_utf8_cutoff: ?u6 = if (baseline.literal_context_candidate) |candidate|
+        if (candidate.mode == literal_context.mode_utf8) candidate.cutoff else null
+    else
+        null;
     const literal_splits = if (options.try_literal_split)
-        literal_block_split.chooseProposals(input, commands, if (baseline.use_recent_distances) 56 else null)
+        literal_block_split.chooseProposals(input, commands, baseline_utf8_cutoff)
     else
         literal_block_split.Proposals{};
     const literal_split = literal_splits.three orelse literal_splits.two;
@@ -3811,13 +3887,13 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
     const baseline_stats = stats.*;
     errdefer stats.* = baseline_stats;
     var candidate_stats = baseline_stats;
-    const candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &candidate_stats, options, baseline.use_recent_distances, literal_split, command_split, distance_split);
+    const candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &candidate_stats, options, baseline, literal_split, command_split, distance_split);
     var best = candidate;
     var best_stats = candidate_stats;
     errdefer allocator.free(best);
     if (literal_splits.three != null) if (literal_splits.two) |two_literal| {
         var two_literal_stats = baseline_stats;
-        const two_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &two_literal_stats, options, baseline.use_recent_distances, two_literal, command_split, distance_split);
+        const two_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &two_literal_stats, options, baseline, two_literal, command_split, distance_split);
         if (two_literal_candidate.len < best.len) {
             allocator.free(best);
             best = two_literal_candidate;
@@ -3826,7 +3902,7 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
     };
     if (literal_splits.clustered) |clustered_literal| {
         var clustered_literal_stats = baseline_stats;
-        const clustered_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &clustered_literal_stats, options, baseline.use_recent_distances, clustered_literal, command_split, distance_split);
+        const clustered_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &clustered_literal_stats, options, baseline, clustered_literal, command_split, distance_split);
         if (clustered_literal_candidate.len < best.len) {
             allocator.free(best);
             best = clustered_literal_candidate;
@@ -3835,7 +3911,7 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
     }
     if (literal_splits.alternating_four) |alternating_literal| {
         var alternating_literal_stats = baseline_stats;
-        const alternating_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &alternating_literal_stats, options, baseline.use_recent_distances, alternating_literal, command_split, distance_split);
+        const alternating_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &alternating_literal_stats, options, baseline, alternating_literal, command_split, distance_split);
         if (alternating_literal_candidate.len < best.len) {
             allocator.free(best);
             best = alternating_literal_candidate;
@@ -3844,7 +3920,7 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
     }
     if (literal_splits.reuse_first_four) |reused_literal| {
         var reused_literal_stats = baseline_stats;
-        const reused_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &reused_literal_stats, options, baseline.use_recent_distances, reused_literal, command_split, distance_split);
+        const reused_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &reused_literal_stats, options, baseline, reused_literal, command_split, distance_split);
         if (reused_literal_candidate.len < best.len) {
             allocator.free(best);
             best = reused_literal_candidate;
@@ -3853,7 +3929,7 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
     }
     if (literal_splits.four) |four_literal| {
         var four_literal_stats = baseline_stats;
-        const four_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &four_literal_stats, options, baseline.use_recent_distances, four_literal, command_split, distance_split);
+        const four_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &four_literal_stats, options, baseline, four_literal, command_split, distance_split);
         if (four_literal_candidate.len < best.len) {
             allocator.free(best);
             best = four_literal_candidate;
@@ -3862,7 +3938,7 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
     }
     if (literal_splits.dynamic) |dynamic_literal| {
         var dynamic_literal_stats = baseline_stats;
-        const dynamic_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &dynamic_literal_stats, options, baseline.use_recent_distances, dynamic_literal, command_split, distance_split);
+        const dynamic_literal_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &dynamic_literal_stats, options, baseline, dynamic_literal, command_split, distance_split);
         if (dynamic_literal_candidate.len < best.len) {
             allocator.free(best);
             best = dynamic_literal_candidate;
@@ -3871,7 +3947,7 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
     }
     if (symbol_splits.command.clustered) |clustered| {
         var clustered_stats = baseline_stats;
-        const clustered_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &clustered_stats, options, baseline.use_recent_distances, literal_split, clustered, distance_split);
+        const clustered_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &clustered_stats, options, baseline, literal_split, clustered, distance_split);
         if (clustered_candidate.len < best.len) {
             allocator.free(best);
             best = clustered_candidate;
@@ -3880,7 +3956,7 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
     }
     if (symbol_splits.command.alternating_four) |alternating| {
         var alternating_stats = baseline_stats;
-        const alternating_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &alternating_stats, options, baseline.use_recent_distances, literal_split, alternating, distance_split);
+        const alternating_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &alternating_stats, options, baseline, literal_split, alternating, distance_split);
         if (alternating_candidate.len < best.len) {
             allocator.free(best);
             best = alternating_candidate;
@@ -3889,7 +3965,7 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
     }
     if (symbol_splits.command.reuse_first_four) |reused| {
         var reused_stats = baseline_stats;
-        const reused_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &reused_stats, options, baseline.use_recent_distances, literal_split, reused, distance_split);
+        const reused_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &reused_stats, options, baseline, literal_split, reused, distance_split);
         if (reused_candidate.len < best.len) {
             allocator.free(best);
             best = reused_candidate;
@@ -3898,7 +3974,7 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
     }
     if (symbol_splits.command.four) |four| {
         var four_stats = baseline_stats;
-        const four_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &four_stats, options, baseline.use_recent_distances, literal_split, four, distance_split);
+        const four_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &four_stats, options, baseline, literal_split, four, distance_split);
         if (four_candidate.len < best.len) {
             allocator.free(best);
             best = four_candidate;
@@ -3907,7 +3983,7 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
     }
     if (symbol_splits.command.dynamic) |dynamic| {
         var dynamic_stats = baseline_stats;
-        const dynamic_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &dynamic_stats, options, baseline.use_recent_distances, literal_split, dynamic, distance_split);
+        const dynamic_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &dynamic_stats, options, baseline, literal_split, dynamic, distance_split);
         if (dynamic_candidate.len < best.len) {
             allocator.free(best);
             best = dynamic_candidate;
@@ -3916,7 +3992,7 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
     }
     if (distance_splits.three != null) if (distance_splits.two) |two_distance| {
         var two_distance_stats = baseline_stats;
-        const two_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &two_distance_stats, options, baseline.use_recent_distances, literal_split, command_split, two_distance);
+        const two_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &two_distance_stats, options, baseline, literal_split, command_split, two_distance);
         if (two_distance_candidate.len < best.len) {
             allocator.free(best);
             best = two_distance_candidate;
@@ -3925,7 +4001,7 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
     };
     if (distance_splits.clustered) |clustered_distance| {
         var clustered_distance_stats = baseline_stats;
-        const clustered_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &clustered_distance_stats, options, baseline.use_recent_distances, literal_split, command_split, clustered_distance);
+        const clustered_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &clustered_distance_stats, options, baseline, literal_split, command_split, clustered_distance);
         if (clustered_distance_candidate.len < best.len) {
             allocator.free(best);
             best = clustered_distance_candidate;
@@ -3934,7 +4010,7 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
     }
     if (distance_splits.alternating_four) |alternating_distance| {
         var alternating_distance_stats = baseline_stats;
-        const alternating_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &alternating_distance_stats, options, baseline.use_recent_distances, literal_split, command_split, alternating_distance);
+        const alternating_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &alternating_distance_stats, options, baseline, literal_split, command_split, alternating_distance);
         if (alternating_distance_candidate.len < best.len) {
             allocator.free(best);
             best = alternating_distance_candidate;
@@ -3943,7 +4019,7 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
     }
     if (distance_splits.reuse_first_four) |reused_distance| {
         var reused_distance_stats = baseline_stats;
-        const reused_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &reused_distance_stats, options, baseline.use_recent_distances, literal_split, command_split, reused_distance);
+        const reused_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &reused_distance_stats, options, baseline, literal_split, command_split, reused_distance);
         if (reused_distance_candidate.len < best.len) {
             allocator.free(best);
             best = reused_distance_candidate;
@@ -3952,7 +4028,7 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
     }
     if (distance_splits.four) |four_distance| {
         var four_distance_stats = baseline_stats;
-        const four_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &four_distance_stats, options, baseline.use_recent_distances, literal_split, command_split, four_distance);
+        const four_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &four_distance_stats, options, baseline, literal_split, command_split, four_distance);
         if (four_distance_candidate.len < best.len) {
             allocator.free(best);
             best = four_distance_candidate;
@@ -3961,7 +4037,7 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
     }
     if (distance_splits.dynamic) |dynamic_distance| {
         var dynamic_distance_stats = baseline_stats;
-        const dynamic_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &dynamic_distance_stats, options, baseline.use_recent_distances, literal_split, command_split, dynamic_distance);
+        const dynamic_distance_candidate = try encodeEntropySplitWireCandidateAlloc(allocator, input, commands, &dynamic_distance_stats, options, baseline, literal_split, command_split, dynamic_distance);
         if (dynamic_distance_candidate.len < best.len) {
             allocator.free(best);
             best = dynamic_distance_candidate;
@@ -3976,13 +4052,13 @@ fn encodeEntropySplitCandidateAlloc(allocator: std.mem.Allocator, input: []const
     return null;
 }
 
-fn encodeEntropySplitWireCandidateAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions, use_recent_distances: bool, literal_split: ?literal_block_split.Result, command_split: ?command_block_split.Result, distance_split: ?distance_block_split.Result) Error![]u8 {
+fn encodeEntropySplitWireCandidateAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions, baseline: PreferredCommandPlan, literal_split: ?literal_block_split.Result, command_split: ?command_block_split.Result, distance_split: ?distance_block_split.Result) Error![]u8 {
     return encodeCommandPlanWithOptionsAlloc(allocator, input, commands, null, stats, .{
         // The ordinary-vs-UTF8 decision is made first. A literal block split
         // then inherits that winner's distance coding instead of accidentally
         // enabling recent-distance symbols when the context candidate lost.
-        .use_recent_distances = use_recent_distances,
-        .use_utf8_text_contexts = use_recent_distances and literal_split == null,
+        .use_recent_distances = baseline.use_recent_distances,
+        .literal_context_candidate = if (literal_split == null) baseline.literal_context_candidate else null,
         .literal_split = literal_split,
         .command_split = command_split,
         .distance_split = distance_split,
@@ -4151,7 +4227,16 @@ fn initPlannedLiteralEncoder(lengths: *const [256]u4, alphabet: *const command_p
 
 fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error!void {
     if (commands.len == 0) return error.InvalidBlockPlan;
-    if (options.literal_split != null and options.use_utf8_text_contexts) return error.InvalidBlockPlan;
+    const context_candidate = options.literal_context_candidate orelse if (options.use_utf8_text_contexts) literal_context_split.Candidate{
+        .mode = literal_context.mode_utf8,
+        .cutoff = options.utf8_context_cutoff,
+        .savings_bits = 0,
+    } else null;
+    if (context_candidate) |candidate| {
+        if (candidate.mode > literal_context.mode_signed or candidate.cutoff == 0 or candidate.cutoff >= 64)
+            return error.InvalidBlockPlan;
+    }
+    if (options.literal_split != null and context_candidate != null) return error.InvalidBlockPlan;
     if (options.literal_split) |split| {
         if (split.split == 0 or split.typeCount() < 2 or split.typeCount() > split.regionCount()) return error.InvalidBlockPlan;
         if (split.cycle_type_count != null and (split.alternate_two_types or split.reuse_first_for_fourth)) return error.InvalidBlockPlan;
@@ -4211,7 +4296,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     // Fast and balanced encoding use one literal tree. Avoid clearing two
     // additional dense histograms unless a ratio candidate requests context
     // trees; the ordinary ratio path benefits too when it keeps one tree.
-    if (options.use_utf8_text_contexts) @memset(&literal_context_frequencies, @splat(0));
+    if (context_candidate != null) @memset(&literal_context_frequencies, @splat(0));
     var literal_block_frequencies: [literal_block_split.max_regions][256]u32 = undefined;
     if (options.literal_split != null) @memset(&literal_block_frequencies, @splat(0));
     var command_frequencies: [704]u32 = undefined;
@@ -4260,11 +4345,11 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
                 literal_index += 1;
             } else {
                 try literal_alphabet.recordByteFrequency(&literal_frequencies, &literal_seen, literal);
-                if (options.use_utf8_text_contexts) {
+                if (context_candidate) |candidate| {
                     const previous = if (position == 0) 0 else input[position - 1];
                     const second_previous = if (position < 2) 0 else input[position - 2];
-                    const context = literal_context.value(literal_context.mode_utf8, previous, second_previous);
-                    literal_context_frequencies[literal_context.utf8SuffixTree(context, options.utf8_context_cutoff)][literal] += 1;
+                    const context = literal_context.value(candidate.mode, previous, second_previous);
+                    literal_context_frequencies[literal_context.suffixTree(context, candidate.cutoff)][literal] += 1;
                 }
             }
         }
@@ -4321,7 +4406,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     var distance_block_alphabets: [distance_block_split.max_regions]command_plan.PrefixAlphabetFor(planned_distance_alphabet_size) = undefined;
     var distance_alphabet: command_plan.PrefixAlphabetFor(planned_distance_alphabet_size) = if (has_same_last_candidate) prepared_distance_alphabet else undefined;
     if (options.literal_split == null) try literal_alphabet.sortByFrequencies(&literal_frequencies);
-    if (options.use_utf8_text_contexts) for (&literal_context_alphabets, &literal_context_frequencies) |*alphabet, *frequencies| {
+    if (context_candidate != null) for (&literal_context_alphabets, &literal_context_frequencies) |*alphabet, *frequencies| {
         if (allZeroFrequencies(256, frequencies)) frequencies[0] = 1;
         try command_plan.alphabetFromFrequenciesInto(256, alphabet, frequencies);
     };
@@ -4369,7 +4454,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         try chooseLiteralTreeLengths(allocator, &literal_frequencies, &literal_alphabet, options.optimize_literal_tree_wire)
     else
         undefined;
-    const literal_context_lengths = if (options.use_utf8_text_contexts) blk: {
+    const literal_context_lengths = if (context_candidate != null) blk: {
         var lengths: [2][256]u4 = undefined;
         for (&lengths, &literal_context_alphabets, &literal_context_frequencies) |*tree_lengths, *alphabet, *frequencies| tree_lengths.* = try alphabet.codeLengths(frequencies);
         break :blk lengths;
@@ -4429,14 +4514,14 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     } else null;
     if (options.literal_split != null) {
         try writePlannedCompressedHeaderLiteralBlocks(allocator, writer, &literal_block_alphabets, &literal_block_lengths, &literal_split_code, options.ndirect, &command_alphabet, command_split_header, &distance_alphabet, distance_split_header, distance_alphabet_size, &command_lengths, &distance_lengths);
-    } else if (options.use_utf8_text_contexts) {
-        try writePlannedCompressedHeaderTwoLiteralContexts(allocator, writer, &literal_context_alphabets, &literal_context_lengths, options.utf8_context_cutoff, options.ndirect, &command_alphabet, command_split_header, &distance_alphabet, distance_split_header, distance_alphabet_size, &command_lengths, &distance_lengths);
+    } else if (context_candidate) |candidate| {
+        try writePlannedCompressedHeaderTwoLiteralContexts(allocator, writer, &literal_context_alphabets, &literal_context_lengths, candidate.mode, candidate.cutoff, options.ndirect, &command_alphabet, command_split_header, &distance_alphabet, distance_split_header, distance_alphabet_size, &command_lengths, &distance_lengths);
     } else try writePlannedCompressedHeader(allocator, writer, &literal_alphabet, &command_alphabet, command_split_header, &distance_alphabet, distance_split_header, options.ndirect, distance_alphabet_size, &literal_lengths, &command_lengths, &distance_lengths);
     if (io) |active| stats.header_ns = elapsedNs(header_start.?, active);
 
     const encoder_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     const literal_encoder = if (options.literal_split == null) try initPlannedLiteralEncoder(&literal_lengths, &literal_alphabet) else undefined;
-    const literal_context_encoders = if (options.use_utf8_text_contexts) [2]huffman.HuffmanTable(256).Encoder{
+    const literal_context_encoders = if (context_candidate != null) [2]huffman.HuffmanTable(256).Encoder{
         try initPlannedLiteralEncoder(&literal_context_lengths[0], &literal_context_alphabets[0]),
         try initPlannedLiteralEncoder(&literal_context_lengths[1], &literal_context_alphabets[1]),
     } else undefined;
@@ -4521,11 +4606,11 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
                 const encoder = &literal_block_encoders[block_index];
                 if (encoder.bits[literal] != 0) try writer.writeHuffmanBits(allocator, encoder.codes[literal], encoder.bits[literal]);
                 literal_index += 1;
-            } else if (options.use_utf8_text_contexts) {
+            } else if (context_candidate) |candidate| {
                 const previous = if (position == 0) 0 else input[position - 1];
                 const second_previous = if (position < 2) 0 else input[position - 2];
-                const context = literal_context.value(literal_context.mode_utf8, previous, second_previous);
-                const encoder = &literal_context_encoders[literal_context.utf8SuffixTree(context, options.utf8_context_cutoff)];
+                const context = literal_context.value(candidate.mode, previous, second_previous);
+                const encoder = &literal_context_encoders[literal_context.suffixTree(context, candidate.cutoff)];
                 if (encoder.bits[literal] != 0) try writer.writeHuffmanBits(allocator, encoder.codes[literal], encoder.bits[literal]);
             } else if (literal_alphabet.len > 1) try writer.writeHuffmanBits(allocator, literal_encoder.codes[literal], literal_encoder.bits[literal]);
         }
@@ -16032,12 +16117,12 @@ test "br large single-tree stream selects the specialized decoder" {
     try std.testing.expectEqual(@as(usize, 1), test_single_tree_external_lookup_hits);
 }
 
-test "br ratio planner selects a profitable three-type command entropy split" {
+test "br ratio planner selects a profitable six-type command entropy split" {
     const payload = @embedFile("br/dictionary.bin");
     const encoded = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
     defer std.testing.allocator.free(encoded);
     const summary = try summarizeStreamAlloc(std.testing.allocator, encoded);
-    try std.testing.expectEqual(@as(usize, 3), summary.max_command_block_types);
+    try std.testing.expectEqual(@as(usize, 6), summary.max_command_block_types);
     try std.testing.expectEqual(@as(usize, 2), summary.max_distance_block_types);
     try std.testing.expectEqual(@as(usize, 2), summary.max_distance_context_trees);
     const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, payload.len);
@@ -24656,6 +24741,74 @@ test "br UTF8 suffix context maps round trip candidate cutoffs" {
     }
 }
 
+test "br literal context suffix maps cover complete cutoff range" {
+    for ([_]u6{ 1, 2, 15, 31, 32, 48, 62, 63 }) |cutoff| {
+        var encoded: std.ArrayList(u8) = .empty;
+        defer encoded.deinit(std.testing.allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeLiteralSuffixContextMap(std.testing.allocator, &writer, cutoff);
+        var reader = bitstream.BitReader.init(encoded.items);
+        var context_map: [64]u8 = undefined;
+        try readContextMap(&reader, &context_map, 2);
+        for (context_map, 0..) |tree, context|
+            try std.testing.expectEqual(literal_context.suffixTree(context, cutoff), tree);
+    }
+}
+
+test "br planned writer emits every RFC literal context mode" {
+    var input: [512]u8 = undefined;
+    for (&input, 0..) |*byte, index| byte.* = @truncate(index * 73 + index / 7);
+    const commands = [_]command_plan.Command{.{
+        .insert_start = 0,
+        .insert_len = input.len,
+    }};
+    inline for (0..4) |mode| {
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const encoded = try encodeCommandPlanWithOptionsAlloc(
+            std.testing.allocator,
+            &input,
+            &commands,
+            null,
+            &stats,
+            .{ .literal_context_candidate = .{
+                .mode = mode,
+                .cutoff = 32,
+                .savings_bits = 0,
+            } },
+        );
+        defer std.testing.allocator.free(encoded);
+        const summary = try summarizeStream(encoded);
+        try std.testing.expectEqual(input.len, summary.literal_context_mode_bytes[mode]);
+        const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, &input, decoded);
+    }
+}
+
+test "br ratio candidate selects a smaller adaptive literal context wire" {
+    const input = ("the quick brown fox jumps over the lazy dog\n" ** 32) ++
+        ("THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG\n" ** 32);
+    const commands = [_]command_plan.Command{.{
+        .insert_start = 0,
+        .insert_len = input.len,
+    }};
+    var plain_stats: encoder_stats.PlannedEncodeStats = .{};
+    const plain = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, input, &commands, null, &plain_stats, .{});
+    defer std.testing.allocator.free(plain);
+    var adaptive_stats: encoder_stats.PlannedEncodeStats = .{};
+    const adaptive = try encodePreferredCommandPlanAlloc(std.testing.allocator, input, &commands, null, &adaptive_stats, .{
+        .try_recent_distances = true,
+    });
+    defer std.testing.allocator.free(adaptive.encoded);
+    const candidate = adaptive.literal_context_candidate orelse return error.TestUnexpectedResult;
+    try std.testing.expect(adaptive.encoded.len < plain.len);
+    const summary = try summarizeStream(adaptive.encoded);
+    try std.testing.expectEqual(input.len, summary.literal_context_mode_bytes[candidate.mode]);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, adaptive.encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
 test "br distance context map reader preserves nonzero tree indexes" {
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(std.testing.allocator);
@@ -26011,6 +26164,7 @@ fn writePlannedCompressedHeaderTwoLiteralContexts(
     writer: *BitWriter,
     literal_alphabets: *const [2]command_plan.PrefixAlphabetFor(256),
     literal_lengths: *const [2][256]u4,
+    context_mode: u2,
     context_cutoff: u6,
     ndirect: u7,
     command_alphabet: *const command_plan.PrefixAlphabet,
@@ -26026,9 +26180,9 @@ fn writePlannedCompressedHeaderTwoLiteralContexts(
     try writeDistanceBlockSwitchHeader(allocator, writer, distance_split);
     try writer.writeBits(allocator, 0, 2); // NPOSTFIX
     try writer.writeBits(allocator, ndirect, 4);
-    try writer.writeBits(allocator, literal_context.mode_utf8, 2);
+    try writer.writeBits(allocator, context_mode, 2);
     try writeBlockTypeCount(allocator, writer, 2);
-    try writeUtf8SuffixContextMap(allocator, writer, context_cutoff);
+    try writeLiteralSuffixContextMap(allocator, writer, context_cutoff);
     try writeDistanceTreeContextMap(allocator, writer, distance_split);
     inline for (0..2) |tree| try writePrefixSymbolsWithLengths(allocator, writer, 256, &literal_alphabets[tree], &literal_lengths[tree]);
     try writePlannedCommandTrees(allocator, writer, command_alphabet, command_lengths, command_split);
@@ -26041,6 +26195,22 @@ fn writeUtf8TextContextMap(allocator: std.mem.Allocator, writer: *BitWriter) Err
 
 fn writeUtf8SuffixContextMap(allocator: std.mem.Allocator, writer: *BitWriter, cutoff: u6) Error!void {
     if (cutoff < 32 or cutoff > 63) return error.InvalidBlockPlan;
+    return writeLiteralSuffixContextMap(allocator, writer, cutoff);
+}
+
+fn writeLiteralSuffixContextMap(allocator: std.mem.Allocator, writer: *BitWriter, cutoff: u6) Error!void {
+    if (cutoff == 0 or cutoff > 63) return error.InvalidBlockPlan;
+    if (cutoff < 32) {
+        try writer.writeBits(allocator, 0, 1); // RLEMAX = 0.
+        try writer.writeBits(allocator, 1, 2); // Simple prefix.
+        try writer.writeBits(allocator, 1, 2); // NSYM = 2.
+        try writer.writeBits(allocator, 0, alphabetBits(2));
+        try writer.writeBits(allocator, 1, alphabetBits(2));
+        for (0..cutoff) |_| try writer.writeBits(allocator, 0, 1);
+        for (cutoff..64) |_| try writer.writeBits(allocator, 1, 1);
+        try writer.writeBits(allocator, 0, 1); // IMTF = false.
+        return;
+    }
     try writer.writeBits(allocator, 1, 1); // Use zero-run RLE.
     try writer.writeBits(allocator, 5, 4); // RLEMAX = 6.
     try writer.writeBits(allocator, 1, 2); // Simple prefix.

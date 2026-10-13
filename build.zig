@@ -120,6 +120,19 @@ pub fn build(b: *std.Build) void {
         .root_module = tests_mod,
     });
     const run_tests = b.addRunArtifact(tests);
+    const br_tests_mod = b.createModule(.{
+        .root_source_file = b.path("src/br.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    br_tests_mod.addObject(br_record_optimal_obj);
+    const br_tests = b.addTest(.{
+        .name = "vort-br-tests",
+        .root_module = br_tests_mod,
+    });
+    const run_br_tests = b.addRunArtifact(br_tests);
+    const br_test_step = b.step("test-br", "Run focused Brotli codec tests");
+    br_test_step.dependOn(&run_br_tests.step);
     const zstd_huffman_x2_tests = b.addTest(.{
         .name = "vort-zstd-huffman-x2-tests",
         .root_module = tests_mod,
@@ -3913,6 +3926,13 @@ pub fn build(b: *std.Build) void {
         "Decode streamed multi-meta-block libbrotli operation schedules byte progressively",
     );
     br_upstream_multiblock_diff_step.dependOn(&run_br_upstream_multiblock_diff.step);
+    const run_br_literal_context_modes_diff = b.addRunArtifact(br_upstream_multiblock_diff_exe);
+    run_br_literal_context_modes_diff.addArg("--only-literal-context-modes");
+    const br_literal_context_modes_diff_step = b.step(
+        "run-br-literal-context-modes-diff",
+        "Validate all RFC Brotli literal context modes against libbrotli",
+    );
+    br_literal_context_modes_diff_step.dependOn(&run_br_literal_context_modes_diff.step);
 
     const br_real_corpus_diff_smoke = b.addSystemCommand(&.{
         "python3", "tools/br/real_corpus_diff_smoke.py",

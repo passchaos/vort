@@ -38,6 +38,7 @@ pub fn main(init: std.process.Init) !void {
     var only_dynamic_distance_types = false;
     var only_dynamic_command_types = false;
     var only_dynamic_literal_types = false;
+    var only_literal_context_modes = false;
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--real-file")) {
             try real_files.append(init.gpa, args.next() orelse return error.MissingCorpusPath);
@@ -56,6 +57,8 @@ pub fn main(init: std.process.Init) !void {
             only_dynamic_command_types = true;
         } else if (std.mem.eql(u8, arg, "--only-dynamic-literal-types")) {
             only_dynamic_literal_types = true;
+        } else if (std.mem.eql(u8, arg, "--only-literal-context-modes")) {
+            only_literal_context_modes = true;
         } else return error.UnknownArgument;
     }
 
@@ -64,8 +67,36 @@ pub fn main(init: std.process.Init) !void {
     const focused_mode_count = @as(usize, @intFromBool(only_four_command_types)) +
         @intFromBool(only_four_distance_types) + @intFromBool(only_distance_clusters) +
         @intFromBool(only_dynamic_distance_types) + @intFromBool(only_dynamic_command_types) +
-        @intFromBool(only_dynamic_literal_types);
+        @intFromBool(only_dynamic_literal_types) + @intFromBool(only_literal_context_modes);
     if (focused_mode_count > 1) return error.InvalidBlockPlan;
+    if (only_literal_context_modes) {
+        if (real_files.items.len != 0) return error.InvalidBlockPlan;
+        var payload: [512]u8 = undefined;
+        for (&payload, 0..) |*byte, index| byte.* = @truncate(index * 73 + index / 7);
+        var encoded_bytes: usize = 0;
+        for (0..4) |mode_usize| {
+            const mode: u2 = @intCast(mode_usize);
+            const encoded = try vort.br.IncrementalTestSupport.encodeLiteralContextMode(init.gpa, &payload, mode, 32);
+            defer init.gpa.free(encoded);
+            const summary = try vort.brSummarizeStream(encoded);
+            if (summary.max_literal_context_trees != 2 or
+                summary.literal_context_mode_bytes[mode] != payload.len) return error.ReferenceEncodeFailed;
+            const decoded = try init.gpa.alloc(u8, payload.len);
+            defer init.gpa.free(decoded);
+            try reference.decode(encoded, decoded);
+            if (!std.mem.eql(u8, &payload, decoded)) return error.ReferenceDecodeFailed;
+            try decodeProgressChunks(init.gpa, encoded, &payload, 16, 17, 31);
+            encoded_bytes += encoded.len;
+        }
+        var buffer: [256]u8 = undefined;
+        var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
+        try stdout.interface.print(
+            "br_upstream_literal_context_modes=ok cases=4 encoded_bytes={d} decoded_bytes={d} reference_version={x}\n",
+            .{ encoded_bytes, payload.len * 4, reference.version() },
+        );
+        try stdout.interface.flush();
+        return;
+    }
     if (only_four_command_types) {
         if (real_files.items.len != 0) return error.InvalidBlockPlan;
         const fixture = try vort.br.IncrementalTestSupport.encodeFourCommandTypes(init.gpa);
@@ -1092,7 +1123,7 @@ pub fn main(init: std.process.Init) !void {
     const planned_command_split = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, dictionary_bytes, .{ .level = .ratio });
     defer init.gpa.free(planned_command_split);
     const planned_command_split_summary = try vort.brSummarizeStreamAlloc(init.gpa, planned_command_split);
-    if (planned_command_split_summary.max_command_block_types != 3 or
+    if (planned_command_split_summary.max_command_block_types != 6 or
         planned_command_split_summary.max_distance_block_types != 2 or
         planned_command_split_summary.max_distance_context_trees != 2) return error.ReferenceEncodeFailed;
     const planned_command_split_decoded = try init.gpa.alloc(u8, dictionary_bytes.len);
