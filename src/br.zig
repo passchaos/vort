@@ -105,6 +105,22 @@ const IncrementalOwnedCodec = struct {
     pub const Error = br.Error;
     pub const DecodeOptions = br.DecodeOptions;
     pub const ProgressiveDecoder = br.IncrementalCopyStreamDecoder;
+    pub const HistoryPlan = struct { allocation_len: usize, capped: bool };
+
+    pub fn historyPlanFromPrefix(prefix: []const u8, output_bound: usize, max_history_len: usize, options: br.DecodeOptions) br.Error!?HistoryPlan {
+        var reader = bitstream.BitReader.init(prefix);
+        const window = readWindowInfo(&reader, options) catch |err| switch (err) {
+            error.TruncatedFrame => return null,
+            else => return err,
+        };
+        const advertised = (@as(usize, 1) << window.bits) - 16;
+        const required = @max(1, @min(output_bound, advertised));
+        if (max_history_len == 0) return error.OutputLimitExceeded;
+        return .{
+            .allocation_len = @min(required, max_history_len),
+            .capped = max_history_len < required,
+        };
+    }
 };
 pub const IncrementalStreamDecoder = incremental_owned_copy.Decoder(IncrementalOwnedCodec);
 pub const IncrementalRleStreamDecoder = incremental_rle.Decoder(IncrementalRleCodec);

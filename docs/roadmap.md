@@ -18954,3 +18954,20 @@ reuse, so production keeps the simpler independently owned plans.
   tests, Large Window focused tests, AArch64 ReleaseFast compilation, all three
   dynamic-family differentials, and the planned encode gate pass; the complete
   upstream matrix and full repository test graph were not run.
+
+- Made the allocator-owned Brotli progressive history window-aware instead of
+  reserving the default 16 MiB RFC maximum before reading input. A two-byte
+  prefix state parses standard or Large Window WBITS under one-byte input
+  fragmentation, replays those exact bits into the existing progressive core,
+  and allocates `min(reachable output, advertised window, max_history_len)`.
+  Unknown-size default WBITS=16 streams now own exactly 65,520 history bytes;
+  pledged tiny streams retain only their reachable output. Caller caps smaller
+  than the advertised window remain useful when actual distances fit. If a
+  valid match crosses the cap, the facade maps the core's bounded-ring
+  `InvalidMatch` to `OutputLimitExceeded`, preserving the distinction from a
+  malformed wire. Tests cover a 32-byte ring, unknown output, zero caps,
+  one-byte standard/Large Window prefixes, final-byte output draining, exact
+  compressed sizes, and every allocation failure. The 58 focused incremental
+  tests, Large Window fixture, nine dynamic external fixtures, AArch64
+  ReleaseFast compile, and planned encode gate pass; the complete upstream
+  matrix and full repository test graph were not run.

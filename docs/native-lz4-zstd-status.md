@@ -193,6 +193,13 @@ output limits, concatenated `nextFrame` accounting, Large Window opt-in,
 metadata capture, external header scratch, snapshots, and diagnostics remain
 on the public facade; `max_history_len` makes its only material owned codec
 state explicit.
+The wrapper consumes at most the two-byte Brotli window prefix before creating
+that ring. Ordinary unknown-size WBITS=16 streams therefore allocate 65,520
+history bytes instead of the standard-format 16 MiB maximum; pledged small
+outputs allocate only their reachable output size. A smaller caller cap remains
+valid for streams whose actual distances fit, while the first match beyond that
+cap is reported as `OutputLimitExceeded` instead of being misclassified as a
+corrupt distance.
 
 ## Next recommended work
 

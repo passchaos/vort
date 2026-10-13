@@ -1135,7 +1135,10 @@ defer zstd_bounded_incremental.deinit();
 // Brotli's general incremental decoder owns only its bounded history ring and
 // emits stored/compressed bytes as symbols become available. It can pledge
 // expected_compressed_len (or use initExactCompressedSize) for a transport
-// boundary; max_history_len bounds owned LZ77 history. Both it and the
+// boundary; max_history_len bounds owned LZ77 history. The wrapper parses at
+// most two window-header bytes first, then allocates no more than the declared
+// window (and often only expected_output_len), rather than a fixed maximum.
+// Both it and the
 // caller-history BrotliIncrementalCopyStreamDecoder use an embedded 16 KiB
 // compressed-header buffer. For unusually large legal entropy headers, pass a
 // larger caller-owned Options.compressed_header_scratch that remains alive and

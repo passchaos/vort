@@ -10,6 +10,10 @@ pub fn Decoder(comptime Codec: type) type {
         options: Options,
         history: std.ArrayList(u8) = .empty,
         progressive: ?Codec.ProgressiveDecoder = null,
+        window_prefix: [2]u8 = undefined,
+        window_prefix_len: u2 = 0,
+        window_prefix_offset: u2 = 0,
+        history_capped: bool = false,
         phase: Phase = .input,
         last_status: core.StepResult.Status = .need_input,
         frame_input_read: usize = 0,
@@ -46,6 +50,7 @@ pub fn Decoder(comptime Codec: type) type {
             payload_remaining: usize,
             retained_input_bytes: usize,
             history_bytes: usize,
+            history_capacity: usize,
             total_compressed: usize,
             total_output: usize,
             frame_count: usize,
@@ -119,6 +124,7 @@ pub fn Decoder(comptime Codec: type) type {
                 .payload_remaining = if (inner) |snap| snap.payload_remaining else self.options.expected_output_len orelse 0,
                 .retained_input_bytes = if (inner) |snap| snap.retained_input_bytes else 0,
                 .history_bytes = if (inner) |snap| snap.history_bytes else 0,
+                .history_capacity = self.history.items.len,
                 .total_compressed = self.total_compressed + if (self.phase == .done) 0 else self.frame_input_read,
                 .total_output = self.total_output + if (self.phase == .done) 0 else self.frame_output_written,
                 .frame_count = self.frame_count,
@@ -156,36 +162,56 @@ pub fn Decoder(comptime Codec: type) type {
                 return self.fail(.input, error.IntegerOverflow);
             if (offered_end > self.options.max_compressed_len)
                 return self.fail(.input, error.OutputLimitExceeded);
-            self.ensureProgressive() catch |err| return self.fail(.input, err);
-            const step_result = self.progressive.?.step(input, output) catch |err|
-                return self.fail(self.phase, err);
-            self.frame_input_read += step_result.progress.input_read;
-            self.frame_output_written += step_result.progress.output_written;
-            self.last_status = step_result.status;
-            self.phase = switch (step_result.status) {
-                .need_input => .input,
-                .need_output => .output,
-                .done => .done,
-            };
-            if (self.options.expected_compressed_len) |expected| {
-                if (self.frame_input_read == expected) {
-                    self.input_finished = true;
-                    if (step_result.status == .need_input) {
-                        self.progressive.?.finish() catch |err| return self.fail(.input, err);
-                        if (self.progressive.?.snapshot().phase == .done) {
-                            self.phase = .done;
-                            self.commitFrame();
-                            return result(step_result.progress.input_read, step_result.progress.output_written, .done);
-                        }
+            var input_read: usize = 0;
+            var output_written: usize = 0;
+            while (true) {
+                if (self.progressive == null) {
+                    while (input_read < input.len and self.window_prefix_len < self.window_prefix.len) {
+                        self.window_prefix[self.window_prefix_len] = input[input_read];
+                        self.window_prefix_len += 1;
+                        input_read += 1;
+                        const ready = self.prepareProgressive() catch |err|
+                            return self.failWithProgress(.input, err, input_read, output_written);
+                        if (ready) break;
+                    }
+                    if (self.progressive == null) {
+                        if (self.window_prefix_len == self.window_prefix.len)
+                            return self.failWithProgress(.input, error.CorruptFrame, input_read, output_written);
+                        return self.completeStep(input_read, output_written, .need_input);
                     }
                 }
+
+                if (self.window_prefix_offset < self.window_prefix_len) {
+                    const inner = self.progressive.?.step(
+                        self.window_prefix[self.window_prefix_offset..self.window_prefix_len],
+                        output[output_written..],
+                    ) catch |err| return self.failWithProgress(self.phase, self.mapHistoryError(err), input_read, output_written);
+                    self.window_prefix_offset += @intCast(inner.progress.input_read);
+                    output_written += inner.progress.output_written;
+                    if (inner.status == .done or inner.status == .need_output)
+                        return self.completeStep(input_read, output_written, inner.status);
+                    if (self.window_prefix_offset < self.window_prefix_len) {
+                        if (inner.progress.input_read == 0 and inner.progress.output_written == 0)
+                            return self.failWithProgress(.input, error.CorruptFrame, input_read, output_written);
+                        continue;
+                    }
+                }
+
+                if (input_read == input.len and self.last_status != .need_output and !self.input_finished)
+                    return self.completeStep(input_read, output_written, .need_input);
+                const inner = self.progressive.?.step(
+                    input[input_read..],
+                    output[output_written..],
+                ) catch |err| return self.failWithProgress(self.phase, self.mapHistoryError(err), input_read, output_written);
+                input_read += inner.progress.input_read;
+                output_written += inner.progress.output_written;
+                if (inner.status == .need_input and input_read < input.len) {
+                    if (inner.progress.input_read == 0 and inner.progress.output_written == 0)
+                        return self.failWithProgress(.input, error.CorruptFrame, input_read, output_written);
+                    continue;
+                }
+                return self.completeStep(input_read, output_written, inner.status);
             }
-            if (step_result.status == .done) {
-                if (self.options.expected_compressed_len) |expected|
-                    if (self.frame_input_read != expected) return self.fail(.done, error.SizeMismatch);
-                self.commitFrame();
-            }
-            return step_result;
         }
 
         pub fn finish(self: *Self) Error!void {
@@ -195,20 +221,41 @@ pub fn Decoder(comptime Codec: type) type {
             }
             self.input_finished = true;
             if (self.last_status == .need_output) return;
-            self.ensureProgressive() catch |err| return self.fail(.input, err);
-            self.progressive.?.finish() catch |err| return self.fail(self.phase, err);
+            const ready = self.prepareProgressive() catch |err| return self.fail(.input, err);
+            if (!ready) return self.fail(.input, error.TruncatedFrame);
+            while (self.window_prefix_offset < self.window_prefix_len) {
+                const inner = self.progressive.?.step(
+                    self.window_prefix[self.window_prefix_offset..self.window_prefix_len],
+                    &.{},
+                ) catch |err| return self.fail(.input, self.mapHistoryError(err));
+                self.window_prefix_offset += @intCast(inner.progress.input_read);
+                if (inner.status == .need_output) return;
+                if (inner.status == .done) {
+                    self.phase = .done;
+                    self.commitFrame();
+                    return;
+                }
+                if (inner.progress.input_read == 0 and inner.progress.output_written == 0)
+                    return self.fail(.input, error.TruncatedFrame);
+            }
+            self.progressive.?.finish() catch |err| return self.fail(self.phase, self.mapHistoryError(err));
             if (self.progressive.?.snapshot().phase == .done) {
                 self.phase = .done;
                 self.commitFrame();
             }
         }
 
-        fn ensureProgressive(self: *Self) Error!void {
-            if (self.progressive != null) return;
-            if (self.options.max_history_len == 0) return self.fail(.input, error.OutputLimitExceeded);
+        fn prepareProgressive(self: *Self) Error!bool {
+            if (self.progressive != null) return true;
             const output_bound = self.options.expected_output_len orelse self.options.max_output_len;
-            const history_len = @max(1, @min(output_bound, self.options.max_history_len));
-            try self.history.resize(self.allocator, history_len);
+            const plan = (try Codec.historyPlanFromPrefix(
+                self.window_prefix[0..self.window_prefix_len],
+                output_bound,
+                self.options.max_history_len,
+                self.options.decode,
+            )) orelse return false;
+            try self.history.resize(self.allocator, plan.allocation_len);
+            self.history_capped = plan.capped;
             self.progressive = Codec.ProgressiveDecoder.initWithOptions(self.history.items, .{
                 .max_output_len = self.options.max_output_len,
                 .expected_output_len = self.options.expected_output_len,
@@ -217,6 +264,43 @@ pub fn Decoder(comptime Codec: type) type {
                 .metadata_output = self.options.metadata_output,
                 .metadata_block_lengths = self.options.metadata_block_lengths,
             });
+            return true;
+        }
+
+        fn mapHistoryError(self: *const Self, err: Error) Error {
+            return if (self.history_capped and err == error.InvalidMatch)
+                error.OutputLimitExceeded
+            else
+                err;
+        }
+
+        fn completeStep(self: *Self, input_read: usize, output_written: usize, initial_status: core.StepResult.Status) Error!core.StepResult {
+            self.frame_input_read += input_read;
+            self.frame_output_written += output_written;
+            var status = initial_status;
+            if (self.options.expected_compressed_len) |expected| {
+                if (self.frame_input_read == expected) self.input_finished = true;
+                if (status == .done and self.frame_input_read != expected)
+                    return self.fail(.done, error.SizeMismatch);
+            }
+            if (self.input_finished and status == .need_input) {
+                self.progressive.?.finish() catch |err| return self.fail(.input, self.mapHistoryError(err));
+                status = .done;
+            }
+            self.last_status = status;
+            self.phase = switch (status) {
+                .need_input => .input,
+                .need_output => .output,
+                .done => .done,
+            };
+            if (status == .done) self.commitFrame();
+            return result(input_read, output_written, status);
+        }
+
+        fn failWithProgress(self: *Self, phase: Phase, err: Error, input_read: usize, output_written: usize) Error {
+            self.frame_input_read += input_read;
+            self.frame_output_written += output_written;
+            return self.fail(phase, err);
         }
 
         fn commitFrame(self: *Self) void {
