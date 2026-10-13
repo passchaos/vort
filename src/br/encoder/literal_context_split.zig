@@ -71,6 +71,15 @@ const ActiveSymbols = struct {
 };
 const TreeHistograms = [max_trees][256]u32;
 const TreeTotals = [max_trees]u32;
+const assignment_log_cache_limit: usize = 4096;
+const assignment_log_cache: [assignment_log_cache_limit + 1]u16 = blk: {
+    @setEvalBranchQuota(100000);
+    var values: [assignment_log_cache_limit + 1]u16 = undefined;
+    values[0] = 0;
+    for (1..values.len) |value|
+        values[value] = @intCast(fastLog2Q8(@intCast(value)));
+    break :blk values;
+};
 const SuffixMapCosts = [64]u64;
 const scored_map_capacity: usize = 22;
 const ScoredMapEntry = struct {
@@ -538,7 +547,7 @@ fn prepareAssignmentCosts(
         const model_log = fastLog2Q8(tree_total + 256);
         for (active_symbols.symbols[0..active_symbols.len]) |symbol| {
             const modeled = tree[symbol];
-            const symbol_cost = model_log - fastLog2Q8(modeled + 1);
+            const symbol_cost = model_log - assignmentLog2Q8(modeled + 1);
             std.debug.assert(symbol_cost <= std.math.maxInt(u16));
             tree_costs[symbol] = @intCast(symbol_cost);
         }
@@ -582,6 +591,11 @@ fn fastLog2Q8(value: u32) u64 {
     const base = @as(u64, 1) << @intCast(floor);
     const fraction = ((@as(u64, value) - base) << 8) / base;
     return @as(u64, floor) * 256 + fraction;
+}
+
+fn assignmentLog2Q8(value: u32) u64 {
+    if (value <= assignment_log_cache_limit) return assignment_log_cache[value];
+    return fastLog2Q8(value);
 }
 
 fn treeBitCost(allocator: std.mem.Allocator, frequencies: *const [256]u32) !u64 {
@@ -715,6 +729,13 @@ test "literal context prepared assignment costs match reference" {
         try std.testing.expectEqual(reference, prepared);
         try std.testing.expectEqual(reference, sparse);
     }
+}
+
+test "literal context assignment log table matches direct Q8 logs" {
+    for (1..assignment_log_cache_limit + 1) |value|
+        try std.testing.expectEqual(fastLog2Q8(@intCast(value)), assignmentLog2Q8(@intCast(value)));
+    for ([_]u32{ assignment_log_cache_limit + 1, 65535, std.math.maxInt(u32) }) |value|
+        try std.testing.expectEqual(fastLog2Q8(value), assignmentLog2Q8(value));
 }
 
 test "literal context active alphabet covers all byte symbols" {

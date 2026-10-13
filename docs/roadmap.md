@@ -19237,6 +19237,23 @@ reuse, so production keeps the simpler independently owned plans.
   eight-case libbrotli/progressive differential, and nine-row ReleaseFast gate
   remain green.
 
+- Reused exact Q8 logarithms for common clustered-tree symbol frequencies. A
+  roughly 8 KiB immutable table generated at compile time covers values
+  1...4,096, so
+  every RFC mode, target, seed, and reassignment round avoids recomputing the
+  same integer log/fraction values without runtime initialization or mutable
+  global state. Tree-total prices and larger symbol counts keep the original
+  formula. An oracle compares every table entry plus representative fallback
+  and `u32` boundary values against direct computation. Three fixed-CPU-2
+  ReleaseFast `source32k` samples at five iterations reduced the ratio median
+  from 64.517 ms to 64.291 ms (`1.004x`). An alternating fixed-CPU A/B over 11
+  pairs and 20 iterations per process favored the table in nine pairs, with
+  medians of 260.290 ms versus 258.414 ms (`1.007x`). Relative to the original
+  130.426 ms dense clustering path, cumulative speedup is about `2.029x`;
+  output remains 6,474 bytes with checksum 134,695. The Node matrix, eight-case
+  libbrotli/progressive differential, and nine-row ReleaseFast gate remain
+  green.
+
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository
   dictionary, source, README, roadmap, and small-corpus payloads; optional
