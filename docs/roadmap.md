@@ -19019,3 +19019,18 @@ reuse, so production keeps the simpler independently owned plans.
   17-byte-input/31-byte-output progressive decoder independently reproduce all
   four suffix-mode fixtures and a non-contiguous four-tree map
   (`literal_context_cases=5`).
+
+- Extended bounded Brotli literal-context clustering from four to eight trees,
+  evaluating 2/3/4/6/8-tree targets under the same ordered and interleaved seed
+  families. `tree_count` now represents eight directly, encoder histogram,
+  alphabet, length, and payload workspaces scale to the new ceiling, and the
+  general context-map writer switches from simple-prefix codes to a complex
+  canonical Huffman prefix when more than four tree IDs are used. A synthetic
+  oracle recovers eight interleaved LSB6 context families exactly; production
+  ratio arbitration selects an eight-tree English fixture, while the repository
+  dictionary row falls another 301 bytes from 55,210 to 54,909 (667 bytes,
+  1.20%, below the pre-clustering 55,576-byte wire). libbrotli 1.0.9 and Vort's
+  17-byte-input/31-byte-output progressive decoder independently reproduce the
+  new non-contiguous eight-tree complex-map fixture alongside the existing four
+  RFC modes and four-tree map (`literal_context_cases=6`). The nine-row
+  ReleaseFast planned-encode gate remains green.
