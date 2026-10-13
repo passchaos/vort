@@ -196,6 +196,7 @@ pub const XzCheck = xz.Check;
 pub const XzStreamInfo = xz.StreamInfo;
 pub const XzEncodeOptions = xz.EncodeOptions;
 pub const XzEncodeParser = xz.Parser;
+pub const xzMaxEncodeDictionarySize = xz.max_encode_dictionary_size;
 pub const XzFilter = xz.Filter;
 pub const XzIncrementalDecoder = xz.IncrementalDecoder;
 pub const XzIncrementalEncoder = xz.IncrementalEncoder;
@@ -3427,6 +3428,7 @@ test "root 7z exports compressed archive writing" {
 }
 
 test "root XZ exports compressed LZMA2 writing" {
+    try std.testing.expectEqual(@as(usize, 64 * 1024 * 1024), xzMaxEncodeDictionarySize);
     const payload = "root XZ compressed writer\n" ** 256;
     const encoded = try encodeXzAlloc(std.testing.allocator, payload, .{ .check = .crc32 });
     defer std.testing.allocator.free(encoded);

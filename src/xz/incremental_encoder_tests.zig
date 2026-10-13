@@ -142,7 +142,7 @@ test "XZ incremental encoder enforces options input block and pending limits" {
     );
     try std.testing.expectError(
         error.InvalidBlockPlan,
-        xz.IncrementalEncoder.initWithOptions(std.testing.allocator, .{ .dictionary_size = 1024 * 1024 + 1 }),
+        xz.IncrementalEncoder.initWithOptions(std.testing.allocator, .{ .dictionary_size = xz.max_encode_dictionary_size + 1 }),
     );
     try std.testing.expectError(
         error.OutputLimitExceeded,

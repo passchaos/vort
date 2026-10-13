@@ -170,6 +170,56 @@ def main() -> None:
         if xz_tool is not None:
             subprocess.run([xz_tool, "--test", str(dictionary_large)], check=True)
 
+        very_wide_gap = 17 * 65536
+        very_wide_payload = bytearray(very_wide_gap + 8192)
+        very_wide_state = 0x243F6A88
+        for index in range(very_wide_gap):
+            very_wide_state ^= (very_wide_state << 13) & 0xFFFFFFFF
+            very_wide_state ^= very_wide_state >> 17
+            very_wide_state ^= (very_wide_state << 5) & 0xFFFFFFFF
+            very_wide_state &= 0xFFFFFFFF
+            very_wide_payload[index] = very_wide_state & 0xFF
+        very_wide_payload[very_wide_gap:] = very_wide_payload[:8192]
+        very_wide_source = temp / "dictionary-2m.source"
+        very_wide_source.write_bytes(very_wide_payload)
+        dictionary_1m = temp / "dictionary-1m.xz"
+        dictionary_2m = temp / "dictionary-2m.xz"
+        run(
+            args.cli,
+            "encode-xz-file",
+            str(very_wide_source),
+            str(dictionary_1m),
+            "crc64",
+            "2097152",
+            "none",
+            "1048576",
+        )
+        run(
+            args.cli,
+            "encode-xz-file",
+            str(very_wide_source),
+            str(dictionary_2m),
+            "crc64",
+            "2097152",
+            "none",
+            "2097152",
+        )
+        dictionary_1m_bytes = dictionary_1m.read_bytes()
+        dictionary_2m_bytes = dictionary_2m.read_bytes()
+        dictionary_2m_saved = len(dictionary_1m_bytes) - len(dictionary_2m_bytes)
+        if dictionary_2m_saved < 7000:
+            raise AssertionError(
+                f"2 MiB XZ dictionary saved only {dictionary_2m_saved} bytes"
+            )
+        if lzma.decompress(dictionary_2m_bytes, format=lzma.FORMAT_XZ) != very_wide_payload:
+            raise AssertionError("Python could not decode Vort 2 MiB dictionary output")
+        if "max_dictionary=2097152" not in run(
+            args.cli, "inspect-xz-file", str(dictionary_2m)
+        ).stdout:
+            raise AssertionError("Vort 2 MiB XZ dictionary property was not preserved")
+        if xz_tool is not None:
+            subprocess.run([xz_tool, "--test", str(dictionary_2m)], check=True)
+
         lazy_source = temp / "text.source"
         lazy_archive = temp / "text.lazy.vort.xz"
         run(
@@ -434,8 +484,10 @@ def main() -> None:
         f"xz_diff=ok directions=2 cases={len(cases)} compressed_bytes={compressed_total} "
         f"decoded_bytes={decoded_total} concatenated_bytes={len(expected_concatenated)} "
         f"filter_cases={len(filter_cases)} writer_modes=2 multiblock_count={multiblock_count}"
-        f" dictionary_cases=1 dictionary_default={len(default_bytes)}"
+        f" dictionary_cases=2 dictionary_default={len(default_bytes)}"
         f" dictionary_large={len(large_bytes)} dictionary_saved={dictionary_saved}"
+        f" dictionary_1m={len(dictionary_1m_bytes)}"
+        f" dictionary_2m={len(dictionary_2m_bytes)} dictionary_2m_saved={dictionary_2m_saved}"
         f" parser_cases=1 lazy_bytes={len(lazy_bytes)}"
         f" modern_filter_cases={len(modern_filter_cases)}"
         f" modern_7zip={modern_seven_zip_tool is not None}"

@@ -2,7 +2,7 @@ const std = @import("std");
 const core = @import("../core.zig");
 const lz77 = @import("../lz77.zig");
 
-pub const max_window_len: usize = 1024 * 1024;
+pub const max_window_len: usize = 64 * 1024 * 1024;
 pub const max_match_len: usize = 273;
 const min_match_len: usize = 3;
 const hash_table_size: usize = 1 << 16;

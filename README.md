@@ -286,7 +286,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   none/CRC-32/CRC-64/SHA-256 checks, multi-block and concatenated-stream
   handling, bounded APIs and metadata inspection, plus deterministic
   filter-aware XZ writing with greedy LZMA matches, repeat distances, a stored
-  fallback, caller-selected 4 KiB...1 MiB cross-chunk LZMA2 dictionary reuse,
+  fallback, caller-selected 4 KiB...64 MiB cross-chunk LZMA2 dictionary reuse,
   and separate greedy/lazy ratio encode APIs, plus block-bounded
   caller-output incremental decoding with
   arbitrary input fragmentation, zero-output backpressure, stream padding,

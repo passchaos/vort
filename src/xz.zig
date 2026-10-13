@@ -14,6 +14,7 @@ pub const IncrementalEncoder = incremental_encoder.Encoder;
 pub const EncodeOptions = writer.EncodeOptions;
 pub const Parser = writer.Parser;
 pub const Filter = writer.Filter;
+pub const max_encode_dictionary_size = lzma2_writer.max_dictionary_size;
 pub const encodeAlloc = writer.encodeAlloc;
 pub const encodeLazyAlloc = writer.encodeLazyAlloc;
 pub const encodeLazyAppend = writer.encodeLazyAppend;

@@ -16,13 +16,13 @@ pub fn dictionaryProperty(requested_size: usize) core.Error!u8 {
     if (requested_size < dictionary_size or requested_size > max_dictionary_size)
         return error.InvalidBlockPlan;
     var property: u8 = 0;
-    while (property <= 16) : (property += 1)
+    while (property <= 28) : (property += 1)
         if (requested_size <= dictionarySize(property)) return property;
     unreachable;
 }
 
 fn dictionarySize(property: u8) usize {
-    std.debug.assert(property <= 16);
+    std.debug.assert(property <= 28);
     return @as(usize, 2 | (property & 1)) << @intCast(property / 2 + 11);
 }
 
@@ -241,7 +241,12 @@ test "LZMA2 dictionary properties round requested sizes upward" {
         .{ .requested = 64 * 1024, .property = 8, .advertised = 64 * 1024 },
         .{ .requested = 128 * 1024, .property = 10, .advertised = 128 * 1024 },
         .{ .requested = 256 * 1024, .property = 12, .advertised = 256 * 1024 },
-        .{ .requested = max_dictionary_size, .property = 16, .advertised = 1024 * 1024 },
+        .{ .requested = 1024 * 1024, .property = 16, .advertised = 1024 * 1024 },
+        .{ .requested = 4 * 1024 * 1024, .property = 20, .advertised = 4 * 1024 * 1024 },
+        .{ .requested = 8 * 1024 * 1024, .property = 22, .advertised = 8 * 1024 * 1024 },
+        .{ .requested = 16 * 1024 * 1024, .property = 24, .advertised = 16 * 1024 * 1024 },
+        .{ .requested = 32 * 1024 * 1024, .property = 26, .advertised = 32 * 1024 * 1024 },
+        .{ .requested = max_dictionary_size, .property = 28, .advertised = 64 * 1024 * 1024 },
     };
     for (cases) |case| {
         try std.testing.expectEqual(case.property, try dictionaryProperty(case.requested));
@@ -423,6 +428,56 @@ test "raw LZMA2 wide dictionary reaches beyond shared u16 history" {
     const decoded = try @import("container.zig").decode7zPayloadAllocLimited(
         std.testing.allocator,
         large_encoded.items,
+        property,
+        input.len,
+        requested_dictionary_size,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "raw LZMA2 dictionary reaches beyond one MiB history" {
+    const requested_dictionary_size = 2 * 1024 * 1024;
+    const narrow_dictionary_size = 1024 * 1024;
+    const repeated_len = 8192;
+    const gap_len = 17 * max_uncompressed_chunk;
+    const input = try std.testing.allocator.alloc(u8, gap_len + repeated_len);
+    defer std.testing.allocator.free(input);
+    var state: u32 = 0x243f_6a88;
+    for (input[0..gap_len]) |*byte| {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        byte.* = @truncate(state);
+    }
+    @memcpy(input[gap_len..], input[0..repeated_len]);
+
+    var narrow: std.ArrayList(u8) = .empty;
+    defer narrow.deinit(std.testing.allocator);
+    _ = try appendCompressedPayloadWithDictionarySize(
+        std.testing.allocator,
+        &narrow,
+        input,
+        narrow_dictionary_size,
+    );
+    var wide: std.ArrayList(u8) = .empty;
+    defer wide.deinit(std.testing.allocator);
+    _ = try appendCompressedPayloadWithDictionarySize(
+        std.testing.allocator,
+        &wide,
+        input,
+        requested_dictionary_size,
+    );
+    const final_chunk = 17 * (3 + max_uncompressed_chunk);
+    try std.testing.expectEqual(@as(u8, 2), narrow.items[final_chunk]);
+    try std.testing.expectEqual(@as(u8, 0xc0), wide.items[final_chunk]);
+    try std.testing.expect(wide.items.len + 7000 < narrow.items.len);
+
+    const property = try dictionaryProperty(requested_dictionary_size);
+    try std.testing.expectEqual(@as(u8, 18), property);
+    const decoded = try @import("container.zig").decode7zPayloadAllocLimited(
+        std.testing.allocator,
+        wide.items,
         property,
         input.len,
         requested_dictionary_size,

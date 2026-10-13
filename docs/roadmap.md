@@ -18971,3 +18971,18 @@ reuse, so production keeps the simpler independently owned plans.
   tests, Large Window fixture, nine dynamic external fixtures, AArch64
   ReleaseFast compile, and planned encode gate pass; the complete upstream
   matrix and full repository test graph were not run.
+
+- Extended pure-Zig XZ/LZMA2 encoding from a 1 MiB dictionary ceiling through
+  the common 2/3/4/6/8/12/16/24/32/48/64 MiB tiers (LZMA2 properties 18...28).
+  The LZMA-specific `u32`-distance streaming matcher now accepts a 64 MiB
+  caller bound while retaining a block-local predecessor ring sized only to
+  `min(dictionary, block input)`; shared LZ77 tokens and every other codec stay
+  unchanged. `xzMaxEncodeDictionarySize` exposes the 64 MiB ceiling. A frozen
+  1,122,304-byte corpus places an 8 KiB repeat 1,114,112 bytes back: a 1 MiB
+  dictionary stores the final chunk, while 2 MiB emits a compressed `0xc0`
+  chunk and saves exactly 8,144 bytes. Vort round trips the raw LZMA2 payload;
+  the complete XZ differential independently decodes the property-18 stream
+  through Python `lzma` and system `xz --test`, verifies the 2 MiB inspection
+  metadata, and raises `dictionary_cases` from one to two. Property boundary,
+  real-distance, XZ focused, external differential, AArch64 ReleaseFast, and
+  nine-row encode-gate checks pass; no full repository test was run.
