@@ -1,6 +1,8 @@
 const std = @import("std");
 const huffman = @import("../../huffman.zig");
 const command_plan = @import("command_plan.zig");
+const complex_prefix = @import("complex_prefix.zig");
+const context_map_encoder = @import("context_map.zig");
 const literal_context = @import("literal_context.zig");
 
 const min_literal_count: usize = 128;
@@ -55,33 +57,33 @@ pub const Candidate = struct {
 /// Keeping the search in a separate noinline routine prevents the 64 KiB
 /// context histogram from inflating the already large Brotli wire encoder
 /// frame.
-pub noinline fn choose(input: []const u8, commands: []const command_plan.Command) ?Candidate {
-    return chooseWithClusters(input, commands, true, max_trees);
+pub noinline fn choose(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command) !?Candidate {
+    return chooseWithClusters(allocator, input, commands, true, max_trees);
 }
 
-pub noinline fn chooseUpTo(input: []const u8, commands: []const command_plan.Command, max_tree_count: usize) ?Candidate {
+pub noinline fn chooseUpTo(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, max_tree_count: usize) !?Candidate {
     if (max_tree_count < 2 or max_tree_count > max_trees) return null;
-    return chooseWithClusters(input, commands, true, max_tree_count);
+    return chooseWithClusters(allocator, input, commands, true, max_tree_count);
 }
 
-pub noinline fn chooseSuffix(input: []const u8, commands: []const command_plan.Command) ?Candidate {
-    return chooseWithClusters(input, commands, false, 2);
+pub noinline fn chooseSuffix(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command) !?Candidate {
+    return chooseWithClusters(allocator, input, commands, false, 2);
 }
 
-fn chooseWithClusters(input: []const u8, commands: []const command_plan.Command, include_clusters: bool, max_tree_count: usize) ?Candidate {
+fn chooseWithClusters(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, include_clusters: bool, max_tree_count: usize) !?Candidate {
     var best: ?Candidate = null;
     for (0..4) |mode_value| {
-        const candidate = chooseModeWithClusters(input, commands, @intCast(mode_value), include_clusters, max_tree_count) orelse continue;
+        const candidate = try chooseModeWithClusters(allocator, input, commands, @intCast(mode_value), include_clusters, max_tree_count) orelse continue;
         if (best == null or candidate.savings_bits > best.?.savings_bits) best = candidate;
     }
     return best;
 }
 
-fn chooseMode(input: []const u8, commands: []const command_plan.Command, mode: u2) ?Candidate {
-    return chooseModeWithClusters(input, commands, mode, true, max_trees);
+fn chooseMode(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, mode: u2) !?Candidate {
+    return chooseModeWithClusters(allocator, input, commands, mode, true, max_trees);
 }
 
-fn chooseModeWithClusters(input: []const u8, commands: []const command_plan.Command, mode: u2, include_clusters: bool, max_tree_count: usize) ?Candidate {
+fn chooseModeWithClusters(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, mode: u2, include_clusters: bool, max_tree_count: usize) !?Candidate {
     var by_context: [64][256]u32 = @splat(@splat(0));
     var total: [256]u32 = @splat(0);
     var literal_count: usize = 0;
@@ -99,36 +101,36 @@ fn chooseModeWithClusters(input: []const u8, commands: []const command_plan.Comm
     }
     if (literal_count < min_literal_count) return null;
 
-    const baseline_lengths = huffman.treeCodeLengths(256, &total, 15);
-    const baseline_bits = weightedBits(&total, &baseline_lengths);
+    const baseline_bits = try treeBitCost(allocator, &total);
     var left: [256]u32 = @splat(0);
     var left_count: usize = 0;
     var best: ?Candidate = null;
-    var best_cutoff: u6 = 1;
-    var best_bits = baseline_bits;
     for (1..64) |cutoff| {
         for (&left, &by_context[cutoff - 1]) |*sum, count| sum.* += count;
         for (by_context[cutoff - 1]) |count| left_count += count;
         if (left_count == 0 or left_count == literal_count) continue;
         var right: [256]u32 = undefined;
         for (&right, &total, &left) |*remaining, all, used| remaining.* = all - used;
-        const left_lengths = huffman.treeCodeLengths(256, &left, 15);
-        const right_lengths = huffman.treeCodeLengths(256, &right, 15);
-        const bits = weightedBits(&left, &left_lengths) + weightedBits(&right, &right_lengths);
-        if (bits < best_bits) {
-            best_bits = bits;
-            best_cutoff = @intCast(cutoff);
+        const candidate = Candidate.suffix(mode, @intCast(cutoff), 0);
+        const map_plan = try context_map_encoder.choose(allocator, &candidate.context_map, candidate.tree_count);
+        const left_bits = try treeBitCost(allocator, &left);
+        const right_bits = try treeBitCost(allocator, &right);
+        const candidate_bits = left_bits + right_bits + map_plan.bit_cost;
+        const savings = baseline_bits -| candidate_bits;
+        if (savings < min_payload_savings_bits) continue;
+        if (best == null or savings > best.?.savings_bits) {
+            var retained = candidate;
+            retained.savings_bits = savings;
+            best = retained;
         }
     }
-    const savings = baseline_bits - best_bits;
-    if (savings >= min_payload_savings_bits)
-        best = Candidate.suffix(mode, best_cutoff, savings);
 
     if (!include_clusters) return best;
     for ([_]usize{ 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64 }) |requested_tree_count| {
         if (requested_tree_count > max_tree_count) continue;
         for ([_]Seed{ .ordered, .interleaved }) |seed| {
-            const clustered = clusterContexts(
+            const clustered = try clusterContexts(
+                allocator,
                 mode,
                 &by_context,
                 baseline_bits,
@@ -146,12 +148,13 @@ fn chooseModeWithClusters(input: []const u8, commands: []const command_plan.Comm
 const Seed = enum { ordered, interleaved };
 
 fn clusterContexts(
+    allocator: std.mem.Allocator,
     mode: u2,
     by_context: *const [64][256]u32,
     baseline_bits: u64,
     requested_tree_count: usize,
     seed: Seed,
-) ?Candidate {
+) !?Candidate {
     var populated: [64]u8 = undefined;
     var populated_count: usize = 0;
     for (by_context, 0..) |histogram, context| {
@@ -221,14 +224,14 @@ fn clusterContexts(
         }
     }
 
-    var payload_bits: u64 = 0;
+    var candidate_bits: u64 = 0;
     for (tree_histograms[0..tree_count]) |*histogram| {
-        const lengths = huffman.treeCodeLengths(256, histogram, 15);
-        payload_bits += weightedBits(histogram, &lengths);
+        candidate_bits += try treeBitCost(allocator, histogram);
     }
-    const savings = baseline_bits -| payload_bits;
-    const required_savings = min_payload_savings_bits * (tree_count - 1);
-    if (savings < required_savings) return null;
+    const map_plan = try context_map_encoder.choose(allocator, &context_map, tree_count);
+    candidate_bits += map_plan.bit_cost;
+    const savings = baseline_bits -| candidate_bits;
+    if (savings < min_payload_savings_bits) return null;
     return .{
         .mode = mode,
         .tree_count = @intCast(tree_count),
@@ -276,6 +279,21 @@ fn fastLog2Q8(value: u32) u64 {
     return @as(u64, floor) * 256 + fraction;
 }
 
+fn treeBitCost(allocator: std.mem.Allocator, frequencies: *const [256]u32) !u64 {
+    var alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
+    try command_plan.alphabetFromFrequenciesInto(256, &alphabet, frequencies);
+    const lengths = try alphabet.codeLengths(frequencies);
+    var cost = weightedBits(frequencies, &lengths);
+    if (alphabet.len <= 4) {
+        cost += 4 + @as(u64, alphabet.len) * 8 + @intFromBool(alphabet.len == 4);
+    } else {
+        var highest: usize = 0;
+        for (alphabet.symbols[0..alphabet.len]) |symbol| highest = @max(highest, symbol);
+        cost += try complex_prefix.bitCost(allocator, 256, &lengths, highest + 1);
+    }
+    return cost;
+}
+
 fn weightedBits(frequencies: *const [256]u32, lengths: *const [256]u4) u64 {
     var bits: u64 = 0;
     for (frequencies, lengths) |frequency, length| bits += @as(u64, frequency) * length;
@@ -289,10 +307,37 @@ test "literal context split finds a predictive RFC mode" {
         .insert_start = 0,
         .insert_len = input.len,
     }};
-    const candidate = choose(input, &commands) orelse return error.TestUnexpectedResult;
+    const candidate = try choose(std.testing.allocator, input, &commands) orelse return error.TestUnexpectedResult;
     try std.testing.expect(candidate.mode <= literal_context.mode_signed);
     try std.testing.expect(candidate.tree_count >= 2 and candidate.tree_count <= max_trees);
     try std.testing.expect(candidate.savings_bits >= min_payload_savings_bits);
+}
+
+test "literal context split reports exact tree and map savings" {
+    const input = ("the quick brown fox jumps over the lazy dog\n" ** 16) ++
+        ("THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG\n" ** 16);
+    const commands = [_]command_plan.Command{.{
+        .insert_start = 0,
+        .insert_len = input.len,
+    }};
+    const candidate = try chooseMode(std.testing.allocator, input, &commands, literal_context.mode_utf8) orelse
+        return error.TestUnexpectedResult;
+    var total: [256]u32 = @splat(0);
+    var trees: [max_trees][256]u32 = @splat(@splat(0));
+    for (input, 0..) |literal, position| {
+        const previous = if (position == 0) 0 else input[position - 1];
+        const second_previous = if (position < 2) 0 else input[position - 2];
+        const context = literal_context.value(candidate.mode, previous, second_previous);
+        total[literal] += 1;
+        trees[candidate.treeFor(context)][literal] += 1;
+    }
+    const baseline_bits = try treeBitCost(std.testing.allocator, &total);
+    var candidate_bits: u64 = 0;
+    for (trees[0..candidate.tree_count]) |*histogram|
+        candidate_bits += try treeBitCost(std.testing.allocator, histogram);
+    const map_plan = try context_map_encoder.choose(std.testing.allocator, &candidate.context_map, candidate.tree_count);
+    candidate_bits += map_plan.bit_cost;
+    try std.testing.expectEqual(baseline_bits - candidate_bits, candidate.savings_bits);
 }
 
 test "literal context split rejects stationary literals" {
@@ -301,7 +346,7 @@ test "literal context split rejects stationary literals" {
         .insert_start = 0,
         .insert_len = input.len,
     }};
-    try std.testing.expectEqual(@as(?Candidate, null), choose(input, &commands));
+    try std.testing.expectEqual(@as(?Candidate, null), try choose(std.testing.allocator, input, &commands));
 }
 
 test "literal context split builds candidates for every RFC mode" {
@@ -335,7 +380,7 @@ test "literal context split builds candidates for every RFC mode" {
                 command_index += 1;
             }
         }
-        const candidate = chooseMode(input, commands, case.mode) orelse return error.TestUnexpectedResult;
+        const candidate = try chooseMode(std.testing.allocator, input, commands, case.mode) orelse return error.TestUnexpectedResult;
         try std.testing.expectEqual(case.mode, candidate.mode);
     }
 }
@@ -360,7 +405,7 @@ test "literal context split clusters interleaved contexts into four trees" {
             command_index += 1;
         }
     }
-    const candidate = chooseMode(input, commands, literal_context.mode_lsb6) orelse return error.TestUnexpectedResult;
+    const candidate = try chooseMode(std.testing.allocator, input, commands, literal_context.mode_lsb6) orelse return error.TestUnexpectedResult;
     try std.testing.expectEqual(literal_context.mode_lsb6, candidate.mode);
     try std.testing.expectEqual(@as(u7, 4), candidate.tree_count);
     for (0..64) |context|
@@ -387,7 +432,7 @@ test "literal context split clusters interleaved contexts into eight trees" {
             command_index += 1;
         }
     }
-    const candidate = choose(input, commands) orelse return error.TestUnexpectedResult;
+    const candidate = try choose(std.testing.allocator, input, commands) orelse return error.TestUnexpectedResult;
     try std.testing.expectEqual(literal_context.mode_lsb6, candidate.mode);
     try std.testing.expectEqual(@as(u7, 8), candidate.tree_count);
     for (0..64) |context|
@@ -414,7 +459,7 @@ test "literal context split clusters interleaved contexts into sixteen trees" {
             command_index += 1;
         }
     }
-    const candidate = choose(input, commands) orelse return error.TestUnexpectedResult;
+    const candidate = try choose(std.testing.allocator, input, commands) orelse return error.TestUnexpectedResult;
     try std.testing.expectEqual(literal_context.mode_lsb6, candidate.mode);
     try std.testing.expectEqual(@as(u7, 16), candidate.tree_count);
     for (0..64) |context|
@@ -441,7 +486,7 @@ test "literal context split clusters every literal context independently" {
             command_index += 1;
         }
     }
-    const candidate = choose(input, commands) orelse return error.TestUnexpectedResult;
+    const candidate = try choose(std.testing.allocator, input, commands) orelse return error.TestUnexpectedResult;
     try std.testing.expectEqual(literal_context.mode_lsb6, candidate.mode);
     try std.testing.expectEqual(@as(u7, 64), candidate.tree_count);
     for (0..64) |context|

@@ -19076,3 +19076,16 @@ reuse, so production keeps the simpler independently owned plans.
   maps alongside the plain 64-tree complex map (`literal_context_cases=8`).
   The repository dictionary wire falls from 54,889 to 54,887 bytes, and the
   nine-row ReleaseFast planned-encode gate remains green.
+
+- Moved literal-context proposal ranking from payload-only Huffman lengths to
+  allocator-aware exact entropy wire cost. The one-tree baseline and every
+  suffix/clustered candidate now include each literal tree's simple-or-complex
+  prefix header and payload plus the best exact plain/MTF/RLE context-map plan.
+  The former per-extra-tree 128-bit proxy gate is replaced by one 128-bit net
+  wire lead, while complete Brotli encoding still performs final byte-level
+  arbitration. A dedicated oracle rebuilds the selected UTF8 histograms and
+  requires reported savings to equal baseline tree wire minus all candidate
+  tree/map bits. Production suffix maps use the same planner as scoring, so
+  proposal and emission cannot diverge. The Node matrix preserves the 54,887-
+  byte dictionary wire; libbrotli/progressive context fixtures fall another
+  nine aggregate bytes, and the nine-row ReleaseFast gate remains green.

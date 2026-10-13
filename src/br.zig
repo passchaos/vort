@@ -3840,9 +3840,9 @@ fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const 
     var literal_split_utf8_cutoff: ?u6 = if (primary_context) |candidate| candidate.suffixCutoff() else null;
     const adaptive_contexts = if (options.try_recent_distances)
         [3]?literal_context_split.Candidate{
-            literal_context_split.chooseSuffix(input, commands),
-            literal_context_split.chooseUpTo(input, commands, 16),
-            literal_context_split.choose(input, commands),
+            try literal_context_split.chooseSuffix(allocator, input, commands),
+            try literal_context_split.chooseUpTo(allocator, input, commands, 16),
+            try literal_context_split.choose(allocator, input, commands),
         }
     else
         [3]?literal_context_split.Candidate{ null, null, null };
@@ -26347,7 +26347,6 @@ fn writePlannedCompressedHeaderLiteralContexts(
 }
 
 fn writeLiteralContextMap(allocator: std.mem.Allocator, writer: *BitWriter, candidate: literal_context_split.Candidate) Error!void {
-    if (candidate.suffixCutoff()) |cutoff| return writeLiteralSuffixContextMap(allocator, writer, cutoff);
     if (candidate.tree_count < 2 or candidate.tree_count > literal_context_split.max_trees)
         return error.InvalidBlockPlan;
     var used: [literal_context_split.max_trees]bool = @splat(false);
