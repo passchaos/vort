@@ -68,6 +68,7 @@ const ActiveSymbols = struct {
     symbols: [256]u8,
     len: u16,
 };
+const SuffixMapCosts = [64]u64;
 const Analysis = struct {
     by_mode: [mode_count]ContextHistograms,
     total: [256]u32,
@@ -102,6 +103,8 @@ pub noinline fn chooseProposals(allocator: std.mem.Allocator, input: []const u8,
     const baseline_bits = try treeBitCost(allocator, &analysis.total);
     var active_symbols: ActiveSymbols = undefined;
     buildActiveSymbols(&analysis.total, &active_symbols);
+    var suffix_map_costs: SuffixMapCosts = undefined;
+    try buildSuffixMapCosts(allocator, &suffix_map_costs);
     var proposals: Proposals = .{};
     for (&analysis.by_mode, 0..) |*by_context, mode_value| {
         const mode_proposals = try chooseModeFromHistograms(
@@ -112,6 +115,7 @@ pub noinline fn chooseProposals(allocator: std.mem.Allocator, input: []const u8,
             analysis.literal_count,
             baseline_bits,
             &active_symbols,
+            &suffix_map_costs,
             true,
             max_trees,
         );
@@ -193,6 +197,8 @@ fn chooseModeProposals(allocator: std.mem.Allocator, input: []const u8, commands
     const baseline_bits = try treeBitCost(allocator, &total);
     var active_symbols: ActiveSymbols = undefined;
     buildActiveSymbols(&total, &active_symbols);
+    var suffix_map_costs: SuffixMapCosts = undefined;
+    try buildSuffixMapCosts(allocator, &suffix_map_costs);
     return chooseModeFromHistograms(
         allocator,
         mode,
@@ -201,6 +207,7 @@ fn chooseModeProposals(allocator: std.mem.Allocator, input: []const u8, commands
         literal_count,
         baseline_bits,
         &active_symbols,
+        &suffix_map_costs,
         include_clusters,
         max_tree_count,
     );
@@ -214,6 +221,7 @@ fn chooseModeFromHistograms(
     literal_count: usize,
     baseline_bits: u64,
     active_symbols: *const ActiveSymbols,
+    suffix_map_costs: *const SuffixMapCosts,
     include_clusters: bool,
     max_tree_count: usize,
 ) !Proposals {
@@ -227,10 +235,9 @@ fn chooseModeFromHistograms(
         var right: [256]u32 = undefined;
         for (&right, total, &left) |*remaining, all, used| remaining.* = all - used;
         const candidate = Candidate.suffix(mode, @intCast(cutoff), 0);
-        const map_plan = try context_map_encoder.choose(allocator, &candidate.context_map, candidate.tree_count);
         const left_bits = try treeBitCost(allocator, &left);
         const right_bits = try treeBitCost(allocator, &right);
-        const candidate_bits = left_bits + right_bits + map_plan.bit_cost;
+        const candidate_bits = left_bits + right_bits + suffix_map_costs[cutoff];
         const savings = baseline_bits -| candidate_bits;
         if (savings < min_payload_savings_bits) continue;
         if (best == null or savings > best.?.savings_bits) {
@@ -421,6 +428,15 @@ fn buildActiveSymbols(total: *const [256]u32, active: *ActiveSymbols) void {
         if (frequency == 0) continue;
         active.symbols[active.len] = @intCast(symbol);
         active.len += 1;
+    }
+}
+
+fn buildSuffixMapCosts(allocator: std.mem.Allocator, costs: *SuffixMapCosts) !void {
+    costs[0] = 0;
+    for (1..64) |cutoff| {
+        const candidate = Candidate.suffix(0, @intCast(cutoff), 0);
+        const plan = try context_map_encoder.choose(allocator, &candidate.context_map, candidate.tree_count);
+        costs[cutoff] = plan.bit_cost;
     }
 }
 
@@ -625,6 +641,17 @@ test "literal context active alphabet covers all byte symbols" {
     buildActiveSymbols(&total, &active);
     try std.testing.expectEqual(@as(u16, 255), active.len);
     try std.testing.expect(std.mem.indexOfScalar(u8, active.symbols[0..active.len], 17) == null);
+}
+
+test "literal context suffix map costs match independent planning" {
+    var costs: SuffixMapCosts = undefined;
+    try buildSuffixMapCosts(std.testing.allocator, &costs);
+    try std.testing.expectEqual(@as(u64, 0), costs[0]);
+    for (1..64) |cutoff| {
+        const candidate = Candidate.suffix(literal_context.mode_signed, @intCast(cutoff), 0);
+        const plan = try context_map_encoder.choose(std.testing.allocator, &candidate.context_map, candidate.tree_count);
+        try std.testing.expectEqual(plan.bit_cost, costs[cutoff]);
+    }
 }
 
 test "literal context sparse tree aggregation matches dense reference" {
