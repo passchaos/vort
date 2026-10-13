@@ -152,6 +152,12 @@ def main() -> int:
     if actual != expected:
         raise SystemExit("four-command-types: node output mismatch")
     print(f"brotli planned four-command-types node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = b"a" * (64 * 1024 + 8192 * 4)
+    encoded = subprocess.check_output([sys.argv[1], "four-distance-types"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("four-distance-types: node output mismatch")
+    print(f"brotli planned four-distance-types node diff: encoded={len(encoded)} decoded={len(actual)}")
     state = 0x12345678
     random_tail = bytearray(512)
     for i in range(len(random_tail)):

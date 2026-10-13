@@ -33,6 +33,7 @@ pub fn main(init: std.process.Init) !void {
     defer real_files.deinit(init.gpa);
     var real_limit: usize = 2 * 1024 * 1024;
     var only_four_command_types = false;
+    var only_four_distance_types = false;
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--real-file")) {
             try real_files.append(init.gpa, args.next() orelse return error.MissingCorpusPath);
@@ -41,11 +42,14 @@ pub fn main(init: std.process.Init) !void {
             if (real_limit == 0) return error.InvalidBlockPlan;
         } else if (std.mem.eql(u8, arg, "--only-four-command-types")) {
             only_four_command_types = true;
+        } else if (std.mem.eql(u8, arg, "--only-four-distance-types")) {
+            only_four_distance_types = true;
         } else return error.UnknownArgument;
     }
 
     var reference = try libbrotli.Runtime.open();
     defer reference.deinit();
+    if (only_four_command_types and only_four_distance_types) return error.InvalidBlockPlan;
     if (only_four_command_types) {
         if (real_files.items.len != 0) return error.InvalidBlockPlan;
         const fixture = try vort.br.IncrementalTestSupport.encodeFourCommandTypes(init.gpa);
@@ -63,6 +67,28 @@ pub fn main(init: std.process.Init) !void {
         try stdout.interface.print(
             "br_upstream_four_command_types=ok encoded_bytes={d} decoded_bytes={d} command_types={d} reference_version={x}\n",
             .{ fixture.encoded.len, fixture.payload.len, summary.max_command_block_types, reference.version() },
+        );
+        try stdout.interface.flush();
+        return;
+    }
+    if (only_four_distance_types) {
+        if (real_files.items.len != 0) return error.InvalidBlockPlan;
+        const fixture = try vort.br.IncrementalTestSupport.encodeFourDistanceTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        const summary = try vort.brSummarizeStreamAlloc(init.gpa, fixture.encoded);
+        if (summary.max_distance_block_types != 4 or
+            summary.max_distance_context_trees != 4) return error.ReferenceEncodeFailed;
+        const decoded = try init.gpa.alloc(u8, fixture.payload.len);
+        defer init.gpa.free(decoded);
+        try reference.decode(fixture.encoded, decoded);
+        if (!std.mem.eql(u8, fixture.payload, decoded)) return error.ReferenceDecodeFailed;
+        try decodeProgressChunks(init.gpa, fixture.encoded, fixture.payload, 16, 17, 31);
+        var buffer: [256]u8 = undefined;
+        var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
+        try stdout.interface.print(
+            "br_upstream_four_distance_types=ok encoded_bytes={d} decoded_bytes={d} distance_types={d} distance_trees={d} reference_version={x}\n",
+            .{ fixture.encoded.len, fixture.payload.len, summary.max_distance_block_types, summary.max_distance_context_trees, reference.version() },
         );
         try stdout.interface.flush();
         return;
@@ -952,6 +978,18 @@ pub fn main(init: std.process.Init) !void {
     if (!std.mem.eql(u8, dictionary_bytes, planned_command_split_decoded)) return error.ReferenceDecodeFailed;
     try decodeProgressChunks(init.gpa, planned_command_split, dictionary_bytes, 16, 17, 31);
     planned_command_split_cases += 1;
+    planned_distance_split_cases += 1;
+    const planned_four_distance = try vort.br.IncrementalTestSupport.encodeFourDistanceTypes(init.gpa);
+    defer init.gpa.free(planned_four_distance.encoded);
+    defer init.gpa.free(planned_four_distance.payload);
+    const planned_four_distance_summary = try vort.brSummarizeStreamAlloc(init.gpa, planned_four_distance.encoded);
+    if (planned_four_distance_summary.max_distance_block_types != 4 or
+        planned_four_distance_summary.max_distance_context_trees != 4) return error.ReferenceEncodeFailed;
+    const planned_four_distance_decoded = try init.gpa.alloc(u8, planned_four_distance.payload.len);
+    defer init.gpa.free(planned_four_distance_decoded);
+    try reference.decode(planned_four_distance.encoded, planned_four_distance_decoded);
+    if (!std.mem.eql(u8, planned_four_distance.payload, planned_four_distance_decoded)) return error.ReferenceDecodeFailed;
+    try decodeProgressChunks(init.gpa, planned_four_distance.encoded, planned_four_distance.payload, 16, 17, 31);
     planned_distance_split_cases += 1;
     const planned_clustered = try vort.br.IncrementalTestSupport.encodeClusteredCommandTypes(init.gpa);
     defer init.gpa.free(planned_clustered.encoded);

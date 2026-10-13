@@ -18805,12 +18805,35 @@ reuse, so production keeps the simpler independently owned plans.
   now scale to four types; block switches use the standard implicit
   0→1→2→3 sequence. A deterministic 8,192-command fixture selects the four-tree
   wire at 202,100 bytes, round trips to 1,451,383 bytes, survives every injected
-  allocation failure, and decodes independently through Node and libbrotli
-  1.1.0 plus Vort's 17-byte-input/31-byte-output progressive path. The default
-  upstream differential permanently includes the case and raises its expected
-  `planned_command_split_cases` counter to five; a new focused flag runs only
+  allocation failure, and decodes independently through Node and runtime
+  libbrotli 1.0.9 plus Vort's 17-byte-input/31-byte-output progressive path. The
+  default upstream differential permanently includes the case and raises its
+  expected `planned_command_split_cases` counter to five; a new focused flag runs only
   this external oracle for minimal validation. The 10 command-split planner
   tests, related writer tests, complete Node planned differential, focused
+  libbrotli/progressive differential, AArch64 ReleaseFast compile, and 9-row
+  planned encode gate pass. Neither the complete upstream matrix nor the full
+  repository test graph was run.
+
+- Extended Brotli distance splitting from one bounded two-tree boundary to
+  independent A-B-C and A-B-C-D regions. Five prefix histograms now score all
+  valid boundary pairs and triples with 512-symbol minimum regions; exact
+  Huffman payload cost must predict at least 4,400 saved bits, and each extra
+  tree must lead the best lower-tree proposal by 1,024 bits before a complete
+  wire is materialized. Unsplit, two-, three-, and four-tree wires still
+  compete by exact byte size. Production frequency, alphabet, code-length,
+  encoder, block-length, and context-map state now scales to four distance
+  block types. The writer emits standard implicit 0→1→2→3 switches and full
+  identity maps across all four distance contexts per type. A deterministic
+  8,192-distance fixture selects a 13,083-byte four-tree stream and round trips
+  to 98,304 bytes through Vort, Node, runtime libbrotli 1.0.9, and the
+  17-byte-input/31-byte-output progressive decoder; the forced three-tree wire
+  is independently covered and every allocation failure is released. The
+  ordinary `ratio-literal-split` Node row also falls 56,387→56,193 bytes,
+  providing a non-fixture ratio win. The default upstream matrix includes the
+  new case and raises the expected `planned_distance_split_cases` counter to
+  two; a focused flag validates only this oracle. Six distance-split planner
+  tests, writer/bounds tests, complete Node planned differential, focused
   libbrotli/progressive differential, AArch64 ReleaseFast compile, and 9-row
   planned encode gate pass. Neither the complete upstream matrix nor the full
   repository test graph was run.
