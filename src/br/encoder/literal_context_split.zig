@@ -126,6 +126,44 @@ const ScoredMapCache = struct {
         self.len += 1;
     }
 };
+const tree_score_cache_capacity: usize = 64;
+const TreeScoreEntry = struct {
+    hash: u64,
+    histogram: [256]u32,
+    bit_cost: u64,
+};
+const TreeScoreCache = struct {
+    entries: [tree_score_cache_capacity]TreeScoreEntry = undefined,
+    occupied: u64 = 0,
+    hits: usize = 0,
+    misses: usize = 0,
+
+    fn get(self: *TreeScoreCache, histogram: *const [256]u32) ?u64 {
+        const hash = treeHistogramHash(histogram);
+        const slot: u6 = @truncate(hash);
+        const mask = @as(u64, 1) << slot;
+        if (self.occupied & mask != 0) {
+            const entry = &self.entries[slot];
+            if (entry.hash == hash and std.mem.eql(u32, &entry.histogram, histogram)) {
+                self.hits += 1;
+                return entry.bit_cost;
+            }
+        }
+        self.misses += 1;
+        return null;
+    }
+
+    fn put(self: *TreeScoreCache, histogram: *const [256]u32, bit_cost: u64) void {
+        const hash = treeHistogramHash(histogram);
+        const slot: u6 = @truncate(hash);
+        self.entries[slot] = .{
+            .hash = hash,
+            .histogram = histogram.*,
+            .bit_cost = bit_cost,
+        };
+        self.occupied |= @as(u64, 1) << slot;
+    }
+};
 const Analysis = struct {
     by_mode: [mode_count]ContextHistograms,
     total: [256]u32,
@@ -432,6 +470,7 @@ fn chooseModeFromHistograms(
     buildSparseContexts(by_context, &sparse_contexts);
     if (profiled) profiler.profile.sparse_ns +%= profiler.elapsedNs(sparse_start);
     var score_cache: ScoredMapCache = .{};
+    var tree_score_cache: TreeScoreCache = .{};
     for ([_]usize{ 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64 }) |requested_tree_count| {
         if (requested_tree_count > max_tree_count) continue;
         for ([_]Seed{ .ordered, .interleaved }) |seed| {
@@ -443,6 +482,7 @@ fn chooseModeFromHistograms(
                 &sparse_contexts,
                 active_symbols,
                 &score_cache,
+                &tree_score_cache,
                 baseline_bits,
                 requested_tree_count,
                 seed,
@@ -486,6 +526,13 @@ fn contextMapHash(context_map: *const [64]u8, tree_count: usize) u64 {
     return hash;
 }
 
+fn treeHistogramHash(histogram: *const [256]u32) u64 {
+    var hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for (histogram) |frequency|
+        hash = (hash ^ @as(u64, frequency)) *% 0x0000_0100_0000_01b3;
+    return hash;
+}
+
 const Seed = enum { ordered, interleaved };
 
 fn clusterContexts(
@@ -495,6 +542,7 @@ fn clusterContexts(
     sparse_contexts: *const SparseContexts,
     active_symbols: *const ActiveSymbols,
     score_cache: *ScoredMapCache,
+    tree_score_cache: *TreeScoreCache,
     baseline_bits: u64,
     requested_tree_count: usize,
     seed: Seed,
@@ -598,10 +646,18 @@ fn clusterContexts(
 
     const score_start = if (profiled) profiler.now() else {};
     const prior_cache_hits = if (profiled) score_cache.hits else 0;
+    const prior_tree_hits = if (profiled) tree_score_cache.hits else 0;
+    const prior_tree_misses = if (profiled) tree_score_cache.misses else 0;
     const candidate_bits = score_cache.get(&context_map, tree_count) orelse blk: {
         var bits: u64 = 0;
-        for (tree_histograms[0..tree_count]) |*histogram|
-            bits += try treeBitCost(allocator, histogram);
+        for (tree_histograms[0..tree_count]) |*histogram| {
+            const tree_bits = tree_score_cache.get(histogram) orelse score: {
+                const computed = try treeBitCost(allocator, histogram);
+                tree_score_cache.put(histogram, computed);
+                break :score computed;
+            };
+            bits += tree_bits;
+        }
         const map_plan = try context_map_encoder.choose(allocator, &context_map, tree_count);
         bits += map_plan.bit_cost;
         score_cache.put(&context_map, tree_count, bits);
@@ -613,6 +669,8 @@ fn clusterContexts(
             profiler.profile.score_cache_hits += 1
         else
             profiler.profile.score_cache_misses += 1;
+        profiler.profile.tree_score_cache_hits += tree_score_cache.hits - prior_tree_hits;
+        profiler.profile.tree_score_cache_misses += tree_score_cache.misses - prior_tree_misses;
     }
     const savings = baseline_bits -| candidate_bits;
     if (savings < min_payload_savings_bits) return null;
@@ -891,6 +949,7 @@ test "literal context profile reports stable stage accounting" {
     try std.testing.expect(profile.assignment_comparisons >= profile.assignment_contexts);
     try std.testing.expect(profile.score_cache_hits + profile.score_cache_misses > 0);
     try std.testing.expect(profile.score_cache_hits + profile.score_cache_misses <= profile.cluster_trials);
+    try std.testing.expect(profile.tree_score_cache_hits + profile.tree_score_cache_misses > 0);
     try std.testing.expect(profile.stageNs() <= profile.total_ns);
     try std.testing.expect(profile.clusterStageNs() <= profile.cluster_ns);
 }
@@ -1003,6 +1062,7 @@ test "literal context scored map cache hits and rejects collisions" {
     buildActiveSymbols(&total, &active_symbols);
     const baseline_bits = try treeBitCost(std.testing.allocator, &total);
     var cache: ScoredMapCache = .{};
+    var tree_cache: TreeScoreCache = .{};
     const first = try clusterContexts(
         false,
         std.testing.allocator,
@@ -1010,6 +1070,7 @@ test "literal context scored map cache hits and rejects collisions" {
         &sparse_contexts,
         &active_symbols,
         &cache,
+        &tree_cache,
         baseline_bits,
         4,
         .interleaved,
@@ -1022,6 +1083,7 @@ test "literal context scored map cache hits and rejects collisions" {
         &sparse_contexts,
         &active_symbols,
         &cache,
+        &tree_cache,
         baseline_bits,
         4,
         .interleaved,
@@ -1040,6 +1102,36 @@ test "literal context scored map cache hits and rejects collisions" {
     collision.entries[0].hash = contextMapHash(&map_b, 2);
     try std.testing.expectEqual(@as(?u64, null), collision.get(&map_b, 2));
     try std.testing.expectEqual(@as(usize, 0), collision.hits);
+}
+
+test "literal context tree score cache hits and rejects collisions" {
+    var histogram_a: [256]u32 = @splat(0);
+    histogram_a[3] = 17;
+    histogram_a[29] = 41;
+    histogram_a[201] = 9;
+    var cache: TreeScoreCache = .{};
+    try std.testing.expectEqual(@as(?u64, null), cache.get(&histogram_a));
+    const expected = try treeBitCost(std.testing.allocator, &histogram_a);
+    cache.put(&histogram_a, expected);
+    try std.testing.expectEqual(@as(?u64, expected), cache.get(&histogram_a));
+    try std.testing.expectEqual(@as(usize, 1), cache.hits);
+    try std.testing.expectEqual(@as(usize, 1), cache.misses);
+
+    var histogram_b = histogram_a;
+    histogram_b[29] -= 1;
+    histogram_b[30] += 1;
+    const hash_b = treeHistogramHash(&histogram_b);
+    const slot: u6 = @truncate(hash_b);
+    var collision: TreeScoreCache = .{};
+    collision.entries[slot] = .{
+        .hash = hash_b,
+        .histogram = histogram_a,
+        .bit_cost = expected,
+    };
+    collision.occupied = @as(u64, 1) << slot;
+    try std.testing.expectEqual(@as(?u64, null), collision.get(&histogram_b));
+    try std.testing.expectEqual(@as(usize, 0), collision.hits);
+    try std.testing.expectEqual(@as(usize, 1), collision.misses);
 }
 
 test "literal context sparse tree aggregation matches dense reference" {

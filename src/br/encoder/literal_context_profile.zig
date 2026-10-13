@@ -24,6 +24,8 @@ pub const Profile = struct {
     assignment_comparisons: usize = 0,
     score_cache_hits: usize = 0,
     score_cache_misses: usize = 0,
+    tree_score_cache_hits: usize = 0,
+    tree_score_cache_misses: usize = 0,
 
     analysis_ns: u64 = 0,
     baseline_ns: u64 = 0,
@@ -58,6 +60,8 @@ pub const Profile = struct {
             "assignment_comparisons",
             "score_cache_hits",
             "score_cache_misses",
+            "tree_score_cache_hits",
+            "tree_score_cache_misses",
             "analysis_ns",
             "baseline_ns",
             "suffix_ns",

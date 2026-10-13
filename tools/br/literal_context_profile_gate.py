@@ -18,6 +18,7 @@ COLUMNS = [
     "full_tree_count", "full_mode", "full_savings_bits",
     "suffix_payload_scores", "suffix_payload_reuses", "cluster_trials", "cluster_rounds",
     "assignment_contexts", "assignment_comparisons", "score_cache_hits", "score_cache_misses",
+    "tree_score_cache_hits", "tree_score_cache_misses",
     "analysis_ns", "baseline_ns", "suffix_ns", "sparse_ns", "cluster_ns", "cluster_init_ns",
     "cluster_prepare_ns", "cluster_assignment_ns", "cluster_finalize_ns", "cluster_score_ns",
     "stage_ns", "cluster_stage_ns", "total_ns", "unattributed_ns", "cluster_unattributed_ns",
@@ -83,6 +84,9 @@ def main() -> int:
         scored = integer(row, "score_cache_hits") + integer(row, "score_cache_misses")
         assert 0 < scored <= integer(row, "cluster_trials"), row
         assert integer(row, "score_cache_misses") > 0, row
+        tree_scored = integer(row, "tree_score_cache_hits") + integer(row, "tree_score_cache_misses")
+        assert tree_scored > 0, row
+        assert integer(row, "tree_score_cache_misses") > 0, row
         for key in TOP_STAGES + CLUSTER_STAGES + ["stage_ns", "cluster_stage_ns", "total_ns"]:
             assert integer(row, key) > 0, (key, row)
         assert integer(row, "stage_ns") == sum(integer(row, key) for key in TOP_STAGES), row
@@ -93,6 +97,7 @@ def main() -> int:
     source32 = by_case["source32k"]
     assert integer(source32, "suffix_tree_count") >= 2, source32
     assert integer(source32, "full_tree_count") >= integer(source32, "suffix_tree_count"), source32
+    assert integer(source32, "tree_score_cache_hits") > 0, source32
     cluster_score = integer(source32, "cluster_score_ns")
     assert cluster_score == max(integer(source32, key) for key in CLUSTER_STAGES), source32
     assert cluster_score * 2 > integer(source32, "cluster_ns"), source32
