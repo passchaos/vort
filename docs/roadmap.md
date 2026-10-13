@@ -19269,6 +19269,22 @@ reuse, so production keeps the simpler independently owned plans.
   checksum 134,695. The Node matrix, eight-case libbrotli/progressive
   differential, and nine-row ReleaseFast gate remain green.
 
+- Replaced runtime planning of the 63 fixed suffix context maps with a
+  versioned 64-entry exact-cost table. These two-tree maps depend only on their
+  cutoff, never on input or RFC mode, so production no longer runs the full
+  plain/MTF/RLE planner for them on every proposal pass. A 63-cutoff oracle
+  independently replans every map and requires exact agreement with the table,
+  making context-map encoder changes fail loudly until the constants are
+  reviewed. A short fixed-CPU-2 three-process screen was noisy (60.658 ms
+  baseline versus 61.122 ms table) and is not treated as a speed claim. The
+  stronger alternating fixed-CPU A/B over seven pairs and 20 iterations per
+  process favored the table in six pairs, with medians of 244.343 ms versus
+  243.448 ms (`1.004x`). Relative to the original 130.426 ms dense clustering
+  path, the conservative short-sample cumulative comparison remains about
+  `2.134x`; output remains 6,474 bytes with checksum 134,695. The Node matrix,
+  eight-case libbrotli/progressive differential, and nine-row ReleaseFast gate
+  remain green.
+
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository
   dictionary, source, README, roadmap, and small-corpus payloads; optional

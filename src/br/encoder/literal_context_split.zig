@@ -81,6 +81,12 @@ const assignment_log_cache: [assignment_log_cache_limit + 1]u16 = blk: {
     break :blk values;
 };
 const SuffixMapCosts = [64]u64;
+const precomputed_suffix_map_costs: SuffixMapCosts = .{
+    0,  29, 30, 30, 31, 31, 31, 31, 32, 32, 32, 32, 32, 32, 32, 32,
+    32, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33,
+    33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 32,
+    32, 32, 32, 32, 32, 32, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23,
+};
 const scored_map_capacity: usize = 22;
 const ScoredMapEntry = struct {
     hash: u64,
@@ -151,8 +157,6 @@ pub noinline fn chooseProposals(allocator: std.mem.Allocator, input: []const u8,
     const baseline_bits = try treeBitCost(allocator, &analysis.total);
     var active_symbols: ActiveSymbols = undefined;
     buildActiveSymbols(&analysis.total, &active_symbols);
-    var suffix_map_costs: SuffixMapCosts = undefined;
-    try buildSuffixMapCosts(allocator, &suffix_map_costs);
     var proposals: Proposals = .{};
     for (&analysis.by_mode, 0..) |*by_context, mode_value| {
         const mode_proposals = try chooseModeFromHistograms(
@@ -163,7 +167,7 @@ pub noinline fn chooseProposals(allocator: std.mem.Allocator, input: []const u8,
             analysis.literal_count,
             baseline_bits,
             &active_symbols,
-            &suffix_map_costs,
+            &precomputed_suffix_map_costs,
             true,
             max_trees,
         );
@@ -245,8 +249,6 @@ fn chooseModeProposals(allocator: std.mem.Allocator, input: []const u8, commands
     const baseline_bits = try treeBitCost(allocator, &total);
     var active_symbols: ActiveSymbols = undefined;
     buildActiveSymbols(&total, &active_symbols);
-    var suffix_map_costs: SuffixMapCosts = undefined;
-    try buildSuffixMapCosts(allocator, &suffix_map_costs);
     return chooseModeFromHistograms(
         allocator,
         mode,
@@ -255,7 +257,7 @@ fn chooseModeProposals(allocator: std.mem.Allocator, input: []const u8, commands
         literal_count,
         baseline_bits,
         &active_symbols,
-        &suffix_map_costs,
+        &precomputed_suffix_map_costs,
         include_clusters,
         max_tree_count,
     );
@@ -542,15 +544,6 @@ fn buildActiveSymbols(total: *const [256]u32, active: *ActiveSymbols) void {
     }
 }
 
-fn buildSuffixMapCosts(allocator: std.mem.Allocator, costs: *SuffixMapCosts) !void {
-    costs[0] = 0;
-    for (1..64) |cutoff| {
-        const candidate = Candidate.suffix(0, @intCast(cutoff), 0);
-        const plan = try context_map_encoder.choose(allocator, &candidate.context_map, candidate.tree_count);
-        costs[cutoff] = plan.bit_cost;
-    }
-}
-
 fn prepareAssignmentCosts(
     tree_histograms: *const [max_trees][256]u32,
     tree_totals: *const [max_trees]u32,
@@ -767,13 +760,11 @@ test "literal context active alphabet covers all byte symbols" {
 }
 
 test "literal context suffix map costs match independent planning" {
-    var costs: SuffixMapCosts = undefined;
-    try buildSuffixMapCosts(std.testing.allocator, &costs);
-    try std.testing.expectEqual(@as(u64, 0), costs[0]);
+    try std.testing.expectEqual(@as(u64, 0), precomputed_suffix_map_costs[0]);
     for (1..64) |cutoff| {
         const candidate = Candidate.suffix(literal_context.mode_signed, @intCast(cutoff), 0);
         const plan = try context_map_encoder.choose(std.testing.allocator, &candidate.context_map, candidate.tree_count);
-        try std.testing.expectEqual(plan.bit_cost, costs[cutoff]);
+        try std.testing.expectEqual(plan.bit_cost, precomputed_suffix_map_costs[cutoff]);
     }
 }
 
