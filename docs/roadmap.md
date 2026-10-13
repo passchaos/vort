@@ -19101,3 +19101,16 @@ reuse, so production keeps the simpler independently owned plans.
   selection. The Node matrix remains byte-identical, including the 54,887-byte
   dictionary row; the eight-case libbrotli/progressive differential and the
   nine-row ReleaseFast planned-encode gate remain green.
+
+- Fused the remaining four RFC literal-context mode scans into one input pass.
+  An allocator-owned analysis object (about 256 KiB for four 64x256 histograms)
+  records LSB6, MSB6, UTF8, and Signed frequencies together with one shared
+  literal total, so the complete command plan is now traversed once rather than
+  four times. Per-mode suffix/clustering searches still operate independently
+  on those frozen histograms and retain identical exact costs and tie-breaking.
+  The legacy independent-mode selector remains as a test oracle: every suffix,
+  <=16-tree, and <=64-tree proposal must match the fused result in mode, tree
+  count, map, and savings. Exhaustive allocation-failure injection covers the
+  new owned analysis state. The Node matrix stays byte-identical at 54,887 bytes
+  for the dictionary row; the eight-case libbrotli/progressive differential and
+  nine-row ReleaseFast gate remain green.

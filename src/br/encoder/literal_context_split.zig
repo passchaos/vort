@@ -56,6 +56,14 @@ pub const Proposals = struct {
     full: ?Candidate = null,
 };
 
+const mode_count: usize = 4;
+const ContextHistograms = [64][256]u32;
+const Analysis = struct {
+    by_mode: [mode_count]ContextHistograms,
+    total: [256]u32,
+    literal_count: usize,
+};
+
 /// Evaluate all four RFC 7932 literal context modes. Each mode gets its best
 /// contiguous two-tree partition plus bounded clustering through all 64 literal
 /// contexts
@@ -79,14 +87,57 @@ pub noinline fn chooseSuffix(allocator: std.mem.Allocator, input: []const u8, co
 }
 
 pub noinline fn chooseProposals(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command) !Proposals {
+    const analysis = try collectAnalysis(allocator, input, commands) orelse return .{};
+    defer allocator.destroy(analysis);
+    const baseline_bits = try treeBitCost(allocator, &analysis.total);
     var proposals: Proposals = .{};
-    for (0..4) |mode_value| {
-        const mode_proposals = try chooseModeProposals(allocator, input, commands, @intCast(mode_value), true, max_trees);
+    for (&analysis.by_mode, 0..) |*by_context, mode_value| {
+        const mode_proposals = try chooseModeFromHistograms(
+            allocator,
+            @intCast(mode_value),
+            by_context,
+            &analysis.total,
+            analysis.literal_count,
+            baseline_bits,
+            true,
+            max_trees,
+        );
         retainBetter(&proposals.suffix, mode_proposals.suffix);
         retainBetter(&proposals.up_to_16, mode_proposals.up_to_16);
         retainBetter(&proposals.full, mode_proposals.full);
     }
     return proposals;
+}
+
+fn collectAnalysis(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command) !?*Analysis {
+    const analysis = try allocator.create(Analysis);
+    errdefer allocator.destroy(analysis);
+    @memset(std.mem.asBytes(analysis), 0);
+    for (commands) |command| {
+        const end = std.math.add(usize, command.insert_start, command.insert_len) catch {
+            allocator.destroy(analysis);
+            return null;
+        };
+        if (end > input.len) {
+            allocator.destroy(analysis);
+            return null;
+        }
+        for (input[command.insert_start..end], command.insert_start..) |literal, position| {
+            const previous = if (position == 0) 0 else input[position - 1];
+            const second_previous = if (position < 2) 0 else input[position - 2];
+            analysis.total[literal] += 1;
+            inline for (0..mode_count) |mode_value| {
+                const context = literal_context.value(@intCast(mode_value), previous, second_previous);
+                analysis.by_mode[mode_value][context][literal] += 1;
+            }
+            analysis.literal_count += 1;
+        }
+    }
+    if (analysis.literal_count < min_literal_count) {
+        allocator.destroy(analysis);
+        return null;
+    }
+    return analysis;
 }
 
 fn chooseWithClusters(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, include_clusters: bool, max_tree_count: usize) !?Candidate {
@@ -127,6 +178,28 @@ fn chooseModeProposals(allocator: std.mem.Allocator, input: []const u8, commands
     if (literal_count < min_literal_count) return .{};
 
     const baseline_bits = try treeBitCost(allocator, &total);
+    return chooseModeFromHistograms(
+        allocator,
+        mode,
+        &by_context,
+        &total,
+        literal_count,
+        baseline_bits,
+        include_clusters,
+        max_tree_count,
+    );
+}
+
+fn chooseModeFromHistograms(
+    allocator: std.mem.Allocator,
+    mode: u2,
+    by_context: *const ContextHistograms,
+    total: *const [256]u32,
+    literal_count: usize,
+    baseline_bits: u64,
+    include_clusters: bool,
+    max_tree_count: usize,
+) !Proposals {
     var left: [256]u32 = @splat(0);
     var left_count: usize = 0;
     var best: ?Candidate = null;
@@ -135,7 +208,7 @@ fn chooseModeProposals(allocator: std.mem.Allocator, input: []const u8, commands
         for (by_context[cutoff - 1]) |count| left_count += count;
         if (left_count == 0 or left_count == literal_count) continue;
         var right: [256]u32 = undefined;
-        for (&right, &total, &left) |*remaining, all, used| remaining.* = all - used;
+        for (&right, total, &left) |*remaining, all, used| remaining.* = all - used;
         const candidate = Candidate.suffix(mode, @intCast(cutoff), 0);
         const map_plan = try context_map_encoder.choose(allocator, &candidate.context_map, candidate.tree_count);
         const left_bits = try treeBitCost(allocator, &left);
@@ -158,7 +231,7 @@ fn chooseModeProposals(allocator: std.mem.Allocator, input: []const u8, commands
             const clustered = try clusterContexts(
                 allocator,
                 mode,
-                &by_context,
+                by_context,
                 baseline_bits,
                 requested_tree_count,
                 seed,
@@ -393,6 +466,26 @@ test "literal context proposals match independent stage selection" {
             try std.testing.expectEqual(expected_candidate.savings_bits, actual.?.savings_bits);
         }
     }
+}
+
+test "literal context single-pass analysis cleans up allocation failures" {
+    const input = ("the quick brown fox jumps over the lazy dog\n" ** 16) ++
+        ("THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG\n" ** 16);
+    const commands = [_]command_plan.Command{.{
+        .insert_start = 0,
+        .insert_len = input.len,
+    }};
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, payload: []const u8, plan: []const command_plan.Command) !void {
+            const proposals = try chooseProposals(allocator, payload, plan);
+            try std.testing.expect(proposals.full != null);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{ input[0..], commands[0..] },
+    );
 }
 
 test "literal context split rejects stationary literals" {
