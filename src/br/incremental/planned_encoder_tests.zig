@@ -330,6 +330,121 @@ test "incremental auto block sizing matches chunked quality wire" {
     );
 }
 
+test "entropy-aware planned stream segmentation follows midpoint changes" {
+    const input_len = 128 * 1024;
+    const input = try std.testing.allocator.alloc(u8, input_len);
+    defer std.testing.allocator.free(input);
+    var random_state: u32 = 0x9e37_79b9;
+    for (input[0 .. 64 * 1024], 0..) |*byte, index| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        const nibble: u8 = @truncate(random_state >> 28);
+        byte.* = if (index < 32 * 1024) nibble else 240 + nibble;
+    }
+    @memset(input[64 * 1024 ..], 'm');
+    const chunks = [_][]const u8{input};
+
+    const adaptive = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 2 },
+    );
+    defer std.testing.allocator.free(adaptive);
+    const fixed = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 2, .adaptive_blocks = false },
+    );
+    defer std.testing.allocator.free(fixed);
+    const forced = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .level = .balanced, .adaptive_blocks = true },
+    );
+    defer std.testing.allocator.free(forced);
+    const ordinary_q2 = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .level = .balanced, .adaptive_blocks = false },
+    );
+    defer std.testing.allocator.free(ordinary_q2);
+
+    try expectDataBlockCount(adaptive, 3);
+    try expectDataBlockCount(fixed, 2);
+    try expectDataBlockCount(forced, 3);
+    try expectDataBlockCount(ordinary_q2, 2);
+    try std.testing.expect(adaptive.len <= fixed.len);
+    for ([_][]const u8{ adaptive, fixed, forced, ordinary_q2 }) |encoded| {
+        const decoded = try br.decodeStreamAllocExactSize(
+            std.testing.allocator,
+            encoded,
+            input.len,
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, input, decoded);
+    }
+
+    var incremental = br.IncrementalPlannedStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{ .stream = .{ .quality = 2 } },
+    );
+    defer incremental.deinit();
+    const incremental_wire = try encodeIncremental(&incremental, input, 509, 17);
+    defer std.testing.allocator.free(incremental_wire);
+    try std.testing.expectEqualSlices(u8, adaptive, incremental_wire);
+
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        br.encodedPlannedStreamChunksBoundWithOptions(
+            &chunks,
+            .{ .quality = 8, .block_len = 32 * 1024, .adaptive_blocks = true },
+        ),
+    );
+}
+
+test "warmed entropy-aware incremental segmentation reuses retained scratch" {
+    const input_len = 64 * 1024;
+    const input = try std.testing.allocator.alloc(u8, input_len);
+    defer std.testing.allocator.free(input);
+    var random_state: u32 = 0xa341_316c;
+    for (input, 0..) |*byte, index| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        const nibble: u8 = @truncate(random_state >> 28);
+        byte.* = if (index < input.len / 2) nibble else 240 + nibble;
+    }
+    var encoder = br.IncrementalPlannedStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{ .stream = .{ .quality = 2 } },
+    );
+    defer encoder.deinit();
+    const first = try encodeIncremental(&encoder, input, input.len, input.len);
+    defer std.testing.allocator.free(first);
+    const retained = encoder.retainedCapacity();
+
+    try encoder.nextStream(.{ .stream = .{ .quality = 2 } });
+    const output = try std.testing.allocator.alloc(u8, input.len + 1024);
+    defer std.testing.allocator.free(output);
+    var failing = std.testing.FailingAllocator.init(
+        std.testing.allocator,
+        .{ .fail_index = 0 },
+    );
+    encoder.allocator = failing.allocator();
+    const written = encodeIncrementalInto(&encoder, input, output) catch |err| {
+        encoder.allocator = std.testing.allocator;
+        return err;
+    };
+    encoder.allocator = std.testing.allocator;
+    try std.testing.expectEqualSlices(u8, first, output[0..written]);
+    try std.testing.expectEqual(retained, encoder.retainedCapacity());
+}
+
+fn expectDataBlockCount(encoded: []const u8, expected: usize) !void {
+    const summary = try br.summarizeStream(encoded);
+    try std.testing.expectEqual(
+        expected,
+        summary.compressed_meta_block_count + summary.uncompressed_meta_block_count,
+    );
+}
+
 test "oversized planned input applies quality policy to every meta block" {
     const input_len = br.max_uncompressed_meta_block_len + 17;
     const input = try std.testing.allocator.alloc(u8, input_len);

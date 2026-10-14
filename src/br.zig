@@ -27,6 +27,7 @@ const code_length_rle = @import("br/encoder/code_length_rle.zig");
 const small_huffman = @import("br/encoder/small_huffman.zig");
 const encoder_stats = @import("br/encoder/stats.zig");
 const quality_schedule = @import("br/encoder/quality_schedule.zig");
+const stream_block_split = @import("br/encoder/stream_block_split.zig");
 const static_dictionary_matcher = @import("br/encoder/static_dictionary_matcher.zig");
 const literal_block_split = @import("br/encoder/literal_block_split.zig");
 const command_block_split = @import("br/encoder/command_block_split.zig");
@@ -536,11 +537,15 @@ const IncrementalPlannedEncoderCodec = struct {
         level: PlannedCompressionLevel = .fast,
         quality: ?u4 = null,
         mode: PlannedMode = .generic,
+        adaptive_blocks: bool = false,
         tokens: std.ArrayList(lz77.Token) = .empty,
         commands: std.ArrayList(command_plan.Command) = .empty,
         history: std.ArrayList(u8) = .empty,
         candidate_wire: std.ArrayList(u8) = .empty,
         best_wire: std.ArrayList(u8) = .empty,
+        adaptive_single_wire: std.ArrayList(u8) = .empty,
+        adaptive_split_wire: std.ArrayList(u8) = .empty,
+        history_snapshot: std.ArrayList(u8) = .empty,
         greedy_scratch: lz77.TinyGreedyScratch = .{},
         dictionary_greedy_scratch: lz77.DictionaryGreedyScratch = .{},
         compound_matcher: ?compound_dictionary_matcher.Matcher = null,
@@ -557,6 +562,9 @@ const IncrementalPlannedEncoderCodec = struct {
         state.history.deinit(allocator);
         state.candidate_wire.deinit(allocator);
         state.best_wire.deinit(allocator);
+        state.adaptive_single_wire.deinit(allocator);
+        state.adaptive_split_wire.deinit(allocator);
+        state.history_snapshot.deinit(allocator);
     }
 
     pub fn resetState(state: *State) void {
@@ -565,11 +573,15 @@ const IncrementalPlannedEncoderCodec = struct {
         state.level = .fast;
         state.quality = null;
         state.mode = .generic;
+        state.adaptive_blocks = false;
         state.tokens.clearRetainingCapacity();
         state.commands.clearRetainingCapacity();
         state.history.clearRetainingCapacity();
         state.candidate_wire.clearRetainingCapacity();
         state.best_wire.clearRetainingCapacity();
+        state.adaptive_single_wire.clearRetainingCapacity();
+        state.adaptive_split_wire.clearRetainingCapacity();
+        state.history_snapshot.clearRetainingCapacity();
         state.compound_dictionary_size = 0;
         state.wire_state = .{};
         state.greedy_scratch.head_initialized = @splat(0);
@@ -582,6 +594,9 @@ const IncrementalPlannedEncoderCodec = struct {
             state.history.capacity +
             state.candidate_wire.capacity +
             state.best_wire.capacity +
+            state.adaptive_single_wire.capacity +
+            state.adaptive_split_wire.capacity +
+            state.history_snapshot.capacity +
             state.greedy_scratch.retainedCapacity() +
             state.dictionary_greedy_scratch.retainedCapacity() +
             (if (state.compound_matcher) |*matcher| matcher.retainedCapacity() else 0);
@@ -605,6 +620,7 @@ const IncrementalPlannedEncoderCodec = struct {
 
     pub fn writePrefix(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, options: StreamOptions) br.Error!void {
         try validatePlannedStreamChunksOptions(options);
+        const adaptive_blocks = try plannedStreamAdaptiveBlocks(options);
         if (state.compound_matcher == null)
             state.compound_matcher = compound_dictionary_matcher.Matcher.init(allocator);
         state.compound_dictionary_size = try preparePlannedSharedDictionary(
@@ -619,10 +635,14 @@ const IncrementalPlannedEncoderCodec = struct {
         state.level = options.level;
         state.quality = options.quality;
         state.mode = options.mode;
+        state.adaptive_blocks = adaptive_blocks;
     }
 
     pub fn writeBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, block: []const u8) br.Error!void {
-        try writePlannedStreamMetaBlock(allocator, out, state, block);
+        if (state.adaptive_blocks and stream_block_split.shouldSplit64(block)) {
+            return writeAdaptivePlannedStreamBlock(allocator, out, state, block);
+        }
+        try writePlannedStreamMetaBlock(allocator, out, state, block, true);
     }
 
     pub fn writeMetadata(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, metadata: []const u8) br.Error!void {
@@ -683,6 +703,7 @@ test {
     _ = literal_block_split;
     _ = command_block_split;
     _ = distance_block_split;
+    _ = stream_block_split;
     _ = compound_wire;
     _ = header_profile;
     _ = code_length_decoder_mod;
@@ -1835,6 +1856,9 @@ pub const PlannedStreamChunksOptions = struct {
     /// Zero selects the policy default: 16 KiB for q0; 32 KiB for legacy
     /// fast/q1/q6/q7/q11; and 64 KiB for balanced/ratio/q2...q5/q8...q10.
     block_len: usize = 0,
+    /// Null follows the level/quality policy. True enables entropy lookahead
+    /// for 64 KiB blocks; false keeps every configured boundary unchanged.
+    adaptive_blocks: ?bool = null,
     window_bits: u5 = default_window_bits,
     metadata: []const u8 = "",
     shared_dictionary: SharedDictionary = .{},
@@ -1870,6 +1894,24 @@ fn plannedStreamBlockLen(options: PlannedStreamChunksOptions) Error!usize {
         .fast => 32 * 1024,
         .balanced, .ratio => 64 * 1024,
     };
+}
+
+fn plannedStreamAdaptiveBlocks(options: PlannedStreamChunksOptions) Error!bool {
+    const block_len = try plannedStreamBlockLen(options);
+    const automatic = if (options.block_len != 0)
+        false
+    else if (options.quality) |quality| blk: {
+        const schedule = quality_schedule.getInt(quality, options.mode) catch
+            return error.InvalidBlockPlan;
+        break :blk schedule.stream_entropy_split;
+    } else options.level != .fast;
+    const enabled = options.adaptive_blocks orelse
+        (automatic and options.window_bits <= default_window_bits);
+    if (enabled and block_len != stream_block_split.full_block_len)
+        return error.InvalidBlockPlan;
+    if (enabled and options.window_bits > default_window_bits)
+        return error.InvalidBlockPlan;
+    return enabled;
 }
 
 pub fn encodedStoredStreamBound(input_len: usize) Error!usize {
@@ -3273,7 +3315,11 @@ pub fn encodedPlannedStreamChunksBound(chunks: []const []const u8) Error!usize {
 }
 
 fn encodedPlannedChunkedStreamBoundForInputLen(input_len: usize, options: PlannedStreamChunksOptions) Error!usize {
-    const block_len = try plannedStreamBlockLen(options);
+    const configured_block_len = try plannedStreamBlockLen(options);
+    const block_len = if (try plannedStreamAdaptiveBlocks(options))
+        stream_block_split.half_block_len
+    else
+        configured_block_len;
     var bit_count = try storedWindowBitsLen(options.window_bits);
     if (options.metadata.len != 0)
         bit_count = try addStoredMetadataMetaBlockBitsLen(bit_count, options.metadata.len);
@@ -3288,7 +3334,11 @@ fn encodedPlannedChunkedStreamBoundForInputLen(input_len: usize, options: Planne
 }
 
 pub fn encodedPlannedStreamChunksBoundWithOptions(chunks: []const []const u8, options: PlannedStreamChunksOptions) Error!usize {
-    const block_len = try plannedStreamBlockLen(options);
+    const configured_block_len = try plannedStreamBlockLen(options);
+    const block_len = if (try plannedStreamAdaptiveBlocks(options))
+        stream_block_split.half_block_len
+    else
+        configured_block_len;
     var bit_count = try storedWindowBitsLen(options.window_bits);
     if (options.metadata.len != 0)
         bit_count = try addStoredMetadataMetaBlockBitsLen(bit_count, options.metadata.len);
@@ -4710,11 +4760,125 @@ fn commitPlannedMetaBlockCandidate(
     }
 }
 
+fn prepareAdaptiveBranch(
+    allocator: std.mem.Allocator,
+    branch: *std.ArrayList(u8),
+    start_byte: u8,
+    start_bit_index: u3,
+) Error!void {
+    branch.clearRetainingCapacity();
+    if (start_bit_index != 0) try branch.append(allocator, start_byte);
+}
+
+fn restorePlannedHistory(
+    allocator: std.mem.Allocator,
+    state: *IncrementalPlannedEncoderCodec.State,
+) Error!void {
+    state.history.clearRetainingCapacity();
+    try state.history.appendSlice(allocator, state.history_snapshot.items);
+}
+
+fn writeAdaptivePlannedStreamBlock(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    state: *IncrementalPlannedEncoderCodec.State,
+    block: []const u8,
+) Error!void {
+    std.debug.assert(block.len == stream_block_split.full_block_len);
+    const start_len = out.items.len;
+    const start_bit_index = state.bit_index;
+    const start_byte = if (start_len == 0) 0 else out.items[start_len - 1];
+    const start_wire_state = state.wire_state;
+    state.history_snapshot.clearRetainingCapacity();
+    try state.history_snapshot.appendSlice(allocator, state.history.items);
+
+    try prepareAdaptiveBranch(
+        allocator,
+        &state.adaptive_single_wire,
+        start_byte,
+        start_bit_index,
+    );
+    state.bit_index = start_bit_index;
+    state.wire_state = start_wire_state;
+    try writePlannedStreamMetaBlock(
+        allocator,
+        &state.adaptive_single_wire,
+        state,
+        block,
+        false,
+    );
+    const single_bit_index = state.bit_index;
+    const single_wire_state = state.wire_state;
+    const single_bits = IncrementalPlannedEncoderCodec.startBitPosition(
+        state.adaptive_single_wire.items.len,
+        single_bit_index,
+    ) - start_bit_index;
+
+    try prepareAdaptiveBranch(
+        allocator,
+        &state.adaptive_split_wire,
+        start_byte,
+        start_bit_index,
+    );
+    state.bit_index = start_bit_index;
+    state.wire_state = start_wire_state;
+    errdefer {
+        restorePlannedHistory(allocator, state) catch {};
+        state.bit_index = start_bit_index;
+        state.wire_state = start_wire_state;
+    }
+    try writePlannedStreamMetaBlock(
+        allocator,
+        &state.adaptive_split_wire,
+        state,
+        block[0..stream_block_split.half_block_len],
+        true,
+    );
+    try writePlannedStreamMetaBlock(
+        allocator,
+        &state.adaptive_split_wire,
+        state,
+        block[stream_block_split.half_block_len..],
+        true,
+    );
+    const split_bits = IncrementalPlannedEncoderCodec.startBitPosition(
+        state.adaptive_split_wire.items.len,
+        state.bit_index,
+    ) - start_bit_index;
+
+    const choose_split = split_bits < single_bits;
+    const selected = if (choose_split)
+        state.adaptive_split_wire.items
+    else
+        state.adaptive_single_wire.items;
+    const shared_byte_count: usize = @intFromBool(start_bit_index != 0);
+    try out.ensureUnusedCapacity(allocator, selected.len - shared_byte_count);
+    if (!choose_split) {
+        try restorePlannedHistory(allocator, state);
+        state.bit_index = single_bit_index;
+        state.wire_state = single_wire_state;
+        const max_backward_distance = (@as(usize, 1) << state.window_bits) - 16;
+        try IncrementalPlannedEncoderCodec.appendHistory(
+            &state.history,
+            allocator,
+            block,
+            max_backward_distance,
+        );
+    }
+    try commitPlannedMetaBlockCandidate(
+        allocator,
+        out,
+        start_bit_index,
+        selected,
+    );
+}
+
 fn writePlannedStreamMetaBlock(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
     state: *IncrementalPlannedEncoderCodec.State,
     block: []const u8,
+    update_history: bool,
 ) Error!void {
     if (block.len == 0 or block.len > planned_chunk_max_input_len)
         return error.InvalidBlockPlan;
@@ -4791,13 +4955,15 @@ fn writePlannedStreamMetaBlock(
         state.wire_state.output_pos = std.math.add(usize, start_wire_state.output_pos, block.len) catch
             return error.IntegerOverflow;
     }
-    const max_backward_distance = (@as(usize, 1) << state.window_bits) - 16;
-    try IncrementalPlannedEncoderCodec.appendHistory(
-        &state.history,
-        allocator,
-        block,
-        max_backward_distance,
-    );
+    if (update_history) {
+        const max_backward_distance = (@as(usize, 1) << state.window_bits) - 16;
+        try IncrementalPlannedEncoderCodec.appendHistory(
+            &state.history,
+            allocator,
+            block,
+            max_backward_distance,
+        );
+    }
 }
 const min_recent_distance_candidate_count: usize = 64;
 const planned_command_symbol_cache_capacity: usize = 128;
@@ -5152,6 +5318,7 @@ pub const PlannedStreamEncoder = struct {
 
     pub fn encodeChunksScratchWithOptions(self: *PlannedStreamEncoder, chunks: []const []const u8, options: PlannedStreamChunksOptions) Error![]const u8 {
         const block_len = try plannedStreamBlockLen(options);
+        _ = try plannedStreamAdaptiveBlocks(options);
         IncrementalPlannedEncoderCodec.resetState(&self.stream_state);
         self.output.clearRetainingCapacity();
         try IncrementalPlannedEncoderCodec.writePrefix(

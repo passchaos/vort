@@ -109,6 +109,8 @@ pub const Schedule = struct {
     /// qualities with a 32 KiB optimal ceiling stay there; the remaining
     /// schedules amortize headers at 64 KiB. Callers may still override it.
     stream_block_len: u32,
+    /// Inspect both 32 KiB halves before committing a 64 KiB stream block.
+    stream_entropy_split: bool,
 
     pub fn validate(self: Schedule) Error!void {
         if (self.window.min_bits < 10 or self.window.max_bits > 24 or
@@ -161,6 +163,8 @@ pub const Schedule = struct {
         if (self.stream_block_len < 16 * 1024 or
             self.stream_block_len > 64 * 1024 or
             !std.math.isPowerOfTwo(self.stream_block_len))
+            return error.InvalidSchedule;
+        if (self.stream_entropy_split and self.stream_block_len != 64 * 1024)
             return error.InvalidSchedule;
     }
 };
@@ -298,6 +302,7 @@ fn makeSchedule(quality: Quality, mode: Mode) Schedule {
             32 * 1024
         else
             64 * 1024,
+        .stream_entropy_split = (q >= 2 and q <= 5) or (q >= 8 and q <= 10),
     };
 }
 
@@ -324,8 +329,15 @@ test "quality stream block sizes follow latency and optimal-search policy" {
             32 * 1024
         else
             64 * 1024;
-        inline for (std.meta.tags(Mode)) |mode|
-            try std.testing.expectEqual(expected, get(quality, mode).stream_block_len);
+        inline for (std.meta.tags(Mode)) |mode| {
+            const schedule = get(quality, mode);
+            try std.testing.expectEqual(expected, schedule.stream_block_len);
+            try std.testing.expectEqual(
+                (quality.int() >= 2 and quality.int() <= 5) or
+                    (quality.int() >= 8 and quality.int() <= 10),
+                schedule.stream_entropy_split,
+            );
+        }
     }
 }
 
