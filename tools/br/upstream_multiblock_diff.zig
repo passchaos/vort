@@ -1144,6 +1144,21 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(planned_adaptive_literal.payload);
     try validatePlannedLiteralFixture(init.gpa, reference, planned_adaptive_literal, 3);
     planned_literal_split_cases += 1;
+    const planned_adaptive_literal_context = try vort.br.IncrementalTestSupport.encodeAdaptiveLiteralContextTypes(init.gpa);
+    defer init.gpa.free(planned_adaptive_literal_context.encoded);
+    defer init.gpa.free(planned_adaptive_literal_context.payload);
+    const planned_adaptive_literal_context_summary = try vort.brSummarizeStreamAlloc(init.gpa, planned_adaptive_literal_context.encoded);
+    if (planned_adaptive_literal_context_summary.max_literal_block_types != 3 or
+        planned_adaptive_literal_context_summary.max_literal_context_trees < 2)
+        return error.ReferenceEncodeFailed;
+    const planned_adaptive_literal_context_decoded = try init.gpa.alloc(u8, planned_adaptive_literal_context.payload.len);
+    defer init.gpa.free(planned_adaptive_literal_context_decoded);
+    try reference.decode(planned_adaptive_literal_context.encoded, planned_adaptive_literal_context_decoded);
+    if (!std.mem.eql(u8, planned_adaptive_literal_context.payload, planned_adaptive_literal_context_decoded))
+        return error.ReferenceDecodeFailed;
+    try decodeProgressChunks(init.gpa, planned_adaptive_literal_context.encoded, planned_adaptive_literal_context.payload, 16, 17, 31);
+    try decodeOwnedProgressChunks(init.gpa, planned_adaptive_literal_context.encoded, planned_adaptive_literal_context.payload, 17, 31);
+    planned_literal_split_cases += 1;
     const planned_maximum_adaptive_literal = try vort.br.IncrementalTestSupport.encodeMaximumAdaptiveLiteralTypes(init.gpa);
     defer init.gpa.free(planned_maximum_adaptive_literal.encoded);
     defer init.gpa.free(planned_maximum_adaptive_literal.payload);
@@ -1167,6 +1182,11 @@ pub fn main(init: std.process.Init) !void {
         31,
         maximum_literal_header_scratch,
     );
+    planned_literal_split_cases += 1;
+    const planned_maximum_joint_literal = try vort.br.IncrementalTestSupport.encodeMaximumJointLiteralContexts(init.gpa);
+    defer init.gpa.free(planned_maximum_joint_literal.encoded);
+    defer init.gpa.free(planned_maximum_joint_literal.payload);
+    try validatePlannedLiteralFixture(init.gpa, reference, planned_maximum_joint_literal, 256);
     planned_literal_split_cases += 1;
     var planned_command_split_cases: usize = 0;
     var planned_distance_split_cases: usize = 0;

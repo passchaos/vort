@@ -19553,6 +19553,27 @@ reuse, so production keeps the simpler independently owned plans.
   retained identical 6,572-byte source32k wire/checksum, won 6/11 pairs, and
   measured a neutral `1.0005x` paired geometric ratio.
 
+- Added joint Brotli literal block/context modeling on top of the adaptive
+  temporal plan. Each block type independently selects one of the four RFC
+  context modes; all populated `type_count * 64` context histograms then enter
+  one deterministic global assignment/rebuild clustering search with a
+  256-tree ceiling. A variable-length context-map planner supports 1--16,384
+  entries and 2--256 trees, explores plain/MTF plus zero-run prefixes 0--6,
+  and pins exact emitted bit cost. The production writer emits per-type modes,
+  the dynamic map, and globally shared trees while retaining the older
+  identity adaptive wire as a complete candidate. On the off-grid
+  `A-B-A-C-A` fixture joint modeling reduces 5,201 -> 943 bytes for the same
+  8,192-byte payload; Vort, Node, libbrotli 1.0.9, and progressive decode agree.
+  A maximum plan uses all 256 block types, all 256 trees, tree ID 255, and all
+  16,384 map entries; dynamic MTF/RLE coding reduces the prior 16,948-byte
+  identity fixture to 1,046 bytes. The upstream matrix now reports
+  `planned_literal_split_cases=13`. The public feature remains ratio-only
+  opt-in: current built-ins and six 128 KiB source/Markdown paths retain their
+  default sizes while the latter pay substantial exploratory latency. Exact
+  complete-wire comparison prevents ratio regression. Eleven fixed-CPU default
+  pairs against `e83e5166` retained identical 6,563-byte source32k wire and
+  checksum, won 7/11, and measured a neutral `0.999455x` paired ratio.
+
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository
   dictionary, source, README, roadmap, and small-corpus payloads; optional

@@ -1546,10 +1546,11 @@ with `run-br-planned-encode-bench -- --adaptive-command-split ...`.
 `BrotliPlannedEncodeOptions.adaptive_literal_split` enables the matching
 ratio-only Viterbi search over the actual emitted literal stream. It supports
 arbitrary boundaries, boundaries inside one insert run, non-cyclic type reuse,
-and the complete 256 literal type/tree wire range. The first production slice
-uses one context-independent tree per literal block type and remains mutually
-exclusive with literal context clustering; complete-wire arbitration retains
-the candidate only when it is strictly smaller. The default remains `false`
+and the complete 256 literal type/tree wire range. The production search also
+selects one RFC context mode per block type and globally clusters all
+`type_count * 64` context histograms into at most 256 shared trees using a
+dynamic variable-length context map. Identity-tree and joint candidates both
+remain in complete-wire arbitration. The default remains `false`
 because current built-in and 128 KiB source/Markdown corpora show no size win.
 Measure it with `--adaptive-literal-split` on the planned encode benchmark.
 `BrotliPlannedEncodeOptions.adaptive_distance_split` is a nullable ratio-mode

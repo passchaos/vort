@@ -124,8 +124,22 @@ pub fn main(init: std.process.Init) !void {
         try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
         return;
     }
+    if (std.mem.eql(u8, mode, "adaptive-literal-context-types")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeAdaptiveLiteralContextTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
     if (std.mem.eql(u8, mode, "maximum-adaptive-literal-types")) {
         const fixture = try vort.br.IncrementalTestSupport.encodeMaximumAdaptiveLiteralTypes(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "maximum-joint-literal-contexts")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeMaximumJointLiteralContexts(init.gpa);
         defer init.gpa.free(fixture.encoded);
         defer init.gpa.free(fixture.payload);
         try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
