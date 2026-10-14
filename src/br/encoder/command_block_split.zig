@@ -1,5 +1,7 @@
 const std = @import("std");
 const huffman = @import("../../huffman.zig");
+const adaptive_block_split = @import("adaptive_block_split.zig");
+const block_split_plan = @import("block_split_plan.zig");
 
 const alphabet_size: usize = 704;
 const min_block_commands: usize = 1024;
@@ -88,6 +90,20 @@ pub const Proposals = struct {
     four: ?Result = null,
     dynamic: ?Result = null,
 };
+
+const AdaptiveSplitter = adaptive_block_split.Splitter(u16, alphabet_size);
+pub const AdaptiveOptions = AdaptiveSplitter.Options;
+
+/// Discover arbitrary command boundaries and non-cyclic type reuse. The
+/// legacy fixed-grid proposals remain separate complete-wire candidates until
+/// this general plan proves smaller after all Brotli header costs.
+pub fn chooseAdaptiveAlloc(
+    allocator: std.mem.Allocator,
+    symbols: []const u16,
+    options: AdaptiveOptions,
+) !?block_split_plan.Plan {
+    return AdaptiveSplitter.splitAlloc(allocator, symbols, options);
+}
 
 pub const Accumulator = struct {
     symbol_count: usize,

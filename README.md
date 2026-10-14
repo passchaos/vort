@@ -1535,6 +1535,14 @@ budgets return `error.InvalidBlockPlan`.
 The planned encode benchmark accepts `--extended-dictionary-probes N`, so this
 opt-in path can be measured with the same built-in and repeatable `--path`
 corpora as the default levels.
+`BrotliPlannedEncodeOptions.adaptive_command_split` enables a second ratio-only
+command-block candidate driven by a deterministic Viterbi assignment. Unlike
+the default bounded fixed-grid splitter, it can place boundaries at arbitrary
+command positions and reuse tree types in non-cyclic patterns such as
+`A-B-A-C-A`. The candidate is retained only when its complete Brotli wire is
+strictly smaller; the default remains `false` because the broader search costs
+material CPU and has not yet improved the built-in/source corpus. Measure it
+with `run-br-planned-encode-bench -- --adaptive-command-split ...`.
 `brProfilePlannedRatioBlockAlloc` is the explicit diagnostic counterpart for
 default-window 4--32 KiB ratio blocks. It reproduces the production wire while
 reporting lazy/optimal plan, command, wire, and selection timings plus optimal

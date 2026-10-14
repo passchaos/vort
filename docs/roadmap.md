@@ -19462,6 +19462,26 @@ reuse, so production keeps the simpler independently owned plans.
   `Z_PARTIAL_FLUSH`, recovery, and mid-stream parameter changes remain separate
   compatibility work rather than being implied by this completed slice.
 
+- Added the first general adaptive Brotli block splitter and integrated it
+  vertically for command trees. Shared modules provide pure-integer Q8
+  histogram costs, an allocator-owned arbitrary block/type plan through the
+  complete 256-type wire range, deterministic `O(N*T)` Viterbi assignment,
+  and general previous/successor/direct block-type transitions. A production
+  fixture uses off-grid boundaries 901/2305/5179/7001 and the non-cyclic
+  `A-B-A-C-A` type sequence; exact complete-wire arbitration selects its
+  191,508-byte stream, and Vort, Node, libbrotli 1.0.9, plus progressive decode
+  reproduce the 405,509-byte payload. The upstream matrix now has nine command
+  split cases. Unconditional search was rejected after 0/11 fixed-CPU pairs
+  and about a `0.944x` paired geometric ratio with unchanged wire. The retained
+  feature is ratio-only opt-in through `adaptive_command_split`; compile-time
+  writer specializations and a separate text section restore the default path
+  to identical wire/checksums and no-regression evidence (6/11 wins, `1.004x`
+  paired geometric). Nine built-ins and six real source/Markdown paths found no
+  size win while paying material opt-in latency, so future automatic routing
+  requires a cheap heterogeneity screen and broader corpus evidence. The common
+  Plan/Viterbi core is deliberately not limited to six regions and is the base
+  for distance, literal, then block/context joint clustering follow-ups.
+
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository
   dictionary, source, README, roadmap, and small-corpus payloads; optional

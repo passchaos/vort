@@ -87,6 +87,31 @@ def main() -> int:
         raise SystemExit("clustered-command-types: node output mismatch")
     print(f"brotli planned clustered-command-types node diff: encoded={len(encoded)} decoded={len(actual)}")
     command_count = 8192
+    boundaries = (901, 2305, 5179, 7001)
+    region_types = (0, 1, 0, 2, 0)
+    adaptive_insert_lens = (
+        outer_insert_lens,
+        middle_insert_lens,
+        (18, 20, 22, 24, 26, 28, 30, 32),
+    )
+    adaptive_copy_lens = (2, 40, 6)
+    adaptive_byte_bases = (0, 64, 128)
+    expected = bytearray()
+    region = 0
+    for i in range(command_count):
+        if region < len(boundaries) and i == boundaries[region]:
+            region += 1
+        tree = region_types[region]
+        insert_len = adaptive_insert_lens[tree][i & 7]
+        copy_len = adaptive_copy_lens[tree]
+        byte = adaptive_byte_bases[tree] + (i & 15)
+        expected.extend(bytes([byte]) * (insert_len + copy_len))
+    encoded = subprocess.check_output([sys.argv[1], "adaptive-command-types"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("adaptive-command-types: node output mismatch")
+    print(f"brotli planned adaptive-command-types node diff: encoded={len(encoded)} decoded={len(actual)}")
+    command_count = 8192
     first_split = command_count // 6
     second_split = command_count * 2 // 6
     third_split = command_count * 3 // 6

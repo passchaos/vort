@@ -1207,6 +1207,11 @@ pub fn main(init: std.process.Init) !void {
     if (!std.mem.eql(u8, planned_clustered.payload, planned_clustered_decoded)) return error.ReferenceDecodeFailed;
     try decodeProgressChunks(init.gpa, planned_clustered.encoded, planned_clustered.payload, 16, 17, 31);
     planned_command_split_cases += 1;
+    const planned_adaptive_command = try vort.br.IncrementalTestSupport.encodeAdaptiveCommandTypes(init.gpa);
+    defer init.gpa.free(planned_adaptive_command.encoded);
+    defer init.gpa.free(planned_adaptive_command.payload);
+    try validatePlannedCommandFixture(init.gpa, reference, planned_adaptive_command, 3);
+    planned_command_split_cases += 1;
     const planned_alternating = try vort.br.IncrementalTestSupport.encodeAlternatingCommandTypes(init.gpa);
     defer init.gpa.free(planned_alternating.encoded);
     defer init.gpa.free(planned_alternating.payload);
