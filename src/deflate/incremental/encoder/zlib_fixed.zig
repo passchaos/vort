@@ -138,6 +138,11 @@ pub fn Encoder(comptime Codec: type) type {
         pub fn blockFlush(self: *Self) void {
             if (!self.finishing and !self.done) self.raw.blockFlush();
         }
+        /// Publish accepted input with zlib Z_PARTIAL_FLUSH wire semantics.
+        /// The Adler-32 state and match history remain continuous.
+        pub fn partialFlush(self: *Self) void {
+            if (!self.finishing and !self.done) self.raw.partialFlush();
+        }
         pub fn flush(self: *Self) void {
             if (!self.finishing and !self.done) self.raw.flush();
         }

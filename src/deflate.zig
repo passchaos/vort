@@ -69,13 +69,29 @@ pub const png_windowed_rle258_history_scratch_len =
 const IncrementalStoredEncoderCodec = struct {
     pub const Error = deflate.Error || std.mem.Allocator.Error;
     pub const max_block_len = deflate.max_stored_block_len;
+    pub const State = bitstream.BitWriter;
 
-    pub fn writeBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, final: bool) IncrementalStoredEncoderCodec.Error!void {
+    pub fn deinitState(state: *State, allocator: std.mem.Allocator) void {
+        state.deinit(allocator);
+    }
+    pub fn resetState(state: *State) void {
+        state.bytes.clearRetainingCapacity();
+        state.scratch = 0;
+        state.bit_index = 0;
+    }
+    pub fn writeBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, block: []const u8, final: bool) IncrementalStoredEncoderCodec.Error!void {
         if (block.len > max_block_len) return error.InvalidBlockPlan;
-        var header: [5]u8 = undefined;
-        writeStoredHeader(final, @intCast(block.len), &header);
-        try out.appendSlice(allocator, &header);
-        try out.appendSlice(allocator, block);
+        try writeStoredBlock(allocator, state, block, final);
+        try publishIncrementalWriterBytes(allocator, out, state);
+    }
+    pub fn writePartialFlush(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State) IncrementalStoredEncoderCodec.Error!void {
+        try writeFixedBlockHeader(allocator, state, false);
+        try writeFixedBlockEnd(allocator, state);
+        try publishIncrementalWriterBytes(allocator, out, state);
+    }
+    pub fn writeSyncFlush(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State) IncrementalStoredEncoderCodec.Error!void {
+        try writeStoredBlock(allocator, state, "", false);
+        try publishIncrementalWriterBytes(allocator, out, state);
     }
 };
 
@@ -129,6 +145,11 @@ const IncrementalFixedEncoderCodec = struct {
     }
     pub fn writeSyncFlush(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) IncrementalFixedEncoderCodec.Error!void {
         try writeStoredBlock(allocator, state, "", false);
+        try publishIncrementalWriterBytes(allocator, pending, state);
+    }
+    pub fn writePartialFlush(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) IncrementalFixedEncoderCodec.Error!void {
+        try writeFixedBlockHeader(allocator, state, false);
+        try writeFixedBlockEnd(allocator, state);
         try publishIncrementalWriterBytes(allocator, pending, state);
     }
     pub fn finishState(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) IncrementalFixedEncoderCodec.Error!void {
@@ -196,6 +217,9 @@ const IncrementalBestEncoderCodec = struct {
     }
     pub fn writeSyncFlush(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) IncrementalBestEncoderCodec.Error!void {
         return IncrementalFixedEncoderCodec.writeSyncFlush(allocator, pending, state);
+    }
+    pub fn writePartialFlush(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) IncrementalBestEncoderCodec.Error!void {
+        return IncrementalFixedEncoderCodec.writePartialFlush(allocator, pending, state);
     }
     pub fn finishState(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) IncrementalBestEncoderCodec.Error!void {
         return IncrementalFixedEncoderCodec.finishState(allocator, pending, state);

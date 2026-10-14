@@ -6,10 +6,9 @@ const rolling_hash = @import("match_finder/rolling_hash.zig");
 /// history and hash-parser levels additionally share a persistent match index;
 /// bit packing stays continuous until finish writes BFINAL. The codec adapter
 /// chooses fixed-only or stored/fixed/dynamic best emission. Block flush ends
-/// the current block without alignment; flush emits an empty stored block,
-/// matching zlib's sync-flush byte boundary without ending the stream. Full
-/// flush additionally starts a new independent match-history segment after
-/// that byte boundary.
+/// the current block without alignment; partial flush adds zlib's ten-bit
+/// empty fixed block; sync flush emits an empty stored byte boundary. Full
+/// flush additionally starts a new independent match-history segment.
 pub fn Encoder(comptime Codec: type) type {
     return struct {
         allocator: std.mem.Allocator,
@@ -22,7 +21,7 @@ pub fn Encoder(comptime Codec: type) type {
         pending: std.ArrayList(u8) = .empty,
         pending_offset: usize = 0,
         flush_mode: FlushMode = .none,
-        flush_boundary_written: bool = false,
+        flush_boundary: FlushBoundary = .none,
         finishing: bool = false,
         final_written: bool = false,
         done: bool = false,
@@ -39,7 +38,8 @@ pub fn Encoder(comptime Codec: type) type {
         stored_only: bool = false,
 
         const Self = @This();
-        const FlushMode = enum { none, block, sync, full };
+        const FlushMode = enum { none, block, partial, sync, full };
+        const FlushBoundary = enum { none, partial, sync };
         pub const Error = Codec.Error;
         pub const supports_runtime_params = Codec.supports_params;
         pub const MatchFinderSnapshot = rolling_hash.Matcher.Snapshot;
@@ -130,7 +130,7 @@ pub fn Encoder(comptime Codec: type) type {
             self.pending.clearRetainingCapacity();
             self.pending_offset = 0;
             self.flush_mode = .none;
-            self.flush_boundary_written = false;
+            self.flush_boundary = .none;
             self.finishing = false;
             self.final_written = false;
             self.done = false;
@@ -250,13 +250,21 @@ pub fn Encoder(comptime Codec: type) type {
             if (!self.finishing and !self.done and self.flush_mode == .none)
                 self.flush_mode = .block;
         }
+        /// Publish all accepted input and append zlib's ten-bit empty fixed
+        /// block without byte-aligning the stream. Match history is retained.
+        pub fn partialFlush(self: *Self) void {
+            if (self.finishing or self.done or self.flush_mode == .sync or
+                self.flush_mode == .full or self.flush_boundary == .sync)
+                return;
+            if (self.flush_boundary != .partial) self.flush_mode = .partial;
+        }
         pub fn flush(self: *Self) void {
             if (self.finishing or self.done or self.flush_mode == .sync or self.flush_mode == .full) return;
-            if (!self.flush_boundary_written) self.flush_mode = .sync;
+            if (self.flush_boundary != .sync) self.flush_mode = .sync;
         }
         pub fn fullFlush(self: *Self) void {
             if (self.finishing or self.done or self.flush_mode == .full) return;
-            if (self.flush_boundary_written) {
+            if (self.flush_boundary == .sync) {
                 // A completed sync boundary can be upgraded in place: its wire
                 // marker is identical to full flush, so only match history
                 // changes. If the marker is still pending, retain the request
@@ -321,7 +329,7 @@ pub fn Encoder(comptime Codec: type) type {
                     // still take the buffered coalescing path.
                     const block = input[input_read..][0..block_capacity];
                     try self.writeDirectBlock(block);
-                    self.flush_boundary_written = false;
+                    self.flush_boundary = .none;
                     input_read += block.len;
                     self.total_input += block.len;
                     if (self.expected_input_len) |expected| {
@@ -332,7 +340,7 @@ pub fn Encoder(comptime Codec: type) type {
                 const n = @min(room, input.len - input_read);
                 if (n != 0) {
                     try self.plain.appendSlice(self.allocator, input[input_read..][0..n]);
-                    self.flush_boundary_written = false;
+                    self.flush_boundary = .none;
                     input_read += n;
                     self.total_input += n;
                     if (self.expected_input_len) |expected| {
@@ -355,9 +363,18 @@ pub fn Encoder(comptime Codec: type) type {
                         self.flush_mode = .none;
                         continue;
                     }
-                    if (!self.flush_boundary_written) {
+                    if (self.flush_mode == .partial) {
+                        if (self.flush_boundary == .none) {
+                            try Codec.writePartialFlush(self.allocator, &self.pending, &self.state);
+                            self.flush_boundary = .partial;
+                            continue;
+                        }
+                        self.flush_mode = .none;
+                        continue;
+                    }
+                    if (self.flush_boundary != .sync) {
                         try Codec.writeSyncFlush(self.allocator, &self.pending, &self.state);
-                        self.flush_boundary_written = true;
+                        self.flush_boundary = .sync;
                         if (self.flush_mode == .full) self.resetMatchHistory();
                         continue;
                     }
