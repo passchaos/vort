@@ -19426,6 +19426,24 @@ reuse, so production keeps the simpler independently owned plans.
   tree-prefix dominance directly against sibling stages instead of requiring a
   brittle aggregate share above one third; its negative smoke has 13 cases.
 
+- Propagated the complete literal histogram's symbol-ascending support through
+  every literal-context baseline, suffix, and clustered tree score. A parallel
+  local ascending view preserves the existing frequency-descending alphabet
+  tie order while removing dense scans from alphabet construction, weighted
+  cost, highest-symbol discovery, and score-only code-length RLE; the real
+  writer and dense cache equality remain unchanged. Dense/sparse run helpers
+  share exact accumulation, with 8,192 randomized RLE summaries and a 1,024
+  case tree oracle spanning every active-size tier plus symbols 0/255. Seven
+  fixed-CPU-2 profiles improved alphabet construction `1.084x`, weighted cost
+  `2.284x`, RLE `1.113x`, complete tree scoring `1.083x`, and the full profile
+  `1.029x`, with every proposal/cache/shape counter unchanged. Eleven
+  alternating complete-encoder pairs won 10, reducing medians
+  191.643→189.366 ms (`1.0120x`) and improving paired geometric mean
+  `1.0108x` with identical 6,475-byte ratio wire and checksums. Alphabet,
+  length generation, and prefix scoring are now co-dominant, so the profile
+  gate locks their 20% band and their `>8x` lead over weighted payload rather
+  than selecting a noise-sensitive single maximum.
+
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository
   dictionary, source, README, roadmap, and small-corpus payloads; optional

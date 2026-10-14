@@ -283,3 +283,40 @@ control used 21 alternating pairs at 50 iterations. It won 13/21 pairs,
 reduced independent medians from 480.934 to 478.503 ms (`1.0051x`), and
 improved the paired geometric mean by `1.0046x`. All pairs retained the same
 6,475-byte ratio output, input SHA-256, auxiliary output sizes, and checksum.
+
+## Sparse literal-tree support
+
+Literal-context scoring now carries the 85-symbol support of the complete
+literal histogram into every baseline, suffix, and clustered tree score. Each
+local tree walks that shared symbol-ascending support once, appending its live
+symbols to a second ascending view while preserving the existing
+frequency-descending/symbol-ascending `PrefixAlphabet` order. The local view
+then drives weighted payload costing, supplies the highest symbol without a
+rescan, and reconstructs complex-prefix zero gaps for score-only RLE. The real
+complex-prefix writer and the dense tree-score cache key/equality check remain
+unchanged.
+
+The sparse RLE summary shares the dense summary's run accumulators. Directed
+tests cover symbols 0/255, zero gaps of 1/2/3/10/11, adjacent equal lengths,
+all 256 non-zero symbols, invalid sparse metadata, and 8,192 randomized byte
+alphabets. A second 1,024-case tree oracle spans the 1–4, 5–16, 17–32,
+33–64, 65–128, and 256-symbol buckets, comparing exact alphabet order, all 256
+code lengths, and complete prefix bit cost against the old dense scorer. The
+profiled sparse path still performs the old dense shape summary outside the
+timed RLE stage and asserts exact frequency, token, and repeat-count equality.
+
+Across seven fixed-CPU-2 ten-search profiles, `source32k` medians improved:
+alphabet construction 2.232→2.059 ms (`1.084x`), weighted payload
+0.278→0.122 ms (`2.284x`), score-only RLE 0.883→0.793 ms (`1.113x`), complete
+tree scoring 6.842→6.320 ms (`1.083x`), and the full diagnostic
+34.573→33.586 ms (`1.029x`). All proposal, cache, alphabet-bucket, RLE-token,
+and shape counters remained exact. Alphabet construction, length generation,
+and prefix scoring are now co-dominant; the gate requires those three stages
+to stay within 20% and each to exceed weighted payload by more than `8x`,
+instead of choosing a noise-sensitive single winner.
+
+Eleven alternating fixed-CPU-2 complete-encoder pairs at 20 iterations won
+10/11, reducing independent medians from 191.643 to 189.366 ms (`1.0120x`)
+with a `1.0108x` paired geometric mean. Every pair retained the same input
+SHA-256, 7,259/6,732/6,475/6,483-byte fast/balanced/ratio/reference outputs,
+and checksum.

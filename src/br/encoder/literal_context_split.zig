@@ -207,9 +207,9 @@ pub noinline fn chooseSuffix(allocator: std.mem.Allocator, input: []const u8, co
 pub noinline fn chooseProposals(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command) !Proposals {
     const analysis = try collectAnalysis(allocator, input, commands) orelse return .{};
     defer allocator.destroy(analysis);
-    const baseline_bits = try treeBitCost(allocator, &analysis.total);
     var active_symbols: ActiveSymbols = undefined;
     buildActiveSymbols(&analysis.total, &active_symbols);
+    const baseline_bits = try treeBitCostWithSupport(allocator, &analysis.total, &active_symbols);
     var proposals: Proposals = .{};
     for (&analysis.by_mode, 0..) |*by_context, mode_value| {
         const mode_proposals = try chooseModeFromHistograms(
@@ -284,9 +284,9 @@ fn profileSearchOnce(
     profile.literal_count = analysis.literal_count;
 
     const baseline_start = profiler.now();
-    const baseline_bits = try treeBitCost(allocator, &analysis.total);
     var active_symbols: ActiveSymbols = undefined;
     buildActiveSymbols(&analysis.total, &active_symbols);
+    const baseline_bits = try treeBitCostWithSupport(allocator, &analysis.total, &active_symbols);
     profile.active_symbols = active_symbols.len;
     profile.baseline_ns = profiler.elapsedNs(baseline_start);
 
@@ -413,9 +413,9 @@ fn chooseModeProposals(allocator: std.mem.Allocator, input: []const u8, commands
     }
     if (literal_count < min_literal_count) return .{};
 
-    const baseline_bits = try treeBitCost(allocator, &total);
     var active_symbols: ActiveSymbols = undefined;
     buildActiveSymbols(&total, &active_symbols);
+    const baseline_bits = try treeBitCostWithSupport(allocator, &total, &active_symbols);
     return chooseModeFromHistograms(
         false,
         allocator,
@@ -460,7 +460,7 @@ fn chooseModeFromHistograms(
         left_count += context_count;
         if (left_count == 0 or left_count == literal_count) continue;
         if (context_count != 0 or payload_bits == null) {
-            payload_bits = try suffixPayloadBitCost(allocator, total, &left);
+            payload_bits = try suffixPayloadBitCost(allocator, total, &left, active_symbols);
             if (profiled) profiler.profile.suffix_payload_scores += 1;
         } else if (profiled) profiler.profile.suffix_payload_reuses += 1;
         const candidate = Candidate.suffix(mode, @intCast(cutoff), 0);
@@ -516,11 +516,13 @@ fn suffixPayloadBitCost(
     allocator: std.mem.Allocator,
     total: *const [256]u32,
     left: *const [256]u32,
+    active_symbols: *const ActiveSymbols,
 ) !u64 {
     var right: [256]u32 = undefined;
-    for (&right, total, left) |*remaining, all, used| remaining.* = all - used;
-    const left_bits = try treeBitCost(allocator, left);
-    const right_bits = try treeBitCost(allocator, &right);
+    for (active_symbols.symbols[0..active_symbols.len]) |symbol|
+        right[symbol] = total[symbol] - left[symbol];
+    const left_bits = try treeBitCostWithSupport(allocator, left, active_symbols);
+    const right_bits = try treeBitCostWithSupport(allocator, &right, active_symbols);
     return left_bits + right_bits;
 }
 
@@ -666,7 +668,7 @@ fn clusterContexts(
         var bits: u64 = 0;
         for (tree_histograms[0..tree_count]) |*histogram| {
             const tree_bits = tree_score_cache.get(profiled, histogram) orelse score: {
-                const computed = try treeBitCostProfiled(profiled, allocator, histogram, profiler);
+                const computed = try treeBitCostProfiled(profiled, allocator, histogram, active_symbols, profiler);
                 tree_score_cache.put(histogram, computed);
                 break :score computed;
             };
@@ -843,18 +845,33 @@ fn assignmentLog2Q8(value: u32) u64 {
 }
 
 fn treeBitCost(allocator: std.mem.Allocator, frequencies: *const [256]u32) !u64 {
-    return treeBitCostProfiled(false, allocator, frequencies, {});
+    var active_symbols: ActiveSymbols = undefined;
+    buildActiveSymbols(frequencies, &active_symbols);
+    return treeBitCostWithSupport(allocator, frequencies, &active_symbols);
+}
+
+/// Score one tree through the sorted support of its parent literal histogram.
+/// Every non-zero `frequency` must occur in `active_symbols`; individual suffix
+/// and clustered trees may omit any number of entries from that shared set.
+fn treeBitCostWithSupport(
+    allocator: std.mem.Allocator,
+    frequencies: *const [256]u32,
+    active_symbols: *const ActiveSymbols,
+) !u64 {
+    return treeBitCostProfiled(false, allocator, frequencies, active_symbols, {});
 }
 
 fn treeBitCostProfiled(
     comptime profiled: bool,
     allocator: std.mem.Allocator,
     frequencies: *const [256]u32,
+    active_symbols: *const ActiveSymbols,
     profiler: if (profiled) *ProfileTimer else void,
 ) !u64 {
     const alphabet_start = if (profiled) profiler.now() else {};
     var alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
-    try command_plan.alphabetFromFrequenciesInto(256, &alphabet, frequencies);
+    var tree_symbols: ActiveSymbols = undefined;
+    try buildTreeAlphabet(frequencies, active_symbols, &alphabet, &tree_symbols);
     if (profiled) {
         profiler.profile.tree_alphabet_ns +%= profiler.elapsedNs(alphabet_start);
         profiler.profile.tree_score_calls += 1;
@@ -888,7 +905,7 @@ fn treeBitCostProfiled(
     } else try alphabet.codeLengths(frequencies);
     if (profiled) profiler.profile.tree_lengths_ns +%= profiler.elapsedNs(lengths_start);
     const weighted_start = if (profiled) profiler.now() else {};
-    var cost = weightedBits(frequencies, &lengths);
+    var cost = weightedBitsSparse(frequencies, &lengths, &tree_symbols);
     if (profiled) profiler.profile.tree_weighted_ns +%= profiler.elapsedNs(weighted_start);
     const prefix_start = if (profiled) profiler.now() else {};
     var prefix_shape_ns: u64 = 0;
@@ -896,15 +913,12 @@ fn treeBitCostProfiled(
         cost += 4 + @as(u64, alphabet.len) * 8 + @intFromBool(alphabet.len == 4);
         if (profiled) profiler.profile.tree_simple_scores += 1;
     } else {
-        var highest: usize = 0;
-        for (alphabet.symbols[0..alphabet.len]) |symbol| highest = @max(highest, symbol);
         if (profiled) {
             var prefix_profile: complex_prefix.BitCostProfile = .{};
-            cost += try complex_prefix.bitCostProfiled(
+            cost += try complex_prefix.bitCostSparseProfiled(
                 allocator,
-                256,
                 &lengths,
-                highest + 1,
+                tree_symbols.symbols[0..tree_symbols.len],
                 profiler.io,
                 &prefix_profile,
             );
@@ -929,7 +943,11 @@ fn treeBitCostProfiled(
             profiler.profile.complex_prefix_shape_ns +%= prefix_profile.shape_ns;
             prefix_shape_ns = prefix_profile.shape_ns;
         } else {
-            cost += try complex_prefix.bitCost(allocator, 256, &lengths, highest + 1);
+            cost += try complex_prefix.bitCostSparse(
+                allocator,
+                &lengths,
+                tree_symbols.symbols[0..tree_symbols.len],
+            );
         }
         if (profiled) profiler.profile.tree_complex_scores += 1;
     }
@@ -937,10 +955,61 @@ fn treeBitCostProfiled(
     return cost;
 }
 
-fn weightedBits(frequencies: *const [256]u32, lengths: *const [256]u4) u64 {
+fn buildTreeAlphabet(
+    frequencies: *const [256]u32,
+    active_symbols: *const ActiveSymbols,
+    alphabet: *command_plan.PrefixAlphabetFor(256),
+    tree_symbols: *ActiveSymbols,
+) !void {
+    // The shared support is symbol-ascending. Appending live entries preserves
+    // that order for sparse RLE while the parallel insertion keeps the exact
+    // frequency-descending/symbol-ascending PrefixAlphabet tie behavior.
+    alphabet.len = 0;
+    tree_symbols.len = 0;
+    var previous_symbol: ?u8 = null;
+    for (active_symbols.symbols[0..active_symbols.len]) |symbol| {
+        if (previous_symbol) |previous| std.debug.assert(previous < symbol);
+        previous_symbol = symbol;
+        const frequency = frequencies[symbol];
+        if (frequency == 0) continue;
+        tree_symbols.symbols[tree_symbols.len] = symbol;
+        tree_symbols.len += 1;
+
+        if (alphabet.len == alphabet.symbols.len) return error.InvalidBlockPlan;
+        var index = alphabet.len;
+        while (index != 0 and frequency > frequencies[alphabet.symbols[index - 1]]) : (index -= 1)
+            alphabet.symbols[index] = alphabet.symbols[index - 1];
+        alphabet.symbols[index] = symbol;
+        alphabet.len += 1;
+    }
+    if (alphabet.len == 0) return error.InvalidBlockPlan;
+    std.debug.assert(alphabet.len == tree_symbols.len);
+}
+
+fn weightedBitsSparse(
+    frequencies: *const [256]u32,
+    lengths: *const [256]u4,
+    tree_symbols: *const ActiveSymbols,
+) u64 {
     var bits: u64 = 0;
-    for (frequencies, lengths) |frequency, length| bits += @as(u64, frequency) * length;
+    for (tree_symbols.symbols[0..tree_symbols.len]) |symbol|
+        bits += @as(u64, frequencies[symbol]) * lengths[symbol];
     return bits;
+}
+
+fn treeBitCostDenseReference(allocator: std.mem.Allocator, frequencies: *const [256]u32) !u64 {
+    var alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
+    try command_plan.alphabetFromFrequenciesInto(256, &alphabet, frequencies);
+    const lengths = try alphabet.codeLengths(frequencies);
+    var cost: u64 = 0;
+    for (frequencies, lengths) |frequency, length|
+        cost += @as(u64, frequency) * length;
+    if (alphabet.len <= 4)
+        return cost + 4 + @as(u64, alphabet.len) * 8 + @intFromBool(alphabet.len == 4);
+
+    var highest: usize = 0;
+    for (alphabet.symbols[0..alphabet.len]) |symbol| highest = @max(highest, symbol);
+    return cost + try complex_prefix.bitCost(allocator, 256, &lengths, highest + 1);
 }
 
 test "literal context split finds a predictive RFC mode" {
@@ -1125,6 +1194,66 @@ test "literal context active alphabet covers all byte symbols" {
     try std.testing.expect(std.mem.indexOfScalar(u8, active.symbols[0..active.len], 17) == null);
 }
 
+test "literal context sparse tree support matches dense scoring" {
+    var state: u32 = 0x243f_6a88;
+    const exact_active_counts = [_]usize{ 1, 2, 4, 5, 16, 17, 32, 33, 64, 65, 128, 256 };
+    for (0..1024) |iteration| {
+        var support_frequencies: [256]u32 = @splat(0);
+        var frequencies: [256]u32 = @splat(0);
+        for (&support_frequencies, &frequencies) |*support, *frequency| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            if (state & 1 == 0) continue;
+            support.* = 1;
+            state = state *% 1_664_525 +% 1_013_904_223;
+            if (state & 3 == 0) {
+                frequency.* = switch (state & 15) {
+                    0 => std.math.maxInt(u32) - (state >> 28),
+                    1...4 => 1 + (state >> 29),
+                    else => 1 + (state >> 12),
+                };
+            }
+        }
+        if (iteration < exact_active_counts.len) {
+            support_frequencies = @splat(1);
+            frequencies = @splat(0);
+            const active_count = exact_active_counts[iteration];
+            for (0..active_count) |index| {
+                const symbol = if (index + 1 == active_count) 255 else index;
+                frequencies[symbol] = 1 + @as(u32, @intCast(index % 3));
+            }
+        } else {
+            const forced_symbol: u8 = switch (iteration & 3) {
+                0 => 0,
+                1 => 255,
+                else => @truncate(iteration),
+            };
+            support_frequencies[forced_symbol] = 1;
+            frequencies[forced_symbol] = 1 + @as(u32, @truncate(iteration));
+        }
+
+        var support: ActiveSymbols = undefined;
+        buildActiveSymbols(&support_frequencies, &support);
+        var sparse_alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
+        var tree_symbols: ActiveSymbols = undefined;
+        try buildTreeAlphabet(&frequencies, &support, &sparse_alphabet, &tree_symbols);
+        var dense_alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
+        try command_plan.alphabetFromFrequenciesInto(256, &dense_alphabet, &frequencies);
+        try std.testing.expectEqual(dense_alphabet.len, sparse_alphabet.len);
+        try std.testing.expectEqualSlices(
+            u16,
+            dense_alphabet.symbols[0..dense_alphabet.len],
+            sparse_alphabet.symbols[0..sparse_alphabet.len],
+        );
+        const sparse_lengths = try sparse_alphabet.codeLengths(&frequencies);
+        const dense_lengths = try dense_alphabet.codeLengths(&frequencies);
+        try std.testing.expectEqualSlices(u4, &dense_lengths, &sparse_lengths);
+
+        const actual = try treeBitCostWithSupport(std.testing.allocator, &frequencies, &support);
+        const expected = try treeBitCostDenseReference(std.testing.allocator, &frequencies);
+        try std.testing.expectEqual(expected, actual);
+    }
+}
+
 test "literal context suffix map costs match independent planning" {
     try std.testing.expectEqual(@as(u64, 0), precomputed_suffix_map_costs[0]);
     for (1..64) |cutoff| {
@@ -1144,6 +1273,8 @@ test "literal context suffix payload reuse matches independent scoring" {
         for (&total, histogram) |*sum, frequency| sum.* += frequency;
     }
     const literal_count: usize = histogramCount(&total);
+    var active_symbols: ActiveSymbols = undefined;
+    buildActiveSymbols(&total, &active_symbols);
 
     var left: [256]u32 = @splat(0);
     var left_count: usize = 0;
@@ -1160,10 +1291,13 @@ test "literal context suffix payload reuse matches independent scoring" {
         if (left_count == 0 or left_count == literal_count) continue;
         valid_cutoffs += 1;
         if (context_count != 0 or cached == null) {
-            cached = try suffixPayloadBitCost(std.testing.allocator, &total, &left);
+            cached = try suffixPayloadBitCost(std.testing.allocator, &total, &left, &active_symbols);
             recomputed += 1;
         }
-        const independent = try suffixPayloadBitCost(std.testing.allocator, &total, &left);
+        var right: [256]u32 = undefined;
+        for (&right, total, left) |*remaining, all, used| remaining.* = all - used;
+        const independent = try treeBitCostDenseReference(std.testing.allocator, &left) +
+            try treeBitCostDenseReference(std.testing.allocator, &right);
         try std.testing.expectEqual(independent, cached.?);
     }
     try std.testing.expect(valid_cutoffs > recomputed);

@@ -164,12 +164,13 @@ def main() -> int:
     cluster_score = integer(source32, "cluster_score_ns")
     assert cluster_score == max(integer(source32, key) for key in CLUSTER_STAGES), source32
     assert cluster_score * 2 > integer(source32, "cluster_ns"), source32
-    tree_prefix = integer(source32, "tree_prefix_ns")
-    assert tree_prefix == max(integer(source32, key) for key in TREE_SCORE_STAGES), source32
+    tree_major = [integer(source32, key) for key in ("tree_alphabet_ns", "tree_lengths_ns", "tree_prefix_ns")]
+    assert min(tree_major) * 5 > max(tree_major) * 4, source32
+    assert min(tree_major) > integer(source32, "tree_weighted_ns") * 8, source32
     prefix_rle = integer(source32, "complex_prefix_rle_ns")
     assert prefix_rle == max(integer(source32, key) for key in COMPLEX_PREFIX_STAGES), source32
     assert prefix_rle * 3 > integer(source32, "complex_prefix_stage_ns"), source32
-    print("br_literal_context_profile_gate=ok rows=3 dominant=cluster_score_ns/tree_prefix_ns/prefix_rle_ns")
+    print("br_literal_context_profile_gate=ok rows=3 dominant=cluster_score_ns/tree_major_ns/prefix_rle_ns")
     return 0
 
 

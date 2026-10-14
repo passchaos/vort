@@ -29,50 +29,99 @@ pub fn summarize(comptime collect_shape: bool, lengths: []const u4, stop_index: 
         var end = index + 1;
         if (length == 0) {
             while (end < stop_index and lengths[end] == 0) end += 1;
-            const run = end - index;
-            if (collect_shape) {
-                summary.zero_runs += 1;
-                summary.zero_lengths += run;
-            }
-            if (run < 3) {
-                summary.frequencies[0] += @intCast(run);
-                summary.token_count += run;
-                if (collect_shape) summary.literal_tokens += run;
-            } else {
-                const tokens = repeatTokenCount(run, 8);
-                summary.frequencies[17] += @intCast(tokens);
-                summary.token_count += tokens;
-                summary.repeat17_tokens += tokens;
-                if (collect_shape) summary.repeat_chain_buckets[@min(tokens - 1, 3)] += 1;
-            }
+            addZeroRun(collect_shape, &summary, end - index);
         } else {
             while (end < stop_index and lengths[end] == length) end += 1;
-            const run = end - index;
-            if (collect_shape) {
-                summary.nonzero_runs += 1;
-                summary.nonzero_lengths += run;
-            }
-            summary.frequencies[length] += 1;
-            summary.token_count += 1;
-            if (collect_shape) summary.literal_tokens += 1;
-            if (run > 1) {
-                const remaining = run - 1;
-                if (remaining < 3) {
-                    summary.frequencies[length] += @intCast(remaining);
-                    summary.token_count += remaining;
-                    if (collect_shape) summary.literal_tokens += remaining;
-                } else {
-                    const tokens = repeatTokenCount(remaining, 4);
-                    summary.frequencies[16] += @intCast(tokens);
-                    summary.token_count += tokens;
-                    summary.repeat16_tokens += tokens;
-                    if (collect_shape) summary.repeat_chain_buckets[@min(tokens - 1, 3)] += 1;
-                }
-            }
+            addNonzeroRun(collect_shape, &summary, length, end - index);
         }
         index = end;
     }
     return summary;
+}
+
+/// Summarize a code-length alphabet from its non-zero symbol list. `symbols`
+/// must be strictly increasing and must contain every non-zero position in
+/// `lengths`; the latter is a caller-owned invariant so this path never scans
+/// dense zero gaps merely to revalidate its sparse input.
+pub fn summarizeSparse(comptime collect_shape: bool, lengths: []const u4, symbols: []const u8) !Summary {
+    if (lengths.len > 256) return error.InvalidBlockPlan;
+
+    var summary: Summary = .{};
+    var symbol_cursor: usize = 0;
+    var sparse_index: usize = 0;
+    while (sparse_index < symbols.len) {
+        const symbol_index: usize = symbols[sparse_index];
+        if (symbol_index >= lengths.len or symbol_index < symbol_cursor or lengths[symbol_index] == 0) {
+            return error.InvalidBlockPlan;
+        }
+
+        if (symbol_index > symbol_cursor) {
+            addZeroRun(collect_shape, &summary, symbol_index - symbol_cursor);
+        }
+
+        const length = lengths[symbol_index];
+        var run: usize = 1;
+        var last_symbol = symbol_index;
+        while (sparse_index + run < symbols.len) : (run += 1) {
+            const next_symbol: usize = symbols[sparse_index + run];
+            if (next_symbol >= lengths.len or next_symbol <= last_symbol or lengths[next_symbol] == 0) {
+                return error.InvalidBlockPlan;
+            }
+            if (next_symbol != last_symbol + 1 or lengths[next_symbol] != length) break;
+            last_symbol = next_symbol;
+        }
+        addNonzeroRun(collect_shape, &summary, length, run);
+        sparse_index += run;
+        // The addition is performed after widening the u8 symbol, so symbol
+        // 255 produces the valid exclusive stop index 256 without overflow.
+        symbol_cursor = last_symbol + 1;
+    }
+    if (collect_shape) summary.input_lengths = symbol_cursor;
+    return summary;
+}
+
+fn addZeroRun(comptime collect_shape: bool, summary: *Summary, run: usize) void {
+    std.debug.assert(run != 0);
+    if (collect_shape) {
+        summary.zero_runs += 1;
+        summary.zero_lengths += run;
+    }
+    if (run < 3) {
+        summary.frequencies[0] += @intCast(run);
+        summary.token_count += run;
+        if (collect_shape) summary.literal_tokens += run;
+    } else {
+        const tokens = repeatTokenCount(run, 8);
+        summary.frequencies[17] += @intCast(tokens);
+        summary.token_count += tokens;
+        summary.repeat17_tokens += tokens;
+        if (collect_shape) summary.repeat_chain_buckets[@min(tokens - 1, 3)] += 1;
+    }
+}
+
+fn addNonzeroRun(comptime collect_shape: bool, summary: *Summary, length: u4, run: usize) void {
+    std.debug.assert(length != 0 and run != 0);
+    if (collect_shape) {
+        summary.nonzero_runs += 1;
+        summary.nonzero_lengths += run;
+    }
+    summary.frequencies[length] += 1;
+    summary.token_count += 1;
+    if (collect_shape) summary.literal_tokens += 1;
+    if (run > 1) {
+        const remaining = run - 1;
+        if (remaining < 3) {
+            summary.frequencies[length] += @intCast(remaining);
+            summary.token_count += remaining;
+            if (collect_shape) summary.literal_tokens += remaining;
+        } else {
+            const tokens = repeatTokenCount(remaining, 4);
+            summary.frequencies[16] += @intCast(tokens);
+            summary.token_count += tokens;
+            summary.repeat16_tokens += tokens;
+            if (collect_shape) summary.repeat_chain_buckets[@min(tokens - 1, 3)] += 1;
+        }
+    }
 }
 
 fn repeatTokenCount(run: usize, comptime radix: usize) usize {
@@ -425,6 +474,87 @@ test "bounded RLE frequency fusion matches token scan" {
         try std.testing.expectEqual(repeat16_tokens, summary.repeat16_tokens);
         try std.testing.expectEqual(repeat17_tokens, summary.repeat17_tokens);
         try std.testing.expectEqual(stop_index, summary.zero_lengths + summary.nonzero_lengths);
+    }
+}
+
+fn expectSparseSummaryMatchesDense(lengths: []const u4) !void {
+    std.debug.assert(lengths.len <= 256);
+    var symbols: [256]u8 = undefined;
+    var active: usize = 0;
+    var stop_index: usize = 0;
+    for (lengths, 0..) |length, symbol| {
+        if (length == 0) continue;
+        symbols[active] = @intCast(symbol);
+        active += 1;
+        stop_index = symbol + 1;
+    }
+
+    inline for (.{ false, true }) |collect_shape| {
+        const dense = try summarize(collect_shape, lengths, stop_index);
+        const sparse = try summarizeSparse(collect_shape, lengths, symbols[0..active]);
+        try std.testing.expectEqualDeep(dense, sparse);
+    }
+}
+
+test "sparse summary matches dense boundary shapes" {
+    var all_zero: [256]u4 = @splat(0);
+    try expectSparseSummaryMatchesDense(&all_zero);
+    try std.testing.expectEqualDeep(Summary{}, try summarizeSparse(true, &all_zero, &.{}));
+
+    var gaps: [256]u4 = @splat(0);
+    // Interior zero gaps of lengths 1, 2, 3, 10, and 11, plus both u8
+    // symbol boundaries and one adjacent equal-length run.
+    gaps[0] = 1;
+    gaps[2] = 2;
+    gaps[5] = 3;
+    gaps[9] = 4;
+    gaps[20] = 5;
+    gaps[32] = 7;
+    gaps[33] = 7;
+    gaps[34] = 7;
+    gaps[255] = 15;
+    try expectSparseSummaryMatchesDense(&gaps);
+
+    var leading: [64]u4 = @splat(0);
+    @memset(leading[11..27], 6);
+    leading[27] = 9;
+    leading[29] = 9;
+    try expectSparseSummaryMatchesDense(&leading);
+
+    var all_nonzero: [256]u4 = @splat(8);
+    try expectSparseSummaryMatchesDense(&all_nonzero);
+}
+
+test "sparse summary rejects invalid local metadata" {
+    var lengths: [4]u4 = @splat(0);
+    lengths[1] = 4;
+    lengths[3] = 5;
+    try std.testing.expectError(error.InvalidBlockPlan, summarizeSparse(false, &lengths, &.{ 1, 1 }));
+    try std.testing.expectError(error.InvalidBlockPlan, summarizeSparse(false, &lengths, &.{ 3, 1 }));
+    try std.testing.expectError(error.InvalidBlockPlan, summarizeSparse(false, &lengths, &.{2}));
+    try std.testing.expectError(error.InvalidBlockPlan, summarizeSparse(false, lengths[0..2], &.{3}));
+
+    var oversized: [257]u4 = @splat(0);
+    try std.testing.expectError(error.InvalidBlockPlan, summarizeSparse(false, &oversized, &.{}));
+}
+
+test "sparse summary matches dense randomized alphabets" {
+    var state: u64 = 0x5350_4152_5345_524c;
+    for (0..8192) |_| {
+        state = state *% 6_364_136_223_846_793_005 +% 1_442_695_040_888_963_407;
+        const alphabet_len: usize = @intCast(state % 257);
+        var lengths: [256]u4 = @splat(0);
+        for (lengths[0..alphabet_len], 0..) |*length, symbol| {
+            state = state *% 6_364_136_223_846_793_005 +% 1_442_695_040_888_963_407;
+            const selector = state & 15;
+            if (selector < 7) continue;
+            if (selector < 12 and symbol != 0 and lengths[symbol - 1] != 0) {
+                length.* = lengths[symbol - 1];
+            } else {
+                length.* = @intCast(1 + (state >> 32) % 15);
+            }
+        }
+        try expectSparseSummaryMatchesDense(lengths[0..alphabet_len]);
     }
 }
 
