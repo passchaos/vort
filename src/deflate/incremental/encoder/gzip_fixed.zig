@@ -31,6 +31,7 @@ pub fn Encoder(comptime Codec: type) type {
             member_input: usize,
             member_output: usize,
             pending_output: usize,
+            pending_bits: u3,
             member_count: usize,
             member_index: usize,
             finishing: bool,
@@ -104,17 +105,25 @@ pub fn Encoder(comptime Codec: type) type {
             self.resetMemberExactSize(expected_input_len);
         }
         pub fn snapshot(self: *const Self) Snapshot {
+            const raw_snapshot = self.raw.snapshot();
             return .{
                 .input_read = self.stream_input,
                 .output_written = self.stream_output,
                 .member_input = self.total_input,
                 .member_output = self.total_output,
                 .pending_output = self.pending.items.len - self.pending_offset,
+                .pending_bits = raw_snapshot.pending_bits,
                 .member_count = self.member_count,
                 .member_index = if (self.done and self.member_count != 0) self.member_count - 1 else self.member_count,
                 .finishing = self.finishing,
                 .done = self.done,
             };
+        }
+        /// End and publish the accepted input as a non-final DEFLATE block
+        /// without byte alignment. CRC-32, ISIZE, and match history remain
+        /// active for subsequent input.
+        pub fn blockFlush(self: *Self) void {
+            if (!self.finishing and !self.done) self.raw.blockFlush();
         }
         pub fn flush(self: *Self) void {
             if (!self.finishing and !self.done) self.raw.flush();

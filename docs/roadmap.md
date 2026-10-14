@@ -19489,9 +19489,25 @@ reuse, so production keeps the simpler independently owned plans.
   sync-to-full upgrade, pending-flush finish, and zlib/gzip checksum continuity.
   The system-zlib incremental benchmark performs a bidirectional preflight:
   zlib inflates Vort's complete stream and independent suffix, while Vort does
-  the same for a system-zlib `Z_FULL_FLUSH` stream. `Z_BLOCK`,
-  `Z_PARTIAL_FLUSH`, recovery, and mid-stream parameter changes remain separate
+  the same for a system-zlib `Z_FULL_FLUSH` stream. `Z_PARTIAL_FLUSH`,
+  `inflateSync`-style recovery, and mid-stream parameter changes remain separate
   compatibility work rather than being implied by this completed slice.
+
+- Added Zig-native `blockFlush()` with zlib `Z_BLOCK`-equivalent behavior to
+  raw stored/fixed/best and zlib/gzip fixed/best incremental encoders. It ends
+  and publishes the current non-final block without adding an empty sync-flush
+  marker; fixed/best keep the bitstream unaligned, while stored output has only
+  the alignment inherent to its RFC 1951 block and no extra marker. Rolling
+  history, match indexes, preset-dictionary availability, and wrapper Adler-32,
+  CRC-32, and ISIZE state remain continuous. Raw fixed/best and wrapper
+  snapshots expose `pending_bits` for partial-byte diagnostics. Pending requests
+  upgrade in `block < sync < full` order without duplicate markers, including
+  tiny-output backpressure, and `finish()` honors an undrained block boundary.
+  Focused tests pin audited libz fixed-Huffman raw/zlib/gzip wire fixtures and
+  cover stored boundaries, empty idempotence, retained history, checksum
+  continuity, block-to-sync/full upgrades, and zero-/one-byte output. This
+  primitive provides the required block boundary for a later runtime parameter
+  switching API; `inflateSync` recovery remains unimplemented.
 
 - Added the first general adaptive Brotli block splitter and integrated it
   vertically for command trees. Shared modules provide pure-integer Q8

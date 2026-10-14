@@ -32,6 +32,7 @@ pub fn Encoder(comptime Codec: type) type {
             stream_input: usize,
             stream_output: usize,
             pending_output: usize,
+            pending_bits: u3,
             stream_count: usize,
             stream_index: usize,
             finishing: bool,
@@ -97,17 +98,25 @@ pub fn Encoder(comptime Codec: type) type {
             self.resetWrapper();
         }
         pub fn snapshot(self: *const Self) Snapshot {
+            const raw_snapshot = self.raw.snapshot();
             return .{
                 .input_read = self.stream_input,
                 .output_written = self.stream_output,
                 .stream_input = self.total_input,
                 .stream_output = self.total_output,
                 .pending_output = self.pending.items.len - self.pending_offset,
+                .pending_bits = raw_snapshot.pending_bits,
                 .stream_count = self.stream_count,
                 .stream_index = if (self.done and self.stream_count != 0) self.stream_count - 1 else self.stream_count,
                 .finishing = self.finishing,
                 .done = self.done,
             };
+        }
+        /// End and publish the accepted input as a non-final DEFLATE block
+        /// without byte alignment. The zlib checksum and dictionary history
+        /// remain active for subsequent input.
+        pub fn blockFlush(self: *Self) void {
+            if (!self.finishing and !self.done) self.raw.blockFlush();
         }
         pub fn flush(self: *Self) void {
             if (!self.finishing and !self.done) self.raw.flush();

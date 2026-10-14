@@ -5,10 +5,11 @@ const rolling_hash = @import("match_finder/rolling_hash.zig");
 /// Incremental block-planned raw-DEFLATE encoder. Blocks share retained 32 KiB
 /// history and hash-parser levels additionally share a persistent match index;
 /// bit packing stays continuous until finish writes BFINAL. The codec adapter
-/// chooses fixed-only or stored/fixed/dynamic best emission. Flush emits an
-/// empty stored block, matching zlib's sync-flush byte boundary without ending
-/// the stream. Full flush additionally starts a new independent match-history
-/// segment after that byte boundary.
+/// chooses fixed-only or stored/fixed/dynamic best emission. Block flush ends
+/// the current block without alignment; flush emits an empty stored block,
+/// matching zlib's sync-flush byte boundary without ending the stream. Full
+/// flush additionally starts a new independent match-history segment after
+/// that byte boundary.
 pub fn Encoder(comptime Codec: type) type {
     return struct {
         allocator: std.mem.Allocator,
@@ -33,7 +34,7 @@ pub fn Encoder(comptime Codec: type) type {
         dictionary_available: bool = true,
 
         const Self = @This();
-        const FlushMode = enum { none, sync, full };
+        const FlushMode = enum { none, block, sync, full };
         pub const Error = Codec.Error;
         pub const MatchFinderSnapshot = rolling_hash.Matcher.Snapshot;
         pub const Snapshot = struct {
@@ -41,6 +42,7 @@ pub fn Encoder(comptime Codec: type) type {
             output_written: usize,
             buffered_input: usize,
             pending_output: usize,
+            pending_bits: u3,
             retained_token_capacity: usize,
             finishing: bool,
             done: bool,
@@ -131,14 +133,22 @@ pub fn Encoder(comptime Codec: type) type {
                 .output_written = self.total_output,
                 .buffered_input = self.plain.items.len,
                 .pending_output = self.pending.items.len - self.pending_offset,
+                .pending_bits = self.state.bit_index,
                 .retained_token_capacity = self.plan_tokens.capacity,
                 .finishing = self.finishing,
                 .done = self.done,
             };
         }
+        /// End and publish a non-final block without adding a sync-flush
+        /// marker or aligning the bit stream. Match history remains available
+        /// to later blocks.
+        pub fn blockFlush(self: *Self) void {
+            if (!self.finishing and !self.done and self.flush_mode == .none)
+                self.flush_mode = .block;
+        }
         pub fn flush(self: *Self) void {
-            if (!self.finishing and !self.done and self.flush_mode == .none and !self.flush_boundary_written)
-                self.flush_mode = .sync;
+            if (self.finishing or self.done or self.flush_mode == .sync or self.flush_mode == .full) return;
+            if (!self.flush_boundary_written) self.flush_mode = .sync;
         }
         pub fn fullFlush(self: *Self) void {
             if (self.finishing or self.done or self.flush_mode == .full) return;
@@ -222,6 +232,10 @@ pub fn Encoder(comptime Codec: type) type {
                 if (self.flush_mode != .none) {
                     if (self.plain.items.len != 0) {
                         try self.writeDataBlock(false);
+                        continue;
+                    }
+                    if (self.flush_mode == .block) {
+                        self.flush_mode = .none;
                         continue;
                     }
                     if (!self.flush_boundary_written) {

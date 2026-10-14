@@ -2,8 +2,9 @@ const std = @import("std");
 const core = @import("../../../core.zig");
 
 /// Incremental raw-DEFLATE stored-block encoder. One RFC 1951 stored block is
-/// retained; encoded bytes drain through arbitrary caller output. Flush writes
-/// a non-final block, while finish writes the only BFINAL block.
+/// retained; encoded bytes drain through arbitrary caller output. Block, sync,
+/// and full flushes write a non-final block, while finish writes the only
+/// BFINAL block.
 pub fn Encoder(comptime Codec: type) type {
     return struct {
         allocator: std.mem.Allocator,
@@ -20,7 +21,7 @@ pub fn Encoder(comptime Codec: type) type {
         expected_input_len: ?usize = null,
 
         const Self = @This();
-        const FlushMode = enum { none, sync, full };
+        const FlushMode = enum { none, block, sync, full };
         pub const Error = Codec.Error;
         pub const Options = struct {
             max_input_len: usize = std.math.maxInt(usize),
@@ -74,11 +75,19 @@ pub fn Encoder(comptime Codec: type) type {
                 .done = self.done,
             };
         }
+        /// End and publish the accepted input as a non-final stored block.
+        /// Stored blocks are inherently byte-aligned, so this adds no separate
+        /// empty sync-flush marker.
+        pub fn blockFlush(self: *Self) void {
+            if (!self.finishing and !self.done and self.flush_mode == .none)
+                self.flush_mode = .block;
+        }
         pub fn flush(self: *Self) void {
-            if (!self.finishing and !self.done and self.flush_mode == .none) self.flush_mode = .sync;
+            if (self.finishing or self.done or self.flush_mode == .sync or self.flush_mode == .full) return;
+            self.flush_mode = .sync;
         }
         pub fn fullFlush(self: *Self) void {
-            if (!self.finishing and !self.done) self.flush_mode = .full;
+            if (!self.finishing and !self.done and self.flush_mode != .full) self.flush_mode = .full;
         }
         pub fn finish(self: *Self) void {
             self.finishing = true;
@@ -130,7 +139,7 @@ pub fn Encoder(comptime Codec: type) type {
                         continue;
                     }
                     self.flush_mode = .none;
-                    return result(input_read, output_written, .need_input);
+                    continue;
                 }
                 if (self.finishing and !self.final_written) {
                     if (self.expected_input_len) |expected| {

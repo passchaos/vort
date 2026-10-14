@@ -255,7 +255,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   resources support bounded individual-blob extraction without materializing
   the whole solid stream. Pipable WIMs, cross-part SWM assembly, and encrypted/
   reparse/ADS path extraction are reported explicitly as unsupported;
-- raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode, with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
+- raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode,
+  with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
+  Zig-native incremental encoders provide `blockFlush()` with zlib `Z_BLOCK`
+  semantics for raw stored/fixed/best and zlib/gzip fixed/best streams;
 - dependency-free BGZF blocked-gzip parsing/writing with strict `BC`/`BSIZE`
   validation, per-block DEFLATE/CRC/ISIZE checks, bounded concatenated decode,
   canonical EOF markers, 48:16 virtual offsets, and cross-block virtual-range
@@ -1175,6 +1178,14 @@ defer zstd_incremental_encoder.deinit();
 // contract for RFC 1951 stored blocks, including pledged input size and flush.
 // RawDeflateIncrementalFixedEncoder adds fixed-Huffman compression, a rolling
 // 32 KiB history, and zlib-compatible empty stored sync-flush boundaries.
+// blockFlush() publishes accepted input by ending the current non-final block,
+// matching zlib Z_BLOCK without an empty sync marker. Fixed/best streams do not
+// byte-align this boundary; stored blocks retain their inherent RFC alignment
+// but add no separate marker. Match history and any wrapper Adler-32 or
+// CRC-32/ISIZE state remain continuous. Raw fixed/best and wrapper snapshots
+// expose pending_bits so callers can diagnose the live partial output byte.
+// Pending flush requests upgrade in block < sync < full order without duplicate
+// boundaries, and finish() honors a boundary requested before finalization.
 // Its fullFlush() method emits the same byte boundary and then drops retained
 // history, rolling match indexes, and any preset dictionary for the remainder
 // of the stream, matching Z_FULL_FLUSH. The best and zlib/gzip wrappers expose
@@ -1190,6 +1201,10 @@ defer zstd_incremental_encoder.deinit();
 // ring and epoch-tagged hash heads across blocks; reset reuses them in O(1).
 // ZlibIncrementalBestEncoder and GzipIncrementalBestEncoder expose that selector
 // through wrapper checksums/metadata; *OptionsForLevel maps zlib levels 0...9.
+// Audited libz fixtures pin the exact fixed-Huffman raw/zlib/gzip wire across a
+// block flush. This non-aligning block primitive is the basis for future
+// mid-stream parameter changes; inflateSync-compatible recovery is not yet
+// implemented.
 // Set adaptive_blocks on a best encoder to use CompressionOptions.split_options
 // for costed, bounded block-boundary selection instead of one fixed block size.
 // Set lookahead_len to retain a bounded suffix and move normal block cuts to a
