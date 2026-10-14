@@ -80,6 +80,25 @@ pub fn Encoder(comptime Codec: type) type {
         pub fn initExactSizeWithDictionary(allocator: std.mem.Allocator, options: Options, expected_input_len: usize, dictionary: []const u8) Self {
             return .{ .allocator = allocator, .options = options, .expected_input_len = expected_input_len, .dictionary = dictionary };
         }
+        /// Validate all block-buffer controls without consuming input or
+        /// allocating. Adapters that publish an outer header before calling
+        /// `step` use this to reject deterministic configuration errors first.
+        pub fn validateOptions(options: Options) Error!void {
+            _ = try baseBlockTarget(options);
+            _ = try maxBufferedInput(options);
+        }
+
+        /// Maximum caller input retained for one planned block, excluding the
+        /// fixed 32 KiB match history and encoded pending output.
+        pub fn maxBufferedInput(options: Options) Error!usize {
+            const base = try baseBlockTarget(options);
+            const active = if (!options.adaptive_blocks and options.low_entropy_block_len != 0)
+                @max(base, options.low_entropy_block_len)
+            else
+                base;
+            return std.math.add(usize, active, options.lookahead_len) catch
+                error.IntegerOverflow;
+        }
         pub fn deinit(self: *Self) void {
             Codec.deinitState(&self.state, self.allocator);
             self.match_finder.deinit(self.allocator);
@@ -333,17 +352,7 @@ pub fn Encoder(comptime Codec: type) type {
             }
         }
         fn blockTarget(self: *const Self) Error!usize {
-            if (!self.options.adaptive_blocks) {
-                if (self.options.block_len == 0) return error.InvalidBlockPlan;
-                if (self.options.lookahead_len >= self.options.block_len) return error.InvalidBlockPlan;
-                if (self.options.low_entropy_block_len != 0 and
-                    self.options.low_entropy_block_len < self.options.block_len) return error.InvalidBlockPlan;
-                return self.options.block_len;
-            }
-            const split = self.options.compression.split_options;
-            if (split.min_block_len == 0 or split.max_block_len == 0 or split.min_block_len > split.max_block_len) return error.InvalidBlockPlan;
-            if (self.options.lookahead_len >= split.max_block_len) return error.InvalidBlockPlan;
-            return split.max_block_len;
+            return baseBlockTarget(self.options);
         }
         fn activeBlockTarget(self: *Self, base: usize) usize {
             const expanded = self.options.low_entropy_block_len;
@@ -359,6 +368,22 @@ pub fn Encoder(comptime Codec: type) type {
         }
         fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
             return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = status };
+        }
+
+        fn baseBlockTarget(options: Options) Error!usize {
+            if (!options.adaptive_blocks) {
+                if (options.block_len == 0) return error.InvalidBlockPlan;
+                if (options.lookahead_len >= options.block_len) return error.InvalidBlockPlan;
+                if (options.low_entropy_block_len != 0 and
+                    options.low_entropy_block_len < options.block_len) return error.InvalidBlockPlan;
+                return options.block_len;
+            }
+            const split = options.compression.split_options;
+            if (split.min_block_len == 0 or split.max_block_len == 0 or
+                split.min_block_len > split.max_block_len)
+                return error.InvalidBlockPlan;
+            if (options.lookahead_len >= split.max_block_len) return error.InvalidBlockPlan;
+            return split.max_block_len;
         }
     };
 }

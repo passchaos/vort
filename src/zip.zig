@@ -14,6 +14,7 @@ const records = @import("zip/records.zig");
 const reduce = @import("zip/reduce.zig");
 const shrink = @import("zip/shrink.zig");
 pub const writer = @import("zip/writer.zig");
+pub const incremental_writer = @import("zip/incremental_writer.zig");
 
 pub const Error = writer.Error || bzip2.Error || dcl_implode.Error || deflate64.Error || implode.Error || lzma.Error || ppmd8.Error || reduce.Error || shrink.Error || xz.Error || zstd.Error || error{
     InvalidZipArchive,
@@ -33,10 +34,19 @@ pub const CompressionMethod = writer.CompressionMethod;
 pub const Zip64Mode = writer.Zip64Mode;
 pub const EncodeEntry = writer.EncodeEntry;
 pub const EncodeOptions = writer.EncodeOptions;
+pub const IncrementalWriter = incremental_writer.Writer;
+pub const IncrementalWriterError = incremental_writer.Error;
+pub const IncrementalWriterOptions = incremental_writer.Options;
+pub const IncrementalEntryOptions = incremental_writer.EntryOptions;
+pub const IncrementalWriterPhase = incremental_writer.Phase;
 pub const DclImplodeDictionary = dcl_implode.Dictionary;
 pub const DclImplodeOptions = dcl_implode.Options;
 pub const encodeAlloc = writer.encodeAlloc;
 pub const encodeAppend = writer.encodeAppend;
+
+test "ZIP incremental writer test suite" {
+    _ = incremental_writer;
+}
 
 pub const DecodeOptions = struct {
     max_output_len: usize = std.math.maxInt(usize),
