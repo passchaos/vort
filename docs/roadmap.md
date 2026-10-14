@@ -19912,6 +19912,28 @@ reuse, so production keeps the simpler independently owned plans.
   and wrapper checksums. The required libz gate adds six bidirectional
   raw/zlib/gzip cases under three-byte output
   (`partial_vort_to_libz=3`, `partial_libz_to_vort=3`). `inflateSync` recovery
-  remains the next independent zlib-control compatibility gap. The direct
+  is implemented by the following recovery slice rather than implied here. The direct
   Deflate suite passes 473/473, the full repository graph passes 2615/2615,
   and `zig build check` passes all 113 steps.
+
+- Added raw-DEFLATE full-flush recovery comparable to zlib `inflateSync`.
+  `RawDeflateSyncScanner` implements a fragmentation-independent KMP search for
+  the byte-aligned empty stored LEN/NLEN marker `00 00 ff ff`, preserving
+  overlap state and absolute offsets across arbitrary caller chunks.
+  `findRawDeflateSyncPoint`, caller-buffer `decodeRawDeflateAfterSync`, and
+  allocating/limited variants resume immediately after that marker; missing
+  markers return the distinct `DeflateSyncPointNotFound` error. The general
+  incremental raw decoder exposes `resumeAfterSync(skipped_input)`, which clears
+  bit/Huffman/history state while preserving cumulative counters and configured
+  output limits. Tests corrupt a reserved BTYPE before a Vort full-flush marker,
+  recover the exact independent suffix, cover fragmented and overlapping marker
+  scans, missing/partial markers, caller-output and allocation limits, and
+  incremental continuation. The system-libz gate adds two bidirectional cases:
+  libz `inflateSync()` recovers a corrupt Vort stream, and Vort recovers a
+  corrupt libz full-flush stream (`sync_vort_to_libz=1`,
+  `sync_libz_to_vort=1`). Recovery is intentionally raw: discarded zlib/gzip
+  wrapper checksum state cannot be reconstructed. As with zlib, byte-pattern
+  scanning can accept a false marker in arbitrary corrupt data, so applications
+  should enable it only for streams produced with deliberate full-flush points.
+  The direct Deflate suite passes 479/479, the full repository graph passes
+  2621/2621, and `zig build check` passes all 113 steps.

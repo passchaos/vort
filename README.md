@@ -265,7 +265,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   zlib `Z_BLOCK`/`Z_PARTIAL_FLUSH` semantics for raw stored/fixed/best and
   zlib/gzip fixed/best streams, while
   raw/zlib/gzip Best encoders support asynchronous runtime level/strategy
-  changes through `DeflateParams` and `requestParams()`;
+  changes through `DeflateParams` and `requestParams()`; raw recovery APIs scan
+  full-flush `00 00 ff ff` markers and decode or incrementally resume the next
+  independent segment after payload corruption;
 - dependency-free BGZF blocked-gzip parsing/writing with strict `BC`/`BSIZE`
   validation, per-block DEFLATE/CRC/ISIZE checks, bounded concatenated decode,
   canonical EOF markers, 48:16 virtual offsets, and cross-block virtual-range
@@ -1211,6 +1213,11 @@ defer zstd_incremental_encoder.deinit();
 // Adler-32 and the footer while preserving the raw core's flush semantics.
 // GzipIncrementalFixedEncoder adds optional RFC 1952 metadata/FHCRC plus
 // streaming CRC-32 and ISIZE with the same split-input and sync-flush contract.
+// RawDeflateSyncScanner finds full-flush LEN/NLEN markers across arbitrary
+// caller chunks. findRawDeflateSyncPoint plus decodeRawDeflateAfterSync*, or
+// RawDeflateIncrementalFixedLiteralDecoder.resumeAfterSync(), recover the raw
+// independent suffix. Wrapped zlib/gzip checksums cannot be reconstructed after
+// discarded corrupt output, so this recovery surface is intentionally raw.
 // RawDeflateIncrementalBestEncoder evaluates stored, fixed, and dynamic Huffman
 // representations per block while retaining the same rolling history core.
 // Hash and lazy-parser levels additionally retain a bounded 32 KiB predecessor
@@ -1246,7 +1253,7 @@ defer zstd_incremental_encoder.deinit();
 // The same gate runs six bidirectional raw/zlib/gzip partial-flush cases under
 // 3-byte output and independently decodes each stream across Vort and libz.
 // Focused runtime-parameter tests pass 19/19 and the direct Deflate suite
-// passes 473/473; the full repository test graph passes 2615/2615.
+// passes 479/479; the full repository test graph passes 2621/2621.
 // Audited libz fixtures pin the exact fixed-Huffman raw/zlib/gzip wire across a
 // block flush. This non-aligning block primitive is the basis for future
 // stream-control work; inflateSync-compatible recovery is not yet implemented.

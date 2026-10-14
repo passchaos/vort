@@ -104,8 +104,19 @@ zlib, and gzip using three-byte output: three Vort streams inflate through
 libz, and three libz streams decode through Vort. Fixed fixture tests separately
 pin the exact ten-bit marker wire.
 
+Raw recovery uses `RawDeflateSyncScanner` or `findRawDeflateSyncPoint()` to
+search the byte sequence `00 00 ff ff` emitted inside a full-flush marker. The
+scanner keeps overlap state across arbitrary chunks and reports absolute marker
+and resume offsets. `decodeRawDeflateAfterSync*()` decodes the independent raw
+suffix into caller or owned storage; the incremental raw decoder can instead
+call `resumeAfterSync(skipped_input)` after an external scan. This intentionally
+matches `inflateSync`'s byte-pattern search and can therefore find the same
+false positive inside arbitrary corrupt bytes; callers should use it only for
+streams whose producer inserted full-flush recovery points. Zlib/gzip wrapper
+checksums cover discarded bytes and are not resumed by the raw API.
+
 Focused runtime-parameter tests pass 19/19, and the direct Deflate suite passes
-473/473. The full repository test graph passes 2615/2615, and `zig build check`
+479/479. The full repository test graph passes 2621/2621, and `zig build check`
 passes all 113 steps including the new probe. The probe is also wired into
 `ci-smoke`; the aggregate smoke graph currently has unrelated existing
 failures, so this increment does not claim a fully green `ci-smoke` run.
