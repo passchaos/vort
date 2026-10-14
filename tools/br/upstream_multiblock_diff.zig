@@ -287,7 +287,13 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(far_history_expected);
     const long_text = text ** 32;
     const long_text_chunks = [_][]const u8{ long_text[0 .. long_text.len / 3], long_text[long_text.len / 3 .. 2 * long_text.len / 3], long_text[2 * long_text.len / 3 ..] };
-    const large_source = try std.Io.Dir.cwd().readFileAlloc(init.io, "src/br.zig", init.gpa, .limited(2 * 1024 * 1024));
+    const repository_source_file_limit = 4 * 1024 * 1024;
+    const large_source = try std.Io.Dir.cwd().readFileAlloc(
+        init.io,
+        "src/br.zig",
+        init.gpa,
+        .limited(repository_source_file_limit),
+    );
     defer init.gpa.free(large_source);
     const large_source_chunks = [_][]const u8{ large_source[0 .. large_source.len / 4], large_source[large_source.len / 4 .. large_source.len / 2], large_source[large_source.len / 2 .. 3 * large_source.len / 4], large_source[3 * large_source.len / 4 ..] };
     // Build a deterministic heterogeneous source from repository-owned files.
@@ -312,7 +318,12 @@ pub fn main(init: std.process.Init) !void {
     var diverse_part_count: usize = 0;
     defer for (diverse_parts[0..diverse_part_count]) |part| init.gpa.free(part);
     for (diverse_paths) |path| {
-        diverse_parts[diverse_part_count] = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(2 * 1024 * 1024));
+        diverse_parts[diverse_part_count] = try std.Io.Dir.cwd().readFileAlloc(
+            init.io,
+            path,
+            init.gpa,
+            .limited(repository_source_file_limit),
+        );
         diverse_part_count += 1;
     }
     // Repeat differently ordered passes until the corpus reaches a stable
@@ -1497,20 +1508,58 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(planned_large_payload);
     for (planned_large_payload, 0..) |*byte, i| byte.* = "abcd0123"[i & 7];
     for ([_]u5{ 10, 24 }) |window_bits| {
-        const encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, planned_large_payload, .{
+        const encoded = vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, planned_large_payload, .{
             .level = .ratio,
             .window_bits = window_bits,
-        });
+        }) catch |err| {
+            std.debug.print("planned large ratio lgwin={d}: {s}\n", .{ window_bits, @errorName(err) });
+            return err;
+        };
         defer init.gpa.free(encoded);
-        const summary = try vort.brSummarizeStreamAlloc(init.gpa, encoded);
+        const summary = vort.brSummarizeStreamAlloc(init.gpa, encoded) catch |err| {
+            std.debug.print("planned large ratio summary lgwin={d}: {s}\n", .{ window_bits, @errorName(err) });
+            return err;
+        };
         if (summary.window_bits != window_bits or summary.compressed_meta_block_count < 2 or encoded.len >= planned_large_payload.len / 100)
             return error.ReferenceEncodeFailed;
         const decoded = try init.gpa.alloc(u8, planned_large_payload.len);
         defer init.gpa.free(decoded);
-        try reference.decode(encoded, decoded);
+        reference.decode(encoded, decoded) catch |err| {
+            std.debug.print("planned large ratio decode lgwin={d}: {s}\n", .{ window_bits, @errorName(err) });
+            return err;
+        };
         if (!std.mem.eql(u8, planned_large_payload, decoded)) return error.ReferenceDecodeFailed;
         planned_large_window_cases += 1;
     }
+    var planned_large_quality_cases: usize = 0;
+    const planned_large_quality = vort.brEncodePlannedStreamWithOptionsAlloc(
+        init.gpa,
+        planned_large_payload,
+        .{ .quality = 2, .mode = .font },
+    ) catch |err| {
+        std.debug.print("planned large q2/font encode: {s}\n", .{@errorName(err)});
+        return err;
+    };
+    defer init.gpa.free(planned_large_quality);
+    const planned_large_quality_summary = vort.brSummarizeStreamAlloc(
+        init.gpa,
+        planned_large_quality,
+    ) catch |err| {
+        std.debug.print("planned large q2/font summary: {s}\n", .{@errorName(err)});
+        return err;
+    };
+    if (planned_large_quality_summary.compressed_meta_block_count < 2 or
+        planned_large_quality.len >= planned_large_payload.len / 100)
+        return error.ReferenceEncodeFailed;
+    const planned_large_quality_decoded = try init.gpa.alloc(u8, planned_large_payload.len);
+    defer init.gpa.free(planned_large_quality_decoded);
+    reference.decode(planned_large_quality, planned_large_quality_decoded) catch |err| {
+        std.debug.print("planned large q2/font decode: {s}\n", .{@errorName(err)});
+        return err;
+    };
+    if (!std.mem.eql(u8, planned_large_payload, planned_large_quality_decoded))
+        return error.ReferenceDecodeFailed;
+    planned_large_quality_cases += 1;
     var planned_metadata_cases: usize = 0;
     const planned_metadata = "vort one-shot planned metadata";
     for ([_]vort.BrotliPlannedCompressionLevel{ .fast, .balanced, .ratio }) |level| {
@@ -1603,8 +1652,8 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [256]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     try stdout.interface.print(
-        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} large_window_decode_cases={d} broad_generated_cases={d} broad_progressive_cases={d} real_file_cases={d} real_progressive_cases={d} real_options_per_file={d} real_quality_mask=0x{x} real_mode_mask=0x{x} real_window_mask=0x{x} planned_window_cases={d} planned_literal_split_cases={d} planned_command_split_cases={d} planned_distance_split_cases={d} planned_distance_parameter_cases={d} planned_chunked_window_cases={d} planned_large_window_cases={d} planned_metadata_cases={d} planned_extended_dictionary_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} high_tree_truncation_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
-        .{ cases_run, one_shot_cases, large_window_decode_cases, broad_generated_cases, broad_progressive_cases, real_file_cases, real_progressive_cases, real_options.len, real_quality_mask, real_mode_mask, real_window_mask, planned_window_cases, planned_literal_split_cases, planned_command_split_cases, planned_distance_split_cases, planned_distance_parameter_cases, planned_chunked_window_cases, planned_large_window_cases, planned_metadata_cases, planned_extended_dictionary_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, high_tree_truncation_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, operation_schedule_cases, reference.version() },
+        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} large_window_decode_cases={d} broad_generated_cases={d} broad_progressive_cases={d} real_file_cases={d} real_progressive_cases={d} real_options_per_file={d} real_quality_mask=0x{x} real_mode_mask=0x{x} real_window_mask=0x{x} planned_window_cases={d} planned_literal_split_cases={d} planned_command_split_cases={d} planned_distance_split_cases={d} planned_distance_parameter_cases={d} planned_chunked_window_cases={d} planned_large_window_cases={d} planned_large_quality_cases={d} planned_metadata_cases={d} planned_extended_dictionary_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} high_tree_truncation_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
+        .{ cases_run, one_shot_cases, large_window_decode_cases, broad_generated_cases, broad_progressive_cases, real_file_cases, real_progressive_cases, real_options.len, real_quality_mask, real_mode_mask, real_window_mask, planned_window_cases, planned_literal_split_cases, planned_command_split_cases, planned_distance_split_cases, planned_distance_parameter_cases, planned_chunked_window_cases, planned_large_window_cases, planned_large_quality_cases, planned_metadata_cases, planned_extended_dictionary_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, high_tree_truncation_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, operation_schedule_cases, reference.version() },
     );
     try stdout.interface.flush();
 }
