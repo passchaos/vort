@@ -19511,8 +19511,8 @@ reuse, so production keeps the simpler independently owned plans.
   (189.033 -> 187.994 ms independent medians), treated as no-regression
   evidence rather than a speed claim. The distance encoder now also exposes
   all 64 legal RFC `NPOSTFIX/NDIRECT` parameter shapes with an independent
-  forward-formula oracle; production parameter search remains the next
-  distance-model feature rather than being implied by this splitter increment.
+  forward-formula oracle; the following increment uses that base for production
+  parameter search.
 
 - Added full production search across all 64 legal Brotli
   `NPOSTFIX/NDIRECT` distance shapes for ratio-oriented optimal command plans.
@@ -19532,6 +19532,26 @@ reuse, so production keeps the simpler independently owned plans.
   `f30b4ee0`, while general `source32k` keeps identical 6,645-byte wire and
   checksum with a `0.9941x` paired ratio. A nullable ratio option can force or
   disable the search for explicit caller tradeoffs.
+
+- Extended the general adaptive splitter vertically through the actual Brotli
+  literal stream. Discovery flattens only command insert bytes, so copied bytes
+  never corrupt block-length accounting; payload switching can occur inside a
+  single command's insert run. Dynamic allocator-owned histograms, alphabets,
+  code lengths, and encoders share the general previous/successor/direct type
+  and arbitrary-length wire with command/distance splitting. The first slice
+  assigns one context-independent tree to every literal block type and writes
+  a full `type_count * 64` identity context map, deliberately remaining
+  mutually exclusive with literal context clustering until the joint model is
+  implemented. An off-grid `A-B-A-C-A` production fixture encodes 8,192 bytes
+  into 5,201 bytes; a second 16,948-byte header fixture exercises all 256
+  literal block types, all 256 trees, and the full 16,384-entry context map.
+  Vort, Node, libbrotli 1.0.9, and caller-scratch 17/31-byte progressive decode
+  reproduce both payloads (`planned_literal_split_cases=11`). The ratio-only
+  feature remains opt-in: nine built-ins and six 128 KiB source/Markdown paths
+  found no size win, while source paths measured roughly `0.907--0.932x` of
+  default throughput. An 11-pair default-path control against `a273746e`
+  retained identical 6,572-byte source32k wire/checksum, won 6/11 pairs, and
+  measured a neutral `1.0005x` paired geometric ratio.
 
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository

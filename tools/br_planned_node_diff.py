@@ -193,6 +193,26 @@ def main() -> int:
         if actual != expected:
             raise SystemExit(f"{mode}: node output mismatch")
         print(f"brotli planned {mode} node diff: encoded={len(encoded)} decoded={len(actual)}")
+    boundaries = (901, 2305, 5179, 7001)
+    region_types = (0, 1, 0, 2, 0)
+    literal_bases = (0, 96, 192)
+    expected = bytearray(8192)
+    region = 0
+    for i in range(len(expected)):
+        if region < len(boundaries) and i == boundaries[region]:
+            region += 1
+        expected[i] = literal_bases[region_types[region]] + (i & 31)
+    encoded = subprocess.check_output([sys.argv[1], "adaptive-literal-types"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("adaptive-literal-types: node output mismatch")
+    print(f"brotli planned adaptive-literal-types node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = bytes(range(256))
+    encoded = subprocess.check_output([sys.argv[1], "maximum-adaptive-literal-types"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("maximum-adaptive-literal-types: node output mismatch")
+    print(f"brotli planned maximum-adaptive-literal-types node diff: encoded={len(encoded)} decoded={len(actual)}")
     dynamic_command_insert_lens = (
         outer_insert_lens,
         middle_insert_lens,

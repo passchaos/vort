@@ -1,6 +1,9 @@
 const std = @import("std");
 const huffman = @import("../../huffman.zig");
+const adaptive_block_split = @import("adaptive_block_split.zig");
+const block_split_plan = @import("block_split_plan.zig");
 const command_plan = @import("command_plan.zig");
+const histogram_model = @import("histogram_model.zig");
 const literal_context = @import("literal_context.zig");
 
 const min_block_literals: usize = 512;
@@ -92,6 +95,20 @@ pub const Proposals = struct {
     four: ?Result = null,
     dynamic: ?Result = null,
 };
+
+const AdaptiveSplitter = adaptive_block_split.Splitter(u8, 256);
+pub const AdaptiveOptions = AdaptiveSplitter.Options;
+
+/// Discover arbitrary literal boundaries and non-cyclic type reuse. The
+/// legacy fixed-grid proposals remain separate complete-wire candidates until
+/// this general plan proves smaller after all Brotli header costs.
+pub fn chooseAdaptiveAlloc(
+    allocator: std.mem.Allocator,
+    literals: []const u8,
+    options: AdaptiveOptions,
+) !?block_split_plan.Plan {
+    return AdaptiveSplitter.splitAlloc(allocator, literals, options);
+}
 
 /// Choose one literal-stream boundary for a two-type Brotli entropy split.
 /// This cheap proposal stage examines seven bounded sixth-, quarter-, third-,
@@ -686,5 +703,89 @@ test "literal block split fixed-point logarithm tracks powers and mantissas" {
         const exact = @log2(@as(f64, @floatFromInt(value))) * 256.0;
         const approximate: f64 = @floatFromInt(fastLog2Q8(@intCast(value)));
         try std.testing.expect(@abs(exact - approximate) <= 2.0);
+    }
+}
+
+test "adaptive literal block split finds an arbitrary off-grid boundary" {
+    var literals: [120]u8 = undefined;
+    const expected_split: usize = 47;
+    for (literals[0..expected_split], 0..) |*literal, index|
+        literal.* = @intCast(index % 4);
+    for (literals[expected_split..], 0..) |*literal, index|
+        literal.* = @intCast(252 + index % 4);
+
+    const plan = (try chooseAdaptiveAlloc(std.testing.allocator, &literals, .{
+        .type_count = 2,
+        .switch_cost_q8 = 2 * histogram_model.cost_scale,
+    })) orelse return error.TestUnexpectedResult;
+    defer plan.deinit(std.testing.allocator);
+
+    try std.testing.expectEqualSlices(u32, &.{ expected_split, literals.len - expected_split }, plan.lengths);
+    try std.testing.expectEqualSlices(u8, &.{ 0, 1 }, plan.types);
+    try std.testing.expectEqual(@as(u16, 2), plan.type_count);
+    try plan.validate(literals.len);
+}
+
+test "adaptive literal block split preserves non-cyclic type reuse" {
+    var literals: [160]u8 = undefined;
+    @memset(literals[0..32], 0);
+    @memset(literals[32..64], 127);
+    @memset(literals[64..96], 0);
+    @memset(literals[96..128], 255);
+    @memset(literals[128..160], 0);
+
+    const plan = (try chooseAdaptiveAlloc(std.testing.allocator, &literals, .{
+        .type_count = 5,
+        .switch_cost_q8 = histogram_model.cost_scale,
+    })) orelse return error.TestUnexpectedResult;
+    defer plan.deinit(std.testing.allocator);
+
+    try std.testing.expectEqualSlices(u32, &.{ 32, 32, 32, 32, 32 }, plan.lengths);
+    try std.testing.expectEqualSlices(u8, &.{ 0, 1, 0, 2, 0 }, plan.types);
+    try std.testing.expectEqual(@as(u16, 3), plan.type_count);
+    try plan.validate(literals.len);
+}
+
+test "adaptive literal block split rejects stationary input and invalid options" {
+    const stationary = [_]u8{7} ** 96;
+    try std.testing.expect((try chooseAdaptiveAlloc(std.testing.allocator, &stationary, .{})) == null);
+
+    try std.testing.expectError(
+        error.InvalidOptions,
+        chooseAdaptiveAlloc(std.testing.allocator, &stationary, .{ .type_count = 0 }),
+    );
+    try std.testing.expectError(
+        error.InvalidOptions,
+        chooseAdaptiveAlloc(std.testing.allocator, &stationary, .{ .iterations = 0 }),
+    );
+    try std.testing.expectError(
+        error.InvalidOptions,
+        chooseAdaptiveAlloc(std.testing.allocator, &stationary, .{
+            .min_symbols = 97,
+            .max_symbols = 96,
+        }),
+    );
+}
+
+test "adaptive literal block split propagates and unwinds all allocator failures" {
+    var literals: [120]u8 = undefined;
+    for (literals[0..47], 0..) |*literal, index| literal.* = @intCast(index % 4);
+    for (literals[47..], 0..) |*literal, index| literal.* = @intCast(252 + index % 4);
+
+    // Seven scratch allocations and two final-plan allocations must each
+    // propagate OutOfMemory and release every preceding allocation.
+    for (0..9) |fail_index| {
+        var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{
+            .fail_index = fail_index,
+        });
+        try std.testing.expectError(
+            error.OutOfMemory,
+            chooseAdaptiveAlloc(failing.allocator(), &literals, .{
+                .type_count = 2,
+                .switch_cost_q8 = 2 * histogram_model.cost_scale,
+            }),
+        );
+        try std.testing.expect(failing.has_induced_failure);
+        try std.testing.expectEqual(failing.allocated_bytes, failing.freed_bytes);
     }
 }

@@ -121,6 +121,10 @@ test "identity context map bit cost matches emitted wire" {
         try plan.write(std.testing.allocator, &writer);
         try std.testing.expectEqual(plan.bit_cost, writer.bits);
     }
+    const maximum = try Plan.init(std.testing.allocator, 256, 64);
+    var maximum_writer: CountingWriter = .{};
+    try maximum.write(std.testing.allocator, &maximum_writer);
+    try std.testing.expectEqual(maximum.bit_cost, maximum_writer.bits);
 }
 
 test "identity context map validates dimensions" {

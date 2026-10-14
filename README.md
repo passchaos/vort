@@ -1543,6 +1543,15 @@ command positions and reuse tree types in non-cyclic patterns such as
 strictly smaller; the default remains `false` because the broader search costs
 material CPU and has not yet improved the built-in/source corpus. Measure it
 with `run-br-planned-encode-bench -- --adaptive-command-split ...`.
+`BrotliPlannedEncodeOptions.adaptive_literal_split` enables the matching
+ratio-only Viterbi search over the actual emitted literal stream. It supports
+arbitrary boundaries, boundaries inside one insert run, non-cyclic type reuse,
+and the complete 256 literal type/tree wire range. The first production slice
+uses one context-independent tree per literal block type and remains mutually
+exclusive with literal context clustering; complete-wire arbitration retains
+the candidate only when it is strictly smaller. The default remains `false`
+because current built-in and 128 KiB source/Markdown corpora show no size win.
+Measure it with `--adaptive-literal-split` on the planned encode benchmark.
 `BrotliPlannedEncodeOptions.adaptive_distance_split` is a nullable ratio-mode
 override for the corresponding distance-symbol search. The default `null`
 automatically evaluates inputs of at least 64 KiB whose derived stream has

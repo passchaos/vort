@@ -1139,6 +1139,35 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(planned_six_clustered_literal.payload);
     try validatePlannedLiteralFixture(init.gpa, reference, planned_six_clustered_literal, 3);
     planned_literal_split_cases += 1;
+    const planned_adaptive_literal = try vort.br.IncrementalTestSupport.encodeAdaptiveLiteralTypes(init.gpa);
+    defer init.gpa.free(planned_adaptive_literal.encoded);
+    defer init.gpa.free(planned_adaptive_literal.payload);
+    try validatePlannedLiteralFixture(init.gpa, reference, planned_adaptive_literal, 3);
+    planned_literal_split_cases += 1;
+    const planned_maximum_adaptive_literal = try vort.br.IncrementalTestSupport.encodeMaximumAdaptiveLiteralTypes(init.gpa);
+    defer init.gpa.free(planned_maximum_adaptive_literal.encoded);
+    defer init.gpa.free(planned_maximum_adaptive_literal.payload);
+    const planned_maximum_adaptive_literal_summary = try vort.brSummarizeStreamAlloc(init.gpa, planned_maximum_adaptive_literal.encoded);
+    if (planned_maximum_adaptive_literal_summary.max_literal_block_types != 256 or
+        planned_maximum_adaptive_literal_summary.max_literal_context_trees != 256)
+        return error.ReferenceEncodeFailed;
+    const planned_maximum_adaptive_literal_decoded = try init.gpa.alloc(u8, planned_maximum_adaptive_literal.payload.len);
+    defer init.gpa.free(planned_maximum_adaptive_literal_decoded);
+    try reference.decode(planned_maximum_adaptive_literal.encoded, planned_maximum_adaptive_literal_decoded);
+    if (!std.mem.eql(u8, planned_maximum_adaptive_literal.payload, planned_maximum_adaptive_literal_decoded))
+        return error.ReferenceDecodeFailed;
+    const maximum_literal_header_scratch = try init.gpa.alloc(u8, planned_maximum_adaptive_literal.encoded.len);
+    defer init.gpa.free(maximum_literal_header_scratch);
+    try decodeProgressChunksWithHeaderScratch(
+        init.gpa,
+        planned_maximum_adaptive_literal.encoded,
+        planned_maximum_adaptive_literal.payload,
+        16,
+        17,
+        31,
+        maximum_literal_header_scratch,
+    );
+    planned_literal_split_cases += 1;
     var planned_command_split_cases: usize = 0;
     var planned_distance_split_cases: usize = 0;
     var planned_distance_parameter_cases: usize = 0;
