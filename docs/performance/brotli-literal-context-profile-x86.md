@@ -200,3 +200,9 @@ A seven-pair control of the compile-time profile refactor itself won 3/7 pairs
 but moved the median from 195.662 to 195.270 ms (`1.002x`). This is treated only
 as no-regression evidence; the unprofiled specialization contains no clocks or
 prefix-substage counters.
+
+A packed one-byte RLE token then halved the token workspace and improved the
+isolated RLE sample from roughly 1.089 to 1.009 ms (`1.078x`). Complete encoding
+again rejected the local win: only 4/11 pairs won and the median regressed from
+195.591 to 195.922 ms. The packed layout was removed; the ordinary two-byte
+field layout remains because its simpler symbol/extra accesses win end to end.

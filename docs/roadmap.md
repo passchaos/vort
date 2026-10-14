@@ -19379,6 +19379,12 @@ reuse, so production keeps the simpler independently owned plans.
   slightly regressed the isolated RLE stage and was neutral-negative in the
   complete encoder (6/11 wins, 195.103→195.138 ms median), so it was removed.
 
+- Rejected a packed one-byte code-length RLE token. It halved token scratch and
+  improved the isolated RLE stage about 1.089→1.009 ms (`1.078x`), but only
+  4/11 complete-encoder pairs won and the median regressed
+  195.591→195.922 ms. The default two-byte field layout was restored; compact
+  storage does not repay its bitfield access cost in the complete encoder.
+
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository
   dictionary, source, README, roadmap, and small-corpus payloads; optional
