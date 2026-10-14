@@ -22,8 +22,8 @@ major gaps before Vort can claim broad industry-best parity:
   distance splitting and context clustering, but the matrix is not libbrotli
   algorithm, byte, ratio, or throughput parity. Specialized q0/q1 fragment
   encoders, q2/q3 entropy writers, q10/q11 Zopfli/HQ cost refinement,
-  contextual dictionary encoding, and quality-aware large-stream planning
-  remain open.
+  contextual dictionary encoding, quality-specific block sizing, and
+  whole-stream entropy/context optimization remain open.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
   entropy block switching, static dictionaries, consecutive compressed
@@ -142,8 +142,8 @@ are validated, including equal cross-mode base policy, and the Node differential
 decodes one deterministic generic/text/font corpus at each quality. This proves
 valid interoperable Brotli output, not equality with libbrotli's output or
 compression/performance curve. Inputs above the 16 MiB single-meta-block limit
-currently use the existing 32 KiB bounded chunk planner; their requested
-quality/mode is not yet applied per block. Full details and the deliberately
+use the history-aware 32 KiB bounded block core and apply their requested
+quality/mode schedule per block. Full details and the deliberately
 unclaimed parity dimensions are tracked in
 [`docs/performance/brotli-quality-presets.md`](performance/brotli-quality-presets.md).
 
@@ -19821,3 +19821,30 @@ reuse, so production keeps the simpler independently owned plans.
   2596/2596, and `zig build check` passes all 113 steps. The probe is wired into
   `ci-smoke`, although unrelated existing aggregate failures prevent a fully
   green smoke claim for this increment.
+
+- Extended the planned Brotli stream policy across bounded multi-meta-block
+  encoding. Inputs beyond the 16 MiB format limit no longer preserve only the
+  window/metadata while silently falling back to the fast planner: legacy
+  fast/balanced/ratio and q0...q11 generic/text/font settings now reach every
+  32 KiB planning block. The shared block core applies the selected hash/lazy
+  budget, recent-distance state, literal context and entropy splits, bounded
+  optimal candidate, distance-parameter/font candidate, and built-in static
+  dictionary policy, then compares exact candidate bits against stored output.
+  q11 retains a q10 candidate per block. Reusable chunked and caller-output
+  incremental encoders use the same core, so both retain window-bounded LZ77
+  history and the actually committed recent-distance ring across blocks;
+  stored rollback preserves the ring and advances only logical output. Retained
+  candidate buffers preserve the existing warmed fast incremental
+  allocation-free path, and `PlannedStreamChunksOptions` now exposes `level`,
+  `quality`, and `mode` alongside window, metadata, and RAW shared dictionaries.
+  Focused tests cover
+  cross-API wire equality, q0/q8 policy differences, q11/q10 representative
+  monotonicity, invalid pre-output combinations, and 16 MiB+ q0/q2 streams.
+  Debug and ReleaseFast `test-br` pass 768/768. The upstream differential
+  passes in both modes with 7,056 one-shot, 7,056 progressive, 1,401
+  fragmentation, 64 high-tree truncation, seven Large Window, and one
+  independently decoded 16 MiB+ q2/font case. The required real-corpus gate
+  passes 16/16 one-shot and 16/16 progressive cases, the full repository test
+  graph passes 2600/2600, and `zig build check` passes all 113 steps;
+  quality-specific block-size selection and whole-stream entropy optimization
+  remain open rather than being implied by this block-local completion.

@@ -18,8 +18,9 @@ defer allocator.free(encoded);
 `quality` is `0...11`; `mode` is `.generic`, `.text`, or `.font`, with
 `.generic` as the default. Setting `quality` selects one of 36 deterministic
 schedules; `level` must remain at its default `.fast` because the two selectors
-are mutually exclusive. Leaving `quality` null keeps the established
-fast/balanced/ratio API and output policy unchanged.
+are mutually exclusive. On the bounded one-shot path, leaving `quality` null
+keeps the established fast/balanced/ratio policy. On chunked/incremental paths,
+null selects the shared fast policy, now with bounded cross-block history.
 The mode is an encoder hint, not a field in the Brotli stream and not automatic
 content detection. Generic and text currently have the same policy; font adds
 one optional distance-shape candidate from q4, so modes may legitimately choose
@@ -102,12 +103,13 @@ attachment slot.
 `BrotliPlannedEncodeOptions.shared_dictionary` makes RAW matching available to
 one-shot and reusable planned encoding at legacy fast/balanced/ratio and
 q0...q11, independently of the table's built-in static-dictionary schedule.
-The fast-only streaming surfaces use
+The streaming surfaces use
 `BrotliPlannedStreamChunksOptions.shared_dictionary` and
 `BrotliIncrementalPlannedStreamEncoder.Options.stream.shared_dictionary` for
-chunked and incremental encoding respectively. These streaming APIs do not
-gain quality-aware planning. Omitting the dictionary preserves the established
-wire exactly.
+chunked and incremental encoding respectively. The same stream options now
+carry `level`, `quality`, and `mode`; omitting them preserves the established
+fast policy while non-null quality applies the selected schedule per bounded
+meta-block. Omitting the dictionary preserves compound-free behavior.
 
 With a non-empty RAW descriptor, the one-shot path applies the selected
 quality's lazy-search budget, context/split policy, recent-distance policy,
@@ -151,19 +153,21 @@ compatibility for either unsupported form.
 
 ## Large-input and API boundaries
 
-The quality-aware planner applies to a single input no larger than Brotli's
-16 MiB meta-block limit. Larger inputs remain one valid Brotli stream, but are
-routed through the established bounded 32 KiB chunk planner. That fallback
-preserves the requested window and metadata while using its existing fast
-per-block policy; it does not apply the requested quality/mode schedule or plan
-matches and entropy decisions across blocks.
+Inputs larger than Brotli's 16 MiB meta-block limit remain one valid stream and
+are split into bounded 32 KiB planning blocks. Every block applies the selected
+legacy level or q0...q11 quality/mode policy, including its parser budget,
+recent-distance choice, context/split candidates, bounded optimal candidate,
+distance-parameter/font candidate, static-dictionary policy, and exact
+compressed-versus-stored bit comparison. LZ77 history and the actual committed
+recent-distance ring continue across block boundaries and are bounded by the
+advertised window. A stored fallback rolls back candidate distance state while
+advancing the logical output position.
 
-The current quality/mode surface is a one-shot planned-encoder policy available
-through allocating, caller-buffer, and reusable-encoder one-shot frontends,
-including RAW shared-prefix matching. It does not add quality-aware behavior to
-the incremental planned encoder or explicit chunk-list options; those accept
-RAW attachments through their separate fast-only options while retaining the
-documented existing planning policy.
+The same policy core backs allocating, caller-buffer, reusable, explicit
+chunk-list, and incremental planned encoders, including RAW shared-prefix
+matching. Incremental `flush` and metadata boundaries preserve the selected
+stream policy and bounded history. Block size remains a fixed maximum of 32 KiB;
+quality-specific block-size planning is still open work.
 
 ## Verification and performance claims
 
@@ -183,8 +187,8 @@ against local libbrotli 1.2.0 with this matrix:
 | libbrotli encode -> Vort decode | 0/1/2/15 | q0/q5/q9/q11 | 16 |
 | Vort one-shot encode -> libbrotli decode | 0/1/2/15 | q0/q5/q9/q11 | 16 |
 | Vort reusable encode -> libbrotli decode | 0/1/2/15 | q0/q5/q9/q11 | 16 |
-| Vort fast chunked encode -> libbrotli decode | 0/1/2/15 | fast-only | 4 |
-| Vort fast incremental encode -> libbrotli decode | 0/1/2/15 | fast-only | 4 |
+| Vort chunked encode -> libbrotli decode | 0/1/2/15 | fast coverage row | 4 |
+| Vort incremental encode -> libbrotli decode | 0/1/2/15 | fast coverage row | 4 |
 | Stateful window/ring/rollback/static regressions | mixed | fast/ratio | 4 |
 
 The stateful regressions cover WBITS=10 saturation and cross-block recent
@@ -193,9 +197,14 @@ output backpressure, and static addressing after a saturated compound region.
 The same run retains four upstream decode fixtures and three descriptor-error
 cases. System libbrotli 1.0.9 lacks the optional shared-dictionary symbols, so
 the tool explicitly reports the complete runtime matrix as skipped there.
-Debug and ReleaseFast `zig build test-br` also passed all 763 tests, including q0...q11,
-legacy level, retained-index, empty-dictionary wire, static-address shift, and
-incremental rollback coverage.
+Debug and ReleaseFast `zig build test-br` pass all 768 tests, including q0...q11,
+legacy level, retained-index, empty-dictionary wire, static-address shift,
+incremental rollback, cross-API quality wire equality, and 16 MiB+ q0/q2
+coverage. The upstream differential passes in both build modes with 7,056
+one-shot and 7,056 progressive generated cases, 1,401 fragmentation runs, 64
+high-tree truncations, seven Large Window cases, and one Vort-generated 16 MiB+
+q2/font stream decoded independently by libbrotli 1.0.9
+(`planned_large_quality_cases=1`).
 
 The planned encode benchmark accepts independent Vort selectors:
 
@@ -251,8 +260,8 @@ names:
 - the specialized q2/q3 entropy writers and their matching block decisions;
 - real q10/q11 Zopfli/HQ cost refinement, including iterative model feedback;
 - contextual dictionary encoding;
-- quality-aware large-stream planning, including cross-meta-block matches,
-  quality-specific block sizing, and entropy/context decisions;
+- quality-specific block sizing and whole-stream rather than block-local
+  entropy/context optimization;
 - calibration and regression gates for compression ratio, throughput, peak
   memory, and output-size monotonicity across representative corpora and
   platforms.

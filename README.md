@@ -411,7 +411,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   models, deterministic size-bounded multi-cabinet writing and explicitly
   ordered set decoding with split CFDATA, mixed-folder archives, and safe
   borrowed paths;
-- dependency-free Brotli `br` stored/uncompressed and planner-backed fast encode/decode surfaces, including a Vort-native deterministic q0...q11 by generic/text/font one-shot preset matrix (the [exact capability and gap table](docs/performance/brotli-quality-presets.md) does not claim libbrotli algorithm, byte, ratio, or throughput parity), explicit 10..16-bit one-shot planned windows at every level and the complete 10..24 range at ratio level with distance-bounded matching, exact-wire-selected bounded 2..6-region literal/command/distance entropy splitting and cyclic tree clustering for heterogeneous ratio inputs, adaptive literal context modeling across the complete 2..64 useful tree range with arbitrary clustered 64-entry maps, exact plain/MTF/zero-run map arbitration, and all RFC LSB6/MSB6/UTF8/Signed modes, one-shot planned metadata at every level, opt-in bounded static-dictionary probing for 257-byte through 4 KiB ratio inputs, arbitrarily large ratio inputs encoded as one bounded-memory multi-meta-block stream, a caller-to-caller incremental planned encoder with flush/metadata, compressed-or-stored arbitration, and bounded cross-block LZ77 history, chunked encoding with bounded parser scratch into one mixed compressed/stored multi-meta-block stream plus 10..24-bit window and metadata options, strict-by-default RFC 7932 window bits 10..24 plus explicit opt-in decoding of the Large Window Brotli 10..30-bit extension across one-shot, chunked, summary, and symbol-progressive incremental APIs, borrowed RAW shared-prefix/compound-dictionary encoding and decoding with zero through fifteen ordered attachments, including q0...q11 one-shot/reusable and fast chunked/incremental encode surfaces, metadata meta-block skipping, caller-history stream summaries for large-window preflight without hidden allocation, an allocator-owned general incremental decoder with bounded history and compressed-header storage but no complete compressed or decoded frame buffer, byte-progressive stored-subset encode/decode, and bounded-header byte-progressive decoders for insert-only Huffman literals, single-command RLE, and copy streams with literal/distance context maps, entropy block switching across the complete 256-entry literal/command/distance block-type count range and literal/distance context-tree ranges, caller-owned compressed-header scratch beyond the default 16 KiB bound, dynamic direct/regular/recent distances, transformed static-dictionary references, non-final compressed blocks followed by metadata/stored blocks and a final-empty terminator, plus libbrotli streaming-operation differentials covering PROCESS accumulation, empty/repeated FLUSH, METADATA transitions, and FINISH with pending input; compressed output honors caller backpressure and copy history is explicit or allocator-owned according to the selected API;
+- dependency-free Brotli `br` stored/uncompressed and planner-backed fast encode/decode surfaces, including a Vort-native deterministic q0...q11 by generic/text/font preset matrix across one-shot, reusable, chunked, incremental, and larger-than-16-MiB multi-meta-block inputs (the [exact capability and gap table](docs/performance/brotli-quality-presets.md) does not claim libbrotli algorithm, byte, ratio, or throughput parity), explicit 10..16-bit one-shot planned windows at every level and the complete 10..24 range at ratio level with distance-bounded matching, exact-wire-selected bounded 2..6-region literal/command/distance entropy splitting and cyclic tree clustering for heterogeneous ratio inputs, adaptive literal context modeling across the complete 2..64 useful tree range with arbitrary clustered 64-entry maps, exact plain/MTF/zero-run map arbitration, and all RFC LSB6/MSB6/UTF8/Signed modes, one-shot planned metadata at every level, opt-in bounded static-dictionary probing for 257-byte through 4 KiB ratio inputs, arbitrarily large planned inputs encoded as one bounded-memory multi-meta-block stream, a caller-to-caller incremental planned encoder with flush/metadata, compressed-or-stored arbitration, quality/level policy, and bounded cross-block LZ77/recent-distance history, chunked encoding with the same history-aware block core plus 10..24-bit window and metadata options, strict-by-default RFC 7932 window bits 10..24 plus explicit opt-in decoding of the Large Window Brotli 10..30-bit extension across one-shot, chunked, summary, and symbol-progressive incremental APIs, borrowed RAW shared-prefix/compound-dictionary encoding and decoding with zero through fifteen ordered attachments across the planned surfaces, metadata meta-block skipping, caller-history stream summaries for large-window preflight without hidden allocation, an allocator-owned general incremental decoder with bounded history and compressed-header storage but no complete compressed or decoded frame buffer, byte-progressive stored-subset encode/decode, and bounded-header byte-progressive decoders for insert-only Huffman literals, single-command RLE, and copy streams with literal/distance context maps, entropy block switching across the complete 256-entry literal/command/distance block-type count range and literal/distance context-tree ranges, caller-owned compressed-header scratch beyond the default 16 KiB bound, dynamic direct/regular/recent distances, transformed static-dictionary references, non-final compressed blocks followed by metadata/stored blocks and a final-empty terminator, plus libbrotli streaming-operation differentials covering PROCESS accumulation, empty/repeated FLUSH, METADATA transitions, and FINISH with pending input; compressed output honors caller backpressure and copy history is explicit or allocator-owned according to the selected API;
 - dependency-free Snappy raw block full decode plus greedy match raw/framed encode with reusable encoder state, encoded-bound helpers, raw-block and framed-stream summaries, split-input and exact-size decode helpers, decoded-size preflight, bounded allocation, masked CRC-32C validation, skippable framed chunks, and caller-owned incremental framed encode/decode with 64 KiB input chunking, optional pledged input/output sizes, split headers/payloads, bounded input/output memory, tiny-output draining, exact-output continuation through following skippable chunks, reset/next-stream reuse with cumulative and per-stream counters, snapshots, and diagnostics;
 - Xerial Snappy version-1 and Hadoop BlockCompressorStream Snappy framing with
   deterministic multi-block writing, strict big-endian nested lengths,
@@ -1638,10 +1638,11 @@ Encoding accepts the descriptor through three public option fields:
 - `BrotliPlannedEncodeOptions.shared_dictionary` covers one-shot and
   `BrotliPlannedStreamEncoder` reusable frontends, including legacy
   fast/balanced/ratio and every Vort-native q0...q11 preset;
-- `BrotliPlannedStreamChunksOptions.shared_dictionary` covers the existing
-  fast chunked planner;
+- `BrotliPlannedStreamChunksOptions.shared_dictionary` covers the chunked
+  planner together with its `level` or q0...q11 `quality`/`mode` policy;
 - `BrotliIncrementalPlannedStreamEncoder.Options.stream.shared_dictionary`
-  covers the fast incremental planner across flushes and meta-blocks.
+  covers the incremental planner across flushes and meta-blocks, including its
+  stream-level `level` or `quality`/`mode` selection.
 
 `BrotliPlannedStreamChunksOptions` is now a distinct option type rather than an
 alias of `BrotliStoredStreamOptions`, because a RAW dictionary has meaning only
@@ -1649,8 +1650,10 @@ for planned encoding. Callers that previously stored the latter type explicitly
 before passing it to a planned chunked API must construct the planned option
 value (or copy its `window_bits` and `metadata` fields) instead.
 
-The default empty descriptor preserves the established no-dictionary wire on
-one-shot, reusable, chunked, and incremental paths. Compound copies participate
+The default empty descriptor does not introduce compound references on
+one-shot, reusable, chunked, or incremental paths. Chunked encoding now shares
+the incremental core and can therefore improve its former independent-block
+wire with bounded cross-block matches. Compound copies participate
 in Brotli's recent-distance ring; explicit compound distances update it, while
 an implicit rep0 reuses it in place. References to the built-in transformed
 static dictionary remain separate and do not update that ring. Across
@@ -1735,8 +1738,9 @@ silently reducing coverage.
 quality schedule from `0...11`; `mode` selects `.generic`, `.text`, or `.font`.
 The quality selector is mutually exclusive with the historical `level`
 selector: keep `level` at its default `.fast` when `quality` is present.
-Leaving `quality = null` preserves the existing fast/balanced/ratio behavior
-and wire. Generic and text currently use identical parser, context, and
+Leaving `quality = null` preserves the established bounded one-shot
+fast/balanced/ratio policy; streaming paths select their explicit/default
+level. Generic and text currently use identical parser, context, and
 dictionary policy. Font differs only from q4 onward, when it adds a complete
 wire candidate using `NPOSTFIX=1, NDIRECT=12`; it does not replace the common
 policy.
@@ -1757,8 +1761,10 @@ They produce standard Brotli streams, but the numbers and modes do not select
 libbrotli's internal encoders and do not promise libbrotli-equivalent bytes,
 compressed size, memory use, or speed. In particular, specialized q0/q1
 fragment encoders, q2/q3 entropy writers, q10/q11 Zopfli/HQ cost refinement,
-contextual dictionary encoding and quality-aware planning across large
-multi-meta-block inputs remain future work. The exact
+contextual dictionary encoding and quality-specific meta-block sizing remain
+future work. Inputs beyond the 16 MiB format limit keep one Brotli stream and
+apply the selected policy independently to bounded 32 KiB blocks while
+retaining window-bounded LZ77 history and the recent-distance ring. The exact
 per-quality and per-mode behavior, input/window bounds, verification scope, and
 benchmark command are recorded in
 [the Brotli quality preset status](docs/performance/brotli-quality-presets.md).
