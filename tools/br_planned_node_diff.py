@@ -241,6 +241,12 @@ def main() -> int:
         if actual != expected:
             raise SystemExit(f"{mode}: node output mismatch")
         print(f"brotli planned {mode} node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = b"a" * (64 * 1024 + 4096 * 4)
+    encoded = subprocess.check_output([sys.argv[1], "selected-distance-parameters"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("selected-distance-parameters: node output mismatch")
+    print(f"brotli planned selected-distance-parameters node diff: encoded={len(encoded)} decoded={len(actual)}")
     dynamic_distance_cases = (
         "five-distance-types",
         "six-distance-types",

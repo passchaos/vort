@@ -69,7 +69,6 @@ paired geometric throughput ratio of `1.008979x`. This is no-regression layout
 evidence, not a general throughput claim.
 
 The distance encoder additionally implements and independently checks all 64
-legal RFC `NPOSTFIX/NDIRECT` shapes. This increment does not yet enable dynamic
-parameter search in production; doing so requires wide distance alphabets and
-complete-wire parameter arbitration without contaminating the 79-symbol hot
-instance.
+legal RFC `NPOSTFIX/NDIRECT` shapes. Production selection, its isolated
+520-symbol writer, and complete-wire arbitration are now implemented and
+measured separately in `brotli-distance-parameters-x86.md`.

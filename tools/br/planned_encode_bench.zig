@@ -32,6 +32,7 @@ const Options = struct {
     extended_dictionary_probes: u16 = 0,
     adaptive_command_split: bool = false,
     adaptive_distance_split: ?bool = null,
+    distance_parameter_search: ?bool = null,
     path_limit: usize = 128 * 1024,
     paths: std.ArrayList([]const u8) = .empty,
 
@@ -118,6 +119,7 @@ pub fn main(init: std.process.Init) !void {
             .extended_dictionary_probes = extended_dictionary_probes,
             .adaptive_command_split = options.adaptive_command_split,
             .adaptive_distance_split = options.adaptive_distance_split,
+            .distance_parameter_search = options.distance_parameter_search,
         });
         defer init.gpa.free(ratio_encoded);
         // Record semantic dictionary use in addition to the encoded size so the
@@ -130,8 +132,8 @@ pub fn main(init: std.process.Init) !void {
             if (!std.mem.eql(u8, case.payload, decoded)) return error.SizeMismatch;
         }
         const samples = try measureInterleaved(init.io, init.gpa, reference, case.payload, options, quality);
-        const lazy_sample = try measurePlanned(init.io, init.gpa, case.payload, options.iterations, .balanced, 0, false, null);
-        const ratio_sample = try measurePlanned(init.io, init.gpa, case.payload, options.iterations, .ratio, extended_dictionary_probes, options.adaptive_command_split, options.adaptive_distance_split);
+        const lazy_sample = try measurePlanned(init.io, init.gpa, case.payload, options.iterations, .balanced, 0, false, null, null);
+        const ratio_sample = try measurePlanned(init.io, init.gpa, case.payload, options.iterations, .ratio, extended_dictionary_probes, options.adaptive_command_split, options.adaptive_distance_split, options.distance_parameter_search);
         const total_bytes = case.payload.len * options.iterations;
         const vort_rate = mibPerSecond(total_bytes, samples.vort.ns);
         const reference_rate = mibPerSecond(total_bytes, samples.reference.ns);
@@ -182,7 +184,7 @@ pub fn main(init: std.process.Init) !void {
     }
 }
 
-fn measurePlanned(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, iterations: usize, level: vort.BrotliPlannedCompressionLevel, extended_dictionary_probes: u16, adaptive_command_split: bool, adaptive_distance_split: ?bool) !Sample {
+fn measurePlanned(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, iterations: usize, level: vort.BrotliPlannedCompressionLevel, extended_dictionary_probes: u16, adaptive_command_split: bool, adaptive_distance_split: ?bool, distance_parameter_search: ?bool) !Sample {
     var best = Sample{ .ns = std.math.maxInt(u64), .mix = 0 };
     for (0..5) |_| {
         var mix: usize = 0;
@@ -193,6 +195,7 @@ fn measurePlanned(io: std.Io, allocator: std.mem.Allocator, payload: []const u8,
                 .extended_dictionary_probes = extended_dictionary_probes,
                 .adaptive_command_split = adaptive_command_split,
                 .adaptive_distance_split = adaptive_distance_split,
+                .distance_parameter_search = distance_parameter_search,
             });
             mix +%= encoded.len;
             allocator.free(encoded);
@@ -267,7 +270,7 @@ fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) 
     var options = Options{};
     errdefer options.deinit(allocator);
     while (args.next()) |arg| {
-        if (std.mem.eql(u8, arg, "--iterations")) options.iterations = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--case")) options.case_filter = args.next() orelse return error.MissingCorpusPath else if (std.mem.eql(u8, arg, "--quality")) options.quality_override = try std.fmt.parseInt(c_int, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--extended-dictionary-probes")) options.extended_dictionary_probes = try std.fmt.parseInt(u16, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--adaptive-command-split")) options.adaptive_command_split = true else if (std.mem.eql(u8, arg, "--adaptive-distance-split")) options.adaptive_distance_split = true else if (std.mem.eql(u8, arg, "--no-adaptive-distance-split")) options.adaptive_distance_split = false else if (std.mem.eql(u8, arg, "--csv")) options.csv_path = args.next() orelse return error.MissingCorpusPath else if (std.mem.eql(u8, arg, "--limit")) options.path_limit = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--path")) try options.paths.append(allocator, try allocator.dupe(u8, args.next() orelse return error.MissingCorpusPath)) else return error.UnknownArgument;
+        if (std.mem.eql(u8, arg, "--iterations")) options.iterations = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--case")) options.case_filter = args.next() orelse return error.MissingCorpusPath else if (std.mem.eql(u8, arg, "--quality")) options.quality_override = try std.fmt.parseInt(c_int, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--extended-dictionary-probes")) options.extended_dictionary_probes = try std.fmt.parseInt(u16, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--adaptive-command-split")) options.adaptive_command_split = true else if (std.mem.eql(u8, arg, "--adaptive-distance-split")) options.adaptive_distance_split = true else if (std.mem.eql(u8, arg, "--no-adaptive-distance-split")) options.adaptive_distance_split = false else if (std.mem.eql(u8, arg, "--distance-parameter-search")) options.distance_parameter_search = true else if (std.mem.eql(u8, arg, "--no-distance-parameter-search")) options.distance_parameter_search = false else if (std.mem.eql(u8, arg, "--csv")) options.csv_path = args.next() orelse return error.MissingCorpusPath else if (std.mem.eql(u8, arg, "--limit")) options.path_limit = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--path")) try options.paths.append(allocator, try allocator.dupe(u8, args.next() orelse return error.MissingCorpusPath)) else return error.UnknownArgument;
     }
     if (options.iterations == 0 or options.path_limit == 0) return error.InvalidBlockPlan;
     if (options.quality_override) |quality| if (quality < 0 or quality > 11) return error.InvalidBlockPlan;

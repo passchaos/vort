@@ -1552,6 +1552,15 @@ writer supports arbitrary boundaries, non-cyclic type reuse, and the complete
 256-type Brotli range. Complete-wire arbitration keeps the automatic result
 size-monotonic. The benchmark accepts `--adaptive-distance-split` and
 `--no-adaptive-distance-split` for explicit A/B runs.
+`BrotliPlannedEncodeOptions.distance_parameter_search` controls the ratio
+encoder's complete 64-shape RFC `NPOSTFIX/NDIRECT` search. The default `null`
+enables it automatically for the stable record-optimal parser family, where
+current evidence shows a material size win; `false` disables it and `true`
+also enables it for the general bounded optimal proposal. A score-only pass
+examines all legal shapes, at most one alternative complete wire is emitted,
+and final byte length must strictly beat the historical `(0, 0)` candidate.
+The planned benchmark exposes matching `--distance-parameter-search` and
+`--no-distance-parameter-search` switches.
 `brProfilePlannedRatioBlockAlloc` is the explicit diagnostic counterpart for
 default-window 4--32 KiB ratio blocks. It reproduces the production wire while
 reporting lazy/optimal plan, command, wire, and selection timings plus optimal

@@ -1141,6 +1141,7 @@ pub fn main(init: std.process.Init) !void {
     planned_literal_split_cases += 1;
     var planned_command_split_cases: usize = 0;
     var planned_distance_split_cases: usize = 0;
+    var planned_distance_parameter_cases: usize = 0;
     const planned_command_split = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, dictionary_bytes, .{ .level = .ratio });
     defer init.gpa.free(planned_command_split);
     const planned_command_split_summary = try vort.brSummarizeStreamAlloc(init.gpa, planned_command_split);
@@ -1176,6 +1177,19 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(planned_maximum_adaptive_distance.payload);
     try validatePlannedDistanceFixture(init.gpa, reference, planned_maximum_adaptive_distance, 256);
     planned_distance_split_cases += 1;
+    const planned_distance_parameters = try vort.br.IncrementalTestSupport.encodeSelectedDistanceParameters(init.gpa);
+    defer init.gpa.free(planned_distance_parameters.encoded);
+    defer init.gpa.free(planned_distance_parameters.payload);
+    const planned_distance_parameters_summary = try vort.brSummarizeStreamAlloc(init.gpa, planned_distance_parameters.encoded);
+    if (planned_distance_parameters_summary.max_distance_postfix_bits == 0)
+        return error.ReferenceEncodeFailed;
+    const planned_distance_parameters_decoded = try init.gpa.alloc(u8, planned_distance_parameters.payload.len);
+    defer init.gpa.free(planned_distance_parameters_decoded);
+    try reference.decode(planned_distance_parameters.encoded, planned_distance_parameters_decoded);
+    if (!std.mem.eql(u8, planned_distance_parameters.payload, planned_distance_parameters_decoded))
+        return error.ReferenceDecodeFailed;
+    try decodeProgressChunks(init.gpa, planned_distance_parameters.encoded, planned_distance_parameters.payload, 16, 17, 31);
+    planned_distance_parameter_cases += 1;
     const planned_clustered_distance = try vort.br.IncrementalTestSupport.encodeClusteredDistanceTypes(init.gpa);
     defer init.gpa.free(planned_clustered_distance.encoded);
     defer init.gpa.free(planned_clustered_distance.payload);
@@ -1540,8 +1554,8 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [256]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     try stdout.interface.print(
-        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} large_window_decode_cases={d} broad_generated_cases={d} broad_progressive_cases={d} real_file_cases={d} real_progressive_cases={d} real_options_per_file={d} real_quality_mask=0x{x} real_mode_mask=0x{x} real_window_mask=0x{x} planned_window_cases={d} planned_literal_split_cases={d} planned_command_split_cases={d} planned_distance_split_cases={d} planned_chunked_window_cases={d} planned_large_window_cases={d} planned_metadata_cases={d} planned_extended_dictionary_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} high_tree_truncation_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
-        .{ cases_run, one_shot_cases, large_window_decode_cases, broad_generated_cases, broad_progressive_cases, real_file_cases, real_progressive_cases, real_options.len, real_quality_mask, real_mode_mask, real_window_mask, planned_window_cases, planned_literal_split_cases, planned_command_split_cases, planned_distance_split_cases, planned_chunked_window_cases, planned_large_window_cases, planned_metadata_cases, planned_extended_dictionary_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, high_tree_truncation_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, operation_schedule_cases, reference.version() },
+        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} large_window_decode_cases={d} broad_generated_cases={d} broad_progressive_cases={d} real_file_cases={d} real_progressive_cases={d} real_options_per_file={d} real_quality_mask=0x{x} real_mode_mask=0x{x} real_window_mask=0x{x} planned_window_cases={d} planned_literal_split_cases={d} planned_command_split_cases={d} planned_distance_split_cases={d} planned_distance_parameter_cases={d} planned_chunked_window_cases={d} planned_large_window_cases={d} planned_metadata_cases={d} planned_extended_dictionary_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} high_tree_truncation_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
+        .{ cases_run, one_shot_cases, large_window_decode_cases, broad_generated_cases, broad_progressive_cases, real_file_cases, real_progressive_cases, real_options.len, real_quality_mask, real_mode_mask, real_window_mask, planned_window_cases, planned_literal_split_cases, planned_command_split_cases, planned_distance_split_cases, planned_distance_parameter_cases, planned_chunked_window_cases, planned_large_window_cases, planned_metadata_cases, planned_extended_dictionary_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, high_tree_truncation_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, operation_schedule_cases, reference.version() },
     );
     try stdout.interface.flush();
 }

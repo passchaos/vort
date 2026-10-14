@@ -19514,6 +19514,25 @@ reuse, so production keeps the simpler independently owned plans.
   forward-formula oracle; production parameter search remains the next
   distance-model feature rather than being implied by this splitter increment.
 
+- Added full production search across all 64 legal Brotli
+  `NPOSTFIX/NDIRECT` distance shapes for ratio-oriented optimal command plans.
+  Semantic explicit distances are first frequency-aggregated, while recent
+  distance symbols 0--15 retain their exact caller-resolved frequencies. The
+  selector computes Huffman payload, extra bits, and the actual simple/complex
+  prefix-tree declaration cost for every shape, then materializes at most one
+  alternative complete wire; `(0, 0)` retains ties and final byte length is
+  authoritative. Nonzero-postfix candidates use an isolated noinline
+  520-symbol writer in a dedicated cold text section, while fast, balanced,
+  splits, and same-last optimization retain the 79-symbol instance. A focused
+  five-distance-cycle fixture improves 6,775 -> 5,140 bytes and round-trips
+  through Vort, Node, libbrotli 1.0.9, and 17/31-byte progressive decode
+  (`planned_distance_parameter_cases=1`). Automatic policy is limited to the
+  stable record-optimal family: the locked `records_q8` row improves
+  3,132 -> 2,865 bytes with a `0.9752x` paired throughput ratio against
+  `f30b4ee0`, while general `source32k` keeps identical 6,645-byte wire and
+  checksum with a `0.9941x` paired ratio. A nullable ratio option can force or
+  disable the search for explicit caller tradeoffs.
+
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository
   dictionary, source, README, roadmap, and small-corpus payloads; optional

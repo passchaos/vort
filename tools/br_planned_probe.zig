@@ -173,6 +173,20 @@ pub fn main(init: std.process.Init) !void {
         try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
         return;
     }
+    if (std.mem.eql(u8, mode, "selected-distance-parameters")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeSelectedDistanceParameters(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "baseline-distance-parameters")) {
+        const fixture = try vort.br.IncrementalTestSupport.encodeBaselineDistanceParameters(init.gpa);
+        defer init.gpa.free(fixture.encoded);
+        defer init.gpa.free(fixture.payload);
+        try std.Io.File.stdout().writeStreamingAll(init.io, fixture.encoded);
+        return;
+    }
     if (std.mem.eql(u8, mode, "clustered-distance-types")) {
         const fixture = try vort.br.IncrementalTestSupport.encodeClusteredDistanceTypes(init.gpa);
         defer init.gpa.free(fixture.encoded);
