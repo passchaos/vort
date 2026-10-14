@@ -36,6 +36,9 @@ pub const Profile = struct {
     small_huffman_calls: usize = 0,
     small_huffman_failures: usize = 0,
     package_merge_calls: usize = 0,
+    complex_prefix_calls: usize = 0,
+    complex_prefix_rle_tokens: usize = 0,
+    complex_prefix_code_length_active: usize = 0,
 
     analysis_ns: u64 = 0,
     baseline_ns: u64 = 0,
@@ -55,6 +58,11 @@ pub const Profile = struct {
     small_huffman_merge_ns: u64 = 0,
     small_huffman_depth_ns: u64 = 0,
     small_huffman_output_ns: u64 = 0,
+    complex_prefix_rle_ns: u64 = 0,
+    complex_prefix_code_length_tree_ns: u64 = 0,
+    complex_prefix_header_ns: u64 = 0,
+    complex_prefix_encoder_ns: u64 = 0,
+    complex_prefix_payload_ns: u64 = 0,
     total_ns: u64 = 0,
 
     pub fn stageNs(self: Profile) u64 {
@@ -78,6 +86,12 @@ pub const Profile = struct {
             self.small_huffman_depth_ns + self.small_huffman_output_ns;
     }
 
+    pub fn complexPrefixStageNs(self: Profile) u64 {
+        return self.complex_prefix_rle_ns + self.complex_prefix_code_length_tree_ns +
+            self.complex_prefix_header_ns + self.complex_prefix_encoder_ns +
+            self.complex_prefix_payload_ns;
+    }
+
     pub fn addSample(self: *Profile, sample: Profile) void {
         inline for (.{
             "suffix_payload_scores",
@@ -99,6 +113,9 @@ pub const Profile = struct {
             "small_huffman_calls",
             "small_huffman_failures",
             "package_merge_calls",
+            "complex_prefix_calls",
+            "complex_prefix_rle_tokens",
+            "complex_prefix_code_length_active",
             "analysis_ns",
             "baseline_ns",
             "suffix_ns",
@@ -117,6 +134,11 @@ pub const Profile = struct {
             "small_huffman_merge_ns",
             "small_huffman_depth_ns",
             "small_huffman_output_ns",
+            "complex_prefix_rle_ns",
+            "complex_prefix_code_length_tree_ns",
+            "complex_prefix_header_ns",
+            "complex_prefix_encoder_ns",
+            "complex_prefix_payload_ns",
             "total_ns",
         }) |field| @field(self, field) +%= @field(sample, field);
         for (&self.tree_active_buckets, sample.tree_active_buckets) |*total, count|

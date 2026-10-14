@@ -897,7 +897,27 @@ fn treeBitCostProfiled(
     } else {
         var highest: usize = 0;
         for (alphabet.symbols[0..alphabet.len]) |symbol| highest = @max(highest, symbol);
-        cost += try complex_prefix.bitCost(allocator, 256, &lengths, highest + 1);
+        if (profiled) {
+            var prefix_profile: complex_prefix.BitCostProfile = .{};
+            cost += try complex_prefix.bitCostProfiled(
+                allocator,
+                256,
+                &lengths,
+                highest + 1,
+                profiler.io,
+                &prefix_profile,
+            );
+            profiler.profile.complex_prefix_calls += prefix_profile.calls;
+            profiler.profile.complex_prefix_rle_tokens += prefix_profile.rle_tokens;
+            profiler.profile.complex_prefix_code_length_active += prefix_profile.code_length_active;
+            profiler.profile.complex_prefix_rle_ns +%= prefix_profile.rle_ns;
+            profiler.profile.complex_prefix_code_length_tree_ns +%= prefix_profile.code_length_tree_ns;
+            profiler.profile.complex_prefix_header_ns +%= prefix_profile.header_ns;
+            profiler.profile.complex_prefix_encoder_ns +%= prefix_profile.encoder_ns;
+            profiler.profile.complex_prefix_payload_ns +%= prefix_profile.payload_ns;
+        } else {
+            cost += try complex_prefix.bitCost(allocator, 256, &lengths, highest + 1);
+        }
         if (profiled) profiler.profile.tree_complex_scores += 1;
     }
     if (profiled) profiler.profile.tree_prefix_ns +%= profiler.elapsedNs(prefix_start);
@@ -1026,7 +1046,9 @@ test "literal context profile reports stable stage accounting" {
             profile.tree_active_buckets[3] + profile.tree_active_buckets[4],
         profile.small_huffman_calls,
     );
+    try std.testing.expectEqual(profile.tree_complex_scores, profile.complex_prefix_calls);
     try std.testing.expect(profile.smallHuffmanStageNs() <= profile.tree_lengths_ns);
+    try std.testing.expect(profile.complexPrefixStageNs() <= profile.tree_prefix_ns);
     try std.testing.expect(profile.treeScoreStageNs() <= profile.cluster_score_ns);
     try std.testing.expect(profile.stageNs() <= profile.total_ns);
     try std.testing.expect(profile.clusterStageNs() <= profile.cluster_ns);

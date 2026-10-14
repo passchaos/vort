@@ -19293,7 +19293,7 @@ reuse, so production keeps the simpler independently owned plans.
   reassignment, compaction, and final exact scoring. It also records proposal
   shapes, trials, rounds, comparisons, and exact-score cache hits/misses. The
   three-row CSV gate checks ReleaseFast provenance, deterministic geometry,
-  nested timing totals, and `source32k` stage dominance; nine negative fixtures
+  nested timing totals, and `source32k` stage dominance; eleven negative fixtures
   reject missing rows, counter/timing drift, invalid modes, false dominance,
   and Debug evidence. A fixed-CPU-2 ten-iteration run selected 2/10/10 trees
   for `source32k`: suffix and clustering consumed 43.4%/53.4% of total search
@@ -19369,6 +19369,15 @@ reuse, so production keeps the simpler independently owned plans.
   All 11 uninstrumented 20-iteration pairs won, reducing the median
   240.515→196.121 ms (`1.226x`) with unchanged 6,475-byte wire and checksum
   134,745. Prefix costing is now the largest tree-score substage at 37.1%.
+
+- Extended the profiler through complex-prefix scoring. Fixed-CPU-2
+  `source32k` covered 2,790 complex trees, 172,920 RLE tokens, and 21,510 live
+  code-length symbols. Of 2.687 ms attributed inside prefix costing, RLE
+  planning used 40.5%, the 18-symbol code-length tree 31.6%, encoder setup
+  11.2%, RLE payload 9.7%, and header declaration 7.0%; the gate now locks RLE
+  dominance and all nested count/timing totals. An eight-byte non-zero-run scan
+  slightly regressed the isolated RLE stage and was neutral-negative in the
+  complete encoder (6/11 wins, 195.103→195.138 ms median), so it was removed.
 
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository

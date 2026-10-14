@@ -39,11 +39,14 @@ pub fn main(init: std.process.Init) !void {
             "tree_score_cache_cold_misses,tree_score_cache_conflict_misses," ++
             "tree_score_calls,tree_simple_scores,tree_complex_scores,tree_active_entries,tree_active_buckets," ++
             "small_huffman_calls,small_huffman_failures,package_merge_calls," ++
+            "complex_prefix_calls,complex_prefix_rle_tokens,complex_prefix_code_length_active," ++
             "analysis_ns,baseline_ns,suffix_ns,sparse_ns,cluster_ns,cluster_init_ns," ++
             "cluster_prepare_ns,cluster_assignment_ns,cluster_finalize_ns,cluster_score_ns," ++
             "tree_alphabet_ns,tree_lengths_ns,tree_weighted_ns,tree_prefix_ns,tree_score_stage_ns," ++
             "small_huffman_leaf_order_ns,small_huffman_merge_ns,small_huffman_depth_ns," ++
             "small_huffman_output_ns,small_huffman_stage_ns," ++
+            "complex_prefix_rle_ns,complex_prefix_code_length_tree_ns,complex_prefix_header_ns," ++
+            "complex_prefix_encoder_ns,complex_prefix_payload_ns,complex_prefix_stage_ns," ++
             "stage_ns,cluster_stage_ns,total_ns,unattributed_ns,cluster_unattributed_ns,{s}\n",
         .{benchmark_provenance.csv_columns},
     );
@@ -59,9 +62,11 @@ pub fn main(init: std.process.Init) !void {
         const cluster_stage_ns = profile.clusterStageNs();
         const tree_score_stage_ns = profile.treeScoreStageNs();
         const small_huffman_stage_ns = profile.smallHuffmanStageNs();
+        const complex_prefix_stage_ns = profile.complexPrefixStageNs();
         if (stage_ns > profile.total_ns or cluster_stage_ns > profile.cluster_ns or
             tree_score_stage_ns > profile.cluster_score_ns or
-            small_huffman_stage_ns > profile.tree_lengths_ns)
+            small_huffman_stage_ns > profile.tree_lengths_ns or
+            complex_prefix_stage_ns > profile.tree_prefix_ns)
             return error.InvalidBlockPlan;
         try csv.writer.print(
             "{s},{d},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}," ++
@@ -103,15 +108,18 @@ pub fn main(init: std.process.Init) !void {
         try csv.writer.writeByte(',');
         try writeHistogram(&csv.writer, &profile.tree_active_buckets);
         try csv.writer.print(
-            ",{d},{d},{d}",
+            ",{d},{d},{d},{d},{d},{d}",
             .{
                 profile.small_huffman_calls,
                 profile.small_huffman_failures,
                 profile.package_merge_calls,
+                profile.complex_prefix_calls,
+                profile.complex_prefix_rle_tokens,
+                profile.complex_prefix_code_length_active,
             },
         );
         try csv.writer.print(
-            ",{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}",
+            ",{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}",
             .{
                 profile.analysis_ns,
                 profile.baseline_ns,
@@ -133,6 +141,12 @@ pub fn main(init: std.process.Init) !void {
                 profile.small_huffman_depth_ns,
                 profile.small_huffman_output_ns,
                 small_huffman_stage_ns,
+                profile.complex_prefix_rle_ns,
+                profile.complex_prefix_code_length_tree_ns,
+                profile.complex_prefix_header_ns,
+                profile.complex_prefix_encoder_ns,
+                profile.complex_prefix_payload_ns,
+                complex_prefix_stage_ns,
                 stage_ns,
                 cluster_stage_ns,
                 profile.total_ns,

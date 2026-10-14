@@ -27,7 +27,7 @@ specialization records:
 
 The CSV gate validates three source sizes, ReleaseFast provenance, candidate
 ranges, deterministic counters, nested timing totals, and the dominant
-`source32k` cluster stage. A nine-case negative smoke rejects missing rows,
+`source32k` cluster stage. An eleven-case negative smoke rejects missing rows,
 counter drift, timing drift, invalid modes, false stage dominance, and
 non-ReleaseFast provenance.
 
@@ -176,3 +176,27 @@ payload (3.8%); the gate now locks prefix dominance.
 The uninstrumented encoder won all 11 alternating fixed-CPU-2 pairs at 20
 iterations, reducing the median from 240.515 to 196.121 ms (`1.226x`) with
 identical 6,475-byte output and checksum 134,745.
+
+## Complex-prefix scoring substages
+
+After the 128-symbol length win shifted tree-score dominance, the profile was
+extended through `complex_prefix.bitCost`: code-length RLE planning, the
+18-symbol code-length tree, header declaration, encoder construction, and RLE
+payload costing. The fixed-CPU-2 ten-iteration `source32k` run covered 2,790
+complex trees, 172,920 RLE tokens, and 21,510 live code-length symbols. Of the
+2.687 ms attributed inside complex-prefix scoring, RLE planning used 40.5%,
+the code-length tree 31.6%, encoder construction 11.2%, payload costing 9.7%,
+and header declaration 7.0%. The gate now locks RLE as the nested dominant
+stage and verifies all call/token/active-symbol and timing relationships.
+
+An eight-byte scan for repeated non-zero code lengths was then tested against
+the scalar loop. The isolated RLE sample slightly regressed (about
+1.089→1.096 ms), and eleven complete-encoder pairs were neutral-negative:
+the candidate won 6/11 but moved the median from 195.103 to 195.138 ms. It was
+removed. The next RLE candidate must reduce token/frequency work rather than
+add another scan path.
+
+A seven-pair control of the compile-time profile refactor itself won 3/7 pairs
+but moved the median from 195.662 to 195.270 ms (`1.002x`). This is treated only
+as no-regression evidence; the unprofiled specialization contains no clocks or
+prefix-substage counters.

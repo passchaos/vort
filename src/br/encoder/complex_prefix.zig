@@ -5,6 +5,17 @@ const small_huffman = @import("small_huffman.zig");
 
 const code_length_order = [_]u5{ 1, 2, 3, 4, 0, 5, 17, 6, 16, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
 
+pub const BitCostProfile = struct {
+    calls: usize = 0,
+    rle_tokens: usize = 0,
+    code_length_active: usize = 0,
+    rle_ns: u64 = 0,
+    code_length_tree_ns: u64 = 0,
+    header_ns: u64 = 0,
+    encoder_ns: u64 = 0,
+    payload_ns: u64 = 0,
+};
+
 /// Encode a Brotli complex prefix tree. Zero gaps use chained symbol-17 runs;
 /// non-zero code lengths remain explicit for deterministic production output.
 pub fn write(allocator: std.mem.Allocator, writer: anytype, alphabet_size: usize, lengths: []const u4) !void {
@@ -17,20 +28,57 @@ pub fn write(allocator: std.mem.Allocator, writer: anytype, alphabet_size: usize
 /// caller. PrefixAlphabet maintains exactly that sparse symbol set, so its
 /// wire path can avoid rescanning the complete dense code-length array.
 pub fn writeWithStopIndex(allocator: std.mem.Allocator, writer: anytype, alphabet_size: usize, lengths: []const u4, stop_index: usize) !void {
+    return writeWithStopIndexInternal(false, allocator, writer, alphabet_size, lengths, stop_index, {}, {});
+}
+
+fn writeWithStopIndexInternal(
+    comptime profiled: bool,
+    allocator: std.mem.Allocator,
+    writer: anytype,
+    alphabet_size: usize,
+    lengths: []const u4,
+    stop_index: usize,
+    io: if (profiled) std.Io else void,
+    profile: if (profiled) *BitCostProfile else void,
+) !void {
     if (lengths.len < alphabet_size or stop_index == 0 or stop_index > alphabet_size or lengths[stop_index - 1] == 0) return error.InvalidBlockPlan;
     try writer.writeBits(allocator, 0, 2); // HSKIP=0, complex prefix.
 
     return if (alphabet_size <= 256)
-        writeWithStorage(256, allocator, writer, lengths, stop_index)
+        writeWithStorage(256, profiled, allocator, writer, lengths, stop_index, io, profile)
     else if (alphabet_size <= 520)
-        writeWithStorage(520, allocator, writer, lengths, stop_index)
+        writeWithStorage(520, profiled, allocator, writer, lengths, stop_index, io, profile)
     else
-        writeWithStorage(704, allocator, writer, lengths, stop_index);
+        writeWithStorage(704, profiled, allocator, writer, lengths, stop_index, io, profile);
 }
 
 /// Exact number of bits produced by `writeWithStopIndex`, used to compare
 /// alternate code-length plans without encoding the complete Brotli stream.
 pub fn bitCost(allocator: std.mem.Allocator, alphabet_size: usize, lengths: []const u4, stop_index: usize) !usize {
+    return bitCostInternal(false, allocator, alphabet_size, lengths, stop_index, {}, {});
+}
+
+pub fn bitCostProfiled(
+    allocator: std.mem.Allocator,
+    alphabet_size: usize,
+    lengths: []const u4,
+    stop_index: usize,
+    io: std.Io,
+    profile: *BitCostProfile,
+) !usize {
+    profile.calls += 1;
+    return bitCostInternal(true, allocator, alphabet_size, lengths, stop_index, io, profile);
+}
+
+fn bitCostInternal(
+    comptime profiled: bool,
+    allocator: std.mem.Allocator,
+    alphabet_size: usize,
+    lengths: []const u4,
+    stop_index: usize,
+    io: if (profiled) std.Io else void,
+    profile: if (profiled) *BitCostProfile else void,
+) !usize {
     const CountingWriter = struct {
         bits: usize = 0,
 
@@ -43,7 +91,7 @@ pub fn bitCost(allocator: std.mem.Allocator, alphabet_size: usize, lengths: []co
         }
     };
     var writer: CountingWriter = .{};
-    try writeWithStopIndex(allocator, &writer, alphabet_size, lengths, stop_index);
+    try writeWithStopIndexInternal(profiled, allocator, &writer, alphabet_size, lengths, stop_index, io, profile);
     return writer.bits;
 }
 
@@ -67,14 +115,33 @@ test "bit cost matches emitted complex prefix" {
     try std.testing.expectEqual(writer.bits, try bitCost(std.testing.allocator, lengths.len, &lengths, 'd' + 1));
 }
 
-fn writeWithStorage(comptime storage_len: usize, allocator: std.mem.Allocator, writer: anytype, lengths: []const u4, stop_index: usize) !void {
+fn writeWithStorage(
+    comptime storage_len: usize,
+    comptime profiled: bool,
+    allocator: std.mem.Allocator,
+    writer: anytype,
+    lengths: []const u4,
+    stop_index: usize,
+    io: if (profiled) std.Io else void,
+    profile: if (profiled) *BitCostProfile else void,
+) !void {
+    const rle_start = if (profiled) std.Io.Clock.awake.now(io) else {};
     var rle_storage: [storage_len]code_length_rle.Token = undefined;
     var code_length_freqs: [18]u32 = undefined;
     const rle_len = try code_length_rle.encodeIntoWithFrequencies(&rle_storage, lengths, stop_index, &code_length_freqs);
     const rle = rle_storage[0..rle_len];
+    if (profiled) {
+        profile.rle_ns +%= elapsedNs(rle_start, io);
+        profile.rle_tokens += rle_len;
+        for (code_length_freqs) |frequency|
+            profile.code_length_active += @intFromBool(frequency != 0);
+    }
 
+    const code_length_tree_start = if (profiled) std.Io.Clock.awake.now(io) else {};
     const code_length_lengths = codeLengthCodeLengths(&code_length_freqs);
+    if (profiled) profile.code_length_tree_ns +%= elapsedNs(code_length_tree_start, io);
 
+    const header_start = if (profiled) std.Io.Clock.awake.now(io) else {};
     var space: i32 = 32;
     for (code_length_order) |symbol| {
         const length = code_length_lengths[symbol];
@@ -86,13 +153,23 @@ fn writeWithStorage(comptime storage_len: usize, allocator: std.mem.Allocator, w
         }
     }
     if (space != 0) return error.InvalidHuffmanCode;
+    if (profiled) profile.header_ns +%= elapsedNs(header_start, io);
 
+    const encoder_start = if (profiled) std.Io.Clock.awake.now(io) else {};
     const encoder = try huffman.HuffmanTable(18).Encoder.init(&code_length_lengths);
+    if (profiled) profile.encoder_ns +%= elapsedNs(encoder_start, io);
+    const payload_start = if (profiled) std.Io.Clock.awake.now(io) else {};
     for (rle) |token| {
         try writer.writeHuffmanBits(allocator, encoder.codes[token.symbol], encoder.bits[token.symbol]);
         if (token.symbol == 17) try writer.writeBits(allocator, token.extra, 3);
         if (token.symbol == 16) try writer.writeBits(allocator, token.extra, 2);
     }
+    if (profiled) profile.payload_ns +%= elapsedNs(payload_start, io);
+}
+
+fn elapsedNs(start: std.Io.Timestamp, io: std.Io) u64 {
+    const ns = start.durationTo(std.Io.Clock.awake.now(io)).nanoseconds;
+    return if (ns <= 0) 0 else @intCast(ns);
 }
 
 /// The code-length alphabet has at most 18 live symbols. Its common trees fit
