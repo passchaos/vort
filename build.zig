@@ -1024,20 +1024,40 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = .ReleaseFast,
     });
+    const deflate_params_interop_exe = b.addExecutable(.{
+        .name = "vort-deflate-params-interop",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/deflate_params_interop.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
     if (zlib_ng_root) |root| {
         zlib_translate.addIncludePath(.{ .cwd_relative = b.pathJoin(&.{ root, "build" }) });
         zlib_translate.defineCMacro("VORT_ZLIB_BENCH_NAME", "\"zlib-ng-2.3.90-level6\"");
         deflate_incremental_encode_bench_exe.root_module.addObjectFile(.{ .cwd_relative = b.pathJoin(&.{ root, "build/libz.a" }) });
         deflate_incremental_decode_bench_exe.root_module.addObjectFile(.{ .cwd_relative = b.pathJoin(&.{ root, "build/libz.a" }) });
+        deflate_params_interop_exe.root_module.addObjectFile(.{ .cwd_relative = b.pathJoin(&.{ root, "build/libz.a" }) });
     } else {
         zlib_translate.linkSystemLibrary("z", .{});
         zlib_translate.defineCMacro("VORT_ZLIB_BENCH_NAME", "\"zlib-1.3-level6\"");
         deflate_incremental_encode_bench_exe.root_module.linkSystemLibrary("z", .{});
         deflate_incremental_decode_bench_exe.root_module.linkSystemLibrary("z", .{});
+        deflate_params_interop_exe.root_module.linkSystemLibrary("z", .{});
     }
     const zlib_compat_mod = zlib_translate.createModule();
     deflate_incremental_encode_bench_exe.root_module.addImport("zlib", zlib_compat_mod);
     deflate_incremental_decode_bench_exe.root_module.addImport("zlib", zlib_compat_mod);
+    deflate_params_interop_exe.root_module.addImport("zlib", zlib_compat_mod);
+    const run_deflate_params_interop = b.addRunArtifact(deflate_params_interop_exe);
+    const deflate_params_interop_step = b.step(
+        "run-deflate-params-interop",
+        "Run bidirectional DEFLATE parameter-change interoperability against libz",
+    );
+    deflate_params_interop_step.dependOn(&run_deflate_params_interop.step);
     const run_deflate_incremental_encode_bench = b.addRunArtifact(deflate_incremental_encode_bench_exe);
     if (b.args) |args| run_deflate_incremental_encode_bench.addArgs(args);
     const deflate_incremental_encode_bench_step = b.step("bench-deflate-incremental-encode", "Compare persistent and rebuilt incremental DEFLATE match indexes");
@@ -5433,6 +5453,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&deflate_encode_bench_exe.step);
     check_step.dependOn(&deflate_incremental_encode_bench_exe.step);
     check_step.dependOn(&deflate_incremental_decode_bench_exe.step);
+    check_step.dependOn(&deflate_params_interop_exe.step);
     check_step.dependOn(&native_parallel_bench_exe.step);
     check_step.dependOn(&fuzz_smoke_exe.step);
     check_step.dependOn(&fuzz_corpus_exe.step);
@@ -5526,6 +5547,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(zlib_diff_step);
     ci_smoke_step.dependOn(gzip_diff_step);
     ci_smoke_step.dependOn(python_zlib_diff_step);
+    ci_smoke_step.dependOn(deflate_params_interop_step);
     ci_smoke_step.dependOn(zlib_relaxed_report_gate_step);
     ci_smoke_step.dependOn(gzip_cli_diff_step);
     ci_smoke_step.dependOn(bgzf_diff_step);
