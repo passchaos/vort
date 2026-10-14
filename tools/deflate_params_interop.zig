@@ -50,6 +50,8 @@ const Counts = struct {
     libz_to_vort: usize = 0,
     partial_vort_to_libz: usize = 0,
     partial_libz_to_vort: usize = 0,
+    sync_vort_to_libz: usize = 0,
+    sync_libz_to_vort: usize = 0,
     params_changes: usize = 0,
     same_family_changes: usize = 0,
     vort_observed_changes: usize = 0,
@@ -88,6 +90,45 @@ pub fn main(init: std.process.Init) !void {
         counts.libz_to_vort += 1;
         counts.compressed_bytes += libz_wire.len;
     }
+
+    const sync_first = "corrupted raw segment before inflateSync 0123456789\n" ** 29;
+    const sync_second = "independent raw segment after inflateSync abcdefghijklmnopqrstuvwxyz\n" ** 31;
+    const vort_sync_wire = try encodeVortFullFlush(
+        init.gpa,
+        sync_first,
+        sync_second,
+        &counts,
+    );
+    defer init.gpa.free(vort_sync_wire);
+    const corrupt_vort_sync = try init.gpa.dupe(u8, vort_sync_wire);
+    defer init.gpa.free(corrupt_vort_sync);
+    corrupt_vort_sync[0] = (corrupt_vort_sync[0] & ~@as(u8, 0x06)) | 0x06;
+    const libz_recovered = try inflateLibzSync(
+        init.gpa,
+        corrupt_vort_sync,
+        &counts,
+    );
+    defer init.gpa.free(libz_recovered);
+    try expectEqual(.raw, "vort-full-to-libz-inflateSync", sync_second, libz_recovered);
+    counts.sync_vort_to_libz += 1;
+
+    const libz_sync_wire = try deflateLibzFullFlush(
+        init.gpa,
+        sync_first,
+        sync_second,
+        &counts,
+    );
+    defer init.gpa.free(libz_sync_wire);
+    const corrupt_libz_sync = try init.gpa.dupe(u8, libz_sync_wire);
+    defer init.gpa.free(corrupt_libz_sync);
+    corrupt_libz_sync[0] = (corrupt_libz_sync[0] & ~@as(u8, 0x06)) | 0x06;
+    const vort_recovered = try vort.decodeRawDeflateAfterSyncAlloc(
+        init.gpa,
+        corrupt_libz_sync,
+    );
+    defer vort_recovered.deinit(init.gpa);
+    try expectEqual(.raw, "libz-full-to-vort-sync", sync_second, vort_recovered.bytes);
+    counts.sync_libz_to_vort += 1;
 
     const partial_first = "Vort partial flush interoperability prefix 0123456789\n" ** 17;
     const partial_second = "Vort partial flush interoperability suffix abcdefghijklmnopqrstuvwxyz\n" ** 19;
@@ -135,6 +176,7 @@ pub fn main(init: std.process.Init) !void {
             "deflate_params_interop_ok cases={d} wrappers={d} params_changes={d} " ++
             "same_family_changes={d} vort_to_libz={d} libz_to_vort={d} " ++
             "partial_flush_cases={d} partial_vort_to_libz={d} partial_libz_to_vort={d} " ++
+            "sync_recovery_cases={d} sync_vort_to_libz={d} sync_libz_to_vort={d} " ++
             "vort_observed_changes={d} vort_boundary_requests={d} " ++
             "tiny_output_bytes={d} vort_tiny_steps={d} libz_tiny_calls={d} " ++
             "z_buf_errors={d} input_bytes_per_case={d} compressed_bytes={d}\n",
@@ -149,6 +191,9 @@ pub fn main(init: std.process.Init) !void {
             counts.partial_vort_to_libz + counts.partial_libz_to_vort,
             counts.partial_vort_to_libz,
             counts.partial_libz_to_vort,
+            counts.sync_vort_to_libz + counts.sync_libz_to_vort,
+            counts.sync_vort_to_libz,
+            counts.sync_libz_to_vort,
             counts.vort_observed_changes,
             counts.vort_boundary_requests,
             tiny_output_len,
@@ -160,6 +205,156 @@ pub fn main(init: std.process.Init) !void {
         },
     );
     try stdout.flush();
+}
+
+fn encodeVortFullFlush(
+    allocator: std.mem.Allocator,
+    first: []const u8,
+    second: []const u8,
+    counts: *Counts,
+) ![]u8 {
+    var encoder = vort.RawDeflateIncrementalFixedEncoder.init(allocator);
+    defer encoder.deinit();
+    var wire: std.ArrayList(u8) = .empty;
+    errdefer wire.deinit(allocator);
+    try feedVort(&encoder, first, allocator, &wire, counts);
+    encoder.fullFlush();
+    try drainVortBoundary(&encoder, allocator, &wire, counts, first.len);
+    try feedVort(&encoder, second, allocator, &wire, counts);
+    encoder.finish();
+    try drainVortDone(&encoder, allocator, &wire, counts, second.len);
+    return wire.toOwnedSlice(allocator);
+}
+
+fn drainVortBoundary(
+    encoder: anytype,
+    allocator: std.mem.Allocator,
+    wire: *std.ArrayList(u8),
+    counts: *Counts,
+    iteration_limit: usize,
+) !void {
+    var iterations: usize = 0;
+    while (true) {
+        iterations += 1;
+        if (iterations > iteration_limit * 8) return error.NoProgress;
+        var tiny: [tiny_output_len]u8 = undefined;
+        const result = try encoder.step("", &tiny);
+        counts.vort_tiny_steps += 1;
+        try wire.appendSlice(allocator, tiny[0..result.progress.output_written]);
+        if (result.status == .need_input) return;
+        if (result.status == .done or result.progress.output_written == 0)
+            return error.NoProgress;
+    }
+}
+
+fn drainVortDone(
+    encoder: anytype,
+    allocator: std.mem.Allocator,
+    wire: *std.ArrayList(u8),
+    counts: *Counts,
+    iteration_limit: usize,
+) !void {
+    var iterations: usize = 0;
+    while (true) {
+        iterations += 1;
+        if (iterations > iteration_limit * 8) return error.NoProgress;
+        var tiny: [tiny_output_len]u8 = undefined;
+        const result = try encoder.step("", &tiny);
+        counts.vort_tiny_steps += 1;
+        try wire.appendSlice(allocator, tiny[0..result.progress.output_written]);
+        if (result.status == .done) return;
+        if (result.progress.output_written == 0) return error.NoProgress;
+    }
+}
+
+fn deflateLibzFullFlush(
+    allocator: std.mem.Allocator,
+    first: []const u8,
+    second: []const u8,
+    counts: *Counts,
+) ![]u8 {
+    var stream: zlib.z_stream = std.mem.zeroes(zlib.z_stream);
+    if (zlib.deflateInit2_(&stream, 1, zlib.Z_DEFLATED, -15, 8, zlib.Z_DEFAULT_STRATEGY, zlib.ZLIB_VERSION, @sizeOf(zlib.z_stream)) != zlib.Z_OK)
+        return error.ZlibFailure;
+    defer _ = zlib.deflateEnd(&stream);
+    var wire: std.ArrayList(u8) = .empty;
+    errdefer wire.deinit(allocator);
+    try feedLibz(&stream, first, allocator, &wire, counts);
+    var iterations: usize = 0;
+    while (true) {
+        iterations += 1;
+        if (iterations > first.len * 8) return error.NoProgress;
+        var tiny: [16]u8 = undefined;
+        stream.next_out = &tiny;
+        stream.avail_out = tiny.len;
+        if (zlib.deflate(&stream, zlib.Z_FULL_FLUSH) != zlib.Z_OK)
+            return error.ZlibFailure;
+        counts.libz_tiny_calls += 1;
+        const written = tiny.len - @as(usize, @intCast(stream.avail_out));
+        try wire.appendSlice(allocator, tiny[0..written]);
+        if (stream.avail_out != 0) break;
+        if (written == 0) return error.NoProgress;
+    }
+    try feedLibz(&stream, second, allocator, &wire, counts);
+    iterations = 0;
+    while (true) {
+        iterations += 1;
+        if (iterations > second.len * 8) return error.NoProgress;
+        var tiny: [tiny_output_len]u8 = undefined;
+        stream.next_out = &tiny;
+        stream.avail_out = tiny.len;
+        const result = zlib.deflate(&stream, zlib.Z_FINISH);
+        counts.libz_tiny_calls += 1;
+        const written = tiny.len - @as(usize, @intCast(stream.avail_out));
+        try wire.appendSlice(allocator, tiny[0..written]);
+        if (result == zlib.Z_STREAM_END) break;
+        if (result != zlib.Z_OK or written == 0) return error.ZlibFailure;
+    }
+    return wire.toOwnedSlice(allocator);
+}
+
+fn inflateLibzSync(
+    allocator: std.mem.Allocator,
+    wire: []const u8,
+    counts: *Counts,
+) ![]u8 {
+    var stream: zlib.z_stream = std.mem.zeroes(zlib.z_stream);
+    if (zlib.inflateInit2_(&stream, -15, zlib.ZLIB_VERSION, @sizeOf(zlib.z_stream)) != zlib.Z_OK)
+        return error.ZlibFailure;
+    defer _ = zlib.inflateEnd(&stream);
+    stream.next_in = @constCast(wire.ptr);
+    stream.avail_in = @intCast(wire.len);
+    var discarded: [tiny_output_len]u8 = undefined;
+    var iterations: usize = 0;
+    while (true) {
+        iterations += 1;
+        if (iterations > wire.len * 8) return error.NoProgress;
+        stream.next_out = &discarded;
+        stream.avail_out = discarded.len;
+        const result = zlib.inflate(&stream, zlib.Z_NO_FLUSH);
+        counts.libz_tiny_calls += 1;
+        if (result == zlib.Z_DATA_ERROR) break;
+        if (result != zlib.Z_OK) return error.ZlibFailure;
+    }
+    if (zlib.inflateSync(&stream) != zlib.Z_OK) return error.ZlibFailure;
+
+    var plain: std.ArrayList(u8) = .empty;
+    errdefer plain.deinit(allocator);
+    iterations = 0;
+    while (true) {
+        iterations += 1;
+        if (iterations > wire.len * 8) return error.NoProgress;
+        var tiny: [tiny_output_len]u8 = undefined;
+        stream.next_out = &tiny;
+        stream.avail_out = tiny.len;
+        const result = zlib.inflate(&stream, zlib.Z_NO_FLUSH);
+        counts.libz_tiny_calls += 1;
+        const written = tiny.len - @as(usize, @intCast(stream.avail_out));
+        try plain.appendSlice(allocator, tiny[0..written]);
+        if (result == zlib.Z_STREAM_END) break;
+        if (result != zlib.Z_OK or written == 0) return error.ZlibFailure;
+    }
+    return plain.toOwnedSlice(allocator);
 }
 
 fn encodeVortPartial(
