@@ -528,7 +528,8 @@ const IncrementalPlannedEncoderCodec = struct {
     pub const Error = br.Error;
     pub const StreamOptions = br.PlannedStreamChunksOptions;
     pub const max_block_len = planned_chunk_max_input_len;
-    pub const default_block_len = planned_chunk_max_input_len;
+    /// Zero asks the shared stream policy to select the level/quality default.
+    pub const default_block_len: usize = 0;
     pub const State = struct {
         bit_index: u3 = 0,
         window_bits: u5 = default_window_bits,
@@ -592,6 +593,14 @@ const IncrementalPlannedEncoderCodec = struct {
             return pending_len - 1;
         }
         return pending_len;
+    }
+
+    pub fn resolveBlockLen(options: StreamOptions, requested: usize) br.Error!usize {
+        if (requested != 0) {
+            if (requested > max_block_len) return error.InvalidBlockPlan;
+            return requested;
+        }
+        return plannedStreamBlockLen(options);
     }
 
     pub fn writePrefix(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, options: StreamOptions) br.Error!void {
@@ -1802,7 +1811,7 @@ pub const IncrementalTestSupport = struct {
 pub const max_uncompressed_meta_block_len: usize = 1 << 24;
 
 pub const default_window_bits: u5 = 16;
-const planned_chunk_max_input_len: usize = 32 * 1024;
+const planned_chunk_max_input_len: usize = 64 * 1024;
 
 // Above this size payload copying dominates the fixed bit-writer overhead, so
 // keep large streams on the shared implementation to avoid duplicating its
@@ -1823,6 +1832,9 @@ pub const PlannedStreamChunksOptions = struct {
     level: PlannedCompressionLevel = .fast,
     quality: ?u4 = null,
     mode: PlannedMode = .generic,
+    /// Zero selects the policy default: 16 KiB for q0; 32 KiB for legacy
+    /// fast/q1/q6/q7/q11; and 64 KiB for balanced/ratio/q2...q5/q8...q10.
+    block_len: usize = 0,
     window_bits: u5 = default_window_bits,
     metadata: []const u8 = "",
     shared_dictionary: SharedDictionary = .{},
@@ -1842,6 +1854,22 @@ fn validatePlannedStreamChunksOptions(options: PlannedStreamChunksOptions) Error
     } else if (options.mode != .generic) {
         return error.InvalidBlockPlan;
     }
+    if (options.block_len > planned_chunk_max_input_len)
+        return error.InvalidBlockPlan;
+}
+
+fn plannedStreamBlockLen(options: PlannedStreamChunksOptions) Error!usize {
+    try validatePlannedStreamChunksOptions(options);
+    if (options.block_len != 0) return options.block_len;
+    if (options.quality) |quality| {
+        const schedule = quality_schedule.getInt(quality, options.mode) catch
+            return error.InvalidBlockPlan;
+        return schedule.stream_block_len;
+    }
+    return switch (options.level) {
+        .fast => 32 * 1024,
+        .balanced, .ratio => 64 * 1024,
+    };
 }
 
 pub fn encodedStoredStreamBound(input_len: usize) Error!usize {
@@ -3245,30 +3273,31 @@ pub fn encodedPlannedStreamChunksBound(chunks: []const []const u8) Error!usize {
 }
 
 fn encodedPlannedChunkedStreamBoundForInputLen(input_len: usize, options: PlannedStreamChunksOptions) Error!usize {
+    const block_len = try plannedStreamBlockLen(options);
     var bit_count = try storedWindowBitsLen(options.window_bits);
     if (options.metadata.len != 0)
         bit_count = try addStoredMetadataMetaBlockBitsLen(bit_count, options.metadata.len);
     var remaining = input_len;
     while (remaining != 0) {
-        const block_len = @min(remaining, planned_chunk_max_input_len);
-        bit_count = try addStoredUncompressedMetaBlockBitsLen(bit_count, block_len);
-        remaining -= block_len;
+        const current_len = @min(remaining, block_len);
+        bit_count = try addStoredUncompressedMetaBlockBitsLen(bit_count, current_len);
+        remaining -= current_len;
     }
     bit_count = std.math.add(usize, bit_count, 2) catch return error.IntegerOverflow;
     return bytesForBits(bit_count);
 }
 
 pub fn encodedPlannedStreamChunksBoundWithOptions(chunks: []const []const u8, options: PlannedStreamChunksOptions) Error!usize {
-    try validatePlannedStreamChunksOptions(options);
+    const block_len = try plannedStreamBlockLen(options);
     var bit_count = try storedWindowBitsLen(options.window_bits);
     if (options.metadata.len != 0)
         bit_count = try addStoredMetadataMetaBlockBitsLen(bit_count, options.metadata.len);
     for (chunks) |chunk| {
         var offset: usize = 0;
         while (offset < chunk.len) {
-            const block_len = @min(chunk.len - offset, planned_chunk_max_input_len);
-            bit_count = try addStoredUncompressedMetaBlockBitsLen(bit_count, block_len);
-            offset += block_len;
+            const current_len = @min(chunk.len - offset, block_len);
+            bit_count = try addStoredUncompressedMetaBlockBitsLen(bit_count, current_len);
+            offset += current_len;
         }
     }
     bit_count = std.math.add(usize, bit_count, 2) catch return error.IntegerOverflow;
@@ -4520,12 +4549,22 @@ fn considerPlannedMetaBlockPolicy(
                 input,
                 parser_options,
             ),
-            .balanced, .ratio => try lz77.lazyGreedyPlanTinyReuse(
-                &state.tokens,
-                allocator,
-                input,
-                parser_options,
-            ),
+            .balanced, .ratio => if (input.len <= 32 * 1024)
+                try lz77.lazyGreedyPlanTinyReuse(
+                    &state.tokens,
+                    allocator,
+                    input,
+                    parser_options,
+                )
+            else
+                try lz77.lazyGreedyPlanWithDictionaryReuse(
+                    &state.tokens,
+                    &state.dictionary_greedy_scratch,
+                    allocator,
+                    input,
+                    "",
+                    parser_options,
+                ),
         }
     else switch (policy.family) {
         .fast => try lz77.hashGreedyPlanWithDictionaryReuse(
@@ -5112,7 +5151,7 @@ pub const PlannedStreamEncoder = struct {
     }
 
     pub fn encodeChunksScratchWithOptions(self: *PlannedStreamEncoder, chunks: []const []const u8, options: PlannedStreamChunksOptions) Error![]const u8 {
-        try validatePlannedStreamChunksOptions(options);
+        const block_len = try plannedStreamBlockLen(options);
         IncrementalPlannedEncoderCodec.resetState(&self.stream_state);
         self.output.clearRetainingCapacity();
         try IncrementalPlannedEncoderCodec.writePrefix(
@@ -5124,14 +5163,14 @@ pub const PlannedStreamEncoder = struct {
         for (chunks) |chunk| {
             var offset: usize = 0;
             while (offset < chunk.len) {
-                const block_len = @min(chunk.len - offset, planned_chunk_max_input_len);
+                const current_len = @min(chunk.len - offset, block_len);
                 try IncrementalPlannedEncoderCodec.writeBlock(
                     self.allocator,
                     &self.output,
                     &self.stream_state,
-                    chunk[offset..][0..block_len],
+                    chunk[offset..][0..current_len],
                 );
-                offset += block_len;
+                offset += current_len;
             }
         }
         try IncrementalPlannedEncoderCodec.writeFinal(
@@ -29743,6 +29782,7 @@ test "br planned large-input bounds follow every chunked fallback" {
             .shared_dictionary = dictionary,
         };
         const expected = try encodedPlannedChunkedStreamBoundForInputLen(input_len, .{
+            .level = level,
             .shared_dictionary = dictionary,
         });
         try std.testing.expectEqual(
@@ -29752,9 +29792,20 @@ test "br planned large-input bounds follow every chunked fallback" {
     }
 
     try std.testing.expectEqual(
-        try encodedPlannedChunkedStreamBoundForInputLen(input_len, .{}),
+        try encodedPlannedChunkedStreamBoundForInputLen(input_len, .{ .level = .ratio }),
         try encodedPlannedStreamBoundWithOptions(input_len, .{ .level = .ratio }),
     );
+
+    inline for (.{ 0, 2, 11 }) |quality| {
+        try std.testing.expectEqual(
+            try encodedPlannedChunkedStreamBoundForInputLen(input_len, .{
+                .quality = quality,
+            }),
+            try encodedPlannedStreamBoundWithOptions(input_len, .{
+                .quality = quality,
+            }),
+        );
+    }
 }
 
 test "br planned RAW shared dictionary covers reusable chunked and incremental encoders" {

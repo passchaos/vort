@@ -138,7 +138,12 @@ pub fn Encoder(comptime Codec: type) type {
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
-            if (self.options.block_len == 0 or self.options.block_len > Codec.max_block_len) return error.InvalidBlockPlan;
+            const block_len = if (@hasDecl(Codec, "resolveBlockLen"))
+                try Codec.resolveBlockLen(self.options.stream, self.options.block_len)
+            else
+                self.options.block_len;
+            if (block_len == 0 or block_len > Codec.max_block_len or
+                self.plain.items.len > block_len) return error.InvalidBlockPlan;
             if (self.done) {
                 if (input.len != 0) return error.TrailingData;
                 return .{ .status = .done };
@@ -174,7 +179,7 @@ pub fn Encoder(comptime Codec: type) type {
                     self.prefix_written = true;
                     continue;
                 }
-                const room = self.options.block_len - self.plain.items.len;
+                const room = block_len - self.plain.items.len;
                 const n = @min(room, input.len - input_read);
                 if (n != 0) {
                     const total = std.math.add(usize, self.total_input, n) catch return error.IntegerOverflow;
@@ -183,7 +188,7 @@ pub fn Encoder(comptime Codec: type) type {
                     self.total_input = total;
                     self.stream_input += n;
                 }
-                if (self.plain.items.len == self.options.block_len or
+                if (self.plain.items.len == block_len or
                     ((self.finishing or self.flush_requested) and self.plain.items.len != 0))
                 {
                     try self.writeBlock();

@@ -247,6 +247,89 @@ test "quality-aware planned blocks consider static dictionary without LZ77 match
     try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
+test "planned stream policies select quality-specific block sizes" {
+    const input_len = 96 * 1024;
+    const input = try std.testing.allocator.alloc(u8, input_len);
+    defer std.testing.allocator.free(input);
+    const phrase = "quality-specific Brotli block sizing amortizes headers while preserving latency\n";
+    for (input, 0..) |*byte, index|
+        byte.* = phrase[(index + index / (16 * 1024) * 5) % phrase.len];
+
+    const Case = struct {
+        options: br.PlannedStreamChunksOptions,
+        expected_blocks: usize,
+    };
+    const cases = [_]Case{
+        .{ .options = .{ .level = .fast }, .expected_blocks = 3 },
+        .{ .options = .{ .level = .balanced }, .expected_blocks = 2 },
+        .{ .options = .{ .level = .ratio }, .expected_blocks = 2 },
+        .{ .options = .{ .quality = 0 }, .expected_blocks = 6 },
+        .{ .options = .{ .quality = 1 }, .expected_blocks = 3 },
+        .{ .options = .{ .quality = 2 }, .expected_blocks = 2 },
+        .{ .options = .{ .quality = 6 }, .expected_blocks = 3 },
+        .{ .options = .{ .quality = 10 }, .expected_blocks = 2 },
+        .{ .options = .{ .quality = 11 }, .expected_blocks = 3 },
+        .{ .options = .{ .quality = 8, .block_len = 24 * 1024 }, .expected_blocks = 4 },
+    };
+    const chunks = [_][]const u8{input};
+    for (cases) |case| {
+        const encoded = try br.encodePlannedStreamChunksWithOptionsAlloc(
+            std.testing.allocator,
+            &chunks,
+            case.options,
+        );
+        defer std.testing.allocator.free(encoded);
+        const summary = try br.summarizeStream(encoded);
+        try std.testing.expectEqual(
+            case.expected_blocks,
+            summary.compressed_meta_block_count + summary.uncompressed_meta_block_count,
+        );
+        const decoded = try br.decodeStreamAllocExactSize(
+            std.testing.allocator,
+            encoded,
+            input.len,
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, input, decoded);
+    }
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        br.encodedPlannedStreamChunksBoundWithOptions(
+            &chunks,
+            .{ .block_len = 64 * 1024 + 1 },
+        ),
+    );
+}
+
+test "incremental auto block sizing matches chunked quality wire" {
+    const input_len = 96 * 1024;
+    const input = try std.testing.allocator.alloc(u8, input_len);
+    defer std.testing.allocator.free(input);
+    const phrase = "incremental and chunked auto block sizing share one policy core 0123456789\n";
+    for (input, 0..) |*byte, index| byte.* = phrase[index % phrase.len];
+    const chunks = [_][]const u8{input};
+    const chunked = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 2, .mode = .text },
+    );
+    defer std.testing.allocator.free(chunked);
+
+    var incremental = br.IncrementalPlannedStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{ .stream = .{ .quality = 2, .mode = .text } },
+    );
+    defer incremental.deinit();
+    const encoded = try encodeIncremental(&incremental, input, 509, 17);
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expectEqualSlices(u8, chunked, encoded);
+    const summary = try br.summarizeStream(encoded);
+    try std.testing.expectEqual(
+        @as(usize, 2),
+        summary.compressed_meta_block_count + summary.uncompressed_meta_block_count,
+    );
+}
+
 test "oversized planned input applies quality policy to every meta block" {
     const input_len = br.max_uncompressed_meta_block_len + 17;
     const input = try std.testing.allocator.alloc(u8, input_len);

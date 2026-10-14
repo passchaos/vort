@@ -105,6 +105,10 @@ pub const Schedule = struct {
     split: SplitFlags,
     use_recent_distances: bool,
     search_distance_parameters: bool,
+    /// Default bounded multi-meta-block planning size. q0 favors latency;
+    /// qualities with a 32 KiB optimal ceiling stay there; the remaining
+    /// schedules amortize headers at 64 KiB. Callers may still override it.
+    stream_block_len: u32,
 
     pub fn validate(self: Schedule) Error!void {
         if (self.window.min_bits < 10 or self.window.max_bits > 24 or
@@ -153,6 +157,10 @@ pub const Schedule = struct {
             return error.InvalidSchedule;
         if (self.context.joint_block_contexts and
             (!self.context.cluster_contexts or !self.split.literal))
+            return error.InvalidSchedule;
+        if (self.stream_block_len < 16 * 1024 or
+            self.stream_block_len > 64 * 1024 or
+            !std.math.isPowerOfTwo(self.stream_block_len))
             return error.InvalidSchedule;
     }
 };
@@ -284,6 +292,12 @@ fn makeSchedule(quality: Quality, mode: Mode) Schedule {
         },
         .use_recent_distances = q >= 3,
         .search_distance_parameters = q >= 4,
+        .stream_block_len = if (q == 0)
+            16 * 1024
+        else if (q == 1 or q == 6 or q == 7 or q == 11)
+            32 * 1024
+        else
+            64 * 1024,
     };
 }
 
@@ -299,6 +313,20 @@ test "quality rejects values outside zero through eleven" {
     try std.testing.expectError(error.InvalidQuality, Quality.fromInt(12));
     try std.testing.expectError(error.InvalidQuality, Quality.fromInt(255));
     try std.testing.expectError(error.InvalidQuality, getInt(200, .generic));
+}
+
+test "quality stream block sizes follow latency and optimal-search policy" {
+    for (0..12) |quality_index| {
+        const quality = try Quality.fromInt(@intCast(quality_index));
+        const expected: u32 = if (quality == .q0)
+            16 * 1024
+        else if (quality == .q1 or quality == .q6 or quality == .q7 or quality == .q11)
+            32 * 1024
+        else
+            64 * 1024;
+        inline for (std.meta.tags(Mode)) |mode|
+            try std.testing.expectEqual(expected, get(quality, mode).stream_block_len);
+    }
 }
 
 test "quality schedule covers the deterministic twelve by three matrix" {
