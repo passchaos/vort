@@ -45,6 +45,13 @@ major gaps before Vort can claim broad industry-best parity:
   Standardized seek-table parsing/
   iteration, one-shot encoding, checksum-aware range decode, and
   dictionary-aware encoding/range decode are also in place.
+  Explicit Zstd encode windows are no longer part of this gap:
+  `FrameOptions.window_log` and `NativeFrameOptions.window_log` accept 10...41,
+  with `null` preserving the old wire, and the one-shot, reusable, incremental,
+  dictionary, dictionary-set, and seekable writers share the same window-aware
+  path. The encoder still has an 8 MiB internal match/history ceiling, and this
+  completed slice does not establish general Zstd compatibility, ratio, or
+  performance parity.
 - Cross-platform optimized kernels and reproducible competitor measurements are
   not yet comprehensive enough for a blanket performance-leadership claim.
 
@@ -19649,3 +19656,28 @@ reuse, so production keeps the simpler independently owned plans.
   deterministic 35/64-tree oracles prove reachable profitable shapes; the
   existing one/two/four-round budget bounds their cost rather than pruning them
   from this limited source-only sample.
+
+- Added explicit Zstd encode-window selection to `FrameOptions` and
+  `NativeFrameOptions` as `window_log: ?u6`. Values 10...41 select a standard
+  window, while `null` retains the legacy wire byte-for-byte. A known content
+  size at or below the selected window keeps the compact single-segment form;
+  a larger known size emits a non-single-segment `Window_Descriptor` followed
+  by the shortest legal two-, four-, or eight-byte FCS, and an unknown-size
+  stream emits the explicit descriptor without an FCS. Encoded-bound accounting
+  follows the same decisions.
+  One-shot, reusable, exact-size and unknown-size incremental, explicit-
+  dictionary, dictionary-set, and seekable encoders all use the shared header,
+  block, and history path. Effective block length, rolling history, match
+  distance, and dictionary visibility are bounded by the selected window and
+  the encoder's current 8 MiB internal capability; logs above 23 therefore
+  advertise a larger legal window without enabling farther references yet.
+  A fixed libzstd 1.6.0 frame for the 2,050-byte `"abcde" ** 410` payload pins
+  frame descriptor `0x44`, window descriptor `0x00` (1 KiB), two-byte FCS, and
+  checksum;
+  Vort decodes it through allocating, caller-buffer, chunked, and incremental
+  APIs. The reverse runtime probe has libzstd decode Vort's equivalent frame,
+  an over-window history case, and raw-dictionary cases where the suffix is
+  visible but the prefix has expired. This establishes the explicit-window
+  slice only. Full Zstd format/entropy coverage, broader malformed/corpus
+  differentials, ratio and throughput parity, and internal history beyond
+  8 MiB remain open.

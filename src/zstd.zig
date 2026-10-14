@@ -462,6 +462,11 @@ extern fn vortZstdHuffmanWideX2Decode(request: *const huffman_x2_abi.Request) ca
 pub const FrameOptions = struct {
     include_content_size: bool = true,
     content_checksum: bool = false,
+    /// Optional standard Zstd Window_Log (10...41). When known content is
+    /// larger than this window, emit a non-single-segment frame that carries
+    /// both Window_Descriptor and Frame_Content_Size. Null preserves the
+    /// historical header and encoder policy.
+    window_log: ?u6 = null,
 };
 
 pub const NativeFrameSelection = enum {
@@ -474,6 +479,10 @@ pub const NativeFrameSelection = enum {
 pub const NativeFrameOptions = struct {
     content_checksum: bool = true,
     include_content_size: bool = true,
+    /// Optional standard Zstd Window_Log (10...41). It caps block size,
+    /// cross-block matches, and visible preset history in addition to changing
+    /// the frame header. Null preserves the historical native encoder wire.
+    window_log: ?u6 = null,
     selection: NativeFrameSelection = .auto,
     block_size_max: usize = std.compress.zstd.block_size_max,
     dictionary_id: u32 = 0,
@@ -508,11 +517,10 @@ const IncrementalEncoderCodec = struct {
         _ = try nativeMatchSearchBudget(options);
     }
     pub fn blockLen(options: Options) usize {
-        return options.block_size_max;
+        return nativeBlockSizeMax(options) catch unreachable;
     }
     pub fn historyLen(options: Options) usize {
-        _ = options;
-        return native_dictionary_window_len;
+        return nativeEncoderWindowLen(options) catch unreachable;
     }
     pub fn writeHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options, expected_input_len: ?usize, dictionary_id: ?u32) zstd.Error!void {
         if (expected_input_len) |len| return emitFrameHeader(allocator, out, try checkedUsizeToU64(len), options);
@@ -520,23 +528,23 @@ const IncrementalEncoderCodec = struct {
         const checksum_flag: u8 = if (options.content_checksum) 0x04 else 0;
         try out.append(allocator, checksum_flag | nativeDictionaryIdFlag(dictionary_id orelse 0));
         // A no-size stream cannot tighten the window from content length. Use
-        // the library's native dictionary window so preset-history offsets
-        // remain valid while still bounding decoder memory explicitly.
-        try emitWindowDescriptor(allocator, out, native_dictionary_window_len);
+        // the configured descriptor, or retain the library's legacy native
+        // dictionary window when the caller did not select one explicitly.
+        try emitConfiguredWindowDescriptor(allocator, out, options, native_dictionary_window_len);
         try emitDictionaryId(allocator, out, dictionary_id orelse 0);
     }
     pub fn writeRawOrRle(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) zstd.Error!void {
         try emitBlock(allocator, out, block, last);
     }
-    pub fn writeEntropy(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, state: *State, dictionary: ?IncrementalEncoderCodec.Dictionary, frame_history: HistoryView, frame_offset: usize, match_search_budget: usize) zstd.Error!void {
-        try emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl(false, allocator, out, block, last, state, dictionary, frame_history, frame_offset, match_search_budget, false, null, null, null);
+    pub fn writeEntropy(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, options: Options, state: *State, dictionary: ?IncrementalEncoderCodec.Dictionary, frame_history: HistoryView, frame_offset: usize) zstd.Error!void {
+        try emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl(false, allocator, out, block, last, state, dictionary, frame_history, frame_offset, options.match_search_budget, false, null, null, null, try nativeMatchWindowLenForBlock(options, frame_offset, block.len, last));
     }
-    pub fn writeFastCompressed(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, state: *State, dictionary: ?IncrementalEncoderCodec.Dictionary) zstd.Error!void {
+    pub fn writeFastCompressed(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, options: Options, state: *State, dictionary: ?IncrementalEncoderCodec.Dictionary, frame_offset: usize) zstd.Error!void {
         var block_scratch: NativeBlockEncodeScratch = .{};
         defer block_scratch.deinit(allocator);
         var large_sequence_scratch: LargeSequenceScratch = .{};
         defer large_sequence_scratch.deinit(allocator);
-        try emitFastCompressedBlockWithScratch(allocator, out, block, last, state, dictionary, &large_sequence_scratch, &block_scratch);
+        try emitFastCompressedBlockWithScratch(allocator, out, block, last, state, dictionaryVisibleAtOffset(dictionary, frame_offset, try nativeMatchWindowLenForBlock(options, frame_offset, block.len, last)), &large_sequence_scratch, &block_scratch);
     }
     pub fn writeChecksum(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options, hasher: *std.hash.XxHash64) zstd.Error!void {
         if (!options.content_checksum) return;
@@ -1924,7 +1932,7 @@ pub fn encodedNativeFrameBoundWithOptions(input_len: usize, options: NativeFrame
     const block_count = if (input_len == 0)
         1
     else
-        (input_len + block_size_max - 1) / block_size_max;
+        1 + (input_len - 1) / block_size_max;
     var bound = frame_header_len;
     bound = std.math.add(usize, bound, input_len) catch return error.IntegerOverflow;
     const block_header_bytes = std.math.mul(usize, block_count, 3) catch return error.IntegerOverflow;
@@ -1945,10 +1953,10 @@ pub fn encodedNativeFrameBoundWithDictionarySet(input_len: usize, options: Nativ
 
 fn nativeFrameHeaderLen(content_len: u64, options: NativeFrameOptions) Error!usize {
     var len: usize = 4 + 1; // magic number plus frame descriptor.
-    if (!options.include_content_size) {
+    if (!try nativeFrameUsesSingleSegment(content_len, options)) {
         // Non-single-segment frames without Frame_Content_Size must carry the
-        // Window_Descriptor byte. When the size is present the writer always
-        // chooses the shorter single-segment form instead.
+        // Window_Descriptor byte. A configured window also needs this form
+        // when the known content is larger than that advertised window.
         len = std.math.add(usize, len, 1) catch return error.IntegerOverflow;
     }
     len = std.math.add(usize, len, nativeDictionaryIdFieldLen(options.dictionary_id)) catch return error.IntegerOverflow;
@@ -1956,6 +1964,43 @@ fn nativeFrameHeaderLen(content_len: u64, options: NativeFrameOptions) Error!usi
         len = std.math.add(usize, len, nativeContentSizeFieldLen(content_len)) catch return error.IntegerOverflow;
     }
     return len;
+}
+
+const native_window_log_min: u6 = 10;
+const native_window_log_max: u6 = 41;
+
+fn nativeExplicitWindowSize(options: NativeFrameOptions) Error!?u64 {
+    const window_log = options.window_log orelse return null;
+    if (window_log < native_window_log_min or window_log > native_window_log_max)
+        return error.InvalidBlockPlan;
+    return @as(u64, 1) << window_log;
+}
+
+fn nativeEncoderWindowLen(options: NativeFrameOptions) Error!usize {
+    const advertised = try nativeExplicitWindowSize(options) orelse native_dictionary_window_len;
+    return @intCast(@min(advertised, native_dictionary_window_len));
+}
+
+fn nativeMatchWindowLen(options: NativeFrameOptions) Error!?usize {
+    if (options.window_log == null) return null;
+    return try nativeEncoderWindowLen(options);
+}
+
+fn nativeMatchWindowLenForBlock(options: NativeFrameOptions, frame_offset: usize, block_len: usize, last: bool) Error!?usize {
+    const configured = try nativeMatchWindowLen(options) orelse return null;
+    if (!options.include_content_size) return configured;
+    var minimum_content_len = std.math.add(usize, frame_offset, block_len) catch return error.IntegerOverflow;
+    if (!last) minimum_content_len = std.math.add(usize, minimum_content_len, 1) catch return error.IntegerOverflow;
+    return @min(configured, minimum_content_len);
+}
+
+fn nativeFrameUsesSingleSegment(content_len: u64, options: NativeFrameOptions) Error!bool {
+    if (!options.include_content_size) {
+        _ = try nativeExplicitWindowSize(options);
+        return false;
+    }
+    const window_size = try nativeExplicitWindowSize(options) orelse return true;
+    return content_len <= window_size;
 }
 
 fn nativeContentSizeFieldLen(content_len: u64) usize {
@@ -2317,7 +2362,8 @@ pub const encodeFrameIntoSliceWithAdvancedOptionsAndDictionarySet = encodeNative
 
 fn nativeBlockSizeMax(options: NativeFrameOptions) Error!usize {
     if (options.block_size_max == 0 or options.block_size_max > std.compress.zstd.block_size_max) return error.InvalidBlockPlan;
-    return options.block_size_max;
+    const window_len = try nativeEncoderWindowLen(options);
+    return @min(options.block_size_max, window_len);
 }
 
 fn nativeMatchSearchBudget(options: NativeFrameOptions) Error!usize {
@@ -6287,6 +6333,7 @@ fn nativeFrameOptionsForLevel(level: c_int, options: FrameOptions) Error!NativeF
     var native_options: NativeFrameOptions = .{
         .content_checksum = options.content_checksum,
         .include_content_size = options.include_content_size,
+        .window_log = options.window_log,
     };
     if (level <= 0) {
         native_options.selection = .raw_or_rle;
@@ -6656,11 +6703,12 @@ fn encodeLiteralOnlyFrameAppendWithDictionaryInternalImpl(
 
     var offset: usize = 0;
     const block_size_max = try nativeBlockSizeMax(frame_options);
+    const history_window_len = try nativeEncoderWindowLen(frame_options);
     var encoder_state: LiteralOnlyEncoderState = .{};
     var frame_history: incremental_history.Rolling = .{};
     defer frame_history.deinit(allocator);
     if (input.len == 0) {
-        try emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl(enable_decisive_history, allocator, out, "", true, &encoder_state, dictionary, emptyIncrementalHistoryView(), 0, match_search_budget, frame_options.rep_beam_search, rep_beam_scratch, large_sequence_scratch, block_scratch);
+        try emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl(enable_decisive_history, allocator, out, "", true, &encoder_state, dictionary, emptyIncrementalHistoryView(), 0, match_search_budget, frame_options.rep_beam_search, rep_beam_scratch, large_sequence_scratch, block_scratch, try nativeMatchWindowLenForBlock(frame_options, 0, 0, true));
     } else {
         while (offset < input.len) {
             const block_end = @min(input.len, offset + block_size_max);
@@ -6672,9 +6720,9 @@ fn encodeLiteralOnlyFrameAppendWithDictionaryInternalImpl(
             // longer frame. Non-final first blocks still prepare before emit so
             // appendCompletedBlock can index them for the following block.
             if (!last)
-                try frame_history.prepareCompletedBlock(allocator, block, native_dictionary_window_len);
-            try emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl(enable_decisive_history, allocator, out, block, last, &encoder_state, dictionary, frame_history.view(), offset, match_search_budget, frame_options.rep_beam_search, rep_beam_scratch, large_sequence_scratch, block_scratch);
-            if (!last) frame_history.appendCompletedBlock(block, native_dictionary_window_len);
+                try frame_history.prepareCompletedBlock(allocator, block, history_window_len);
+            try emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl(enable_decisive_history, allocator, out, block, last, &encoder_state, dictionary, frame_history.view(), offset, match_search_budget, frame_options.rep_beam_search, rep_beam_scratch, large_sequence_scratch, block_scratch, try nativeMatchWindowLenForBlock(frame_options, offset, block.len, last));
+            if (!last) frame_history.appendCompletedBlock(block, history_window_len);
             offset = block_end;
         }
     }
@@ -7032,7 +7080,8 @@ pub const NativeFrameEncoder = struct {
                     var offset: usize = 0;
                     while (offset < input.len) {
                         const end = @min(input.len, offset + block_size_max);
-                        try emitFastCompressedBlockWithScratch(self.allocator, out, input[offset..end], end == input.len, &state, dictionary, &self.large_sequence_scratch, &self.block_scratch);
+                        const last = end == input.len;
+                        try emitFastCompressedBlockWithScratch(self.allocator, out, input[offset..end], last, &state, dictionaryVisibleAtOffset(dictionary, offset, try nativeMatchWindowLenForBlock(frame_options, offset, end - offset, last)), &self.large_sequence_scratch, &self.block_scratch);
                         offset = end;
                     }
                 }
@@ -7095,19 +7144,25 @@ fn optionsWithNativeDictionary(options: NativeFrameOptions, dictionary: ?NativeD
     return with_dictionary;
 }
 
+fn dictionaryVisibleAtOffset(dictionary: ?NativeDictionary, frame_offset: usize, window_len: ?usize) ?NativeDictionary {
+    if (window_len) |limit| if (frame_offset >= limit) return null;
+    return dictionary;
+}
+
 fn emitFrameHeader(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
     content_len: u64,
     options: NativeFrameOptions,
 ) Error!void {
+    const single_segment = try nativeFrameUsesSingleSegment(content_len, options);
     try out.appendSlice(allocator, &frame_magic);
     const checksum_flag: u8 = if (options.content_checksum) 0x04 else 0;
     const dictionary_flag: u8 = nativeDictionaryIdFlag(options.dictionary_id);
 
     if (!options.include_content_size) {
         try out.append(allocator, checksum_flag | dictionary_flag);
-        try emitWindowDescriptor(allocator, out, content_len);
+        try emitConfiguredWindowDescriptor(allocator, out, options, content_len);
         try emitDictionaryId(allocator, out, options.dictionary_id);
         return;
     }
@@ -7117,7 +7172,19 @@ fn emitFrameHeader(
     // bytes here, which was easy to inspect but disproportionately expensive
     // for the tiny raw/RLE frames this dependency-free path is meant to cover.
     const field_size = nativeContentSizeFieldLen(content_len);
-    if (content_len <= 255) {
+    if (!single_segment) {
+        std.debug.assert(field_size != 1);
+        const content_size_flag: u8 = switch (field_size) {
+            2 => 1,
+            4 => 2,
+            8 => 3,
+            else => unreachable,
+        };
+        try out.append(allocator, (content_size_flag << 6) | checksum_flag | dictionary_flag);
+        try emitConfiguredWindowDescriptor(allocator, out, options, content_len);
+        try emitDictionaryId(allocator, out, options.dictionary_id);
+        try emitContentSizeField(allocator, out, content_len, field_size);
+    } else if (content_len <= 255) {
         std.debug.assert(field_size == 1);
         try out.append(allocator, 0x20 | checksum_flag | dictionary_flag); // fcs=1 byte, single segment
         try emitDictionaryId(allocator, out, options.dictionary_id);
@@ -7144,6 +7211,37 @@ fn emitFrameHeader(
         std.mem.writeInt(u64, &size_bytes, content_len, .little);
         try out.appendSlice(allocator, &size_bytes);
     }
+}
+
+fn emitContentSizeField(allocator: std.mem.Allocator, out: *std.ArrayList(u8), content_len: u64, field_size: usize) Error!void {
+    switch (field_size) {
+        1 => try out.append(allocator, @intCast(content_len)),
+        2 => {
+            var size_bytes: [2]u8 = undefined;
+            std.mem.writeInt(u16, &size_bytes, @intCast(content_len - 256), .little);
+            try out.appendSlice(allocator, &size_bytes);
+        },
+        4 => {
+            var size_bytes: [4]u8 = undefined;
+            std.mem.writeInt(u32, &size_bytes, @intCast(content_len), .little);
+            try out.appendSlice(allocator, &size_bytes);
+        },
+        8 => {
+            var size_bytes: [8]u8 = undefined;
+            std.mem.writeInt(u64, &size_bytes, content_len, .little);
+            try out.appendSlice(allocator, &size_bytes);
+        },
+        else => unreachable,
+    }
+}
+
+fn emitConfiguredWindowDescriptor(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: NativeFrameOptions, legacy_window_size: u64) Error!void {
+    if (options.window_log) |window_log| {
+        _ = try nativeExplicitWindowSize(options);
+        try out.append(allocator, (@as(u8, window_log) - native_window_log_min) << 3);
+        return;
+    }
+    try emitWindowDescriptor(allocator, out, legacy_window_size);
 }
 
 fn emitWindowDescriptor(allocator: std.mem.Allocator, out: *std.ArrayList(u8), content_len: u64) Error!void {
@@ -15414,6 +15512,7 @@ fn emitLiteralOnlyCompressedBlockWithHistoryAndScratch(
         rep_beam_scratch,
         large_sequence_scratch,
         null,
+        null,
     );
 }
 
@@ -15496,8 +15595,10 @@ fn emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl(
     rep_beam_scratch: ?*lz77.RepBeamScratch,
     large_sequence_scratch: ?*LargeSequenceScratch,
     block_scratch: ?*NativeBlockEncodeScratch,
+    window_len: ?usize,
 ) Error!void {
     try ensureEncoderSequenceState(state, dictionary);
+    const visible_dictionary = dictionaryVisibleAtOffset(dictionary, frame_offset, window_len);
     const CandidateKind = enum { dictionary, history, huffman, match };
     var local_block_scratch: NativeBlockEncodeScratch = .{};
     defer if (block_scratch == null) local_block_scratch.deinit(allocator);
@@ -15508,8 +15609,8 @@ fn emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl(
     var best_kind: ?CandidateKind = null;
     var match_tested = false;
 
-    const dictionary_ok = if (dictionary) |dict|
-        try emitDictionaryMatchCompressedBlock(allocator, candidate, block, last, dict, frame_offset, match_search_budget)
+    const dictionary_ok = if (visible_dictionary) |dict|
+        try emitDictionaryMatchCompressedBlock(allocator, candidate, block, last, dict, frame_offset, match_search_budget, window_len)
     else
         false;
     const dictionary_ready = dictionary_ok and try prepareSequenceCandidateForFrameWithScratch(allocator, candidate, block, last, &state.sequence_state, large_sequence_scratch);
@@ -15523,13 +15624,14 @@ fn emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl(
     // against the current frame state directly instead of first serializing
     // with the initial tables/repcodes and then decoding that temporary block
     // only to serialize the same sequence list again.
-    const history_ready = try emitFrameHistoryMatchCompressedBlock(
+    const history_ready = try emitFrameHistoryMatchCompressedBlockWithWindow(
         allocator,
         candidate,
         block,
         last,
         frame_history,
         &state.sequence_state,
+        window_len,
     );
     if (history_ready and (best_kind == null or candidate.items.len < best.items.len)) {
         best.clearRetainingCapacity();
@@ -15539,12 +15641,12 @@ fn emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl(
         // checks. A broader speed shortcut is restricted to wide alphabets
         // without a long periodic segment; narrow/periodic blocks can still be
         // improved materially by the local repeated-match family.
-        if (enable_decisive_history and dictionary == null and decisiveHistoryCandidate(block, candidate.items.len)) {
+        if (enable_decisive_history and visible_dictionary == null and decisiveHistoryCandidate(block, candidate.items.len)) {
             state.previous_huffman_plan = null;
             try appendSequenceCandidateAndCommit(allocator, out, candidate.items, last, &state.sequence_state);
             return;
         }
-        if (enable_decisive_history and dictionary == null and
+        if (enable_decisive_history and visible_dictionary == null and
             candidate.items.len <= block.len / decisive_wide_history_ratio and decisiveWideHistoryBlock(block))
         {
             state.previous_huffman_plan = null;
@@ -19682,18 +19784,19 @@ fn emitDictionaryMatchCompressedBlock(
     dictionary: NativeDictionary,
     frame_offset: usize,
     match_search_budget: usize,
+    window_len: ?usize,
 ) Error!bool {
     var mixed_block: std.ArrayList(u8) = .empty;
     defer mixed_block.deinit(allocator);
-    const mixed_ok = try emitMixedDictionaryDuplicateMatchCompressedBlock(allocator, &mixed_block, block, last, dictionary, frame_offset, match_search_budget);
+    const mixed_ok = try emitMixedDictionaryDuplicateMatchCompressedBlock(allocator, &mixed_block, block, last, dictionary, frame_offset, match_search_budget, window_len);
 
     var multi_block: std.ArrayList(u8) = .empty;
     defer multi_block.deinit(allocator);
-    const multi_ok = try emitMultiDictionaryMatchCompressedBlock(allocator, &multi_block, block, last, dictionary, frame_offset);
+    const multi_ok = try emitMultiDictionaryMatchCompressedBlock(allocator, &multi_block, block, last, dictionary, frame_offset, window_len);
 
     var single_block: std.ArrayList(u8) = .empty;
     defer single_block.deinit(allocator);
-    const single_ok = try emitSingleDictionaryMatchCompressedBlock(allocator, &single_block, block, last, dictionary, frame_offset);
+    const single_ok = try emitSingleDictionaryMatchCompressedBlock(allocator, &single_block, block, last, dictionary, frame_offset, window_len);
 
     var best: ?[]const u8 = null;
     var best_len: usize = std.math.maxInt(usize);
@@ -19720,6 +19823,18 @@ fn emitFrameHistoryMatchCompressedBlock(
     history: incremental_history.View,
     current: ?*const SequenceEncoderState,
 ) Error!bool {
+    return emitFrameHistoryMatchCompressedBlockWithWindow(allocator, out, block, last, history, current, null);
+}
+
+fn emitFrameHistoryMatchCompressedBlockWithWindow(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    history: incremental_history.View,
+    current: ?*const SequenceEncoderState,
+    window_len: ?usize,
+) Error!bool {
     const plan = incremental_history_match.findPlan(history, block);
     if (plan.len == 0) return false;
     var literal_lens: [incremental_history_match.max_matches]usize = undefined;
@@ -19730,6 +19845,7 @@ fn emitFrameHistoryMatchCompressedBlock(
     for (plan.slice(), 0..) |match, i| {
         literal_lens[i] = match.block_start - literal_start;
         offsets[i] = match.offset(history.bytes.len) orelse return error.IntegerOverflow;
+        if (window_len) |limit| if (offsets[i] > limit) return false;
         match_lens[i] = match.len;
         literal_ends[i] = match.block_start + match.len;
         literal_start = literal_ends[i];
@@ -19775,10 +19891,12 @@ fn emitSingleDictionaryMatchCompressedBlock(
     last: bool,
     dictionary: NativeDictionary,
     frame_offset: usize,
+    window_len: ?usize,
 ) Error!bool {
     const match = findDictionaryMatch(dictionary.content, block, frame_offset) orelse return false;
     const literal_len = match.block_start;
     const match_offset = try dictionaryMatchOffset(dictionary.content.len, frame_offset, match);
+    if (window_len) |limit| if (match_offset > limit) return false;
     const tail_start = match.block_start + match.len;
     const literal_lens = [_]usize{literal_len};
     const offsets = [_]usize{match_offset};
@@ -19900,12 +20018,16 @@ fn emitMixedDictionaryDuplicateMatchCompressedBlock(
     dictionary: NativeDictionary,
     frame_offset: usize,
     match_search_budget: usize,
+    window_len: ?usize,
 ) Error!bool {
     const plan = try bestMixedMatchLookaheadPlan(dictionary.content, block, frame_offset, .{
         .dictionary = true,
         .duplicate = true,
         .repeated = true,
     }, .{ .kind = .dictionary }, .non_dictionary, match_search_budget, null, null) orelse return false;
+    if (window_len) |limit|
+        for (plan.kinds[0..plan.count], plan.offsets[0..plan.count]) |kind, offset|
+            if (kind == .dictionary and offset > limit) return false;
     return try emitBestSequenceCompressedBlockFromLookaheadPlan(
         allocator,
         out,
@@ -20548,6 +20670,7 @@ fn emitMultiDictionaryMatchCompressedBlock(
     last: bool,
     dictionary: NativeDictionary,
     frame_offset: usize,
+    window_len: ?usize,
 ) Error!bool {
     var literal_lens: [max_bootstrap_sequence_count]usize = undefined;
     var offsets: [max_bootstrap_sequence_count]usize = undefined;
@@ -20559,6 +20682,7 @@ fn emitMultiDictionaryMatchCompressedBlock(
         const match = findDictionaryMatchIn(dictionary.content, block, literal_start, frame_offset) orelse break;
         literal_lens[count] = match.block_start - literal_start;
         offsets[count] = try dictionaryMatchOffset(dictionary.content.len, frame_offset, match);
+        if (window_len) |limit| if (offsets[count] > limit) return false;
         match_lens[count] = match.len;
         literal_ends[count] = match.block_start + match.len;
         literal_start = literal_ends[count];
@@ -29434,6 +29558,360 @@ test "zstd native encoded bound follows emitted frame header widths" {
     try std.testing.expectEqual(@as(usize, 9), dictionary_header.payload_offset);
 
     try std.testing.expectEqual(@as(usize, 13), try nativeFrameHeaderLen(@as(u64, std.math.maxInt(u32)) + 1, .{}));
+}
+
+test "zstd explicit window writes known and unknown size frame headers" {
+    const one_kib = "x" ** 1024;
+    const at_window = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, one_kib, .{
+        .content_checksum = false,
+        .window_log = 10,
+    });
+    defer std.testing.allocator.free(at_window);
+    try std.testing.expectEqual(@as(u8, 0x60), at_window[4]);
+    try std.testing.expectEqual(@as(usize, 7), (try inspectNativeFrameHeader(at_window)).payload_offset);
+
+    const over_window = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, one_kib ++ "y", .{
+        .content_checksum = false,
+        .window_log = 10,
+    });
+    defer std.testing.allocator.free(over_window);
+    try std.testing.expectEqualSlices(u8, &.{ 0x40, 0x00, 0x01, 0x03 }, over_window[4..8]);
+    const over_header = try inspectNativeFrameHeader(over_window);
+    try std.testing.expectEqual(@as(u64, 1024), over_header.window_size);
+    try std.testing.expectEqual(@as(?u64, 1025), over_header.content_size);
+
+    const checksummed = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, "z" ** 2050, .{
+        .content_checksum = true,
+        .window_log = 10,
+    });
+    defer std.testing.allocator.free(checksummed);
+    try std.testing.expectEqualSlices(u8, &.{ 0x44, 0x00, 0x02, 0x07 }, checksummed[4..8]);
+    const checksummed_header = try inspectNativeFrameHeader(checksummed);
+    try std.testing.expect(checksummed_header.has_checksum);
+    try std.testing.expectEqual(@as(?u64, 2050), checksummed_header.content_size);
+
+    const unknown = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, "unknown window", .{
+        .content_checksum = false,
+        .include_content_size = false,
+        .window_log = 12,
+    });
+    defer std.testing.allocator.free(unknown);
+    try std.testing.expectEqualSlices(u8, &.{ 0x00, 0x10 }, unknown[4..6]);
+    const unknown_header = try inspectNativeFrameHeader(unknown);
+    try std.testing.expectEqual(@as(?u64, null), unknown_header.content_size);
+    try std.testing.expectEqual(@as(u64, 4096), unknown_header.window_size);
+}
+
+test "zstd explicit window uses non-single FCS widths and validates logs" {
+    const cases = [_]struct {
+        content_len: u64,
+        descriptor: u8,
+        header_len: usize,
+    }{
+        .{ .content_len = 1025, .descriptor = 0x40, .header_len = 8 },
+        .{ .content_len = 70_000, .descriptor = 0x80, .header_len = 10 },
+        .{ .content_len = @as(u64, std.math.maxInt(u32)) + 1, .descriptor = 0xc0, .header_len = 14 },
+    };
+    for (cases) |case| {
+        var header: std.ArrayList(u8) = .empty;
+        defer header.deinit(std.testing.allocator);
+        try emitFrameHeader(std.testing.allocator, &header, case.content_len, .{
+            .content_checksum = false,
+            .window_log = 10,
+        });
+        try std.testing.expectEqual(case.header_len, header.items.len);
+        try std.testing.expectEqual(case.descriptor, header.items[4]);
+        try std.testing.expectEqual(@as(u8, 0), header.items[5]);
+    }
+
+    try std.testing.expectError(error.InvalidBlockPlan, encodedNativeFrameBoundWithOptions(1, .{ .window_log = 9 }));
+    try std.testing.expectError(error.InvalidBlockPlan, encodedNativeFrameBoundWithOptions(1, .{ .window_log = 42 }));
+    try std.testing.expectError(error.IntegerOverflow, encodedNativeFrameBoundWithOptions(std.math.maxInt(usize), .{ .window_log = 10 }));
+    try std.testing.expectEqual(native_dictionary_window_len, try nativeEncoderWindowLen(.{ .window_log = 41 }));
+
+    var invalid_header: std.ArrayList(u8) = .empty;
+    defer invalid_header.deinit(std.testing.allocator);
+    try invalid_header.appendSlice(std.testing.allocator, "prefix");
+    try std.testing.expectError(error.InvalidBlockPlan, emitFrameHeader(std.testing.allocator, &invalid_header, 1, .{ .window_log = 9 }));
+    try std.testing.expectEqualSlices(u8, "prefix", invalid_header.items);
+
+    var large_window_header: std.ArrayList(u8) = .empty;
+    defer large_window_header.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &large_window_header, 1, .{
+        .include_content_size = false,
+        .content_checksum = false,
+        .window_log = 41,
+    });
+    try std.testing.expectEqual(@as(u8, 0xf8), large_window_header.items[5]);
+}
+
+test "zstd null window preserves legacy wire and explicit bounds cover every mode" {
+    const payload = ("explicit-window-wire-check-" ** 100) ++ ("Q" ** 1600);
+    const legacy = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, .{});
+    defer std.testing.allocator.free(legacy.frame);
+    const explicit_null = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, .{ .window_log = null });
+    defer std.testing.allocator.free(explicit_null.frame);
+    try std.testing.expectEqual(legacy.mode, explicit_null.mode);
+    try std.testing.expectEqualSlices(u8, legacy.frame, explicit_null.frame);
+
+    for ([_]NativeFrameSelection{ .raw_or_rle, .literal_only, .fast_compressed, .auto }) |selection| {
+        const options: NativeFrameOptions = .{
+            .selection = selection,
+            .content_checksum = true,
+            .window_log = 10,
+        };
+        const encoded = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, options);
+        defer std.testing.allocator.free(encoded.frame);
+        try std.testing.expect(encoded.frame.len <= try encodedNativeFrameBoundWithOptions(payload.len, options));
+        const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded.frame);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
+
+    const facade = try encodeFrameWithLevelAndOptionsAlloc(std.testing.allocator, payload, 3, .{
+        .content_checksum = true,
+        .window_log = 10,
+    });
+    defer std.testing.allocator.free(facade);
+    try std.testing.expectEqual(@as(u64, 1024), (try inspectNativeFrameHeader(facade)).window_size);
+    const facade_decoded = try decodeFrameAlloc(std.testing.allocator, facade);
+    defer std.testing.allocator.free(facade_decoded);
+    try std.testing.expectEqualSlices(u8, payload, facade_decoded);
+
+    const seekable_stream = try encodeNativeSeekableStreamAlloc(std.testing.allocator, payload, .{
+        .frame_size = payload.len,
+        .frame_options = .{
+            .content_checksum = false,
+            .window_log = 10,
+        },
+        .seek_checksums = false,
+    });
+    defer std.testing.allocator.free(seekable_stream);
+    try std.testing.expectEqual(@as(u64, 1024), (try inspectNativeFrameHeader(seekable_stream)).window_size);
+    try std.testing.expect(seekable_stream.len <= try encodedNativeSeekableStreamBound(payload.len, .{
+        .frame_size = payload.len,
+        .frame_options = .{
+            .content_checksum = false,
+            .window_log = 10,
+        },
+        .seek_checksums = false,
+    }));
+}
+
+test "zstd explicit window caps block size and cross-block history" {
+    var raw_payload: [3073]u8 = undefined;
+    fillNonRlePayload(&raw_payload);
+    const raw = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, &raw_payload, .{
+        .content_checksum = false,
+        .window_log = 10,
+    });
+    defer std.testing.allocator.free(raw);
+    var raw_blocks = try iterateNativeFrameBlocks(raw);
+    var raw_block_count: usize = 0;
+    while (try raw_blocks.next()) |block| {
+        raw_block_count += 1;
+        try std.testing.expect(block.payload_len <= 1024);
+    }
+    try std.testing.expectEqual(@as(usize, 4), raw_block_count);
+
+    const rle = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, "R" ** 3073, .{
+        .content_checksum = false,
+        .window_log = 10,
+    });
+    defer std.testing.allocator.free(rle);
+    var rle_blocks = try iterateNativeFrameBlocks(rle);
+    var rle_block_count: usize = 0;
+    while (try rle_blocks.next()) |block| {
+        if (block.block_type == .rle) rle_block_count += 1;
+        try std.testing.expect(block.payload_len <= 1024);
+    }
+    try std.testing.expectEqual(@as(usize, 3), rle_block_count);
+
+    const prefix = "window-history-prefix-0123456789abcdef" ** 3;
+    const payload = prefix ++ ("0" ** 1025) ++ prefix;
+    const compressed = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+        .window_log = 10,
+    });
+    defer std.testing.allocator.free(compressed.frame);
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, compressed.frame);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    var compressed_blocks = try iterateNativeFrameBlocks(compressed.frame);
+    var compressed_block_count: usize = 0;
+    var entropy_block_count: usize = 0;
+    while (try compressed_blocks.next()) |block| {
+        compressed_block_count += 1;
+        entropy_block_count += @intFromBool(block.block_type == .compressed);
+        try std.testing.expect(block.payload_len <= 1024);
+    }
+    try std.testing.expect(compressed_block_count > 1);
+    try std.testing.expect(entropy_block_count != 0);
+}
+
+test "zstd explicit window rejects dictionary matches beyond its boundary" {
+    const dictionary = NativeDictionary.init(0x1020_3040, "dictionary-boundary-phrase-" ** 4);
+    var block: [1024]u8 = undefined;
+    @memset(&block, 0);
+    const phrase_start = block.len - dictionary.content.len + 1;
+    @memcpy(block[phrase_start..], dictionary.content[0 .. block.len - phrase_start]);
+
+    var rejected: std.ArrayList(u8) = .empty;
+    defer rejected.deinit(std.testing.allocator);
+    try std.testing.expect(!try emitSingleDictionaryMatchCompressedBlock(
+        std.testing.allocator,
+        &rejected,
+        &block,
+        true,
+        dictionary,
+        0,
+        1024,
+    ));
+
+    var accepted: std.ArrayList(u8) = .empty;
+    defer accepted.deinit(std.testing.allocator);
+    try std.testing.expect(try emitSingleDictionaryMatchCompressedBlock(
+        std.testing.allocator,
+        &accepted,
+        &block,
+        true,
+        dictionary,
+        0,
+        1025,
+    ));
+}
+
+test "zstd explicit window public dictionary encoders honor visible history" {
+    var dictionary_bytes: [2048]u8 = undefined;
+    var random_state: u32 = 0x4d59_5df4;
+    for (&dictionary_bytes) |*byte| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(random_state >> 24);
+    }
+    const dictionary = NativeDictionary.init(0x3344_5566, &dictionary_bytes);
+    const outside = dictionary_bytes[0..128];
+    const visible = dictionary_bytes[dictionary_bytes.len - 128 ..];
+    const options: NativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+        .window_log = 10,
+    };
+
+    const outside_encoded = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, outside, options, dictionary);
+    defer std.testing.allocator.free(outside_encoded.frame);
+    const outside_decoded = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, outside_encoded.frame, dictionary);
+    defer std.testing.allocator.free(outside_decoded);
+    try std.testing.expectEqualSlices(u8, outside, outside_decoded);
+    const outside_block = try inspectNativeFrameFirstBlock(outside_encoded.frame);
+    if (outside_block.block_type == .compressed) {
+        const modes = try inspectNativeFrameBlockSequenceModesWithDictionary(outside_encoded.frame, outside_block, dictionary);
+        try std.testing.expectEqual(@as(usize, 0), modes.sequence_count);
+    }
+
+    const visible_encoded = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, visible, options, dictionary);
+    defer std.testing.allocator.free(visible_encoded.frame);
+    const visible_block = try inspectNativeFrameFirstBlock(visible_encoded.frame);
+    try std.testing.expectEqual(NativeBlockType.compressed, visible_block.block_type);
+    const visible_modes = try inspectNativeFrameBlockSequenceModesWithDictionary(visible_encoded.frame, visible_block, dictionary);
+    try std.testing.expect(visible_modes.sequence_count != 0);
+    const visible_decoded = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, visible_encoded.frame, dictionary);
+    defer std.testing.allocator.free(visible_decoded);
+    try std.testing.expectEqualSlices(u8, visible, visible_decoded);
+
+    const dictionary_set = try NativeDictionarySet.initChecked(&.{dictionary});
+    const set_encoded = try encodeNativeFrameWithDictionarySetAlloc(std.testing.allocator, visible, options, dictionary_set, dictionary.id);
+    defer std.testing.allocator.free(set_encoded.frame);
+    try std.testing.expectEqualSlices(u8, visible_encoded.frame, set_encoded.frame);
+
+    var incremental_options = options;
+    incremental_options.dictionary_id = dictionary.id;
+    var incremental = try NativeIncrementalFrameEncoder.initExactSizeWithPresetDictionary(
+        std.testing.allocator,
+        incremental_options,
+        visible.len,
+        dictionary,
+    );
+    defer incremental.deinit();
+    const incremental_frame = try encodeIncrementalFrameForTest(&incremental, visible);
+    defer std.testing.allocator.free(incremental_frame);
+    const incremental_block = try inspectNativeFrameFirstBlock(incremental_frame);
+    const incremental_modes = try inspectNativeFrameBlockSequenceModesWithDictionary(incremental_frame, incremental_block, dictionary);
+    try std.testing.expect(incremental_modes.sequence_count != 0);
+    const incremental_decoded = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, incremental_frame, dictionary);
+    defer std.testing.allocator.free(incremental_decoded);
+    try std.testing.expectEqualSlices(u8, visible, incremental_decoded);
+}
+
+fn encodeIncrementalFrameForTest(encoder: *NativeIncrementalFrameEncoder, payload: []const u8) ![]u8 {
+    var frame: std.ArrayList(u8) = .empty;
+    errdefer frame.deinit(std.testing.allocator);
+    var output: [23]u8 = undefined;
+    var input_offset: usize = 0;
+    while (input_offset < payload.len) {
+        const input_end = @min(payload.len, input_offset + 41);
+        const result = try encoder.step(payload[input_offset..input_end], &output);
+        input_offset += result.progress.input_read;
+        try frame.appendSlice(std.testing.allocator, output[0..result.progress.output_written]);
+    }
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &output);
+        try frame.appendSlice(std.testing.allocator, output[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    return frame.toOwnedSlice(std.testing.allocator);
+}
+
+test "zstd explicit window incremental exact unknown and reusable encoders agree" {
+    const payload = ("incremental explicit window " ** 96) ++ ("K" ** 1300);
+    const exact_options: NativeFrameOptions = .{
+        .include_content_size = true,
+        .content_checksum = true,
+        .selection = .literal_only,
+        .window_log = 10,
+    };
+    var exact = try NativeIncrementalFrameEncoder.initExactSize(std.testing.allocator, exact_options, payload.len);
+    defer exact.deinit();
+    const exact_frame = try encodeIncrementalFrameForTest(&exact, payload);
+    defer std.testing.allocator.free(exact_frame);
+    const exact_header = try inspectNativeFrameHeader(exact_frame);
+    try std.testing.expectEqual(@as(?u64, payload.len), exact_header.content_size);
+    try std.testing.expectEqual(@as(u64, 1024), exact_header.window_size);
+    const exact_decoded = try decodeNativeFrameAlloc(std.testing.allocator, exact_frame);
+    defer std.testing.allocator.free(exact_decoded);
+    try std.testing.expectEqualSlices(u8, payload, exact_decoded);
+
+    exact.reset();
+    const reset_frame = try encodeIncrementalFrameForTest(&exact, payload);
+    defer std.testing.allocator.free(reset_frame);
+    try std.testing.expectEqualSlices(u8, exact_frame, reset_frame);
+
+    const unknown_options: NativeFrameOptions = .{
+        .include_content_size = false,
+        .content_checksum = false,
+        .selection = .raw_or_rle,
+        .window_log = 10,
+    };
+    var unknown = try NativeIncrementalFrameEncoder.init(std.testing.allocator, unknown_options);
+    defer unknown.deinit();
+    const unknown_frame = try encodeIncrementalFrameForTest(&unknown, payload);
+    defer std.testing.allocator.free(unknown_frame);
+    const unknown_header = try inspectNativeFrameHeader(unknown_frame);
+    try std.testing.expectEqual(@as(?u64, null), unknown_header.content_size);
+    try std.testing.expectEqual(@as(u64, 1024), unknown_header.window_size);
+    const unknown_decoded = try decodeNativeFrameAlloc(std.testing.allocator, unknown_frame);
+    defer std.testing.allocator.free(unknown_decoded);
+    try std.testing.expectEqualSlices(u8, payload, unknown_decoded);
+
+    var reusable = NativeFrameEncoder.init(std.testing.allocator);
+    defer reusable.deinit();
+    const first = try reusable.encodeScratch(payload, exact_options);
+    const first_copy = try std.testing.allocator.dupe(u8, first.frame);
+    defer std.testing.allocator.free(first_copy);
+    const second = try reusable.encodeScratch(payload, exact_options);
+    try std.testing.expectEqualSlices(u8, first_copy, second.frame);
+    try std.testing.expect(second.frame.len <= try encodedNativeFrameBoundWithOptions(payload.len, exact_options));
 }
 
 test "zstd raw/RLE frame writer round trips through std decompressor" {

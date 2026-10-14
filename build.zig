@@ -3211,6 +3211,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("tools/zstd_native_frame_probe.zig"),
             .target = target,
             .optimize = optimize,
+            .link_libc = true,
             .imports = &.{
                 .{ .name = "vort", .module = vort_mod },
             },

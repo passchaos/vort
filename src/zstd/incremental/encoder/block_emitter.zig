@@ -19,17 +19,26 @@ pub fn Emitter(comptime Codec: type) type {
         ) Codec.Error!void {
             switch (options.selection) {
                 .raw_or_rle => try Codec.writeRawOrRle(allocator, out, block, last),
-                .fast_compressed => try Codec.writeFastCompressed(allocator, out, block, last, state, dictionary),
+                .fast_compressed => try Codec.writeFastCompressed(
+                    allocator,
+                    out,
+                    block,
+                    last,
+                    options,
+                    state,
+                    dictionary,
+                    frame_offset,
+                ),
                 .literal_only, .auto => try Codec.writeEntropy(
                     allocator,
                     out,
                     block,
                     last,
+                    options,
                     state,
                     dictionary,
                     frame_history,
                     frame_offset,
-                    options.match_search_budget,
                 ),
             }
         }

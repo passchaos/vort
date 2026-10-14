@@ -40,7 +40,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   8-byte header while discarding or capturing arbitrary-size metadata directly
   from caller input,
   pure Zig native Zstandard frame encode/bounded/caller-owned decode with header
-  options and decoded-size preflight, a
+  options and decoded-size preflight, including explicit 10...41-bit
+  `window_log` selection on both `FrameOptions` and `NativeFrameOptions` with
+  `null` preserving the established wire, strict block/history/dictionary
+  reach bounded by the selected window and the encoder's current 8 MiB
+  internal capability, a
   dependency-free raw/RLE, literal-only compressed-block, single-/four-stream
   and treeless repeat Huffman-literals, minimal RLE-sequence, mixed
   RLE/predefined/FSE sequence-table, repeated sequence-table, and streaming
@@ -1080,6 +1084,9 @@ _ = lz4_block_plain;
 const zstd_options: vort.ZstdNativeFrameOptions = .{
     .selection = .auto,
     .block_size_max = 32 * 1024,
+    // null preserves the legacy wire; 10...41 selects an explicit window.
+    // Known content no larger than that window still uses a single segment.
+    .window_log = 10,
     // 0 disables mixed dictionary/duplicate/repeated lookahead; values up to
     // the default keep more ratio-seeking branches at higher planning cost.
     // Dictionary-only matches remain available even when the budget is 0.
@@ -1636,10 +1643,12 @@ The native LZ4/Zstd APIs are library-first.  CLI commands and probes call the
 same public symbols shown above; applications should use the allocator/append,
 caller-owned slice, reusable scratch, chunked, and incremental decoder APIs
 directly.
-Zstd native encoded-bound helpers now account for the same shortest
-single-segment `Frame_Content_Size` width used by the writer, so callers sizing
-`encode*IntoSlice` buffers do not reserve the old eight-byte content-size worst
-case for small and medium frames.
+Zstd native encoded-bound helpers account for the same header form and shortest
+legal `Frame_Content_Size` width used by the writer. With an explicit window,
+known content no larger than the window retains the compact single-segment
+form; larger known content emits a non-single-segment `Window_Descriptor` plus
+a two-, four-, or eight-byte content size, while unknown-size output emits the
+selected descriptor without a content size.
 
 | Codec | Option / symbol | Default / range | Use when | Tradeoff |
 | --- | --- | --- | --- | --- |
@@ -1652,6 +1661,7 @@ case for small and medium frames.
 | LZ4 native | `Lz4NativeDictionarySet` / `Lz4NativeDictionarySet.initFromMetadata` / `lz4NativeDictionarySetFromMetadataAlloc` | caller-owned slice of dictionaries or validated metadata+bytes catalog | Concatenated streams can carry different `Dictionary_ID` values, or a container provides versioned metadata records beside dictionary bytes. | Lets decoders resolve each frame without caller-side splitting; metadata construction validates bytes and duplicate IDs before decode; the alloc helper owns only the small catalog array. |
 | Zstd native | `ZstdNativeFrameOptions.selection` | `.auto`; `.auto` / `.raw_or_rle` / `.literal_only` | You need deterministic native-subset frame selection. | `.auto` chooses the smaller implemented native mode; explicit modes are useful for tests and predictable behavior. |
 | Zstd native | `ZstdNativeFrameOptions.block_size_max` | `std.compress.zstd.block_size_max`; `1...std.compress.zstd.block_size_max` | You need a latency/seekability/ratio knob. | Smaller blocks reduce per-block latency and direct-output bursts; larger blocks usually improve ratio and reduce headers. |
+| Zstd native | `ZstdFrameOptions.window_log` / `ZstdNativeFrameOptions.window_log` | `null`; explicit `10...41` | You need a standards-compatible advertised decode window or a tighter encode working set. | `null` is byte-identical to the prior writer. For an explicit value, block length, rolling history, match offsets, and dictionary visibility are bounded by the selected window; the current encoder also caps effective history at 8 MiB, so values above 23 advertise a larger legal window but do not yet enable farther matches. |
 | Zstd native | `ZstdNativeFrameOptions.match_search_budget` | `vort.zstdNativeMaxMatchSearchBudget` (`512` currently); `0...vort.zstdNativeMaxMatchSearchBudget` | You want to bound the bootstrap mixed-match planner. | `0` disables generic duplicate/repeated mixed planning while dictionary-only matches can still be used; the default searches more branches for ratio. |
 | Zstd native | `vort.zstdNativeMaxDirectHuffmanSymbol` | `128` currently | You need to know when the bootstrap writer can use direct Huffman literal weights. | Byte values above this use FSE-compressed Huffman weights when the literal-only plan wins; incompressible shapes can still fall back to raw/RLE or another native plan. |
 | Zstd native | `content_checksum` / `include_content_size` | both on by default | You want self-describing frames and content verification. | Disabling them saves bytes when a container already carries size/checksum metadata. |
@@ -1663,6 +1673,20 @@ case for small and medium frames.
 | Shared dictionary | `summarizeDictionaryMatches` / `dictionary.validationScore` | borrowed dictionary, sample slices, and non-zero minimum match length | You need dictionary coverage/cost diagnostics without temporary allocation. | Streams the same greedy matches as `findDictionaryMatchesAlloc`; the legacy `summarizeDictionaryMatchesAlloc` and `dictionary.validationScoreAlloc` names remain compatible wrappers but no longer allocate. |
 | Zstd native | `ZstdOwnedNativeDictionary.metadata()` / `ZstdNativeDictionary.initFromMetadata` / `encodeDictionaryMetadata*` / `decodeDictionaryMetadata*` / `*DictionaryMetadataCatalog*` | shared `DictionaryMetadata` plus `std.compress.zstd.default_window_len`; single records are 32 bytes and catalogs are versioned counted records with strict and prefix decoders | You want to persist trained dictionary catalog metadata from the same object returned by `zstdTrainNativeDictionaryAlloc`, then verify received bytes before decoding. | Metadata uses the wider shared dictionary fingerprint; frame `Dictionary_ID` is still derived from validated bytes; dictionary bytes are still distributed separately. |
 | Zstd native | `ZstdNativeDictionarySet` / `ZstdNativeDictionarySet.initFromMetadata` / `zstdNativeDictionarySetFromMetadataAlloc` | caller-owned slice of dictionaries or validated metadata+bytes catalog | Concatenated streams can carry different `Dictionary_ID` values, or a container provides versioned metadata records beside dictionary bytes. | Shared decoder APIs resolve per-frame IDs and avoid manual stream splitting; metadata construction validates bytes and duplicate IDs before decode; the alloc helper owns only the small catalog array. |
+
+The same explicit-window policy is threaded through one-shot, reusable,
+incremental, explicit-dictionary, dictionary-set, and seekable native encoders;
+those surfaces share header construction, block sizing, rolling history, and
+dictionary-distance enforcement rather than maintaining separate window
+rules. Interoperability evidence includes a fixed libzstd 1.6.0 2,050-byte
+fixture with frame descriptor `0x44`, a 1 KiB `Window_Descriptor`, checksum,
+and two-byte FCS. Vort decodes that fixture through allocating,
+caller-buffer, chunked, and incremental APIs, while the runtime probe decodes
+Vort's corresponding explicit-window frame with libzstd. The bidirectional
+probe also verifies a raw dictionary's in-window suffix remains referenceable
+and its expired prefix is not emitted as a dictionary match. This closes the
+explicit-window slice; it does not imply complete Zstd format, ratio, or speed
+parity.
 
 For bounded-memory decode, prefer the `*Limited`, exact-size, chunked, append,
 and incremental forms when the surrounding container knows the expected output
