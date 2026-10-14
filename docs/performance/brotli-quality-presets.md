@@ -55,6 +55,21 @@ outer `block_len` takes precedence when non-zero; otherwise the stream option
 or automatic policy is used. q6/q7/q11 therefore keep every automatic block
 inside their deepest optimal-search ceiling.
 
+Legacy balanced/ratio plus q2...q5 and q8...q10 inspect both 32 KiB halves of each
+automatic 64 KiB lookahead. A deterministic allocation-free Q8 byte-histogram
+model materializes a midpoint candidate only when separate literal entropy
+beats the combined distribution by more than a conservative 2,048-bit
+header/tree allowance. The encoder then compares the exact single-block and
+two-block bit counts and keeps the split only when it is strictly smaller.
+Homogeneous data therefore keeps the larger block, while a profitable strong
+distribution transition gets two independently modeled blocks without losing
+cross-block LZ77 history or the recent-distance ring. `adaptive_blocks = false` disables
+this policy; `true` forces it for a 64 KiB configured block. A non-zero explicit
+`block_len` is fixed by default. Automatic lookahead is disabled above the
+standard 16-bit window to keep branch snapshots bounded; forcing it there is
+rejected. Conservative encoded bounds assume every adaptive 64 KiB block may
+split.
+
 | Quality | Family | Current Vort behavior |
 | ---: | --- | --- |
 | 0 | fast | Minimum hash-greedy search: chain 1, nice length 16, one candidate; no contexts, splitting, recent distances, or built-in static-dictionary probing. Explicit RAW shared-prefix matching remains available. This is not a fragment encoder. |
@@ -206,7 +221,7 @@ output backpressure, and static addressing after a saturated compound region.
 The same run retains four upstream decode fixtures and three descriptor-error
 cases. System libbrotli 1.0.9 lacks the optional shared-dictionary symbols, so
 the tool explicitly reports the complete runtime matrix as skipped there.
-Debug and ReleaseFast `zig build test-br` pass all 771 tests, including q0...q11,
+Debug and ReleaseFast `zig build test-br` pass all 775 tests, including q0...q11,
 legacy level, retained-index, empty-dictionary wire, static-address shift,
 incremental rollback, cross-API quality wire equality, and 16 MiB+ q0/q2
 coverage. The upstream differential passes in both build modes with 7,056
@@ -216,6 +231,9 @@ q2/font stream decoded independently by libbrotli 1.0.9
 (`planned_large_quality_cases=1`). Five additional Vort-generated streams pin
 q0/q2/q6/q11 automatic sizing plus an explicit 24 KiB override through
 libbrotli (`planned_quality_block_size_cases=5`).
+Two more streams require automatic q2 midpoint splitting and its explicit
+disable path to decode through libbrotli
+(`planned_stream_segmentation_cases=2`).
 
 The planned encode benchmark accepts independent Vort selectors:
 
@@ -271,7 +289,8 @@ names:
 - the specialized q2/q3 entropy writers and their matching block decisions;
 - real q10/q11 Zopfli/HQ cost refinement, including iterative model feedback;
 - contextual dictionary encoding;
-- whole-stream rather than block-local entropy/context optimization;
+- global multi-boundary segmentation and exact compressed-cost optimization
+  beyond the current bounded midpoint entropy lookahead;
 - calibration and regression gates for compression ratio, throughput, peak
   memory, and output-size monotonicity across representative corpora and
   platforms.

@@ -22,8 +22,8 @@ major gaps before Vort can claim broad industry-best parity:
   distance splitting and context clustering, but the matrix is not libbrotli
   algorithm, byte, ratio, or throughput parity. Specialized q0/q1 fragment
   encoders, q2/q3 entropy writers, q10/q11 Zopfli/HQ cost refinement,
-  contextual dictionary encoding and whole-stream entropy/context optimization
-  remain open.
+  contextual dictionary encoding and global exact-cost segmentation remain
+  open.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
   entropy block switching, static dictionaries, consecutive compressed
@@ -19870,3 +19870,28 @@ reuse, so production keeps the simpler independently owned plans.
   Whole-stream entropy/context
   optimization remains open; this completes deterministic block-size policy,
   not global segmentation search.
+
+- Added deterministic entropy-aware stream segmentation on top of the
+  quality-sized Brotli block policy. Legacy balanced/ratio plus q2...q5 and
+  q8...q10 inspect both
+  32 KiB halves of every automatic 64 KiB lookahead using two fixed 256-symbol
+  Q8 histograms. The proxy materializes a midpoint candidate only when separate
+  raw-literal entropy beats the combined distribution by more than a
+  conservative 2,048-bit header/tree allowance; the shared writer then encodes
+  both branches and retains the split only when its exact bit count is smaller.
+  Homogeneous data stays at 64 KiB. The screening decision allocates no memory;
+  retained branch/history scratch keeps LZ77 history plus recent distances
+  continuous across a selected cut. `adaptive_blocks = false` disables the
+  policy, `true` forces it for configured 64 KiB blocks, and any explicit
+  `block_len` is fixed by default. Chunked and incremental encoders call the
+  same codec-level splitter, producing byte-identical wires, while encoded
+  bounds conservatively reserve the all-32-KiB header case. Unit tests cover
+  homogeneous/heterogeneous histograms, q2 automatic vs disabled behavior,
+  balanced default vs forced behavior, invalid non-64-KiB forcing, round trips, and
+  cross-API equality plus warmed zero-allocation scratch reuse. Debug and
+  ReleaseFast `test-br` pass 775/775; the
+  upstream differential independently decodes both segmentation policies in
+  both modes (`planned_stream_segmentation_cases=2`). The required real-corpus
+  gate passes 16/16 one-shot and 16/16 progressive cases, the full repository
+  graph passes 2607/2607, and `zig build check` passes all 113 steps. Global
+  multi-boundary DP and exact compressed-cost segmentation remain open.

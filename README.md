@@ -1762,7 +1762,7 @@ They produce standard Brotli streams, but the numbers and modes do not select
 libbrotli's internal encoders and do not promise libbrotli-equivalent bytes,
 compressed size, memory use, or speed. In particular, specialized q0/q1
 fragment encoders, q2/q3 entropy writers, q10/q11 Zopfli/HQ cost refinement,
-contextual dictionary encoding and whole-stream entropy optimization remain
+contextual dictionary encoding and global exact-cost segmentation remain
 future work. Inputs beyond the 16 MiB format limit keep one Brotli stream and
 apply the selected policy independently to bounded 16/32/64 KiB blocks while
 retaining window-bounded LZ77 history and the recent-distance ring. The exact
