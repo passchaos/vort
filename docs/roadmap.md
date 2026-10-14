@@ -19411,6 +19411,21 @@ reuse, so production keeps the simpler independently owned plans.
   6,475-byte wire/checksum. Shape accounting is timed separately and removed
   from parent hotspot attribution.
 
+- Added a dedicated direct Huffman builder for the fixed 18-symbol Brotli
+  code-length alphabet. A single stable `(frequency, symbol)` leaf order feeds
+  two linear queues, leaf/parent ties preserve the previous serial order, and
+  depths write directly to original symbols; depth above five keeps the
+  package-merge fallback. Targeted edge tests plus 16,384 random/extreme
+  histograms match the previous implementation's full `[18]u4` result. The
+  fixed-CPU-2 ten-search profile improved the tree stage 0.885→0.685 ms
+  (`1.292x`), complete prefix scoring 2.034→1.797 ms (`1.132x`), and the full
+  diagnostic 35.347→33.956 ms (`1.041x`). A longer 21-pair, 50-iteration
+  complete-encoder control won 13 pairs, improved independent medians
+  480.934→478.503 ms (`1.0051x`) and paired geometric mean `1.0046x`, with
+  unchanged 6,475-byte ratio wire and checksums. The profile gate now tests
+  tree-prefix dominance directly against sibling stages instead of requiring a
+  brittle aggregate share above one third; its negative smoke has 13 cases.
+
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository
   dictionary, source, README, roadmap, and small-corpus payloads; optional

@@ -45,6 +45,7 @@ def main() -> int:
         ("stage_ns", "1"),
         ("full_mode", "9"),
         ("cluster_score_ns", "1"),
+        ("tree_prefix_ns", "1"),
         ("tree_score_calls", "1"),
         ("tree_active_buckets", "1;2"),
         ("small_huffman_calls", "1"),

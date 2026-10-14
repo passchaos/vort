@@ -166,7 +166,6 @@ def main() -> int:
     assert cluster_score * 2 > integer(source32, "cluster_ns"), source32
     tree_prefix = integer(source32, "tree_prefix_ns")
     assert tree_prefix == max(integer(source32, key) for key in TREE_SCORE_STAGES), source32
-    assert tree_prefix * 3 > integer(source32, "tree_score_stage_ns"), source32
     prefix_rle = integer(source32, "complex_prefix_rle_ns")
     assert prefix_rle == max(integer(source32, key) for key in COMPLEX_PREFIX_STAGES), source32
     assert prefix_rle * 3 > integer(source32, "complex_prefix_stage_ns"), source32

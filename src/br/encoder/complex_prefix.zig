@@ -1,5 +1,6 @@
 const std = @import("std");
 const huffman = @import("../../huffman.zig");
+const code_length_huffman = @import("code_length_huffman.zig");
 const code_length_rle = @import("code_length_rle.zig");
 const small_huffman = @import("small_huffman.zig");
 
@@ -231,10 +232,18 @@ fn elapsedNs(start: std.Io.Timestamp, io: std.Io) u64 {
     return if (ns <= 0) 0 else @intCast(ns);
 }
 
-/// The code-length alphabet has at most 18 live symbols. Its common trees fit
-/// Brotli's five-bit limit without length limiting, so reuse the linear small
-/// Huffman builder and reserve package merge for the rare over-depth shape.
+/// The code-length alphabet has at most 18 live symbols. Its dedicated builder
+/// writes depths straight to the original symbols and reserves package merge
+/// for the rare shape whose unbounded tree exceeds Brotli's five-bit limit.
 fn codeLengthCodeLengths(frequencies: *const [18]u32) [18]u4 {
+    return code_length_huffman.build(frequencies) orelse
+        huffman.treeCodeLengths(18, frequencies, 5);
+}
+
+/// Previous production implementation retained as an exact test oracle. It
+/// deliberately repeats the compact ordering and scatter that the dedicated
+/// builder removes from the hot path.
+fn codeLengthCodeLengthsReference(frequencies: *const [18]u32) [18]u4 {
     var symbols: [18]u16 = undefined;
     var compact_frequencies: [18]u32 = undefined;
     var active: usize = 0;
@@ -328,6 +337,38 @@ test "small code-length alphabet matches package-merge weighted cost" {
         try std.testing.expectEqual(@as(usize, 0), actual_space);
         try std.testing.expectEqual(@as(usize, 0), reference_space);
         try std.testing.expect(actual_declaration_bits <= reference_declaration_bits);
+    }
+}
+
+test "direct code-length builder exactly matches previous implementation" {
+    const edge_cases = [_][18]u32{
+        @splat(0),
+        @splat(1),
+        @splat(std.math.maxInt(u32)),
+        .{ 1, 1, 2, 4, 8, 16, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        .{ 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9 },
+    };
+    for (edge_cases) |frequencies| {
+        const actual = codeLengthCodeLengths(&frequencies);
+        const expected = codeLengthCodeLengthsReference(&frequencies);
+        try std.testing.expectEqualSlices(u4, &expected, &actual);
+    }
+
+    var state: u32 = 0x6a09_e667;
+    for (0..16_384) |_| {
+        var frequencies: [18]u32 = undefined;
+        for (&frequencies) |*frequency| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            frequency.* = switch (state & 7) {
+                0, 1 => 0,
+                2, 3 => 1 + (state >> 29),
+                4 => std.math.maxInt(u32) - (state >> 28),
+                else => 1 + (state >> 8),
+            };
+        }
+        const actual = codeLengthCodeLengths(&frequencies);
+        const expected = codeLengthCodeLengthsReference(&frequencies);
+        try std.testing.expectEqualSlices(u4, &expected, &actual);
     }
 }
 

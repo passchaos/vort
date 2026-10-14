@@ -27,7 +27,7 @@ specialization records:
 
 The CSV gate validates three source sizes, ReleaseFast provenance, candidate
 ranges, deterministic counters, nested timing totals, and the dominant
-`source32k` cluster stage. A twelve-case negative smoke rejects missing rows,
+`source32k` cluster stage. A thirteen-case negative smoke rejects missing rows,
 counter drift, timing drift, invalid modes, false stage dominance, and
 non-ReleaseFast provenance.
 
@@ -255,3 +255,31 @@ at 2.5%.
 Eleven alternating fixed-CPU-2 complete-encoder pairs all won, reducing the
 median from 195.119 to 192.659 ms (`1.013x`) with unchanged 6,475-byte output
 and checksum 134,745.
+
+## Direct 18-symbol Huffman builder
+
+Complex-prefix scoring now uses a dedicated builder for its fixed 18-symbol
+code-length alphabet. It orders live leaves once by `(frequency, symbol)`,
+merges them through stable leaf/parent queues, and writes depths directly to
+the original symbols. This removes the previous descending compact order,
+second leaf ordering inside `small_huffman`, and final scatter. Leaf/parent
+weight ties prefer the leaf, generated parents retain creation order, and an
+unbounded depth above five still falls back to the unchanged package-merge
+builder. Empty and singleton alphabets plus targeted ties, full trees, and
+over-depth shapes have focused coverage; 16,384 mixed random/extreme
+histograms match the previous implementation's complete `[18]u4` result.
+
+On fixed CPU 2 for ten `source32k` searches, the 18-symbol tree stage fell
+0.885→0.685 ms (`1.292x`), complete complex-prefix scoring fell
+2.034→1.797 ms (`1.132x`), and complete profiled search fell
+35.347→33.956 ms (`1.041x`). Prefix scoring remains the largest tree-score
+sibling, but its share is now close enough to one third that the gate compares
+it directly with every sibling instead of imposing a fragile aggregate-share
+threshold; a new negative smoke mutation locks that dominance check.
+
+The initial 20-iteration complete-encoder control was narrowly positive at
+7/11 wins and a `1.0015x` paired geometric mean, so a longer fixed-CPU-2
+control used 21 alternating pairs at 50 iterations. It won 13/21 pairs,
+reduced independent medians from 480.934 to 478.503 ms (`1.0051x`), and
+improved the paired geometric mean by `1.0046x`. All pairs retained the same
+6,475-byte ratio output, input SHA-256, auxiliary output sizes, and checksum.
