@@ -80,8 +80,17 @@ fn augmentAllocWithStride(comptime stride: usize, allocator: std.mem.Allocator, 
             }
         }
         if (!command.has_copy) continue;
-        try appendCopy(&output, allocator, insert_start, insert_len, command.copy_len, command.distance);
-        position += command.copy_len;
+        const copy_output_len = command.outputLen();
+        if (copy_output_len == 0 or copy_output_len > input.len - position) return error.InvalidBlockPlan;
+        if (command.isLz77()) {
+            try appendCopy(&output, allocator, insert_start, insert_len, command.copy_len, command.distance);
+        } else {
+            var copied = command;
+            copied.insert_start = insert_start;
+            copied.insert_len = insert_len;
+            try output.append(allocator, copied);
+        }
+        position += copy_output_len;
         insert_start = position;
         insert_len = 0;
     }
@@ -131,7 +140,7 @@ fn hash(bytes: *const [4]u8) usize {
 fn appendCopy(output: *std.ArrayList(command_plan.Command), allocator: std.mem.Allocator, insert_start: usize, insert_len: usize, copy_len: usize, distance: usize) !void {
     if (insert_len == 0 and output.items.len != 0) {
         const previous = &output.items[output.items.len - 1];
-        if (previous.has_copy and previous.dictionary_output_len == 0 and previous.distance == distance) {
+        if (previous.has_copy and previous.isLz77() and previous.distance == distance) {
             previous.copy_len = std.math.add(usize, previous.copy_len, copy_len) catch return error.IntegerOverflow;
             return;
         }
@@ -158,6 +167,53 @@ test "augments literal runs with Brotli-only long matches" {
         if (command.has_copy and command.distance == gap) found = true;
     }
     try std.testing.expect(found);
+}
+
+test "long-distance augmentation preserves dictionary command sources" {
+    const literal_len = min_distance + 32;
+    const static_output_len = 5;
+    const compound_output_len = 7;
+    const input = [_]u8{'a'} ** (literal_len + static_output_len + compound_output_len);
+    const original = [_]command_plan.Command{
+        .{
+            .insert_start = 0,
+            .insert_len = literal_len,
+            .copy_len = 4,
+            .has_copy = true,
+            .source = .static,
+            .dictionary_output_len = static_output_len,
+            .dictionary_address = 17,
+        },
+        .{
+            .insert_start = literal_len + static_output_len,
+            .insert_len = 0,
+            .copy_len = compound_output_len,
+            .has_copy = true,
+            .source = .compound,
+            .dictionary_address = 29,
+        },
+    };
+    const augmented = try augmentAlloc(std.testing.allocator, &input, &original) orelse return error.TestUnexpectedResult;
+    defer std.testing.allocator.free(augmented);
+
+    var static_count: usize = 0;
+    var compound_count: usize = 0;
+    for (augmented) |command| {
+        if (command.isStatic()) {
+            static_count += 1;
+            try std.testing.expectEqual(@as(usize, 4), command.copy_len);
+            try std.testing.expectEqual(static_output_len, command.dictionary_output_len);
+            try std.testing.expectEqual(@as(usize, 17), command.dictionary_address);
+        }
+        if (command.isCompound()) {
+            compound_count += 1;
+            try std.testing.expectEqual(compound_output_len, command.copy_len);
+            try std.testing.expectEqual(@as(usize, 0), command.dictionary_output_len);
+            try std.testing.expectEqual(@as(usize, 29), command.dictionary_address);
+        }
+    }
+    try std.testing.expectEqual(@as(usize, 1), static_count);
+    try std.testing.expectEqual(@as(usize, 1), compound_count);
 }
 
 test "near hash collisions do not hide eligible long matches" {

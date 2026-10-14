@@ -3,6 +3,7 @@ const lz77 = @import("../../lz77.zig");
 const static_dictionary = @import("../static_dictionary.zig");
 const small_huffman = @import("small_huffman.zig");
 const static_dictionary_matcher = @import("static_dictionary_matcher.zig");
+const compound_dictionary_matcher = @import("compound_dictionary_matcher.zig");
 
 /// A Brotli insert/copy command derived from a generic LZ77 token stream.
 /// `insert_start` indexes the original input so the wire writer can emit the
@@ -10,16 +11,51 @@ const static_dictionary_matcher = @import("static_dictionary_matcher.zig");
 /// may contain only inserts; its copy fields are then intentionally ignored by
 /// the Brotli decoder after those inserts reach the meta-block boundary.
 pub const Command = struct {
+    pub const Source = enum {
+        lz77,
+        compound,
+        static,
+    };
+
     insert_start: usize,
     insert_len: usize,
     copy_len: usize = 2,
     distance: usize = 0,
     has_copy: bool = false,
+    source: @This().Source = .lz77,
     /// RFC 7932 dictionary commands encode the untransformed word length in
-    /// the command and advance by the transformed output length.
+    /// the command and advance by the transformed output length. Compound
+    /// dictionary commands instead keep their output length in `copy_len`,
+    /// their logical address in `dictionary_address`, and leave this zero.
     dictionary_output_len: usize = 0,
     dictionary_address: usize = 0,
+
+    pub fn outputLen(self: Command) usize {
+        if (!self.has_copy) return 0;
+        return switch (self.source) {
+            .lz77, .compound => self.copy_len,
+            .static => self.dictionary_output_len,
+        };
+    }
+
+    pub fn updatesRecentDistance(self: Command) bool {
+        return self.has_copy and !self.isStatic();
+    }
+
+    pub fn isLz77(self: Command) bool {
+        return self.source == .lz77;
+    }
+
+    pub fn isStatic(self: Command) bool {
+        return self.source == .static;
+    }
+
+    pub fn isCompound(self: Command) bool {
+        return self.source == .compound;
+    }
 };
+
+pub const Source = Command.Source;
 
 pub const Plan = struct {
     commands: []Command,
@@ -368,6 +404,7 @@ pub fn buildStaticDictionaryWithCacheAlloc(allocator: std.mem.Allocator, input: 
             .insert_len = insert_len,
             .copy_len = selected.copy_len,
             .has_copy = true,
+            .source = .static,
             .dictionary_output_len = selected.output_len,
             .dictionary_address = selected.address,
         });
@@ -438,6 +475,7 @@ pub fn mixStaticDictionaryWithCacheProbeLimitAlloc(allocator: std.mem.Allocator,
                 .insert_len = pending_len,
                 .copy_len = match.?.copy_len,
                 .has_copy = true,
+                .source = .static,
                 .dictionary_output_len = match.?.output_len,
                 .dictionary_address = match.?.address,
             });
@@ -448,7 +486,7 @@ pub fn mixStaticDictionaryWithCacheProbeLimitAlloc(allocator: std.mem.Allocator,
         }
         cursor = literal_end;
         if (!command.has_copy) continue;
-        const copy_output_len = if (command.dictionary_output_len == 0) command.copy_len else command.dictionary_output_len;
+        const copy_output_len = command.outputLen();
         if (copy_output_len == 0 or copy_output_len > input.len - cursor) return error.InvalidBlockPlan;
         var copied = command;
         copied.insert_start = pending_start;
@@ -460,6 +498,70 @@ pub fn mixStaticDictionaryWithCacheProbeLimitAlloc(allocator: std.mem.Allocator,
     }
     if (cursor != input.len) return error.InvalidBlockPlan;
     if (pending_len != 0) try commands.append(allocator, .{ .insert_start = pending_start, .insert_len = pending_len });
+    return .{ .commands = try commands.toOwnedSlice(allocator), .match_count = match_count };
+}
+
+/// Replace literal runs with RAW compound-dictionary copies without changing
+/// any already-selected LZ77/static/compound copy. Logical dictionary
+/// addresses remain independent of the current Brotli output position; the
+/// wire writer resolves them against its active history window.
+pub fn mixCompoundDictionaryAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    baseline: []const Command,
+    matcher: *const compound_dictionary_matcher.Matcher,
+    probe_limit: usize,
+) !Plan {
+    var commands: std.ArrayList(Command) = .empty;
+    errdefer commands.deinit(allocator);
+    var cursor: usize = 0;
+    var pending_start: usize = 0;
+    var pending_len: usize = 0;
+    var match_count: usize = 0;
+
+    for (baseline) |command| {
+        if (command.insert_start != cursor or command.insert_len > input.len - cursor)
+            return error.InvalidBlockPlan;
+        const literal_end = cursor + command.insert_len;
+        var position = cursor;
+        while (position < literal_end) {
+            const remaining = literal_end - position;
+            const match = matcher.findLongest(input, position, remaining, probe_limit);
+            if (match == null) {
+                position += 1;
+                pending_len += 1;
+                continue;
+            }
+            try commands.append(allocator, .{
+                .insert_start = pending_start,
+                .insert_len = pending_len,
+                .copy_len = match.?.length,
+                .has_copy = true,
+                .source = .compound,
+                .dictionary_address = match.?.address,
+            });
+            position += match.?.length;
+            pending_start = position;
+            pending_len = 0;
+            match_count += 1;
+        }
+        cursor = literal_end;
+        if (!command.has_copy) continue;
+        const output_len = command.outputLen();
+        if (output_len == 0 or output_len > input.len - cursor) return error.InvalidBlockPlan;
+        var copied = command;
+        copied.insert_start = pending_start;
+        copied.insert_len = pending_len;
+        try commands.append(allocator, copied);
+        cursor += output_len;
+        pending_start = cursor;
+        pending_len = 0;
+    }
+    if (cursor != input.len) return error.InvalidBlockPlan;
+    if (pending_len != 0) try commands.append(allocator, .{
+        .insert_start = pending_start,
+        .insert_len = pending_len,
+    });
     return .{ .commands = try commands.toOwnedSlice(allocator), .match_count = match_count };
 }
 
@@ -553,7 +655,7 @@ pub fn withoutCopiesInto(output: []Command, input_len: usize, commands: []const 
     if (drops.len == 0) return error.InvalidBlockPlan;
     var previous_drop: ?usize = null;
     for (drops) |drop| {
-        if (drop >= commands.len or !commands[drop].has_copy or (previous_drop != null and drop <= previous_drop.?)) return error.InvalidBlockPlan;
+        if (drop >= commands.len or !commands[drop].has_copy or !commands[drop].isLz77() or (previous_drop != null and drop <= previous_drop.?)) return error.InvalidBlockPlan;
         previous_drop = drop;
     }
     if (output.len < commands.len) return error.OutOfMemory;
@@ -566,7 +668,7 @@ pub fn withoutCopiesInto(output: []Command, input_len: usize, commands: []const 
         cursor += command.insert_len;
         insert_len += command.insert_len;
         if (!command.has_copy) continue;
-        const copy_output_len = if (command.dictionary_output_len == 0) command.copy_len else command.dictionary_output_len;
+        const copy_output_len = command.outputLen();
         if (std.mem.indexOfScalar(usize, drops, i) != null) {
             cursor += copy_output_len;
             insert_len += copy_output_len;
@@ -578,6 +680,7 @@ pub fn withoutCopiesInto(output: []Command, input_len: usize, commands: []const 
             .copy_len = command.copy_len,
             .distance = command.distance,
             .has_copy = true,
+            .source = command.source,
             .dictionary_output_len = command.dictionary_output_len,
             .dictionary_address = command.dictionary_address,
         };
@@ -604,7 +707,7 @@ fn appendCopyCommand(
 ) !void {
     if (insert_len == 0 and commands.items.len != 0) {
         const previous = &commands.items[commands.items.len - 1];
-        if (previous.has_copy and previous.dictionary_output_len == 0 and previous.distance == distance) {
+        if (previous.has_copy and previous.isLz77() and previous.distance == distance) {
             previous.copy_len = std.math.add(usize, previous.copy_len, copy_len) catch return error.IntegerOverflow;
             return;
         }
@@ -616,6 +719,105 @@ fn appendCopyCommand(
         .distance = distance,
         .has_copy = true,
     });
+}
+
+test "command sources centralize copy semantics" {
+    const lz77_command = Command{
+        .insert_start = 0,
+        .insert_len = 2,
+        .copy_len = 7,
+        .distance = 4,
+        .has_copy = true,
+    };
+    const compound_command = Command{
+        .insert_start = 9,
+        .insert_len = 0,
+        .copy_len = 11,
+        .has_copy = true,
+        .source = .compound,
+        .dictionary_address = 1234,
+    };
+    const static_command = Command{
+        .insert_start = 20,
+        .insert_len = 0,
+        .copy_len = 6,
+        .has_copy = true,
+        .source = .static,
+        .dictionary_output_len = 9,
+        .dictionary_address = 5678,
+    };
+
+    try std.testing.expect(lz77_command.isLz77());
+    try std.testing.expect(!lz77_command.isCompound());
+    try std.testing.expect(!lz77_command.isStatic());
+    try std.testing.expectEqual(@as(usize, 7), lz77_command.outputLen());
+    try std.testing.expect(lz77_command.updatesRecentDistance());
+
+    try std.testing.expect(compound_command.isCompound());
+    try std.testing.expect(!compound_command.isLz77());
+    try std.testing.expect(!compound_command.isStatic());
+    try std.testing.expectEqual(@as(usize, 11), compound_command.outputLen());
+    try std.testing.expect(compound_command.updatesRecentDistance());
+    try std.testing.expectEqual(@as(usize, 0), compound_command.dictionary_output_len);
+
+    try std.testing.expect(static_command.isStatic());
+    try std.testing.expect(!static_command.isLz77());
+    try std.testing.expect(!static_command.isCompound());
+    try std.testing.expectEqual(@as(usize, 9), static_command.outputLen());
+    try std.testing.expect(!static_command.updatesRecentDistance());
+
+    const literal_only = Command{ .insert_start = 31, .insert_len = 3 };
+    try std.testing.expect(literal_only.isLz77());
+    try std.testing.expectEqual(@as(usize, 0), literal_only.outputLen());
+    try std.testing.expect(!literal_only.updatesRecentDistance());
+    try std.testing.expectEqual(Source.lz77, literal_only.source);
+}
+
+test "compound dictionary mixer replaces literal runs and preserves LZ77 copies" {
+    var matcher = compound_dictionary_matcher.Matcher.init(std.testing.allocator);
+    defer matcher.deinit();
+    try matcher.prepare(.{ .raw_prefixes = &.{"hello-world"} });
+    const input = "xxworldyyABCDABCD";
+    const baseline = [_]Command{
+        .{ .insert_start = 0, .insert_len = 9, .copy_len = 4, .distance = 4, .has_copy = true },
+        .{ .insert_start = 13, .insert_len = 4 },
+    };
+    const mixed = try mixCompoundDictionaryAlloc(
+        std.testing.allocator,
+        input,
+        &baseline,
+        &matcher,
+        compound_dictionary_matcher.bucket_ways,
+    );
+    defer mixed.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 1), mixed.match_count);
+    try std.testing.expectEqual(@as(usize, 3), mixed.commands.len);
+    try std.testing.expectEqual(Source.compound, mixed.commands[0].source);
+    try std.testing.expectEqual(@as(usize, 2), mixed.commands[0].insert_len);
+    try std.testing.expectEqual(@as(usize, 5), mixed.commands[0].copy_len);
+    try std.testing.expectEqual(@as(usize, 6), mixed.commands[0].dictionary_address);
+    try std.testing.expectEqual(Source.lz77, mixed.commands[1].source);
+    try std.testing.expectEqual(@as(usize, 4), mixed.commands[1].distance);
+    try std.testing.expectEqual(@as(usize, 4), mixed.commands[2].insert_len);
+}
+
+test "legacy command initializers default to LZ77" {
+    const legacy = Command{
+        .insert_start = 0,
+        .insert_len = 4,
+        .copy_len = 8,
+        .distance = 4,
+        .has_copy = true,
+    };
+    const explicit = Command{
+        .insert_start = 0,
+        .insert_len = 4,
+        .copy_len = 8,
+        .distance = 4,
+        .has_copy = true,
+        .source = .lz77,
+    };
+    try std.testing.expectEqual(explicit, legacy);
 }
 
 test "coalesces literals around LZ77 matches" {
@@ -712,6 +914,27 @@ test "rejects invalid short-copy replacement requests" {
     var storage: [1]Command = undefined;
     try std.testing.expectError(error.InvalidBlockPlan, withoutCopyInto(&storage, 4, &command, 0));
     try std.testing.expectError(error.InvalidBlockPlan, withoutCopyInto(&storage, 4, &command, 1));
+
+    const compound = [_]Command{.{
+        .insert_start = 0,
+        .insert_len = 0,
+        .copy_len = 4,
+        .has_copy = true,
+        .source = .compound,
+        .dictionary_address = 7,
+    }};
+    try std.testing.expectError(error.InvalidBlockPlan, withoutCopyInto(&storage, 4, &compound, 0));
+
+    const static = [_]Command{.{
+        .insert_start = 0,
+        .insert_len = 0,
+        .copy_len = 4,
+        .has_copy = true,
+        .source = .static,
+        .dictionary_output_len = 6,
+        .dictionary_address = 9,
+    }};
+    try std.testing.expectError(error.InvalidBlockPlan, withoutCopyInto(&storage, 6, &static, 0));
 }
 
 test "replaces multiple short copies using original indexes" {
@@ -734,8 +957,10 @@ test "static dictionary plan preserves transformed and copy lengths" {
     try std.testing.expect(plan.match_count > 0);
     const command = plan.commands[0];
     try std.testing.expect(command.has_copy);
+    try std.testing.expect(command.isStatic());
     try std.testing.expect(command.dictionary_output_len > 0);
     try std.testing.expect(command.copy_len != command.dictionary_output_len);
+    try std.testing.expectEqual(command.dictionary_output_len, command.outputLen());
 }
 
 test "static dictionary mixes only inside literal runs" {
@@ -748,6 +973,7 @@ test "static dictionary mixes only inside literal runs" {
     defer mixed.deinit(std.testing.allocator);
     try std.testing.expect(mixed.match_count > 0);
     try std.testing.expect(mixed.commands.len >= baseline.len);
+    try std.testing.expect(mixed.commands[0].isStatic());
     try std.testing.expect(mixed.commands[0].dictionary_output_len > 0);
     try std.testing.expectEqual(@as(usize, 11), mixed.commands[mixed.commands.len - 1].distance);
 }
@@ -770,6 +996,7 @@ test "static dictionary mixed planner honors literal probe limit" {
     defer reaches_match.deinit(std.testing.allocator);
     try std.testing.expectEqual(@as(usize, 1), reaches_match.match_count);
     try std.testing.expectEqual(@as(usize, 2), reaches_match.commands[0].insert_len);
+    try std.testing.expect(reaches_match.commands[0].isStatic());
     try std.testing.expect(reaches_match.commands[0].dictionary_output_len >= "information".len);
 }
 
