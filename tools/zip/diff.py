@@ -621,10 +621,353 @@ def validate_seven_zip_ppmd_with_vort(cli: Path, tool: str, temp: Path) -> int:
     return len(cases)
 
 
+INCREMENTAL_COMMENT = b"vort incremental writer interop"
+INCREMENTAL_PAYLOADS = {
+    "known-stored.bin": b"\x00known-stored-PK\x07\x08-payload\xff",
+    "unknown-stored.bin": b"PK\x07\x08unknown-stored-PK\x07\x08tail",
+    "known-deflate.txt": b"known deflate stream crosses block boundaries.\n" * 900,
+    "utf8-目录/未知-deflate.txt": b"unknown deflate UTF-8 path payload.\n" * 61,
+    "empty-stored.bin": b"",
+    "empty-deflate.bin": b"",
+}
+INCREMENTAL_METHODS = {
+    "known-stored.bin": zipfile.ZIP_STORED,
+    "unknown-stored.bin": zipfile.ZIP_STORED,
+    "known-deflate.txt": zipfile.ZIP_DEFLATED,
+    "utf8-目录/未知-deflate.txt": zipfile.ZIP_DEFLATED,
+    "empty-stored.bin": zipfile.ZIP_STORED,
+    "empty-deflate.bin": zipfile.ZIP_DEFLATED,
+}
+
+
+def parse_extra_fields(extra: bytes, context: str) -> dict[int, bytes]:
+    fields: dict[int, bytes] = {}
+    offset = 0
+    while offset < len(extra):
+        if offset + 4 > len(extra):
+            raise AssertionError(f"truncated extra-field header in {context}")
+        field_id, field_len = struct.unpack_from("<HH", extra, offset)
+        offset += 4
+        end = offset + field_len
+        if end > len(extra):
+            raise AssertionError(f"truncated extra field {field_id:#06x} in {context}")
+        if field_id in fields:
+            raise AssertionError(f"duplicate extra field {field_id:#06x} in {context}")
+        fields[field_id] = extra[offset:end]
+        offset = end
+    return fields
+
+
+def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
+    eocd_offset = raw.rfind(b"PK\x05\x06")
+    if eocd_offset < 0 or eocd_offset + 22 > len(raw):
+        raise AssertionError("incremental archive omitted its legacy EOCD")
+    (
+        eocd_signature,
+        disk,
+        central_disk,
+        entries_on_disk,
+        entry_count,
+        legacy_central_size,
+        legacy_central_offset,
+        comment_len,
+    ) = struct.unpack_from("<IHHHHIIH", raw, eocd_offset)
+    if eocd_signature != 0x06054B50 or disk != 0 or central_disk != 0:
+        raise AssertionError("invalid incremental legacy EOCD header")
+    if raw[eocd_offset + 22 :] != INCREMENTAL_COMMENT or comment_len != len(
+        INCREMENTAL_COMMENT
+    ):
+        raise AssertionError("incremental archive comment mismatch")
+
+    expected_count = len(INCREMENTAL_PAYLOADS)
+    if force_zip64:
+        locator_offset = eocd_offset - 20
+        if locator_offset < 0 or raw[locator_offset : locator_offset + 4] != b"PK\x06\x07":
+            raise AssertionError("ZIP64 incremental archive omitted its EOCD locator")
+        locator_disk, zip64_eocd_offset, disk_count = struct.unpack_from(
+            "<IQI", raw, locator_offset + 4
+        )
+        if locator_disk != 0 or disk_count != 1:
+            raise AssertionError("invalid ZIP64 incremental EOCD locator")
+        if zip64_eocd_offset + 56 != locator_offset:
+            raise AssertionError("unexpected ZIP64 incremental EOCD record size")
+        (
+            zip64_signature,
+            zip64_record_size,
+            _made_by,
+            needed,
+            zip64_disk,
+            zip64_central_disk,
+            zip64_entries_on_disk,
+            zip64_entry_count,
+            central_size,
+            central_offset,
+        ) = struct.unpack_from("<IQHHIIQQQQ", raw, zip64_eocd_offset)
+        if zip64_signature != 0x06064B50 or zip64_record_size != 44 or needed != 45:
+            raise AssertionError("invalid ZIP64 incremental EOCD record")
+        if zip64_disk != 0 or zip64_central_disk != 0:
+            raise AssertionError("multi-disk ZIP64 incremental archive is unexpected")
+        if zip64_entries_on_disk != expected_count or zip64_entry_count != expected_count:
+            raise AssertionError("ZIP64 incremental EOCD entry count mismatch")
+        if (
+            entries_on_disk != 0xFFFF
+            or entry_count != 0xFFFF
+            or legacy_central_size != 0xFFFFFFFF
+            or legacy_central_offset != 0xFFFFFFFF
+        ):
+            raise AssertionError("ZIP64 incremental legacy EOCD fields are not sentinels")
+        central_end = zip64_eocd_offset
+    else:
+        if b"PK\x06\x06" in raw or b"PK\x06\x07" in raw:
+            raise AssertionError("ZIP32 incremental archive unexpectedly uses ZIP64 EOCD")
+        if entries_on_disk != expected_count or entry_count != expected_count:
+            raise AssertionError("ZIP32 incremental EOCD entry count mismatch")
+        central_size = legacy_central_size
+        central_offset = legacy_central_offset
+        central_end = eocd_offset
+
+    if central_offset + central_size != central_end:
+        raise AssertionError("incremental central-directory bounds mismatch")
+
+    central_entries: list[dict[str, int | str]] = []
+    central_cursor = central_offset
+    for expected_name, expected_payload in INCREMENTAL_PAYLOADS.items():
+        if raw[central_cursor : central_cursor + 4] != b"PK\x01\x02":
+            raise AssertionError(f"missing central header for {expected_name!r}")
+        (
+            _signature,
+            _made_by,
+            needed,
+            flags,
+            method,
+            _time,
+            _date,
+            crc32,
+            legacy_compressed_size,
+            legacy_uncompressed_size,
+            name_len,
+            extra_len,
+            entry_comment_len,
+            disk_start,
+            _internal_attributes,
+            _external_attributes,
+            legacy_local_offset,
+        ) = struct.unpack_from("<IHHHHHHIIIHHHHHII", raw, central_cursor)
+        variable_offset = central_cursor + 46
+        name_bytes = raw[variable_offset : variable_offset + name_len]
+        extra_offset = variable_offset + name_len
+        extra = raw[extra_offset : extra_offset + extra_len]
+        comment_offset = extra_offset + extra_len
+        entry_comment = raw[comment_offset : comment_offset + entry_comment_len]
+        central_cursor = comment_offset + entry_comment_len
+        try:
+            name = name_bytes.decode("utf-8")
+        except UnicodeDecodeError as error:
+            raise AssertionError("incremental central name is not UTF-8") from error
+        if name != expected_name:
+            raise AssertionError(
+                f"incremental central order/name mismatch: {name!r} != {expected_name!r}"
+            )
+        if flags & 0x0008 == 0 or flags & 0x0800 == 0:
+            raise AssertionError(f"incremental central flags omit bit 3/11 for {name!r}")
+        if method != INCREMENTAL_METHODS[name] or disk_start != 0:
+            raise AssertionError(f"incremental central method/disk mismatch for {name!r}")
+        expected_crc = binascii.crc32(expected_payload) & 0xFFFFFFFF
+        if crc32 != expected_crc:
+            raise AssertionError(f"incremental central CRC mismatch for {name!r}")
+
+        fields = parse_extra_fields(extra, f"central entry {name!r}")
+        if force_zip64:
+            if needed != 45:
+                raise AssertionError(f"ZIP64 central version-needed mismatch for {name!r}")
+            if (
+                legacy_compressed_size != 0xFFFFFFFF
+                or legacy_uncompressed_size != 0xFFFFFFFF
+                or legacy_local_offset != 0xFFFFFFFF
+            ):
+                raise AssertionError(f"ZIP64 central fields are not sentinels for {name!r}")
+            zip64_extra = fields.get(0x0001)
+            if zip64_extra is None or len(zip64_extra) != 24:
+                raise AssertionError(f"ZIP64 central extra width mismatch for {name!r}")
+            uncompressed_size, compressed_size, local_offset = struct.unpack(
+                "<QQQ", zip64_extra
+            )
+        else:
+            if needed != 20 or 0x0001 in fields:
+                raise AssertionError(f"ZIP32 central metadata mismatch for {name!r}")
+            compressed_size = legacy_compressed_size
+            uncompressed_size = legacy_uncompressed_size
+            local_offset = legacy_local_offset
+        if uncompressed_size != len(expected_payload):
+            raise AssertionError(f"incremental central size mismatch for {name!r}")
+        central_entries.append(
+            {
+                "name": name,
+                "flags": flags,
+                "method": method,
+                "crc32": crc32,
+                "compressed_size": compressed_size,
+                "uncompressed_size": uncompressed_size,
+                "local_offset": local_offset,
+                "comment_len": len(entry_comment),
+            }
+        )
+    if central_cursor != central_end:
+        raise AssertionError("incremental central-directory size/trailing data mismatch")
+
+    for index, entry in enumerate(central_entries):
+        name = str(entry["name"])
+        local_offset = int(entry["local_offset"])
+        if raw[local_offset : local_offset + 4] != b"PK\x03\x04":
+            raise AssertionError(f"missing incremental local header for {name!r}")
+        (
+            _signature,
+            needed,
+            flags,
+            method,
+            _time,
+            _date,
+            crc32,
+            legacy_compressed_size,
+            legacy_uncompressed_size,
+            name_len,
+            extra_len,
+        ) = struct.unpack_from("<IHHHHHIIIHH", raw, local_offset)
+        name_offset = local_offset + 30
+        name_bytes = raw[name_offset : name_offset + name_len]
+        extra_offset = name_offset + name_len
+        extra = raw[extra_offset : extra_offset + extra_len]
+        data_offset = extra_offset + extra_len
+        if name_bytes.decode("utf-8") != name:
+            raise AssertionError(f"local/central name mismatch for {name!r}")
+        if flags != entry["flags"] or flags & 0x0008 == 0 or flags & 0x0800 == 0:
+            raise AssertionError(f"incremental local flags omit bit 3/11 for {name!r}")
+        if method != entry["method"] or crc32 != 0:
+            raise AssertionError(f"incremental local method/CRC placeholder mismatch for {name!r}")
+        fields = parse_extra_fields(extra, f"local entry {name!r}")
+        if force_zip64:
+            if needed != 45:
+                raise AssertionError(f"ZIP64 local version-needed mismatch for {name!r}")
+            if legacy_compressed_size != 0xFFFFFFFF or legacy_uncompressed_size != 0xFFFFFFFF:
+                raise AssertionError(f"ZIP64 local size fields are not sentinels for {name!r}")
+            zip64_extra = fields.get(0x0001)
+            if zip64_extra is None or len(zip64_extra) != 16:
+                raise AssertionError(f"ZIP64 local extra width mismatch for {name!r}")
+            if struct.unpack("<QQ", zip64_extra) != (0, 0):
+                raise AssertionError(f"ZIP64 local size placeholders are not zero for {name!r}")
+            descriptor_format = "<IIQQ"
+            descriptor_len = 24
+        else:
+            if needed != 20 or legacy_compressed_size != 0 or legacy_uncompressed_size != 0:
+                raise AssertionError(f"ZIP32 local size placeholders are not zero for {name!r}")
+            if 0x0001 in fields:
+                raise AssertionError(f"ZIP32 local entry has a ZIP64 extra for {name!r}")
+            descriptor_format = "<IIII"
+            descriptor_len = 16
+
+        descriptor_offset = data_offset + int(entry["compressed_size"])
+        descriptor_end = descriptor_offset + descriptor_len
+        if descriptor_end > len(raw):
+            raise AssertionError(f"truncated incremental descriptor for {name!r}")
+        descriptor = struct.unpack_from(descriptor_format, raw, descriptor_offset)
+        if descriptor[0] != 0x08074B50:
+            raise AssertionError(f"incremental descriptor signature mismatch for {name!r}")
+        if descriptor[1:] != (
+            entry["crc32"],
+            entry["compressed_size"],
+            entry["uncompressed_size"],
+        ):
+            raise AssertionError(f"incremental descriptor values mismatch for {name!r}")
+        next_offset = (
+            int(central_entries[index + 1]["local_offset"])
+            if index + 1 < len(central_entries)
+            else central_offset
+        )
+        if descriptor_end != next_offset:
+            raise AssertionError(f"incremental descriptor width mismatch for {name!r}")
+
+        if method == zipfile.ZIP_STORED:
+            stored_data = raw[data_offset:descriptor_offset]
+            if stored_data != INCREMENTAL_PAYLOADS[name]:
+                raise AssertionError(f"incremental stored bytes mismatch for {name!r}")
+    if b"PK\x07\x08" not in INCREMENTAL_PAYLOADS["known-stored.bin"] or (
+        INCREMENTAL_PAYLOADS["unknown-stored.bin"].count(b"PK\x07\x08") != 2
+    ):
+        raise AssertionError("incremental stored fixtures lost descriptor-signature payloads")
+
+
+def validate_extracted_tree(root: Path) -> None:
+    for name, expected in INCREMENTAL_PAYLOADS.items():
+        extracted = root / name
+        if not extracted.is_file() or extracted.read_bytes() != expected:
+            raise AssertionError(f"external incremental extraction mismatch for {name!r}")
+
+
+def validate_incremental_writer_archive(
+    writer: Path,
+    temp: Path,
+    force_zip64: bool,
+    unzip_tool: str | None,
+    seven_zip_tool: str | None,
+) -> tuple[int, bool, bool]:
+    suffix = "zip64" if force_zip64 else "zip32"
+    one_byte_path = temp / f"incremental-{suffix}-one.zip"
+    micro_path = temp / f"incremental-{suffix}-micro.zip"
+    run(writer, str(one_byte_path), suffix, "one")
+    run(writer, str(micro_path), suffix, "micro")
+    raw = one_byte_path.read_bytes()
+    if raw != micro_path.read_bytes():
+        raise AssertionError(
+            f"incremental {suffix} output depends on one-byte versus micro output buffers"
+        )
+    validate_incremental_raw_layout(raw, force_zip64)
+
+    with zipfile.ZipFile(one_byte_path) as archive:
+        if archive.comment != INCREMENTAL_COMMENT:
+            raise AssertionError(f"Python incremental {suffix} comment mismatch")
+        if archive.namelist() != list(INCREMENTAL_PAYLOADS):
+            raise AssertionError(f"Python incremental {suffix} entry order mismatch")
+        if archive.testzip() is not None:
+            raise AssertionError(f"Python reported a corrupt incremental {suffix} entry")
+        for name, expected in INCREMENTAL_PAYLOADS.items():
+            info = archive.getinfo(name)
+            if info.compress_type != INCREMENTAL_METHODS[name]:
+                raise AssertionError(f"Python incremental method mismatch for {name!r}")
+            if archive.read(name) != expected:
+                raise AssertionError(f"Python incremental extraction mismatch for {name!r}")
+
+    unzip_checked = False
+    if unzip_tool is not None:
+        extracted = subprocess.run(
+            [unzip_tool, "-p", str(one_byte_path)],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        ).stdout
+        if extracted != b"".join(INCREMENTAL_PAYLOADS.values()):
+            raise AssertionError(f"Info-ZIP incremental {suffix} extraction mismatch")
+        unzip_checked = True
+
+    seven_zip_checked = False
+    if seven_zip_tool is not None:
+        seven_zip_root = temp / f"incremental-{suffix}-7zip"
+        seven_zip_root.mkdir()
+        subprocess.run(
+            [seven_zip_tool, "x", "-y", f"-o{seven_zip_root}", str(one_byte_path)],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        validate_extracted_tree(seven_zip_root)
+        seven_zip_checked = True
+    return len(raw), unzip_checked, seven_zip_checked
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
     parser.add_argument("--writer", required=True, type=Path)
+    parser.add_argument("--incremental-writer", required=True, type=Path)
     parser.add_argument("--seven-zip", type=Path)
     parser.add_argument("--blast", type=Path)
     args = parser.parse_args()
@@ -633,6 +976,7 @@ def main() -> None:
         if args.seven_zip
         else shutil.which("7zz") or shutil.which("7z")
     )
+    unzip_tool = shutil.which("unzip")
 
     with tempfile.TemporaryDirectory(prefix="vort-zip-diff-") as temp_text:
         temp = Path(temp_text)
@@ -642,6 +986,16 @@ def main() -> None:
         )
         vort_zip64_bytes = validate_vort_archive_with_python(
             args.cli, args.writer, temp, True, seven_zip_tool
+        )
+        incremental_zip32_bytes, incremental_zip32_unzip, incremental_zip32_7zip = (
+            validate_incremental_writer_archive(
+                args.incremental_writer, temp, False, unzip_tool, seven_zip_tool
+            )
+        )
+        incremental_zip64_bytes, incremental_zip64_unzip, incremental_zip64_7zip = (
+            validate_incremental_writer_archive(
+                args.incremental_writer, temp, True, unzip_tool, seven_zip_tool
+            )
         )
         deflate64_cases = 0
         ppmd_cases = 0
@@ -669,6 +1023,11 @@ def main() -> None:
         "zip_diff=ok directions=2 "
         f"python_entries=7 vort_entries=18 zstd_methods=2 python_bytes={python_bytes} "
         f"vort_zip32_bytes={vort_zip32_bytes} vort_zip64_bytes={vort_zip64_bytes} "
+        f"incremental_entries={len(INCREMENTAL_PAYLOADS)} "
+        f"incremental_zip32_bytes={incremental_zip32_bytes} "
+        f"incremental_zip64_bytes={incremental_zip64_bytes} "
+        f"system_unzip={incremental_zip32_unzip and incremental_zip64_unzip} "
+        f"incremental_7zip={incremental_zip32_7zip and incremental_zip64_7zip} "
         f"system_7zip={seven_zip_tool is not None} deflate64_cases={deflate64_cases} "
         f"ppmd_cases={ppmd_cases} vort_ppmd_cutoff={seven_zip_tool is not None} "
         f"vort_shrink={seven_zip_tool is not None} implode_modes={implode_modes} "

@@ -82,6 +82,158 @@ const zip_bytes = try vort.zipEncodeAlloc(allocator, &entries, .{
 defer allocator.free(zip_bytes);
 ```
 
+## Incremental writer
+
+`ZipIncrementalWriter` emits archive bytes directly into caller-owned output
+without retaining the complete entry or archive. Stored data is copied directly;
+Deflate retains its configured block/lookahead, history, token, and pending-
+output working state. The initial public slice accepts only Stored (`method 0`)
+and raw Deflate (`method 8`) entries.
+Every entry sets general-purpose flag bit 3 and ends with a signed
+`0x08074b50` data descriptor; there is no seek-back or header-patching mode.
+
+The public option types are `ZipIncrementalWriterOptions` and
+`ZipIncrementalEntryOptions`. Archive options include `archive_comment`,
+`initial_offset`, UTF-8 and ZIP64 policy, raw-Deflate options, and limits for
+entry count, central-directory bytes, retained Deflate input, uncompressed
+input, and emitted archive bytes. `max_deflate_buffer_size` defaults to 1 MiB
+and bounds one planning block plus lookahead before a Deflate entry starts; it
+excludes the encoder's fixed 32 KiB history and one encoded pending block.
+Entry options contain the copied name/comment, Stored or Deflate method, and an
+optional exact `expected_size`. A null size accepts input until the configured
+limit. A known size rejects an overlong offered slice and `finishEntry()`
+rejects a short entry; a premature short finish is recoverable, so the caller
+may provide the remaining input and retry.
+
+The state sequence is `beginEntry` -> repeated `step` -> `finishEntry` -> drain
+to `.ready`, followed by more entries or `finishArchive` -> drain to `.done`.
+`step` returns the common `need_input`, `need_output`, or `done` status with
+exact input/output progress. Tiny output slices may split local headers,
+Deflate bytes, descriptors, central-directory records, and archive endings.
+Zero-length output returns `need_output` without consuming entry input whenever
+output is pending. With empty input, an idle `.ready` boundary or active
+`.entry_data` phase returns `need_input`.
+
+```zig
+var writer = try vort.ZipIncrementalWriter.initWithOptions(allocator, .{
+    .zip64 = .auto,
+    .initial_offset = sfx_prefix.len,
+    .archive_comment = "streamed by Vort",
+});
+defer writer.deinit();
+
+try writer.beginEntry(.{
+    .name = "data.txt",
+    .method = .deflate,
+    .expected_size = null,
+});
+var input_offset: usize = 0;
+var scratch: [17]u8 = undefined;
+while (input_offset != input.len) {
+    const result = try writer.step(input[input_offset..], &scratch);
+    input_offset += result.progress.input_read;
+    try sink.writeAll(scratch[0..result.progress.output_written]);
+}
+try writer.finishEntry();
+while (writer.snapshot().phase != .ready) {
+    const result = try writer.step("", &scratch);
+    try sink.writeAll(scratch[0..result.progress.output_written]);
+}
+try writer.finishArchive();
+while (true) {
+    const result = try writer.step("", &scratch);
+    try sink.writeAll(scratch[0..result.progress.output_written]);
+    if (result.status == .done) break;
+}
+```
+
+`initial_offset` accounts for bytes already written before the archive, such as
+an SFX executable prefix. The writer does not emit those bytes; the caller
+writes the prefix separately, then appends the incremental output. Local-file,
+central-directory, ZIP64 locator, and EOCD offsets include the supplied value.
+
+ZIP64 selection is frozen before each unpatchable local header is emitted:
+
+- `.auto` keeps a known-size Stored entry in ZIP32 when its size and local
+  offset fit. Unknown-size entries and all Deflate entries conservatively use
+  ZIP64 because their final sizes are not known at header time. Archive count,
+  central size/offset, or any ZIP64 entry also promotes the archive ending;
+- `.always` emits ZIP64 local/central extras, 64-bit descriptors, and a ZIP64
+  archive ending even for small archives;
+- `.never` emits ZIP32 and rejects impossible known sizes/offsets before the
+  entry starts. An unknown or compressed entry may cross a ZIP32 sentinel only
+  after bytes have been published; that late `Zip32LimitExceeded` comes from
+  `step` and poisons the writer. After all entry descriptors drain,
+  `finishArchive()` preflights entry count, central-directory and ending
+  offsets/sizes, and `max_archive_size`; rejection leaves the phase `.ready`
+  and does not poison the writer.
+
+ZIP32 descriptor-backed local headers contain zero CRC/sizes. ZIP64 local
+headers use legacy `0xffffffff` size sentinels plus two zero `u64` placeholders
+in the local ZIP64 extra; authoritative CRC and sizes appear in the descriptor
+and central directory.
+
+The writer copies `archive_comment` during initialization and each entry's name
+and comment during `beginEntry`, so callers may release or mutate those slices
+after the respective call succeeds. It retains encoded central-directory
+metadata, one pending control record, counters, and codec working state; it does
+not retain Stored payload or already-emitted archive bytes. Deflate retains at
+most the accepted block/lookahead bound, 32 KiB history and match state, and one
+encoded pending block rather than the complete entry.
+`max_central_directory_size` bounds the logical encoded central directory;
+the independently copied archive comment is governed only by ZIP's `u16`
+length limit and is not charged to this field.
+
+Direct validation/state errors returned by `beginEntry`, `finishEntry`, or
+`finishArchive` do not poison the writer. `step` is not transactional: output
+from earlier successful calls may already be in an external sink, and an error
+can occur after output-buffer mutation or partial internal accounting. Output
+from a failing call is invalid and must not be committed. Any `step` error
+changes the phase to `.poisoned`; subsequent mutating calls return
+`ZipWriterPoisoned`, and the caller must discard the unfinished archive and
+deinitialize the writer. This does not change `zipEncodeAppend`'s existing
+whole-operation transactional guarantee.
+
+The incremental writer's additive error set is exported as
+`ZipIncrementalWriterError`; the established `ZipError` used by existing
+one-shot and reader APIs is unchanged.
+
+The incremental writer does not yet support Shrink, Reduce, Implode, Deflate64,
+DCL Implode, Bzip2, LZMA, Zstandard, XZ, or PPMd entries. It also does not add
+an incremental ZIP reader, encryption, or multi-disk/split archive support; the
+existing complete-buffer reader and broader one-shot writer retain their
+documented method coverage.
+
+The incremental differential uses six entries: known Stored data containing a
+descriptor-signature byte sequence, unknown Stored data containing two such
+sequences, a known Deflate entry larger than 32 KiB that crosses an actual
+planning-block boundary, a UTF-8-path cross-block unknown Deflate entry, empty
+Stored, and empty Deflate. Input uses repeating
+1/2/3/5/7-byte chunks. For each ZIP mode, a one-byte-output run must be
+byte-identical to a 2/3/5/7-byte micro-output run; a zero-output local-header
+probe must return `need_output` with zero progress.
+
+`zig build run-zip-diff` passes for a 1,204-byte ZIP32 `.never` archive and a
+1,616-byte ZIP64 `.always` archive. Python raw parsing checks bit 3/bit 11,
+local placeholders, signed 16-/24-byte descriptors, central CRC/size/offset and
+ZIP64 extras/end records; `zipfile` tests and reads every member. System
+Info-ZIP extracts every entry's contents byte-for-byte, and the aggregate
+reports 13/13 ZIP differential steps. No 7z/7zz is installed on the current
+host, so the optional 7-Zip branch reports false and is not claimed as
+validation. Info-ZIP coverage uses `unzip -p` for contents, not pathname
+rendering; its 6.00 ZIP32 UTF-8 filename rendering issue also affects the
+pre-existing one-shot output and is not claimed as fixed here.
+
+`zig test src/root.zig --test-filter 'ZIP incremental writer'` passes 61/61.
+The wire refactor also leaves 14 one-shot probe modes byte-identical to HEAD,
+including every existing method and ZIP32/ZIP64 descriptor choice. Default and
+forced-ZIP64 SHA-256 values remain
+`72541262b3867def603dd184e49fea086f585096ac0763c7d4a457bb01dd1381` and
+`e54cf36083080e69c82eeba49cd405bf3d21c00146c54a905e11d348fb057b17`.
+`zig build check` and Python syntax validation pass. No physical 4 GiB or
+65,535-entry archive was generated; sentinel/overflow paths use focused tests,
+small forced-ZIP64 layouts, and code review instead.
+
 `EncodeOptions.ppmd_options` selects PPMd order 2...16, model memory from 1
 through 256 MiB in whole-MiB units, and `.restart` or `.cut_off` restoration.
 Defaults are order 8, 16 MiB, and restart. Method 98 stores those values in its

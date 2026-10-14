@@ -274,8 +274,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   legacy/current Zstandard-method-20/93, XZ-method-95, and PPMd-method-98
   multi-entry encoding/extraction (including fixed-Huffman or stored
   Deflate64 output with the extended 64 KiB distance alphabet),
-  transactional prefix append, 32-/64-bit data descriptors, archive/entry
-  comments, CRC-32/size validation, UTF-8 flags, and explicit
+  transactional one-shot prefix append plus caller-output incremental
+  Stored/raw-Deflate writing with signed data descriptors, known or unknown
+  size pledges, ZIP32/ZIP64 policy, SFX offsets, and payload-bounded memory;
+  archive/entry comments, CRC-32/size validation, UTF-8 flags, and explicit
   encrypted/multi-disk/unknown-method errors;
 - dependency-free Bzip2 `BZh1`...`BZh9` encoding and decoding with canonical Huffman,
   selector/inverse move-to-front, RUNA/RUNB, inverse BWT, first-stage RLE,
@@ -1541,6 +1543,59 @@ _ = gzip_cat_chunked_written;
 // );
 // defer allocator.free(dict_encoded);
 ```
+
+### ZIP incremental writer
+
+`ZipIncrementalWriter` streams Stored and raw-Deflate entries into caller-owned
+output. `ZipIncrementalWriterOptions` configures archive comment, UTF-8, ZIP64,
+SFX `initial_offset`, Deflate policy, and resource limits;
+`ZipIncrementalEntryOptions` supplies the copied name/comment, method, and an
+optional exact `expected_size`. Every entry uses bit 3 and a signed data
+descriptor. Known and unknown sizes, one-byte output, and zero-output
+backpressure share the same `beginEntry` / `step` / `finishEntry` contract;
+after the last entry, `finishArchive` drains the retained central metadata and
+archive ending.
+
+Stored payload and previously emitted bytes are not retained; Deflate keeps one
+bounded planning block/lookahead, its 32 KiB history and match state, and one
+encoded pending block. `max_deflate_buffer_size` defaults to 1 MiB and caps the
+retained input portion before an entry starts. Memory therefore scales with
+that bound plus central-directory metadata, not with the complete archive.
+Archive comments are copied by initialization, and names/comments by
+`beginEntry`, so those caller slices need not outlive the successful call.
+
+With `.auto`, unknown-size entries and every Deflate entry conservatively use
+ZIP64 before their non-seekable local header is emitted; a known-size Stored
+entry remains ZIP32 when its size and local offset fit. `.always` forces ZIP64.
+`.never` rejects known entry overflow up front, while a late unknown entry-size
+or codec overflow detected in `step` poisons the writer. After all descriptors
+drain, `finishArchive` preflights count, central-directory/ending offsets and
+sizes, and the archive-output limit; a failure there leaves the writer ready
+and recoverable. `initial_offset` includes an already-written SFX prefix in
+every ZIP offset but does not emit that prefix.
+
+`step` errors are deliberately non-transactional because earlier output may
+already be committed to an external sink; output from the failing call is
+invalid and must not be committed. After an error, mutating calls return
+`ZipWriterPoisoned` and the partial archive must be discarded. Direct
+validation errors from `beginEntry` and a premature short `finishEntry` remain
+recoverable. The existing one-shot `zipEncodeAppend` retains its transactional
+guarantee and broader method support. Incremental writing does not yet cover
+the other ZIP methods, a streaming reader, encryption, or multi-disk archives. See
+[the ZIP format status](docs/formats/zip.md) for the full state and wire
+contract. Its additive errors are exposed separately as
+`ZipIncrementalWriterError`; the established `ZipError` set is unchanged.
+
+The incremental `run-zip-diff` matrix generates the same six-entry archive,
+including a known Deflate payload larger than 32 KiB that crosses a real
+planning-block boundary, under one-byte and micro-chunk output schedules in
+ZIP32 `.never` and ZIP64 `.always` modes. Python raw-wire checks, `zipfile`, and
+system Info-ZIP validate both outputs and all member contents; the aggregate
+reports 13/13 ZIP differential steps. Focused ZIP incremental tests pass 61/61,
+and the refactored
+one-shot writer remains byte-identical to HEAD across 14 probe modes. The
+current host has no 7z/7zz, so that optional extraction branch is reported as
+skipped rather than passed.
 
 ### Brotli RAW shared-prefix dictionaries
 

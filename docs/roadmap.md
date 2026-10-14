@@ -19733,3 +19733,50 @@ reuse, so production keeps the simpler independently owned plans.
   static-dictionary policies. Serialized shared dictionaries and caller-supplied/custom static
   dictionaries remain unsupported and are not a promised future compatibility
   surface.
+
+- Added `ZipIncrementalWriter` as a caller-output archive state machine for
+  Stored and raw-Deflate entries. `Options` controls archive comment, UTF-8,
+  `.auto`/`.always`/`.never` ZIP64 selection, `initial_offset` for SFX prefixes,
+  Deflate policy, and archive/input/central-directory limits; `EntryOptions`
+  supplies a copied name/comment and a known or unknown exact size pledge.
+  `max_deflate_buffer_size` defaults to 1 MiB and preflights one retained
+  Deflate input block plus lookahead before the entry begins. Every entry
+  uses bit 3 plus a signed descriptor. Local headers, payload, descriptors,
+  central records, and EOCD/ZIP64 endings drain through arbitrary tiny or zero
+  output with exact progress. The writer retains one bounded Deflate input
+  block/lookahead, 32 KiB history and match state, one encoded pending block,
+  control state, and encoded central metadata, but never a complete
+  entry/archive or already-emitted bytes; Stored payload passes through
+  directly.
+  In `.auto`, unknown-size and Deflate entries conservatively select ZIP64
+  before their unpatchable local headers, while known-size Stored entries stay
+  ZIP32 when size and offset fit. `.always` forces ZIP64 throughout; `.never`
+  preflights known entry limits and poisons the writer if an unknown late entry
+  size/codec value crosses a ZIP32 sentinel during `step`. `finishArchive`
+  preflights count, central-directory/ending offsets and sizes, and the archive
+  limit; rejection leaves the writer ready. Archive and entry metadata are
+  copied at `initWithOptions`/`beginEntry`, so caller slices have call-scoped
+  lifetimes. `initial_offset` adjusts every stored offset without emitting the
+  prefix itself. Direct validation/state failures outside `step`
+  remain recoverable, including a premature short `finishEntry`; any `step`
+  error is non-transactional, invalidates that call's output, changes the phase
+  to `.poisoned`, and requires discarding the partial archive. The existing
+  one-shot append remains transactional.
+  `ZipIncrementalWriterError` keeps these additive failures separate from the
+  established `ZipError` set.
+  Other compression methods, an incremental reader, encryption, and multi-disk
+  archives remain outside this slice.
+  The external differential generates six known/unknown Stored/Deflate entries,
+  including descriptor-signature payloads, UTF-8, empty cases, and a known
+  Deflate payload above 32 KiB that crosses an actual planning-block boundary,
+  under repeating 1/2/3/5/7-byte input. One-byte and 2/3/5/7-byte output
+  schedules are byte-identical, and zero output pins no-progress backpressure.
+  Python wire parsing/`zipfile` and system Info-ZIP validate the 1,204-byte
+  ZIP32 `.never` and 1,616-byte ZIP64 `.always` archives. The current host has
+  no 7z/7zz, so that optional branch is explicitly skipped. `run-zip-diff` and
+  the full build `check` pass; the differential reports 13/13 steps. Focused
+  ZIP incremental tests pass 61/61, and 14 one-shot probe modes remain
+  byte-identical to HEAD across all existing methods and ZIP32/ZIP64 descriptor
+  choices. Physical 4 GiB and 65,535-entry
+  archives were not generated; those sentinel paths are covered with focused
+  tests, forced small ZIP64 layouts, and code review.

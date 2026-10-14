@@ -1587,12 +1587,23 @@ pub fn build(b: *std.Build) void {
             .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
         }),
     });
+    const zip_incremental_writer_probe_exe = b.addExecutable(.{
+        .name = "vort-zip-incremental-writer-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zip/incremental_writer_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
     const zip_diff = b.addSystemCommand(&.{ "python3", "tools/zip/diff.py", "--cli" });
     zip_diff.addArtifactArg(cli_exe);
     zip_diff.addArg("--writer");
     zip_diff.addArtifactArg(zip_writer_probe_exe);
+    zip_diff.addArg("--incremental-writer");
+    zip_diff.addArtifactArg(zip_incremental_writer_probe_exe);
     if (b.args) |args| zip_diff.addArgs(args);
-    const zip_diff_step = b.step("run-zip-diff", "Validate ZIP32/ZIP64 Reduce, Shrink, Implode, DCL Implode, Deflate64, Bzip2, LZMA, Zstandard, XZ, and PPMd interoperability");
+    const zip_diff_step = b.step("run-zip-diff", "Validate ZIP32/ZIP64 codecs plus incremental Stored/Deflate descriptors against Python, Info-ZIP, and optional 7-Zip");
     zip_diff_step.dependOn(&zip_diff.step);
 
     const bzip2_diff = b.addSystemCommand(&.{ "python3", "tools/bzip2/diff.py", "--cli" });
@@ -5432,6 +5443,8 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&checksum_diff_exe.step);
     check_step.dependOn(&zlib_diff_exe.step);
     check_step.dependOn(&gzip_diff_exe.step);
+    check_step.dependOn(&zip_writer_probe_exe.step);
+    check_step.dependOn(&zip_incremental_writer_probe_exe.step);
     check_step.dependOn(&br_rle_probe_exe.step);
     check_step.dependOn(&br_planned_corpus_exe.step);
     check_step.dependOn(&br_planned_probe_exe.step);
