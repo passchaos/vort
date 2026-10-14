@@ -532,9 +532,14 @@ const IncrementalPlannedEncoderCodec = struct {
     pub const State = struct {
         bit_index: u3 = 0,
         window_bits: u5 = default_window_bits,
+        level: PlannedCompressionLevel = .fast,
+        quality: ?u4 = null,
+        mode: PlannedMode = .generic,
         tokens: std.ArrayList(lz77.Token) = .empty,
         commands: std.ArrayList(command_plan.Command) = .empty,
         history: std.ArrayList(u8) = .empty,
+        candidate_wire: std.ArrayList(u8) = .empty,
+        best_wire: std.ArrayList(u8) = .empty,
         greedy_scratch: lz77.TinyGreedyScratch = .{},
         dictionary_greedy_scratch: lz77.DictionaryGreedyScratch = .{},
         compound_matcher: ?compound_dictionary_matcher.Matcher = null,
@@ -549,14 +554,21 @@ const IncrementalPlannedEncoderCodec = struct {
         state.tokens.deinit(allocator);
         state.commands.deinit(allocator);
         state.history.deinit(allocator);
+        state.candidate_wire.deinit(allocator);
+        state.best_wire.deinit(allocator);
     }
 
     pub fn resetState(state: *State) void {
         state.bit_index = 0;
         state.window_bits = default_window_bits;
+        state.level = .fast;
+        state.quality = null;
+        state.mode = .generic;
         state.tokens.clearRetainingCapacity();
         state.commands.clearRetainingCapacity();
         state.history.clearRetainingCapacity();
+        state.candidate_wire.clearRetainingCapacity();
+        state.best_wire.clearRetainingCapacity();
         state.compound_dictionary_size = 0;
         state.wire_state = .{};
         state.greedy_scratch.head_initialized = @splat(0);
@@ -567,6 +579,8 @@ const IncrementalPlannedEncoderCodec = struct {
         return state.tokens.capacity * @sizeOf(lz77.Token) +
             state.commands.capacity * @sizeOf(command_plan.Command) +
             state.history.capacity +
+            state.candidate_wire.capacity +
+            state.best_wire.capacity +
             state.greedy_scratch.retainedCapacity() +
             state.dictionary_greedy_scratch.retainedCapacity() +
             (if (state.compound_matcher) |*matcher| matcher.retainedCapacity() else 0);
@@ -581,6 +595,7 @@ const IncrementalPlannedEncoderCodec = struct {
     }
 
     pub fn writePrefix(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, options: StreamOptions) br.Error!void {
+        try validatePlannedStreamChunksOptions(options);
         if (state.compound_matcher == null)
             state.compound_matcher = compound_dictionary_matcher.Matcher.init(allocator);
         state.compound_dictionary_size = try preparePlannedSharedDictionary(
@@ -592,83 +607,13 @@ const IncrementalPlannedEncoderCodec = struct {
         if (options.metadata.len != 0) try writeMetadataMetaBlock(allocator, &writer, options.metadata);
         state.bit_index = writer.bit_index;
         state.window_bits = options.window_bits;
+        state.level = options.level;
+        state.quality = options.quality;
+        state.mode = options.mode;
     }
 
     pub fn writeBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, block: []const u8) br.Error!void {
-        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
-        const start_len = out.items.len;
-        const start_bit_index = writer.bit_index;
-        const start_byte = if (start_len == 0) 0 else out.items[start_len - 1];
-        const max_backward_distance = (@as(usize, 1) << state.window_bits) - 16;
-
-        const stats = if (state.history.items.len == 0)
-            try lz77.hashGreedyPlanAutoTinyScratchReuse(&state.tokens, &state.greedy_scratch, allocator, block, .{
-                .window_len = @min(block.len, max_backward_distance),
-                .max_chain = 64,
-                .nice_len = 64,
-                .max_candidates = 8,
-                .min_match = 3,
-                .max_match = lz77.max_match_len,
-            })
-        else blk: {
-            const history_stats = try lz77.hashGreedyPlanWithDictionaryReuse(&state.tokens, &state.dictionary_greedy_scratch, allocator, block, state.history.items, .{
-                .window_len = max_backward_distance,
-                .max_chain = 64,
-                .nice_len = 64,
-                .max_candidates = 8,
-                .min_match = 3,
-                .max_match = lz77.max_match_len,
-            });
-            break :blk history_stats;
-        };
-        var compressed_ok = stats.matches != 0;
-        const start_wire_state = state.wire_state;
-        if (compressed_ok or state.compound_dictionary_size != 0) {
-            _ = if (state.history.items.len == 0)
-                try command_plan.buildTrustedReuse(&state.commands, allocator, block, state.tokens.items)
-            else
-                try command_plan.buildWithDictionaryReuse(&state.commands, allocator, block, state.history.items.len, state.tokens.items);
-            const mixed = if (state.compound_dictionary_size != 0)
-                try command_plan.mixCompoundDictionaryAlloc(
-                    allocator,
-                    block,
-                    state.commands.items,
-                    &state.compound_matcher.?,
-                    compound_dictionary_matcher.bucket_ways,
-                )
-            else
-                null;
-            defer if (mixed) |plan| plan.deinit(allocator);
-            const commands = if (mixed) |plan| plan.commands else state.commands.items;
-            compressed_ok = compressed_ok or (mixed != null and mixed.?.match_count != 0);
-            var encode_stats: encoder_stats.PlannedEncodeStats = .{};
-            var candidate_state = state.wire_state;
-            encodeCommandPlanWithOptionsWrite(allocator, &writer, block, commands, null, &encode_stats, .{
-                .write_stream_prefix = false,
-                .final_meta_block = false,
-                .window_bits = state.window_bits,
-                .compound_dictionary_size = state.compound_dictionary_size,
-                .initial_output_pos = if (state.compound_dictionary_size == 0) 0 else state.wire_state.output_pos,
-                .starting_last_distances = if (state.compound_dictionary_size == 0) initial_last_distances else state.wire_state.last_distances,
-                .final_wire_state = if (state.compound_dictionary_size == 0) null else &candidate_state,
-            }) catch |err| switch (err) {
-                error.InvalidBlockPlan => compressed_ok = false,
-                else => return err,
-            };
-            if (compressed_ok) state.wire_state = candidate_state;
-        }
-        const stored_ceiling = try addStoredUncompressedMetaBlockBitsLen(startBitPosition(start_len, start_bit_index), block.len);
-        if (!compressed_ok or writer.bitPosition() > stored_ceiling) {
-            out.shrinkRetainingCapacity(start_len);
-            if (start_len != 0) out.items[start_len - 1] = start_byte;
-            writer.bit_index = start_bit_index;
-            try writeUncompressedMetaBlock(allocator, &writer, block);
-            state.wire_state = start_wire_state;
-            state.wire_state.output_pos = std.math.add(usize, start_wire_state.output_pos, block.len) catch
-                return error.IntegerOverflow;
-        }
-        state.bit_index = writer.bit_index;
-        try appendHistory(&state.history, allocator, block, max_backward_distance);
+        try writePlannedStreamMetaBlock(allocator, out, state, block);
     }
 
     pub fn writeMetadata(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, metadata: []const u8) br.Error!void {
@@ -1875,10 +1820,29 @@ pub const StoredStreamOptions = struct {
     metadata: []const u8 = "",
 };
 pub const PlannedStreamChunksOptions = struct {
+    level: PlannedCompressionLevel = .fast,
+    quality: ?u4 = null,
+    mode: PlannedMode = .generic,
     window_bits: u5 = default_window_bits,
     metadata: []const u8 = "",
     shared_dictionary: SharedDictionary = .{},
 };
+
+fn validatePlannedStreamChunksOptions(options: PlannedStreamChunksOptions) Error!void {
+    _ = try plannedSharedDictionarySize(options.shared_dictionary);
+    if (options.window_bits < 10 or options.window_bits > 24)
+        return error.InvalidBlockPlan;
+    if (options.quality) |quality| {
+        if (options.level != .fast) return error.InvalidBlockPlan;
+        const schedule = quality_schedule.getInt(quality, options.mode) catch
+            return error.InvalidBlockPlan;
+        schedule.validate() catch return error.InvalidBlockPlan;
+        _ = schedule.window.resolve(options.window_bits) catch
+            return error.InvalidBlockPlan;
+    } else if (options.mode != .generic) {
+        return error.InvalidBlockPlan;
+    }
+}
 
 pub fn encodedStoredStreamBound(input_len: usize) Error!usize {
     return try encodedStoredStreamBoundWithOptions(input_len, .{});
@@ -2790,16 +2754,16 @@ pub fn encodePlannedStreamAlloc(allocator: std.mem.Allocator, input: []const u8)
 
 pub fn encodePlannedStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
     try validatePlannedEncodeOptions(input.len, options);
+    if (input.len > max_uncompressed_meta_block_len) {
+        const chunks = [_][]const u8{input};
+        return encodePlannedStreamChunksWithOptionsAlloc(
+            allocator,
+            &chunks,
+            try plannedStreamChunksOptionsFromEncodeOptions(options),
+        );
+    }
     const compound_size = try plannedSharedDictionarySize(options.shared_dictionary);
     if (compound_size != 0) {
-        if (input.len > max_uncompressed_meta_block_len) {
-            const chunks = [_][]const u8{input};
-            return encodePlannedStreamChunksWithOptionsAlloc(allocator, &chunks, .{
-                .window_bits = try resolvedPlannedWindowBits(options),
-                .metadata = options.metadata,
-                .shared_dictionary = options.shared_dictionary,
-            });
-        }
         var matcher = compound_dictionary_matcher.Matcher.init(allocator);
         defer matcher.deinit();
         _ = try preparePlannedSharedDictionary(&matcher, options.shared_dictionary);
@@ -3026,16 +2990,11 @@ pub fn encodedPlannedStreamBound(input_len: usize) Error!usize {
 pub fn encodedPlannedStreamBoundWithOptions(input_len: usize, options: PlannedEncodeOptions) Error!usize {
     try validatePlannedEncodeOptions(input_len, options);
     const window_bits = try resolvedPlannedWindowBits(options);
-    const compound_size = try plannedSharedDictionarySize(options.shared_dictionary);
-    if (input_len > max_uncompressed_meta_block_len and
-        (options.quality != null or options.level == .ratio or compound_size != 0))
-    {
-        return encodedPlannedChunkedStreamBoundForInputLen(input_len, .{
-            .window_bits = window_bits,
-            .metadata = options.metadata,
-            .shared_dictionary = options.shared_dictionary,
-        });
-    }
+    if (input_len > max_uncompressed_meta_block_len)
+        return encodedPlannedChunkedStreamBoundForInputLen(
+            input_len,
+            try plannedStreamChunksOptionsFromEncodeOptions(options),
+        );
     return encodedStoredStreamBoundWithOptions(input_len, .{ .window_bits = window_bits, .metadata = options.metadata });
 }
 
@@ -3054,6 +3013,17 @@ fn resolvedPlannedWindowBits(options: PlannedEncodeOptions) Error!u5 {
         return schedule.window.resolve(options.window_bits) catch error.InvalidBlockPlan;
     }
     return options.window_bits orelse default_window_bits;
+}
+
+fn plannedStreamChunksOptionsFromEncodeOptions(options: PlannedEncodeOptions) Error!PlannedStreamChunksOptions {
+    return .{
+        .level = options.level,
+        .quality = options.quality,
+        .mode = options.mode,
+        .window_bits = try resolvedPlannedWindowBits(options),
+        .metadata = options.metadata,
+        .shared_dictionary = options.shared_dictionary,
+    };
 }
 
 fn qualityWireOptions(schedule: quality_schedule.Schedule, options: PlannedEncodeOptions, window_bits: u5) LazyWireOptions {
@@ -3083,16 +3053,7 @@ fn encodePlannedStreamQualityWithOptionsAlloc(
     const window_bits = schedule.window.resolve(options.window_bits) catch return error.InvalidBlockPlan;
     const stream_options = StoredStreamOptions{ .window_bits = window_bits, .metadata = options.metadata };
     if (input.len < 5) return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options);
-    if (input.len > max_uncompressed_meta_block_len) {
-        // Preserve one legal Brotli stream through the established bounded
-        // multi-meta-block path. Per-block quality planning is a follow-up;
-        // never return concatenated streams or silently exceed the format cap.
-        const chunks = [_][]const u8{input};
-        return encodePlannedStreamChunksWithOptionsAlloc(allocator, &chunks, .{
-            .window_bits = window_bits,
-            .metadata = options.metadata,
-        });
-    }
+    std.debug.assert(input.len <= max_uncompressed_meta_block_len);
 
     // Resolve q10 first so its planner scratch is gone before q11 constructs
     // the deeper plan. Only the complete q10 winner remains live, which keeps
@@ -3276,9 +3237,9 @@ fn retainSmallerOwnedWire(allocator: std.mem.Allocator, best: *[]u8, candidate: 
     } else allocator.free(candidate);
 }
 
-/// Conservative bound for a fast planned stream with one independently
-/// planned meta-block per non-empty chunk. Oversized chunks are split into
-/// 32 KiB blocks so parser memory remains bounded.
+/// Conservative bound for a planned stream with one policy-selected
+/// meta-block per bounded input block. Oversized chunks are split into 32 KiB
+/// blocks so parser memory remains bounded.
 pub fn encodedPlannedStreamChunksBound(chunks: []const []const u8) Error!usize {
     return encodedPlannedStreamChunksBoundWithOptions(chunks, .{});
 }
@@ -3298,7 +3259,7 @@ fn encodedPlannedChunkedStreamBoundForInputLen(input_len: usize, options: Planne
 }
 
 pub fn encodedPlannedStreamChunksBoundWithOptions(chunks: []const []const u8, options: PlannedStreamChunksOptions) Error!usize {
-    _ = try plannedSharedDictionarySize(options.shared_dictionary);
+    try validatePlannedStreamChunksOptions(options);
     var bit_count = try storedWindowBitsLen(options.window_bits);
     if (options.metadata.len != 0)
         bit_count = try addStoredMetadataMetaBlockBitsLen(bit_count, options.metadata.len);
@@ -3390,10 +3351,10 @@ pub fn encodePlannedStreamLazyAlloc(allocator: std.mem.Allocator, input: []const
 /// search for smaller Brotli streams. Keeping this distinct from `.balanced`
 /// makes the substantial encode-time cost explicit rather than silently
 /// slowing latency-sensitive users. Short inputs without a backward match use
-/// static-dictionary/stored arbitration so this stable level still accepts
-/// arbitrary payloads inside its documented one-meta-block size range.
+/// static-dictionary/stored arbitration. Larger inputs use the shared bounded
+/// multi-meta-block policy while remaining one Brotli stream.
 pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
-    return encodePlannedStreamRatioWithOptionsAlloc(allocator, input, .{ .level = .ratio });
+    return encodePlannedStreamWithOptionsAlloc(allocator, input, .{ .level = .ratio });
 }
 
 /// Profile the exact default-window ratio pipeline for one bounded block. The
@@ -3622,14 +3583,7 @@ fn encodePlannedStreamRatioWithOptionsAlloc(allocator: std.mem.Allocator, input:
     const window_bits = options.window_bits orelse default_window_bits;
     const window_len = try plannedWindowLen(.ratio, window_bits);
     const primary_window_len = @min(window_len, planner_max_backward_distance);
-    if (input.len > max_uncompressed_meta_block_len) {
-        // A Brotli meta-block can describe at most 2^24 output bytes. Keep the
-        // stable ratio API total over larger slices by emitting one bounded
-        // stream of independently planned blocks rather than failing or
-        // returning concatenated Brotli streams (which the format forbids).
-        const chunks = [_][]const u8{input};
-        return encodePlannedStreamChunksWithOptionsAlloc(allocator, &chunks, .{ .window_bits = window_bits, .metadata = options.metadata });
-    }
+    std.debug.assert(input.len <= max_uncompressed_meta_block_len);
     if (input.len < 5) return encodeStoredStreamWithOptionsAlloc(allocator, input, .{ .window_bits = window_bits, .metadata = options.metadata });
     const parser_options = PlannedParserOptions{
         .window_len = primary_window_len,
@@ -4213,6 +4167,599 @@ const PlannedWireContext = struct {
     initial_output_pos: usize = 0,
     starting_last_distances: [4]usize = initial_last_distances,
 };
+
+const PlannedMetaBlockPolicy = struct {
+    family: quality_schedule.LevelFamily,
+    lazy: quality_schedule.LazyBudget,
+    optimal: quality_schedule.OptimalBudget = .{
+        .enabled = false,
+        .max_chain = 0,
+        .nice_len = 0,
+        .max_candidates = 0,
+        .max_input_len = 0,
+    },
+    context: quality_schedule.ContextFlags = .{
+        .literal_contexts = false,
+        .cluster_contexts = false,
+        .joint_block_contexts = false,
+    },
+    dictionary: quality_schedule.DictionaryFlags = .{
+        .static_dictionary = false,
+        .extended_search = false,
+        .max_probes = 0,
+    },
+    split: quality_schedule.SplitFlags = .{
+        .literal = false,
+        .command = false,
+        .distance = false,
+        .adaptive_literal = false,
+        .adaptive_command = false,
+        .adaptive_distance = false,
+    },
+    use_recent_distances: bool = false,
+    search_distance_parameters: bool = false,
+    font_distance_candidate: bool = false,
+    hash_candidates: usize = 1,
+
+    fn fromLevel(level: PlannedCompressionLevel) PlannedMetaBlockPolicy {
+        return switch (level) {
+            .fast => .{
+                .family = .fast,
+                .lazy = .{ .max_chain = 64, .nice_len = 64, .min_gain = 1 },
+                .hash_candidates = 8,
+            },
+            .balanced => .{
+                .family = .balanced,
+                .lazy = .{ .max_chain = 64, .nice_len = 64, .min_gain = 1 },
+            },
+            .ratio => .{
+                .family = .ratio,
+                .lazy = .{ .max_chain = 512, .nice_len = lz77.max_match_len, .min_gain = 1 },
+                .context = .{
+                    .literal_contexts = true,
+                    .cluster_contexts = true,
+                    .joint_block_contexts = true,
+                },
+                .split = .{
+                    .literal = true,
+                    .command = true,
+                    .distance = true,
+                    .adaptive_literal = false,
+                    .adaptive_command = false,
+                    .adaptive_distance = false,
+                },
+                .use_recent_distances = true,
+                .dictionary = .{
+                    .static_dictionary = true,
+                    .extended_search = false,
+                    .max_probes = 0,
+                },
+            },
+        };
+    }
+
+    fn fromSchedule(schedule: quality_schedule.Schedule) PlannedMetaBlockPolicy {
+        return .{
+            .family = schedule.family,
+            .lazy = schedule.lazy,
+            .optimal = schedule.optimal,
+            .context = schedule.context,
+            .dictionary = schedule.dictionary,
+            .split = schedule.split,
+            .use_recent_distances = schedule.use_recent_distances,
+            .search_distance_parameters = schedule.search_distance_parameters,
+            .font_distance_candidate = schedule.mode == .font and schedule.quality.int() >= 4,
+        };
+    }
+};
+
+const PlannedMetaBlockCandidate = struct {
+    bit_index: u3 = 0,
+    bit_count: usize = 0,
+    wire_state: PlannedWireState = .{},
+};
+
+fn encodePlannedMetaBlockCandidate(
+    allocator: std.mem.Allocator,
+    bytes: *std.ArrayList(u8),
+    start_byte: u8,
+    start_bit_index: u3,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    initial_wire_state: PlannedWireState,
+    base_options: CommandPlanEncodeOptions,
+) Error!PlannedMetaBlockCandidate {
+    bytes.clearRetainingCapacity();
+    var candidate: PlannedMetaBlockCandidate = .{ .wire_state = initial_wire_state };
+    if (start_bit_index != 0) try bytes.append(allocator, start_byte);
+    var writer = BitWriter{ .out = bytes, .bit_index = start_bit_index };
+    var options = base_options;
+    options.write_stream_prefix = false;
+    options.final_meta_block = false;
+    options.initial_output_pos = initial_wire_state.output_pos;
+    options.starting_last_distances = initial_wire_state.last_distances;
+    options.final_wire_state = &candidate.wire_state;
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    try encodeCommandPlanWithOptionsWrite(
+        allocator,
+        &writer,
+        input,
+        commands,
+        null,
+        &stats,
+        options,
+    );
+    candidate.bit_index = writer.bit_index;
+    candidate.bit_count = writer.bitPosition() - start_bit_index;
+    return candidate;
+}
+
+fn retainSmallerMetaBlockCandidate(
+    allocator: std.mem.Allocator,
+    best: *?PlannedMetaBlockCandidate,
+    candidate_wire: *std.ArrayList(u8),
+    best_wire: *std.ArrayList(u8),
+    candidate: PlannedMetaBlockCandidate,
+) Error!void {
+    if (best.* == null or candidate.bit_count < best.*.?.bit_count) {
+        best_wire.clearRetainingCapacity();
+        try best_wire.appendSlice(allocator, candidate_wire.items);
+        candidate_wire.clearRetainingCapacity();
+        best.* = candidate;
+    } else {
+        candidate_wire.clearRetainingCapacity();
+    }
+}
+
+fn considerPlannedMetaBlockCommands(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    policy: PlannedMetaBlockPolicy,
+    window_bits: u5,
+    compound_dictionary_size: usize,
+    start_byte: u8,
+    start_bit_index: u3,
+    wire_state: PlannedWireState,
+    best: *?PlannedMetaBlockCandidate,
+    candidate_wire: *std.ArrayList(u8),
+    best_wire: *std.ArrayList(u8),
+) Error!void {
+    const common = CommandPlanEncodeOptions{
+        .window_bits = window_bits,
+        .compound_dictionary_size = compound_dictionary_size,
+    };
+    if (encodePlannedMetaBlockCandidate(
+        allocator,
+        candidate_wire,
+        start_byte,
+        start_bit_index,
+        input,
+        commands,
+        wire_state,
+        common,
+    )) |candidate| {
+        try retainSmallerMetaBlockCandidate(allocator, best, candidate_wire, best_wire, candidate);
+    } else |err| switch (err) {
+        error.InvalidBlockPlan => {},
+        else => return err,
+    }
+    if (!policy.use_recent_distances and !policy.context.literal_contexts and
+        !policy.split.literal and !policy.split.command and
+        !policy.split.distance and !policy.split.adaptive_literal and
+        !policy.split.adaptive_command and !policy.split.adaptive_distance and
+        !policy.font_distance_candidate and !policy.search_distance_parameters)
+        return;
+
+    const literal_context_candidate = if (policy.context.literal_contexts)
+        if (policy.context.cluster_contexts)
+            try literal_context_split.choose(allocator, input, commands)
+        else
+            try literal_context_split.chooseSuffix(allocator, input, commands)
+    else
+        null;
+    const literal_split = if (policy.split.literal)
+        literal_block_split.choose(
+            input,
+            commands,
+            if (literal_context_candidate) |candidate| candidate.suffixCutoff() else null,
+        )
+    else
+        null;
+    var adaptive_literal = if (policy.split.adaptive_literal)
+        try chooseAdaptiveLiteralSplitAlloc(allocator, input, commands)
+    else
+        null;
+    defer if (adaptive_literal) |*plan| plan.deinit(allocator);
+    var joint_literal = if (adaptive_literal != null and policy.context.joint_block_contexts)
+        literal_joint_context_split.chooseAlloc(
+            allocator,
+            input,
+            commands,
+            adaptive_literal.?,
+            .{},
+        ) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.IntegerOverflow => return error.IntegerOverflow,
+            else => null,
+        }
+    else
+        null;
+    defer if (joint_literal) |*plan| plan.deinit(allocator);
+    var symbol_splits = try chooseCommandAndDistanceSplitsAlloc(
+        allocator,
+        commands,
+        policy.use_recent_distances,
+        policy.split.command,
+        policy.split.adaptive_command,
+        policy.split.distance,
+        policy.split.adaptive_distance,
+        .{
+            .window_bits = window_bits,
+            .compound_dictionary_size = compound_dictionary_size,
+            .initial_output_pos = wire_state.output_pos,
+            .starting_last_distances = wire_state.last_distances,
+        },
+    );
+    defer symbol_splits.deinit(allocator);
+    const enhanced = CommandPlanEncodeOptions{
+        .use_recent_distances = policy.use_recent_distances,
+        .literal_context_candidate = if (joint_literal == null) literal_context_candidate else null,
+        .literal_split = if (adaptive_literal == null and joint_literal == null) literal_split else null,
+        .adaptive_literal_split = if (joint_literal == null)
+            if (adaptive_literal) |*plan| plan else null
+        else
+            null,
+        .literal_entropy_plan = if (joint_literal) |*plan| plan else null,
+        .command_split = if (symbol_splits.adaptive_command == null)
+            symbol_splits.command.three orelse symbol_splits.command.two
+        else
+            null,
+        .adaptive_command_split = if (symbol_splits.adaptive_command) |*plan| plan else null,
+        .distance_split = if (symbol_splits.adaptive_distance == null)
+            symbol_splits.distance.three orelse symbol_splits.distance.two
+        else
+            null,
+        .adaptive_distance_split = if (symbol_splits.adaptive_distance) |*plan| plan else null,
+        .window_bits = window_bits,
+        .compound_dictionary_size = compound_dictionary_size,
+    };
+    if (encodePlannedMetaBlockCandidate(
+        allocator,
+        candidate_wire,
+        start_byte,
+        start_bit_index,
+        input,
+        commands,
+        wire_state,
+        enhanced,
+    )) |candidate| {
+        try retainSmallerMetaBlockCandidate(allocator, best, candidate_wire, best_wire, candidate);
+    } else |err| switch (err) {
+        error.InvalidBlockPlan => {},
+        else => return err,
+    }
+    if (policy.font_distance_candidate) {
+        var font = enhanced;
+        font.distance_parameters = encoder_distance.Parameters.init(1, 6);
+        font.optimize_same_last_distance = false;
+        if (encodePlannedMetaBlockCandidate(
+            allocator,
+            candidate_wire,
+            start_byte,
+            start_bit_index,
+            input,
+            commands,
+            wire_state,
+            font,
+        )) |candidate| {
+            try retainSmallerMetaBlockCandidate(allocator, best, candidate_wire, best_wire, candidate);
+        } else |err| switch (err) {
+            error.InvalidBlockPlan => {},
+            else => return err,
+        }
+    }
+    if (policy.search_distance_parameters and policy.use_recent_distances and
+        enhanced.distance_split == null and enhanced.adaptive_distance_split == null)
+    {
+        if (try chooseDistanceParameterAlternativeAlloc(
+            allocator,
+            commands,
+            enhanced,
+        )) |parameters| {
+            var distance_candidate = enhanced;
+            distance_candidate.distance_parameters = parameters;
+            distance_candidate.optimize_same_last_distance = false;
+            if (encodePlannedMetaBlockCandidate(
+                allocator,
+                candidate_wire,
+                start_byte,
+                start_bit_index,
+                input,
+                commands,
+                wire_state,
+                distance_candidate,
+            )) |candidate| {
+                try retainSmallerMetaBlockCandidate(allocator, best, candidate_wire, best_wire, candidate);
+            } else |err| switch (err) {
+                error.InvalidBlockPlan => {},
+                else => return err,
+            }
+        }
+    }
+}
+
+fn considerPlannedMetaBlockPolicy(
+    allocator: std.mem.Allocator,
+    state: *IncrementalPlannedEncoderCodec.State,
+    input: []const u8,
+    policy: PlannedMetaBlockPolicy,
+    start_byte: u8,
+    start_bit_index: u3,
+    best: *?PlannedMetaBlockCandidate,
+) Error!void {
+    const max_backward_distance = (@as(usize, 1) << state.window_bits) - 16;
+    const parser_options = lz77.GreedyOptions{
+        .window_len = if (state.history.items.len == 0)
+            @min(input.len, max_backward_distance)
+        else
+            max_backward_distance,
+        .max_chain = policy.lazy.max_chain,
+        .nice_len = policy.lazy.nice_len,
+        .max_candidates = if (policy.family == .fast) policy.hash_candidates else 1,
+        .lazy_min_gain = policy.lazy.min_gain,
+        .min_match = 3,
+        .max_match = lz77.max_match_len,
+    };
+    const plan_stats = if (state.history.items.len == 0)
+        switch (policy.family) {
+            .fast => try lz77.hashGreedyPlanAutoTinyScratchReuse(
+                &state.tokens,
+                &state.greedy_scratch,
+                allocator,
+                input,
+                parser_options,
+            ),
+            .balanced, .ratio => try lz77.lazyGreedyPlanTinyReuse(
+                &state.tokens,
+                allocator,
+                input,
+                parser_options,
+            ),
+        }
+    else switch (policy.family) {
+        .fast => try lz77.hashGreedyPlanWithDictionaryReuse(
+            &state.tokens,
+            &state.dictionary_greedy_scratch,
+            allocator,
+            input,
+            state.history.items,
+            parser_options,
+        ),
+        .balanced, .ratio => try lz77.lazyGreedyPlanWithDictionaryReuse(
+            &state.tokens,
+            &state.dictionary_greedy_scratch,
+            allocator,
+            input,
+            state.history.items,
+            parser_options,
+        ),
+    };
+    if (plan_stats.matches != 0 or state.compound_dictionary_size != 0 or
+        policy.dictionary.static_dictionary)
+    {
+        _ = if (state.history.items.len == 0)
+            try command_plan.buildTrustedReuse(&state.commands, allocator, input, state.tokens.items)
+        else
+            try command_plan.buildWithDictionaryReuse(
+                &state.commands,
+                allocator,
+                input,
+                state.history.items.len,
+                state.tokens.items,
+            );
+        const mixed = if (state.compound_dictionary_size != 0)
+            try command_plan.mixCompoundDictionaryAlloc(
+                allocator,
+                input,
+                state.commands.items,
+                &state.compound_matcher.?,
+                compound_dictionary_matcher.bucket_ways,
+            )
+        else
+            null;
+        defer if (mixed) |plan| plan.deinit(allocator);
+        const commands = if (mixed) |plan| plan.commands else state.commands.items;
+        if (plan_stats.matches != 0 or (mixed != null and mixed.?.match_count != 0))
+            try considerPlannedMetaBlockCommands(
+                allocator,
+                input,
+                commands,
+                policy,
+                state.window_bits,
+                state.compound_dictionary_size,
+                start_byte,
+                start_bit_index,
+                state.wire_state,
+                best,
+                &state.candidate_wire,
+                &state.best_wire,
+            );
+        if (policy.dictionary.static_dictionary and
+            input.len <= ratio_extended_static_dictionary_max_input_len)
+        {
+            const with_static = if (input.len <= ratio_static_dictionary_max_input_len)
+                try command_plan.mixStaticDictionaryAlloc(
+                    allocator,
+                    input,
+                    commands,
+                )
+            else if (policy.dictionary.extended_search and policy.dictionary.max_probes != 0)
+                try command_plan.mixStaticDictionaryWithCacheProbeLimitAlloc(
+                    allocator,
+                    input,
+                    commands,
+                    null,
+                    policy.dictionary.max_probes,
+                )
+            else
+                null;
+            defer if (with_static) |plan| plan.deinit(allocator);
+            if (with_static) |plan| if (plan.match_count != 0)
+                try considerPlannedMetaBlockCommands(
+                    allocator,
+                    input,
+                    plan.commands,
+                    policy,
+                    state.window_bits,
+                    state.compound_dictionary_size,
+                    start_byte,
+                    start_bit_index,
+                    state.wire_state,
+                    best,
+                    &state.candidate_wire,
+                    &state.best_wire,
+                );
+        }
+    }
+
+    if (policy.optimal.enabled and input.len >= 4 * 1024 and
+        input.len <= policy.optimal.max_input_len)
+    {
+        const optimal = try lz77.optimalPlanAlloc(allocator, input, .{
+            .window_len = @min(input.len, @min(max_backward_distance, lz77.default_window_len)),
+            .max_chain = policy.optimal.max_chain,
+            .nice_len = policy.optimal.nice_len,
+            .max_candidates = policy.optimal.max_candidates,
+            .min_match = 4,
+            .max_match = lz77.max_match_len,
+        });
+        defer optimal.deinit(allocator);
+        if (optimal.stats.matches != 0) {
+            const commands = try command_plan.buildAlloc(allocator, input, optimal.tokens);
+            defer commands.deinit(allocator);
+            try considerPlannedMetaBlockCommands(
+                allocator,
+                input,
+                commands.commands,
+                policy,
+                state.window_bits,
+                state.compound_dictionary_size,
+                start_byte,
+                start_bit_index,
+                state.wire_state,
+                best,
+                &state.candidate_wire,
+                &state.best_wire,
+            );
+        }
+    }
+}
+
+fn commitPlannedMetaBlockCandidate(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    start_bit_index: u3,
+    bytes: []const u8,
+) Error!void {
+    if (start_bit_index == 0) {
+        try out.appendSlice(allocator, bytes);
+    } else {
+        std.debug.assert(out.items.len != 0 and bytes.len != 0);
+        out.items[out.items.len - 1] = bytes[0];
+        try out.appendSlice(allocator, bytes[1..]);
+    }
+}
+
+fn writePlannedStreamMetaBlock(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    state: *IncrementalPlannedEncoderCodec.State,
+    block: []const u8,
+) Error!void {
+    if (block.len == 0 or block.len > planned_chunk_max_input_len)
+        return error.InvalidBlockPlan;
+    const start_len = out.items.len;
+    const start_bit_index = state.bit_index;
+    const start_byte = if (start_len == 0) 0 else out.items[start_len - 1];
+    const start_bits = IncrementalPlannedEncoderCodec.startBitPosition(start_len, start_bit_index);
+    const stored_end_bits = try addStoredUncompressedMetaBlockBitsLen(start_bits, block.len);
+    const stored_bit_count = stored_end_bits - start_bits;
+    const start_wire_state = state.wire_state;
+    state.candidate_wire.clearRetainingCapacity();
+    state.best_wire.clearRetainingCapacity();
+    var best: ?PlannedMetaBlockCandidate = null;
+
+    if (state.quality) |quality| {
+        const schedule = quality_schedule.getInt(quality, state.mode) catch
+            return error.InvalidBlockPlan;
+        if (schedule.quality == .q11) {
+            const q10 = quality_schedule.get(.q10, schedule.mode);
+            try considerPlannedMetaBlockPolicy(
+                allocator,
+                state,
+                block,
+                PlannedMetaBlockPolicy.fromSchedule(q10),
+                start_byte,
+                start_bit_index,
+                &best,
+            );
+        }
+        try considerPlannedMetaBlockPolicy(
+            allocator,
+            state,
+            block,
+            PlannedMetaBlockPolicy.fromSchedule(schedule),
+            start_byte,
+            start_bit_index,
+            &best,
+        );
+    } else {
+        try considerPlannedMetaBlockPolicy(
+            allocator,
+            state,
+            block,
+            PlannedMetaBlockPolicy.fromLevel(state.level),
+            start_byte,
+            start_bit_index,
+            &best,
+        );
+    }
+
+    if (best) |candidate| {
+        if (candidate.bit_count <= stored_bit_count) {
+            try commitPlannedMetaBlockCandidate(
+                allocator,
+                out,
+                start_bit_index,
+                state.best_wire.items,
+            );
+            state.bit_index = candidate.bit_index;
+            state.wire_state = candidate.wire_state;
+        } else {
+            var writer = BitWriter{ .out = out, .bit_index = start_bit_index };
+            try writeUncompressedMetaBlock(allocator, &writer, block);
+            state.bit_index = writer.bit_index;
+            state.wire_state = start_wire_state;
+            state.wire_state.output_pos = std.math.add(usize, start_wire_state.output_pos, block.len) catch
+                return error.IntegerOverflow;
+        }
+    } else {
+        var writer = BitWriter{ .out = out, .bit_index = start_bit_index };
+        try writeUncompressedMetaBlock(allocator, &writer, block);
+        state.bit_index = writer.bit_index;
+        state.wire_state = start_wire_state;
+        state.wire_state.output_pos = std.math.add(usize, start_wire_state.output_pos, block.len) catch
+            return error.IntegerOverflow;
+    }
+    const max_backward_distance = (@as(usize, 1) << state.window_bits) - 16;
+    try IncrementalPlannedEncoderCodec.appendHistory(
+        &state.history,
+        allocator,
+        block,
+        max_backward_distance,
+    );
+}
 const min_recent_distance_candidate_count: usize = 64;
 const planned_command_symbol_cache_capacity: usize = 128;
 const LazyWireOptions = struct {
@@ -4426,6 +4973,7 @@ pub const PlannedStreamEncoder = struct {
     output: std.ArrayList(u8) = .empty,
     greedy_scratch: lz77.TinyGreedyScratch = .{},
     compound_matcher: compound_dictionary_matcher.Matcher,
+    stream_state: IncrementalPlannedEncoderCodec.State = .{},
 
     pub fn init(allocator: std.mem.Allocator) PlannedStreamEncoder {
         return .{
@@ -4435,6 +4983,7 @@ pub const PlannedStreamEncoder = struct {
     }
 
     pub fn deinit(self: *PlannedStreamEncoder) void {
+        IncrementalPlannedEncoderCodec.deinitState(&self.stream_state, self.allocator);
         self.greedy_scratch.deinit(self.allocator);
         self.compound_matcher.deinit();
         self.tokens.deinit(self.allocator);
@@ -4480,16 +5029,16 @@ pub const PlannedStreamEncoder = struct {
     /// inputs retain their one-shot paths because they need wider search state.
     pub fn encodeWithOptionsAlloc(self: *PlannedStreamEncoder, allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
         try validatePlannedEncodeOptions(input.len, options);
+        if (input.len > max_uncompressed_meta_block_len) {
+            const chunks = [_][]const u8{input};
+            return self.encodeChunksWithOptionsAlloc(
+                allocator,
+                &chunks,
+                try plannedStreamChunksOptionsFromEncodeOptions(options),
+            );
+        }
         const compound_size = try preparePlannedSharedDictionary(&self.compound_matcher, options.shared_dictionary);
         if (compound_size != 0) {
-            if (input.len > max_uncompressed_meta_block_len) {
-                const chunks = [_][]const u8{input};
-                return self.encodeChunksWithOptionsAlloc(allocator, &chunks, .{
-                    .window_bits = try resolvedPlannedWindowBits(options),
-                    .metadata = options.metadata,
-                    .shared_dictionary = options.shared_dictionary,
-                });
-            }
             return encodePlannedStreamWithPreparedSharedDictionaryAlloc(
                 allocator,
                 input,
@@ -4543,17 +5092,18 @@ pub const PlannedStreamEncoder = struct {
             self.commands.capacity * @sizeOf(command_plan.Command) +
             self.output.capacity +
             self.greedy_scratch.retainedCapacity() +
-            self.compound_matcher.retainedCapacity();
+            self.compound_matcher.retainedCapacity() +
+            IncrementalPlannedEncoderCodec.stateRetainedCapacity(&self.stream_state);
     }
 
-    /// Encode a fast-level stream into retained encoder-owned output. The
+    /// Encode a planned stream into retained encoder-owned output. The
     /// returned slice is invalidated by the next call or by `deinit`. This path
     /// avoids allocating an owned result once input/output capacities stabilize.
     pub fn encodeScratch(self: *PlannedStreamEncoder, input: []const u8) Error![]const u8 {
         return self.encodeScratchWithOptions(input, .{});
     }
 
-    /// Encode one Brotli stream containing multiple independently planned fast
+    /// Encode one Brotli stream containing multiple history-aware planned
     /// meta-blocks. Empty chunks are ignored, and chunks above 32 KiB are split
     /// to keep parser state bounded. The returned slice is invalidated by the
     /// next call or by `deinit`.
@@ -4562,113 +5112,34 @@ pub const PlannedStreamEncoder = struct {
     }
 
     pub fn encodeChunksScratchWithOptions(self: *PlannedStreamEncoder, chunks: []const []const u8, options: PlannedStreamChunksOptions) Error![]const u8 {
-        const compound_size = try preparePlannedSharedDictionary(&self.compound_matcher, options.shared_dictionary);
+        try validatePlannedStreamChunksOptions(options);
+        IncrementalPlannedEncoderCodec.resetState(&self.stream_state);
         self.output.clearRetainingCapacity();
-        var writer = BitWriter{ .out = &self.output };
-        try writeWindowBits(self.allocator, &writer, options.window_bits);
-        if (options.metadata.len != 0) try writeMetadataMetaBlock(self.allocator, &writer, options.metadata);
-        const window_len = (@as(usize, 1) << options.window_bits) - 16;
-        var wire_state: PlannedWireState = .{};
-        var stored_ceiling_bits = writer.bitPosition();
+        try IncrementalPlannedEncoderCodec.writePrefix(
+            self.allocator,
+            &self.output,
+            &self.stream_state,
+            options,
+        );
         for (chunks) |chunk| {
             var offset: usize = 0;
             while (offset < chunk.len) {
                 const block_len = @min(chunk.len - offset, planned_chunk_max_input_len);
-                stored_ceiling_bits = try addStoredUncompressedMetaBlockBitsLen(stored_ceiling_bits, block_len);
-                try self.encodeFastMetaBlock(
-                    &writer,
+                try IncrementalPlannedEncoderCodec.writeBlock(
+                    self.allocator,
+                    &self.output,
+                    &self.stream_state,
                     chunk[offset..][0..block_len],
-                    stored_ceiling_bits,
-                    window_len,
-                    if (compound_size == 0) null else &self.compound_matcher,
-                    compound_size,
-                    &wire_state,
                 );
                 offset += block_len;
             }
         }
-        try writer.writeBits(self.allocator, 1, 1); // ISLAST.
-        try writer.writeBits(self.allocator, 1, 1); // ISLASTEMPTY.
+        try IncrementalPlannedEncoderCodec.writeFinal(
+            self.allocator,
+            &self.output,
+            &self.stream_state,
+        );
         return self.output.items;
-    }
-
-    fn encodeFastMetaBlock(
-        self: *PlannedStreamEncoder,
-        writer: *BitWriter,
-        input: []const u8,
-        stored_ceiling_bits: usize,
-        window_len: usize,
-        matcher: ?*const compound_dictionary_matcher.Matcher,
-        compound_size: usize,
-        wire_state: *PlannedWireState,
-    ) Error!void {
-        std.debug.assert(input.len != 0 and input.len <= planned_chunk_max_input_len);
-        const start_len = self.output.items.len;
-        const start_bit_index = writer.bit_index;
-        const start_byte = self.output.items[start_len - 1];
-        const stats = try lz77.hashGreedyPlanAutoTinyScratchReuse(&self.tokens, &self.greedy_scratch, self.allocator, input, .{
-            .window_len = @min(input.len, window_len),
-            .max_chain = 64,
-            .nice_len = 64,
-            .max_candidates = 8,
-            .min_match = 3,
-            .max_match = lz77.max_match_len,
-        });
-        if (stats.matches == 0 and matcher == null)
-            return self.replacePlannedBlockWithStored(writer, input, start_len, start_bit_index, start_byte);
-        _ = command_plan.buildTrustedReuse(&self.commands, self.allocator, input, self.tokens.items) catch |err| switch (err) {
-            error.InvalidBlockPlan => return self.replacePlannedBlockWithStored(writer, input, start_len, start_bit_index, start_byte),
-            else => return err,
-        };
-        const mixed = if (matcher) |active|
-            try command_plan.mixCompoundDictionaryAlloc(
-                self.allocator,
-                input,
-                self.commands.items,
-                active,
-                compound_dictionary_matcher.bucket_ways,
-            )
-        else
-            null;
-        defer if (mixed) |plan| plan.deinit(self.allocator);
-        const commands = if (mixed) |plan| plan.commands else self.commands.items;
-        if (stats.matches == 0 and (mixed == null or mixed.?.match_count == 0)) {
-            try self.replacePlannedBlockWithStored(writer, input, start_len, start_bit_index, start_byte);
-            wire_state.output_pos = std.math.add(usize, wire_state.output_pos, input.len) catch
-                return error.IntegerOverflow;
-            return;
-        }
-        var stats_out: encoder_stats.PlannedEncodeStats = .{};
-        var candidate_state = wire_state.*;
-        const compressed_ok = blk: {
-            encodeCommandPlanWithOptionsWrite(self.allocator, writer, input, commands, null, &stats_out, .{
-                .write_stream_prefix = false,
-                .final_meta_block = false,
-                .window_bits = @intCast(std.math.log2_int(usize, window_len + 16)),
-                .compound_dictionary_size = compound_size,
-                .initial_output_pos = if (compound_size == 0) 0 else wire_state.output_pos,
-                .starting_last_distances = if (compound_size == 0) initial_last_distances else wire_state.last_distances,
-                .final_wire_state = if (compound_size == 0) null else &candidate_state,
-            }) catch |err| switch (err) {
-                error.InvalidBlockPlan => break :blk false,
-                else => return err,
-            };
-            break :blk true;
-        };
-        if (compressed_ok and writer.bitPosition() <= stored_ceiling_bits) {
-            wire_state.* = candidate_state;
-            return;
-        }
-        try self.replacePlannedBlockWithStored(writer, input, start_len, start_bit_index, start_byte);
-        wire_state.output_pos = std.math.add(usize, wire_state.output_pos, input.len) catch
-            return error.IntegerOverflow;
-    }
-
-    fn replacePlannedBlockWithStored(self: *PlannedStreamEncoder, writer: *BitWriter, input: []const u8, start_len: usize, start_bit_index: u3, start_byte: u8) Error!void {
-        self.output.shrinkRetainingCapacity(start_len);
-        self.output.items[start_len - 1] = start_byte;
-        writer.bit_index = start_bit_index;
-        try writeUncompressedMetaBlock(self.allocator, writer, input);
     }
 
     /// Encode into retained encoder-owned output. Fast and balanced reuse their
@@ -4677,16 +5148,15 @@ pub const PlannedStreamEncoder = struct {
     /// The returned slice is invalidated by the next call or by `deinit`.
     pub fn encodeScratchWithOptions(self: *PlannedStreamEncoder, input: []const u8, options: PlannedEncodeOptions) Error![]const u8 {
         try validatePlannedEncodeOptions(input.len, options);
+        if (input.len > max_uncompressed_meta_block_len) {
+            const chunks = [_][]const u8{input};
+            return self.encodeChunksScratchWithOptions(
+                &chunks,
+                try plannedStreamChunksOptionsFromEncodeOptions(options),
+            );
+        }
         const compound_size = try preparePlannedSharedDictionary(&self.compound_matcher, options.shared_dictionary);
         if (compound_size != 0) {
-            if (input.len > max_uncompressed_meta_block_len) {
-                const chunks = [_][]const u8{input};
-                return self.encodeChunksScratchWithOptions(&chunks, .{
-                    .window_bits = try resolvedPlannedWindowBits(options),
-                    .metadata = options.metadata,
-                    .shared_dictionary = options.shared_dictionary,
-                });
-            }
             const encoded = try encodePlannedStreamWithPreparedSharedDictionaryAlloc(
                 self.allocator,
                 input,
