@@ -1,6 +1,33 @@
 const std = @import("std");
 const vort = @import("vort");
 
+const QualityCase = struct {
+    quality: u4,
+    mode: vort.BrotliPlannedMode,
+    name: []const u8,
+};
+
+fn parseQualityCase(argument: []const u8) ?QualityCase {
+    if (argument.len < "q0-font-x".len or argument[0] != 'q') return null;
+    const quality_end = std.mem.indexOfScalar(u8, argument, '-') orelse return null;
+    const quality = std.fmt.parseInt(u8, argument[1..quality_end], 10) catch return null;
+    if (quality > 11) return null;
+
+    const mode_and_name = argument[quality_end + 1 ..];
+    const mode_end = std.mem.indexOfScalar(u8, mode_and_name, '-') orelse return null;
+    const mode: vort.BrotliPlannedMode = if (std.mem.eql(u8, mode_and_name[0..mode_end], "generic"))
+        .generic
+    else if (std.mem.eql(u8, mode_and_name[0..mode_end], "text"))
+        .text
+    else if (std.mem.eql(u8, mode_and_name[0..mode_end], "font"))
+        .font
+    else
+        return null;
+    const name = mode_and_name[mode_end + 1 ..];
+    if (name.len == 0) return null;
+    return .{ .quality = @intCast(quality), .mode = mode, .name = name };
+}
+
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
     defer args.deinit();
@@ -11,6 +38,7 @@ pub fn main(init: std.process.Init) !void {
     const static_dictionary = std.mem.startsWith(u8, mode, "dictionary-");
     const stable_fast = std.mem.startsWith(u8, mode, "stable-fast-");
     const stable_balanced = std.mem.startsWith(u8, mode, "stable-balanced-");
+    const quality_case = parseQualityCase(mode);
     const dictionary_index_bytes = std.mem.eql(u8, mode, "dictionary-index-bytes");
     if (dictionary_index_bytes) {
         var text: [32]u8 = undefined;
@@ -314,7 +342,7 @@ pub fn main(init: std.process.Init) !void {
         try std.Io.File.stdout().writeStreamingAll(init.io, encoded.items);
         return;
     }
-    const name = if (lazy) mode["lazy-".len..] else if (ratio) mode["ratio-".len..] else if (static_dictionary) mode["dictionary-".len..] else if (stable_fast) mode["stable-fast-".len..] else if (stable_balanced) mode["stable-balanced-".len..] else mode;
+    const name = if (quality_case) |case| case.name else if (lazy) mode["lazy-".len..] else if (ratio) mode["ratio-".len..] else if (static_dictionary) mode["dictionary-".len..] else if (stable_fast) mode["stable-fast-".len..] else if (stable_balanced) mode["stable-balanced-".len..] else mode;
     const payload = if (std.mem.eql(u8, name, "json"))
         "{\"kind\":\"event\",\"active\":true,\"values\":[1,2,3,5,8,13]}\n" ** 48
     else if (std.mem.eql(u8, name, "source"))
@@ -341,7 +369,12 @@ pub fn main(init: std.process.Init) !void {
         "abcd"
     else
         return error.InvalidBlockPlan;
-    const encoded = if (stable_fast)
+    const encoded = if (quality_case) |case|
+        try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, payload, .{
+            .quality = case.quality,
+            .mode = case.mode,
+        })
+    else if (stable_fast)
         try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, payload, .{ .level = .fast })
     else if (stable_balanced)
         try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, payload, .{ .level = .balanced })

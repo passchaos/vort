@@ -27,6 +27,15 @@ def main() -> int:
             if actual != expected:
                 raise SystemExit(f"{mode}: node output mismatch")
             print(f"brotli planned {mode} node diff: encoded={len(encoded)} decoded={len(actual)}")
+    quality_modes = ("generic", "text", "font")
+    for quality in range(12):
+        for planned_mode, (name, expected) in zip(quality_modes, cases):
+            mode = f"q{quality}-{planned_mode}-{name}"
+            encoded = subprocess.check_output([sys.argv[1], mode])
+            actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+            if actual != expected:
+                raise SystemExit(f"{mode}: node output mismatch")
+            print(f"brotli planned {mode} node diff: encoded={len(encoded)} decoded={len(actual)}")
     expected = (
         b"alpha beta gamma delta alpha beta gamma delta " * 64
         + b"qzxwvbnm1234567890QZXWVBNM!@#$%^&*"

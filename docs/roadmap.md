@@ -16,12 +16,14 @@ major gaps before Vort can claim broad industry-best parity:
 
 - Full libbrotli-class general-purpose compression is not implemented. The
   production encoder now covers stored streams, compressed-or-stored
-  planner-backed LZ77/Huffman streams, bounded multi-meta-block input, and a
-  vetted static-dictionary subset. Ratio mode now also has bounded two-to-six
-  region literal, command, and distance entropy splitting with cyclic tree
-  reuse, but still lacks libbrotli's complete adaptive multi-type block
-  splitting and clustering, libbrotli-class adaptive context clustering, and
-  the complete quality/ratio range.
+  planner-backed LZ77/Huffman streams, bounded multi-meta-block input, a vetted
+  static-dictionary subset, and a Vort-native q0...q11 by generic/text/font
+  policy matrix. Ratio-oriented presets can use bounded literal, command, and
+  distance splitting and context clustering, but the matrix is not libbrotli
+  algorithm, byte, ratio, or throughput parity. Specialized q0/q1 fragment
+  encoders, q2/q3 entropy writers, q10/q11 Zopfli/HQ cost refinement,
+  shared/contextual/compound dictionaries, and quality-aware large-stream
+  planning remain open.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
   entropy block switching, static dictionaries, consecutive compressed
@@ -110,9 +112,33 @@ missing files/categories and counter mismatches; optional `--extra-file` inputs
 from neighboring checkouts add coverage without replacing the required set.
 
 The next highest-value deliverable is broader real-corpus and cross-platform
-Brotli decoder evidence, followed by the remaining general Brotli encoder
-features and ratio work. Performance work should then resume on the profiled
-DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
+Brotli decoder evidence, followed by the missing quality-specific Brotli
+encoder engines and large-stream planning listed below. Performance work should
+then resume on the profiled DEFLATE matcher/tree stages with pinned, interleaved
+A/B evidence.
+
+The planned Brotli one-shot encoder now exposes `quality = 0...11` and
+`mode = generic/text/font`, backed by a deterministic 12-by-3 policy matrix.
+It maps q0/q1 to the fast family, q2...q5 to balanced, and q6...q11 to ratio;
+search budgets rise by quality, bounded optimal candidates begin at q6,
+ordinary entropy splitting begins at q4, and higher presets progressively
+enable adaptive distance/literal/command proposals. Generic, text, and font use
+the same parser, context, and dictionary budgets. Their only current policy
+difference is a font-only q4+ complete-wire candidate using
+`NPOSTFIX=1, NDIRECT=12`. q0/q1 use the hash-greedy planner; q2...q11 use lazy planning.
+q10's 256-chain/128-candidate optimal search applies through 64 KiB, while
+q11's deeper 512/256 search is limited to 32 KiB and always retains the complete
+q10 winner, guaranteeing q11 output is no larger than q10 for the same options.
+All candidates still use the existing Vort planners and exact complete-wire
+arbitration against other candidates and stored output. The 36 schedule entries
+are validated, including equal cross-mode base policy, and the Node differential
+decodes one deterministic generic/text/font corpus at each quality. This proves
+valid interoperable Brotli output, not equality with libbrotli's output or
+compression/performance curve. Inputs above the 16 MiB single-meta-block limit
+currently use the existing 32 KiB bounded chunk planner; their requested
+quality/mode is not yet applied per block. Full details and the deliberately
+unclaimed parity dimensions are tracked in
+[`docs/performance/brotli-quality-presets.md`](performance/brotli-quality-presets.md).
 
 One-shot planned Brotli encoding now accepts an explicit 10...16-bit window at
 all fast/balanced/ratio levels, plus 17...24-bit windows at ratio level. The

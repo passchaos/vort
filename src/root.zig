@@ -611,6 +611,7 @@ pub const BrotliPlannedEncodeStats = br.PlannedEncodeStats;
 pub const BrotliRatioEncodeProfile = br.RatioEncodeProfile;
 pub const BrotliLiteralContextProfile = br.LiteralContextProfile;
 pub const BrotliPlannedCompressionLevel = br.PlannedCompressionLevel;
+pub const BrotliPlannedMode = br.PlannedMode;
 pub const BrotliPlannedEncodeOptions = br.PlannedEncodeOptions;
 pub const brotliMaxExtendedDictionaryProbes = br.max_extended_dictionary_probes;
 pub const BrotliPlannedStreamChunksOptions = br.PlannedStreamChunksOptions;
@@ -664,6 +665,18 @@ pub const BrotliIncrementalRleStreamDecoder = br.IncrementalRleStreamDecoder;
 pub const BrotliIncrementalStoredStreamDecoder = br.IncrementalStoredStreamDecoder;
 pub const BrotliIncrementalStoredStreamEncoder = br.IncrementalStoredStreamEncoder;
 pub const BrotliIncrementalPlannedStreamEncoder = br.IncrementalPlannedStreamEncoder;
+
+test "root Brotli planned mode is part of the public options API" {
+    inline for (.{
+        BrotliPlannedMode.generic,
+        BrotliPlannedMode.text,
+        BrotliPlannedMode.font,
+    }) |mode| {
+        const options: BrotliPlannedEncodeOptions = .{ .mode = mode };
+        const internal: br.PlannedMode = options.mode;
+        try std.testing.expectEqual(mode, internal);
+    }
+}
 
 test "root Brotli incremental decoder continues framed payloads" {
     const first = try br.IncrementalTestSupport.encodeStored(std.testing.allocator, "one");
