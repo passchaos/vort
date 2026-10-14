@@ -1166,6 +1166,16 @@ pub fn main(init: std.process.Init) !void {
     if (!std.mem.eql(u8, planned_four_distance.payload, planned_four_distance_decoded)) return error.ReferenceDecodeFailed;
     try decodeProgressChunks(init.gpa, planned_four_distance.encoded, planned_four_distance.payload, 16, 17, 31);
     planned_distance_split_cases += 1;
+    const planned_adaptive_distance = try vort.br.IncrementalTestSupport.encodeAdaptiveDistanceTypes(init.gpa);
+    defer init.gpa.free(planned_adaptive_distance.encoded);
+    defer init.gpa.free(planned_adaptive_distance.payload);
+    try validatePlannedDistanceFixture(init.gpa, reference, planned_adaptive_distance, 3);
+    planned_distance_split_cases += 1;
+    const planned_maximum_adaptive_distance = try vort.br.IncrementalTestSupport.encodeMaximumAdaptiveDistanceTypes(init.gpa);
+    defer init.gpa.free(planned_maximum_adaptive_distance.encoded);
+    defer init.gpa.free(planned_maximum_adaptive_distance.payload);
+    try validatePlannedDistanceFixture(init.gpa, reference, planned_maximum_adaptive_distance, 256);
+    planned_distance_split_cases += 1;
     const planned_clustered_distance = try vort.br.IncrementalTestSupport.encodeClusteredDistanceTypes(init.gpa);
     defer init.gpa.free(planned_clustered_distance.encoded);
     defer init.gpa.free(planned_clustered_distance.payload);

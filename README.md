@@ -1543,6 +1543,15 @@ command positions and reuse tree types in non-cyclic patterns such as
 strictly smaller; the default remains `false` because the broader search costs
 material CPU and has not yet improved the built-in/source corpus. Measure it
 with `run-br-planned-encode-bench -- --adaptive-command-split ...`.
+`BrotliPlannedEncodeOptions.adaptive_distance_split` is a nullable ratio-mode
+override for the corresponding distance-symbol search. The default `null`
+automatically evaluates inputs of at least 64 KiB whose derived stream has
+2,048--32,768 explicit distance symbols; `false` disables the search and
+`true` forces the same bounded symbol policy on smaller inputs. Its dynamic block/tree
+writer supports arbitrary boundaries, non-cyclic type reuse, and the complete
+256-type Brotli range. Complete-wire arbitration keeps the automatic result
+size-monotonic. The benchmark accepts `--adaptive-distance-split` and
+`--no-adaptive-distance-split` for explicit A/B runs.
 `brProfilePlannedRatioBlockAlloc` is the explicit diagnostic counterpart for
 default-window 4--32 KiB ratio blocks. It reproduces the production wire while
 reporting lazy/optimal plan, command, wire, and selection timings plus optimal

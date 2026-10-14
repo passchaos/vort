@@ -228,6 +228,8 @@ def main() -> int:
         raise SystemExit("four-distance-types: node output mismatch")
     print(f"brotli planned four-distance-types node diff: encoded={len(encoded)} decoded={len(actual)}")
     distance_cluster_cases = (
+        ("adaptive-distance-types", 64 * 1024 + 8192 * 4),
+        ("maximum-adaptive-distance-types", 64 * 1024 + 256 * 4),
         ("clustered-distance-types", 64 * 1024 + 12288 * 4),
         ("alternating-distance-types", 64 * 1024 + 8192 * 4),
         ("reuse-first-three-distance-types", 64 * 1024 + 8192 * 4),

@@ -4,6 +4,11 @@ This roadmap is a living checklist toward the larger goal: outperform and
 out-feature `zlib`, `zlib-ng`, `zlib-rs`, and `zstd` without copying their
 architecture blindly.
 
+Current product scope prioritizes Zig-native implementations of established
+compression formats. A zlib/zstd-compatible C ABI and further development of
+the experimental native VORT format are not active deliverables; existing
+native-format code remains available but does not drive roadmap priority.
+
 ### Current completion audit (2026-09-11)
 
 The long-term objective is **not complete**. Current evidence still leaves these
@@ -19481,6 +19486,33 @@ reuse, so production keeps the simpler independently owned plans.
   requires a cheap heterogeneity screen and broader corpus evidence. The common
   Plan/Viterbi core is deliberately not limited to six regions and is the base
   for distance, literal, then block/context joint clustering follow-ups.
+
+- Extended the general adaptive splitter vertically through Brotli distance
+  symbols. The command and distance writers now share an allocator-owned
+  adaptive block code for previous/successor/direct type transitions and
+  arbitrary block lengths; a separate identity context-map writer covers the
+  complete 2--256 distance type/tree range without materializing the maximum
+  1,024-entry map. A production fixture uses distance-symbol boundaries
+  901/2305/5179/7001 and normalized `A-B-A-C-A` reuse. Its 9,521-byte stream
+  expands to 98,304 bytes and decodes byte-exactly through Vort, Node,
+  libbrotli 1.0.9, and the 17-byte-input/31-byte-output progressive path. The
+  upstream matrix now reports ten distance-split cases. A second 1,528-byte
+  production fixture expands to 66,560 bytes while exercising all 256 distance
+  block types, all 256 distance context trees, and the maximum 1,024-entry
+  context map through Node, libbrotli, and progressive decode. Ratio mode evaluates
+  the bounded one-iteration/eight-seed search automatically only for inputs of
+  at least 64 KiB with 2,048--32,768 explicit distance symbols, then keeps it solely on a strict
+  complete-wire win; a nullable public option can disable or force that policy.
+  Six 128 KiB source/Markdown rows improved in five cases by 25--257 bytes and
+  tied once, while costing roughly 28--32% extra ratio time. Nine smaller
+  built-ins retained identical output. A fixed-CPU default-path comparison
+  against `ce909cf3` retained identical source32k wire/checksum, won 9/11
+  pairs, and measured a `1.0090x` paired geometric throughput ratio
+  (189.033 -> 187.994 ms independent medians), treated as no-regression
+  evidence rather than a speed claim. The distance encoder now also exposes
+  all 64 legal RFC `NPOSTFIX/NDIRECT` parameter shapes with an independent
+  forward-formula oracle; production parameter search remains the next
+  distance-model feature rather than being implied by this splitter increment.
 
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository
