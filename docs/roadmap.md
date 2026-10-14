@@ -19496,9 +19496,8 @@ reuse, so production keeps the simpler independently owned plans.
   sync-to-full upgrade, pending-flush finish, and zlib/gzip checksum continuity.
   The system-zlib incremental benchmark performs a bidirectional preflight:
   zlib inflates Vort's complete stream and independent suffix, while Vort does
-  the same for a system-zlib `Z_FULL_FLUSH` stream. `Z_PARTIAL_FLUSH` and
-  `inflateSync`-style recovery remain separate compatibility work rather than
-  being implied by this completed slice.
+  the same for a system-zlib `Z_FULL_FLUSH` stream. `inflateSync`-style recovery
+  remains separate compatibility work rather than being implied by this slice.
 
 - Added Zig-native `blockFlush()` with zlib `Z_BLOCK`-equivalent behavior to
   raw stored/fixed/best and zlib/gzip fixed/best incremental encoders. It ends
@@ -19895,3 +19894,24 @@ reuse, so production keeps the simpler independently owned plans.
   gate passes 16/16 one-shot and 16/16 progressive cases, the full repository
   graph passes 2607/2607, and `zig build check` passes all 113 steps. Global
   multi-boundary DP and exact compressed-cost segmentation remain open.
+
+- Added Zig-native `partialFlush()` with zlib `Z_PARTIAL_FLUSH` semantics to
+  raw stored/fixed/best and zlib/gzip fixed/best incremental encoders. After
+  publishing accepted data it appends the required non-final empty fixed block:
+  exactly ten bits, deliberately not byte-aligned, but sufficient for a decoder
+  to consume all preceding input immediately. The raw stored encoder now keeps
+  a bit-writer state so its following stored block can legally resume after the
+  two retained marker bits. Repeated empty partial flushes are idempotent;
+  pending requests upgrade in block < partial < sync < full order, sync after
+  partial emits the necessary alignment marker, and finish honors an undrained
+  request. Partial boundaries retain rolling history, match indexes, preset
+  dictionary availability, Adler-32, CRC-32, and ISIZE; a later full flush
+  remains responsible for clearing match history. Focused tests pin audited
+  libz raw/zlib/gzip fixed fixtures plus level-0 stored wire, empty and repeated
+  requests, zero/one-byte output, block upgrade, finish, full upgrade, history,
+  and wrapper checksums. The required libz gate adds six bidirectional
+  raw/zlib/gzip cases under three-byte output
+  (`partial_vort_to_libz=3`, `partial_libz_to_vort=3`). `inflateSync` recovery
+  remains the next independent zlib-control compatibility gap. The direct
+  Deflate suite passes 473/473, the full repository graph passes 2615/2615,
+  and `zig build check` passes all 113 steps.

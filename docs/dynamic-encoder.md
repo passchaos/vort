@@ -77,8 +77,13 @@ already emitted zlib FLEVEL or gzip XFL/header field.
 Parameter boundaries retain rolling history, matcher state, and a preset
 dictionary. Zlib Adler-32 and gzip CRC-32/ISIZE continue across changes.
 `fullFlush()` remains the only parameter/flush composition that clears history
-and disables the current preset dictionary; sync/block boundaries and ordinary
-parameter changes do not.
+and disables the current preset dictionary; partial/sync/block boundaries and
+ordinary parameter changes do not. `partialFlush()` publishes accepted data
+then writes the ten-bit non-final empty fixed block defined by zlib
+`Z_PARTIAL_FLUSH`. Unlike sync/full flush it does not byte-align, but unlike
+`blockFlush()` it emits enough bits for the decoder to finish the preceding
+block immediately. Flush strength upgrades in block < partial < sync < full
+order.
 
 ### Validation
 
@@ -94,8 +99,13 @@ observes three `Z_BUF_ERROR` results, and retries the same requested parameters
 to successful completion. Cross-implementation wire equality is not required;
 decoded bytes and wrapper checksums are.
 
+The same gate covers six bidirectional `Z_PARTIAL_FLUSH` cases across raw,
+zlib, and gzip using three-byte output: three Vort streams inflate through
+libz, and three libz streams decode through Vort. Fixed fixture tests separately
+pin the exact ten-bit marker wire.
+
 Focused runtime-parameter tests pass 19/19, and the direct Deflate suite passes
-465/465. The full repository test graph passes 2596/2596, and `zig build check`
+473/473. The full repository test graph passes 2615/2615, and `zig build check`
 passes all 113 steps including the new probe. The probe is also wired into
 `ci-smoke`; the aggregate smoke graph currently has unrelated existing
 failures, so this increment does not claim a fully green `ci-smoke` run.

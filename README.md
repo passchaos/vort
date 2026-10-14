@@ -261,8 +261,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   reparse/ADS path extraction are reported explicitly as unsupported;
 - raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode,
   with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
-  Zig-native incremental encoders provide `blockFlush()` with zlib `Z_BLOCK`
-  semantics for raw stored/fixed/best and zlib/gzip fixed/best streams, while
+  Zig-native incremental encoders provide `blockFlush()`/`partialFlush()` with
+  zlib `Z_BLOCK`/`Z_PARTIAL_FLUSH` semantics for raw stored/fixed/best and
+  zlib/gzip fixed/best streams, while
   raw/zlib/gzip Best encoders support asynchronous runtime level/strategy
   changes through `DeflateParams` and `requestParams()`;
 - dependency-free BGZF blocked-gzip parsing/writing with strict `BC`/`BSIZE`
@@ -1195,8 +1196,12 @@ defer zstd_incremental_encoder.deinit();
 // but add no separate marker. Match history and any wrapper Adler-32 or
 // CRC-32/ISIZE state remain continuous. Raw fixed/best and wrapper snapshots
 // expose pending_bits so callers can diagnose the live partial output byte.
-// Pending flush requests upgrade in block < sync < full order without duplicate
-// boundaries, and finish() honors a boundary requested before finalization.
+// partialFlush() follows the published data with zlib's ten-bit empty fixed
+// block. It deliberately stays non-byte-aligned but emits enough bits for a
+// decoder to consume every accepted byte. Repeated requests are idempotent and
+// history/checksums remain continuous. Pending flush requests upgrade in
+// block < partial < sync < full order without duplicate boundaries, and
+// finish() honors a boundary requested before finalization.
 // Its fullFlush() method emits the same byte boundary and then drops retained
 // history, rolling match indexes, and any preset dictionary for the remainder
 // of the stream, matching Z_FULL_FLUSH. The best and zlib/gzip wrappers expose
@@ -1238,8 +1243,10 @@ defer zstd_incremental_encoder.deinit();
 // Vort. Its six cases use 3-byte output, issue 84 requests including 24
 // same-family requests, observe 45 Vort commits/30 implicit boundaries, and
 // retry three Z_BUF_ERROR results without losing parameter or stream state.
+// The same gate runs six bidirectional raw/zlib/gzip partial-flush cases under
+// 3-byte output and independently decodes each stream across Vort and libz.
 // Focused runtime-parameter tests pass 19/19 and the direct Deflate suite
-// passes 465/465; the full repository test graph passes 2596/2596.
+// passes 473/473; the full repository test graph passes 2615/2615.
 // Audited libz fixtures pin the exact fixed-Huffman raw/zlib/gzip wire across a
 // block flush. This non-aligning block primitive is the basis for future
 // stream-control work; inflateSync-compatible recovery is not yet implemented.
