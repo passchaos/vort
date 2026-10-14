@@ -40,6 +40,9 @@ pub fn main(init: std.process.Init) !void {
             "tree_score_calls,tree_simple_scores,tree_complex_scores,tree_active_entries,tree_active_buckets," ++
             "small_huffman_calls,small_huffman_failures,package_merge_calls," ++
             "complex_prefix_calls,complex_prefix_rle_tokens,complex_prefix_code_length_active," ++
+            "complex_prefix_input_lengths,complex_prefix_zero_runs,complex_prefix_nonzero_runs," ++
+            "complex_prefix_zero_lengths,complex_prefix_nonzero_lengths,complex_prefix_literal_tokens," ++
+            "complex_prefix_repeat16_tokens,complex_prefix_repeat17_tokens,complex_prefix_repeat_chain_buckets," ++
             "analysis_ns,baseline_ns,suffix_ns,sparse_ns,cluster_ns,cluster_init_ns," ++
             "cluster_prepare_ns,cluster_assignment_ns,cluster_finalize_ns,cluster_score_ns," ++
             "tree_alphabet_ns,tree_lengths_ns,tree_weighted_ns,tree_prefix_ns,tree_score_stage_ns," ++
@@ -47,6 +50,7 @@ pub fn main(init: std.process.Init) !void {
             "small_huffman_output_ns,small_huffman_stage_ns," ++
             "complex_prefix_rle_ns,complex_prefix_code_length_tree_ns,complex_prefix_header_ns," ++
             "complex_prefix_encoder_ns,complex_prefix_payload_ns,complex_prefix_stage_ns," ++
+            "complex_prefix_shape_ns," ++
             "stage_ns,cluster_stage_ns,total_ns,unattributed_ns,cluster_unattributed_ns,{s}\n",
         .{benchmark_provenance.csv_columns},
     );
@@ -108,7 +112,7 @@ pub fn main(init: std.process.Init) !void {
         try csv.writer.writeByte(',');
         try writeHistogram(&csv.writer, &profile.tree_active_buckets);
         try csv.writer.print(
-            ",{d},{d},{d},{d},{d},{d}",
+            ",{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}",
             .{
                 profile.small_huffman_calls,
                 profile.small_huffman_failures,
@@ -116,10 +120,20 @@ pub fn main(init: std.process.Init) !void {
                 profile.complex_prefix_calls,
                 profile.complex_prefix_rle_tokens,
                 profile.complex_prefix_code_length_active,
+                profile.complex_prefix_input_lengths,
+                profile.complex_prefix_zero_runs,
+                profile.complex_prefix_nonzero_runs,
+                profile.complex_prefix_zero_lengths,
+                profile.complex_prefix_nonzero_lengths,
+                profile.complex_prefix_literal_tokens,
+                profile.complex_prefix_repeat16_tokens,
+                profile.complex_prefix_repeat17_tokens,
             },
         );
+        try csv.writer.writeByte(',');
+        try writeHistogram(&csv.writer, &profile.complex_prefix_repeat_chain_buckets);
         try csv.writer.print(
-            ",{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}",
+            ",{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}",
             .{
                 profile.analysis_ns,
                 profile.baseline_ns,
@@ -147,6 +161,7 @@ pub fn main(init: std.process.Init) !void {
                 profile.complex_prefix_encoder_ns,
                 profile.complex_prefix_payload_ns,
                 complex_prefix_stage_ns,
+                profile.complex_prefix_shape_ns,
                 stage_ns,
                 cluster_stage_ns,
                 profile.total_ns,

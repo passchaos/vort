@@ -27,7 +27,7 @@ specialization records:
 
 The CSV gate validates three source sizes, ReleaseFast provenance, candidate
 ranges, deterministic counters, nested timing totals, and the dominant
-`source32k` cluster stage. An eleven-case negative smoke rejects missing rows,
+`source32k` cluster stage. A twelve-case negative smoke rejects missing rows,
 counter drift, timing drift, invalid modes, false stage dominance, and
 non-ReleaseFast provenance.
 
@@ -213,3 +213,45 @@ Each hit required full `[18]u32` frequency equality. It reused 340/2,790 trees
 lookup/hash/copy work lost in the complete encoder: only 2/11 pairs won and the
 median regressed from 194.908 to 195.910 ms. The cache and its profile schema
 were removed.
+
+## Code-length RLE shape
+
+Profile-only shape accounting now runs after the timed RLE stage. For ten
+`source32k` searches it observed 337,000 input code lengths: 41,370 zero runs
+covering 215,990 lengths and 101,420 non-zero runs covering 121,010 lengths.
+The encoder emitted 151,860 literal-length tokens, 530 symbol-16 tokens, and
+20,530 symbol-17 tokens. Repeat chains were especially shallow: 11,300 had one
+token, 4,880 had two, and none had three or more.
+
+A direct one-/two-token repeat fast path removed the general loop and temporary
+array for every observed chain. It improved the isolated RLE stage from roughly
+1.089 to 1.017 ms (`1.07x`), but won only 3/7 complete-encoder pairs and moved
+the median from 195.410 to 195.469 ms. The candidate was removed. Even a fully
+covered branch specialization does not clear the complete-code-layout bar;
+future RLE work must remove broader bookkeeping rather than specialize chain
+depth.
+
+## Score-only RLE summary
+
+The retained RLE optimization changes only `complex_prefix.bitCost`; the real
+writer still emits the original token stream. A score-only summary walks the
+same runs but accumulates the 18 frequencies and repeat-token counts without
+materializing tokens. Exact payload cost is then
+`sum(freq[s] * code_length_bits[s]) + 2*freq[16] + 3*freq[17]`, so scoring no
+longer constructs a canonical encoder or replays the token stream. Randomized
+256/520/704-alphabet tests compare the summary bit count with the real writer,
+and the summary's frequencies/token categories match the existing bounded RLE
+encoder exactly.
+
+On fixed CPU 2 for ten `source32k` searches, RLE scoring fell 1.089→0.882 ms
+(`1.234x`), encoder construction was eliminated, payload costing fell
+0.260→0.048 ms (`5.39x`), and complete complex-prefix scoring fell
+2.687→1.964 ms (`1.369x`). Profile-only shape accounting is measured
+separately at 0.923 ms and subtracted from the parent tree-prefix stage, so it
+cannot distort dominance. RLE remains narrowly largest at 44.9%, followed by
+the 18-symbol tree at 43.1%, header declaration at 9.5%, and payload arithmetic
+at 2.5%.
+
+Eleven alternating fixed-CPU-2 complete-encoder pairs all won, reducing the
+median from 195.119 to 192.659 ms (`1.013x`) with unchanged 6,475-byte output
+and checksum 134,745.

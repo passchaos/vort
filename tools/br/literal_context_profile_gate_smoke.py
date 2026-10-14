@@ -50,6 +50,7 @@ def main() -> int:
         ("small_huffman_calls", "1"),
         ("complex_prefix_calls", "1"),
         ("complex_prefix_rle_ns", "1"),
+        ("complex_prefix_repeat_chain_buckets", "1;2;3;4"),
         ("optimize", "Debug"),
     ):
         changed = [row.copy() for row in rows]

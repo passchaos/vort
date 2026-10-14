@@ -39,6 +39,15 @@ pub const Profile = struct {
     complex_prefix_calls: usize = 0,
     complex_prefix_rle_tokens: usize = 0,
     complex_prefix_code_length_active: usize = 0,
+    complex_prefix_input_lengths: usize = 0,
+    complex_prefix_zero_runs: usize = 0,
+    complex_prefix_nonzero_runs: usize = 0,
+    complex_prefix_zero_lengths: usize = 0,
+    complex_prefix_nonzero_lengths: usize = 0,
+    complex_prefix_literal_tokens: usize = 0,
+    complex_prefix_repeat16_tokens: usize = 0,
+    complex_prefix_repeat17_tokens: usize = 0,
+    complex_prefix_repeat_chain_buckets: [4]usize = @splat(0),
 
     analysis_ns: u64 = 0,
     baseline_ns: u64 = 0,
@@ -63,6 +72,7 @@ pub const Profile = struct {
     complex_prefix_header_ns: u64 = 0,
     complex_prefix_encoder_ns: u64 = 0,
     complex_prefix_payload_ns: u64 = 0,
+    complex_prefix_shape_ns: u64 = 0,
     total_ns: u64 = 0,
 
     pub fn stageNs(self: Profile) u64 {
@@ -116,6 +126,14 @@ pub const Profile = struct {
             "complex_prefix_calls",
             "complex_prefix_rle_tokens",
             "complex_prefix_code_length_active",
+            "complex_prefix_input_lengths",
+            "complex_prefix_zero_runs",
+            "complex_prefix_nonzero_runs",
+            "complex_prefix_zero_lengths",
+            "complex_prefix_nonzero_lengths",
+            "complex_prefix_literal_tokens",
+            "complex_prefix_repeat16_tokens",
+            "complex_prefix_repeat17_tokens",
             "analysis_ns",
             "baseline_ns",
             "suffix_ns",
@@ -139,9 +157,12 @@ pub const Profile = struct {
             "complex_prefix_header_ns",
             "complex_prefix_encoder_ns",
             "complex_prefix_payload_ns",
+            "complex_prefix_shape_ns",
             "total_ns",
         }) |field| @field(self, field) +%= @field(sample, field);
         for (&self.tree_active_buckets, sample.tree_active_buckets) |*total, count|
+            total.* += count;
+        for (&self.complex_prefix_repeat_chain_buckets, sample.complex_prefix_repeat_chain_buckets) |*total, count|
             total.* += count;
     }
 };

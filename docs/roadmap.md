@@ -19293,7 +19293,7 @@ reuse, so production keeps the simpler independently owned plans.
   reassignment, compaction, and final exact scoring. It also records proposal
   shapes, trials, rounds, comparisons, and exact-score cache hits/misses. The
   three-row CSV gate checks ReleaseFast provenance, deterministic geometry,
-  nested timing totals, and `source32k` stage dominance; eleven negative fixtures
+  nested timing totals, and `source32k` stage dominance; twelve negative fixtures
   reject missing rows, counter/timing drift, invalid modes, false dominance,
   and Debug evidence. A fixed-CPU-2 ten-iteration run selected 2/10/10 trees
   for `source32k`: suffix and clustering consumed 43.4%/53.4% of total search
@@ -19390,6 +19390,26 @@ reuse, so production keeps the simpler independently owned plans.
   (12.2%). The isolated tree stage improved by roughly 6%, while complete
   encoding won just 2/11 pairs and regressed 194.908→195.910 ms median. The
   cache and temporary schema counters were removed.
+
+- Added profile-only code-length RLE shape accounting after the timed stage.
+  Ten `source32k` searches covered 337,000 lengths in 41,370 zero and 101,420
+  non-zero runs, emitting 151,860 literal, 530 symbol-16, and 20,530 symbol-17
+  tokens. Repeat-chain buckets were 11,300/4,880/0/0 for one/two/three/four+
+  tokens. A fully covering one-/two-token fast path improved isolated RLE about
+  1.089→1.017 ms (`1.07x`) but won only 3/7 complete pairs and regressed the
+  median 195.410→195.469 ms, so it was removed.
+
+- Added a score-only code-length RLE summary for complex-prefix cost planning.
+  The real writer is unchanged; scoring now accumulates the exact 18-symbol
+  frequencies and repeat counts without storing tokens, building an encoder,
+  or replaying payload. Randomized 256/520/704-alphabet writer parity and
+  bounded-RLE summary differentials require exact bits, frequencies, and token
+  categories. Fixed-CPU-2 `source32k` improved RLE 1.089→0.882 ms (`1.234x`),
+  eliminated encoder construction, improved payload costing `5.39x`, and cut
+  complete prefix scoring 2.687→1.964 ms (`1.369x`). All 11 complete-encoder
+  pairs won, reducing the median 195.119→192.659 ms (`1.013x`) with unchanged
+  6,475-byte wire/checksum. Shape accounting is timed separately and removed
+  from parent hotspot attribution.
 
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository

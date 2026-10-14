@@ -5,6 +5,88 @@ pub const Token = struct {
     extra: u3 = 0,
 };
 
+pub const Summary = struct {
+    frequencies: [18]u32 = @splat(0),
+    token_count: usize = 0,
+    repeat16_tokens: usize = 0,
+    repeat17_tokens: usize = 0,
+    input_lengths: usize = 0,
+    zero_runs: usize = 0,
+    nonzero_runs: usize = 0,
+    zero_lengths: usize = 0,
+    nonzero_lengths: usize = 0,
+    literal_tokens: usize = 0,
+    repeat_chain_buckets: [4]usize = @splat(0),
+};
+
+pub fn summarize(comptime collect_shape: bool, lengths: []const u4, stop_index: usize) !Summary {
+    if (stop_index > lengths.len) return error.InvalidBlockPlan;
+    var summary: Summary = .{};
+    if (collect_shape) summary.input_lengths = stop_index;
+    var index: usize = 0;
+    while (index < stop_index) {
+        const length = lengths[index];
+        var end = index + 1;
+        if (length == 0) {
+            while (end < stop_index and lengths[end] == 0) end += 1;
+            const run = end - index;
+            if (collect_shape) {
+                summary.zero_runs += 1;
+                summary.zero_lengths += run;
+            }
+            if (run < 3) {
+                summary.frequencies[0] += @intCast(run);
+                summary.token_count += run;
+                if (collect_shape) summary.literal_tokens += run;
+            } else {
+                const tokens = repeatTokenCount(run, 8);
+                summary.frequencies[17] += @intCast(tokens);
+                summary.token_count += tokens;
+                summary.repeat17_tokens += tokens;
+                if (collect_shape) summary.repeat_chain_buckets[@min(tokens - 1, 3)] += 1;
+            }
+        } else {
+            while (end < stop_index and lengths[end] == length) end += 1;
+            const run = end - index;
+            if (collect_shape) {
+                summary.nonzero_runs += 1;
+                summary.nonzero_lengths += run;
+            }
+            summary.frequencies[length] += 1;
+            summary.token_count += 1;
+            if (collect_shape) summary.literal_tokens += 1;
+            if (run > 1) {
+                const remaining = run - 1;
+                if (remaining < 3) {
+                    summary.frequencies[length] += @intCast(remaining);
+                    summary.token_count += remaining;
+                    if (collect_shape) summary.literal_tokens += remaining;
+                } else {
+                    const tokens = repeatTokenCount(remaining, 4);
+                    summary.frequencies[16] += @intCast(tokens);
+                    summary.token_count += tokens;
+                    summary.repeat16_tokens += tokens;
+                    if (collect_shape) summary.repeat_chain_buckets[@min(tokens - 1, 3)] += 1;
+                }
+            }
+        }
+        index = end;
+    }
+    return summary;
+}
+
+fn repeatTokenCount(run: usize, comptime radix: usize) usize {
+    const max_extra = radix - 1;
+    var count: usize = 1;
+    var current = run;
+    while (current > max_extra + 3) {
+        const extra = (current - 3) & max_extra;
+        current = ((current - (extra + 3)) / radix) + 2;
+        count += 1;
+    }
+    return count;
+}
+
 /// Brotli code-length RLE for zero runs. Chained symbol-17 runs use the same
 /// recurrence as the decoder: `total = 8 * (total - 2) + (extra + 3)`. This
 /// compactly spans the large unused gaps in literal/command alphabets while
@@ -327,6 +409,22 @@ test "bounded RLE frequency fusion matches token scan" {
         try std.testing.expectEqual(expected_len, actual_len);
         try std.testing.expectEqualSlices(Token, expected_tokens[0..expected_len], actual_tokens[0..actual_len]);
         try std.testing.expectEqual(expected_frequencies, actual_frequencies);
+
+        const summary = try summarize(true, &lengths, stop_index);
+        try std.testing.expectEqual(expected_len, summary.token_count);
+        try std.testing.expectEqual(expected_frequencies, summary.frequencies);
+        var literal_tokens: usize = 0;
+        var repeat16_tokens: usize = 0;
+        var repeat17_tokens: usize = 0;
+        for (expected_tokens[0..expected_len]) |token| switch (token.symbol) {
+            16 => repeat16_tokens += 1,
+            17 => repeat17_tokens += 1,
+            else => literal_tokens += 1,
+        };
+        try std.testing.expectEqual(literal_tokens, summary.literal_tokens);
+        try std.testing.expectEqual(repeat16_tokens, summary.repeat16_tokens);
+        try std.testing.expectEqual(repeat17_tokens, summary.repeat17_tokens);
+        try std.testing.expectEqual(stop_index, summary.zero_lengths + summary.nonzero_lengths);
     }
 }
 

@@ -891,6 +891,7 @@ fn treeBitCostProfiled(
     var cost = weightedBits(frequencies, &lengths);
     if (profiled) profiler.profile.tree_weighted_ns +%= profiler.elapsedNs(weighted_start);
     const prefix_start = if (profiled) profiler.now() else {};
+    var prefix_shape_ns: u64 = 0;
     if (alphabet.len <= 4) {
         cost += 4 + @as(u64, alphabet.len) * 8 + @intFromBool(alphabet.len == 4);
         if (profiled) profiler.profile.tree_simple_scores += 1;
@@ -910,17 +911,29 @@ fn treeBitCostProfiled(
             profiler.profile.complex_prefix_calls += prefix_profile.calls;
             profiler.profile.complex_prefix_rle_tokens += prefix_profile.rle_tokens;
             profiler.profile.complex_prefix_code_length_active += prefix_profile.code_length_active;
+            profiler.profile.complex_prefix_input_lengths += prefix_profile.input_lengths;
+            profiler.profile.complex_prefix_zero_runs += prefix_profile.zero_runs;
+            profiler.profile.complex_prefix_nonzero_runs += prefix_profile.nonzero_runs;
+            profiler.profile.complex_prefix_zero_lengths += prefix_profile.zero_lengths;
+            profiler.profile.complex_prefix_nonzero_lengths += prefix_profile.nonzero_lengths;
+            profiler.profile.complex_prefix_literal_tokens += prefix_profile.literal_tokens;
+            profiler.profile.complex_prefix_repeat16_tokens += prefix_profile.repeat16_tokens;
+            profiler.profile.complex_prefix_repeat17_tokens += prefix_profile.repeat17_tokens;
+            for (&profiler.profile.complex_prefix_repeat_chain_buckets, prefix_profile.repeat_chain_buckets) |*total, count|
+                total.* += count;
             profiler.profile.complex_prefix_rle_ns +%= prefix_profile.rle_ns;
             profiler.profile.complex_prefix_code_length_tree_ns +%= prefix_profile.code_length_tree_ns;
             profiler.profile.complex_prefix_header_ns +%= prefix_profile.header_ns;
             profiler.profile.complex_prefix_encoder_ns +%= prefix_profile.encoder_ns;
             profiler.profile.complex_prefix_payload_ns +%= prefix_profile.payload_ns;
+            profiler.profile.complex_prefix_shape_ns +%= prefix_profile.shape_ns;
+            prefix_shape_ns = prefix_profile.shape_ns;
         } else {
             cost += try complex_prefix.bitCost(allocator, 256, &lengths, highest + 1);
         }
         if (profiled) profiler.profile.tree_complex_scores += 1;
     }
-    if (profiled) profiler.profile.tree_prefix_ns +%= profiler.elapsedNs(prefix_start);
+    if (profiled) profiler.profile.tree_prefix_ns +%= profiler.elapsedNs(prefix_start) -| prefix_shape_ns;
     return cost;
 }
 
@@ -1047,6 +1060,15 @@ test "literal context profile reports stable stage accounting" {
         profile.small_huffman_calls,
     );
     try std.testing.expectEqual(profile.tree_complex_scores, profile.complex_prefix_calls);
+    try std.testing.expectEqual(
+        profile.complex_prefix_input_lengths,
+        profile.complex_prefix_zero_lengths + profile.complex_prefix_nonzero_lengths,
+    );
+    try std.testing.expectEqual(
+        profile.complex_prefix_rle_tokens,
+        profile.complex_prefix_literal_tokens +
+            profile.complex_prefix_repeat16_tokens + profile.complex_prefix_repeat17_tokens,
+    );
     try std.testing.expect(profile.smallHuffmanStageNs() <= profile.tree_lengths_ns);
     try std.testing.expect(profile.complexPrefixStageNs() <= profile.tree_prefix_ns);
     try std.testing.expect(profile.treeScoreStageNs() <= profile.cluster_score_ns);

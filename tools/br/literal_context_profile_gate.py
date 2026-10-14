@@ -23,6 +23,9 @@ COLUMNS = [
     "tree_score_calls", "tree_simple_scores", "tree_complex_scores", "tree_active_entries", "tree_active_buckets",
     "small_huffman_calls", "small_huffman_failures", "package_merge_calls",
     "complex_prefix_calls", "complex_prefix_rle_tokens", "complex_prefix_code_length_active",
+    "complex_prefix_input_lengths", "complex_prefix_zero_runs", "complex_prefix_nonzero_runs",
+    "complex_prefix_zero_lengths", "complex_prefix_nonzero_lengths", "complex_prefix_literal_tokens",
+    "complex_prefix_repeat16_tokens", "complex_prefix_repeat17_tokens", "complex_prefix_repeat_chain_buckets",
     "analysis_ns", "baseline_ns", "suffix_ns", "sparse_ns", "cluster_ns", "cluster_init_ns",
     "cluster_prepare_ns", "cluster_assignment_ns", "cluster_finalize_ns", "cluster_score_ns",
     "tree_alphabet_ns", "tree_lengths_ns", "tree_weighted_ns", "tree_prefix_ns", "tree_score_stage_ns",
@@ -30,6 +33,7 @@ COLUMNS = [
     "small_huffman_output_ns", "small_huffman_stage_ns",
     "complex_prefix_rle_ns", "complex_prefix_code_length_tree_ns", "complex_prefix_header_ns",
     "complex_prefix_encoder_ns", "complex_prefix_payload_ns", "complex_prefix_stage_ns",
+    "complex_prefix_shape_ns",
     "stage_ns", "cluster_stage_ns", "total_ns", "unattributed_ns", "cluster_unattributed_ns",
 ] + PROVENANCE_COLUMNS
 CASES = {"source4k": 4 * 1024, "source16k": 16 * 1024, "source32k": 32 * 1024}
@@ -129,8 +133,18 @@ def main() -> int:
         assert integer(row, "complex_prefix_calls") == integer(row, "tree_complex_scores"), row
         assert integer(row, "complex_prefix_rle_tokens") >= integer(row, "complex_prefix_calls"), row
         assert integer(row, "complex_prefix_calls") <= integer(row, "complex_prefix_code_length_active") <= 18 * integer(row, "complex_prefix_calls"), row
-        for key in TOP_STAGES + CLUSTER_STAGES + TREE_SCORE_STAGES + SMALL_HUFFMAN_STAGES + COMPLEX_PREFIX_STAGES + ["stage_ns", "cluster_stage_ns", "tree_score_stage_ns", "small_huffman_stage_ns", "complex_prefix_stage_ns", "total_ns"]:
+        assert integer(row, "complex_prefix_input_lengths") == integer(row, "complex_prefix_zero_lengths") + integer(row, "complex_prefix_nonzero_lengths"), row
+        assert 0 < integer(row, "complex_prefix_zero_runs") <= integer(row, "complex_prefix_zero_lengths"), row
+        assert 0 < integer(row, "complex_prefix_nonzero_runs") <= integer(row, "complex_prefix_nonzero_lengths"), row
+        repeat_tokens = integer(row, "complex_prefix_repeat16_tokens") + integer(row, "complex_prefix_repeat17_tokens")
+        assert integer(row, "complex_prefix_rle_tokens") == integer(row, "complex_prefix_literal_tokens") + repeat_tokens, row
+        chain_buckets = histogram(row, "complex_prefix_repeat_chain_buckets", 4)
+        assert chain_buckets[3] == 0, row
+        assert chain_buckets[0] + 2 * chain_buckets[1] + 3 * chain_buckets[2] == repeat_tokens, row
+        positive_prefix_stages = [key for key in COMPLEX_PREFIX_STAGES if key != "complex_prefix_encoder_ns"]
+        for key in TOP_STAGES + CLUSTER_STAGES + TREE_SCORE_STAGES + SMALL_HUFFMAN_STAGES + positive_prefix_stages + ["stage_ns", "cluster_stage_ns", "tree_score_stage_ns", "small_huffman_stage_ns", "complex_prefix_stage_ns", "total_ns"]:
             assert integer(row, key) > 0, (key, row)
+        assert integer(row, "complex_prefix_encoder_ns") == 0, row
         assert integer(row, "stage_ns") == sum(integer(row, key) for key in TOP_STAGES), row
         assert integer(row, "cluster_stage_ns") == sum(integer(row, key) for key in CLUSTER_STAGES), row
         assert integer(row, "tree_score_stage_ns") == sum(integer(row, key) for key in TREE_SCORE_STAGES), row
@@ -139,6 +153,7 @@ def main() -> int:
         assert integer(row, "small_huffman_stage_ns") <= integer(row, "tree_lengths_ns"), row
         assert integer(row, "complex_prefix_stage_ns") == sum(integer(row, key) for key in COMPLEX_PREFIX_STAGES), row
         assert integer(row, "complex_prefix_stage_ns") <= integer(row, "tree_prefix_ns"), row
+        assert integer(row, "complex_prefix_shape_ns") > 0, row
         assert integer(row, "stage_ns") + integer(row, "unattributed_ns") == integer(row, "total_ns"), row
         assert integer(row, "cluster_stage_ns") + integer(row, "cluster_unattributed_ns") == integer(row, "cluster_ns"), row
 
