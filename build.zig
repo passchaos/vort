@@ -5485,6 +5485,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&br_stored_corpus_exe.step);
     check_step.dependOn(&br_static_dictionary_report_exe.step);
     check_step.dependOn(&br_upstream_multiblock_diff_exe.step);
+    check_step.dependOn(&br_compound_dictionary_diff_exe.step);
     check_step.dependOn(&br_progressive_copy_bench_exe.step);
     check_step.dependOn(&br_progressive_huffman_bench_exe.step);
     check_step.dependOn(&br_incremental_planned_bench_exe.step);
@@ -5560,6 +5561,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(br_record_optimal_shape_gate_step);
     ci_smoke_step.dependOn(br_planned_chunks_bench_gate_step);
     ci_smoke_step.dependOn(br_upstream_multiblock_diff_step);
+    ci_smoke_step.dependOn(br_compound_dictionary_diff_step);
     ci_smoke_step.dependOn(br_context_tree_report_gate_step);
     ci_smoke_step.dependOn(br_context_tree_report_gate_smoke_step);
     ci_smoke_step.dependOn(br_context_tree_report_dir_smoke_step);

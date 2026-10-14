@@ -3,9 +3,23 @@ const vort = @import("vort");
 const libbrotli = @import("libbrotli_runtime.zig");
 
 const max_raw_attachments = 15;
+const qualities = [_]u4{ 0, 5, 9, 11 };
 const fixture = [_]u8{ 0xa1, 0xa8, 0x00, 0xc0, 0x2f, 0x01, 0x10, 0xc4, 0x44, 0x09, 0x00 };
 const fixture_dictionary_output = "Kot lomom kolol slona!";
 const fixture_without_dictionary_output = "alternate\" type=\"appli";
+
+const MatrixCase = struct {
+    raw_dictionaries: []const []const u8,
+    input: []const u8,
+    expect_dictionary_copy: bool,
+};
+
+const VortEncodeCounts = struct {
+    one_shot: usize = 0,
+    reusable: usize = 0,
+    chunked: usize = 0,
+    incremental: usize = 0,
+};
 
 const streaming_options: libbrotli.Runtime.StreamingOptions = .{
     .quality = 11,
@@ -18,10 +32,49 @@ pub fn main(init: std.process.Init) !void {
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     defer stdout.interface.flush() catch {};
 
-    var fifteen: [max_raw_attachments][]const u8 = @splat("");
-    fifteen[0] = fixture_dictionary_output[0..4];
-    fifteen[5] = fixture_dictionary_output[4..13];
-    fifteen[14] = fixture_dictionary_output[13..];
+    const fixture_one = [_][]const u8{fixture_dictionary_output};
+    const fixture_two = [_][]const u8{
+        fixture_dictionary_output[0..13],
+        fixture_dictionary_output[13..],
+    };
+    var fixture_fifteen: [max_raw_attachments][]const u8 = @splat("");
+    fixture_fifteen[0] = fixture_dictionary_output[0..4];
+    fixture_fifteen[5] = fixture_dictionary_output[4..13];
+    fixture_fifteen[14] = fixture_dictionary_output[13..];
+
+    var dictionary_payload: [1024]u8 = undefined;
+    fillDictionaryPayload(&dictionary_payload);
+    const dictionary_one = [_][]const u8{&dictionary_payload};
+    const dictionary_two = [_][]const u8{
+        dictionary_payload[0..417],
+        dictionary_payload[417..],
+    };
+    var dictionary_fifteen: [max_raw_attachments][]const u8 = @splat("");
+    dictionary_fifteen[0] = dictionary_payload[0..173];
+    dictionary_fifteen[5] = dictionary_payload[173..691];
+    dictionary_fifteen[14] = dictionary_payload[691..];
+    const cases = [_]MatrixCase{
+        .{
+            .raw_dictionaries = &.{},
+            .input = "zero attachment payload",
+            .expect_dictionary_copy = false,
+        },
+        .{
+            .raw_dictionaries = &dictionary_one,
+            .input = &dictionary_payload,
+            .expect_dictionary_copy = true,
+        },
+        .{
+            .raw_dictionaries = &dictionary_two,
+            .input = &dictionary_payload,
+            .expect_dictionary_copy = true,
+        },
+        .{
+            .raw_dictionaries = &dictionary_fifteen,
+            .input = &dictionary_payload,
+            .expect_dictionary_copy = true,
+        },
+    };
 
     try validateVortFixtureDecode(
         init.gpa,
@@ -31,19 +84,19 @@ pub fn main(init: std.process.Init) !void {
     );
     try validateVortFixtureDecode(
         init.gpa,
-        &.{fixture_dictionary_output},
+        &fixture_one,
         fixture_dictionary_output,
         true,
     );
     try validateVortFixtureDecode(
         init.gpa,
-        &.{ fixture_dictionary_output[0..13], fixture_dictionary_output[13..] },
+        &fixture_two,
         fixture_dictionary_output,
         true,
     );
     try validateVortFixtureDecode(
         init.gpa,
-        &fifteen,
+        &fixture_fifteen,
         fixture_dictionary_output,
         true,
     );
@@ -52,8 +105,9 @@ pub fn main(init: std.process.Init) !void {
     var runtime = libbrotli.Runtime.open() catch {
         try stdout.interface.writeAll(
             "br_compound_dictionary_diff=ok fixture_cases=4 descriptor_errors=3 " ++
-                "reference_shared_dictionary=skipped reason=libbrotli_unavailable " ++
-                "vort_encode=skipped reason=public_encoder_shared_dictionary_not_exposed\n",
+                "shared_dictionary_matrix=skipped reason=libbrotli_unavailable " ++
+                "reference_encode=skipped vort_encode=skipped " ++
+                "runtime_regressions=skipped\n",
         );
         return;
     };
@@ -65,59 +119,91 @@ pub fn main(init: std.process.Init) !void {
             runtime.encodeWithRawDictionariesAlloc(
                 init.gpa,
                 fixture_dictionary_output,
-                &.{fixture_dictionary_output},
+                &fixture_one,
                 streaming_options,
             ),
         );
         try stdout.interface.print(
             "br_compound_dictionary_diff=ok fixture_cases=4 descriptor_errors=3 " ++
-                "reference_shared_dictionary=skipped reason=libbrotli_missing_symbols " ++
-                "reference_version={x} vort_encode=skipped " ++
-                "reason=public_encoder_shared_dictionary_not_exposed\n",
+                "shared_dictionary_matrix=skipped reason=libbrotli_missing_symbols " ++
+                "reference_version={x} reference_encode=skipped vort_encode=skipped " ++
+                "runtime_regressions=skipped\n",
             .{runtime.version()},
         );
         return;
     }
 
-    try validateReferenceEncode(init.gpa, runtime, &.{}, "zero attachment payload", false);
-    try validateReferenceEncode(
+    const reference_encode_cases = try validateReferenceEncodeMatrix(
         init.gpa,
         runtime,
-        &.{fixture_dictionary_output},
-        fixture_dictionary_output,
-        true,
-    );
-    try validateReferenceEncode(
-        init.gpa,
-        runtime,
-        &.{ fixture_dictionary_output[0..13], fixture_dictionary_output[13..] },
-        fixture_dictionary_output,
-        true,
-    );
-    try validateReferenceEncode(
-        init.gpa,
-        runtime,
-        &fifteen,
-        fixture_dictionary_output,
-        true,
+        &cases,
     );
     try validateReferenceAttachmentLimit(init.gpa, runtime);
 
-    const vort_encode_cases = try validateVortEncodeIfExposed(init.gpa, runtime, &fifteen);
-    if (vort_encode_cases == 0) {
-        try stdout.interface.print(
-            "br_compound_dictionary_diff=ok fixture_cases=4 reference_encode_cases=4 " ++
-                "descriptor_errors=3 reference_version={x} vort_encode=skipped " ++
+    const vort_counts = try validateVortEncodeMatrix(
+        init.gpa,
+        runtime,
+        &cases,
+    );
+    const runtime_regression_cases = try validateRuntimeRegressionMatrix(
+        init.gpa,
+        runtime,
+    );
+    try writeSuccess(
+        &stdout.interface,
+        runtime.version(),
+        reference_encode_cases,
+        vort_counts,
+        runtime_regression_cases,
+    );
+}
+
+fn writeSuccess(
+    writer: *std.Io.Writer,
+    reference_version: u32,
+    reference_encode_cases: usize,
+    vort_counts: VortEncodeCounts,
+    runtime_regression_cases: usize,
+) !void {
+    try writer.print(
+        "br_compound_dictionary_diff=ok fixture_cases=4 descriptor_errors=3 " ++
+            "attachment_cases=4 quality_cases=4 reference_encode_cases={d} " ++
+            "runtime_regression_cases={d} reference_version={x}",
+        .{ reference_encode_cases, runtime_regression_cases, reference_version },
+    );
+
+    if (vort_counts.one_shot == 0) {
+        try writer.writeAll(
+            " vort_encode=skipped " ++
                 "reason=public_encoder_shared_dictionary_not_exposed\n",
-            .{runtime.version()},
+        );
+        return;
+    }
+
+    try writer.print(
+        " vort_one_shot_cases={d} vort_reusable_cases={d}",
+        .{ vort_counts.one_shot, vort_counts.reusable },
+    );
+    if (vort_counts.chunked == 0) {
+        try writer.writeAll(
+            " vort_chunked=skipped " ++
+                "reason=public_chunked_shared_dictionary_not_exposed",
         );
     } else {
-        try stdout.interface.print(
-            "br_compound_dictionary_diff=ok fixture_cases=4 reference_encode_cases=4 " ++
-                "vort_encode_cases={d} descriptor_errors=3 reference_version={x}\n",
-            .{ vort_encode_cases, runtime.version() },
+        try writer.print(" vort_chunked_cases={d}", .{vort_counts.chunked});
+    }
+    if (vort_counts.incremental == 0) {
+        try writer.writeAll(
+            " vort_incremental=skipped " ++
+                "reason=public_incremental_shared_dictionary_not_exposed",
+        );
+    } else {
+        try writer.print(
+            " vort_incremental_cases={d}",
+            .{vort_counts.incremental},
         );
     }
+    try writer.writeByte('\n');
 }
 
 fn validateVortFixtureDecode(
@@ -145,40 +231,67 @@ fn validateVortFixtureDecode(
         return error.ReferenceDecodeFailed;
 }
 
+fn validateReferenceEncodeMatrix(
+    allocator: std.mem.Allocator,
+    runtime: libbrotli.Runtime,
+    cases: []const MatrixCase,
+) !usize {
+    var count: usize = 0;
+    for (cases) |case| {
+        for (qualities) |quality| {
+            try validateReferenceEncode(allocator, runtime, case, quality);
+            count += 1;
+        }
+    }
+    return count;
+}
+
 fn validateReferenceEncode(
     allocator: std.mem.Allocator,
     runtime: libbrotli.Runtime,
-    raw_dictionaries: []const []const u8,
-    input: []const u8,
-    expect_dictionary_copy: bool,
+    case: MatrixCase,
+    quality: u4,
 ) !void {
+    var options = streaming_options;
+    options.quality = quality;
     const encoded = try runtime.encodeWithRawDictionariesAlloc(
         allocator,
-        input,
-        raw_dictionaries,
-        streaming_options,
+        case.input,
+        case.raw_dictionaries,
+        options,
     );
     defer allocator.free(encoded);
 
     const decoded = try vort.brDecodeStreamAllocExactSizeWithOptions(
         allocator,
         encoded,
-        input.len,
-        decodeOptions(raw_dictionaries),
+        case.input.len,
+        decodeOptions(case.raw_dictionaries),
     );
     defer allocator.free(decoded);
-    if (!std.mem.eql(u8, input, decoded)) return error.ReferenceDecodeFailed;
+    if (!std.mem.eql(u8, case.input, decoded)) return error.ReferenceDecodeFailed;
 
-    const reference_output = try allocator.alloc(u8, input.len);
+    const reference_output = try allocator.alloc(u8, case.input.len);
     defer allocator.free(reference_output);
-    try runtime.decodeWithRawDictionaries(encoded, reference_output, raw_dictionaries);
-    if (!std.mem.eql(u8, input, reference_output)) return error.ReferenceDecodeFailed;
+    try runtime.decodeWithRawDictionaries(
+        encoded,
+        reference_output,
+        case.raw_dictionaries,
+    );
+    if (!std.mem.eql(u8, case.input, reference_output))
+        return error.ReferenceDecodeFailed;
 
     const summary = try vort.brSummarizeStreamWithOptions(
         encoded,
-        decodeOptions(raw_dictionaries),
+        decodeOptions(case.raw_dictionaries),
     );
-    if (expect_dictionary_copy and !summary.uses_shared_dictionary)
+    // libbrotli 1.2 q0 accepts and prepares RAW attachments but deliberately
+    // selects its stored-speed path for this incompressible payload. Keep q0
+    // in the interoperability matrix without claiming that attachment means
+    // the encoder must reference it; q5+ must prove an actual compound copy.
+    const expect_dictionary_copy = case.expect_dictionary_copy and quality != 0;
+    if ((!case.expect_dictionary_copy and summary.uses_shared_dictionary) or
+        (expect_dictionary_copy and !summary.uses_shared_dictionary))
         return error.ReferenceEncodeFailed;
 }
 
@@ -252,57 +365,461 @@ fn validateReferenceAttachmentLimit(
     );
 }
 
-fn validateVortEncodeIfExposed(
+fn validateVortEncodeMatrix(
     allocator: std.mem.Allocator,
     runtime: libbrotli.Runtime,
-    fifteen: []const []const u8,
-) !usize {
-    if (comptime @hasField(vort.BrotliPlannedEncodeOptions, "shared_dictionary")) {
-        try validateVortEncode(allocator, runtime, &.{}, "zero attachment payload");
-        try validateVortEncode(
-            allocator,
-            runtime,
-            &.{fixture_dictionary_output},
-            fixture_dictionary_output,
-        );
-        try validateVortEncode(
-            allocator,
-            runtime,
-            &.{ fixture_dictionary_output[0..13], fixture_dictionary_output[13..] },
-            fixture_dictionary_output,
-        );
-        try validateVortEncode(
-            allocator,
-            runtime,
-            fifteen,
-            fixture_dictionary_output,
-        );
-        return 4;
+    cases: []const MatrixCase,
+) !VortEncodeCounts {
+    if (comptime !@hasField(vort.BrotliPlannedEncodeOptions, "shared_dictionary"))
+        return .{};
+
+    var counts: VortEncodeCounts = .{};
+    var encoder = vort.BrotliPlannedStreamEncoder.init(allocator);
+    defer encoder.deinit();
+
+    for (cases) |case| {
+        for (qualities) |quality| {
+            var options: vort.BrotliPlannedEncodeOptions = .{ .quality = quality };
+            @field(options, "shared_dictionary") = .{
+                .raw_prefixes = case.raw_dictionaries,
+            };
+
+            const one_shot = try vort.brEncodePlannedStreamWithOptionsAlloc(
+                allocator,
+                case.input,
+                options,
+            );
+            defer allocator.free(one_shot);
+            try validateVortEncoded(
+                allocator,
+                runtime,
+                one_shot,
+                case,
+                // Match upstream q0's legal stored-path behavior.
+                quality != 0,
+            );
+            counts.one_shot += 1;
+
+            const reusable = try encoder.encodeWithOptionsAlloc(
+                allocator,
+                case.input,
+                options,
+            );
+            defer allocator.free(reusable);
+            try validateVortEncoded(
+                allocator,
+                runtime,
+                reusable,
+                case,
+                quality != 0,
+            );
+            counts.reusable += 1;
+        }
+
+        if (comptime chunkedEncodeExposed()) {
+            const chunks = splitInput(case.input);
+            var chunked_options: vort.BrotliPlannedStreamChunksOptions = .{};
+            @field(chunked_options, "shared_dictionary") = .{
+                .raw_prefixes = case.raw_dictionaries,
+            };
+            const chunked = try vort.brEncodePlannedStreamChunksWithOptionsAlloc(
+                allocator,
+                &chunks,
+                chunked_options,
+            );
+            defer allocator.free(chunked);
+            try validateVortEncoded(
+                allocator,
+                runtime,
+                chunked,
+                case,
+                true,
+            );
+            counts.chunked += 1;
+        }
+
+        if (comptime incrementalEncodeExposed()) {
+            const incremental = try encodeIncremental(allocator, case);
+            defer allocator.free(incremental);
+            try validateVortEncoded(
+                allocator,
+                runtime,
+                incremental,
+                case,
+                true,
+            );
+            counts.incremental += 1;
+        }
     }
-    return 0;
+    return counts;
 }
 
-fn validateVortEncode(
+fn validateRuntimeRegressionMatrix(
     allocator: std.mem.Allocator,
     runtime: libbrotli.Runtime,
-    raw_dictionaries: []const []const u8,
-    input: []const u8,
-) !void {
-    if (comptime @hasField(vort.BrotliPlannedEncodeOptions, "shared_dictionary")) {
-        var options: vort.BrotliPlannedEncodeOptions = .{ .quality = 11 };
-        @field(options, "shared_dictionary") = .{ .raw_prefixes = raw_dictionaries };
-        const encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(
-            allocator,
-            input,
-            options,
-        );
-        defer allocator.free(encoded);
+) !usize {
+    var dictionary_bytes: [4096]u8 = undefined;
+    fillRuntimeRegressionPayload(&dictionary_bytes, 0x1234_5678);
+    const prefixes = [_][]const u8{
+        dictionary_bytes[0..333],
+        dictionary_bytes[333..2049],
+        dictionary_bytes[2049..],
+    };
+    const dictionary = vort.BrotliSharedDictionary{ .raw_prefixes = &prefixes };
+    const options = vort.BrotliDecodeOptions{ .shared_dictionary = dictionary };
+    var count: usize = 0;
 
-        const output = try allocator.alloc(u8, input.len);
-        defer allocator.free(output);
-        try runtime.decodeWithRawDictionaries(encoded, output, raw_dictionaries);
-        if (!std.mem.eql(u8, input, output)) return error.ReferenceDecodeFailed;
+    // Cross the unsaturated-to-saturated WBITS=10 boundary over three
+    // meta-blocks. The continuation before saturation reuses compound rep0.
+    const crossing_chunks = [_][]const u8{
+        dictionary_bytes[0..900],
+        dictionary_bytes[900..1800],
+        dictionary_bytes[1800..],
+    };
+    const crossing = try vort.brEncodePlannedStreamChunksWithOptionsAlloc(
+        allocator,
+        &crossing_chunks,
+        .{
+            .window_bits = 10,
+            .metadata = "cross-window",
+            .shared_dictionary = dictionary,
+        },
+    );
+    defer allocator.free(crossing);
+    try validateRuntimeRegressionEncoded(
+        allocator,
+        runtime,
+        crossing,
+        &dictionary_bytes,
+        &prefixes,
+        options,
+        .{
+            .require_shared_dictionary = true,
+            .require_metadata = true,
+        },
+    );
+    count += 1;
+
+    // Roll a random first meta-block back to stored, then require the next
+    // compound distance to use saturated H without inheriting candidate state.
+    var filler: [32768]u8 = undefined;
+    fillRuntimeRegressionPayload(&filler, 0x9e37_79b9);
+    const rollback_chunks = [_][]const u8{ &filler, &dictionary_bytes };
+    const expected = try allocator.alloc(u8, filler.len + dictionary_bytes.len);
+    defer allocator.free(expected);
+    @memcpy(expected[0..filler.len], &filler);
+    @memcpy(expected[filler.len..], &dictionary_bytes);
+    const rollback = try vort.brEncodePlannedStreamChunksWithOptionsAlloc(
+        allocator,
+        &rollback_chunks,
+        .{
+            .window_bits = 10,
+            .metadata = "stored-rollback",
+            .shared_dictionary = dictionary,
+        },
+    );
+    defer allocator.free(rollback);
+    try validateRuntimeRegressionEncoded(
+        allocator,
+        runtime,
+        rollback,
+        expected,
+        &prefixes,
+        options,
+        .{
+            .require_shared_dictionary = true,
+            .require_stored = true,
+            .require_metadata = true,
+        },
+    );
+    count += 1;
+
+    // Repeat the rollback/H transition through the progressive encoder. A
+    // metadata block separates content while a small output slice forces
+    // repeated backpressure and resumptions.
+    var encoder = vort.BrotliIncrementalPlannedStreamEncoder.initWithOptions(
+        allocator,
+        .{
+            .stream = .{
+                .window_bits = 10,
+                .shared_dictionary = dictionary,
+            },
+            .block_len = filler.len,
+        },
+    );
+    defer encoder.deinit();
+    var incremental: std.ArrayList(u8) = .empty;
+    defer incremental.deinit(allocator);
+    var scratch: [257]u8 = undefined;
+    try feedRuntimeIncremental(
+        &encoder,
+        allocator,
+        &incremental,
+        &filler,
+        &scratch,
+    );
+    try encoder.writeMetadata("between-blocks");
+    try drainRuntimeIncrementalFlush(
+        &encoder,
+        allocator,
+        &incremental,
+        &scratch,
+    );
+    try feedRuntimeIncremental(
+        &encoder,
+        allocator,
+        &incremental,
+        &dictionary_bytes,
+        &scratch,
+    );
+    try encoder.finish();
+    try drainRuntimeIncrementalFinish(
+        &encoder,
+        allocator,
+        &incremental,
+        &scratch,
+    );
+    try validateRuntimeRegressionEncoded(
+        allocator,
+        runtime,
+        incremental.items,
+        expected,
+        &prefixes,
+        options,
+        .{
+            .require_shared_dictionary = true,
+            .require_stored = true,
+            .require_metadata = true,
+        },
+    );
+    count += 1;
+
+    // At saturated H, a static dictionary address begins after the complete
+    // compound region even though this plan never copies from the RAW bytes.
+    var static_input: [1205]u8 = @splat('a');
+    @memcpy(static_input[1200..], "world");
+    const static_wire = try vort.brEncodePlannedStreamWithOptionsAlloc(
+        allocator,
+        &static_input,
+        .{
+            .level = .ratio,
+            .window_bits = 10,
+            .extended_dictionary_probes = 4096,
+            .shared_dictionary = dictionary,
+        },
+    );
+    defer allocator.free(static_wire);
+    const static_summary = try vort.brSummarizeStreamWithOptions(
+        static_wire,
+        options,
+    );
+    if (static_summary.window_bits != 10) return error.UnexpectedWindowBits;
+    if (!static_summary.uses_static_dictionary) return error.MissingStaticCopy;
+    if (static_summary.uses_shared_dictionary)
+        return error.UnexpectedSharedDictionaryCopy;
+    const static_output = try allocator.alloc(u8, static_input.len);
+    defer allocator.free(static_output);
+    try runtime.decodeWithRawDictionaries(
+        static_wire,
+        static_output,
+        &prefixes,
+    );
+    if (!std.mem.eql(u8, &static_input, static_output))
+        return error.ReferenceDecodeFailed;
+    count += 1;
+
+    return count;
+}
+
+const RuntimeRegressionExpectations = struct {
+    require_shared_dictionary: bool = false,
+    require_stored: bool = false,
+    require_metadata: bool = false,
+};
+
+fn validateRuntimeRegressionEncoded(
+    allocator: std.mem.Allocator,
+    runtime: libbrotli.Runtime,
+    encoded: []const u8,
+    expected: []const u8,
+    prefixes: []const []const u8,
+    decode_options: vort.BrotliDecodeOptions,
+    expectations: RuntimeRegressionExpectations,
+) !void {
+    const summary = try vort.brSummarizeStreamWithOptions(
+        encoded,
+        decode_options,
+    );
+    if (summary.window_bits != 10) return error.UnexpectedWindowBits;
+    if (expectations.require_shared_dictionary and
+        !summary.uses_shared_dictionary)
+        return error.MissingSharedDictionaryCopy;
+    if (expectations.require_stored and
+        summary.uncompressed_meta_block_count == 0)
+        return error.MissingStoredBlock;
+    if (expectations.require_metadata and
+        summary.metadata_meta_block_count == 0)
+        return error.MissingMetadataBlock;
+
+    const decoded = try allocator.alloc(u8, expected.len);
+    defer allocator.free(decoded);
+    try runtime.decodeWithRawDictionaries(encoded, decoded, prefixes);
+    if (!std.mem.eql(u8, expected, decoded)) return error.ReferenceDecodeFailed;
+}
+
+fn feedRuntimeIncremental(
+    encoder: *vort.BrotliIncrementalPlannedStreamEncoder,
+    allocator: std.mem.Allocator,
+    encoded: *std.ArrayList(u8),
+    input: []const u8,
+    scratch: []u8,
+) !void {
+    var offset: usize = 0;
+    while (offset < input.len) {
+        const result = try encoder.step(input[offset..], scratch);
+        offset += result.progress.input_read;
+        try encoded.appendSlice(
+            allocator,
+            scratch[0..result.progress.output_written],
+        );
     }
+}
+
+fn drainRuntimeIncrementalFlush(
+    encoder: *vort.BrotliIncrementalPlannedStreamEncoder,
+    allocator: std.mem.Allocator,
+    encoded: *std.ArrayList(u8),
+    scratch: []u8,
+) !void {
+    while (true) {
+        const result = try encoder.step("", scratch);
+        try encoded.appendSlice(
+            allocator,
+            scratch[0..result.progress.output_written],
+        );
+        if (result.status == .need_input) return;
+    }
+}
+
+fn drainRuntimeIncrementalFinish(
+    encoder: *vort.BrotliIncrementalPlannedStreamEncoder,
+    allocator: std.mem.Allocator,
+    encoded: *std.ArrayList(u8),
+    scratch: []u8,
+) !void {
+    while (true) {
+        const result = try encoder.step("", scratch);
+        try encoded.appendSlice(
+            allocator,
+            scratch[0..result.progress.output_written],
+        );
+        if (result.status == .done) return;
+    }
+}
+
+fn chunkedEncodeExposed() bool {
+    return @hasField(
+        vort.BrotliPlannedStreamChunksOptions,
+        "shared_dictionary",
+    );
+}
+
+fn incrementalEncodeExposed() bool {
+    const EncoderOptions = vort.BrotliIncrementalPlannedStreamEncoder.Options;
+    const StreamOptions = @FieldType(EncoderOptions, "stream");
+    return @hasField(StreamOptions, "shared_dictionary");
+}
+
+fn encodeIncremental(
+    allocator: std.mem.Allocator,
+    case: MatrixCase,
+) ![]u8 {
+    const Encoder = vort.BrotliIncrementalPlannedStreamEncoder;
+    const StreamOptions = @FieldType(Encoder.Options, "stream");
+    var stream_options: StreamOptions = .{};
+    @field(stream_options, "shared_dictionary") = .{
+        .raw_prefixes = case.raw_dictionaries,
+    };
+    var encoder = Encoder.initWithOptions(allocator, .{
+        .stream = stream_options,
+        .block_len = @max(case.input.len, 1),
+    });
+    defer encoder.deinit();
+
+    var encoded: std.ArrayList(u8) = .empty;
+    errdefer encoded.deinit(allocator);
+    var scratch: [3]u8 = undefined;
+    var offset: usize = 0;
+    while (offset < case.input.len) {
+        const end = @min(case.input.len, offset + 2);
+        const result = try encoder.step(case.input[offset..end], &scratch);
+        offset += result.progress.input_read;
+        try encoded.appendSlice(
+            allocator,
+            scratch[0..result.progress.output_written],
+        );
+    }
+    try encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try encoded.appendSlice(
+            allocator,
+            scratch[0..result.progress.output_written],
+        );
+        if (result.status == .done) break;
+    }
+    return encoded.toOwnedSlice(allocator);
+}
+
+fn splitInput(input: []const u8) [3][]const u8 {
+    const first = input.len / 3;
+    const second = (input.len * 2) / 3;
+    return .{ input[0..first], input[first..second], input[second..] };
+}
+
+fn fillDictionaryPayload(output: []u8) void {
+    var state: u32 = 0x6d2b_79f5;
+    for (output) |*byte| {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        byte.* = @truncate(state >> 24);
+    }
+}
+
+fn fillRuntimeRegressionPayload(output: []u8, initial: u32) void {
+    var state = initial;
+    for (output) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+}
+
+fn validateVortEncoded(
+    allocator: std.mem.Allocator,
+    runtime: libbrotli.Runtime,
+    encoded: []const u8,
+    case: MatrixCase,
+    require_dictionary_copy: bool,
+) !void {
+    const output = try allocator.alloc(u8, case.input.len);
+    defer allocator.free(output);
+    try runtime.decodeWithRawDictionaries(
+        encoded,
+        output,
+        case.raw_dictionaries,
+    );
+    if (!std.mem.eql(u8, case.input, output)) return error.ReferenceDecodeFailed;
+
+    const summary = try vort.brSummarizeStreamWithOptions(
+        encoded,
+        decodeOptions(case.raw_dictionaries),
+    );
+    if ((!case.expect_dictionary_copy and summary.uses_shared_dictionary) or
+        (case.expect_dictionary_copy and
+            require_dictionary_copy and
+            !summary.uses_shared_dictionary))
+        return error.ReferenceEncodeFailed;
 }
 
 fn decodeOptions(raw_dictionaries: []const []const u8) vort.BrotliDecodeOptions {

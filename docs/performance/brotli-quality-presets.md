@@ -1,6 +1,6 @@
 # Brotli quality and mode preset status
 
-Date: 2026-10-14.
+Date: 2026-10-15.
 
 ## Scope
 
@@ -47,8 +47,8 @@ advertised.
 
 | Quality | Family | Current Vort behavior |
 | ---: | --- | --- |
-| 0 | fast | Minimum hash-greedy search: chain 1, nice length 16, one candidate; no contexts, splitting, recent distances, or dictionary probing. This is not a fragment encoder. |
-| 1 | fast | Hash-greedy chain 2 and nice length 24; still no contexts, splitting, recent distances, or dictionary probing. This is not a fragment encoder. |
+| 0 | fast | Minimum hash-greedy search: chain 1, nice length 16, one candidate; no contexts, splitting, recent distances, or built-in static-dictionary probing. Explicit RAW shared-prefix matching remains available. This is not a fragment encoder. |
+| 1 | fast | Hash-greedy chain 2 and nice length 24; still no contexts, splitting, recent distances, or built-in static-dictionary probing. Explicit RAW shared-prefix matching remains available. This is not a fragment encoder. |
 | 2 | balanced | Lazy chain 4 and nice length 32; every mode may try the built-in transformed static dictionary through 256 bytes. No specialized q2 entropy writer is present. |
 | 3 | balanced | Lazy chain 8, nice length 48, recent-distance selection, and the same short-input dictionary candidate in every mode. No specialized q3 entropy writer is present. |
 | 4 | balanced | Lazy chain 16 and nice length 64; enables existing literal/command/distance split candidates and distance-parameter search. Font additionally compares its first mode-specific distance-shape candidate. |
@@ -72,7 +72,8 @@ general libbrotli HQ parser.
 ## Mode effects
 
 Generic, text, and font use exactly the same parser budgets, UTF-8 literal
-context policy, split schedule, and dictionary thresholds and probe budgets:
+context policy, split schedule, and built-in static-dictionary thresholds and
+probe budgets:
 
 - the built-in transformed static dictionary starts at q2;
 - the fixed UTF-8 literal-context candidate starts at q5;
@@ -88,17 +89,46 @@ only when its complete encoded byte length is smaller.
 Static-dictionary candidates are considered through 256 bytes. When extended
 search is enabled, the bounded indexed search applies through 4 KiB. This is a
 vetted subset of the RFC built-in dictionary transforms; it is not support for
-caller-supplied or shared dictionaries in the planned encoder.
+caller-supplied/custom static dictionaries. RAW shared-prefix matching is the
+separate option described below.
 
-## RAW shared-prefix decode boundary
+## RAW shared-prefix encode/decode boundary
 
-Shared dictionaries are currently a decode-only capability, separate from the
-quality preset encoder. `BrotliDecodeOptions.shared_dictionary` accepts a
-borrowed `BrotliSharedDictionary` with zero through fifteen ordered RAW
-attachments. Non-empty attachments are logically concatenated in order; an
-empty attachment contributes no bytes but still consumes one attachment slot.
+`BrotliSharedDictionary` is a borrowed descriptor for zero through fifteen
+ordered RAW attachments. Non-empty attachments are logically concatenated in
+order; an empty attachment contributes no bytes but still consumes one
+attachment slot.
 
-The option is honored by one-shot `brDecodeStream*WithOptions` decoding,
+`BrotliPlannedEncodeOptions.shared_dictionary` makes RAW matching available to
+one-shot and reusable planned encoding at legacy fast/balanced/ratio and
+q0...q11, independently of the table's built-in static-dictionary schedule.
+The fast-only streaming surfaces use
+`BrotliPlannedStreamChunksOptions.shared_dictionary` and
+`BrotliIncrementalPlannedStreamEncoder.Options.stream.shared_dictionary` for
+chunked and incremental encoding respectively. These streaming APIs do not
+gain quality-aware planning. Omitting the dictionary preserves the established
+wire exactly.
+
+With a non-empty RAW descriptor, the one-shot path applies the selected
+quality's lazy-search budget, context/split policy, recent-distance policy,
+adaptive split overrides, distance-parameter search, and built-in static-
+dictionary budget to the compound-aware command plan. It does not yet combine
+RAW matches with the separate optimal-parser, fixed-record, or font-distance
+alternative candidates used by some higher presets, and non-empty RAW q11 does
+not inherit the complete q10 winner. Consequently, the ordinary no-dictionary
+q11 <= q10 size guarantee does not currently extend to non-empty RAW
+dictionaries. Closing that ratio gap is performance work; it does not change
+the accepted quality range or wire interoperability described here.
+
+Compound references use the actual Brotli wire distance and update the recent-
+distance ring when explicit; implicit rep0 leaves its order unchanged. Built-in
+transformed static-dictionary references never update the ring. The encoder's
+fixed 15-bit/four-way matcher index occupies about 1 MiB on 64-bit targets once
+a non-empty dictionary is prepared. Reusable and incremental encoders retain
+the index, but never copy or own the attachment bytes.
+
+`BrotliDecodeOptions.shared_dictionary` is honored by one-shot
+`brDecodeStream*WithOptions` decoding,
 chunked decode, decoded-size and summary APIs, caller-history summaries, and
 both the caller-history `BrotliIncrementalCopyStreamDecoder` and allocator-owned
 `BrotliIncrementalStreamDecoder` progressive paths. Summary results distinguish
@@ -106,16 +136,18 @@ shared-dictionary use with `uses_shared_dictionary`,
 `shared_dictionary_copy_count`, and `shared_dictionary_bytes`.
 
 The outer attachment slice and every attachment's bytes are borrowed without
-copying. They must remain alive and unchanged throughout a synchronous decode
-or summary call, and from initialization through completion for progressive
-decoding. Reset reuse keeps the same borrowing requirement; the allocator-owned
-decoder can install a replacement only through `nextFrame` after completing the
-current frame.
+copying. They remain alive and unchanged throughout any synchronous call.
+Reusable encoders retain the matcher index, not the bytes; index reuse for an
+identical descriptor requires the attachment bytes to stay unchanged across
+calls. Incremental encoders retain them through finish/drain and reset reuse,
+or until `nextStream` installs completed-stream options. Progressive decoders
+retain them from initialization through completion and reset reuse; the
+allocator-owned decoder can replace them only through `nextFrame` after
+completing the current frame.
 
-No public Brotli encoder currently accepts RAW attachments or exposes compound-
-dictionary encoding. Serialized shared dictionaries and caller-supplied/custom
-static dictionaries are unsupported; their future API or wire compatibility is
-not promised by this decode slice.
+Serialized shared dictionaries and caller-supplied/custom static dictionaries
+are unsupported; RAW attachment support does not promise future API or wire
+compatibility for either unsupported form.
 
 ## Large-input and API boundaries
 
@@ -127,10 +159,11 @@ per-block policy; it does not apply the requested quality/mode schedule or plan
 matches and entropy decisions across blocks.
 
 The current quality/mode surface is a one-shot planned-encoder policy available
-through allocating, caller-buffer, and reusable-encoder one-shot frontends. It
-does not add quality-aware behavior to the incremental planned encoder or the
-explicit chunk-list options. Callers that need streaming today should continue
-to use those APIs with their documented existing policy.
+through allocating, caller-buffer, and reusable-encoder one-shot frontends,
+including RAW shared-prefix matching. It does not add quality-aware behavior to
+the incremental planned encoder or explicit chunk-list options; those accept
+RAW attachments through their separate fast-only options while retaining the
+documented existing planning policy.
 
 ## Verification and performance claims
 
@@ -141,6 +174,28 @@ modes. The planned Node differential emits one generic, text, and font fixture
 at each of q0...q11 and requires Node's Brotli decoder to reproduce the input,
 for 36 quality/mode interoperability cases. This is wire-compatibility evidence
 only; it is not byte-parity or ratio/performance evidence against libbrotli.
+
+The dedicated RAW shared-dictionary gate passed in Debug and ReleaseFast
+against local libbrotli 1.2.0 with this matrix:
+
+| Direction and Vort surface | Attachments | Qualities | Cases |
+| --- | --- | --- | ---: |
+| libbrotli encode -> Vort decode | 0/1/2/15 | q0/q5/q9/q11 | 16 |
+| Vort one-shot encode -> libbrotli decode | 0/1/2/15 | q0/q5/q9/q11 | 16 |
+| Vort reusable encode -> libbrotli decode | 0/1/2/15 | q0/q5/q9/q11 | 16 |
+| Vort fast chunked encode -> libbrotli decode | 0/1/2/15 | fast-only | 4 |
+| Vort fast incremental encode -> libbrotli decode | 0/1/2/15 | fast-only | 4 |
+| Stateful window/ring/rollback/static regressions | mixed | fast/ratio | 4 |
+
+The stateful regressions cover WBITS=10 saturation and cross-block recent
+reuse, stored rollback followed by compound copy, incremental metadata and
+output backpressure, and static addressing after a saturated compound region.
+The same run retains four upstream decode fixtures and three descriptor-error
+cases. System libbrotli 1.0.9 lacks the optional shared-dictionary symbols, so
+the tool explicitly reports the complete runtime matrix as skipped there.
+Debug and ReleaseFast `zig build test-br` also passed all 763 tests, including q0...q11,
+legacy level, retained-index, empty-dictionary wire, static-address shift, and
+incremental rollback coverage.
 
 The planned encode benchmark accepts independent Vort selectors:
 
@@ -195,8 +250,7 @@ names:
 - dedicated q0/q1 fragment compressors and their streaming fragment model;
 - the specialized q2/q3 entropy writers and their matching block decisions;
 - real q10/q11 Zopfli/HQ cost refinement, including iterative model feedback;
-- a public RAW shared-prefix/compound-dictionary encoder and contextual
-  dictionary encoding;
+- contextual dictionary encoding;
 - quality-aware large-stream planning, including cross-meta-block matches,
   quality-specific block sizing, and entropy/context decisions;
 - calibration and regression gates for compression ratio, throughput, peak

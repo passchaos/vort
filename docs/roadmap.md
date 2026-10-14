@@ -22,8 +22,8 @@ major gaps before Vort can claim broad industry-best parity:
   distance splitting and context clustering, but the matrix is not libbrotli
   algorithm, byte, ratio, or throughput parity. Specialized q0/q1 fragment
   encoders, q2/q3 entropy writers, q10/q11 Zopfli/HQ cost refinement,
-  shared/contextual/compound dictionaries, and quality-aware large-stream
-  planning remain open.
+  contextual dictionary encoding, and quality-aware large-stream planning
+  remain open.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
   entropy block switching, static dictionaries, consecutive compressed
@@ -19697,7 +19697,39 @@ reuse, so production keeps the simpler independently owned plans.
   completed allocator-owned decoder's `nextFrame` options). An upstream RAW
   compound fixture is pinned across public APIs, including split attachments,
   an empty occupied slot, one-byte input/output progression, and descriptor
-  rejection before output mutation. This is decode-only at the public surface;
-  no Brotli encoder API currently accepts attachments. Serialized shared
-  dictionaries and caller-supplied/custom static dictionaries remain
+  rejection before output mutation. This first slice was decode-only; the
+  following encoder increment completes the public RAW round trip. Serialized
+  shared dictionaries and caller-supplied/custom static dictionaries remain
   unsupported, with no compatibility commitment implied for either form.
+
+- Added Brotli RAW shared-prefix/compound-dictionary encoding to
+  `PlannedEncodeOptions.shared_dictionary` for one-shot/reusable encoding at
+  legacy fast/balanced/ratio and q0...q11,
+  `PlannedStreamChunksOptions.shared_dictionary` for fast chunked encoding, and
+  `IncrementalPlannedStreamEncoder.Options.stream.shared_dictionary` for fast
+  incremental streams. Zero through fifteen ordered borrowed attachments share
+  the decoder's logical concatenation and validation rules; empty attachments
+  still occupy slots. The reusable matcher keeps a fixed 15-bit, four-way
+  address index (about 1 MiB on 64-bit) without flattening dictionary bytes,
+  and reusable/incremental encoders retain that index across streams. Explicit
+  compound copies update the recent-distance ring, implicit rep0 reuses it in
+  place, and built-in transformed static-dictionary copies do not update it.
+  Compressed meta-block winners commit their output position and recent ring;
+  stored fallback rolls back the candidate ring and advances only the output
+  position. Omitted or byte-empty dictionary options preserve the prior wire
+  across one-shot, chunked, and incremental paths.
+  Debug and ReleaseFast `test-br` pass all 763 tests. The dedicated libbrotli matrix passes in
+  Debug and ReleaseFast against local 1.2.0: 0/1/2/15 attachments at
+  q0/q5/q9/q11 give 16 reference-encode-to-Vort-decode cases, then Vort emits
+  16 one-shot, 16 reusable, four fast chunked, and four fast incremental cases
+  decoded by libbrotli. Four stateful regressions additionally pin WBITS=10
+  saturation/cross-block recent reuse, stored rollback followed by compound
+  copy, incremental metadata/backpressure, and static addressing after a
+  saturated compound region. System libbrotli 1.0.9 lacks the optional symbols and
+  explicitly skips the whole runtime matrix. Higher-preset optimal, fixed-
+  record, and font-distance alternative candidates are not yet combined with
+  RAW matches; the shared-aware candidate still honors the selected lazy,
+  context/split, recent-distance, adaptive, distance-parameter, and built-in
+  static-dictionary policies. Serialized shared dictionaries and caller-supplied/custom static
+  dictionaries remain unsupported and are not a promised future compatibility
+  surface.
