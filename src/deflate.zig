@@ -84,10 +84,16 @@ pub const RawDeflateIncrementalStoredEncoder = incremental_stored_encoder.Encode
 
 const IncrementalFixedEncoderCodec = struct {
     pub const Error = deflate.Error || std.mem.Allocator.Error;
+    pub const ParamsError = deflate.ParamsError;
     pub const CompressionOptions = deflate.CompressionOptions;
+    pub const Params = deflate.DeflateParams;
+    pub const ResolvedParams = deflate.ResolvedDeflateParams;
     pub const Token = lz77.Token;
     pub const history_len = lz77.default_window_len;
+    pub const supports_params: bool = false;
     pub const State = bitstream.BitWriter;
+
+    pub const resolveParams = deflate.resolveDeflateParams;
 
     pub fn deinitState(state: *State, allocator: std.mem.Allocator) void {
         state.deinit(allocator);
@@ -112,6 +118,15 @@ const IncrementalFixedEncoderCodec = struct {
         }
         try publishIncrementalWriterBytes(allocator, pending, state);
     }
+    pub fn writeStoredOnlyBlock(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State, matcher: *incremental_rolling_hash.Matcher, block: []const u8, history: []const u8, final: bool) IncrementalFixedEncoderCodec.Error!void {
+        const additional = storedBlocksEncodedSizeFromState(state.*, block.len);
+        const capacity = std.math.add(usize, state.bytes.items.len, additional) catch
+            return error.IntegerOverflow;
+        try state.bytes.ensureTotalCapacity(allocator, capacity);
+        try matcher.observeUnindexedBlock(block.len, history.len);
+        try writeStoredBlocks(allocator, state, block, final);
+        try publishIncrementalWriterBytes(allocator, pending, state);
+    }
     pub fn writeSyncFlush(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) IncrementalFixedEncoderCodec.Error!void {
         try writeStoredBlock(allocator, state, "", false);
         try publishIncrementalWriterBytes(allocator, pending, state);
@@ -134,10 +149,16 @@ pub const RawDeflateIncrementalFixedEncoder = incremental_fixed_encoder.Encoder(
 
 const IncrementalBestEncoderCodec = struct {
     pub const Error = deflate.Error || std.mem.Allocator.Error;
+    pub const ParamsError = deflate.ParamsError;
     pub const CompressionOptions = deflate.CompressionOptions;
+    pub const Params = deflate.DeflateParams;
+    pub const ResolvedParams = deflate.ResolvedDeflateParams;
     pub const Token = lz77.Token;
     pub const history_len = lz77.default_window_len;
+    pub const supports_params: bool = true;
     pub const State = bitstream.BitWriter;
+
+    pub const resolveParams = deflate.resolveDeflateParams;
 
     pub fn deinitState(state: *State, allocator: std.mem.Allocator) void {
         state.deinit(allocator);
@@ -169,6 +190,9 @@ const IncrementalBestEncoderCodec = struct {
             try matcher.observeUnindexedBlock(block.len, history.len);
         }
         try publishIncrementalWriterBytes(allocator, pending, state);
+    }
+    pub fn writeStoredOnlyBlock(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State, matcher: *incremental_rolling_hash.Matcher, block: []const u8, history: []const u8, final: bool) IncrementalBestEncoderCodec.Error!void {
+        return IncrementalFixedEncoderCodec.writeStoredOnlyBlock(allocator, pending, state, matcher, block, history, final);
     }
     pub fn writeSyncFlush(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) IncrementalBestEncoderCodec.Error!void {
         return IncrementalFixedEncoderCodec.writeSyncFlush(allocator, pending, state);
@@ -220,9 +244,13 @@ pub fn writeIncrementalBestPlannedBlock(
 
 const IncrementalZlibFixedEncoderCodec = struct {
     pub const Error = deflate.Error || std.mem.Allocator.Error;
+    pub const ParamsError = deflate.ParamsError;
+    pub const Params = deflate.DeflateParams;
     pub const RawEncoder = deflate.RawDeflateIncrementalFixedEncoder;
     pub const RawOptions = RawEncoder.Options;
     pub const Adler32 = checksum.Adler32;
+
+    pub const resolveParams = deflate.resolveDeflateParams;
 
     pub fn writeHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), dictionary: []const u8) IncrementalZlibFixedEncoderCodec.Error!void {
         const header_len: usize = if (dictionary.len == 0) 2 else 6;
@@ -240,9 +268,12 @@ pub const ZlibIncrementalFixedEncoder = incremental_zlib_fixed_encoder.Encoder(I
 
 const IncrementalZlibBestEncoderCodec = struct {
     pub const Error = IncrementalZlibFixedEncoderCodec.Error;
+    pub const ParamsError = IncrementalZlibFixedEncoderCodec.ParamsError;
+    pub const Params = IncrementalZlibFixedEncoderCodec.Params;
     pub const RawEncoder = deflate.RawDeflateIncrementalBestEncoder;
     pub const RawOptions = RawEncoder.Options;
     pub const Adler32 = checksum.Adler32;
+    pub const resolveParams = IncrementalZlibFixedEncoderCodec.resolveParams;
     pub const writeHeader = IncrementalZlibFixedEncoderCodec.writeHeader;
     pub const writeFooter = IncrementalZlibFixedEncoderCodec.writeFooter;
 };
@@ -251,10 +282,14 @@ pub const ZlibIncrementalBestEncoder = incremental_zlib_fixed_encoder.Encoder(In
 
 const IncrementalGzipFixedEncoderCodec = struct {
     pub const Error = deflate.Error || std.mem.Allocator.Error;
+    pub const ParamsError = deflate.ParamsError;
+    pub const Params = deflate.DeflateParams;
     pub const RawEncoder = deflate.RawDeflateIncrementalFixedEncoder;
     pub const RawOptions = RawEncoder.Options;
     pub const HeaderOptions = deflate.GzipHeaderOptions;
     pub const Crc32 = checksum.Crc32Best;
+
+    pub const resolveParams = deflate.resolveDeflateParams;
 
     pub fn writeHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: HeaderOptions) IncrementalGzipFixedEncoderCodec.Error!void {
         const header_len = try gzipHeaderEncodedSize(options);
@@ -273,10 +308,13 @@ pub const GzipIncrementalFixedEncoder = incremental_gzip_fixed_encoder.Encoder(I
 
 const IncrementalGzipBestEncoderCodec = struct {
     pub const Error = IncrementalGzipFixedEncoderCodec.Error;
+    pub const ParamsError = IncrementalGzipFixedEncoderCodec.ParamsError;
+    pub const Params = IncrementalGzipFixedEncoderCodec.Params;
     pub const RawEncoder = deflate.RawDeflateIncrementalBestEncoder;
     pub const RawOptions = RawEncoder.Options;
     pub const HeaderOptions = deflate.GzipHeaderOptions;
     pub const Crc32 = checksum.Crc32Best;
+    pub const resolveParams = IncrementalGzipFixedEncoderCodec.resolveParams;
     pub const writeHeader = IncrementalGzipFixedEncoderCodec.writeHeader;
     pub const writeFooter = IncrementalGzipFixedEncoderCodec.writeFooter;
 };
@@ -378,6 +416,37 @@ pub const DecodeResult = struct {
 pub const ParserMode = enum { hash, greedy, lazy, optimal };
 pub const CompressionStrategy = enum { default, filtered, huffman_only, rle };
 
+/// zlib-compatible runtime compression parameters. This is intentionally
+/// separate from `CompressionStrategy`: the latter remains the strategy domain
+/// used by low-level planning options, while `.fixed` controls block selection.
+pub const DeflateParams = struct {
+    level: u4 = 6,
+    strategy: Strategy = .default,
+
+    pub const Strategy = enum {
+        default,
+        filtered,
+        huffman_only,
+        rle,
+        fixed,
+    };
+};
+
+pub const ParamsError = error{
+    InvalidCompressionLevel,
+    InvalidEncoderState,
+    UnsupportedOperation,
+};
+
+/// zlib changes its internal compression approach at these level boundaries.
+/// Runtime parameter changes only need a DEFLATE block boundary when the
+/// family or strategy changes.
+pub const DeflateAlgorithmFamily = enum {
+    stored,
+    fast,
+    slow,
+};
+
 pub const BlockSelection = enum { stored_fixed, stored_fixed_dynamic };
 
 pub const CompressionOptions = struct {
@@ -386,6 +455,13 @@ pub const CompressionOptions = struct {
     lz77_options: lz77.GreedyOptions = .{},
     block_selection: BlockSelection = .stored_fixed_dynamic,
     split_options: AdaptiveSplitOptions = .{},
+};
+
+pub const ResolvedDeflateParams = struct {
+    params: DeflateParams,
+    compression: CompressionOptions,
+    stored_only: bool,
+    family: DeflateAlgorithmFamily,
 };
 
 pub const CompressionLevel = enum { fastest, fast, default, best };
@@ -691,6 +767,38 @@ pub fn optionsForZlibLevel(level: u4) Error!CompressionOptions {
         8 => .{ .parser = .optimal, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 384, .nice_len = 128, .max_candidates = @max(4, lz77.max_optimal_candidates / 2), .lazy_min_gain = 1, .min_match = 3, .max_match = lz77.max_match_len, .min_savings_bits = 0 }, .split_options = .{ .min_block_len = 5 * 1024, .max_block_len = max_stored_block_len, .sample_len = 7168, .search_step = 5 * 1024 } },
         9 => optionsForLevel(.best),
         else => error.InvalidBlockPlan,
+    };
+}
+
+/// Resolve zlib-compatible public parameters to Vort's internal planner
+/// options. Level zero stays outside `optionsForZlibLevel()` so that helper's
+/// established 1...9 contract and error remain unchanged.
+pub fn resolveDeflateParams(params: DeflateParams) ParamsError!ResolvedDeflateParams {
+    if (params.level > 9) return error.InvalidCompressionLevel;
+
+    const family: DeflateAlgorithmFamily = if (params.level == 0)
+        .stored
+    else if (params.level <= 3)
+        .fast
+    else
+        .slow;
+    const options_level: u4 = if (params.level == 0) 1 else params.level;
+    var compression = optionsForZlibLevel(options_level) catch unreachable;
+    switch (params.strategy) {
+        .default => compression.strategy = .default,
+        .filtered => compression.strategy = .filtered,
+        .huffman_only => compression.strategy = .huffman_only,
+        .rle => compression.strategy = .rle,
+        .fixed => {
+            compression.strategy = .default;
+            compression.block_selection = .stored_fixed;
+        },
+    }
+    return .{
+        .params = params,
+        .compression = compression,
+        .stored_only = params.level == 0,
+        .family = family,
     };
 }
 
@@ -22311,6 +22419,122 @@ test "zlib numeric compression levels map to stable Vort presets" {
     try std.testing.expectEqual(ParserMode.optimal, (try optionsForZlibLevel(8)).parser);
     try std.testing.expect((try optionsForZlibLevel(8)).lz77_options.max_chain < (try optionsForZlibLevel(9)).lz77_options.max_chain);
     try std.testing.expectError(error.InvalidBlockPlan, optionsForZlibLevel(10));
+}
+
+test "runtime deflate parameters resolve the complete zlib domain" {
+    const defaults = try resolveDeflateParams(.{});
+    try std.testing.expectEqual(@as(u4, 6), defaults.params.level);
+    try std.testing.expectEqual(DeflateParams.Strategy.default, defaults.params.strategy);
+    try std.testing.expectEqual(DeflateAlgorithmFamily.slow, defaults.family);
+    try std.testing.expect(!defaults.stored_only);
+    try std.testing.expectEqualDeep(try optionsForZlibLevel(6), defaults.compression);
+
+    inline for (0..10) |level_usize| {
+        const level: u4 = @intCast(level_usize);
+        const resolved = try resolveDeflateParams(.{ .level = level });
+        try std.testing.expectEqual(level, resolved.params.level);
+        try std.testing.expectEqual(level == 0, resolved.stored_only);
+        const expected_family: DeflateAlgorithmFamily = if (level == 0)
+            .stored
+        else if (level <= 3)
+            .fast
+        else
+            .slow;
+        try std.testing.expectEqual(expected_family, resolved.family);
+    }
+    inline for (10..16) |level_usize| {
+        try std.testing.expectError(
+            error.InvalidCompressionLevel,
+            resolveDeflateParams(.{ .level = @intCast(level_usize) }),
+        );
+    }
+
+    inline for (.{
+        DeflateParams.Strategy.default,
+        DeflateParams.Strategy.filtered,
+        DeflateParams.Strategy.huffman_only,
+        DeflateParams.Strategy.rle,
+    }) |strategy| {
+        const resolved = try resolveDeflateParams(.{ .level = 7, .strategy = strategy });
+        const expected_strategy: CompressionStrategy = switch (strategy) {
+            .default => .default,
+            .filtered => .filtered,
+            .huffman_only => .huffman_only,
+            .rle => .rle,
+            .fixed => unreachable,
+        };
+        try std.testing.expectEqual(expected_strategy, resolved.compression.strategy);
+        try std.testing.expectEqual(BlockSelection.stored_fixed_dynamic, resolved.compression.block_selection);
+    }
+
+    const fixed = try resolveDeflateParams(.{ .level = 9, .strategy = .fixed });
+    try std.testing.expectEqual(CompressionStrategy.default, fixed.compression.strategy);
+    try std.testing.expectEqual(BlockSelection.stored_fixed, fixed.compression.block_selection);
+    try std.testing.expectEqual(ParserMode.optimal, fixed.compression.parser);
+
+    const stored_fixed = try resolveDeflateParams(.{ .level = 0, .strategy = .fixed });
+    try std.testing.expect(stored_fixed.stored_only);
+    try std.testing.expectEqual(DeflateAlgorithmFamily.stored, stored_fixed.family);
+    try std.testing.expectEqual(BlockSelection.stored_fixed, stored_fixed.compression.block_selection);
+
+    // The older low-level helper deliberately retains its established error.
+    try std.testing.expectError(error.InvalidBlockPlan, optionsForZlibLevel(0));
+}
+
+test "incremental deflate codec capabilities include stored-only emission" {
+    try std.testing.expect(!IncrementalFixedEncoderCodec.supports_params);
+    try std.testing.expect(IncrementalBestEncoderCodec.supports_params);
+    try std.testing.expect(IncrementalFixedEncoderCodec.Params == DeflateParams);
+    try std.testing.expect(IncrementalBestEncoderCodec.ResolvedParams == ResolvedDeflateParams);
+
+    var fixed_encoder = RawDeflateIncrementalFixedEncoder.init(std.testing.allocator);
+    defer fixed_encoder.deinit();
+    try std.testing.expectError(error.UnsupportedOperation, fixed_encoder.requestParams(.{}));
+    try std.testing.expect(!RawDeflateIncrementalFixedEncoder.supports_runtime_params);
+    try std.testing.expect(RawDeflateIncrementalBestEncoder.supports_runtime_params);
+
+    var best_encoder = RawDeflateIncrementalBestEncoder.init(std.testing.allocator);
+    defer best_encoder.deinit();
+    try best_encoder.requestParams(.{ .level = 0 });
+    try std.testing.expect(best_encoder.snapshot().stored_only);
+
+    var zlib_best = ZlibIncrementalBestEncoder.init(std.testing.allocator);
+    defer zlib_best.deinit();
+    try zlib_best.requestParams(.{ .level = 9, .strategy = .fixed });
+    try std.testing.expectEqual(BlockSelection.stored_fixed, zlib_best.raw.options.compression.block_selection);
+
+    var gzip_best = GzipIncrementalBestEncoder.init(std.testing.allocator);
+    defer gzip_best.deinit();
+    try gzip_best.requestParams(.{ .level = 0 });
+    try std.testing.expect(gzip_best.snapshot().stored_only);
+
+    const input = try std.testing.allocator.alloc(u8, max_stored_block_len + 17);
+    defer std.testing.allocator.free(input);
+    for (input, 0..) |*byte, index| byte.* = @truncate(index *% 131);
+
+    var pending: std.ArrayList(u8) = .empty;
+    defer pending.deinit(std.testing.allocator);
+    var state: bitstream.BitWriter = .{};
+    defer state.deinit(std.testing.allocator);
+    var matcher: incremental_rolling_hash.Matcher = .{};
+    defer matcher.deinit(std.testing.allocator);
+    const history = "retained preset history";
+    try IncrementalBestEncoderCodec.writeStoredOnlyBlock(
+        std.testing.allocator,
+        &pending,
+        &state,
+        &matcher,
+        input,
+        history,
+        true,
+    );
+
+    try std.testing.expect(pending.items.len > input.len);
+    try std.testing.expectEqual(RawDeflateBlockType.stored, (try parseRawDeflateHeaderInfo(pending.items)).block_type);
+    try std.testing.expectEqual(history.len + input.len, matcher.snapshot().absolute_position);
+    const decoded = try decodeRawStoredAlloc(std.testing.allocator, pending.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
 }
 
 test "zlib numeric level encoders round trip raw zlib and gzip wrappers" {

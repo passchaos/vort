@@ -32,10 +32,16 @@ pub fn Encoder(comptime Codec: type) type {
         expected_input_len: ?usize = null,
         dictionary: []const u8 = &.{},
         dictionary_available: bool = true,
+        active_params: ?Codec.ResolvedParams = null,
+        requested_params: ?Codec.ResolvedParams = null,
+        params_boundary_pending: bool = false,
+        params_change_count: usize = 0,
+        stored_only: bool = false,
 
         const Self = @This();
         const FlushMode = enum { none, block, sync, full };
         pub const Error = Codec.Error;
+        pub const supports_runtime_params = Codec.supports_params;
         pub const MatchFinderSnapshot = rolling_hash.Matcher.Snapshot;
         pub const Snapshot = struct {
             input_read: usize,
@@ -44,6 +50,12 @@ pub fn Encoder(comptime Codec: type) type {
             pending_output: usize,
             pending_bits: u3,
             retained_token_capacity: usize,
+            active_params: ?Codec.Params,
+            requested_params: ?Codec.Params,
+            params_boundary_pending: bool,
+            params_change_count: usize,
+            stored_only: bool,
+            flushing: bool,
             finishing: bool,
             done: bool,
         };
@@ -127,6 +139,19 @@ pub fn Encoder(comptime Codec: type) type {
             self.total_output = 0;
             self.expected_input_len = expected;
             self.dictionary_available = true;
+            self.requested_params = null;
+            self.params_boundary_pending = false;
+            self.params_change_count = 0;
+        }
+        /// Reset the stream with caller-supplied raw options. Unlike `reset`,
+        /// this explicitly replaces runtime parameter state because the new
+        /// compression options do not necessarily correspond to a public
+        /// zlib-compatible level and strategy pair.
+        pub fn resetWithOptions(self: *Self, options: Options) void {
+            self.options = options;
+            self.active_params = null;
+            self.stored_only = false;
+            self.reset();
         }
         /// Reset the stream while changing its pledged input size. Wrapper
         /// encoders use this between independent gzip members.
@@ -147,6 +172,15 @@ pub fn Encoder(comptime Codec: type) type {
             return self.match_finder.snapshot();
         }
         pub fn snapshot(self: *const Self) Snapshot {
+            const managed_valid = if (self.active_params) |params|
+                self.stored_only == params.stored_only and
+                    std.meta.eql(self.options.compression, params.compression)
+            else
+                true;
+            const managed_active = if (managed_valid)
+                if (self.active_params) |params| params.params else null
+            else
+                null;
             return .{
                 .input_read = self.total_input,
                 .output_written = self.total_output,
@@ -154,9 +188,60 @@ pub fn Encoder(comptime Codec: type) type {
                 .pending_output = self.pending.items.len - self.pending_offset,
                 .pending_bits = self.state.bit_index,
                 .retained_token_capacity = self.plan_tokens.capacity,
+                .active_params = managed_active,
+                .requested_params = if (managed_valid)
+                    if (self.requested_params) |params| params.params else null
+                else
+                    null,
+                .params_boundary_pending = managed_valid and self.params_boundary_pending,
+                .params_change_count = self.params_change_count,
+                .stored_only = self.stored_only,
+                .flushing = self.flush_mode != .none or (managed_valid and self.params_boundary_pending),
                 .finishing = self.finishing,
                 .done = self.done,
             };
+        }
+        /// Request zlib-compatible compression parameters for subsequent
+        /// input. Changes within one algorithm family and strategy take effect
+        /// immediately. Other changes are committed after the already accepted
+        /// input has been published as a non-final block. Repeated requests are
+        /// idempotent and a newer request replaces an uncommitted one.
+        pub fn requestParams(self: *Self, params: Codec.Params) Codec.ParamsError!void {
+            if (!Codec.supports_params) return error.UnsupportedOperation;
+            if (self.finishing or self.done)
+                return error.InvalidEncoderState;
+
+            self.syncExternallyModifiedCompression();
+            const resolved = try Codec.resolveParams(params);
+            if (self.requested_params) |requested| {
+                if (paramsEqual(requested, resolved)) return;
+            }
+            if (self.active_params) |active| {
+                if (paramsEqual(active, resolved)) {
+                    self.requested_params = null;
+                    self.params_boundary_pending = false;
+                    return;
+                }
+            }
+            // With no accepted bytes there is no old-parameter block to
+            // terminate, even when reset retained a parameter identity from a
+            // prior stream. Match zlib by replacing the active parameters
+            // immediately before the first input byte.
+            if (self.total_input == 0) {
+                self.applyParams(resolved);
+                return;
+            }
+            if (self.active_params) |active| {
+                if (active.family == resolved.family and
+                    active.params.strategy == resolved.params.strategy)
+                {
+                    self.applyParams(resolved);
+                    return;
+                }
+            }
+
+            self.requested_params = resolved;
+            self.params_boundary_pending = true;
         }
         /// End and publish a non-final block without adding a sync-flush
         /// marker or aligning the bit stream. Match history remains available
@@ -187,12 +272,14 @@ pub fn Encoder(comptime Codec: type) type {
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
-            const base_block_target = try self.blockTarget();
+            self.syncExternallyModifiedCompression();
             if (self.done) {
                 if (input.len != 0) return error.TrailingData;
                 return .{ .status = .done };
             }
-            if ((self.finishing or self.flush_mode != .none) and input.len != 0) return error.TrailingData;
+            if ((self.finishing or self.flush_mode != .none or self.params_boundary_pending) and input.len != 0)
+                return error.TrailingData;
+            const base_block_target = try self.blockTarget();
             const offered_total = std.math.add(usize, self.total_input, input.len) catch return error.IntegerOverflow;
             if (offered_total > self.options.max_input_len) return error.OutputLimitExceeded;
 
@@ -212,9 +299,20 @@ pub fn Encoder(comptime Codec: type) type {
                     if (output_written == output.len and output.len != 0) return result(input_read, output_written, .need_output);
                 }
 
+                if (self.params_boundary_pending) {
+                    if (self.plain.items.len != 0)
+                        try self.writeDataBlock(false);
+                    const requested = self.requested_params orelse unreachable;
+                    self.applyParams(requested);
+                    continue;
+                }
+
                 const block_target = self.activeBlockTarget(base_block_target);
                 const block_capacity = std.math.add(usize, block_target, self.options.lookahead_len) catch return error.IntegerOverflow;
-                const room = block_capacity - self.plain.items.len;
+                const room = if (self.plain.items.len < block_capacity)
+                    block_capacity - self.plain.items.len
+                else
+                    0;
                 if (self.canWriteDirectBlock(input[input_read..], base_block_target, block_capacity)) {
                     // The complete non-final block already lives contiguously
                     // in caller input. Plan and emit it in place instead of
@@ -242,7 +340,7 @@ pub fn Encoder(comptime Codec: type) type {
                     }
                 }
                 const active_capacity = std.math.add(usize, self.activeBlockTarget(base_block_target), self.options.lookahead_len) catch return error.IntegerOverflow;
-                if (self.plain.items.len == active_capacity and
+                if (self.plain.items.len >= active_capacity and
                     (input_read < input.len or self.options.lookahead_len != 0))
                 {
                     try self.writeDataBlock(false);
@@ -297,13 +395,18 @@ pub fn Encoder(comptime Codec: type) type {
 
         fn writeDirectBlock(self: *Self, block: []const u8) Error!void {
             try self.prepareHistory();
-            try Codec.writeBlock(self.allocator, &self.pending, &self.state, &self.match_finder, &self.plan_tokens, block, self.history.items, false, self.options.compression);
+            if (self.stored_only)
+                try Codec.writeStoredOnlyBlock(self.allocator, &self.pending, &self.state, &self.match_finder, block, self.history.items, false)
+            else
+                try Codec.writeBlock(self.allocator, &self.pending, &self.state, &self.match_finder, &self.plan_tokens, block, self.history.items, false, self.options.compression);
             self.retainHistory(block);
         }
 
         fn writeDataBlock(self: *Self, final: bool) Error!void {
             try self.prepareHistory();
-            const selected_len = if (!final and self.flush_mode == .none and self.options.lookahead_len != 0)
+            const selected_len = if (self.stored_only)
+                self.plain.items.len
+            else if (!final and self.flush_mode == .none and !self.params_boundary_pending and self.options.lookahead_len != 0)
                 try Codec.chooseLookaheadLen(
                     self.allocator,
                     self.plain.items,
@@ -311,13 +414,16 @@ pub fn Encoder(comptime Codec: type) type {
                     self.plain.items.len - self.options.lookahead_len,
                     self.options.compression,
                 )
-            else if (self.options.adaptive_blocks and !final and self.flush_mode == .none)
+            else if (self.options.adaptive_blocks and !final and self.flush_mode == .none and !self.params_boundary_pending)
                 try Codec.chooseBlockLen(self.allocator, self.plain.items, self.options.compression)
             else
                 self.plain.items.len;
             if ((selected_len == 0 and !(final and self.plain.items.len == 0)) or selected_len > self.plain.items.len) return error.InvalidBlockPlan;
             const block = self.plain.items[0..selected_len];
-            try Codec.writeBlock(self.allocator, &self.pending, &self.state, &self.match_finder, &self.plan_tokens, block, self.history.items, final, self.options.compression);
+            if (self.stored_only)
+                try Codec.writeStoredOnlyBlock(self.allocator, &self.pending, &self.state, &self.match_finder, block, self.history.items, final)
+            else
+                try Codec.writeBlock(self.allocator, &self.pending, &self.state, &self.match_finder, &self.plan_tokens, block, self.history.items, final, self.options.compression);
             self.retainHistory(block);
             self.low_entropy_expanded = false;
             if (selected_len == self.plain.items.len) {
@@ -350,6 +456,24 @@ pub fn Encoder(comptime Codec: type) type {
                 self.history.items.len = keep;
                 self.history.appendSliceAssumeCapacity(block);
             }
+        }
+        fn applyParams(self: *Self, params: Codec.ResolvedParams) void {
+            self.options.compression = params.compression;
+            self.active_params = params;
+            self.requested_params = null;
+            self.params_boundary_pending = false;
+            self.stored_only = params.stored_only;
+            if (self.params_change_count != std.math.maxInt(usize))
+                self.params_change_count += 1;
+        }
+        fn syncExternallyModifiedCompression(self: *Self) void {
+            const active = self.active_params orelse return;
+            if (self.stored_only == active.stored_only and
+                std.meta.eql(self.options.compression, active.compression)) return;
+            self.active_params = null;
+            self.requested_params = null;
+            self.params_boundary_pending = false;
+            self.stored_only = false;
         }
         fn blockTarget(self: *const Self) Error!usize {
             return baseBlockTarget(self.options);
@@ -386,6 +510,11 @@ pub fn Encoder(comptime Codec: type) type {
             return split.max_block_len;
         }
     };
+}
+
+fn paramsEqual(a: anytype, b: @TypeOf(a)) bool {
+    return a.params.level == b.params.level and
+        a.params.strategy == b.params.strategy;
 }
 
 fn uniqueByteCount(input: []const u8) usize {

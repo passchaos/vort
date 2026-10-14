@@ -4,6 +4,7 @@ const deflate = @import("../../deflate.zig");
 const block_flush_tests = @import("tests/block_flush.zig");
 const gzip_concatenated_tests = @import("tests/gzip_concatenated.zig");
 const full_flush_tests = @import("tests/full_flush.zig");
+const params_tests = @import("tests/params.zig");
 const rolling_hash_tests = @import("tests/rolling_hash.zig");
 const wrapper_continuation_tests = @import("tests/wrapper_continuation.zig");
 
@@ -11,6 +12,7 @@ test {
     _ = block_flush_tests;
     _ = gzip_concatenated_tests;
     _ = full_flush_tests;
+    _ = params_tests;
     _ = rolling_hash_tests;
     _ = wrapper_continuation_tests;
 }
