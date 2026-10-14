@@ -19681,3 +19681,23 @@ reuse, so production keeps the simpler independently owned plans.
   slice only. Full Zstd format/entropy coverage, broader malformed/corpus
   differentials, ratio and throughput parity, and internal history beyond
   8 MiB remain open.
+
+- Added Brotli RAW shared-prefix/compound-dictionary decoding through the
+  public `BrotliSharedDictionary` borrowed descriptor and
+  `BrotliDecodeOptions.shared_dictionary`. Zero through fifteen ordered RAW
+  attachments are accepted; empty attachments add no logical bytes but still
+  occupy a slot. One-shot allocating/append/caller-buffer and size APIs,
+  chunked decode, allocating/caller-history/diagnostic summaries, and both the
+  caller-history and allocator-owned symbol-progressive decoders share the same
+  distance classification and cross-attachment resumable copy behavior.
+  Summaries report shared-dictionary use, copy count, and copied bytes. The
+  outer attachment slice and all attachment bytes remain borrowed: synchronous
+  callers retain them for the call, while progressive callers retain them
+  unchanged through completion and any reset reuse (or replace them with a
+  completed allocator-owned decoder's `nextFrame` options). An upstream RAW
+  compound fixture is pinned across public APIs, including split attachments,
+  an empty occupied slot, one-byte input/output progression, and descriptor
+  rejection before output mutation. This is decode-only at the public surface;
+  no Brotli encoder API currently accepts attachments. Serialized shared
+  dictionaries and caller-supplied/custom static dictionaries remain
+  unsupported, with no compatibility commitment implied for either form.

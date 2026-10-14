@@ -88,7 +88,34 @@ only when its complete encoded byte length is smaller.
 Static-dictionary candidates are considered through 256 bytes. When extended
 search is enabled, the bounded indexed search applies through 4 KiB. This is a
 vetted subset of the RFC built-in dictionary transforms; it is not support for
-caller-supplied or shared dictionaries.
+caller-supplied or shared dictionaries in the planned encoder.
+
+## RAW shared-prefix decode boundary
+
+Shared dictionaries are currently a decode-only capability, separate from the
+quality preset encoder. `BrotliDecodeOptions.shared_dictionary` accepts a
+borrowed `BrotliSharedDictionary` with zero through fifteen ordered RAW
+attachments. Non-empty attachments are logically concatenated in order; an
+empty attachment contributes no bytes but still consumes one attachment slot.
+
+The option is honored by one-shot `brDecodeStream*WithOptions` decoding,
+chunked decode, decoded-size and summary APIs, caller-history summaries, and
+both the caller-history `BrotliIncrementalCopyStreamDecoder` and allocator-owned
+`BrotliIncrementalStreamDecoder` progressive paths. Summary results distinguish
+shared-dictionary use with `uses_shared_dictionary`,
+`shared_dictionary_copy_count`, and `shared_dictionary_bytes`.
+
+The outer attachment slice and every attachment's bytes are borrowed without
+copying. They must remain alive and unchanged throughout a synchronous decode
+or summary call, and from initialization through completion for progressive
+decoding. Reset reuse keeps the same borrowing requirement; the allocator-owned
+decoder can install a replacement only through `nextFrame` after completing the
+current frame.
+
+No public Brotli encoder currently accepts RAW attachments or exposes compound-
+dictionary encoding. Serialized shared dictionaries and caller-supplied/custom
+static dictionaries are unsupported; their future API or wire compatibility is
+not promised by this decode slice.
 
 ## Large-input and API boundaries
 
@@ -168,7 +195,8 @@ names:
 - dedicated q0/q1 fragment compressors and their streaming fragment model;
 - the specialized q2/q3 entropy writers and their matching block decisions;
 - real q10/q11 Zopfli/HQ cost refinement, including iterative model feedback;
-- shared dictionaries, contextual dictionaries, and compound dictionaries;
+- a public RAW shared-prefix/compound-dictionary encoder and contextual
+  dictionary encoding;
 - quality-aware large-stream planning, including cross-meta-block matches,
   quality-specific block sizing, and entropy/context decisions;
 - calibration and regression gates for compression ratio, throughput, peak

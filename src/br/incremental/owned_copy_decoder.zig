@@ -13,6 +13,7 @@ pub fn Decoder(comptime Codec: type) type {
         window_prefix: [2]u8 = undefined,
         window_prefix_len: u2 = 0,
         window_prefix_offset: u2 = 0,
+        decode_options_validated: bool = false,
         history_capped: bool = false,
         phase: Phase = .input,
         last_status: core.StepResult.Status = .need_input,
@@ -152,6 +153,11 @@ pub fn Decoder(comptime Codec: type) type {
             if (self.phase == .done) {
                 if (input.len != 0) return self.fail(.done, error.TrailingData);
                 return result(0, 0, .done);
+            }
+            if (!self.decode_options_validated) {
+                Codec.validateDecodeOptions(self.options.decode) catch |err|
+                    return self.fail(.input, err);
+                self.decode_options_validated = true;
             }
             if (self.input_finished and input.len != 0) return self.fail(self.phase, error.TrailingData);
             if (self.options.expected_compressed_len) |expected| {

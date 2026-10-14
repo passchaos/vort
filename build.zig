@@ -3924,6 +3924,29 @@ pub fn build(b: *std.Build) void {
         &br_reference_bench_path_smoke.step,
     );
 
+    const br_compound_dictionary_diff_exe = b.addExecutable(.{
+        .name = "vort-br-compound-dictionary-diff",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/compound_dictionary_diff.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_br_compound_dictionary_diff = b.addRunArtifact(
+        br_compound_dictionary_diff_exe,
+    );
+    const br_compound_dictionary_diff_step = b.step(
+        "run-br-compound-dictionary-diff",
+        "Validate RAW compound dictionaries between Vort and libbrotli",
+    );
+    br_compound_dictionary_diff_step.dependOn(
+        &run_br_compound_dictionary_diff.step,
+    );
+
     const br_compressed_header_profile_exe = b.addExecutable(.{
         .name = "vort-br-compressed-header-profile",
         .root_module = b.createModule(.{

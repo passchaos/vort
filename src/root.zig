@@ -612,6 +612,7 @@ pub const BrotliRatioEncodeProfile = br.RatioEncodeProfile;
 pub const BrotliLiteralContextProfile = br.LiteralContextProfile;
 pub const BrotliPlannedCompressionLevel = br.PlannedCompressionLevel;
 pub const BrotliPlannedMode = br.PlannedMode;
+pub const BrotliSharedDictionary = br.SharedDictionary;
 pub const BrotliPlannedEncodeOptions = br.PlannedEncodeOptions;
 pub const brotliMaxExtendedDictionaryProbes = br.max_extended_dictionary_probes;
 pub const BrotliPlannedStreamChunksOptions = br.PlannedStreamChunksOptions;

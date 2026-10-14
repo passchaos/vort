@@ -55,6 +55,7 @@ const fast_bit_reader = @import("br/fast_bit_reader.zig");
 const paired_literal_lookup = @import("br/paired_literal_lookup.zig");
 const code_sections = @import("br/format/code_sections.zig");
 const distance_history = @import("br/decoder/distance_history.zig");
+const shared_dictionary = @import("br/shared_dictionary.zig");
 const code_length_decoder_mod = @import("br/code_length_decoder.zig");
 
 const distanceWithDelta = distance_history.withDelta;
@@ -77,6 +78,7 @@ pub const RatioEncodeProfile = encoder_stats.RatioEncodeProfile;
 pub const LiteralContextProfile = literal_context_split.Profile;
 pub const PlannedCompressionLevel = enum { fast, balanced, ratio };
 pub const PlannedMode = quality_schedule.Mode;
+pub const SharedDictionary = shared_dictionary.Dictionary;
 pub const max_extended_dictionary_probes: u16 = 4096;
 pub const PlannedEncodeOptions = struct {
     level: PlannedCompressionLevel = .fast,
@@ -136,7 +138,28 @@ pub const PlannedParserOptions = struct {
 /// remains disabled by default for strict format validation.
 pub const DecodeOptions = struct {
     allow_large_window: bool = false,
+    /// Borrowed RAW shared-prefix chunks attached out of band. Empty chunks are
+    /// byte-wise no-ops but still consume one of the fifteen attachment slots.
+    shared_dictionary: SharedDictionary = .{},
 };
+
+const DecodeSharedDictionary = struct {
+    dictionary: SharedDictionary,
+    total_size: usize,
+};
+
+fn decodeSharedDictionary(options: DecodeOptions) Error!?DecodeSharedDictionary {
+    const total_size = options.shared_dictionary.totalSize() catch |err| switch (err) {
+        error.IntegerOverflow => return error.IntegerOverflow,
+        else => return error.CorruptFrame,
+    };
+    if (total_size == 0) return null;
+    return .{ .dictionary = options.shared_dictionary, .total_size = total_size };
+}
+
+fn decodeOptionsNeedColdPath(options: DecodeOptions) Error!bool {
+    return options.allow_large_window or (try decodeSharedDictionary(options)) != null;
+}
 
 const br = @This();
 pub const IncrementalLiteralStreamDecoder = incremental_literal.Decoder(IncrementalLiteralCodec);
@@ -147,7 +170,15 @@ const IncrementalOwnedCodec = struct {
     pub const ProgressiveDecoder = br.IncrementalCopyStreamDecoder;
     pub const HistoryPlan = struct { allocation_len: usize, capped: bool };
 
+    pub fn validateDecodeOptions(options: br.DecodeOptions) br.Error!void {
+        _ = try decodeSharedDictionary(options);
+    }
+
     pub fn historyPlanFromPrefix(prefix: []const u8, output_bound: usize, max_history_len: usize, options: br.DecodeOptions) br.Error!?HistoryPlan {
+        options.shared_dictionary.validate() catch |err| switch (err) {
+            error.IntegerOverflow => return error.IntegerOverflow,
+            else => return error.CorruptFrame,
+        };
         var reader = bitstream.BitReader.init(prefix);
         const window = readWindowInfo(&reader, options) catch |err| switch (err) {
             error.TruncatedFrame => return null,
@@ -341,6 +372,9 @@ const IncrementalCopyCodec = struct {
 
     pub fn dictionaryWord(distance: usize, copy_len: usize, max_backward_distance: usize, scratch: *[64]u8) IncrementalCopyCodec.Error![]const u8 {
         return minimalStaticDictionaryWord(distance, copy_len, max_backward_distance, scratch);
+    }
+    pub fn staticDictionaryWord(address: usize, copy_len: usize, scratch: *[64]u8) IncrementalCopyCodec.Error![]const u8 {
+        return minimalStaticDictionaryWordAtAddress(address, copy_len, scratch);
     }
 
     pub fn maxBackwardDistance(window_bits: u5, output_len: usize) usize {
@@ -1843,6 +1877,9 @@ pub const StreamSummary = struct {
     uses_static_dictionary: bool = false,
     static_dictionary_copy_count: usize = 0,
     static_dictionary_bytes: usize = 0,
+    uses_shared_dictionary: bool = false,
+    shared_dictionary_copy_count: usize = 0,
+    shared_dictionary_bytes: usize = 0,
     /// Commands decoded from compressed meta-block payloads. This includes a
     /// final command whose insert reaches the end before its copy is applied.
     command_count: usize = 0,
@@ -1905,6 +1942,8 @@ pub const StreamProbeResult = struct {
 const StreamSummaryMetaBlockStats = struct {
     static_dictionary_copy_count: usize = 0,
     static_dictionary_bytes: usize = 0,
+    shared_dictionary_copy_count: usize = 0,
+    shared_dictionary_bytes: usize = 0,
     command_count: usize = 0,
     zero_insert_command_count: usize = 0,
     single_literal_insert_command_count: usize = 0,
@@ -6996,12 +7035,12 @@ pub fn decodeStreamAllocLimited(allocator: std.mem.Allocator, stream: []const u8
 }
 
 pub fn decodeStreamAllocWithOptions(allocator: std.mem.Allocator, stream: []const u8, options: DecodeOptions) Error![]u8 {
-    if (!options.allow_large_window) return decodeStreamAlloc(allocator, stream);
+    if (!try decodeOptionsNeedColdPath(options)) return decodeStreamAlloc(allocator, stream);
     return try decodeStreamAllocLimitedWithOptions(allocator, stream, std.math.maxInt(usize), options);
 }
 
 pub fn decodeStreamAllocLimitedWithOptions(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize, options: DecodeOptions) Error![]u8 {
-    if (!options.allow_large_window) return decodeStreamAllocLimited(allocator, stream, max_output_len);
+    if (!try decodeOptionsNeedColdPath(options)) return decodeStreamAllocLimited(allocator, stream, max_output_len);
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
 
@@ -7012,6 +7051,8 @@ pub fn decodeStreamAllocLimitedWithOptions(allocator: std.mem.Allocator, stream:
     // change caller-owned output when validation fails.
     var reader = bitstream.BitReader.init(stream);
     const window = try readWindowInfo(&reader, options);
+    var shared = try decodeSharedDictionary(options);
+    const dictionary: ?*const DecodeSharedDictionary = if (shared) |*active| active else null;
     var written: usize = 0;
     var last_distances = initial_last_distances;
     while (true) {
@@ -7025,10 +7066,10 @@ pub fn decodeStreamAllocLimitedWithOptions(allocator: std.mem.Allocator, stream:
             .compressed => |header| {
                 const meta_block_end = try checkedDecodedEnd(written, header.decoded_len, max_output_len);
                 try out.resize(allocator, meta_block_end);
-                if (stream.len >= large_stream_decode_threshold)
+                if (dictionary == null and stream.len >= large_stream_decode_threshold)
                     try processLargeCompressedMetaBlockWithOptions(&reader, out.items, &written, header.decoded_len, &last_distances, window)
                 else
-                    try processMinimalCompressedMetaBlockWithOptions(&reader, out.items, &written, header.decoded_len, &last_distances, window);
+                    try processMinimalCompressedMetaBlockWithOptions(&reader, out.items, &written, header.decoded_len, &last_distances, window, dictionary);
                 if (written != meta_block_end) return error.SizeMismatch;
                 if (header.final) {
                     try ensureZeroPaddingAndEnd(reader);
@@ -7055,7 +7096,7 @@ pub fn decodeStreamAllocExactSize(allocator: std.mem.Allocator, stream: []const 
 }
 
 pub fn decodeStreamAllocExactSizeWithOptions(allocator: std.mem.Allocator, stream: []const u8, expected_output_len: usize, options: DecodeOptions) Error![]u8 {
-    if (!options.allow_large_window) return decodeStreamAllocExactSize(allocator, stream, expected_output_len);
+    if (!try decodeOptionsNeedColdPath(options)) return decodeStreamAllocExactSize(allocator, stream, expected_output_len);
     const out = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(out);
     const written = try decodeStreamIntoExactSizeWithOptions(stream, out, expected_output_len, options);
@@ -7084,12 +7125,12 @@ pub fn decodeStreamAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayLi
 }
 
 pub fn decodeStreamAppendWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, options: DecodeOptions) Error!usize {
-    if (!options.allow_large_window) return decodeStreamAppend(allocator, out, stream);
+    if (!try decodeOptionsNeedColdPath(options)) return decodeStreamAppend(allocator, out, stream);
     return try decodeStreamAppendLimitedWithOptions(allocator, out, stream, std.math.maxInt(usize), options);
 }
 
 pub fn decodeStreamAppendLimitedWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, max_output_len: usize, options: DecodeOptions) Error!usize {
-    if (!options.allow_large_window) return decodeStreamAppendLimited(allocator, out, stream, max_output_len);
+    if (!try decodeOptionsNeedColdPath(options)) return decodeStreamAppendLimited(allocator, out, stream, max_output_len);
     const decoded_len = try decodedStreamSizeAllocLimitedWithOptions(allocator, stream, max_output_len, options);
     try out.ensureUnusedCapacity(allocator, decoded_len);
     const start = out.items.len;
@@ -7121,7 +7162,7 @@ pub fn decodeStreamAppendExactSize(allocator: std.mem.Allocator, out: *std.Array
 }
 
 pub fn decodeStreamAppendExactSizeWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, expected_output_len: usize, options: DecodeOptions) Error!usize {
-    if (!options.allow_large_window) return decodeStreamAppendExactSize(allocator, out, stream, expected_output_len);
+    if (!try decodeOptionsNeedColdPath(options)) return decodeStreamAppendExactSize(allocator, out, stream, expected_output_len);
     try out.ensureUnusedCapacity(allocator, expected_output_len);
     const start = out.items.len;
     const slot = out.addManyAsSliceAssumeCapacity(expected_output_len);
@@ -7211,7 +7252,7 @@ pub fn decodeStreamInto(stream: []const u8, output: []u8) Error!usize {
 }
 
 pub noinline fn decodeStreamIntoWithOptions(stream: []const u8, output: []u8, options: DecodeOptions) Error!usize {
-    if (!options.allow_large_window) return decodeStreamInto(stream, output);
+    if (!try decodeOptionsNeedColdPath(options)) return decodeStreamInto(stream, output);
     // The direct stored encoder's common WBITS=16 wire is payload+4 bytes.
     // Gate the colder shape validation on that exact-size relation so ordinary
     // compressed frames enter their established hot path without another call.
@@ -7222,7 +7263,10 @@ pub noinline fn decodeStreamIntoWithOptions(stream: []const u8, output: []u8, op
             return payload.len;
         }
     }
-    if (stream.len >= large_stream_decode_threshold) return decodeLargeStreamIntoWithOptions(stream, output, options);
+    var shared = try decodeSharedDictionary(options);
+    const dictionary: ?*const DecodeSharedDictionary = if (shared) |*active| active else null;
+    if (dictionary == null and stream.len >= large_stream_decode_threshold)
+        return decodeLargeStreamIntoWithOptions(stream, output, options);
     var reader = bitstream.BitReader.init(stream);
     const window = try readWindowInfo(&reader, options);
     var written: usize = 0;
@@ -7235,7 +7279,7 @@ pub noinline fn decodeStreamIntoWithOptions(stream: []const u8, output: []u8, op
             },
             .metadata => try skipMetadataMetaBlock(&reader),
             .compressed => |header| {
-                try processMinimalCompressedMetaBlockWithOptions(&reader, output, &written, header.decoded_len, &last_distances, window);
+                try processMinimalCompressedMetaBlockWithOptions(&reader, output, &written, header.decoded_len, &last_distances, window, dictionary);
                 if (header.final) {
                     try ensureZeroPaddingAndEnd(reader);
                     return written;
@@ -7373,7 +7417,7 @@ pub fn decodeStreamIntoLimited(stream: []const u8, output: []u8, max_output_len:
 }
 
 pub fn decodeStreamIntoLimitedWithOptions(stream: []const u8, output: []u8, max_output_len: usize, options: DecodeOptions) Error!usize {
-    if (!options.allow_large_window) return decodeStreamIntoLimited(stream, output, max_output_len);
+    if (!try decodeOptionsNeedColdPath(options)) return decodeStreamIntoLimited(stream, output, max_output_len);
     // Match the allocator-returning and append limited APIs: perform the full
     // Brotli preflight first so callers see `OutputLimitExceeded` before any
     // mutation when the stream's declared/decoded size is outside policy.
@@ -7398,7 +7442,7 @@ pub fn decodeStreamIntoExactSize(stream: []const u8, output: []u8, expected_outp
 }
 
 pub fn decodeStreamIntoExactSizeWithOptions(stream: []const u8, output: []u8, expected_output_len: usize, options: DecodeOptions) Error!usize {
-    if (!options.allow_large_window) return decodeStreamIntoExactSize(stream, output, expected_output_len);
+    if (!try decodeOptionsNeedColdPath(options)) return decodeStreamIntoExactSize(stream, output, expected_output_len);
     if (output.len < expected_output_len) return error.OutputTooSmall;
     const written = decodeStreamIntoWithOptions(stream, output[0..expected_output_len], options) catch |err| switch (err) {
         error.OutputTooSmall => return error.SizeMismatch,
@@ -7417,12 +7461,12 @@ pub fn decodedStreamSizeLimited(stream: []const u8, max_output_len: usize) Error
 }
 
 pub fn decodedStreamSizeWithOptions(stream: []const u8, options: DecodeOptions) Error!usize {
-    if (!options.allow_large_window) return decodedStreamSize(stream);
+    if (!try decodeOptionsNeedColdPath(options)) return decodedStreamSize(stream);
     return try decodedStreamSizeLimitedWithOptions(stream, std.math.maxInt(usize), options);
 }
 
 pub fn decodedStreamSizeLimitedWithOptions(stream: []const u8, max_output_len: usize, options: DecodeOptions) Error!usize {
-    if (!options.allow_large_window) return decodedStreamSizeLimited(stream, max_output_len);
+    if (!try decodeOptionsNeedColdPath(options)) return decodedStreamSizeLimited(stream, max_output_len);
     return (try summarizeStreamLimitedWithOptions(stream, max_output_len, options)).decoded_bytes;
 }
 
@@ -7436,12 +7480,12 @@ pub fn summarizeStreamLimited(stream: []const u8, max_output_len: usize) Error!S
 }
 
 pub fn summarizeStreamWithOptions(stream: []const u8, options: DecodeOptions) Error!StreamSummary {
-    if (!options.allow_large_window) return summarizeStream(stream);
+    if (!try decodeOptionsNeedColdPath(options)) return summarizeStream(stream);
     return try summarizeStreamLimitedWithOptions(stream, std.math.maxInt(usize), options);
 }
 
 pub fn summarizeStreamLimitedWithOptions(stream: []const u8, max_output_len: usize, options: DecodeOptions) Error!StreamSummary {
-    if (!options.allow_large_window) return summarizeStreamLimited(stream, max_output_len);
+    if (!try decodeOptionsNeedColdPath(options)) return summarizeStreamLimited(stream, max_output_len);
     var diagnostics: StreamSummaryDiagnostics = .{};
     return try summarizeStreamLimitedWithOptionsAndDiagnostics(stream, max_output_len, options, &diagnostics);
 }
@@ -7462,7 +7506,7 @@ pub fn summarizeStreamLimitedWithDiagnostics(stream: []const u8, max_output_len:
 }
 
 pub fn summarizeStreamLimitedWithOptionsAndDiagnostics(stream: []const u8, max_output_len: usize, options: DecodeOptions, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
-    if (!options.allow_large_window) return summarizeStreamLimitedWithDiagnostics(stream, max_output_len, diagnostics);
+    if (!try decodeOptionsNeedColdPath(options)) return summarizeStreamLimitedWithDiagnostics(stream, max_output_len, diagnostics);
     return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, options, diagnostics, null) catch |err| switch (err) {
         error.SummaryHistoryExhausted => error.UnsupportedBrotliFeature,
         else => |public_err| public_err,
@@ -7666,6 +7710,11 @@ fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_outpu
         recordSummaryError(diagnostics, .window_bits, reader, 0);
         return err;
     };
+    var shared = decodeSharedDictionary(options) catch |err| {
+        recordSummaryError(diagnostics, .stream, reader, 0);
+        return err;
+    };
+    const dictionary: ?*const DecodeSharedDictionary = if (shared) |*active| active else null;
     var summary = StreamSummary{
         .window_bits = window.bits,
         .large_window = window.large,
@@ -7740,7 +7789,7 @@ fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_outpu
             summary.uses_compressed_meta_blocks = true;
             summary.stored_only = false;
             var block_stats: StreamSummaryMetaBlockStats = .{};
-            skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history, &block_stats, window) catch |err| {
+            skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history, &block_stats, window, dictionary) catch |err| {
                 recordSummaryError(diagnostics, .compressed_meta_block, reader, meta_block_index);
                 return err;
             };
@@ -7761,7 +7810,7 @@ fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_outpu
             summary.uses_compressed_meta_blocks = true;
             summary.stored_only = false;
             var block_stats: StreamSummaryMetaBlockStats = .{};
-            skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history, &block_stats, window) catch |err| {
+            skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history, &block_stats, window, dictionary) catch |err| {
                 recordSummaryError(diagnostics, .compressed_meta_block, reader, meta_block_index);
                 return err;
             };
@@ -8094,6 +8143,11 @@ fn applySummaryMetaBlockStats(summary: *StreamSummary, stats: StreamSummaryMetaB
         summary.uses_static_dictionary = true;
         summary.static_dictionary_copy_count = std.math.add(usize, summary.static_dictionary_copy_count, stats.static_dictionary_copy_count) catch return error.IntegerOverflow;
         summary.static_dictionary_bytes = std.math.add(usize, summary.static_dictionary_bytes, stats.static_dictionary_bytes) catch return error.IntegerOverflow;
+    }
+    if (stats.shared_dictionary_copy_count != 0) {
+        summary.uses_shared_dictionary = true;
+        summary.shared_dictionary_copy_count = std.math.add(usize, summary.shared_dictionary_copy_count, stats.shared_dictionary_copy_count) catch return error.IntegerOverflow;
+        summary.shared_dictionary_bytes = std.math.add(usize, summary.shared_dictionary_bytes, stats.shared_dictionary_bytes) catch return error.IntegerOverflow;
     }
     summary.command_count = std.math.add(usize, summary.command_count, stats.command_count) catch return error.IntegerOverflow;
     summary.zero_insert_command_count = std.math.add(usize, summary.zero_insert_command_count, stats.zero_insert_command_count) catch return error.IntegerOverflow;
@@ -9344,6 +9398,18 @@ fn processMinimalCompressedMetaBlock(
     last_distances: *[4]usize,
     window_bits: u5,
 ) Error!void {
+    return processMinimalCompressedMetaBlockImpl(reader, output, written, meta_block_len, last_distances, window_bits, null);
+}
+
+fn processMinimalCompressedMetaBlockImpl(
+    reader: *bitstream.BitReader,
+    output: []u8,
+    written: *usize,
+    meta_block_len: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    dictionary: ?*const DecodeSharedDictionary,
+) Error!void {
     const meta_block_end = std.math.add(usize, written.*, meta_block_len) catch return error.IntegerOverflow;
     if (meta_block_end > output.len) return error.OutputTooSmall;
     var header: MinimalCompressedHeader = undefined;
@@ -9372,10 +9438,9 @@ fn processMinimalCompressedMetaBlock(
         if (distance == 0) return error.InvalidMatch;
         const max_distance = maxBackwardDistanceForWindow(window_bits, written.*);
         if (distance > max_distance) {
-            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
-            if (word.len > meta_block_end - written.*) return error.CorruptFrame;
-            @memcpy(output[written.*..][0..word.len], word);
-            written.* += word.len;
+            const kind = try appendOutOfWindowReference(output, written, meta_block_end, dictionary, distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
+            if (kind == .compound and decoded_distance.update_ring)
+                pushLastDistance(last_distances, distance);
             continue;
         }
         if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
@@ -9391,12 +9456,13 @@ fn processMinimalCompressedMetaBlockWithOptions(
     meta_block_len: usize,
     last_distances: *[4]usize,
     window: WindowInfo,
+    dictionary: ?*const DecodeSharedDictionary,
 ) Error!void {
     if (window.large) {
         @branchHint(.unlikely);
-        return processMinimalCompressedMetaBlockLargeWindow(reader, output, written, meta_block_len, last_distances, window.bits);
+        return processMinimalCompressedMetaBlockLargeWindow(reader, output, written, meta_block_len, last_distances, window.bits, dictionary);
     }
-    return processMinimalCompressedMetaBlock(reader, output, written, meta_block_len, last_distances, window.bits);
+    return processMinimalCompressedMetaBlockImpl(reader, output, written, meta_block_len, last_distances, window.bits, dictionary);
 }
 
 noinline fn processMinimalCompressedMetaBlockLargeWindow(
@@ -9406,8 +9472,9 @@ noinline fn processMinimalCompressedMetaBlockLargeWindow(
     meta_block_len: usize,
     last_distances: *[4]usize,
     window_bits: u5,
+    dictionary: ?*const DecodeSharedDictionary,
 ) linksection(large_window_text_section) Error!void {
-    return processMinimalCompressedMetaBlockLargeWindowImpl(reader, output, written, meta_block_len, last_distances, window_bits);
+    return processMinimalCompressedMetaBlockLargeWindowImpl(reader, output, written, meta_block_len, last_distances, window_bits, dictionary);
 }
 
 fn processMinimalCompressedMetaBlockLargeWindowImpl(
@@ -9417,6 +9484,7 @@ fn processMinimalCompressedMetaBlockLargeWindowImpl(
     meta_block_len: usize,
     last_distances: *[4]usize,
     window_bits: u5,
+    dictionary: ?*const DecodeSharedDictionary,
 ) Error!void {
     const meta_block_end = std.math.add(usize, written.*, meta_block_len) catch return error.IntegerOverflow;
     if (meta_block_end > output.len) return error.OutputTooSmall;
@@ -9446,10 +9514,9 @@ fn processMinimalCompressedMetaBlockLargeWindowImpl(
         if (distance == 0) return error.InvalidMatch;
         const max_distance = maxBackwardDistanceForWindow(window_bits, written.*);
         if (distance > max_distance) {
-            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
-            if (word.len > meta_block_end - written.*) return error.CorruptFrame;
-            @memcpy(output[written.*..][0..word.len], word);
-            written.* += word.len;
+            const kind = try appendOutOfWindowReference(output, written, meta_block_end, dictionary, distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
+            if (kind == .compound and decoded_distance.update_ring)
+                pushLastDistance(last_distances, distance);
             continue;
         }
         if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
@@ -11072,9 +11139,10 @@ fn skipMinimalCompressedMetaBlock(
     literal_history: *LiteralHistory,
     stats: ?*StreamSummaryMetaBlockStats,
     window: WindowInfo,
+    dictionary: ?*const DecodeSharedDictionary,
 ) SummaryError!void {
     const meta_block_end = std.math.add(usize, start_written, meta_block_len) catch return error.IntegerOverflow;
-    if (window.large) return skipMinimalCompressedMetaBlockLargeWindow(reader, start_written, meta_block_len, last_distances, literal_history, stats, window.bits);
+    if (window.large) return skipMinimalCompressedMetaBlockLargeWindow(reader, start_written, meta_block_len, last_distances, literal_history, stats, window.bits, dictionary);
     var header: MinimalCompressedHeader = undefined;
     try readMinimalCompressedHeaderInto(reader, &header);
     if (stats) |s| {
@@ -11089,10 +11157,10 @@ fn skipMinimalCompressedMetaBlock(
     if (header.literal_tree_count >= clustered_literal_tree_threshold and prepareLiteralTailLookups(&header)) {
         const auxiliary_tail_lookups = prepareAuxiliaryTailLookups(&header);
         if (auxiliary_tail_lookups)
-            return skipDecodedCompressedPayload(true, true, reader, start_written, meta_block_end, last_distances, literal_history, stats, window.bits, &header);
-        return skipDecodedCompressedPayload(true, false, reader, start_written, meta_block_end, last_distances, literal_history, stats, window.bits, &header);
+            return skipDecodedCompressedPayload(true, true, reader, start_written, meta_block_end, last_distances, literal_history, stats, window.bits, &header, dictionary);
+        return skipDecodedCompressedPayload(true, false, reader, start_written, meta_block_end, last_distances, literal_history, stats, window.bits, &header, dictionary);
     }
-    return skipDecodedCompressedPayload(false, false, reader, start_written, meta_block_end, last_distances, literal_history, stats, window.bits, &header);
+    return skipDecodedCompressedPayload(false, false, reader, start_written, meta_block_end, last_distances, literal_history, stats, window.bits, &header, dictionary);
 }
 
 noinline fn skipMinimalCompressedMetaBlockLargeWindow(
@@ -11103,6 +11171,7 @@ noinline fn skipMinimalCompressedMetaBlockLargeWindow(
     literal_history: *LiteralHistory,
     stats: ?*StreamSummaryMetaBlockStats,
     window_bits: u5,
+    dictionary: ?*const DecodeSharedDictionary,
 ) linksection(large_window_text_section) SummaryError!void {
     const meta_block_end = std.math.add(usize, start_written, meta_block_len) catch return error.IntegerOverflow;
     var header: LargeWindowCompressedHeader = undefined;
@@ -11119,10 +11188,10 @@ noinline fn skipMinimalCompressedMetaBlockLargeWindow(
     if (header.literal_tree_count >= clustered_literal_tree_threshold and prepareLargeLiteralTailLookups(&header)) {
         const auxiliary_tail_lookups = prepareLargeAuxiliaryTailLookups(&header);
         if (auxiliary_tail_lookups)
-            return skipDecodedCompressedPayloadLargeWindow(true, true, reader, start_written, meta_block_end, last_distances, literal_history, stats, window_bits, &header);
-        return skipDecodedCompressedPayloadLargeWindow(true, false, reader, start_written, meta_block_end, last_distances, literal_history, stats, window_bits, &header);
+            return skipDecodedCompressedPayloadLargeWindow(true, true, reader, start_written, meta_block_end, last_distances, literal_history, stats, window_bits, &header, dictionary);
+        return skipDecodedCompressedPayloadLargeWindow(true, false, reader, start_written, meta_block_end, last_distances, literal_history, stats, window_bits, &header, dictionary);
     }
-    return skipDecodedCompressedPayloadLargeWindow(false, false, reader, start_written, meta_block_end, last_distances, literal_history, stats, window_bits, &header);
+    return skipDecodedCompressedPayloadLargeWindow(false, false, reader, start_written, meta_block_end, last_distances, literal_history, stats, window_bits, &header, dictionary);
 }
 
 noinline fn skipDecodedCompressedPayload(
@@ -11136,6 +11205,7 @@ noinline fn skipDecodedCompressedPayload(
     stats: ?*StreamSummaryMetaBlockStats,
     window_bits: u5,
     header: *MinimalCompressedHeader,
+    dictionary: ?*const DecodeSharedDictionary,
 ) SummaryError!void {
     var transformed_dictionary_word: [64]u8 = undefined;
     var written = start_written;
@@ -11177,14 +11247,10 @@ noinline fn skipDecodedCompressedPayload(
         if (distance == 0) return error.InvalidMatch;
         const max_distance = maxBackwardDistanceForWindow(window_bits, written);
         if (distance > max_distance) {
-            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
-            if (word.len > meta_block_end - written) return error.CorruptFrame;
-            if (stats) |s| {
-                s.static_dictionary_copy_count = std.math.add(usize, s.static_dictionary_copy_count, 1) catch return error.IntegerOverflow;
-                s.static_dictionary_bytes = std.math.add(usize, s.static_dictionary_bytes, word.len) catch return error.IntegerOverflow;
-            }
-            literal_history.pushSlice(word);
-            written += word.len;
+            const replayed = try replayOutOfWindowReference(literal_history, stats, dictionary, distance, lengths.copy_len, max_distance, meta_block_end - written, &transformed_dictionary_word);
+            written += replayed.output_len;
+            if (replayed.kind == .compound and decoded_distance.update_ring)
+                pushLastDistance(last_distances, distance);
             continue;
         }
         if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
@@ -11218,6 +11284,7 @@ noinline fn skipDecodedCompressedPayloadLargeWindow(
     stats: ?*StreamSummaryMetaBlockStats,
     window_bits: u5,
     header: *LargeWindowCompressedHeader,
+    dictionary: ?*const DecodeSharedDictionary,
 ) linksection(large_window_text_section) SummaryError!void {
     var transformed_dictionary_word: [64]u8 = undefined;
     var written = start_written;
@@ -11257,14 +11324,10 @@ noinline fn skipDecodedCompressedPayloadLargeWindow(
         if (distance == 0) return error.InvalidMatch;
         const max_distance = maxBackwardDistanceForWindow(window_bits, written);
         if (distance > max_distance) {
-            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
-            if (word.len > meta_block_end - written) return error.CorruptFrame;
-            if (stats) |s| {
-                s.static_dictionary_copy_count = std.math.add(usize, s.static_dictionary_copy_count, 1) catch return error.IntegerOverflow;
-                s.static_dictionary_bytes = std.math.add(usize, s.static_dictionary_bytes, word.len) catch return error.IntegerOverflow;
-            }
-            literal_history.pushSlice(word);
-            written += word.len;
+            const replayed = try replayOutOfWindowReference(literal_history, stats, dictionary, distance, lengths.copy_len, max_distance, meta_block_end - written, &transformed_dictionary_word);
+            written += replayed.output_len;
+            if (replayed.kind == .compound and decoded_distance.update_ring)
+                pushLastDistance(last_distances, distance);
             continue;
         }
         if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
@@ -14016,6 +14079,15 @@ fn minimalStaticDictionaryWord(
     if (distance <= max_backward_distance) return error.InvalidMatch;
     const address = distance - max_backward_distance - 1;
 
+    return minimalStaticDictionaryWordAtAddress(address, copy_len, transformed_scratch);
+}
+
+fn minimalStaticDictionaryWordAtAddress(
+    address: usize,
+    copy_len: usize,
+    transformed_scratch: *[64]u8,
+) Error![]const u8 {
+
     // `static_dictionary.transform` is the complete RFC 7932 implementation.
     // The historical compatibility list is retained for introspection and
     // regression metadata only; scanning its thousands of entries on every
@@ -14023,6 +14095,104 @@ fn minimalStaticDictionaryWord(
     // that coverage list. RFC copy lengths are bounded to 4...24 before this
     // point, so no separate size-bit lookup is needed here.
     return static_dictionary.transform(address, copy_len, transformed_scratch) orelse error.UnsupportedBrotliFeature;
+}
+
+const ResolvedDictionaryReference = union(enum) {
+    compound: shared_dictionary.Cursor,
+    static: []const u8,
+};
+
+fn resolveOutOfWindowReference(
+    dictionary: ?*const DecodeSharedDictionary,
+    distance: usize,
+    copy_len: usize,
+    max_history: usize,
+    static_scratch: *[64]u8,
+) Error!ResolvedDictionaryReference {
+    const compound_size = if (dictionary) |active| active.total_size else 0;
+    const target = shared_dictionary.classifyDistance(distance, max_history, compound_size) catch
+        return error.InvalidMatch;
+    return switch (target) {
+        .history => error.InvalidMatch,
+        .compound => |address| .{ .compound = (dictionary orelse return error.InvalidMatch).dictionary.cursor(address, copy_len) catch |err| switch (err) {
+            error.IntegerOverflow => return error.IntegerOverflow,
+            else => return error.InvalidMatch,
+        } },
+        .static_dictionary => |address| .{ .static = try minimalStaticDictionaryWordAtAddress(address, copy_len, static_scratch) },
+    };
+}
+
+const DictionaryReferenceKind = enum { compound, static };
+const ReplayedDictionaryReference = struct {
+    kind: DictionaryReferenceKind,
+    output_len: usize,
+};
+
+fn appendOutOfWindowReference(
+    output: []u8,
+    written: *usize,
+    output_end: usize,
+    dictionary: ?*const DecodeSharedDictionary,
+    distance: usize,
+    copy_len: usize,
+    max_history: usize,
+    static_scratch: *[64]u8,
+) Error!DictionaryReferenceKind {
+    var resolved = try resolveOutOfWindowReference(dictionary, distance, copy_len, max_history, static_scratch);
+    switch (resolved) {
+        .compound => |*cursor| {
+            if (copy_len > output_end - written.*) return error.CorruptFrame;
+            const target = output[written.*..][0..copy_len];
+            const copied = cursor.copyInto(target);
+            if (copied != copy_len or !cursor.isDone()) return error.InvalidMatch;
+            written.* += copy_len;
+            return .compound;
+        },
+        .static => |word| {
+            if (word.len > output_end - written.*) return error.CorruptFrame;
+            @memcpy(output[written.*..][0..word.len], word);
+            written.* += word.len;
+            return .static;
+        },
+    }
+}
+
+fn replayOutOfWindowReference(
+    literal_history: *LiteralHistory,
+    stats: ?*StreamSummaryMetaBlockStats,
+    dictionary: ?*const DecodeSharedDictionary,
+    distance: usize,
+    copy_len: usize,
+    max_history: usize,
+    remaining_output: usize,
+    static_scratch: *[64]u8,
+) SummaryError!ReplayedDictionaryReference {
+    var resolved = try resolveOutOfWindowReference(dictionary, distance, copy_len, max_history, static_scratch);
+    switch (resolved) {
+        .compound => |*cursor| {
+            if (copy_len > remaining_output) return error.CorruptFrame;
+            var scratch: [256]u8 = undefined;
+            while (!cursor.isDone()) {
+                const copied = cursor.copyInto(scratch[0..@min(scratch.len, cursor.remaining())]);
+                if (copied == 0) return error.InvalidMatch;
+                literal_history.pushSlice(scratch[0..copied]);
+            }
+            if (stats) |s| {
+                s.shared_dictionary_copy_count = std.math.add(usize, s.shared_dictionary_copy_count, 1) catch return error.IntegerOverflow;
+                s.shared_dictionary_bytes = std.math.add(usize, s.shared_dictionary_bytes, copy_len) catch return error.IntegerOverflow;
+            }
+            return .{ .kind = .compound, .output_len = copy_len };
+        },
+        .static => |word| {
+            if (word.len > remaining_output) return error.CorruptFrame;
+            literal_history.pushSlice(word);
+            if (stats) |s| {
+                s.static_dictionary_copy_count = std.math.add(usize, s.static_dictionary_copy_count, 1) catch return error.IntegerOverflow;
+                s.static_dictionary_bytes = std.math.add(usize, s.static_dictionary_bytes, word.len) catch return error.IntegerOverflow;
+            }
+            return .{ .kind = .static, .output_len = word.len };
+        },
+    }
 }
 
 pub fn minimalStaticDictionarySizeBits(copy_len: usize) ?u5 {
@@ -28330,6 +28500,122 @@ test "br large window simple distance tree uses wire width and safe limit" {
     );
 }
 
+test "br RAW shared dictionary decodes upstream compound fixture across public APIs" {
+    const frame = [_]u8{ 0xa1, 0xa8, 0x00, 0xc0, 0x2f, 0x01, 0x10, 0xc4, 0x44, 0x09, 0x00 };
+    const expected = "Kot lomom kolol slona!";
+    const without_dictionary = try decodeStreamAlloc(std.testing.allocator, &frame);
+    defer std.testing.allocator.free(without_dictionary);
+    try std.testing.expectEqualSlices(u8, "alternate\" type=\"appli", without_dictionary);
+
+    const one_options = DecodeOptions{
+        .shared_dictionary = .{ .raw_prefixes = &.{expected} },
+    };
+    const one = try decodeStreamAllocWithOptions(std.testing.allocator, &frame, one_options);
+    defer std.testing.allocator.free(one);
+    try std.testing.expectEqualSlices(u8, expected, one);
+
+    const two_options = DecodeOptions{
+        .shared_dictionary = .{ .raw_prefixes = &.{ expected[0..13], expected[13..] } },
+    };
+    const exact = try decodeStreamAllocExactSizeWithOptions(std.testing.allocator, &frame, expected.len, two_options);
+    defer std.testing.allocator.free(exact);
+    try std.testing.expectEqualSlices(u8, expected, exact);
+
+    var into: [expected.len]u8 = undefined;
+    try std.testing.expectEqual(expected.len, try decodeStreamIntoExactSizeWithOptions(&frame, &into, expected.len, two_options));
+    try std.testing.expectEqualSlices(u8, expected, &into);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(expected.len, try decodeStreamAppendWithOptions(std.testing.allocator, &appended, &frame, two_options));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ expected, appended.items);
+
+    const chunks = [_][]const u8{ frame[0..1], frame[1..7], frame[7..] };
+    var compressed_scratch: [frame.len]u8 = undefined;
+    const chunked = try decodeStreamChunksAllocWithOptions(std.testing.allocator, &chunks, &compressed_scratch, two_options);
+    defer std.testing.allocator.free(chunked);
+    try std.testing.expectEqualSlices(u8, expected, chunked);
+
+    const summary = try summarizeStreamWithOptions(&frame, two_options);
+    try std.testing.expect(summary.uses_shared_dictionary);
+    try std.testing.expectEqual(@as(usize, 1), summary.shared_dictionary_copy_count);
+    try std.testing.expectEqual(expected.len, summary.shared_dictionary_bytes);
+    try std.testing.expectEqual(@as(usize, 0), summary.static_dictionary_copy_count);
+}
+
+test "br RAW shared dictionary progressive decoder resumes across prefix and output boundaries" {
+    const frame = [_]u8{ 0xa1, 0xa8, 0x00, 0xc0, 0x2f, 0x01, 0x10, 0xc4, 0x44, 0x09, 0x00 };
+    const expected = "Kot lomom kolol slona!";
+    const decode_options = DecodeOptions{
+        .shared_dictionary = .{ .raw_prefixes = &.{ expected[0..4], "", expected[4..13], expected[13..] } },
+    };
+    var history: [32]u8 = undefined;
+    var decoder = IncrementalCopyStreamDecoder.initWithOptions(&history, .{
+        .expected_output_len = expected.len,
+        .max_output_len = expected.len,
+        .decode = decode_options,
+    });
+    var output: [expected.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(frame.len, input_offset + 1);
+        const output_end = @min(output.len, output_offset + 1);
+        const step = try decoder.step(frame[input_offset..input_end], output[output_offset..output_end]);
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+        if (step.status == .need_input) try std.testing.expect(input_offset < frame.len);
+        if (step.status == .need_output) try std.testing.expect(output_offset < output.len);
+    }
+    try decoder.finish();
+    try std.testing.expectEqual(frame.len, input_offset);
+    try std.testing.expectEqual(expected.len, output_offset);
+    try std.testing.expectEqualSlices(u8, expected, &output);
+}
+
+test "br RAW shared dictionary rejects invalid descriptors before output mutation" {
+    const frame = [_]u8{ 0xa1, 0xa8, 0x00, 0xc0, 0x2f, 0x01, 0x10, 0xc4, 0x44, 0x09, 0x00 };
+    const too_many: [shared_dictionary.max_raw_prefixes + 1][]const u8 = @splat("");
+    const options = DecodeOptions{ .shared_dictionary = .{ .raw_prefixes = &too_many } };
+    var output: [32]u8 = @splat(0xa5);
+    try std.testing.expectError(error.CorruptFrame, decodeStreamIntoWithOptions(&frame, &output, options));
+    try std.testing.expectEqual([_]u8{0xa5} ** output.len, output);
+    var history: [32]u8 = undefined;
+    var decoder = IncrementalCopyStreamDecoder.initWithOptions(&history, .{ .decode = options });
+    try std.testing.expectError(error.CorruptFrame, decoder.step(&frame, &output));
+    try std.testing.expectEqual(@as(usize, 0), decoder.snapshot().input_read);
+    var owned = IncrementalStreamDecoder.initWithOptions(
+        std.testing.allocator,
+        .{ .decode = options },
+    );
+    defer owned.deinit();
+    try std.testing.expectError(error.CorruptFrame, owned.step(&frame, &output));
+    try std.testing.expectEqual(@as(usize, 0), owned.snapshot().compressed_bytes);
+
+    const sentinel: [*]const u8 = @ptrFromInt(1);
+    const overflowing_prefixes = [_][]const u8{
+        sentinel[0..std.math.maxInt(usize)],
+        sentinel[0..1],
+    };
+    const overflowing_options = DecodeOptions{
+        .shared_dictionary = .{ .raw_prefixes = &overflowing_prefixes },
+    };
+    var overflowing_decoder = IncrementalCopyStreamDecoder.initWithOptions(
+        &history,
+        .{ .decode = overflowing_options },
+    );
+    try std.testing.expectError(error.IntegerOverflow, overflowing_decoder.step(&frame, &output));
+    try std.testing.expectEqual(@as(usize, 0), overflowing_decoder.snapshot().input_read);
+    var overflowing_owned = IncrementalStreamDecoder.initWithOptions(
+        std.testing.allocator,
+        .{ .decode = overflowing_options },
+    );
+    defer overflowing_owned.deinit();
+    try std.testing.expectError(error.IntegerOverflow, overflowing_owned.step(&frame, &output));
+    try std.testing.expectEqual(@as(usize, 0), overflowing_owned.snapshot().compressed_bytes);
+}
+
 test "br static dictionary addresses use the active window distance" {
     var scratch: [64]u8 = undefined;
     const output_len = (@as(usize, 1) << 16) + 4096;
@@ -28347,6 +28633,46 @@ test "br static dictionary addresses use the active window distance" {
         error.InvalidMatch,
         minimalStaticDictionaryWord(window_distance + 1 + address, copy_len, output_len, &scratch),
     );
+}
+
+test "br RAW shared dictionary shifts static dictionary addresses after compound region" {
+    const prefix = "abc";
+    var shared = DecodeSharedDictionary{
+        .dictionary = .{ .raw_prefixes = &.{prefix} },
+        .total_size = prefix.len,
+    };
+    var scratch: [64]u8 = undefined;
+    const max_history: usize = 10;
+
+    var compound = try resolveOutOfWindowReference(
+        &shared,
+        max_history + 1,
+        1,
+        max_history,
+        &scratch,
+    );
+    switch (compound) {
+        .compound => |*cursor| {
+            var output: [1]u8 = undefined;
+            try std.testing.expectEqual(@as(usize, 1), cursor.copyInto(&output));
+            try std.testing.expectEqualSlices(u8, "c", &output);
+        },
+        .static => return error.TestUnexpectedResult,
+    }
+
+    const static_address: usize = 3;
+    const shifted_distance = max_history + prefix.len + 1 + static_address;
+    const shifted = try resolveOutOfWindowReference(
+        &shared,
+        shifted_distance,
+        5,
+        max_history,
+        &scratch,
+    );
+    switch (shifted) {
+        .compound => return error.TestUnexpectedResult,
+        .static => |word| try std.testing.expectEqualSlices(u8, "world", word),
+    }
 }
 
 test "br simple prefix code decodes three-symbol canonical tree" {
