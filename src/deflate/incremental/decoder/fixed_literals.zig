@@ -110,6 +110,17 @@ pub const Decoder = struct {
         self.last_error_name = "";
         self.last_error_phase = .block_header;
     }
+    /// Reset raw-DEFLATE block/history state after an external sync-marker
+    /// scanner consumed `skipped_input` bytes. Cumulative input/output counters
+    /// and output limits remain attached to this logical recovery session.
+    pub fn resumeAfterSync(self: *Decoder, skipped_input: usize) Error!void {
+        const resumed_input = std.math.add(usize, self.total_input, skipped_input) catch
+            return error.IntegerOverflow;
+        const produced = self.total_output;
+        self.reset();
+        self.total_input = resumed_input;
+        self.total_output = produced;
+    }
     pub fn seedDictionary(self: *Decoder, dictionary: []const u8) void {
         if (self.history.len == 0) return;
         const keep = @min(dictionary.len, self.history.len);

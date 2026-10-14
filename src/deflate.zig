@@ -13,6 +13,7 @@ const semantic_rle1 = @import("deflate/semantic/rle1.zig");
 const semantic_rle258 = @import("deflate/semantic/rle258.zig");
 const dynamic_code_length_rle = @import("deflate/dynamic/code_length_rle.zig");
 const zlib_dictionary_set = @import("deflate/zlib/dictionary_set.zig");
+const sync = @import("deflate/sync.zig");
 const incremental_stored_encoder = @import("deflate/incremental/encoder/stored.zig");
 const incremental_fixed_encoder = @import("deflate/incremental/encoder/fixed.zig");
 const incremental_rolling_hash = @import("deflate/incremental/encoder/match_finder/rolling_hash.zig");
@@ -58,6 +59,67 @@ const pngImageOutputLen = png.pngImageOutputLen;
 const pngScanlinePayloadLen = png.pngScanlinePayloadLen;
 
 pub const Error = core.Error;
+pub const SyncError = Error || std.mem.Allocator.Error || error{DeflateSyncPointNotFound};
+pub const RawDeflateSyncPoint = sync.Point;
+pub const RawDeflateSyncScanner = sync.Scanner;
+pub const RawDeflateSyncScanResult = sync.ScanResult;
+
+pub const RawDeflateSyncDecodeResult = struct {
+    sync_point: RawDeflateSyncPoint,
+    input_read: usize,
+    output_written: usize,
+};
+
+pub const RawDeflateOwnedSyncDecodeResult = struct {
+    sync_point: RawDeflateSyncPoint,
+    bytes: []u8,
+    input_read: usize,
+
+    pub fn deinit(self: RawDeflateOwnedSyncDecodeResult, allocator: std.mem.Allocator) void {
+        allocator.free(self.bytes);
+    }
+};
+
+pub fn findRawDeflateSyncPoint(input: []const u8) ?RawDeflateSyncPoint {
+    return sync.find(input);
+}
+
+pub fn decodeRawDeflateAfterSync(input: []const u8, output: []u8) SyncError!RawDeflateSyncDecodeResult {
+    const point = findRawDeflateSyncPoint(input) orelse
+        return error.DeflateSyncPointNotFound;
+    const decoded = try decodeRawAuto(input[point.resume_offset..], output);
+    return .{
+        .sync_point = point,
+        .input_read = point.resume_offset + decoded.input_read,
+        .output_written = decoded.output_written,
+    };
+}
+
+pub fn decodeRawDeflateAfterSyncAlloc(allocator: std.mem.Allocator, input: []const u8) SyncError!RawDeflateOwnedSyncDecodeResult {
+    const point = findRawDeflateSyncPoint(input) orelse
+        return error.DeflateSyncPointNotFound;
+    const decoded = try decodeRawAutoAllocPartial(allocator, input[point.resume_offset..]);
+    return .{
+        .sync_point = point,
+        .bytes = decoded.bytes,
+        .input_read = point.resume_offset + decoded.input_read,
+    };
+}
+
+pub fn decodeRawDeflateAfterSyncAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) SyncError!RawDeflateOwnedSyncDecodeResult {
+    const point = findRawDeflateSyncPoint(input) orelse
+        return error.DeflateSyncPointNotFound;
+    const decoded = try decodeRawAutoAllocPartialLimited(
+        allocator,
+        input[point.resume_offset..],
+        max_output_len,
+    );
+    return .{
+        .sync_point = point,
+        .bytes = decoded.bytes,
+        .input_read = point.resume_offset + decoded.input_read,
+    };
+}
 pub const ZlibDictionaryEntry = zlib_dictionary_set.Entry;
 pub const ZlibDictionarySet = zlib_dictionary_set.Set;
 pub const max_stored_block_len: usize = std.math.maxInt(u16);

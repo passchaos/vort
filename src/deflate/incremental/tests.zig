@@ -7,6 +7,7 @@ const full_flush_tests = @import("tests/full_flush.zig");
 const params_tests = @import("tests/params.zig");
 const partial_flush_tests = @import("tests/partial_flush.zig");
 const rolling_hash_tests = @import("tests/rolling_hash.zig");
+const sync_recovery_tests = @import("tests/sync_recovery.zig");
 const wrapper_continuation_tests = @import("tests/wrapper_continuation.zig");
 
 test {
@@ -16,6 +17,7 @@ test {
     _ = params_tests;
     _ = partial_flush_tests;
     _ = rolling_hash_tests;
+    _ = sync_recovery_tests;
     _ = wrapper_continuation_tests;
 }
 
