@@ -1,18 +1,53 @@
 const std = @import("std");
 
-/// Unbounded Huffman tree for at most 64 active symbols. `frequencies` must be
+pub const BuildProfile = struct {
+    calls: usize = 0,
+    failures: usize = 0,
+    package_merge_calls: usize = 0,
+    leaf_order_ns: u64 = 0,
+    merge_ns: u64 = 0,
+    depth_ns: u64 = 0,
+    output_ns: u64 = 0,
+};
+
+/// Unbounded Huffman tree for at most 128 active symbols. `frequencies` must be
 /// ordered from highest to lowest weight, with the caller's deterministic tie
-/// order preserved. Planner alphabets in current text/source/log corpora are
-/// <=33 symbols, so depth is comfortably below Brotli's 15-bit limit. Returns
-/// false if an adversarial distribution exceeds that limit, allowing the
-/// caller to retain package-merge fallback.
+/// order preserved. Observed ratio-mode literal trees reach the mid-80s while
+/// remaining comfortably below Brotli's 15-bit limit. Returns false if an
+/// adversarial distribution exceeds that limit, allowing the caller to retain
+/// package-merge fallback.
 pub fn build(comptime capacity: usize, frequencies: []const u32, lengths: *[capacity]u4) bool {
-    std.debug.assert(capacity <= 64 and frequencies.len <= capacity);
+    return buildInternal(capacity, false, frequencies, lengths, {}, {});
+}
+
+pub fn buildProfiled(
+    comptime capacity: usize,
+    frequencies: []const u32,
+    lengths: *[capacity]u4,
+    io: std.Io,
+    profile: *BuildProfile,
+) bool {
+    return buildInternal(capacity, true, frequencies, lengths, io, profile);
+}
+
+fn buildInternal(
+    comptime capacity: usize,
+    comptime profiled: bool,
+    frequencies: []const u32,
+    lengths: *[capacity]u4,
+    io: if (profiled) std.Io else void,
+    profile: if (profiled) *BuildProfile else void,
+) bool {
+    std.debug.assert(capacity <= 128 and frequencies.len <= capacity);
+    if (profiled) profile.calls += 1;
     if (frequencies.len > 1) {
         for (frequencies[1..], frequencies[0 .. frequencies.len - 1]) |frequency, previous|
             std.debug.assert(previous >= frequency);
     }
-    if (frequencies.len == 0) return false;
+    if (frequencies.len == 0) {
+        if (profiled) profile.failures += 1;
+        return false;
+    }
     if (frequencies.len == 1) {
         lengths[0] = 1;
         return true;
@@ -20,11 +55,14 @@ pub fn build(comptime capacity: usize, frequencies: []const u32, lengths: *[capa
     // Leaves always precede generated parents, so node indexes are also the
     // stable tie-break serials used by the reference heap. Keeping weights and
     // parents in parallel compact arrays avoids dragging a padded 16-byte Node
-    // through both queues. The largest legal node index is 126, so every
-    // non-root parent fits in i8. All non-root nodes receive a parent during
+    // through both queues. The largest legal node index is 254, so every
+    // non-root parent fits in u8; the <=64 specialization retains signed bytes
+    // for identical generated layout. All non-root nodes receive a parent during
     // construction, and the reverse traversal deliberately excludes the root.
+    const leaf_order_start = if (profiled) std.Io.Clock.awake.now(io) else {};
+    const Parent = if (capacity <= 64) i8 else u8;
     var weights: [2 * capacity - 1]u64 = undefined;
-    var parents: [2 * capacity - 1]i8 = undefined;
+    var parents: [2 * capacity - 1]Parent = undefined;
     var leaves: [capacity]u8 = undefined;
     var node_len = frequencies.len;
     for (frequencies, 0..) |frequency, i| {
@@ -45,6 +83,8 @@ pub fn build(comptime capacity: usize, frequencies: []const u32, lengths: *[capa
         }
         group_end = group_start;
     }
+    if (profiled) profile.leaf_order_ns +%= elapsedNs(leaf_order_start, io);
+    const merge_start = if (profiled) std.Io.Clock.awake.now(io) else {};
     var leaf_i: usize = 0;
     var parent_i = frequencies.len;
     var remaining = frequencies.len;
@@ -58,9 +98,11 @@ pub fn build(comptime capacity: usize, frequencies: []const u32, lengths: *[capa
         node_len += 1;
         remaining -= 1;
     }
+    if (profiled) profile.merge_ns +%= elapsedNs(merge_start, io);
     // Parents are appended after both children. Walking nodes backwards makes
     // every parent depth available before its children, so all leaf depths are
     // recovered in O(nodes) instead of following each leaf-to-root chain.
+    const depth_start = if (profiled) std.Io.Clock.awake.now(io) else {};
     var depths: [2 * capacity - 1]u5 = undefined;
     depths[node_len - 1] = 0;
     var index = node_len - 1;
@@ -69,11 +111,25 @@ pub fn build(comptime capacity: usize, frequencies: []const u32, lengths: *[capa
         const parent = parents[index];
         depths[index] = depths[@intCast(parent)] + 1;
     }
+    if (profiled) profile.depth_ns +%= elapsedNs(depth_start, io);
+    const output_start = if (profiled) std.Io.Clock.awake.now(io) else {};
     for (frequencies, 0..) |_, symbol| {
-        if (depths[symbol] > 15) return false;
+        if (depths[symbol] > 15) {
+            if (profiled) {
+                profile.output_ns +%= elapsedNs(output_start, io);
+                profile.failures += 1;
+            }
+            return false;
+        }
         lengths[symbol] = @intCast(depths[symbol]);
     }
+    if (profiled) profile.output_ns +%= elapsedNs(output_start, io);
     return true;
+}
+
+fn elapsedNs(start: std.Io.Timestamp, io: std.Io) u64 {
+    const ns = start.durationTo(std.Io.Clock.awake.now(io)).nanoseconds;
+    return if (ns <= 0) 0 else @intCast(ns);
 }
 
 fn less(comptime Node: type, nodes: []const Node, left_index: u8, right_index: u8) bool {
@@ -201,6 +257,25 @@ test "small Huffman two-queue builder matches heap reference lengths" {
     }
 }
 
+test "small Huffman 128-symbol builder matches heap reference lengths" {
+    var state: u32 = 0x243f_6a88;
+    for (0..256) |_| {
+        var frequencies: [128]u32 = @splat(0);
+        const active: usize = 65 + state % 64;
+        for (frequencies[0..active]) |*frequency| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            frequency.* = 1 + (state >> 20);
+        }
+        std.mem.sort(u32, frequencies[0..active], {}, std.sort.desc(u32));
+        var actual: [128]u4 = undefined;
+        var expected: [128]u4 = undefined;
+        const actual_ok = build(128, frequencies[0..active], &actual);
+        const expected_ok = buildHeapReference(128, frequencies[0..active], &expected);
+        try std.testing.expectEqual(expected_ok, actual_ok);
+        if (actual_ok) try std.testing.expectEqualSlices(u4, expected[0..active], actual[0..active]);
+    }
+}
+
 fn buildHeapReference(comptime capacity: usize, frequencies: []const u32, lengths: *[capacity]u4) bool {
     lengths.* = @splat(0);
     const Node = struct { weight: u64, parent: i16 = -1, serial: u8 };
@@ -224,14 +299,14 @@ fn buildHeapReference(comptime capacity: usize, frequencies: []const u32, length
         heapPush(Node, nodes[0..node_len], &heap, &heap_len, parent);
     }
     for (frequencies, 0..) |_, symbol| {
-        var depth: u4 = 0;
+        var depth: u5 = 0;
         var node: i16 = @intCast(symbol);
         while (nodes[@intCast(node)].parent >= 0) {
             depth += 1;
             if (depth > 15) return false;
             node = nodes[@intCast(node)].parent;
         }
-        lengths[symbol] = depth;
+        lengths[symbol] = @intCast(depth);
     }
     return true;
 }

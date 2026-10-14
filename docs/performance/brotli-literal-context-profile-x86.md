@@ -27,7 +27,7 @@ specialization records:
 
 The CSV gate validates three source sizes, ReleaseFast provenance, candidate
 ranges, deterministic counters, nested timing totals, and the dominant
-`source32k` cluster stage. An eight-case negative smoke rejects missing rows,
+`source32k` cluster stage. A nine-case negative smoke rejects missing rows,
 counter drift, timing drift, invalid modes, false stage dominance, and
 non-ReleaseFast provenance.
 
@@ -152,3 +152,27 @@ encoder rejected it: only 4/11 alternating 20-iteration pairs won and the
 median regressed from 241.440 to 242.398 ms. The candidate and its extra guard
 were removed. Future length work must improve generated layout and complete
 encoding, not merely shrink the isolated queue scratch.
+
+## 65–128-symbol two-queue extension
+
+The active-size evidence showed all 700 former package-merge calls in
+`source32k` fell in the 65–128 bucket. The retained implementation extends the
+same stable two-queue algorithm to 128 symbols: node indexes remain `u8`, while
+the parent array uses `u8` only for the wider instance and keeps the existing
+`i8` layout for <=64. Any tree deeper than Brotli's 15-bit limit still returns
+false and uses the unchanged 256-slot package-merge fallback. A randomized
+65–128-symbol oracle compares success and every length against the heap
+reference.
+
+On fixed CPU 2 for ten iterations, small-builder calls rose 2,090→2,790 and
+package-merge calls fell 700→0. Length generation dropped 7.479→2.096 ms
+(`3.567x`), complete `treeBitCost` substages dropped 12.759→7.424 ms
+(`1.719x`), cluster exact scoring dropped 20.986→15.740 ms (`1.333x`), and
+the full diagnostic dropped 59.882→36.330 ms (`1.648x`). The tree-score
+bottleneck consequently shifted to prefix costing (37.1%), followed by
+alphabet construction (30.8%), length generation (28.2%), and weighted
+payload (3.8%); the gate now locks prefix dominance.
+
+The uninstrumented encoder won all 11 alternating fixed-CPU-2 pairs at 20
+iterations, reducing the median from 240.515 to 196.121 ms (`1.226x`) with
+identical 6,475-byte output and checksum 134,745.

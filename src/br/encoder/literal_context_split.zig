@@ -5,6 +5,7 @@ const complex_prefix = @import("complex_prefix.zig");
 const context_map_encoder = @import("context_map.zig");
 const literal_context = @import("literal_context.zig");
 const literal_context_profile = @import("literal_context_profile.zig");
+const small_huffman = @import("small_huffman.zig");
 
 const min_literal_count: usize = 128;
 const min_payload_savings_bits: u64 = 128;
@@ -866,12 +867,25 @@ fn treeBitCostProfiled(
             2
         else if (alphabet.len <= 64)
             3
+        else if (alphabet.len <= 128)
+            4
         else
-            4;
+            5;
         profiler.profile.tree_active_buckets[bucket] += 1;
     }
     const lengths_start = if (profiled) profiler.now() else {};
-    const lengths = try alphabet.codeLengths(frequencies);
+    const lengths = if (profiled) blk: {
+        var huffman_profile: small_huffman.BuildProfile = .{};
+        const result = try alphabet.codeLengthsProfiled(frequencies, profiler.io, &huffman_profile);
+        profiler.profile.small_huffman_calls += huffman_profile.calls;
+        profiler.profile.small_huffman_failures += huffman_profile.failures;
+        profiler.profile.package_merge_calls += huffman_profile.package_merge_calls;
+        profiler.profile.small_huffman_leaf_order_ns +%= huffman_profile.leaf_order_ns;
+        profiler.profile.small_huffman_merge_ns +%= huffman_profile.merge_ns;
+        profiler.profile.small_huffman_depth_ns +%= huffman_profile.depth_ns;
+        profiler.profile.small_huffman_output_ns +%= huffman_profile.output_ns;
+        break :blk result;
+    } else try alphabet.codeLengths(frequencies);
     if (profiled) profiler.profile.tree_lengths_ns +%= profiler.elapsedNs(lengths_start);
     const weighted_start = if (profiled) profiler.now() else {};
     var cost = weightedBits(frequencies, &lengths);
@@ -1007,6 +1021,12 @@ test "literal context profile reports stable stage accounting" {
     var bucket_total: usize = 0;
     for (profile.tree_active_buckets) |count| bucket_total += count;
     try std.testing.expectEqual(profile.tree_score_calls, bucket_total);
+    try std.testing.expectEqual(
+        profile.tree_active_buckets[1] + profile.tree_active_buckets[2] +
+            profile.tree_active_buckets[3] + profile.tree_active_buckets[4],
+        profile.small_huffman_calls,
+    );
+    try std.testing.expect(profile.smallHuffmanStageNs() <= profile.tree_lengths_ns);
     try std.testing.expect(profile.treeScoreStageNs() <= profile.cluster_score_ns);
     try std.testing.expect(profile.stageNs() <= profile.total_ns);
     try std.testing.expect(profile.clusterStageNs() <= profile.cluster_ns);

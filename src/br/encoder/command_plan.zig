@@ -75,6 +75,25 @@ pub fn PrefixAlphabetFor(comptime capacity: usize) type {
         len: usize = 0,
 
         pub fn codeLengths(self: *const Self, frequencies: *const [capacity]u32) ![capacity]u4 {
+            return self.codeLengthsInternal(false, frequencies, {}, {});
+        }
+
+        pub fn codeLengthsProfiled(
+            self: *const Self,
+            frequencies: *const [capacity]u32,
+            io: std.Io,
+            profile: *small_huffman.BuildProfile,
+        ) ![capacity]u4 {
+            return self.codeLengthsInternal(true, frequencies, io, profile);
+        }
+
+        fn codeLengthsInternal(
+            self: *const Self,
+            comptime profiled: bool,
+            frequencies: *const [capacity]u32,
+            io: if (profiled) std.Io else void,
+            profile: if (profiled) *small_huffman.BuildProfile else void,
+        ) ![capacity]u4 {
             if (self.len == 0) return error.InvalidBlockPlan;
             var lengths: [capacity]u4 = @splat(0);
             switch (self.len) {
@@ -95,15 +114,37 @@ pub fn PrefixAlphabetFor(comptime capacity: usize) type {
                         var compact_lengths: [64]u4 = undefined;
                         var compact_frequencies: [64]u32 = undefined;
                         for (self.symbols[0..self.len], 0..) |symbol, i| compact_frequencies[i] = frequencies[symbol];
-                        if (small_huffman.build(64, compact_frequencies[0..self.len], &compact_lengths)) {
+                        const built = if (profiled)
+                            small_huffman.buildProfiled(64, compact_frequencies[0..self.len], &compact_lengths, io, profile)
+                        else
+                            small_huffman.build(64, compact_frequencies[0..self.len], &compact_lengths);
+                        if (built) {
                             for (self.symbols[0..self.len], compact_lengths[0..self.len]) |symbol, bits| lengths[symbol] = bits;
                         } else {
+                            if (profiled) profile.package_merge_calls += 1;
                             self.fillTreeLengths(frequencies, 64, &lengths);
                         }
-                    } else if (self.len <= 256)
-                        self.fillTreeLengths(frequencies, 256, &lengths)
-                    else
+                    } else if (self.len <= 128) {
+                        var compact_lengths: [128]u4 = undefined;
+                        var compact_frequencies: [128]u32 = undefined;
+                        for (self.symbols[0..self.len], 0..) |symbol, i| compact_frequencies[i] = frequencies[symbol];
+                        const built = if (profiled)
+                            small_huffman.buildProfiled(128, compact_frequencies[0..self.len], &compact_lengths, io, profile)
+                        else
+                            small_huffman.build(128, compact_frequencies[0..self.len], &compact_lengths);
+                        if (built) {
+                            for (self.symbols[0..self.len], compact_lengths[0..self.len]) |symbol, bits| lengths[symbol] = bits;
+                        } else {
+                            if (profiled) profile.package_merge_calls += 1;
+                            self.fillTreeLengths(frequencies, 256, &lengths);
+                        }
+                    } else if (self.len <= 256) {
+                        if (profiled) profile.package_merge_calls += 1;
+                        self.fillTreeLengths(frequencies, 256, &lengths);
+                    } else {
+                        if (profiled) profile.package_merge_calls += 1;
                         self.fillTreeLengths(frequencies, max_prefix_symbols, &lengths);
+                    }
                 },
                 else => unreachable,
             }

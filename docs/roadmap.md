@@ -19293,7 +19293,7 @@ reuse, so production keeps the simpler independently owned plans.
   reassignment, compaction, and final exact scoring. It also records proposal
   shapes, trials, rounds, comparisons, and exact-score cache hits/misses. The
   three-row CSV gate checks ReleaseFast provenance, deterministic geometry,
-  nested timing totals, and `source32k` stage dominance; eight negative fixtures
+  nested timing totals, and `source32k` stage dominance; nine negative fixtures
   reject missing rows, counter/timing drift, invalid modes, false dominance,
   and Debug evidence. A fixed-CPU-2 ten-iteration run selected 2/10/10 trees
   for `source32k`: suffix and clustering consumed 43.4%/53.4% of total search
@@ -19357,6 +19357,18 @@ reuse, so production keeps the simpler independently owned plans.
   the result: only 4/11 fixed-CPU alternating pairs won and the median regressed
   241.440→242.398 ms. The implementation and guard were removed; only the
   profiler, gate, and rejection evidence remain.
+
+- Extended the stable two-queue Huffman builder through 128 active symbols.
+  The wider instance keeps `u8` node/parent indexes, while <=64 retains its
+  established `i8` parent layout; depth above Brotli's 15-bit limit still falls
+  back to the unchanged 256-slot package merge. A randomized 65–128-symbol
+  oracle matches the heap reference exactly. Fixed-CPU-2 `source32k` moved
+  700 package-merge calls onto the fast builder: length generation fell
+  7.479→2.096 ms (`3.567x`), complete tree-score substages fell `1.719x`,
+  cluster exact scoring fell `1.333x`, and the full diagnostic fell `1.648x`.
+  All 11 uninstrumented 20-iteration pairs won, reducing the median
+  240.515→196.121 ms (`1.226x`) with unchanged 6,475-byte wire and checksum
+  134,745. Prefix costing is now the largest tree-score substage at 37.1%.
 
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository

@@ -21,9 +21,12 @@ COLUMNS = [
     "tree_score_cache_hits", "tree_score_cache_misses",
     "tree_score_cache_cold_misses", "tree_score_cache_conflict_misses",
     "tree_score_calls", "tree_simple_scores", "tree_complex_scores", "tree_active_entries", "tree_active_buckets",
+    "small_huffman_calls", "small_huffman_failures", "package_merge_calls",
     "analysis_ns", "baseline_ns", "suffix_ns", "sparse_ns", "cluster_ns", "cluster_init_ns",
     "cluster_prepare_ns", "cluster_assignment_ns", "cluster_finalize_ns", "cluster_score_ns",
     "tree_alphabet_ns", "tree_lengths_ns", "tree_weighted_ns", "tree_prefix_ns", "tree_score_stage_ns",
+    "small_huffman_leaf_order_ns", "small_huffman_merge_ns", "small_huffman_depth_ns",
+    "small_huffman_output_ns", "small_huffman_stage_ns",
     "stage_ns", "cluster_stage_ns", "total_ns", "unattributed_ns", "cluster_unattributed_ns",
 ] + PROVENANCE_COLUMNS
 CASES = {"source4k": 4 * 1024, "source16k": 16 * 1024, "source32k": 32 * 1024}
@@ -33,6 +36,10 @@ CLUSTER_STAGES = [
     "cluster_finalize_ns", "cluster_score_ns",
 ]
 TREE_SCORE_STAGES = ["tree_alphabet_ns", "tree_lengths_ns", "tree_weighted_ns", "tree_prefix_ns"]
+SMALL_HUFFMAN_STAGES = [
+    "small_huffman_leaf_order_ns", "small_huffman_merge_ns",
+    "small_huffman_depth_ns", "small_huffman_output_ns",
+]
 
 
 def integer(row: dict[str, str], key: str) -> int:
@@ -105,17 +112,21 @@ def main() -> int:
         assert integer(row, "tree_score_calls") == integer(row, "tree_score_cache_misses"), row
         assert integer(row, "tree_simple_scores") + integer(row, "tree_complex_scores") == integer(row, "tree_score_calls"), row
         assert integer(row, "tree_active_entries") >= integer(row, "tree_score_calls"), row
-        active_buckets = histogram(row, "tree_active_buckets", 5)
+        active_buckets = histogram(row, "tree_active_buckets", 6)
         assert sum(active_buckets) == integer(row, "tree_score_calls"), row
-        minimum_entries = sum(count * minimum for count, minimum in zip(active_buckets, (1, 5, 17, 33, 65)))
-        maximum_entries = sum(count * maximum for count, maximum in zip(active_buckets, (4, 16, 32, 64, 256)))
+        minimum_entries = sum(count * minimum for count, minimum in zip(active_buckets, (1, 5, 17, 33, 65, 129)))
+        maximum_entries = sum(count * maximum for count, maximum in zip(active_buckets, (4, 16, 32, 64, 128, 256)))
         assert minimum_entries <= integer(row, "tree_active_entries") <= maximum_entries, row
-        for key in TOP_STAGES + CLUSTER_STAGES + TREE_SCORE_STAGES + ["stage_ns", "cluster_stage_ns", "tree_score_stage_ns", "total_ns"]:
+        assert integer(row, "small_huffman_calls") == sum(active_buckets[1:5]), row
+        assert integer(row, "package_merge_calls") == active_buckets[5] + integer(row, "small_huffman_failures"), row
+        for key in TOP_STAGES + CLUSTER_STAGES + TREE_SCORE_STAGES + SMALL_HUFFMAN_STAGES + ["stage_ns", "cluster_stage_ns", "tree_score_stage_ns", "small_huffman_stage_ns", "total_ns"]:
             assert integer(row, key) > 0, (key, row)
         assert integer(row, "stage_ns") == sum(integer(row, key) for key in TOP_STAGES), row
         assert integer(row, "cluster_stage_ns") == sum(integer(row, key) for key in CLUSTER_STAGES), row
         assert integer(row, "tree_score_stage_ns") == sum(integer(row, key) for key in TREE_SCORE_STAGES), row
         assert integer(row, "tree_score_stage_ns") <= integer(row, "cluster_score_ns"), row
+        assert integer(row, "small_huffman_stage_ns") == sum(integer(row, key) for key in SMALL_HUFFMAN_STAGES), row
+        assert integer(row, "small_huffman_stage_ns") <= integer(row, "tree_lengths_ns"), row
         assert integer(row, "stage_ns") + integer(row, "unattributed_ns") == integer(row, "total_ns"), row
         assert integer(row, "cluster_stage_ns") + integer(row, "cluster_unattributed_ns") == integer(row, "cluster_ns"), row
 
@@ -126,10 +137,10 @@ def main() -> int:
     cluster_score = integer(source32, "cluster_score_ns")
     assert cluster_score == max(integer(source32, key) for key in CLUSTER_STAGES), source32
     assert cluster_score * 2 > integer(source32, "cluster_ns"), source32
-    tree_lengths = integer(source32, "tree_lengths_ns")
-    assert tree_lengths == max(integer(source32, key) for key in TREE_SCORE_STAGES), source32
-    assert tree_lengths * 2 > integer(source32, "tree_score_stage_ns"), source32
-    print("br_literal_context_profile_gate=ok rows=3 dominant=cluster_score_ns/tree_lengths_ns")
+    tree_prefix = integer(source32, "tree_prefix_ns")
+    assert tree_prefix == max(integer(source32, key) for key in TREE_SCORE_STAGES), source32
+    assert tree_prefix * 3 > integer(source32, "tree_score_stage_ns"), source32
+    print("br_literal_context_profile_gate=ok rows=3 dominant=cluster_score_ns/tree_prefix_ns")
     return 0
 
 
