@@ -22,8 +22,8 @@ major gaps before Vort can claim broad industry-best parity:
   distance splitting and context clustering, but the matrix is not libbrotli
   algorithm, byte, ratio, or throughput parity. Specialized q0/q1 fragment
   encoders, q2/q3 entropy writers, q10/q11 Zopfli/HQ cost refinement,
-  contextual dictionary encoding, quality-specific block sizing, and
-  whole-stream entropy/context optimization remain open.
+  contextual dictionary encoding and whole-stream entropy/context optimization
+  remain open.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
   entropy block switching, static dictionaries, consecutive compressed
@@ -142,7 +142,7 @@ are validated, including equal cross-mode base policy, and the Node differential
 decodes one deterministic generic/text/font corpus at each quality. This proves
 valid interoperable Brotli output, not equality with libbrotli's output or
 compression/performance curve. Inputs above the 16 MiB single-meta-block limit
-use the history-aware 32 KiB bounded block core and apply their requested
+use the history-aware quality-sized bounded block core and apply their requested
 quality/mode schedule per block. Full details and the deliberately
 unclaimed parity dimensions are tracked in
 [`docs/performance/brotli-quality-presets.md`](performance/brotli-quality-presets.md).
@@ -19848,3 +19848,25 @@ reuse, so production keeps the simpler independently owned plans.
   graph passes 2600/2600, and `zig build check` passes all 113 steps;
   quality-specific block-size selection and whole-stream entropy optimization
   remain open rather than being implied by this block-local completion.
+
+- Added quality-specific bounded block sizing to the shared Brotli planned
+  stream core. q0 uses 16 KiB for latency; legacy fast, q1, q6, q7, and q11 use
+  32 KiB; balanced/ratio plus q2...q5 and q8...q10 use 64 KiB to amortize
+  meta-block headers. The q6/q7/q11 defaults deliberately stay inside their
+  deepest optimal-search ceilings. `PlannedStreamChunksOptions.block_len`
+  accepts an explicit 1...64 KiB override; incremental `Options.block_len`
+  takes precedence when non-zero, otherwise the stream override or automatic
+  policy is resolved before accepting input. Chunked bounds and 16 MiB+ one-shot
+  fallback use the identical resolution, so caller-buffer preflight cannot
+  undercount the selected number of stored fallback headers. Focused tests pin
+  every legacy family, representative q0/q1/q2/q6/q10/q11 policies, a 24 KiB
+  override, invalid 64 KiB+ rejection, automatic incremental/chunked byte
+  equality, and level/quality-specific large bounds. Debug and ReleaseFast
+  `test-br` pass 771/771. The upstream differential independently decodes five
+  q0/q2/q6/q11/explicit-size streams through libbrotli 1.0.9 in both build
+  modes (`planned_quality_block_size_cases=5`). The required real-corpus gate
+  passes 16/16 one-shot and 16/16 progressive cases, the full repository test
+  graph passes 2603/2603, and `zig build check` passes all 113 steps.
+  Whole-stream entropy/context
+  optimization remains open; this completes deterministic block-size policy,
+  not global segmentation search.

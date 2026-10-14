@@ -46,6 +46,15 @@ accept RFC windows 10...24. The quality path's ordinary LZ matcher is capped at
 `lz77.max_window_len`, currently 65,535 bytes, even when a wider window is
 advertised.
 
+Bounded stream planning uses a quality-specific automatic block size: q0 uses
+16 KiB for lower latency; q1, q6, q7, and q11 use 32 KiB; q2...q5 and q8...q10
+use 64 KiB to amortize meta-block headers. Legacy fast uses 32 KiB; balanced
+and ratio use 64 KiB. `BrotliPlannedStreamChunksOptions.block_len` may
+explicitly select any size from 1 through 64 KiB. The incremental encoder's
+outer `block_len` takes precedence when non-zero; otherwise the stream option
+or automatic policy is used. q6/q7/q11 therefore keep every automatic block
+inside their deepest optimal-search ceiling.
+
 | Quality | Family | Current Vort behavior |
 | ---: | --- | --- |
 | 0 | fast | Minimum hash-greedy search: chain 1, nice length 16, one candidate; no contexts, splitting, recent distances, or built-in static-dictionary probing. Explicit RAW shared-prefix matching remains available. This is not a fragment encoder. |
@@ -154,7 +163,7 @@ compatibility for either unsupported form.
 ## Large-input and API boundaries
 
 Inputs larger than Brotli's 16 MiB meta-block limit remain one valid stream and
-are split into bounded 32 KiB planning blocks. Every block applies the selected
+are split into bounded 16/32/64 KiB planning blocks selected as above. Every block applies the selected
 legacy level or q0...q11 quality/mode policy, including its parser budget,
 recent-distance choice, context/split candidates, bounded optimal candidate,
 distance-parameter/font candidate, static-dictionary policy, and exact
@@ -166,8 +175,8 @@ advancing the logical output position.
 The same policy core backs allocating, caller-buffer, reusable, explicit
 chunk-list, and incremental planned encoders, including RAW shared-prefix
 matching. Incremental `flush` and metadata boundaries preserve the selected
-stream policy and bounded history. Block size remains a fixed maximum of 32 KiB;
-quality-specific block-size planning is still open work.
+stream policy and bounded history. Explicit chunked/incremental block-size
+overrides use the same core and conservative stored-stream bounds.
 
 ## Verification and performance claims
 
@@ -197,14 +206,16 @@ output backpressure, and static addressing after a saturated compound region.
 The same run retains four upstream decode fixtures and three descriptor-error
 cases. System libbrotli 1.0.9 lacks the optional shared-dictionary symbols, so
 the tool explicitly reports the complete runtime matrix as skipped there.
-Debug and ReleaseFast `zig build test-br` pass all 768 tests, including q0...q11,
+Debug and ReleaseFast `zig build test-br` pass all 771 tests, including q0...q11,
 legacy level, retained-index, empty-dictionary wire, static-address shift,
 incremental rollback, cross-API quality wire equality, and 16 MiB+ q0/q2
 coverage. The upstream differential passes in both build modes with 7,056
 one-shot and 7,056 progressive generated cases, 1,401 fragmentation runs, 64
 high-tree truncations, seven Large Window cases, and one Vort-generated 16 MiB+
 q2/font stream decoded independently by libbrotli 1.0.9
-(`planned_large_quality_cases=1`).
+(`planned_large_quality_cases=1`). Five additional Vort-generated streams pin
+q0/q2/q6/q11 automatic sizing plus an explicit 24 KiB override through
+libbrotli (`planned_quality_block_size_cases=5`).
 
 The planned encode benchmark accepts independent Vort selectors:
 
@@ -260,8 +271,7 @@ names:
 - the specialized q2/q3 entropy writers and their matching block decisions;
 - real q10/q11 Zopfli/HQ cost refinement, including iterative model feedback;
 - contextual dictionary encoding;
-- quality-specific block sizing and whole-stream rather than block-local
-  entropy/context optimization;
+- whole-stream rather than block-local entropy/context optimization;
 - calibration and regression gates for compression ratio, throughput, peak
   memory, and output-size monotonicity across representative corpora and
   platforms.

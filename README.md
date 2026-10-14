@@ -1639,7 +1639,8 @@ Encoding accepts the descriptor through three public option fields:
   `BrotliPlannedStreamEncoder` reusable frontends, including legacy
   fast/balanced/ratio and every Vort-native q0...q11 preset;
 - `BrotliPlannedStreamChunksOptions.shared_dictionary` covers the chunked
-  planner together with its `level` or q0...q11 `quality`/`mode` policy;
+  planner together with its `level` or q0...q11 `quality`/`mode` policy and
+  optional `block_len` override;
 - `BrotliIncrementalPlannedStreamEncoder.Options.stream.shared_dictionary`
   covers the incremental planner across flushes and meta-blocks, including its
   stream-level `level` or `quality`/`mode` selection.
@@ -1761,9 +1762,9 @@ They produce standard Brotli streams, but the numbers and modes do not select
 libbrotli's internal encoders and do not promise libbrotli-equivalent bytes,
 compressed size, memory use, or speed. In particular, specialized q0/q1
 fragment encoders, q2/q3 entropy writers, q10/q11 Zopfli/HQ cost refinement,
-contextual dictionary encoding and quality-specific meta-block sizing remain
+contextual dictionary encoding and whole-stream entropy optimization remain
 future work. Inputs beyond the 16 MiB format limit keep one Brotli stream and
-apply the selected policy independently to bounded 32 KiB blocks while
+apply the selected policy independently to bounded 16/32/64 KiB blocks while
 retaining window-bounded LZ77 history and the recent-distance ring. The exact
 per-quality and per-mode behavior, input/window bounds, verification scope, and
 benchmark command are recorded in
