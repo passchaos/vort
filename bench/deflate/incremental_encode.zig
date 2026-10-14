@@ -39,6 +39,7 @@ pub fn main(init: std.process.Init) !void {
         if (!std.mem.eql(u8, mode, "persistent-only")) return error.InvalidBlockPlan;
     }
     if (cpu) |index| try pinCurrentThread(index);
+    try verifyFullFlushInterop(init.gpa);
 
     const cases = try buildCases(init.gpa);
     defer {
@@ -198,6 +199,130 @@ fn zlibRawDeflate(input: []const u8, output: []u8) !usize {
     stream.avail_out = @intCast(output.len);
     if (zlib.deflate(&stream, zlib.Z_FINISH) != zlib.Z_STREAM_END) return error.OutputTooSmall;
     return @intCast(stream.total_out);
+}
+
+/// Keep the benchmark's system-zlib dependency useful as a bidirectional
+/// compatibility gate for the incremental encoder's Z_FULL_FLUSH semantics.
+/// This runs once before timing and does not contribute to any benchmark row.
+fn verifyFullFlushInterop(allocator: std.mem.Allocator) !void {
+    const first = "vort and zlib full flush interop first segment\n" ** 16;
+    const second = "vort and zlib full flush interop second segment\n" ** 19;
+    const expected = first ++ second;
+
+    var vort_encoder = vort.RawDeflateIncrementalBestEncoder.initWithOptions(allocator, .{ .block_len = 97 });
+    defer vort_encoder.deinit();
+    var vort_wire: std.ArrayList(u8) = .empty;
+    defer vort_wire.deinit(allocator);
+    var scratch: [13]u8 = undefined;
+    try feedVortEncoder(allocator, &vort_encoder, first, &scratch, &vort_wire);
+    vort_encoder.fullFlush();
+    try drainVortFlush(allocator, &vort_encoder, &scratch, &vort_wire);
+    const vort_boundary = vort_wire.items.len;
+    try feedVortEncoder(allocator, &vort_encoder, second, &scratch, &vort_wire);
+    vort_encoder.finish();
+    try finishVortEncoder(allocator, &vort_encoder, &scratch, &vort_wire);
+
+    const zlib_output = try allocator.alloc(u8, expected.len);
+    defer allocator.free(zlib_output);
+    const zlib_output_len = try zlibRawInflate(vort_wire.items, zlib_output);
+    if (!std.mem.eql(u8, expected, zlib_output[0..zlib_output_len])) return error.DecodeMismatch;
+    const zlib_suffix_len = try zlibRawInflate(vort_wire.items[vort_boundary..], zlib_output);
+    if (!std.mem.eql(u8, second, zlib_output[0..zlib_suffix_len])) return error.DecodeMismatch;
+
+    const zlib_bound: usize = @intCast(zlib.compressBound(@intCast(expected.len)) + 32);
+    const zlib_wire = try allocator.alloc(u8, zlib_bound);
+    defer allocator.free(zlib_wire);
+    const zlib_result = try zlibRawDeflateFullFlush(first, second, zlib_wire);
+    const vort_output = try vort.decodeRawDeflateAlloc(allocator, zlib_wire[0..zlib_result.len]);
+    defer allocator.free(vort_output);
+    if (!std.mem.eql(u8, expected, vort_output)) return error.DecodeMismatch;
+    const vort_suffix = try vort.decodeRawDeflateAlloc(allocator, zlib_wire[zlib_result.boundary..zlib_result.len]);
+    defer allocator.free(vort_suffix);
+    if (!std.mem.eql(u8, second, vort_suffix)) return error.DecodeMismatch;
+}
+
+fn feedVortEncoder(
+    allocator: std.mem.Allocator,
+    encoder: *vort.RawDeflateIncrementalBestEncoder,
+    input: []const u8,
+    scratch: []u8,
+    wire: *std.ArrayList(u8),
+) !void {
+    var offset: usize = 0;
+    while (offset < input.len) {
+        const result = try encoder.step(input[offset..], scratch);
+        try wire.appendSlice(allocator, scratch[0..result.progress.output_written]);
+        offset += result.progress.input_read;
+        if (result.progress.input_read == 0 and result.progress.output_written == 0) return error.NoProgress;
+    }
+}
+
+fn drainVortFlush(
+    allocator: std.mem.Allocator,
+    encoder: *vort.RawDeflateIncrementalBestEncoder,
+    scratch: []u8,
+    wire: *std.ArrayList(u8),
+) !void {
+    while (true) {
+        const result = try encoder.step("", scratch);
+        try wire.appendSlice(allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .need_input) return;
+        if (result.status == .done) return error.DecodeMismatch;
+    }
+}
+
+fn finishVortEncoder(
+    allocator: std.mem.Allocator,
+    encoder: *vort.RawDeflateIncrementalBestEncoder,
+    scratch: []u8,
+    wire: *std.ArrayList(u8),
+) !void {
+    while (true) {
+        const result = try encoder.step("", scratch);
+        try wire.appendSlice(allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) return;
+    }
+}
+
+fn zlibRawInflate(input: []const u8, output: []u8) !usize {
+    var stream: zlib.z_stream = std.mem.zeroes(zlib.z_stream);
+    if (zlib.inflateInit2_(&stream, -15, zlib.ZLIB_VERSION, @sizeOf(zlib.z_stream)) != zlib.Z_OK)
+        return error.ZlibFailure;
+    defer _ = zlib.inflateEnd(&stream);
+    stream.next_in = @constCast(input.ptr);
+    stream.avail_in = @intCast(input.len);
+    stream.next_out = output.ptr;
+    stream.avail_out = @intCast(output.len);
+    if (zlib.inflate(&stream, zlib.Z_FINISH) != zlib.Z_STREAM_END) return error.ZlibFailure;
+    if (stream.total_in != input.len) return error.DecodeMismatch;
+    return @intCast(stream.total_out);
+}
+
+fn zlibRawDeflateFullFlush(first: []const u8, second: []const u8, output: []u8) !struct { len: usize, boundary: usize } {
+    var stream: zlib.z_stream = std.mem.zeroes(zlib.z_stream);
+    if (zlib.deflateInit2_(
+        &stream,
+        6,
+        zlib.Z_DEFLATED,
+        -15,
+        8,
+        zlib.Z_DEFAULT_STRATEGY,
+        zlib.ZLIB_VERSION,
+        @sizeOf(zlib.z_stream),
+    ) != zlib.Z_OK) return error.ZlibFailure;
+    defer _ = zlib.deflateEnd(&stream);
+    stream.next_out = output.ptr;
+    stream.avail_out = @intCast(output.len);
+    stream.next_in = @constCast(first.ptr);
+    stream.avail_in = @intCast(first.len);
+    if (zlib.deflate(&stream, zlib.Z_FULL_FLUSH) != zlib.Z_OK or stream.avail_in != 0)
+        return error.ZlibFailure;
+    const boundary: usize = @intCast(stream.total_out);
+    stream.next_in = @constCast(second.ptr);
+    stream.avail_in = @intCast(second.len);
+    if (zlib.deflate(&stream, zlib.Z_FINISH) != zlib.Z_STREAM_END or stream.avail_in != 0)
+        return error.ZlibFailure;
+    return .{ .len = @intCast(stream.total_out), .boundary = boundary };
 }
 
 fn row(case: Case, mode: []const u8, iterations: usize, output_bytes: usize, elapsed_ns: i96, mix: u64) Row {

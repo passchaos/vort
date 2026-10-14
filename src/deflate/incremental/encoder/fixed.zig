@@ -7,7 +7,8 @@ const rolling_hash = @import("match_finder/rolling_hash.zig");
 /// bit packing stays continuous until finish writes BFINAL. The codec adapter
 /// chooses fixed-only or stored/fixed/dynamic best emission. Flush emits an
 /// empty stored block, matching zlib's sync-flush byte boundary without ending
-/// the stream.
+/// the stream. Full flush additionally starts a new independent match-history
+/// segment after that byte boundary.
 pub fn Encoder(comptime Codec: type) type {
     return struct {
         allocator: std.mem.Allocator,
@@ -19,7 +20,8 @@ pub fn Encoder(comptime Codec: type) type {
         history: std.ArrayList(u8) = .empty,
         pending: std.ArrayList(u8) = .empty,
         pending_offset: usize = 0,
-        flush_requested: bool = false,
+        flush_mode: FlushMode = .none,
+        flush_boundary_written: bool = false,
         finishing: bool = false,
         final_written: bool = false,
         done: bool = false,
@@ -28,8 +30,10 @@ pub fn Encoder(comptime Codec: type) type {
         total_output: usize = 0,
         expected_input_len: ?usize = null,
         dictionary: []const u8 = &.{},
+        dictionary_available: bool = true,
 
         const Self = @This();
+        const FlushMode = enum { none, sync, full };
         pub const Error = Codec.Error;
         pub const MatchFinderSnapshot = rolling_hash.Matcher.Snapshot;
         pub const Snapshot = struct {
@@ -92,7 +96,8 @@ pub fn Encoder(comptime Codec: type) type {
             self.history.clearRetainingCapacity();
             self.pending.clearRetainingCapacity();
             self.pending_offset = 0;
-            self.flush_requested = false;
+            self.flush_mode = .none;
+            self.flush_boundary_written = false;
             self.finishing = false;
             self.final_written = false;
             self.done = false;
@@ -100,6 +105,7 @@ pub fn Encoder(comptime Codec: type) type {
             self.total_input = 0;
             self.total_output = 0;
             self.expected_input_len = expected;
+            self.dictionary_available = true;
         }
         /// Reset the stream while changing its pledged input size. Wrapper
         /// encoders use this between independent gzip members.
@@ -131,11 +137,24 @@ pub fn Encoder(comptime Codec: type) type {
             };
         }
         pub fn flush(self: *Self) void {
-            if (!self.finishing and !self.done) self.flush_requested = true;
+            if (!self.finishing and !self.done and self.flush_mode == .none and !self.flush_boundary_written)
+                self.flush_mode = .sync;
+        }
+        pub fn fullFlush(self: *Self) void {
+            if (self.finishing or self.done or self.flush_mode == .full) return;
+            if (self.flush_boundary_written) {
+                // A completed sync boundary can be upgraded in place: its wire
+                // marker is identical to full flush, so only match history
+                // changes. If the marker is still pending, retain the request
+                // until all of that output has drained.
+                self.resetMatchHistory();
+                if (self.flush_mode == .sync) self.flush_mode = .full;
+                return;
+            }
+            self.flush_mode = .full;
         }
         pub fn finish(self: *Self) void {
             self.finishing = true;
-            self.flush_requested = false;
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
@@ -144,7 +163,7 @@ pub fn Encoder(comptime Codec: type) type {
                 if (input.len != 0) return error.TrailingData;
                 return .{ .status = .done };
             }
-            if ((self.finishing or self.flush_requested) and input.len != 0) return error.TrailingData;
+            if ((self.finishing or self.flush_mode != .none) and input.len != 0) return error.TrailingData;
             const offered_total = std.math.add(usize, self.total_input, input.len) catch return error.IntegerOverflow;
             if (offered_total > self.options.max_input_len) return error.OutputLimitExceeded;
 
@@ -175,6 +194,7 @@ pub fn Encoder(comptime Codec: type) type {
                     // still take the buffered coalescing path.
                     const block = input[input_read..][0..block_capacity];
                     try self.writeDirectBlock(block);
+                    self.flush_boundary_written = false;
                     input_read += block.len;
                     self.total_input += block.len;
                     if (self.expected_input_len) |expected| {
@@ -185,6 +205,7 @@ pub fn Encoder(comptime Codec: type) type {
                 const n = @min(room, input.len - input_read);
                 if (n != 0) {
                     try self.plain.appendSlice(self.allocator, input[input_read..][0..n]);
+                    self.flush_boundary_written = false;
                     input_read += n;
                     self.total_input += n;
                     if (self.expected_input_len) |expected| {
@@ -198,13 +219,18 @@ pub fn Encoder(comptime Codec: type) type {
                     try self.writeDataBlock(false);
                     continue;
                 }
-                if (self.flush_requested) {
+                if (self.flush_mode != .none) {
                     if (self.plain.items.len != 0) {
                         try self.writeDataBlock(false);
                         continue;
                     }
-                    try Codec.writeSyncFlush(self.allocator, &self.pending, &self.state);
-                    self.flush_requested = false;
+                    if (!self.flush_boundary_written) {
+                        try Codec.writeSyncFlush(self.allocator, &self.pending, &self.state);
+                        self.flush_boundary_written = true;
+                        if (self.flush_mode == .full) self.resetMatchHistory();
+                        continue;
+                    }
+                    self.flush_mode = .none;
                     continue;
                 }
                 if (self.finishing and !self.final_written) {
@@ -244,7 +270,7 @@ pub fn Encoder(comptime Codec: type) type {
 
         fn writeDataBlock(self: *Self, final: bool) Error!void {
             try self.prepareHistory();
-            const selected_len = if (!final and !self.flush_requested and self.options.lookahead_len != 0)
+            const selected_len = if (!final and self.flush_mode == .none and self.options.lookahead_len != 0)
                 try Codec.chooseLookaheadLen(
                     self.allocator,
                     self.plain.items,
@@ -252,7 +278,7 @@ pub fn Encoder(comptime Codec: type) type {
                     self.plain.items.len - self.options.lookahead_len,
                     self.options.compression,
                 )
-            else if (self.options.adaptive_blocks and !final and !self.flush_requested)
+            else if (self.options.adaptive_blocks and !final and self.flush_mode == .none)
                 try Codec.chooseBlockLen(self.allocator, self.plain.items, self.options.compression)
             else
                 self.plain.items.len;
@@ -270,10 +296,15 @@ pub fn Encoder(comptime Codec: type) type {
         }
         fn prepareHistory(self: *Self) Error!void {
             try self.history.ensureTotalCapacity(self.allocator, Codec.history_len);
-            if (self.history.items.len == 0 and self.dictionary.len != 0) {
+            if (self.history.items.len == 0 and self.dictionary_available and self.dictionary.len != 0) {
                 const keep = @min(self.dictionary.len, Codec.history_len);
                 self.history.appendSliceAssumeCapacity(self.dictionary[self.dictionary.len - keep ..]);
             }
+        }
+        fn resetMatchHistory(self: *Self) void {
+            self.history.clearRetainingCapacity();
+            self.match_finder.reset();
+            self.dictionary_available = false;
         }
         fn retainHistory(self: *Self, block: []const u8) void {
             if (block.len >= Codec.history_len) {

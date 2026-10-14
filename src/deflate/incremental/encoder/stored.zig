@@ -11,7 +11,7 @@ pub fn Encoder(comptime Codec: type) type {
         plain: std.ArrayList(u8) = .empty,
         pending: std.ArrayList(u8) = .empty,
         pending_offset: usize = 0,
-        flush_requested: bool = false,
+        flush_mode: FlushMode = .none,
         finishing: bool = false,
         final_written: bool = false,
         done: bool = false,
@@ -20,6 +20,7 @@ pub fn Encoder(comptime Codec: type) type {
         expected_input_len: ?usize = null,
 
         const Self = @This();
+        const FlushMode = enum { none, sync, full };
         pub const Error = Codec.Error;
         pub const Options = struct {
             max_input_len: usize = std.math.maxInt(usize),
@@ -54,7 +55,7 @@ pub fn Encoder(comptime Codec: type) type {
             self.plain.clearRetainingCapacity();
             self.pending.clearRetainingCapacity();
             self.pending_offset = 0;
-            self.flush_requested = false;
+            self.flush_mode = .none;
             self.finishing = false;
             self.final_written = false;
             self.done = false;
@@ -68,17 +69,19 @@ pub fn Encoder(comptime Codec: type) type {
                 .output_written = self.total_output,
                 .buffered_input = self.plain.items.len,
                 .pending_output = self.pending.items.len - self.pending_offset,
-                .flushing = self.flush_requested,
+                .flushing = self.flush_mode != .none,
                 .finishing = self.finishing,
                 .done = self.done,
             };
         }
         pub fn flush(self: *Self) void {
-            if (!self.finishing and !self.done) self.flush_requested = true;
+            if (!self.finishing and !self.done and self.flush_mode == .none) self.flush_mode = .sync;
+        }
+        pub fn fullFlush(self: *Self) void {
+            if (!self.finishing and !self.done) self.flush_mode = .full;
         }
         pub fn finish(self: *Self) void {
             self.finishing = true;
-            self.flush_requested = false;
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
@@ -87,7 +90,7 @@ pub fn Encoder(comptime Codec: type) type {
                 if (input.len != 0) return error.TrailingData;
                 return .{ .status = .done };
             }
-            if ((self.finishing or self.flush_requested) and input.len != 0) return error.TrailingData;
+            if ((self.finishing or self.flush_mode != .none) and input.len != 0) return error.TrailingData;
             const offered_total = std.math.add(usize, self.total_input, input.len) catch return error.IntegerOverflow;
             if (offered_total > self.options.max_input_len) return error.OutputLimitExceeded;
 
@@ -121,12 +124,12 @@ pub fn Encoder(comptime Codec: type) type {
                     try self.writeBlock(false);
                     continue;
                 }
-                if (self.flush_requested) {
+                if (self.flush_mode != .none) {
                     if (self.plain.items.len != 0) {
                         try self.writeBlock(false);
                         continue;
                     }
-                    self.flush_requested = false;
+                    self.flush_mode = .none;
                     return result(input_read, output_written, .need_input);
                 }
                 if (self.finishing and !self.final_written) {

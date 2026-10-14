@@ -2,11 +2,13 @@ const std = @import("std");
 const core = @import("../../core.zig");
 const deflate = @import("../../deflate.zig");
 const gzip_concatenated_tests = @import("tests/gzip_concatenated.zig");
+const full_flush_tests = @import("tests/full_flush.zig");
 const rolling_hash_tests = @import("tests/rolling_hash.zig");
 const wrapper_continuation_tests = @import("tests/wrapper_continuation.zig");
 
 test {
     _ = gzip_concatenated_tests;
+    _ = full_flush_tests;
     _ = rolling_hash_tests;
     _ = wrapper_continuation_tests;
 }

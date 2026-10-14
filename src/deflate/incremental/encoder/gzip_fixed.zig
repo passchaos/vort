@@ -119,6 +119,12 @@ pub fn Encoder(comptime Codec: type) type {
         pub fn flush(self: *Self) void {
             if (!self.finishing and !self.done) self.raw.flush();
         }
+        /// Publish all accepted input at a byte boundary and reset the raw
+        /// DEFLATE match history without ending the gzip member. CRC-32 and
+        /// ISIZE continue across the boundary.
+        pub fn fullFlush(self: *Self) void {
+            if (!self.finishing and !self.done) self.raw.fullFlush();
+        }
         pub fn finish(self: *Self) void {
             self.finishing = true;
             self.raw.finish();

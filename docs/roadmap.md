@@ -19444,6 +19444,24 @@ reuse, so production keeps the simpler independently owned plans.
   gate locks their 20% band and their `>8x` lead over weighted payload rather
   than selecting a noise-sensitive single maximum.
 
+- Added zlib-compatible full-flush semantics to the raw fixed/best and zlib/gzip
+  incremental encoders, with the equivalent history-free non-final boundary on
+  the raw stored encoder. `fullFlush()` first publishes every accepted byte plus
+  the usual byte-aligned empty stored boundary, then clears the 32 KiB history
+  and rolling hash index and disables preset-dictionary reuse for the remainder
+  of that stream; wrapper Adler-32, CRC-32, and ISIZE remain continuous. Reset
+  and dictionary-reset re-enable the caller's dictionary.
+  Repeated flushes without new input are idempotent, a completed sync boundary
+  upgrades to full without another marker, and `finish()` now honors a pending
+  boundary before BFINAL. Focused tests independently decode the post-boundary
+  raw suffix, cover tiny output, fixed/best/stored modes, dictionary invalidation,
+  sync-to-full upgrade, pending-flush finish, and zlib/gzip checksum continuity.
+  The system-zlib incremental benchmark performs a bidirectional preflight:
+  zlib inflates Vort's complete stream and independent suffix, while Vort does
+  the same for a system-zlib `Z_FULL_FLUSH` stream. `Z_BLOCK`,
+  `Z_PARTIAL_FLUSH`, recovery, and mid-stream parameter changes remain separate
+  compatibility work rather than being implied by this completed slice.
+
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository
   dictionary, source, README, roadmap, and small-corpus payloads; optional

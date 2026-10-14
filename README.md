@@ -1175,6 +1175,11 @@ defer zstd_incremental_encoder.deinit();
 // contract for RFC 1951 stored blocks, including pledged input size and flush.
 // RawDeflateIncrementalFixedEncoder adds fixed-Huffman compression, a rolling
 // 32 KiB history, and zlib-compatible empty stored sync-flush boundaries.
+// Its fullFlush() method emits the same byte boundary and then drops retained
+// history, rolling match indexes, and any preset dictionary for the remainder
+// of the stream, matching Z_FULL_FLUSH. The best and zlib/gzip wrappers expose
+// the same method; the stored encoder exposes the equivalent history-free
+// non-final boundary. Wrapper Adler-32/CRC-32/ISIZE state remains continuous.
 // ZlibIncrementalFixedEncoder adds CMF/FLG, optional preset DICTID, streaming
 // Adler-32 and the footer while preserving the raw core's flush semantics.
 // GzipIncrementalFixedEncoder adds optional RFC 1952 metadata/FHCRC plus

@@ -112,6 +112,12 @@ pub fn Encoder(comptime Codec: type) type {
         pub fn flush(self: *Self) void {
             if (!self.finishing and !self.done) self.raw.flush();
         }
+        /// Publish all accepted input at a byte boundary and reset the raw
+        /// DEFLATE match history, matching zlib's Z_FULL_FLUSH semantics while
+        /// keeping this RFC 1950 stream and its Adler-32 state open.
+        pub fn fullFlush(self: *Self) void {
+            if (!self.finishing and !self.done) self.raw.fullFlush();
+        }
         pub fn finish(self: *Self) void {
             self.finishing = true;
             self.raw.finish();
