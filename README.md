@@ -262,7 +262,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode,
   with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
   Zig-native incremental encoders provide `blockFlush()` with zlib `Z_BLOCK`
-  semantics for raw stored/fixed/best and zlib/gzip fixed/best streams;
+  semantics for raw stored/fixed/best and zlib/gzip fixed/best streams, while
+  raw/zlib/gzip Best encoders support asynchronous runtime level/strategy
+  changes through `DeflateParams` and `requestParams()`;
 - dependency-free BGZF blocked-gzip parsing/writing with strict `BC`/`BSIZE`
   validation, per-block DEFLATE/CRC/ISIZE checks, bounded concatenated decode,
   canonical EOF markers, 48:16 virtual offsets, and cross-block virtual-range
@@ -1209,11 +1211,38 @@ defer zstd_incremental_encoder.deinit();
 // Hash and lazy-parser levels additionally retain a bounded 32 KiB predecessor
 // ring and epoch-tagged hash heads across blocks; reset reuses them in O(1).
 // ZlibIncrementalBestEncoder and GzipIncrementalBestEncoder expose that selector
-// through wrapper checksums/metadata; *OptionsForLevel maps zlib levels 0...9.
+// through wrapper checksums/metadata; optionsForZlibLevel maps levels 1...9,
+// while DeflateParams supplies the complete runtime level 0...9 domain.
+// Their requestParams() method accepts DeflateParams levels 0...9 and
+// default/filtered/huffman_only/rle/fixed strategies. Level 0 emits genuinely
+// stored-only blocks; fixed permits stored/fixed selection but never dynamic.
+// Request the initial pair before supplying data to apply it without output.
+// A level change within the current stored/fast/slow algorithm family takes
+// effect immediately when the strategy is unchanged, without cutting the
+// buffered block. A family or strategy change is asynchronous: step("", out)
+// first publishes already accepted input as one non-final, non-byte-aligned
+// block with no sync marker, then commits the newest request. Do not offer more
+// input until that drain acknowledges need_input.
+// Repeating the same request is idempotent; newer queued requests replace older
+// ones, and requesting the active pair cancels a queued change. Snapshots expose
+// active_params, requested_params, params_boundary_pending,
+// params_change_count, stored_only, and the combined flushing state. reset()
+// preserves the active pair, clears a queued request and counters, and starts a
+// fresh stream; resetWithOptions() explicitly returns to raw option control.
+// Parameter boundaries preserve the 32 KiB history, rolling matcher, preset
+// dictionary, and wrapper checksums. Only fullFlush() clears match/dictionary
+// history; zlib Adler-32 and gzip CRC-32/ISIZE remain continuous either way.
+// run-deflate-params-interop validates all three wrappers in both directions
+// against the selected libz; the local run reports runtime zlib 1.2.11. Vort
+// params streams inflate in libz, and libz deflateParams streams decode in
+// Vort. Its six cases use 3-byte output, issue 84 requests including 24
+// same-family requests, observe 45 Vort commits/30 implicit boundaries, and
+// retry three Z_BUF_ERROR results without losing parameter or stream state.
+// Focused runtime-parameter tests pass 19/19 and the direct Deflate suite
+// passes 465/465; the full repository test graph passes 2596/2596.
 // Audited libz fixtures pin the exact fixed-Huffman raw/zlib/gzip wire across a
 // block flush. This non-aligning block primitive is the basis for future
-// mid-stream parameter changes; inflateSync-compatible recovery is not yet
-// implemented.
+// stream-control work; inflateSync-compatible recovery is not yet implemented.
 // Set adaptive_blocks on a best encoder to use CompressionOptions.split_options
 // for costed, bounded block-boundary selection instead of one fixed block size.
 // Set lookahead_len to retain a bounded suffix and move normal block cuts to a

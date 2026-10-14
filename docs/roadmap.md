@@ -19496,9 +19496,9 @@ reuse, so production keeps the simpler independently owned plans.
   sync-to-full upgrade, pending-flush finish, and zlib/gzip checksum continuity.
   The system-zlib incremental benchmark performs a bidirectional preflight:
   zlib inflates Vort's complete stream and independent suffix, while Vort does
-  the same for a system-zlib `Z_FULL_FLUSH` stream. `Z_PARTIAL_FLUSH`,
-  `inflateSync`-style recovery, and mid-stream parameter changes remain separate
-  compatibility work rather than being implied by this completed slice.
+  the same for a system-zlib `Z_FULL_FLUSH` stream. `Z_PARTIAL_FLUSH` and
+  `inflateSync`-style recovery remain separate compatibility work rather than
+  being implied by this completed slice.
 
 - Added Zig-native `blockFlush()` with zlib `Z_BLOCK`-equivalent behavior to
   raw stored/fixed/best and zlib/gzip fixed/best incremental encoders. It ends
@@ -19512,9 +19512,9 @@ reuse, so production keeps the simpler independently owned plans.
   tiny-output backpressure, and `finish()` honors an undrained block boundary.
   Focused tests pin audited libz fixed-Huffman raw/zlib/gzip wire fixtures and
   cover stored boundaries, empty idempotence, retained history, checksum
-  continuity, block-to-sync/full upgrades, and zero-/one-byte output. This
-  primitive provides the required block boundary for a later runtime parameter
-  switching API; `inflateSync` recovery remains unimplemented.
+  continuity, block-to-sync/full upgrades, and zero-/one-byte output. The
+  runtime-parameter increment below now uses this primitive; `inflateSync`
+  recovery remains unimplemented.
 
 - Added the first general adaptive Brotli block splitter and integrated it
   vertically for command trees. Shared modules provide pure-integer Q8
@@ -19780,3 +19780,44 @@ reuse, so production keeps the simpler independently owned plans.
   choices. Physical 4 GiB and 65,535-entry
   archives were not generated; those sentinel paths are covered with focused
   tests, forced small ZIP64 layouts, and code review.
+
+- Added zlib-compatible runtime compression parameters through
+  `DeflateParams` and `requestParams()` on the raw, zlib, and gzip incremental
+  Best encoders. The public domain is numeric level `0...9` plus
+  default/filtered/Huffman-only/RLE/fixed strategies. Level 0 is a genuine
+  stored-only path, while fixed strategy permits stored/fixed blocks and
+  excludes dynamic blocks. Stored (`0`), fast (`1...3`), and slow (`4...9`)
+  form the algorithm families: a level change within one family and unchanged
+  strategy applies immediately without cutting the current buffered block; a
+  family or strategy change asynchronously publishes already accepted input as
+  one non-final, non-byte-aligned block with no sync marker before committing.
+  An initial pre-input request applies without emitting an empty block; levels
+  `10...15` fail atomically with `InvalidCompressionLevel`.
+  Callers drain that transition with empty input to `need_input` before
+  supplying more bytes, including under zero-/one-byte output backpressure.
+  Duplicate requests are idempotent, the newest queued request wins, and a
+  request for the active pair cancels a queued change. `finish()` honors one
+  pending boundary. Snapshots report active/requested params, boundary state,
+  applied-change count, stored-only mode, and aggregate flushing; `reset()`
+  retains the active pair while clearing queued work/counts, whereas
+  `resetWithOptions()` explicitly returns control to raw options.
+  Ordinary parameter and block/sync boundaries retain the 32 KiB history,
+  rolling matcher, preset dictionary, and wrapper checksums. Only `fullFlush()`
+  clears history/dictionary availability; zlib Adler-32 and gzip CRC-32/ISIZE
+  remain continuous even across full flush. Fixed-only incremental encoders
+  advertise `supports_runtime_params = false` and return
+  `UnsupportedOperation`; finishing/completed streams reject requests without
+  mutating state. Only `DeflateParams` and `DeflateParamsError` are root-public;
+  the family/resolved planner types stay internal, and the normalized Zig API
+  deliberately has no C-style `-1` level sentinel.
+  A dedicated gate passes six bidirectional cases against the selected libz;
+  the local run reports runtime zlib 1.2.11. Vort raw, zlib, and gzip params
+  streams inflate through libz, while libz `deflateParams()` streams decode
+  through Vort. Three-byte output exercises 84 requests, including 24
+  same-family requests; Vort observes 45 applied changes and 30 implicit
+  boundary requests. The libz path observes and successfully retries three
+  deliberate `Z_BUF_ERROR` results. Focused parameter tests pass 19/19, the
+  direct Deflate suite passes 465/465, the full repository test graph passes
+  2596/2596, and `zig build check` passes all 113 steps. The probe is wired into
+  `ci-smoke`, although unrelated existing aggregate failures prevent a fully
+  green smoke claim for this increment.
