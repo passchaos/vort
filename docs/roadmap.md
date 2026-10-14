@@ -19385,6 +19385,12 @@ reuse, so production keeps the simpler independently owned plans.
   195.591→195.922 ms. The default two-byte field layout was restored; compact
   storage does not repay its bitfield access cost in the complete encoder.
 
+- Rejected a 64-slot exact cache for the 18-symbol code-length tree. Full
+  `[18]u32` equality made reuse collision-safe, but only 340/2,790 calls hit
+  (12.2%). The isolated tree stage improved by roughly 6%, while complete
+  encoding won just 2/11 pairs and regressed 194.908→195.910 ms median. The
+  cache and temporary schema counters were removed.
+
 - Added a reproducible Brotli ratio context-tree selection report. The
   ReleaseFast tool covers a dedicated context-shaped input plus repository
   dictionary, source, README, roadmap, and small-corpus payloads; optional

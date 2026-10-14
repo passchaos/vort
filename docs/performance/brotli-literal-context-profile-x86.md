@@ -206,3 +206,10 @@ isolated RLE sample from roughly 1.089 to 1.009 ms (`1.078x`). Complete encoding
 again rejected the local win: only 4/11 pairs won and the median regressed from
 195.591 to 195.922 ms. The packed layout was removed; the ordinary two-byte
 field layout remains because its simpler symbol/extra accesses win end to end.
+
+A 64-slot exact cache for the 18-symbol code-length tree was also evaluated.
+Each hit required full `[18]u32` frequency equality. It reused 340/2,790 trees
+(12.2%) and reduced the isolated code-length-tree sample by roughly 6%, but the
+lookup/hash/copy work lost in the complete encoder: only 2/11 pairs won and the
+median regressed from 194.908 to 195.910 ms. The cache and its profile schema
+were removed.
