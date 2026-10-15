@@ -98,7 +98,7 @@ def make_legacy_payload(prefix_len: int, seed: int) -> bytes:
 
 def validate_python_archive_with_vort(
     cli: Path, temp: Path
-) -> tuple[int, int, int, int, int, int, int]:
+) -> tuple[int, int, int, int, int, int, int, int]:
     payloads = {
         "stored.bin": bytes(range(64)) + b"\x00stored\xff",
         "folder/deflated.txt": b"Vort ZIP deflate differential.\n" * 256,
@@ -284,6 +284,32 @@ def validate_python_archive_with_vort(
     if dcl_stream_output_path.read_bytes() != dcl_payload:
         raise AssertionError("Vort sequential ZIP method 10 extraction mismatch")
     incremental_archive_dcl_cases = 1
+
+    shrink_fixture_hex = (
+        Path(__file__).resolve().parents[2]
+        / "src/zip/testdata/commons-compress-shrunk.zip.hex"
+    ).read_text(encoding="ascii")
+    shrink_fixture_path = temp / "commons-compress-shrunk.zip"
+    shrink_fixture_path.write_bytes(bytes.fromhex(shrink_fixture_hex))
+    shrink_payloads = {
+        "TEST1.XML": b"<?xml version = '1.0'?>\n<!DOCTYPE connections>\n<connections>\n</connections>\n",
+        "TEST2.XML": b"<?xml version = '1.0'?>\n<!DOCTYPE connections>\n<meinxml>\n    <leer />\n</meinxml>\n",
+    }
+    incremental_archive_shrink_cases = 0
+    for index, (name, expected) in enumerate(shrink_payloads.items()):
+        output = temp / f"commons-shrink-stream-{index}.out"
+        run(
+            cli,
+            "extract-zip-stream-file",
+            str(shrink_fixture_path),
+            name,
+            str(output),
+        )
+        if output.read_bytes() != expected:
+            raise AssertionError(
+                f"Vort sequential Apache Commons ZIP Shrink extraction mismatch for {name!r}"
+            )
+        incremental_archive_shrink_cases += 1
     local_offset = fixture.index(b"python-force-zip64.bin") - 30
     local_name_len = struct.unpack_from("<H", fixture, local_offset + 26)[0]
     local_extra_len = struct.unpack_from("<H", fixture, local_offset + 28)[0]
@@ -348,6 +374,7 @@ def validate_python_archive_with_vort(
         incremental_archive_xz_cases,
         incremental_archive_deflate64_cases,
         incremental_archive_dcl_cases,
+        incremental_archive_shrink_cases,
     )
 
 
@@ -1129,6 +1156,7 @@ def main() -> None:
             incremental_archive_xz_cases,
             incremental_archive_deflate64_cases,
             incremental_archive_dcl_cases,
+            incremental_archive_shrink_cases,
         ) = validate_python_archive_with_vort(args.cli, temp)
         vort_zip32_bytes = validate_vort_archive_with_python(
             args.cli, args.writer, temp, False, seven_zip_tool
@@ -1177,6 +1205,7 @@ def main() -> None:
         f"incremental_archive_xz_cases={incremental_archive_xz_cases} "
         f"incremental_archive_deflate64_cases={incremental_archive_deflate64_cases} "
         f"incremental_archive_dcl_cases={incremental_archive_dcl_cases} "
+        f"incremental_archive_shrink_cases={incremental_archive_shrink_cases} "
         f"vort_zip32_bytes={vort_zip32_bytes} vort_zip64_bytes={vort_zip64_bytes} "
         f"incremental_entries={len(INCREMENTAL_PAYLOADS)} "
         f"incremental_zip32_bytes={incremental_zip32_bytes} "
