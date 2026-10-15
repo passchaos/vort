@@ -4,17 +4,114 @@ const bzip2 = @import("../../bzip2.zig");
 const checksum = @import("../../checksum.zig");
 const core = @import("../../core.zig");
 const deflate = @import("../../deflate.zig");
+const deflate64 = @import("../../deflate64.zig");
 const descriptor = @import("descriptor.zig");
 const lzma = @import("../../lzma.zig");
 const wire = @import("../wire.zig");
 const xz = @import("../../xz.zig");
 const zstd = @import("../../zstd.zig");
 
-pub const Error = deflate.Error || bzip2.Error || lzma.Error || xz.Error || zstd.Error || error{
+pub const Error = deflate.Error || deflate64.Error || bzip2.Error || lzma.Error || xz.Error || zstd.Error || error{
     InvalidZipArchive,
     UnsupportedZipFeature,
     SizeMismatch,
     IntegerOverflow,
+};
+
+pub const Deflate64State = struct {
+    allocator: std.mem.Allocator,
+    history: []u8,
+    decoder: deflate64.IncrementalDecoder,
+    descriptor_layout: ?descriptor.Layout,
+    expected_compressed_size: ?usize,
+    crc: checksum.Crc32Best = checksum.Crc32Best.init(),
+    compressed_size: usize = 0,
+    uncompressed_size: usize = 0,
+
+    const Self = @This();
+
+    pub fn init(
+        allocator: std.mem.Allocator,
+        entry_limit: usize,
+        expected_compressed_size: ?usize,
+        expected_uncompressed_size: ?usize,
+        descriptor_layout: ?descriptor.Layout,
+    ) Error!Self {
+        const history = try allocator.alloc(u8, deflate64.IncrementalDecoder.required_history_len);
+        errdefer allocator.free(history);
+        return .{
+            .allocator = allocator,
+            .history = history,
+            .decoder = try deflate64.IncrementalDecoder.initWithHistory(.{
+                .max_output_len = entry_limit,
+                .expected_output_len = expected_uncompressed_size,
+                .allow_trailing_data = true,
+            }, history),
+            .descriptor_layout = descriptor_layout,
+            .expected_compressed_size = expected_compressed_size,
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.allocator.free(self.history);
+        self.* = undefined;
+    }
+
+    pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+        var progress: core.Progress = .{};
+        const drained = try self.decoder.step("", output);
+        try self.account(drained.progress, output, &progress);
+        if (drained.status == .done or drained.status == .need_output)
+            return .{ .progress = progress, .status = drained.status };
+
+        const offer_len = try inputOffer(
+            self.descriptor_layout,
+            self.expected_compressed_size,
+            self.compressed_size,
+            input.len,
+        );
+        if (offer_len == 0) {
+            if (input.len == 0) return .{ .progress = progress, .status = .need_input };
+            try self.decoder.finish();
+            return error.TruncatedFrame;
+        }
+        const output_offset = drained.progress.output_written;
+        const supplied = try self.decoder.step(input[0..offer_len], output[output_offset..]);
+        try self.account(supplied.progress, output[output_offset..], &progress);
+        return .{ .progress = progress, .status = supplied.status };
+    }
+
+    pub fn layout(self: *const Self) ?descriptor.Layout {
+        return self.descriptor_layout;
+    }
+
+    pub fn trailingInput(_: *const Self) []const u8 {
+        return &.{};
+    }
+
+    pub fn actualCompressedSize(self: *const Self) Error!usize {
+        return self.compressed_size;
+    }
+
+    pub fn outputSize(self: *const Self) usize {
+        return self.uncompressed_size;
+    }
+
+    pub fn crc32(self: *const Self) u32 {
+        return self.crc.digest();
+    }
+
+    fn account(
+        self: *Self,
+        progress: core.Progress,
+        output: []const u8,
+        aggregate: *core.Progress,
+    ) Error!void {
+        self.compressed_size = try checkedAdd(self.compressed_size, progress.input_read);
+        self.uncompressed_size = try checkedAdd(self.uncompressed_size, progress.output_written);
+        self.crc.update(output[0..progress.output_written]);
+        try aggregate.add(progress);
+    }
 };
 
 pub const LzmaZipState = struct {

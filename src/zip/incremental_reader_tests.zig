@@ -326,6 +326,35 @@ test "ZIP incremental reader streams LZMA and XZ known and descriptor members" {
     }, error.OutputLimitExceeded);
 }
 
+test "ZIP incremental reader streams Deflate64 extended-window members" {
+    const allocator = std.testing.allocator;
+    const prefix_len = 40 * 1024;
+    const payload = try allocator.alloc(u8, prefix_len * 2);
+    defer allocator.free(payload);
+    var random_state: u32 = 0x9def_64a1;
+    for (payload[0..prefix_len]) |*byte| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(random_state >> 24);
+    }
+    @memcpy(payload[prefix_len..], payload[0..prefix_len]);
+    const entries = [_]zip.EncodeEntry{.{
+        .name = "codec/deflate64.bin",
+        .data = payload,
+        .method = .deflate64,
+    }};
+    const expected = [_]ExpectedEntry{.{ .name = entries[0].name, .data = payload }};
+    inline for (.{ false, true }) |uses_descriptor| {
+        inline for (.{ zip.Zip64Mode.never, zip.Zip64Mode.always }) |zip64_mode| {
+            const bytes = try zip.encodeAlloc(allocator, &entries, .{
+                .data_descriptor = uses_descriptor,
+                .zip64 = zip64_mode,
+            });
+            defer allocator.free(bytes);
+            try decodeArchiveFragmented(allocator, bytes, &expected, .{}, 3, 17);
+        }
+    }
+}
+
 test "ZIP incremental reader accepts unsigned Stored and Deflate descriptors" {
     const allocator = std.testing.allocator;
     const cases = [_]struct {
