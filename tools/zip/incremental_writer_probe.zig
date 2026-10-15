@@ -43,6 +43,8 @@ pub fn main(init: std.process.Init) !void {
     const unknown_stored = "PK\x07\x08unknown-stored-PK\x07\x08tail";
     const known_deflate = "known deflate stream crosses block boundaries.\n" ** 900;
     const unknown_deflate = "unknown deflate UTF-8 path payload.\n" ** 61;
+    const known_bzip2 = "known Bzip2 incremental ZIP payload.\n" ** 96;
+    const unknown_bzip2 = "unknown Bzip2 incremental ZIP payload.\n" ** 73;
     const entries = [_]Entry{
         .{
             .name = "known-stored.bin",
@@ -83,6 +85,24 @@ pub fn main(init: std.process.Init) !void {
             .method = .deflate,
             .expected_size = 0,
         },
+        .{
+            .name = "known-bzip2.txt",
+            .data = known_bzip2,
+            .method = .bzip2,
+            .expected_size = known_bzip2.len,
+        },
+        .{
+            .name = "unknown-bzip2.txt",
+            .data = unknown_bzip2,
+            .method = .bzip2,
+            .expected_size = null,
+        },
+        .{
+            .name = "empty-bzip2.bin",
+            .data = "",
+            .method = .bzip2,
+            .expected_size = 0,
+        },
     };
 
     const encoded = try encodeArchive(init.gpa, &entries, zip64, output_pattern);
@@ -99,6 +119,7 @@ fn encodeArchive(
     var writer = try vort.ZipIncrementalWriter.initWithOptions(allocator, .{
         .archive_comment = "vort incremental writer interop",
         .zip64 = zip64,
+        .bzip2_options = .{ .block_size_100k = 1 },
     });
     defer writer.deinit();
 

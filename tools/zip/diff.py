@@ -878,6 +878,9 @@ INCREMENTAL_PAYLOADS = {
     "utf8-目录/未知-deflate.txt": b"unknown deflate UTF-8 path payload.\n" * 61,
     "empty-stored.bin": b"",
     "empty-deflate.bin": b"",
+    "known-bzip2.txt": b"known Bzip2 incremental ZIP payload.\n" * 96,
+    "unknown-bzip2.txt": b"unknown Bzip2 incremental ZIP payload.\n" * 73,
+    "empty-bzip2.bin": b"",
 }
 INCREMENTAL_METHODS = {
     "known-stored.bin": zipfile.ZIP_STORED,
@@ -886,6 +889,9 @@ INCREMENTAL_METHODS = {
     "utf8-目录/未知-deflate.txt": zipfile.ZIP_DEFLATED,
     "empty-stored.bin": zipfile.ZIP_STORED,
     "empty-deflate.bin": zipfile.ZIP_DEFLATED,
+    "known-bzip2.txt": zipfile.ZIP_BZIP2,
+    "unknown-bzip2.txt": zipfile.ZIP_BZIP2,
+    "empty-bzip2.bin": zipfile.ZIP_BZIP2,
 }
 
 
@@ -1026,8 +1032,9 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
             raise AssertionError(f"incremental central CRC mismatch for {name!r}")
 
         fields = parse_extra_fields(extra, f"central entry {name!r}")
+        expected_needed = 46 if method == zipfile.ZIP_BZIP2 else (45 if force_zip64 else 20)
         if force_zip64:
-            if needed != 45:
+            if needed != expected_needed:
                 raise AssertionError(f"ZIP64 central version-needed mismatch for {name!r}")
             if (
                 legacy_compressed_size != 0xFFFFFFFF
@@ -1042,7 +1049,7 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
                 "<QQQ", zip64_extra
             )
         else:
-            if needed != 20 or 0x0001 in fields:
+            if needed != expected_needed or 0x0001 in fields:
                 raise AssertionError(f"ZIP32 central metadata mismatch for {name!r}")
             compressed_size = legacy_compressed_size
             uncompressed_size = legacy_uncompressed_size
@@ -1094,8 +1101,9 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
         if method != entry["method"] or crc32 != 0:
             raise AssertionError(f"incremental local method/CRC placeholder mismatch for {name!r}")
         fields = parse_extra_fields(extra, f"local entry {name!r}")
+        expected_needed = 46 if method == zipfile.ZIP_BZIP2 else (45 if force_zip64 else 20)
         if force_zip64:
-            if needed != 45:
+            if needed != expected_needed:
                 raise AssertionError(f"ZIP64 local version-needed mismatch for {name!r}")
             if legacy_compressed_size != 0xFFFFFFFF or legacy_uncompressed_size != 0xFFFFFFFF:
                 raise AssertionError(f"ZIP64 local size fields are not sentinels for {name!r}")
@@ -1107,7 +1115,7 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
             descriptor_format = "<IIQQ"
             descriptor_len = 24
         else:
-            if needed != 20 or legacy_compressed_size != 0 or legacy_uncompressed_size != 0:
+            if needed != expected_needed or legacy_compressed_size != 0 or legacy_uncompressed_size != 0:
                 raise AssertionError(f"ZIP32 local size placeholders are not zero for {name!r}")
             if 0x0001 in fields:
                 raise AssertionError(f"ZIP32 local entry has a ZIP64 extra for {name!r}")
