@@ -20122,3 +20122,22 @@ reuse, so production keeps the simpler independently owned plans.
   only methods. The DCL incremental suite passes 4/4, the complete reader
   suite passes 21/21, the full repository graph passes 2654/2654, and
   `zig build check` passes all 113 steps.
+
+- Added caller-output Shrink decoding and ZIP method-1 sequential support.
+  `ShrinkIncrementalDecoder` retains the 9...13-bit LSB-first reservoir,
+  8,192-entry LZW parent/suffix dictionary, partial-clear reachability marks,
+  and a pending expanded string in an explicit caller-owned workspace. It
+  supports arbitrary input/output fragmentation, zero-output backpressure,
+  expected and maximum output limits, legal zero padding, reset, snapshots and
+  terminal diagnostics. Since Shrink has no EOS marker, its ZIP adapter keeps
+  one 16/24-byte descriptor candidate window and feeds disproven bytes into
+  LZW one at a time; a boundary commits only when padding, CRC-32, compressed
+  size and decoded size agree, with a following record signature additionally
+  required for unsigned descriptors. Known, signed/unsigned descriptor,
+  ZIP32/ZIP64, empty, output-limit and malformed-control paths pass under one-
+  byte fragmentation. Both Apache Commons Compress `SHRUNK.ZIP` members are
+  now required CLI sequential cases (`incremental_archive_shrink_cases=2`),
+  while the ZIP gate remains 13/13. The Shrink incremental suite passes 4/4,
+  the complete reader suite passes 22/22, the full repository graph passes
+  2659/2659, and `zig build check` passes all 113 steps. Reduce and traditional
+  Implode remain the sequential reader's complete-buffer-only methods.
