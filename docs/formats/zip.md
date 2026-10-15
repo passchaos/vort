@@ -82,6 +82,31 @@ const zip_bytes = try vort.zipEncodeAlloc(allocator, &entries, .{
 defer allocator.free(zip_bytes);
 ```
 
+## Traditional ZipCrypto
+
+The reusable cipher state and one-shot header helpers come from Vail's
+dependency-free `archive_crypto` package; Vort owns ZIP flags, verification-byte
+selection, compressed-size accounting and codec composition.
+
+The one-shot writer accepts optional per-entry `traditional_encryption` with a
+password and exactly 11 caller-supplied header-entropy bytes. Vort never hides a
+random source: production callers should obtain those bytes from a CSPRNG,
+while deterministic fixtures may provide stable bytes explicitly. The 12th
+encrypted-header byte uses the CRC-32 high byte for entries without bit 3 and
+the deterministic DOS-time high byte for descriptor-backed entries. The
+reported compressed size includes the 12-byte encryption header.
+
+One-shot extraction accepts `ZipDecodeOptions.password`. Encrypted extraction
+requires an allocator for the decrypted compressed payload; the no-allocator
+surface retains `EncryptedZipEntry`. Missing and rejected passwords return
+`PasswordRequired` and `InvalidZipPassword`, while the ordinary outer CRC-32
+still detects ciphertext corruption that passes the one-byte password check.
+`Archive.compressedData` deliberately does not expose ciphertext as if it were
+a codec payload. Strong-encryption flags and WinZip AES remain unsupported.
+Traditional ZipCrypto is legacy compatibility, not authenticated modern
+encryption; applications requiring confidentiality and integrity should use a
+WinZip-AES-capable surface.
+
 ## Incremental entry decoder
 
 `ZipIncrementalEntryDecoder` is the caller-memory data plane for a single
@@ -413,9 +438,9 @@ The incremental writer's additive error set is exported as
 one-shot and reader APIs is unchanged.
 
 Every compression method currently supported by the sequential reader has a
-bounded incremental writer. Encryption and
-multi-disk/split archives remain unsupported; the existing complete-buffer
-reader and broader one-shot writer retain their documented method coverage.
+bounded incremental writer. Incremental encryption, WinZip AES, and multi-disk/
+split archives remain unsupported; the one-shot surface supports Traditional
+ZipCrypto.
 
 The incremental differential uses forty-five entries: known Stored data containing a
 descriptor-signature byte sequence, unknown Stored data containing two such
@@ -466,6 +491,9 @@ All three default traditional Implode members pass the sequential path and
 system Info-ZIP; Python pins bits 1/2, their 27-byte fixed three-tree header,
 descriptors and ZIP64 metadata. The existing dedicated matrix still covers
 all four 4/8 KiB × raw/tree modes plus the two Apache Commons fixtures.
+Traditional ZipCrypto adds four Vort-to-Python/Info-ZIP Stored/Deflate cases
+covering CRC- and descriptor-time verification bytes, plus two independently
+written Info-ZIP-to-Vort cases. Wrong passwords must fail in both directions.
 The aggregate reports 13/13 ZIP differential steps. The Python-to-Vort half
 also decodes five
 Stored/Deflate members through `ZipOwnedIncrementalEntryDecoder` with 3-byte
@@ -518,7 +546,7 @@ implicit-zero and overlapping matches. PPMd
 restart/cut-off, descriptor and ZIP64 combinations are required
 Vort coverage. Third-party method-98 evidence remains explicitly unavailable:
 Python `zipfile` has no PPMd codec and this host has no 7z/7zz. The full
-repository graph passes 2698/2698 and `zig build check` passes 113/113.
+repository graph passes 2700/2700 and `zig build check` passes 113/113.
 The wire refactor also leaves 14 one-shot probe modes byte-identical to HEAD,
 including every existing method and ZIP32/ZIP64 descriptor choice. Default and
 forced-ZIP64 SHA-256 values remain
@@ -598,21 +626,22 @@ CLI validation surfaces:
 
 ```sh
 zig build run -- list-zip-file archive.zip
-zig build run -- extract-zip-file archive.zip folder/data.txt output.txt 67108864 67108864
+zig build run -- extract-zip-file archive.zip folder/data.txt output.txt 67108864 67108864 [password|-]
 zig build run-zip-diff
 ```
 
 The writer rejects empty names, invalid UTF-8 names/comments when UTF-8 mode is
 enabled, fields longer than ZIP's 16-bit name/comment limit, and methods other
 than stored/Shrink/Reduce1-4/Implode/Deflate/Deflate64/DCL-Implode/Bzip2/LZMA/Zstandard-20/Zstandard-93/XZ/PPMd. The
-reader deliberately
-rejects encrypted entries, multi-disk archives, malformed/duplicate ZIP64
-extra fields, and compression methods other than
+reader accepts Traditional ZipCrypto when `ZipDecodeOptions.password` is
+provided, and deliberately rejects strong/WinZip-AES encryption, multi-disk
+archives, malformed/duplicate ZIP64 extra fields, and compression methods other than
 stored/Shrink/Reduce1-4/Implode/Deflate/Deflate64/DCL-Implode/Bzip2/LZMA/
 Zstandard-20/Zstandard-93/XZ/PPMd with specific errors.
 Addressable entry and archive sizes remain bounded by the target's `usize` and
-the caller's available memory. Encryption, split archives, and additional entry
-compression methods remain explicit future compatibility increments.
+the caller's available memory. Incremental/WinZip-AES encryption, split
+archives, and additional entry compression methods remain explicit future
+compatibility increments.
 
 The differential verifies Vort Shrink output with system 7-Zip, including a
 32 KiB deterministic high-entropy payload that reaches the full dictionary.

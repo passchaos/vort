@@ -20355,3 +20355,27 @@ reuse, so production keeps the simpler independently owned plans.
   30,453/33,049 bytes; `run-zip-diff` remains 13/13, the Implode encoder suite
   passes 4/4, writer suite 71/71, full repository graph 2698/2698, and
   `zig build check` passes all 113 steps.
+
+- Added one-shot Traditional ZipCrypto writing and reading as the first ZIP
+  encryption slice, using the dependency-free `../vail/archive_crypto`
+  package for cipher state, header helpers and secure wiping while Vort retains
+  ZIP wire policy. `ZipEncodeEntry.traditional_encryption` carries a password
+  plus 11 explicit caller-supplied header-entropy bytes, keeping CSPRNG
+  ownership visible and deterministic fixtures reproducible. The writer
+  encrypts the 12-byte header and any supported codec payload, includes that
+  header in compressed sizes, sets bit 0, and selects the CRC-high or
+  descriptor-time-high verification byte exactly as the wire requires.
+  `ZipDecodeOptions.password` decrypts through a reusable byte-stream cipher
+  state before the established codec and CRC paths; missing/wrong passwords,
+  short headers, header tampering, ciphertext corruption and allocation
+  failures have focused coverage. No-allocator extraction and
+  `Archive.compressedData` retain explicit encrypted-entry rejection. Four
+  Vort-to-Python/Info-ZIP Stored/Deflate cases cover descriptor and non-
+  descriptor layouts, while two Info-ZIP-to-Vort cases provide independent
+  writing evidence (`vort_zipcrypto_cases=4`, `infozip_zipcrypto_cases=2`).
+  The ZIP differential remains 13/13, two Vort ZIP integration tests plus the
+  Vail archive-crypto package's 3/3 tests pass, the full Vort repository graph
+  passes 2700/2700, and `zig build check` passes all 113 steps. Traditional
+  ZipCrypto is unauthenticated legacy
+  compatibility; incremental encryption and WinZip AES remain explicit next
+  functionality increments.
