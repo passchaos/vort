@@ -19937,3 +19937,31 @@ reuse, so production keeps the simpler independently owned plans.
   should enable it only for streams produced with deliberate full-flush points.
   The direct Deflate suite passes 479/479, the full repository graph passes
   2621/2621, and `zig build check` passes all 113 steps.
+
+- Added the ZIP single-member incremental decode data plane for Stored and raw
+  Deflate entries. `ZipIncrementalEntryDecoder` takes canonical central-
+  directory metadata plus caller-owned history, while
+  `ZipOwnedIncrementalEntryDecoder` retains one allocator-owned reusable 32 KiB
+  history buffer. Both accept arbitrary input/output fragmentation, enforce
+  exact compressed and uncompressed sizes plus `max_output_len`, validate IEEE
+  CRC-32 before `.done`, preserve following archive bytes unconsumed, expose
+  snapshots/streaming diagnostics, distinguish early `finish()` truncation,
+  enter a terminal failed state after a `step` error, and reset across
+  independent Stored/Deflate members. `Archive.compressedData(entry)` exposes a
+  borrowed payload only after re-reading the canonical central entry, rejecting
+  caller-modified metadata, and validating local-header method, flags,
+  filename, ZIP64 fields, and non-descriptor sizes. Moving `ZipEntry` into the
+  small shared ZIP types module lets the parser and decoder share the public
+  contract without a module cycle. Focused tests cover zero-output
+  backpressure, one-byte input/output, descriptor-signature payload bytes,
+  dynamic matches, suffix retention, CRC/size/output-limit/history failures,
+  truncated input, terminal errors, reset reuse, and forced-ZIP64 descriptors;
+  the filtered suite passes 15/15. The CLI validation path deliberately uses
+  3-byte input and 5-byte output. Python's non-seekable ZIP writer supplies five
+  independently encoded Stored/Deflate cases, including descriptor-backed
+  UTF-8/empty entries and a forced-ZIP64 local header
+  (`incremental_reader_cases=5`); `run-zip-diff` passes all 13 build steps. The
+  full repository graph passes 2628/2628 and `zig build check` passes all 113
+  steps. This completes a reusable entry codec, not the still-open sequential
+  local-header/data-descriptor/central-directory archive state machine;
+  non-Stored/Deflate methods retain complete-buffer extraction.

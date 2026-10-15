@@ -1587,7 +1587,25 @@ _ = gzip_cat_chunked_written;
 // defer allocator.free(dict_encoded);
 ```
 
-### ZIP incremental writer
+### ZIP incremental entry decoder and writer
+
+After parsing an archive and selecting a canonical `ZipEntry`,
+`archive.compressedData(entry)` returns its validated borrowed payload.
+`ZipIncrementalEntryDecoder` then decodes Stored or raw-Deflate members under
+arbitrary input/output fragmentation without consuming bytes after the
+declared compressed payload. It enforces the central-directory compressed and
+uncompressed sizes, applies `max_output_len`, and validates IEEE CRC-32 before
+returning `.done`. Deflate uses a caller-owned 32 KiB history buffer;
+`ZipOwnedIncrementalEntryDecoder` supplies an allocator-owned reusable buffer.
+Both variants can `reset` across independent Stored and Deflate members, expose
+snapshots/streaming diagnostics, and treat a `step` error as terminal until
+reset. `finish` distinguishes truncated input when a source ends early.
+
+This is the member data plane needed by a future sequential archive reader; it
+does not yet parse local headers, descriptors, and the central directory from
+an arriving byte stream. Complete-buffer ZIP parsing remains responsible for
+producing authoritative `ZipEntry` metadata. Other ZIP compression methods
+continue to use the broader one-shot extraction APIs.
 
 `ZipIncrementalWriter` streams Stored and raw-Deflate entries into caller-owned
 output. `ZipIncrementalWriterOptions` configures archive comment, UTF-8, ZIP64,
@@ -1624,9 +1642,9 @@ invalid and must not be committed. After an error, mutating calls return
 validation errors from `beginEntry` and a premature short `finishEntry` remain
 recoverable. The existing one-shot `zipEncodeAppend` retains its transactional
 guarantee and broader method support. Incremental writing does not yet cover
-the other ZIP methods, a streaming reader, encryption, or multi-disk archives. See
-[the ZIP format status](docs/formats/zip.md) for the full state and wire
-contract. Its additive errors are exposed separately as
+the other ZIP methods, a whole-archive streaming reader, encryption, or
+multi-disk archives. See [the ZIP format status](docs/formats/zip.md) for the
+full state and wire contract. Its additive errors are exposed separately as
 `ZipIncrementalWriterError`; the established `ZipError` set is unchanged.
 
 The incremental `run-zip-diff` matrix generates the same six-entry archive,
@@ -1634,11 +1652,14 @@ including a known Deflate payload larger than 32 KiB that crosses a real
 planning-block boundary, under one-byte and micro-chunk output schedules in
 ZIP32 `.never` and ZIP64 `.always` modes. Python raw-wire checks, `zipfile`, and
 system Info-ZIP validate both outputs and all member contents; the aggregate
-reports 13/13 ZIP differential steps. Focused ZIP incremental tests pass 61/61,
-and the refactored
-one-shot writer remains byte-identical to HEAD across 14 probe modes. The
-current host has no 7z/7zz, so that optional extraction branch is reported as
-skipped rather than passed.
+reports 13/13 ZIP differential steps. The same gate incrementally decodes five
+Python-generated Stored/Deflate entries, including non-seekable descriptors
+and a forced-ZIP64 local header, with 3-byte input and 5-byte output. Focused
+writer tests pass 61/61 and the incremental entry decoder suite passes 15/15.
+The full repository graph passes 2628/2628 and `zig build check` passes 113/113.
+The refactored one-shot writer remains byte-identical to HEAD across 14 probe
+modes. The current host has no 7z/7zz, so that optional extraction branch is
+reported as skipped rather than passed.
 
 ### Brotli RAW shared-prefix dictionaries
 

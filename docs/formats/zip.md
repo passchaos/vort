@@ -82,6 +82,53 @@ const zip_bytes = try vort.zipEncodeAlloc(allocator, &entries, .{
 defer allocator.free(zip_bytes);
 ```
 
+## Incremental entry decoder
+
+`ZipIncrementalEntryDecoder` is the caller-memory data plane for a single
+Stored or raw-Deflate member. It takes a canonical `ZipEntry` obtained from the
+central directory, so data-descriptor and ZIP64 entries already have
+authoritative CRC and 64-bit size values. `Archive.compressedData(entry)`
+validates the matching local header and returns the borrowed compressed payload.
+
+The decoder accepts arbitrary compressed-input and uncompressed-output slices,
+returns exact progress with `need_input`, `need_output`, or `done`, and never
+consumes bytes beyond `entry.compressed_size`. Completion requires exact
+compressed and uncompressed lengths plus the central IEEE CRC-32. The output
+limit is checked before decoding; encrypted entries, unsupported methods,
+malformed Stored sizes, short history, corruption, truncation, and checksum
+failure have distinct errors. A failing `step` enters `.failed`; `reset`
+starts another independent entry with the same history storage. `finish`
+reports `TruncatedFrame` if the compressed source ends before the declared
+boundary.
+
+```zig
+const archive = try vort.parseZipArchive(zip_bytes);
+const entry = (try archive.find("data.txt")) orelse return error.ZipEntryNotFound;
+const compressed = try archive.compressedData(entry);
+
+var history: [vort.ZipIncrementalEntryDecoder.required_history_len]u8 = undefined;
+var decoder = try vort.ZipIncrementalEntryDecoder.initWithOptions(
+    entry,
+    &history,
+    .{ .max_output_len = 64 * 1024 * 1024 },
+);
+var input_offset: usize = 0;
+var scratch: [4096]u8 = undefined;
+while (true) {
+    const result = try decoder.step(compressed[input_offset..], &scratch);
+    input_offset += result.progress.input_read;
+    try sink.writeAll(scratch[0..result.progress.output_written]);
+    if (result.status == .done) break;
+}
+```
+
+Stored members accept an empty history slice. The allocator-owned
+`ZipOwnedIncrementalEntryDecoder` always retains one reusable 32 KiB history
+buffer, making Stored-to-Deflate reset straightforward. This API does not yet
+parse an entire arriving ZIP archive: sequential local-header/data-descriptor/
+central-directory streaming remains open. Methods other than Stored and
+Deflate retain their complete-buffer extraction paths.
+
 ## Incremental writer
 
 `ZipIncrementalWriter` emits archive bytes directly into caller-owned output
@@ -200,9 +247,9 @@ one-shot and reader APIs is unchanged.
 
 The incremental writer does not yet support Shrink, Reduce, Implode, Deflate64,
 DCL Implode, Bzip2, LZMA, Zstandard, XZ, or PPMd entries. It also does not add
-an incremental ZIP reader, encryption, or multi-disk/split archive support; the
-existing complete-buffer reader and broader one-shot writer retain their
-documented method coverage.
+an entire sequential ZIP reader, encryption, or multi-disk/split archive
+support; the existing complete-buffer reader and broader one-shot writer retain
+their documented method coverage.
 
 The incremental differential uses six entries: known Stored data containing a
 descriptor-signature byte sequence, unknown Stored data containing two such
@@ -218,21 +265,27 @@ probe must return `need_output` with zero progress.
 local placeholders, signed 16-/24-byte descriptors, central CRC/size/offset and
 ZIP64 extras/end records; `zipfile` tests and reads every member. System
 Info-ZIP extracts every entry's contents byte-for-byte, and the aggregate
-reports 13/13 ZIP differential steps. No 7z/7zz is installed on the current
-host, so the optional 7-Zip branch reports false and is not claimed as
-validation. Info-ZIP coverage uses `unzip -p` for contents, not pathname
-rendering; its 6.00 ZIP32 UTF-8 filename rendering issue also affects the
-pre-existing one-shot output and is not claimed as fixed here.
+reports 13/13 ZIP differential steps. The Python-to-Vort half also decodes five
+Stored/Deflate members through `ZipOwnedIncrementalEntryDecoder` with 3-byte
+input and 5-byte output, covering descriptor-backed entries, UTF-8, empty
+Stored, and a forced-ZIP64 local header (`incremental_reader_cases=5`). No
+7z/7zz is installed on the current host, so the optional 7-Zip branch reports
+false and is not claimed as validation. Info-ZIP coverage uses `unzip -p` for
+contents, not pathname rendering; its 6.00 ZIP32 UTF-8 filename rendering issue
+also affects the pre-existing one-shot output and is not claimed as fixed here.
 
-`zig test src/root.zig --test-filter 'ZIP incremental writer'` passes 61/61.
+`zig test src/root.zig --test-filter 'ZIP incremental writer'` passes 61/61;
+`zig test src/zip.zig --test-filter 'ZIP incremental entry decoder'` passes
+15/15. The full repository graph passes 2628/2628 and `zig build check` passes
+113/113.
 The wire refactor also leaves 14 one-shot probe modes byte-identical to HEAD,
 including every existing method and ZIP32/ZIP64 descriptor choice. Default and
 forced-ZIP64 SHA-256 values remain
 `72541262b3867def603dd184e49fea086f585096ac0763c7d4a457bb01dd1381` and
 `e54cf36083080e69c82eeba49cd405bf3d21c00146c54a905e11d348fb057b17`.
-`zig build check` and Python syntax validation pass. No physical 4 GiB or
-65,535-entry archive was generated; sentinel/overflow paths use focused tests,
-small forced-ZIP64 layouts, and code review instead.
+Python syntax validation passes. No physical 4 GiB or 65,535-entry archive was
+generated; sentinel/overflow paths use focused tests, small forced-ZIP64
+layouts, and code review instead.
 
 `EncodeOptions.ppmd_options` selects PPMd order 2...16, model memory from 1
 through 256 MiB in whole-MiB units, and `.restart` or `.cut_off` restoration.
