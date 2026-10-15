@@ -2452,6 +2452,7 @@ pub const DeflateError = deflate.Error;
 pub const Deflate64Error = deflate64.Error;
 pub const Deflate64DecodeResult = deflate64.DecodeResult;
 pub const Deflate64EncodeOptions = deflate64.EncodeOptions;
+pub const Deflate64IncrementalDecoder = deflate64.IncrementalDecoder;
 pub const decodeDeflate64Into = deflate64.decodeInto;
 pub const decodeDeflate64Alloc = deflate64.decodeAlloc;
 pub const decodeDeflate64AllocLimited = deflate64.decodeAllocLimited;
