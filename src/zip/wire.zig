@@ -21,6 +21,7 @@ pub const zip64_end_of_central_len: usize = 56;
 pub const zip64_end_of_central_locator_len: usize = 20;
 pub const central_directory_digital_signature_len: usize = 6;
 
+pub const version_10: u16 = 10;
 pub const version_20: u16 = 20;
 pub const version_21: u16 = 21;
 pub const version_45: u16 = 45;

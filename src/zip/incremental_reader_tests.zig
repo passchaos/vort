@@ -420,6 +420,82 @@ test "ZIP incremental reader streams every DCL Implode mode" {
     }
 }
 
+test "ZIP incremental reader streams Shrink known descriptor and reference members" {
+    const allocator = std.testing.allocator;
+    const payload = try allocator.alloc(u8, 12 * 1024);
+    defer allocator.free(payload);
+    var random_state: u32 = 0x5a17_c9e3;
+    for (payload) |*byte| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(random_state >> 24);
+    }
+    const entries = [_]zip.EncodeEntry{.{
+        .name = "codec/shrink.bin",
+        .data = payload,
+        .method = .shrink,
+    }};
+    const expected = [_]ExpectedEntry{.{ .name = entries[0].name, .data = payload }};
+    inline for (.{ false, true }) |uses_descriptor| {
+        inline for (.{ zip.Zip64Mode.never, zip.Zip64Mode.always }) |zip64_mode| {
+            const bytes = try zip.encodeAlloc(allocator, &entries, .{
+                .data_descriptor = uses_descriptor,
+                .zip64 = zip64_mode,
+            });
+            defer allocator.free(bytes);
+            try decodeArchiveFragmented(allocator, bytes, &expected, .{}, 1, 1);
+            try decodeArchiveFragmented(allocator, bytes, &expected, .{}, 7, 13);
+
+            if (uses_descriptor and zip64_mode == .never) {
+                const unsigned = try withoutDescriptorSignature(allocator, bytes);
+                defer allocator.free(unsigned);
+                try decodeArchiveFragmented(allocator, unsigned, &expected, .{}, 1, 3);
+            }
+        }
+    }
+
+    const empty_entries = [_]zip.EncodeEntry{.{
+        .name = "codec/empty-shrink",
+        .data = "",
+        .method = .shrink,
+    }};
+    const empty_expected = [_]ExpectedEntry{.{ .name = empty_entries[0].name, .data = "" }};
+    inline for (.{ false, true }) |uses_descriptor| {
+        const bytes = try zip.encodeAlloc(allocator, &empty_entries, .{
+            .data_descriptor = uses_descriptor,
+        });
+        defer allocator.free(bytes);
+        try decodeArchiveFragmented(allocator, bytes, &empty_expected, .{}, 1, 1);
+    }
+
+    const limited_archive = try zip.encodeAlloc(allocator, &entries, .{});
+    defer allocator.free(limited_archive);
+    try expectReaderError(allocator, limited_archive, .{
+        .max_entry_output_len = payload.len - 1,
+    }, error.OutputLimitExceeded);
+
+    // Apache Commons Compress src/test/resources/SHRUNK.ZIP.
+    const fixture_hex = std.mem.trim(
+        u8,
+        @embedFile("testdata/commons-compress-shrunk.zip.hex"),
+        "\r\n \t",
+    );
+    const fixture = try allocator.alloc(u8, fixture_hex.len / 2);
+    defer allocator.free(fixture);
+    _ = try std.fmt.hexToBytes(fixture, fixture_hex);
+    const fixture_expected = [_]ExpectedEntry{
+        .{
+            .name = "TEST1.XML",
+            .data = "<?xml version = '1.0'?>\n<!DOCTYPE connections>\n<connections>\n</connections>\n",
+        },
+        .{
+            .name = "TEST2.XML",
+            .data = "<?xml version = '1.0'?>\n<!DOCTYPE connections>\n<meinxml>\n    <leer />\n</meinxml>\n",
+        },
+    };
+    try decodeArchiveFragmented(allocator, fixture, &fixture_expected, .{}, 1, 1);
+    try decodeArchiveFragmented(allocator, fixture, &fixture_expected, .{}, 5, 7);
+}
+
 test "ZIP incremental reader accepts unsigned Stored and Deflate descriptors" {
     const allocator = std.testing.allocator;
     const cases = [_]struct {

@@ -138,6 +138,8 @@ pub fn parseCentral(bytes: []const u8) Error!CentralHeader {
         disk_start,
     );
     if (values.zip64 and version_needed < wire.version_45) return error.InvalidZipArchive;
+    if (method == .shrink and version_needed < wire.version_10)
+        return error.InvalidZipArchive;
     if (method == .bzip2 and version_needed < wire.version_46)
         return error.InvalidZipArchive;
     if (method == .deflate64 and version_needed < wire.version_21)
