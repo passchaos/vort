@@ -4,6 +4,7 @@ const zip = @import("../zip.zig");
 const zstd = @import("../zstd.zig");
 const incremental = @import("incremental_writer.zig");
 const wire = @import("wire.zig");
+const xz = @import("../xz.zig");
 
 const TestEntry = struct {
     name: []const u8,
@@ -27,10 +28,13 @@ test "ZIP incremental writer round trips known and unknown common codec entries"
         .{ .name = "unknown-zstd-legacy.txt", .data = "unknown legacy zstd payload" ** 59, .method = .zstandard_legacy, .expected_size = null },
         .{ .name = "known-lzma.txt", .data = "known lzma payload" ** 71, .method = .lzma, .expected_size = ("known lzma payload" ** 71).len },
         .{ .name = "unknown-lzma.txt", .data = "unknown lzma payload" ** 57, .method = .lzma, .expected_size = null },
+        .{ .name = "known-xz.txt", .data = "known xz payload" ** 79, .method = .xz, .expected_size = ("known xz payload" ** 79).len },
+        .{ .name = "unknown-xz.txt", .data = "unknown xz payload" ** 63, .method = .xz, .expected_size = null },
         .{ .name = "empty", .data = "", .method = .stored, .expected_size = 0 },
         .{ .name = "empty-bzip2", .data = "", .method = .bzip2, .expected_size = 0 },
         .{ .name = "empty-zstd", .data = "", .method = .zstandard, .expected_size = 0 },
         .{ .name = "empty-lzma", .data = "", .method = .lzma, .expected_size = 0 },
+        .{ .name = "empty-xz", .data = "", .method = .xz, .expected_size = 0 },
     };
     const bytes = try encodeEntries(allocator, &entries, .{ .archive_comment = "streamed" }, 7, 5);
     defer allocator.free(bytes);
@@ -60,6 +64,7 @@ test "ZIP incremental writer handles one-byte input and output and is determinis
         .{ .name = "bzip2.txt", .data = "deterministic Bzip2 stream" ** 79, .method = .bzip2, .expected_size = null },
         .{ .name = "zstd.txt", .data = "deterministic Zstd stream" ** 91, .method = .zstandard, .expected_size = null },
         .{ .name = "lzma.txt", .data = "deterministic LZMA stream" ** 67, .method = .lzma, .expected_size = null },
+        .{ .name = "xz.txt", .data = "deterministic XZ stream" ** 73, .method = .xz, .expected_size = null },
     };
     const tiny = try encodeEntries(allocator, &entries, .{}, 1, 1);
     defer allocator.free(tiny);
@@ -111,6 +116,7 @@ test "ZIP incremental writer emits precise ZIP32 and conservative ZIP64 layouts"
         .{ .name = "bzip2", .data = "bbbbbbbb", .method = .bzip2, .expected_size = 8 },
         .{ .name = "zstd", .data = "zzzzzzzz", .method = .zstandard, .expected_size = 8 },
         .{ .name = "lzma", .data = "llllllll", .method = .lzma, .expected_size = 8 },
+        .{ .name = "xz", .data = "xxxxxxxx", .method = .xz, .expected_size = 8 },
     };
     const bytes = try encodeEntries(allocator, &entries, .{}, 2, 3);
     defer allocator.free(bytes);
@@ -121,12 +127,14 @@ test "ZIP incremental writer emits precise ZIP32 and conservative ZIP64 layouts"
     const bzip2_entry = try archive.entryAt(3);
     const zstd_entry = try archive.entryAt(4);
     const lzma_entry = try archive.entryAt(5);
+    const xz_entry = try archive.entryAt(6);
     try std.testing.expect(!known.zip64);
     try std.testing.expect(unknown.zip64);
     try std.testing.expect(deflated.zip64);
     try std.testing.expect(bzip2_entry.zip64);
     try std.testing.expect(zstd_entry.zip64);
     try std.testing.expect(lzma_entry.zip64);
+    try std.testing.expect(xz_entry.zip64);
 
     try std.testing.expectEqual(@as(u32, 0), readU32(bytes, known.local_header_offset + 18));
     try std.testing.expectEqual(@as(u16, 0), readU16(bytes, known.local_header_offset + 28));
@@ -376,6 +384,26 @@ test "ZIP incremental writer preflights codec configuration before headers" {
         }),
     );
     try std.testing.expectEqual(incremental.Phase.ready, input_limited_lzma.snapshot().phase);
+
+    var invalid_xz = try incremental.Writer.initWithOptions(std.testing.allocator, .{
+        .xz_options = .{ .block_size = 0 },
+    });
+    defer invalid_xz.deinit();
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        invalid_xz.beginEntry(.{ .name = "bad-xz", .method = .xz }),
+    );
+    try std.testing.expectEqual(incremental.Phase.ready, invalid_xz.snapshot().phase);
+
+    var dictionary_xz = try incremental.Writer.initWithOptions(std.testing.allocator, .{
+        .xz_options = .{ .dictionary_size = 1024 },
+    });
+    defer dictionary_xz.deinit();
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        dictionary_xz.beginEntry(.{ .name = "dictionary-xz", .method = .xz }),
+    );
+    try std.testing.expectEqual(incremental.Phase.ready, dictionary_xz.snapshot().phase);
 }
 
 test "ZIP incremental writer emits multi-block Bzip2 payloads" {
@@ -465,6 +493,38 @@ test "ZIP incremental writer emits ZIP LZMA prefix and end marker" {
     try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
+test "ZIP incremental writer emits filtered multi-block XZ streams" {
+    const allocator = std.testing.allocator;
+    const payload = ("filtered multi-block incremental XZ payload\n" ** 193) ++
+        ([_]u8{ 0x90, 0xe8, 0x10, 0, 0, 0, 0xe9, 0xf0, 0xff, 0xff, 0xff, 0x90 } ** 211);
+    const filters = [_]xz.Filter{
+        xz.Filter.x86(0),
+        try xz.Filter.delta(4),
+    };
+    const entries = [_]TestEntry{.{
+        .name = "filtered.xz",
+        .data = payload,
+        .method = .xz,
+        .expected_size = payload.len,
+    }};
+    const bytes = try encodeEntries(allocator, &entries, .{
+        .zip64 = .never,
+        .xz_options = .{
+            .check = .sha256,
+            .block_size = 1024,
+            .dictionary_size = 4096,
+            .filters = &filters,
+        },
+    }, 173, 17);
+    defer allocator.free(bytes);
+    const archive = try zip.parse(bytes);
+    const entry = try archive.entryAt(0);
+    try std.testing.expect(!entry.zip64);
+    const decoded = try archive.extractAlloc(allocator, entry);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
 test "ZIP incremental writer preflights archive finish and output limits" {
     var finish_limited = try incremental.Writer.initWithOptions(std.testing.allocator, .{
         .archive_comment = "comment",
@@ -516,13 +576,14 @@ test "ZIP incremental writer releases every allocation failure" {
                 .{ .name = "bzip2", .data = "allocation-safe bzip2" ** 47, .method = .bzip2, .expected_size = null },
                 .{ .name = "zstd", .data = "allocation-safe zstd" ** 53, .method = .zstandard, .expected_size = null },
                 .{ .name = "lzma", .data = "allocation-safe lzma" ** 41, .method = .lzma, .expected_size = null },
+                .{ .name = "xz", .data = "allocation-safe xz" ** 43, .method = .xz, .expected_size = null },
             };
             const encoded = try encodeEntries(allocator, &entries, .{ .archive_comment = "oom" }, 17, 19);
             defer allocator.free(encoded);
             const archive = try zip.parse(encoded);
-            const decoded = try archive.extractAlloc(allocator, try archive.entryAt(4));
+            const decoded = try archive.extractAlloc(allocator, try archive.entryAt(5));
             defer allocator.free(decoded);
-            try std.testing.expectEqualSlices(u8, entries[4].data, decoded);
+            try std.testing.expectEqualSlices(u8, entries[5].data, decoded);
         }
     };
     try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{});

@@ -40,6 +40,9 @@ pub const Options = struct {
     /// ZIP LZMA properties/dictionary/buffering policy. Method 14 always uses
     /// an end marker; `size_mode` is normalized accordingly.
     lzma_options: codecs.LzmaOptions = .{},
+    /// XZ check, block, dictionary, parser, and filter-chain policy. Filters
+    /// are copied by initialization and need not outlive the writer.
+    xz_options: codecs.XzOptions = .{},
     max_entries: u64 = std.math.maxInt(u64),
     max_central_directory_size: usize = std.math.maxInt(usize),
     max_uncompressed_size: u64 = std.math.maxInt(u64),
@@ -76,10 +79,12 @@ pub const Phase = enum {
 /// one configured RLE/BWT block plus bounded encoded output. Zstandard retains
 /// one configured frame block, bounded rolling history, and pending output.
 /// LZMA retains bounded input/lookahead, dictionary history, and range output.
+/// XZ retains one configured plaintext block, encoded output, and Index records.
 pub const Writer = struct {
     allocator: std.mem.Allocator,
     options: Options,
     archive_comment: []u8,
+    xz_filters: []codecs.XzFilter,
     phase: Phase = .ready,
     pending: std.ArrayList(u8) = .empty,
     pending_offset: usize = 0,
@@ -180,6 +185,8 @@ pub const Writer = struct {
             return error.Zip32LimitExceeded;
         const comment = try allocator.dupe(u8, options.archive_comment);
         errdefer allocator.free(comment);
+        const xz_filters = try allocator.dupe(codecs.XzFilter, options.xz_options.filters);
+        errdefer allocator.free(xz_filters);
         const max_end_len = try checkedAdd(
             wire.zip64_end_of_central_len + wire.zip64_end_of_central_locator_len + wire.end_of_central_len,
             options.archive_comment.len,
@@ -189,10 +196,12 @@ pub const Writer = struct {
         try pending.ensureTotalCapacity(allocator, max_end_len);
         var owned_options = options;
         owned_options.archive_comment = "";
+        owned_options.xz_options.filters = xz_filters;
         return .{
             .allocator = allocator,
             .options = owned_options,
             .archive_comment = comment,
+            .xz_filters = xz_filters,
             .pending = pending,
         };
     }
@@ -202,6 +211,7 @@ pub const Writer = struct {
         self.pending.deinit(self.allocator);
         self.central.deinit(self.allocator);
         self.allocator.free(self.archive_comment);
+        self.allocator.free(self.xz_filters);
         self.* = undefined;
     }
 
@@ -553,6 +563,7 @@ pub const Writer = struct {
             .bzip2 = self.options.bzip2_options,
             .zstd = self.options.zstd_options,
             .lzma = self.options.lzma_options,
+            .xz = self.options.xz_options,
         };
     }
 
