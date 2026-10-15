@@ -20245,3 +20245,20 @@ reuse, so production keeps the simpler independently owned plans.
   14,418/15,502 bytes; `run-zip-diff` remains 13/13, the writer suite passes
   65/65, the full repository graph passes 2673/2673, and `zig build check`
   passes all 113 steps.
+
+- Added a caller-output stored-block Deflate64 encoder and wired method 9 into
+  `ZipIncrementalWriter`. The implementation instantiates the shared bounded
+  stored-block state machine with Deflate64-compatible raw framing, supporting
+  arbitrary fragmentation, exact pledges, empty streams, zero-output
+  backpressure, 65,535-byte boundaries and input/block limits without retaining
+  a member. ZIP reuses signed ZIP32/ZIP64 descriptors, CRC-32, version-needed
+  2.1 and the codec union. Known/unknown/empty and a multi-block payload pass
+  one-byte deterministic schedules; Python zlib and Info-ZIP independently
+  decode the stored subset, while the committed 7-Zip fixed payload retains
+  extended-distance reader evidence. Match-producing fixed/64 KiB-distance
+  incremental encoding remains an explicit ratio optimization; the one-shot
+  encoder already provides it. The external archive grows from eighteen to
+  twenty-one entries with ZIP32/ZIP64 sizes 22,542/23,794 bytes;
+  `run-zip-diff` remains 13/13, the Deflate64 incremental encoder suite passes
+  3/3, the writer suite passes 66/66, the full repository graph passes
+  2676/2676, and `zig build check` passes all 113 steps.
