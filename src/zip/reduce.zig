@@ -13,7 +13,7 @@ pub const Options = struct {
     max_chain: u16 = 64,
 };
 
-const dle: u8 = 144;
+pub const dle: u8 = 144;
 
 const BitReader = struct {
     input: []const u8,
@@ -66,12 +66,12 @@ const BitWriter = struct {
     }
 };
 
-const Followers = struct {
+pub const FollowerTable = struct {
     counts: [256]u8 = @splat(0),
     symbols: [256][32]u8 = @splat(@splat(0)),
 
-    fn parse(reader: *BitReader) Error!Followers {
-        var result = Followers{};
+    fn parse(reader: *BitReader) Error!FollowerTable {
+        var result = FollowerTable{};
         var previous: usize = 256;
         while (previous != 0) {
             previous -= 1;
@@ -85,14 +85,14 @@ const Followers = struct {
     }
 };
 
-fn followerBits(count: u8) u4 {
+pub fn followerBits(count: u8) u4 {
     if (count <= 1) return 0;
     return @intCast(std.math.log2_int_ceil(u8, count));
 }
 
 fn nextReducedByte(
     reader: *BitReader,
-    followers: *const Followers,
+    followers: *const FollowerTable,
     last_character: *u8,
 ) Error!u8 {
     const count = followers.counts[last_character.*];
@@ -111,7 +111,7 @@ fn nextReducedByte(
 
 pub fn decodeInto(input: []const u8, output: []u8, factor: Factor) Error!void {
     var reader = BitReader{ .input = input };
-    const followers = try Followers.parse(&reader);
+    const followers = try FollowerTable.parse(&reader);
     const factor_bits: u4 = @intFromEnum(factor);
     const length_bits: u4 = 8 - factor_bits;
     const length_mask: u8 = (@as(u8, 1) << @intCast(length_bits)) - 1;
@@ -268,10 +268,10 @@ fn buildIntermediate(
     }
 }
 
-fn trainFollowers(
+fn trainFollowersFromIntermediate(
     allocator: std.mem.Allocator,
     intermediate: []const u8,
-) Error!Followers {
+) Error!FollowerTable {
     const transition_counts = try allocator.alloc(u32, 256 * 256);
     defer allocator.free(transition_counts);
     @memset(transition_counts, 0);
@@ -281,7 +281,7 @@ fn trainFollowers(
         previous = byte;
     }
 
-    var followers = Followers{};
+    var followers = FollowerTable{};
     for (0..256) |context| {
         var selected: [256]bool = @splat(false);
         var count: usize = 0;
@@ -305,7 +305,23 @@ fn trainFollowers(
     return followers;
 }
 
-fn followerIndex(followers: *const Followers, previous: u8, byte: u8) ?u8 {
+/// Trains the exact follower table used by `encodeAppend` after applying the
+/// same factor-specific DLE match plan. Callers can reuse the returned table
+/// with the incremental encoder when a replayable prepass is available.
+pub fn trainFollowerTable(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    factor: Factor,
+    options: Options,
+) Error!FollowerTable {
+    if (options.max_chain == 0) return error.InvalidReduceOptions;
+    var intermediate: std.ArrayList(u8) = .empty;
+    defer intermediate.deinit(allocator);
+    try buildIntermediate(allocator, &intermediate, input, factor, options);
+    return trainFollowersFromIntermediate(allocator, intermediate.items);
+}
+
+fn followerIndex(followers: *const FollowerTable, previous: u8, byte: u8) ?u8 {
     for (followers.symbols[previous][0..followers.counts[previous]], 0..) |candidate, index|
         if (candidate == byte) return @intCast(index);
     return null;
@@ -324,7 +340,7 @@ pub fn encodeAppend(
     var intermediate: std.ArrayList(u8) = .empty;
     defer intermediate.deinit(allocator);
     try buildIntermediate(allocator, &intermediate, input, factor, options);
-    const followers = try trainFollowers(allocator, intermediate.items);
+    const followers = try trainFollowersFromIntermediate(allocator, intermediate.items);
     var writer = BitWriter{ .allocator = allocator, .output = output };
 
     var context: usize = 256;

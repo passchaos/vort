@@ -16,6 +16,8 @@ const xz = @import("xz.zig");
 const zstd = @import("zstd.zig");
 const records = @import("zip/records.zig");
 const reduce = @import("zip/reduce.zig");
+const reduce_incremental_encoder = @import("zip/reduce/incremental_encoder.zig");
+const reduce_incremental_encoder_tests = @import("zip/reduce_incremental_encoder_tests.zig");
 const reduce_incremental_tests = @import("zip/reduce_incremental_tests.zig");
 const shrink = @import("zip/shrink.zig");
 const shrink_incremental_tests = @import("zip/shrink_incremental_tests.zig");
@@ -69,6 +71,9 @@ pub const ShrinkIncrementalWorkspace = shrink.IncrementalWorkspace;
 pub const ShrinkIncrementalEncoder = shrink.IncrementalEncoder;
 pub const ReduceIncrementalDecoder = reduce.IncrementalDecoder;
 pub const ReduceIncrementalWorkspace = reduce.IncrementalWorkspace;
+pub const ReduceIncrementalEncoder = reduce_incremental_encoder.Encoder;
+pub const ReduceFollowerTable = reduce.FollowerTable;
+pub const trainReduceFollowerTable = reduce.trainFollowerTable;
 pub const ReduceFactor = reduce.Factor;
 pub const ImplodeDictionary = implode.Dictionary;
 pub const ImplodeOptions = implode.Options;
@@ -107,6 +112,10 @@ test "ZIP Shrink incremental encoder test suite" {
 
 test "ZIP Reduce incremental test suite" {
     _ = reduce_incremental_tests;
+}
+
+test "ZIP Reduce incremental encoder test suite" {
+    _ = reduce_incremental_encoder_tests;
 }
 
 test "ZIP Legacy Implode incremental test suite" {
