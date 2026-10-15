@@ -177,6 +177,7 @@ pub const ZipIncrementalReaderStepResult = zip.IncrementalReaderStepResult;
 pub const ZipIncrementalReaderEntryInfo = zip.IncrementalReaderEntryInfo;
 pub const ZipDclImplodeDictionary = zip.DclImplodeDictionary;
 pub const ZipDclImplodeOptions = zip.DclImplodeOptions;
+pub const ZipDclImplodeIncrementalDecoder = zip.DclImplodeIncrementalDecoder;
 pub const Ppmd8IncrementalDecoder = ppmd8.IncrementalDecoder;
 pub const Ppmd8RestoreMethod = ppmd8.RestoreMethod;
 pub const Ppmd8ZipProperties = ppmd8.ZipProperties;

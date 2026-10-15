@@ -3,6 +3,7 @@ const bzip2 = @import("bzip2.zig");
 const core = @import("core.zig");
 const checksum = @import("checksum.zig");
 const dcl_implode = @import("zip/dcl_implode.zig");
+const dcl_implode_incremental_tests = @import("zip/dcl_implode_incremental_tests.zig");
 const deflate = @import("deflate.zig");
 const deflate64 = @import("deflate64.zig");
 const lzma = @import("lzma.zig");
@@ -55,6 +56,7 @@ pub const IncrementalReaderStepResult = incremental_reader.StepResult;
 pub const IncrementalReaderEntryInfo = incremental_reader.EntryInfo;
 pub const DclImplodeDictionary = dcl_implode.Dictionary;
 pub const DclImplodeOptions = dcl_implode.Options;
+pub const DclImplodeIncrementalDecoder = dcl_implode.IncrementalDecoder;
 pub const encodeAlloc = writer.encodeAlloc;
 pub const encodeAppend = writer.encodeAppend;
 
@@ -68,6 +70,10 @@ test "ZIP incremental entry decoder test suite" {
 
 test "ZIP incremental reader test suite" {
     _ = incremental_reader;
+}
+
+test "ZIP DCL Implode incremental test suite" {
+    _ = dcl_implode_incremental_tests;
 }
 
 pub const DecodeOptions = struct {
