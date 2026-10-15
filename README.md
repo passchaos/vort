@@ -290,7 +290,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   AES-128/192/256 one-shot reading/writing, bounded incremental writing, and
   known-size/descriptor-backed sequential reading with explicit caller salt and Vail-backed
   PBKDF2/CTR/HMAC; password-based PKWARE Strong Encryption AES-128/192/256
-  one-shot reading/writing with caller-owned IV/random/validation entropy,
+  one-shot reading plus one-shot/bounded incremental writing with caller-owned
+  IV/random/validation entropy,
   strict `0x0017`/bit-6/decryption-header validation, and Vail-backed SHA-1
   key derivation/AES-CBC/PKCS#7; ordered split/multi-disk ZIP32/ZIP64 normalization with
   strict disk-coordinate and allocation limits, cross-volume payload/descriptor
@@ -1787,8 +1788,8 @@ owned backing allocation. `ZipSplitIncrementalWriter` reuses every incremental
 codec/encryption path, retains only the established codec state, central
 metadata, one atomic control record and caller-selected current-part storage,
 and reports `part_done` before output switches volumes. PKWARE Strong
-Encryption is currently one-shot only; its incremental writer and sequential
-reader paths remain unsupported. See
+Encryption supports bounded incremental writing; its sequential reader path
+remains unsupported. See
 [the ZIP format status](docs/formats/zip.md) for the full state and wire
 contract. Writer-specific additive errors are exposed separately as
 `ZipIncrementalWriterError`; the established `ZipError` set is unchanged.
@@ -1859,8 +1860,11 @@ one-shot cases across known-size and descriptor-backed entries. A locally built
 independently decrypts all six Stored/Deflate/Bzip2 cases. Reader coverage also
 includes APPNOTE's synthesized zero-length-IV form, wrong passwords, corrupt
 validation/padding, malformed flags/algorithm metadata, and allocation failure.
-Certificate recipients, non-AES algorithms, central-directory encryption and
-incremental Strong Encryption remain explicit gaps.
+The incremental writer adds six deterministic ZIP32/ZIP64 known/unknown/empty
+cases (2,115/2,359 bytes) and uses a bounded 256-byte codec bridge plus two AES
+blocks; fixed 7-Zip independently decrypts another 6/6. Certificate recipients,
+non-AES algorithms, central-directory encryption and sequential Strong
+Encryption remain explicit gaps.
 The incremental writer adds six known/unknown/empty ZIP32/ZIP64 cases in
 separate deterministic archives (1,695/1,939 bytes), decoded independently by
 Python, Vort's one-shot reader, and Info-ZIP.

@@ -7,6 +7,7 @@
 
 const std = @import("std");
 const crypto = @import("vail_archive_crypto").pkware_strong;
+const crypto_stream = @import("vail_archive_crypto").pkware_strong_stream;
 
 pub const Strength = crypto.Strength;
 pub const block_len = crypto.block_len;
@@ -19,7 +20,7 @@ pub const fixed_remaining_len: usize = 16;
 pub const explicit_prefix_len: usize = @sizeOf(u16) + explicit_iv_len + @sizeOf(u32);
 pub const max_remaining_len: usize = 1 << 18;
 
-pub const Error = crypto.Error || error{
+pub const Error = crypto.Error || crypto_stream.Error || error{
     InvalidStrongEncryptionHeader,
     UnsupportedStrongEncryptionFeature,
 };
@@ -68,6 +69,66 @@ pub fn validateOptions(options: Options) Error!void {
         return error.InvalidValidationDataLength;
 }
 
+pub fn streamHeaderLen(options: Options) Error!usize {
+    try validateOptions(options);
+    const encrypted_random_size = try checkedAdd(options.random_data.len, block_len);
+    const validation_size = try checkedAdd(options.validation_data.len, @sizeOf(u32));
+    const remaining_len = try checkedAdd(
+        fixed_remaining_len,
+        try checkedAdd(encrypted_random_size, validation_size),
+    );
+    return checkedAdd(explicit_prefix_len, remaining_len);
+}
+
+pub fn encryptedDataLen(data_len: u64) Error!u64 {
+    const remainder = data_len % block_len;
+    const padding_len = block_len - remainder;
+    return std.math.add(u64, data_len, padding_len) catch error.IntegerOverflow;
+}
+
+pub const PreparedStreamEncryptor = struct {
+    header: []u8,
+    encryptor: crypto_stream.Encryptor,
+
+    const Self = @This();
+
+    pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
+        allocator.free(self.header);
+        self.encryptor.deinit();
+        self.* = undefined;
+    }
+};
+
+pub fn prepareStreamEncryptAlloc(
+    allocator: std.mem.Allocator,
+    options: Options,
+) Error!PreparedStreamEncryptor {
+    try validateOptions(options);
+    var prepared = try crypto_stream.prepareEncryptAlloc(allocator, .{
+        .password = options.password,
+        .strength = options.strength,
+        .cbc_iv = options.iv,
+        .iv_material = &options.iv,
+        .random_data = options.random_data,
+        .validation_data = options.validation_data,
+    });
+    errdefer prepared.deinit(allocator);
+    const header = try allocator.alloc(u8, try streamHeaderLen(options));
+    errdefer allocator.free(header);
+    const written = writeExplicitHeader(
+        header,
+        options.iv,
+        options.strength,
+        prepared.encrypted_random_data,
+        prepared.encrypted_validation,
+    );
+    std.debug.assert(written == header.len);
+    return .{
+        .header = header,
+        .encryptor = prepared.takeEncryptor(allocator),
+    };
+}
+
 /// Returns the complete decryption-header plus encrypted compressed payload.
 pub fn encryptAlloc(
     allocator: std.mem.Allocator,
@@ -85,16 +146,10 @@ pub fn encryptAlloc(
     });
     defer encrypted.deinit(allocator);
 
-    const remaining_len = try checkedAdd(
-        fixed_remaining_len,
-        try checkedAdd(encrypted.encrypted_random_data.len, encrypted.validation_size),
-    );
-    if (remaining_len > max_remaining_len or remaining_len > std.math.maxInt(u32))
-        return error.InvalidStrongEncryptionHeader;
     const file_ciphertext_len = encrypted.encrypted_payload.len - encrypted.validation_size;
     const total_len = try checkedAdd(
-        explicit_prefix_len,
-        try checkedAdd(remaining_len, file_ciphertext_len),
+        try streamHeaderLen(options),
+        file_ciphertext_len,
     );
     const output = try allocator.alloc(u8, total_len);
     errdefer {
@@ -102,20 +157,13 @@ pub fn encryptAlloc(
         allocator.free(output);
     }
 
-    var cursor: usize = 0;
-    writeU16(output, &cursor, @intCast(explicit_iv_len));
-    writeBytes(output, &cursor, &options.iv);
-    writeU32(output, &cursor, @intCast(remaining_len));
-    writeU16(output, &cursor, format);
-    writeU16(output, &cursor, algorithmId(options.strength));
-    writeU16(output, &cursor, bitLength(options.strength));
-    writeU16(output, &cursor, password_flag);
-    writeU16(output, &cursor, @intCast(encrypted.encrypted_random_data.len));
-    writeBytes(output, &cursor, encrypted.encrypted_random_data);
-    writeU32(output, &cursor, 0);
-    writeU16(output, &cursor, @intCast(encrypted.validation_size));
-    writeBytes(output, &cursor, encrypted.encrypted_payload[0..encrypted.validation_size]);
-    std.debug.assert(cursor == explicit_prefix_len + remaining_len);
+    var cursor = writeExplicitHeader(
+        output,
+        options.iv,
+        options.strength,
+        encrypted.encrypted_random_data,
+        encrypted.encrypted_payload[0..encrypted.validation_size],
+    );
     writeBytes(output, &cursor, encrypted.encrypted_payload[encrypted.validation_size..]);
     std.debug.assert(cursor == output.len);
     return output;
@@ -193,6 +241,33 @@ fn checkedEnd(start: usize, len: usize, limit: usize) Error!usize {
     const end = try checkedAdd(start, len);
     if (end > limit) return error.InvalidStrongEncryptionHeader;
     return end;
+}
+
+fn writeExplicitHeader(
+    output: []u8,
+    iv: [block_len]u8,
+    strength: Strength,
+    encrypted_random_data: []const u8,
+    encrypted_validation: []const u8,
+) usize {
+    const remaining_len = fixed_remaining_len +
+        encrypted_random_data.len + encrypted_validation.len;
+    std.debug.assert(output.len >= explicit_prefix_len + remaining_len);
+    std.debug.assert(remaining_len <= max_remaining_len);
+    var cursor: usize = 0;
+    writeU16(output, &cursor, @intCast(explicit_iv_len));
+    writeBytes(output, &cursor, &iv);
+    writeU32(output, &cursor, @intCast(remaining_len));
+    writeU16(output, &cursor, format);
+    writeU16(output, &cursor, algorithmId(strength));
+    writeU16(output, &cursor, bitLength(strength));
+    writeU16(output, &cursor, password_flag);
+    writeU16(output, &cursor, @intCast(encrypted_random_data.len));
+    writeBytes(output, &cursor, encrypted_random_data);
+    writeU32(output, &cursor, 0);
+    writeU16(output, &cursor, @intCast(encrypted_validation.len));
+    writeBytes(output, &cursor, encrypted_validation);
+    return cursor;
 }
 
 fn readBytes(bytes: []const u8, cursor: *usize, len: usize) Error![]const u8 {

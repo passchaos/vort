@@ -193,11 +193,14 @@ data, and malformed lengths before codec work.
 This legacy profile provides confidentiality but no ciphertext authentication;
 the ordinary ZIP CRC-32 remains the final content check. New applications
 should prefer WinZip AES when authenticated encryption compatibility is
-required. Certificate recipients, DES/3DES/RC2/RC4/Blowfish/Twofish, encrypted
-central directories, incremental writing, and sequential/split-stream reading
-are not yet supported. A fixed 7-Zip 26.04 source build at commit
+required. The incremental writer uses the same wire with a bounded 256-byte
+codec bridge and Vail stream state retaining at most one plaintext and one
+ciphertext AES block; it never buffers a complete member. Certificate
+recipients, DES/3DES/RC2/RC4/Blowfish/Twofish, encrypted central directories,
+and sequential/split-stream reading are not yet supported. A fixed 7-Zip 26.04 source build at commit
 `9128b80e3a471108678e2b3ec3c985861c8d7b0f` independently extracts six
-Vort-produced AES strength × known/descriptor Stored/Deflate/Bzip2 cases.
+Vort-produced AES strength × known/descriptor Stored/Deflate/Bzip2 one-shot
+cases plus six ZIP32/ZIP64 incremental-writer entries.
 
 ## Incremental entry decoder
 
@@ -542,7 +545,8 @@ accepted by the sequential reader alongside descriptor-backed AES. The writers
 remain single-disk, and the sequential reader does not directly coordinate
 separate split/multi-disk sources. The split adapter described below validates
 and supplies them as one logical stream without allocating joined archive
-bytes. PKWARE Strong Encryption remains one-shot on both sides.
+bytes. PKWARE Strong Encryption has a bounded incremental writer, while its
+sequential reader remains a follow-up.
 
 The incremental differential uses forty-five entries: known Stored data containing a
 descriptor-signature byte sequence, unknown Stored data containing two such

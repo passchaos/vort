@@ -1835,6 +1835,12 @@ INCREMENTAL_WINZIP_AES_PAYLOADS = {
     "aes-empty.bin": b"",
 }
 
+INCREMENTAL_PKWARE_STRONG_PAYLOADS = {
+    "strong-known.bin": b"incremental PKWARE Strong stored payload\n" * 31,
+    "strong-unknown.txt": b"incremental PKWARE Strong Deflate payload\n" * 89,
+    "strong-empty.bin": b"",
+}
+
 
 def validate_incremental_zipcrypto_writer(
     cli: Path,
@@ -1975,6 +1981,93 @@ def validate_incremental_winzip_aes_writer(
             sequential_cases += 1
             cases += 1
     return len(raw), cases, sequential_cases
+
+
+def validate_incremental_pkware_strong_writer(
+    cli: Path,
+    writer: Path,
+    temp: Path,
+    force_zip64: bool,
+    seven_zip_tool: str | None,
+) -> tuple[int, int, int]:
+    suffix = "zip64" if force_zip64 else "zip32"
+    one_path = temp / f"incremental-pkware-strong-{suffix}-one.zip"
+    micro_path = temp / f"incremental-pkware-strong-{suffix}-micro.zip"
+    run(writer, str(one_path), suffix, "one", "pkware-strong")
+    run(writer, str(micro_path), suffix, "micro", "pkware-strong")
+    raw = one_path.read_bytes()
+    if raw != micro_path.read_bytes():
+        raise AssertionError(
+            f"incremental PKWARE Strong {suffix} output changed with scheduling"
+        )
+    cases = 0
+    seven_zip_cases = 0
+    expected_algorithms = (0x660E, 0x660F, 0x6610)
+    with zipfile.ZipFile(one_path) as archive:
+        if archive.namelist() != list(INCREMENTAL_PKWARE_STRONG_PAYLOADS):
+            raise AssertionError("incremental PKWARE Strong entry order mismatch")
+        for index, (name, expected) in enumerate(
+            INCREMENTAL_PKWARE_STRONG_PAYLOADS.items()
+        ):
+            info = archive.getinfo(name)
+            if info.flag_bits & 0x49 != 0x49:
+                raise AssertionError(
+                    f"incremental PKWARE Strong flags mismatch for {name!r}"
+                )
+            fields = parse_extra_fields(
+                info.extra, f"incremental PKWARE Strong central {name!r}"
+            )
+            strong = fields.get(0x0017)
+            if strong is None or len(strong) != 8:
+                raise AssertionError(
+                    f"incremental PKWARE Strong extra missing for {name!r}"
+                )
+            record_format, algorithm, bit_length, flags = struct.unpack(
+                "<HHHH", strong
+            )
+            if (
+                record_format != 2
+                or algorithm != expected_algorithms[index]
+                or bit_length != (128, 192, 256)[index]
+                or flags != 1
+            ):
+                raise AssertionError(
+                    f"incremental PKWARE Strong extra mismatch for {name!r}"
+                )
+            output = temp / f"incremental-pkware-strong-{suffix}-{index}.out"
+            extract_with_vort_password(
+                cli,
+                one_path,
+                name,
+                output,
+                PKWARE_STRONG_PASSWORD,
+            )
+            if output.read_bytes() != expected:
+                raise AssertionError(
+                    f"incremental PKWARE Strong extraction mismatch for {name!r}"
+                )
+            cases += 1
+            if seven_zip_tool is not None:
+                extracted = subprocess.run(
+                    [
+                        seven_zip_tool,
+                        "x",
+                        "-so",
+                        "-bd",
+                        f"-p{PKWARE_STRONG_PASSWORD}",
+                        str(one_path),
+                        name,
+                    ],
+                    check=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                ).stdout
+                if extracted != expected:
+                    raise AssertionError(
+                        f"7-Zip incremental PKWARE Strong mismatch for {name!r}"
+                    )
+                seven_zip_cases += 1
+    return len(raw), cases, seven_zip_cases
 
 
 def ordered_split_parts(archive: Path) -> list[Path]:
@@ -2724,6 +2817,28 @@ def main() -> None:
             True,
             openssl_tool,
         )
+        (
+            incremental_pkware_strong_zip32_bytes,
+            incremental_pkware_strong_zip32_cases,
+            incremental_pkware_strong_zip32_7zip,
+        ) = validate_incremental_pkware_strong_writer(
+            args.cli,
+            args.incremental_writer,
+            temp,
+            False,
+            seven_zip_tool,
+        )
+        (
+            incremental_pkware_strong_zip64_bytes,
+            incremental_pkware_strong_zip64_cases,
+            incremental_pkware_strong_zip64_7zip,
+        ) = validate_incremental_pkware_strong_writer(
+            args.cli,
+            args.incremental_writer,
+            temp,
+            True,
+            seven_zip_tool,
+        )
         incremental_reader_zipcrypto_cases = (
             vort_incremental_reader_zipcrypto_cases
             + infozip_incremental_reader_zipcrypto_cases
@@ -2830,6 +2945,10 @@ def main() -> None:
         f"incremental_winzip_aes_cases={incremental_winzip_aes_zip32_cases + incremental_winzip_aes_zip64_cases} "
         f"incremental_winzip_aes_zip32_bytes={incremental_winzip_aes_zip32_bytes} "
         f"incremental_winzip_aes_zip64_bytes={incremental_winzip_aes_zip64_bytes} "
+        f"incremental_pkware_strong_cases={incremental_pkware_strong_zip32_cases + incremental_pkware_strong_zip64_cases} "
+        f"incremental_pkware_strong_zip32_bytes={incremental_pkware_strong_zip32_bytes} "
+        f"incremental_pkware_strong_zip64_bytes={incremental_pkware_strong_zip64_bytes} "
+        f"incremental_pkware_strong_7zip_cases={incremental_pkware_strong_zip32_7zip + incremental_pkware_strong_zip64_7zip} "
         f"split_zip_parts={split_zip_parts} split_zip_cases={split_zip_cases} "
         f"split_zip_stream_cases={split_zip_stream_cases} "
         f"split_zip_source_cases={split_zip_source_cases} "

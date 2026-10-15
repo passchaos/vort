@@ -2,6 +2,8 @@ const std = @import("std");
 const checksum = @import("../checksum.zig");
 const core = @import("../core.zig");
 const codecs = @import("incremental_writer/codecs.zig");
+const writer_encryption = @import("incremental_writer/encryption.zig");
+const pkware_strong = @import("pkware_strong.zig");
 const types = @import("types.zig");
 const traditional_encryption = @import("vail_archive_crypto").zipcrypto;
 const winzip_aes = @import("vail_archive_crypto").winzip_aes;
@@ -11,7 +13,7 @@ const zip_writer = @import("writer.zig");
 pub const CompressionMethod = types.CompressionMethod;
 pub const Zip64Mode = zip_writer.Zip64Mode;
 
-pub const Error = codecs.Error || winzip_aes.Error || std.mem.Allocator.Error || error{
+pub const Error = codecs.Error || writer_encryption.Error || std.mem.Allocator.Error || error{
     InvalidZipEntryName,
     InvalidZipTextEncoding,
     UnsupportedZipCompressionMethod,
@@ -81,6 +83,7 @@ pub const EntryOptions = struct {
     expected_size: ?u64 = null,
     traditional_encryption: ?traditional_encryption.Options = null,
     winzip_aes: ?zip_writer.WinZipAesOptions = null,
+    pkware_strong_encryption: ?zip_writer.PkwareStrongEncryptionOptions = null,
 };
 
 pub const Phase = enum {
@@ -136,100 +139,7 @@ pub const Writer = struct {
         uncompressed_size: u64 = 0,
         compressed_size: u64 = 0,
         codec: codecs.State,
-        encryption: ?EncryptionState = null,
-
-        const EncryptionState = union(enum) {
-            traditional: TraditionalState,
-            winzip_aes: WinZipAesState,
-
-            const TraditionalState = struct {
-                cipher: traditional_encryption.Cipher,
-                header: [traditional_encryption.header_len]u8,
-            };
-
-            const WinZipAesState = struct {
-                cipher: winzip_aes.Cipher,
-                header: [winzip_aes.max_salt_len + winzip_aes.password_verifier_len]u8,
-                header_len: usize,
-                info: types.WinZipAesInfo,
-            };
-
-            fn initTraditional(options: traditional_encryption.Options) EncryptionState {
-                var cipher = traditional_encryption.Cipher.init(options.password);
-                var header_bytes: [traditional_encryption.header_len]u8 = undefined;
-                cipher.encrypt(
-                    &options.header_random,
-                    header_bytes[0..traditional_encryption.header_random_len],
-                );
-                header_bytes[traditional_encryption.header_random_len] = cipher.encryptByte(
-                    @truncate(wire.deterministic_dos_time >> 8),
-                );
-                return .{ .traditional = .{ .cipher = cipher, .header = header_bytes } };
-            }
-
-            fn initWinZipAes(options: zip_writer.WinZipAesOptions) Error!EncryptionState {
-                var cipher = try winzip_aes.Cipher.init(
-                    options.password,
-                    options.salt,
-                    options.strength,
-                );
-                errdefer cipher.deinit();
-                var header_bytes: [winzip_aes.max_salt_len + winzip_aes.password_verifier_len]u8 = undefined;
-                @memcpy(header_bytes[0..options.salt.len], options.salt);
-                header_bytes[options.salt.len..][0..winzip_aes.password_verifier_len].* =
-                    cipher.passwordVerifier();
-                return .{ .winzip_aes = .{
-                    .cipher = cipher,
-                    .header = header_bytes,
-                    .header_len = options.salt.len + winzip_aes.password_verifier_len,
-                    .info = .{ .version = options.version, .strength = options.strength },
-                } };
-            }
-
-            fn header(self: *const EncryptionState) []const u8 {
-                return switch (self.*) {
-                    .traditional => |*state| &state.header,
-                    .winzip_aes => |*state| state.header[0..state.header_len],
-                };
-            }
-
-            fn encrypt(self: *EncryptionState, output: []u8) void {
-                switch (self.*) {
-                    .traditional => |*state| {
-                        for (output) |*byte| byte.* = state.cipher.encryptByte(byte.*);
-                    },
-                    .winzip_aes => |*state| state.cipher.encrypt(output, output),
-                }
-            }
-
-            fn authenticationCode(self: *const EncryptionState) ?[winzip_aes.authentication_code_len]u8 {
-                return switch (self.*) {
-                    .traditional => null,
-                    .winzip_aes => |*state| state.cipher.authenticationCode(),
-                };
-            }
-
-            fn aesInfo(self: *const EncryptionState) ?types.WinZipAesInfo {
-                return switch (self.*) {
-                    .traditional => null,
-                    .winzip_aes => |state| state.info,
-                };
-            }
-
-            fn deinit(self: *EncryptionState) void {
-                switch (self.*) {
-                    .traditional => |*state| {
-                        state.cipher.deinit();
-                        std.crypto.secureZero(u8, &state.header);
-                    },
-                    .winzip_aes => |*state| {
-                        state.cipher.deinit();
-                        std.crypto.secureZero(u8, &state.header);
-                    },
-                }
-                self.* = undefined;
-            }
-        };
+        encryption: ?writer_encryption.State = null,
 
         fn init(
             allocator: std.mem.Allocator,
@@ -251,12 +161,15 @@ pub const Writer = struct {
                 entry_options.comment.len,
             ) catch return error.IntegerOverflow;
             const metadata = try allocator.alloc(u8, metadata_len);
+            errdefer allocator.free(metadata);
             @memcpy(metadata[0..entry_options.name.len], entry_options.name);
             @memcpy(metadata[entry_options.name.len..], entry_options.comment);
             const encryption = if (entry_options.traditional_encryption) |options|
-                EncryptionState.initTraditional(options)
+                writer_encryption.State.initTraditional(options)
             else if (entry_options.winzip_aes) |options|
-                try EncryptionState.initWinZipAes(options)
+                try writer_encryption.State.initWinZipAes(options)
+            else if (entry_options.pkware_strong_encryption) |options|
+                try writer_encryption.State.initPkwareStrong(allocator, options)
             else
                 null;
             return .{
@@ -281,7 +194,13 @@ pub const Writer = struct {
         }
 
         fn encryptionFlag(self: *const CurrentEntry) u16 {
-            return if (self.encryption != null) wire.encrypted_flag else 0;
+            if (self.encryption) |encryption|
+                return wire.encrypted_flag |
+                    (if (std.meta.activeTag(encryption) == .pkware_strong)
+                        wire.strong_encryption_flag
+                    else
+                        0);
+            return 0;
         }
 
         fn appendEncryptionHeader(
@@ -294,11 +213,11 @@ pub const Writer = struct {
         }
 
         fn encryptOutput(self: *CurrentEntry, output: []u8) void {
-            if (self.encryption) |*encryption| encryption.encrypt(output);
+            if (self.encryption) |*encryption| encryption.encryptInPlace(output);
         }
 
         fn deinit(self: *CurrentEntry, allocator: std.mem.Allocator) void {
-            if (self.encryption) |*encryption| encryption.deinit();
+            if (self.encryption) |*encryption| encryption.deinit(allocator);
             self.codec.deinit();
             allocator.free(self.metadata);
             self.* = undefined;
@@ -407,6 +326,8 @@ pub const Writer = struct {
             traditional_encryption.header_len
         else if (entry_options.winzip_aes) |aes|
             aes.strength.saltLen() + winzip_aes.password_verifier_len
+        else if (entry_options.pkware_strong_encryption) |strong|
+            try pkware_strong.streamHeaderLen(strong)
         else
             0;
         const entry_prefix_len = try checkedAdd(
@@ -424,7 +345,8 @@ pub const Writer = struct {
                 entry_options.comment.len,
             ),
             (if (entry_zip64) @as(usize, 28) else 0) +
-                (if (entry_options.winzip_aes != null) @as(usize, 11) else 0),
+                (if (entry_options.winzip_aes != null) @as(usize, 11) else 0) +
+                (if (entry_options.pkware_strong_encryption != null) @as(usize, 12) else 0),
         );
         if (central_header_len > self.options.max_central_directory_size or
             self.central.items.len > self.options.max_central_directory_size - central_header_len)
@@ -468,6 +390,10 @@ pub const Writer = struct {
             .zip64 = entry_zip64,
             .winzip_aes = if (current.encryption) |*encryption|
                 encryption.aesInfo()
+            else
+                null,
+            .pkware_strong_encryption = if (current.encryption) |*encryption|
+                encryption.pkwareInfo()
             else
                 null,
         }, .{ .zip64_size_placeholders = entry_zip64 });
@@ -565,6 +491,19 @@ pub const Writer = struct {
                     continue;
                 },
                 .entry_data => {
+                    const uses_pkware_strong = if (self.current.?.encryption) |encryption|
+                        std.meta.activeTag(encryption) == .pkware_strong
+                    else
+                        false;
+                    if (uses_pkware_strong) {
+                        if (try self.stepPkwareStrongEntry(
+                            input,
+                            output,
+                            &input_read,
+                            &output_written,
+                        )) |step_result| return step_result;
+                        continue;
+                    }
                     if (self.finish_entry_requested) {
                         if (input_read != input.len) return error.TrailingData;
                         if (self.current.?.method == .stored) {
@@ -662,12 +601,143 @@ pub const Writer = struct {
         }
     }
 
+    fn stepPkwareStrongEntry(
+        self: *Self,
+        input: []const u8,
+        output: []u8,
+        input_read: *usize,
+        output_written: *usize,
+    ) Error!?core.StepResult {
+        var entry = &self.current.?;
+        const state = entry.encryption.?.pkwareState().?;
+        if (entry.method == .stored) {
+            if (self.finish_entry_requested) {
+                if (input_read.* != input.len) return error.TrailingData;
+                const target = try self.pkwareOutputSlice(output, output_written.*);
+                const encrypted = try state.encryptor.finish(target);
+                try self.accountPkwareOutput(entry, encrypted.output_written, output_written);
+                if (encrypted.status != .done)
+                    return result(input_read.*, output_written.*, .need_output);
+                try self.finalizeEntry();
+                if (self.options.stop_at_record_boundaries)
+                    return result(input_read.*, output_written.*, .need_output);
+                return null;
+            }
+            if (input_read.* == input.len)
+                return result(input_read.*, output_written.*, .need_input);
+            try self.checkInputOffer(input[input_read.*..].len);
+            const target = try self.pkwareOutputSlice(output, output_written.*);
+            const encrypted = try state.encryptor.update(input[input_read.*..], target);
+            const consumed = input[input_read.*..][0..encrypted.input_read];
+            entry.crc.update(consumed);
+            try self.addEntryInput(entry, encrypted.input_read);
+            input_read.* += encrypted.input_read;
+            try self.accountPkwareOutput(entry, encrypted.output_written, output_written);
+            if (input_read.* != input.len)
+                return result(input_read.*, output_written.*, .need_output);
+            return result(input_read.*, output_written.*, .need_input);
+        }
+
+        while (true) {
+            if (state.codec_output_pos < state.codec_output_len) {
+                const target = try self.pkwareOutputSlice(output, output_written.*);
+                const encrypted = try state.encryptor.update(
+                    state.codec_output[state.codec_output_pos..state.codec_output_len],
+                    target,
+                );
+                state.codec_output_pos += encrypted.input_read;
+                try self.accountPkwareOutput(entry, encrypted.output_written, output_written);
+                if (state.codec_output_pos != state.codec_output_len)
+                    return result(input_read.*, output_written.*, .need_output);
+                state.codec_output_pos = 0;
+                state.codec_output_len = 0;
+                continue;
+            }
+
+            if (state.codec_done) {
+                const target = try self.pkwareOutputSlice(output, output_written.*);
+                const encrypted = try state.encryptor.finish(target);
+                try self.accountPkwareOutput(entry, encrypted.output_written, output_written);
+                if (encrypted.status != .done)
+                    return result(input_read.*, output_written.*, .need_output);
+                try self.finalizeEntry();
+                if (self.options.stop_at_record_boundaries)
+                    return result(input_read.*, output_written.*, .need_output);
+                return null;
+            }
+
+            if (self.finish_entry_requested) {
+                if (input_read.* != input.len) return error.TrailingData;
+                if (!state.codec_finish_requested) {
+                    entry.codec.finish();
+                    state.codec_finish_requested = true;
+                }
+            } else {
+                if (input_read.* == input.len)
+                    return result(input_read.*, output_written.*, .need_input);
+                try self.checkInputOffer(input[input_read.*..].len);
+            }
+
+            const offered = if (self.finish_entry_requested) "" else input[input_read.*..];
+            const encoded = try entry.codec.step(offered, &state.codec_output);
+            if (encoded.progress.input_read > offered.len or
+                encoded.progress.output_written > state.codec_output.len)
+                return error.InvalidBlockPlan;
+            entry.crc.update(offered[0..encoded.progress.input_read]);
+            try self.addEntryInput(entry, encoded.progress.input_read);
+            input_read.* += encoded.progress.input_read;
+            state.codec_output_len = encoded.progress.output_written;
+            state.codec_output_pos = 0;
+            if (encoded.status == .done) state.codec_done = true;
+            if (encoded.progress.input_read == 0 and encoded.progress.output_written == 0 and
+                encoded.status != .done)
+            {
+                if (!self.finish_entry_requested and input_read.* == input.len)
+                    return result(input_read.*, output_written.*, .need_input);
+                return error.InvalidBlockPlan;
+            }
+        }
+    }
+
+    fn pkwareOutputSlice(
+        self: *const Self,
+        output: []u8,
+        output_written: usize,
+    ) Error![]u8 {
+        const available = output.len - output_written;
+        const allowed = self.limitArchiveWrite(available);
+        if (allowed == 0) {
+            if (available == 0) return output[output_written..output_written];
+            return error.OutputLimitExceeded;
+        }
+        return output[output_written..][0..allowed];
+    }
+
+    fn accountPkwareOutput(
+        self: *Self,
+        entry: *CurrentEntry,
+        amount: usize,
+        output_written: *usize,
+    ) Error!void {
+        entry.compressed_size = std.math.add(
+            u64,
+            entry.compressed_size,
+            @as(u64, @intCast(amount)),
+        ) catch return error.IntegerOverflow;
+        try self.addArchiveOutput(amount);
+        output_written.* += amount;
+    }
+
     fn validateEntry(self: *const Self, entry: EntryOptions) Error!void {
         if (entry.name.len == 0) return error.InvalidZipEntryName;
-        if (entry.traditional_encryption != null and entry.winzip_aes != null)
+        if ((entry.traditional_encryption != null and entry.winzip_aes != null) or
+            (entry.traditional_encryption != null and entry.pkware_strong_encryption != null) or
+            (entry.winzip_aes != null and entry.pkware_strong_encryption != null))
             return error.ConflictingZipEncryption;
         if (entry.winzip_aes) |aes|
             if (aes.salt.len != aes.strength.saltLen()) return error.InvalidSaltLength;
+        if (entry.pkware_strong_encryption) |strong|
+            try pkware_strong.validateOptions(strong);
         if (entry.name.len > std.math.maxInt(u16) or entry.comment.len > std.math.maxInt(u16))
             return error.Zip32LimitExceeded;
         if (entry.expected_size) |expected| {
@@ -675,17 +745,21 @@ pub const Writer = struct {
             if (self.options.zip64 == .never and expected >= std.math.maxInt(u32))
                 return error.Zip32LimitExceeded;
             if (entry.method == .stored and
-                (entry.traditional_encryption != null or entry.winzip_aes != null))
+                (entry.traditional_encryption != null or entry.winzip_aes != null or
+                    entry.pkware_strong_encryption != null))
             {
                 const encryption_len: u64 = if (entry.traditional_encryption != null)
                     traditional_encryption.header_len
+                else if (entry.winzip_aes != null)
+                    entry.winzip_aes.?.strength.overhead()
                 else
-                    entry.winzip_aes.?.strength.overhead();
-                const compressed_size = std.math.add(
-                    u64,
-                    expected,
-                    encryption_len,
-                ) catch return error.IntegerOverflow;
+                    @intCast(try pkware_strong.streamHeaderLen(entry.pkware_strong_encryption.?));
+                const encrypted_payload_len = if (entry.pkware_strong_encryption != null)
+                    try pkware_strong.encryptedDataLen(expected)
+                else
+                    expected;
+                const compressed_size = std.math.add(u64, encrypted_payload_len, encryption_len) catch
+                    return error.IntegerOverflow;
                 if (self.options.zip64 == .never and compressed_size >= std.math.maxInt(u32))
                     return error.Zip32LimitExceeded;
             }
@@ -712,9 +786,15 @@ pub const Writer = struct {
             traditional_encryption.header_len
         else if (entry.winzip_aes) |aes|
             aes.strength.overhead()
+        else if (entry.pkware_strong_encryption) |strong|
+            @intCast(try pkware_strong.streamHeaderLen(strong))
         else
             0;
-        const compressed_size = std.math.add(u64, expected, encryption_len) catch
+        const encrypted_payload_len = if (entry.pkware_strong_encryption != null)
+            try pkware_strong.encryptedDataLen(expected)
+        else
+            expected;
+        const compressed_size = std.math.add(u64, encrypted_payload_len, encryption_len) catch
             return error.IntegerOverflow;
         return compressed_size >= std.math.maxInt(u32);
     }
@@ -818,6 +898,10 @@ pub const Writer = struct {
             .zip64 = entry.zip64,
             .winzip_aes = if (entry.encryption) |*encryption|
                 encryption.aesInfo()
+            else
+                null,
+            .pkware_strong_encryption = if (entry.encryption) |*encryption|
+                encryption.pkwareInfo()
             else
                 null,
         };

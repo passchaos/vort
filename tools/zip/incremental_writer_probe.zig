@@ -9,6 +9,7 @@ const Entry = struct {
     comment: []const u8 = "",
     traditional_encryption: ?vort.ZipTraditionalEncryptionOptions = null,
     winzip_aes: ?vort.ZipWinZipAesOptions = null,
+    pkware_strong_encryption: ?vort.ZipPkwareStrongEncryptionOptions = null,
 };
 
 const OutputPattern = enum {
@@ -425,12 +426,64 @@ pub fn main(init: std.process.Init) !void {
             },
         },
     };
+    const strong_iv128 = [_]u8{0x91} ** 16;
+    const strong_iv192 = [_]u8{0x92} ** 16;
+    const strong_iv256 = [_]u8{0x93} ** 16;
+    const strong_random128 = [_]u8{0xa1} ** 16;
+    const strong_random192 = [_]u8{0xa2} ** 16;
+    const strong_random256 = [_]u8{0xa3} ** 32;
+    const strong_validation128 = [_]u8{0xb1} ** 12;
+    const strong_validation192 = [_]u8{0xb2} ** 12;
+    const strong_validation256 = [_]u8{0xb3} ** 12;
+    const pkware_strong_entries = [_]Entry{
+        .{
+            .name = "strong-known.bin",
+            .data = "incremental PKWARE Strong stored payload\n" ** 31,
+            .method = .stored,
+            .expected_size = ("incremental PKWARE Strong stored payload\n" ** 31).len,
+            .pkware_strong_encryption = .{
+                .password = "vort-strong-password",
+                .strength = .aes128,
+                .iv = strong_iv128,
+                .random_data = &strong_random128,
+                .validation_data = &strong_validation128,
+            },
+        },
+        .{
+            .name = "strong-unknown.txt",
+            .data = "incremental PKWARE Strong Deflate payload\n" ** 89,
+            .method = .deflate,
+            .expected_size = null,
+            .pkware_strong_encryption = .{
+                .password = "vort-strong-password",
+                .strength = .aes192,
+                .iv = strong_iv192,
+                .random_data = &strong_random192,
+                .validation_data = &strong_validation192,
+            },
+        },
+        .{
+            .name = "strong-empty.bin",
+            .data = "",
+            .method = .stored,
+            .expected_size = 0,
+            .pkware_strong_encryption = .{
+                .password = "vort-strong-password",
+                .strength = .aes256,
+                .iv = strong_iv256,
+                .random_data = &strong_random256,
+                .validation_data = &strong_validation256,
+            },
+        },
+    };
 
     const selected_entries: []const Entry = if (entry_mode) |value|
         if (std.mem.eql(u8, value, "zipcrypto"))
             &encrypted_entries
         else if (std.mem.eql(u8, value, "winzip-aes"))
             &winzip_aes_entries
+        else if (std.mem.eql(u8, value, "pkware-strong"))
+            &pkware_strong_entries
         else if (std.mem.eql(u8, value, "split"))
             entries[0..6]
         else
@@ -511,6 +564,7 @@ fn encodeSplitArchive(
             .expected_size = entry.expected_size,
             .traditional_encryption = entry.traditional_encryption,
             .winzip_aes = entry.winzip_aes,
+            .pkware_strong_encryption = entry.pkware_strong_encryption,
         });
         if (entry_index == 0) {
             const blocked = try writer.step(entry.data[0..1], &.{});
@@ -635,6 +689,7 @@ fn encodeArchive(
             .expected_size = entry.expected_size,
             .traditional_encryption = entry.traditional_encryption,
             .winzip_aes = entry.winzip_aes,
+            .pkware_strong_encryption = entry.pkware_strong_encryption,
         });
         if (entry_index == 0) {
             const blocked = try writer.step(entry.data[0..1], &.{});

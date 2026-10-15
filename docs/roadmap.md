@@ -20600,3 +20600,18 @@ reuse, so production keeps the simpler independently owned plans.
   decryption remain explicit follow-ups. The focused gate passes 55/55,
   `run-zip-diff` remains green across all 13 build steps with
   `pkware_strong_cases=6`, and `zig build check` passes all 113 steps.
+
+- Extended `ZipIncrementalWriter` with password-based PKWARE Strong AES while
+  preserving bounded caller-output operation. Vail prepares ErdData and the
+  encrypted validator, advances CBC across that validator, then retains at
+  most one plaintext and one ciphertext block. Vort places the complete
+  decryption header atomically with the local record and uses a 256-byte codec
+  bridge so Stored and every streaming compression method can feed block CBC
+  without retaining a member. PKCS#7 finalization precedes the ordinary signed
+  descriptor; compressed-size and ZIP32/ZIP64 policy include the complete
+  header and padding. One-byte input/output is byte-identical to coalesced
+  output for known Stored, unknown Deflate, Bzip2 and empty AES-128/192/256
+  entries; allocation failure is exhaustive. The external probe adds six
+  deterministic ZIP32/ZIP64 cases (2,115/2,359 bytes), all self-extracted by
+  Vort and independently decrypted by fixed 7-Zip 26.04 (6/6). Sequential
+  Strong decryption remains the next compatibility slice.

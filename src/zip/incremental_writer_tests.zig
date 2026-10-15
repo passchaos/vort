@@ -18,6 +18,7 @@ const TestEntry = struct {
     comment: []const u8 = "",
     traditional_encryption: ?zip.TraditionalEncryptionOptions = null,
     winzip_aes: ?zip.WinZipAesOptions = null,
+    pkware_strong_encryption: ?zip.PkwareStrongEncryptionOptions = null,
 };
 
 test "ZIP incremental writer round trips known and unknown common codec entries" {
@@ -257,6 +258,130 @@ test "ZIP incremental writer streams WinZip AES entries" {
     try std.testing.expect(!(try archive.entryAt(0)).zip64);
     try std.testing.expect((try archive.entryAt(1)).zip64);
     try std.testing.expect(!(try archive.entryAt(2)).zip64);
+}
+
+test "ZIP incremental writer streams PKWARE Strong AES entries" {
+    const allocator = std.testing.allocator;
+    const password = "incremental PKWARE Strong password";
+    const iv128 = [_]u8{0x51} ** 16;
+    const iv192 = [_]u8{0x52} ** 16;
+    const iv256 = [_]u8{0x53} ** 16;
+    const random128 = [_]u8{0x61} ** 16;
+    const random192 = [_]u8{0x62} ** 16;
+    const random256 = [_]u8{0x63} ** 32;
+    const validation128 = [_]u8{0x71} ** 12;
+    const validation192 = [_]u8{0x72} ** 12;
+    const validation256 = [_]u8{0x73} ** 12;
+    const entries = [_]TestEntry{
+        .{
+            .name = "strong-known.bin",
+            .data = "known PKWARE Strong stored payload",
+            .method = .stored,
+            .expected_size = "known PKWARE Strong stored payload".len,
+            .pkware_strong_encryption = .{
+                .password = password,
+                .strength = .aes128,
+                .iv = iv128,
+                .random_data = &random128,
+                .validation_data = &validation128,
+            },
+        },
+        .{
+            .name = "strong-unknown.txt",
+            .data = "unknown PKWARE Strong Deflate payload\n" ** 83,
+            .method = .deflate,
+            .expected_size = null,
+            .pkware_strong_encryption = .{
+                .password = password,
+                .strength = .aes192,
+                .iv = iv192,
+                .random_data = &random192,
+                .validation_data = &validation192,
+            },
+        },
+        .{
+            .name = "strong-bzip2.txt",
+            .data = "known PKWARE Strong Bzip2 payload\n" ** 59,
+            .method = .bzip2,
+            .expected_size = ("known PKWARE Strong Bzip2 payload\n" ** 59).len,
+            .pkware_strong_encryption = .{
+                .password = password,
+                .strength = .aes256,
+                .iv = iv256,
+                .random_data = &random256,
+                .validation_data = &validation256,
+            },
+        },
+        .{
+            .name = "strong-empty.bin",
+            .data = "",
+            .method = .stored,
+            .expected_size = 0,
+            .pkware_strong_encryption = .{
+                .password = password,
+                .strength = .aes256,
+                .iv = iv256,
+                .random_data = &random256,
+                .validation_data = &validation256,
+            },
+        },
+    };
+    const tiny = try encodeEntries(allocator, &entries, .{}, 1, 1);
+    defer allocator.free(tiny);
+    const coalesced = try encodeEntries(allocator, &entries, .{}, 4096, 8192);
+    defer allocator.free(coalesced);
+    try std.testing.expectEqualSlices(u8, coalesced, tiny);
+
+    const archive = try zip.parse(tiny);
+    for (entries, 0..) |expected, index| {
+        const entry = try archive.entryAt(index);
+        try std.testing.expect(entry.isPkwareStrongEncrypted());
+        try std.testing.expect(entry.flags & wire.descriptor_flag != 0);
+        try std.testing.expectEqual(
+            expected.pkware_strong_encryption.?.strength,
+            entry.pkware_strong_encryption.?.strength,
+        );
+        try std.testing.expectError(
+            error.InvalidPasswordValidation,
+            archive.extractAllocWithOptions(allocator, entry, .{ .password = "wrong" }),
+        );
+        const decoded = try archive.extractAllocWithOptions(
+            allocator,
+            entry,
+            .{ .password = password },
+        );
+        defer allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, expected.data, decoded);
+    }
+    try std.testing.expect(!(try archive.entryAt(0)).zip64);
+    try std.testing.expect((try archive.entryAt(1)).zip64);
+    try std.testing.expect((try archive.entryAt(2)).zip64);
+    try std.testing.expect(!(try archive.entryAt(3)).zip64);
+}
+
+test "ZIP incremental writer PKWARE Strong path releases every allocation failure" {
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const iv = [_]u8{0x81} ** 16;
+            const random_data = [_]u8{0x82} ** 16;
+            const validation_data = [_]u8{0x83} ** 12;
+            const entries = [_]TestEntry{.{
+                .name = "strong-oom.bin",
+                .data = "allocation-safe incremental strong payload",
+                .method = .stored,
+                .expected_size = "allocation-safe incremental strong payload".len,
+                .pkware_strong_encryption = .{
+                    .password = "password",
+                    .iv = iv,
+                    .random_data = &random_data,
+                    .validation_data = &validation_data,
+                },
+            }};
+            const bytes = try encodeEntries(allocator, &entries, .{}, 3, 2);
+            defer allocator.free(bytes);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{});
 }
 
 test "ZIP incremental writer applies zero-output backpressure" {
@@ -1176,6 +1301,7 @@ fn encodeEntries(
             .expected_size = entry.expected_size,
             .traditional_encryption = entry.traditional_encryption,
             .winzip_aes = entry.winzip_aes,
+            .pkware_strong_encryption = entry.pkware_strong_encryption,
         });
         var input_offset: usize = 0;
         while (input_offset < entry.data.len) {
