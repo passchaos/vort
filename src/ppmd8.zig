@@ -2,6 +2,8 @@ const std = @import("std");
 const decoder = @import("ppmd8/decoder.zig");
 const encoder = @import("ppmd8/encoder.zig");
 const incremental_decoder = @import("ppmd8/incremental_decoder.zig");
+const incremental_encoder = @import("ppmd8/incremental_encoder.zig");
+const incremental_encoder_tests = @import("ppmd8/incremental_encoder_tests.zig");
 const incremental_tests = @import("ppmd8/incremental_tests.zig");
 const model = @import("ppmd8/model.zig");
 
@@ -12,6 +14,7 @@ pub const Error = decoder.Error || error{
 
 pub const RestoreMethod = model.RestoreMethod;
 pub const IncrementalDecoder = incremental_decoder.Decoder;
+pub const IncrementalEncoder = incremental_encoder.Encoder;
 
 pub const ZipProperties = struct {
     order: u8 = 8,
@@ -45,7 +48,7 @@ pub fn parseZipProperties(encoded: []const u8) Error!ZipProperties {
     return result;
 }
 
-fn propertyValue(properties: ZipProperties) Error!u16 {
+pub fn propertyValue(properties: ZipProperties) Error!u16 {
     try validateZipProperties(properties);
     const memory_mib = properties.memory_size / mib;
     return @as(u16, properties.order - 1) |
@@ -148,6 +151,8 @@ test {
     _ = decoder;
     _ = encoder;
     _ = incremental_decoder;
+    _ = incremental_encoder;
+    _ = incremental_encoder_tests;
     _ = incremental_tests;
     _ = model;
 }

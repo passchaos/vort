@@ -188,6 +188,7 @@ pub const ZipImplodeOptions = zip.ImplodeOptions;
 pub const ZipImplodeIncrementalDecoder = zip.ImplodeIncrementalDecoder;
 pub const ZipImplodeIncrementalWorkspace = zip.ImplodeIncrementalWorkspace;
 pub const Ppmd8IncrementalDecoder = ppmd8.IncrementalDecoder;
+pub const Ppmd8IncrementalEncoder = ppmd8.IncrementalEncoder;
 pub const Ppmd8RestoreMethod = ppmd8.RestoreMethod;
 pub const Ppmd8ZipProperties = ppmd8.ZipProperties;
 pub const parseZipArchive = zip.parse;
