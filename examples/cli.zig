@@ -1006,11 +1006,17 @@ pub fn main(init: std.process.Init) !void {
         const output_path = args.next() orelse return error.MissingCorpusPath;
         const max_output_len = try parseOptionalLimit(args.next());
         const max_dictionary_size = (try parseOptionalLimit(args.next())) orelse 64 * 1024 * 1024;
+        const password_arg = args.next();
+        const password = if (password_arg) |value|
+            if (std.mem.eql(u8, value, "-")) null else value
+        else
+            null;
         const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
         defer init.gpa.free(bytes);
         const decoded = try vort.zipExtractByNameAllocWithOptions(init.gpa, bytes, entry_name, .{
             .max_output_len = max_output_len orelse std.math.maxInt(usize),
             .max_dictionary_size = max_dictionary_size,
+            .password = password,
         });
         defer init.gpa.free(decoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
@@ -2896,7 +2902,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  extract-cab-set <entry> <out> <cab1> <cab2> [...]
         \\                              Extract an entry across an explicitly ordered cabinet set
         \\  list-zip-file <path>        List ZIP32/ZIP64 central-directory entries
-        \\  extract-zip-file <zip> <entry> <out> [max_output] [max_dictionary]
+        \\  extract-zip-file <zip> <entry> <out> [max_output] [max_dictionary] [password|-]
         \\                              Extract a supported ZIP entry with CRC validation
         \\  extract-zip-file-incremental <zip> <entry> <out> [max_output]
         \\                              Incrementally extract one Stored/Deflate ZIP entry

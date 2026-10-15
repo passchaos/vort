@@ -586,6 +586,143 @@ def validate_vort_archive_with_python(
     return len(raw)
 
 
+ZIPCRYPTO_PASSWORD = "vort-zip-password"
+ZIPCRYPTO_PAYLOADS = {
+    "encrypted/stored.bin": b"Vort Traditional ZipCrypto stored payload.\n" * 17,
+    "encrypted/deflate.txt": b"Vort Traditional ZipCrypto Deflate payload.\n" * 97,
+}
+
+
+def extract_with_vort_password(
+    cli: Path, archive: Path, name: str, output: Path, password: str
+) -> None:
+    run(
+        cli,
+        "extract-zip-file",
+        str(archive),
+        name,
+        str(output),
+        str(512 * 1024 * 1024),
+        str(64 * 1024 * 1024),
+        password,
+    )
+
+
+def validate_vort_zipcrypto(
+    cli: Path,
+    writer: Path,
+    unzip_tool: str,
+    temp: Path,
+) -> int:
+    cases = 0
+    for descriptor in (False, True):
+        suffix = "descriptor" if descriptor else "known"
+        archive_path = temp / f"vort-zipcrypto-{suffix}.zip"
+        run(
+            writer,
+            str(archive_path),
+            "zipcrypto-descriptor" if descriptor else "zipcrypto",
+        )
+        with zipfile.ZipFile(archive_path) as archive:
+            if archive.namelist() != list(ZIPCRYPTO_PAYLOADS):
+                raise AssertionError("Vort ZipCrypto entry order mismatch")
+            for index, (name, expected) in enumerate(ZIPCRYPTO_PAYLOADS.items()):
+                info = archive.getinfo(name)
+                if info.flag_bits & 1 == 0 or bool(info.flag_bits & 8) != descriptor:
+                    raise AssertionError(f"Vort ZipCrypto flags mismatch for {name!r}")
+                if archive.read(name, pwd=ZIPCRYPTO_PASSWORD.encode()) != expected:
+                    raise AssertionError(f"Python could not decrypt Vort {name!r}")
+                try:
+                    archive.read(name, pwd=b"wrong-password")
+                except (RuntimeError, zipfile.BadZipFile):
+                    pass
+                else:
+                    raise AssertionError("Python accepted a wrong Vort ZIP password")
+
+                output = temp / f"vort-zipcrypto-{suffix}-{index}.out"
+                extract_with_vort_password(
+                    cli,
+                    archive_path,
+                    name,
+                    output,
+                    ZIPCRYPTO_PASSWORD,
+                )
+                if output.read_bytes() != expected:
+                    raise AssertionError(f"Vort ZipCrypto self-extraction mismatch for {name!r}")
+                wrong = subprocess.run(
+                    [
+                        str(cli),
+                        "extract-zip-file",
+                        str(archive_path),
+                        name,
+                        str(temp / f"vort-zipcrypto-{suffix}-{index}.wrong"),
+                        str(512 * 1024 * 1024),
+                        str(64 * 1024 * 1024),
+                        "wrong-password",
+                    ],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+                if wrong.returncode == 0:
+                    raise AssertionError("Vort accepted a wrong ZIP password")
+                cases += 1
+
+        extracted = subprocess.run(
+            [unzip_tool, "-P", ZIPCRYPTO_PASSWORD, "-p", str(archive_path)],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        ).stdout
+        if extracted != b"".join(ZIPCRYPTO_PAYLOADS.values()):
+            raise AssertionError("Info-ZIP could not decrypt Vort ZipCrypto output")
+    return cases
+
+
+def validate_infozip_zipcrypto(
+    cli: Path,
+    zip_tool: str,
+    temp: Path,
+) -> int:
+    payload = b"Info-ZIP Traditional encryption read by Vort.\n" * 128
+    cases = 0
+    for index, compression in enumerate(("-0", "-9")):
+        source = temp / f"infozip-encrypted-{index}.txt"
+        archive = temp / f"infozip-encrypted-{index}.zip"
+        output = temp / f"infozip-encrypted-{index}.out"
+        source.write_bytes(payload)
+        subprocess.run(
+            [
+                zip_tool,
+                "-q",
+                compression,
+                "-P",
+                ZIPCRYPTO_PASSWORD,
+                archive.name,
+                source.name,
+            ],
+            cwd=temp,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        with zipfile.ZipFile(archive) as parsed:
+            info = parsed.getinfo(source.name)
+            expected_method = zipfile.ZIP_STORED if compression == "-0" else zipfile.ZIP_DEFLATED
+            if info.flag_bits & 1 == 0 or info.compress_type != expected_method:
+                raise AssertionError("Info-ZIP ZipCrypto metadata mismatch")
+        extract_with_vort_password(
+            cli,
+            archive,
+            source.name,
+            output,
+            ZIPCRYPTO_PASSWORD,
+        )
+        if output.read_bytes() != payload:
+            raise AssertionError("Vort could not decrypt Info-ZIP output")
+        cases += 1
+    return cases
+
+
 def validate_seven_zip_xz_with_vort(cli: Path, tool: str, temp: Path) -> None:
     payload = b"7-Zip XZ method 95 reference.\n" * 256
     source = temp / "seven-zip-xz.txt"
@@ -1404,6 +1541,9 @@ def main() -> None:
         else shutil.which("7zz") or shutil.which("7z")
     )
     unzip_tool = shutil.which("unzip")
+    zip_tool = shutil.which("zip")
+    if unzip_tool is None or zip_tool is None:
+        raise AssertionError("Info-ZIP zip and unzip CLIs are required for ZipCrypto differential")
 
     with tempfile.TemporaryDirectory(prefix="vort-zip-diff-") as temp_text:
         temp = Path(temp_text)
@@ -1423,6 +1563,12 @@ def main() -> None:
         )
         vort_zip64_bytes = validate_vort_archive_with_python(
             args.cli, args.writer, temp, True, seven_zip_tool
+        )
+        vort_zipcrypto_cases = validate_vort_zipcrypto(
+            args.cli, args.writer, unzip_tool, temp
+        )
+        infozip_zipcrypto_cases = validate_infozip_zipcrypto(
+            args.cli, zip_tool, temp
         )
         incremental_zip32_bytes, incremental_zip32_unzip, incremental_zip32_7zip = (
             validate_incremental_writer_archive(
@@ -1471,6 +1617,8 @@ def main() -> None:
         f"incremental_archive_implode_cases={incremental_archive_implode_cases} "
         f"incremental_archive_implode_fixture_cases={incremental_archive_implode_fixture_cases} "
         f"vort_zip32_bytes={vort_zip32_bytes} vort_zip64_bytes={vort_zip64_bytes} "
+        f"vort_zipcrypto_cases={vort_zipcrypto_cases} "
+        f"infozip_zipcrypto_cases={infozip_zipcrypto_cases} "
         f"incremental_entries={len(INCREMENTAL_PAYLOADS)} "
         f"incremental_zip32_bytes={incremental_zip32_bytes} "
         f"incremental_zip64_bytes={incremental_zip64_bytes} "

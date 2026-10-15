@@ -30,6 +30,8 @@ pub fn main(init: std.process.Init) !void {
     var dcl_mode = false;
     var reduce_mode = false;
     var reduce_descriptor_mode = false;
+    var zipcrypto_mode = false;
+    var zipcrypto_descriptor_mode = false;
     if (mode) |value| {
         if (std.mem.eql(u8, value, "zip64")) {
             zip64 = .always;
@@ -56,6 +58,11 @@ pub fn main(init: std.process.Init) !void {
             reduce_mode = true;
         } else if (std.mem.eql(u8, value, "reduce-descriptor")) {
             reduce_descriptor_mode = true;
+        } else if (std.mem.eql(u8, value, "zipcrypto")) {
+            zipcrypto_mode = true;
+        } else if (std.mem.eql(u8, value, "zipcrypto-descriptor")) {
+            zipcrypto_mode = true;
+            zipcrypto_descriptor_mode = true;
         } else if (std.mem.startsWith(u8, value, "dcl-")) {
             dcl_mode = true;
             const specification = value["dcl-".len..];
@@ -132,11 +139,33 @@ pub fn main(init: std.process.Init) !void {
         .{ .name = "utf8-目录/数据.txt", .data = utf8_payload, .method = .deflate },
         .{ .name = "empty/", .data = "", .method = .stored },
     };
+    const zipcrypto_entries = [_]vort.ZipEncodeEntry{
+        .{
+            .name = "encrypted/stored.bin",
+            .data = "Vort Traditional ZipCrypto stored payload.\n" ** 17,
+            .method = .stored,
+            .traditional_encryption = .{
+                .password = "vort-zip-password",
+                .header_random = .{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 },
+            },
+        },
+        .{
+            .name = "encrypted/deflate.txt",
+            .data = "Vort Traditional ZipCrypto Deflate payload.\n" ** 97,
+            .method = .deflate,
+            .traditional_encryption = .{
+                .password = "vort-zip-password",
+                .header_random = .{ 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0 },
+            },
+        },
+    };
 
     var bytes: std.ArrayList(u8) = .empty;
     defer bytes.deinit(init.gpa);
     try bytes.appendSlice(init.gpa, "MZ-VORT-ZIP-PREFIX\n");
-    const selected_entries: []const vort.ZipEncodeEntry = if (reduce_mode or reduce_descriptor_mode)
+    const selected_entries: []const vort.ZipEncodeEntry = if (zipcrypto_mode)
+        &zipcrypto_entries
+    else if (reduce_mode or reduce_descriptor_mode)
         entries[3..7]
     else if (implode_mode)
         entries[2..3]
@@ -145,7 +174,8 @@ pub fn main(init: std.process.Init) !void {
     _ = try vort.zipEncodeAppend(init.gpa, &bytes, selected_entries, .{
         .archive_comment = "vort zip writer differential",
         .data_descriptor = implode_descriptor_mode or reduce_descriptor_mode or
-            !(implode_mode or reduce_mode or dcl_mode),
+            zipcrypto_descriptor_mode or
+            !(implode_mode or reduce_mode or dcl_mode or zipcrypto_mode),
         .zip64 = zip64,
         .implode_options = .{
             .dictionary = if (implode_large) .large_8k else .small_4k,
