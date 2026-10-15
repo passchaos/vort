@@ -25,6 +25,7 @@ const shrink = @import("zip/shrink.zig");
 const shrink_incremental_tests = @import("zip/shrink_incremental_tests.zig");
 const shrink_incremental_encoder_tests = @import("zip/shrink_incremental_encoder_tests.zig");
 const split = @import("zip/split.zig");
+const split_incremental_reader = @import("zip/split_incremental_reader.zig");
 const traditional_encryption = @import("vail_archive_crypto").zipcrypto;
 const winzip_aes = @import("vail_archive_crypto").winzip_aes;
 const types = @import("zip/types.zig");
@@ -59,6 +60,10 @@ pub const WinZipAesStrength = types.WinZipAesStrength;
 pub const WinZipAesVendorVersion = types.WinZipAesVendorVersion;
 pub const WinZipAesInfo = types.WinZipAesInfo;
 pub const SplitOptions = split.Options;
+pub const SplitNormalizedStream = split.NormalizedStream;
+pub const SplitIncrementalReader = split_incremental_reader.Reader;
+pub const SplitIncrementalReaderOptions = split_incremental_reader.Options;
+pub const SplitIncrementalReaderError = split_incremental_reader.Error;
 pub const IncrementalWriter = incremental_writer.Writer;
 pub const IncrementalWriterError = incremental_writer.Error;
 pub const IncrementalWriterOptions = incremental_writer.Options;
@@ -1187,9 +1192,63 @@ const SplitTestFixture = struct {
     }
 };
 
+const EmptySplitTestFixture = struct {
+    allocator: std.mem.Allocator,
+    bytes: []u8,
+    parts: [2][]const u8,
+
+    fn deinit(self: *EmptySplitTestFixture) void {
+        self.allocator.free(self.bytes);
+        self.* = undefined;
+    }
+};
+
 const SplitTestCut = enum {
     descriptor,
     central_directory,
+};
+
+fn drainSplitIncrementalReader(reader: *SplitIncrementalReader) !void {
+    var calls: usize = 0;
+    while (true) {
+        var output: [4096]u8 = undefined;
+        const result = try reader.step(&output);
+        calls += 1;
+        if (calls > 1024 * 1024) return error.TestUnexpectedResult;
+        if (result.status == .done) break;
+        if (result.status == .need_input) return error.TestUnexpectedResult;
+        if (result.progress.input_read == 0 and
+            result.progress.output_written == 0 and
+            result.status != .entry_header and
+            result.status != .entry_done)
+            return error.TestUnexpectedResult;
+    }
+    try reader.finish();
+}
+
+const SplitOwnedAllocationTest = struct {
+    fn run(
+        allocator: std.mem.Allocator,
+        parts: []const []const u8,
+    ) !void {
+        var archive = try parseSplitArchiveAlloc(allocator, parts, .{});
+        defer archive.deinit();
+    }
+};
+
+const SplitReaderAllocationTest = struct {
+    fn run(
+        allocator: std.mem.Allocator,
+        parts: []const []const u8,
+    ) !void {
+        var reader = try SplitIncrementalReader.initAlloc(
+            allocator,
+            parts,
+            .{ .input_buffer_size = 257 },
+        );
+        defer reader.deinit();
+        try drainSplitIncrementalReader(&reader);
+    }
 };
 
 fn makeSplitTestFixture(
@@ -1304,15 +1363,56 @@ fn makeSplitTestFixture(
     };
 }
 
+fn makeEmptySplitTestFixture(
+    allocator: std.mem.Allocator,
+    zip64_mode: Zip64Mode,
+) !EmptySplitTestFixture {
+    const source = try encodeAlloc(allocator, &.{}, .{ .zip64 = zip64_mode });
+    defer allocator.free(source);
+    const archive = try parse(source);
+    const bytes = try allocator.alloc(u8, source.len + 4);
+    errdefer allocator.free(bytes);
+    std.mem.writeInt(u32, bytes[0..4], wire.data_descriptor_signature, .little);
+    @memcpy(bytes[4..], source);
+    const source_eocd = source.len - wire.end_of_central_len - archive.comment.len;
+    const eocd = source_eocd + 4;
+    if (archive.zip64) {
+        const source_locator = source_eocd - wire.zip64_end_of_central_locator_len;
+        const locator = source_locator + 4;
+        const source_zip64 = std.math.cast(
+            usize,
+            std.mem.readInt(u64, source[source_locator + 8 ..][0..8], .little),
+        ) orelse return error.UnsupportedZipFeature;
+        const zip64 = source_zip64 + 4;
+        std.mem.writeInt(u32, bytes[zip64 + 16 ..][0..4], 1, .little);
+        std.mem.writeInt(u32, bytes[zip64 + 20 ..][0..4], 1, .little);
+        std.mem.writeInt(u64, bytes[zip64 + 48 ..][0..8], 0, .little);
+        std.mem.writeInt(u32, bytes[locator + 4 ..][0..4], 1, .little);
+        std.mem.writeInt(u64, bytes[locator + 8 ..][0..8], source_zip64, .little);
+        std.mem.writeInt(u32, bytes[locator + 16 ..][0..4], 2, .little);
+    } else {
+        std.mem.writeInt(u16, bytes[eocd + 4 ..][0..2], 1, .little);
+        std.mem.writeInt(u16, bytes[eocd + 6 ..][0..2], 1, .little);
+        std.mem.writeInt(u32, bytes[eocd + 16 ..][0..4], 0, .little);
+    }
+    return .{
+        .allocator = allocator,
+        .bytes = bytes,
+        .parts = .{ bytes[0..4], bytes[4..] },
+    };
+}
+
 test "ZIP split archive normalization round trips cross-disk entries" {
     const allocator = std.testing.allocator;
     const large = "split ZIP payload crosses disk boundaries\n" ** 4096;
+    const archive_comment = "split archive comment";
     const entries = [_]EncodeEntry{
         .{ .name = "large.txt", .data = large, .method = .deflate },
         .{ .name = "tail.bin", .data = "tail entry", .method = .stored },
     };
     inline for (.{ Zip64Mode.never, .always }) |zip64_mode| {
         const source = try encodeAlloc(allocator, &entries, .{
+            .archive_comment = archive_comment,
             .data_descriptor = true,
             .zip64 = zip64_mode,
         });
@@ -1327,6 +1427,11 @@ test "ZIP split archive normalization round trips cross-disk entries" {
             );
             defer split_archive.deinit();
             try std.testing.expectEqual(entries.len, split_archive.archive.entry_count);
+            try std.testing.expectEqualSlices(
+                u8,
+                archive_comment,
+                split_archive.archive.comment,
+            );
             for (entries, 0..) |expected, index| {
                 const decoded = try split_archive.archive.extractAlloc(
                     allocator,
@@ -1339,6 +1444,133 @@ test "ZIP split archive normalization round trips cross-disk entries" {
                 @as(u32, wire.data_descriptor_signature),
                 std.mem.readInt(u32, split_archive.bytes[0..4], .little),
             );
+
+            var normalized_stream = try SplitNormalizedStream.initAlloc(
+                allocator,
+                &fixture.parts,
+                .{},
+            );
+            defer normalized_stream.deinit();
+            try std.testing.expectEqual(split_archive.bytes.len, normalized_stream.len());
+            try std.testing.expect(normalized_stream.patchCount() != 0);
+            try std.testing.expectEqual(
+                (try split_archive.archive.entryAt(0)).local_header_offset,
+                normalized_stream.firstRecordOffset(),
+            );
+            var stream_offset: usize = 0;
+            var stream_scratch: [7]u8 = undefined;
+            while (stream_offset < normalized_stream.len()) {
+                const written = try normalized_stream.readAt(stream_offset, &stream_scratch);
+                try std.testing.expect(written != 0);
+                try std.testing.expectEqualSlices(
+                    u8,
+                    split_archive.bytes[stream_offset..][0..written],
+                    stream_scratch[0..written],
+                );
+                stream_offset += written;
+            }
+            try std.testing.expectEqual(
+                @as(usize, 0),
+                try normalized_stream.readAt(normalized_stream.len(), &stream_scratch),
+            );
+            try std.testing.expectError(
+                error.RangeOutOfBounds,
+                normalized_stream.readAt(normalized_stream.len() + 1, &stream_scratch),
+            );
+
+            inline for (.{ @as(usize, 3), 257 }) |input_buffer_size| {
+                var stream_reader = try SplitIncrementalReader.initAlloc(
+                    allocator,
+                    &fixture.parts,
+                    .{
+                        .reader_options = .{ .initial_offset = 1234 },
+                        .input_buffer_size = input_buffer_size,
+                    },
+                );
+                defer stream_reader.deinit();
+                try std.testing.expectEqual(fixture.bytes.len, stream_reader.normalizedLength());
+                try std.testing.expect(stream_reader.metadataPatchCount() != 0);
+                var streamed: std.ArrayList(u8) = .empty;
+                defer streamed.deinit(allocator);
+                var header_count: usize = 0;
+                var done_count: usize = 0;
+                var calls: usize = 0;
+                while (true) {
+                    var output: [5]u8 = undefined;
+                    const result = try stream_reader.step(&output);
+                    try streamed.appendSlice(
+                        allocator,
+                        output[0..result.progress.output_written],
+                    );
+                    calls += 1;
+                    if (calls > large.len + 1024) return error.TestUnexpectedResult;
+                    switch (result.status) {
+                        .entry_header => {
+                            try std.testing.expect(header_count < entries.len);
+                            try std.testing.expectEqualSlices(
+                                u8,
+                                entries[header_count].name,
+                                stream_reader.currentEntry().?.name,
+                            );
+                            header_count += 1;
+                        },
+                        .entry_done => done_count += 1,
+                        .done => break,
+                        .need_input => return error.TestUnexpectedResult,
+                        .need_output => {},
+                    }
+                }
+                try stream_reader.finish();
+                try std.testing.expectEqualSlices(
+                    u8,
+                    archive_comment,
+                    stream_reader.archiveComment(),
+                );
+                try std.testing.expectEqual(entries.len, header_count);
+                try std.testing.expectEqual(entries.len, done_count);
+                try std.testing.expectEqual(large.len + entries[1].data.len, streamed.items.len);
+                try std.testing.expectEqualSlices(u8, large, streamed.items[0..large.len]);
+                try std.testing.expectEqualSlices(u8, entries[1].data, streamed.items[large.len..]);
+            }
+
+            var limited_reader = try SplitIncrementalReader.initAlloc(
+                allocator,
+                &fixture.parts,
+                .{
+                    .reader_options = .{ .max_total_output_len = large.len - 1 },
+                    .input_buffer_size = 31,
+                },
+            );
+            defer limited_reader.deinit();
+            try std.testing.expectError(
+                error.OutputLimitExceeded,
+                drainSplitIncrementalReader(&limited_reader),
+            );
+            try std.testing.expectError(
+                error.OutputLimitExceeded,
+                SplitIncrementalReader.initAlloc(allocator, &fixture.parts, .{
+                    .input_buffer_size = 0,
+                }),
+            );
+
+            try std.testing.expectError(
+                error.OutputLimitExceeded,
+                SplitNormalizedStream.initAlloc(allocator, &fixture.parts, .{
+                    .max_entries = 1,
+                }),
+            );
+            if (zip64_mode == .never and cut == .descriptor) {
+                try std.testing.checkAllAllocationFailures(
+                    allocator,
+                    SplitOwnedAllocationTest.run,
+                    .{fixture.parts[0..]},
+                );
+                try std.testing.checkAllAllocationFailures(
+                    allocator,
+                    SplitReaderAllocationTest.run,
+                    .{fixture.parts[0..]},
+                );
+            }
 
             const reordered = [_][]const u8{ fixture.parts[1], fixture.parts[0], fixture.parts[2] };
             try std.testing.expectError(
@@ -1381,6 +1613,125 @@ test "ZIP split archive normalization round trips cross-disk entries" {
             });
             marker_optional.deinit();
         }
+    }
+}
+
+test "ZIP split incremental reader streams WinZip AES and ZipCrypto entries" {
+    const allocator = std.testing.allocator;
+    const password = "split encryption password 密码";
+    const aes_payload = "split WinZip AES payload crosses disks\n" ** 257;
+    const traditional_payload = "split Traditional ZipCrypto tail";
+    const salt = [_]u8{0x5a} ** 16;
+    const entries = [_]EncodeEntry{
+        .{
+            .name = "aes-crossing.txt",
+            .data = aes_payload,
+            .method = .deflate,
+            .winzip_aes = .{
+                .password = password,
+                .strength = .aes256,
+                .salt = &salt,
+                .version = .ae2,
+            },
+        },
+        .{
+            .name = "zipcrypto-tail.bin",
+            .data = traditional_payload,
+            .method = .stored,
+            .traditional_encryption = .{
+                .password = password,
+                .header_random = .{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 },
+            },
+        },
+    };
+    const source = try encodeAlloc(allocator, &entries, .{
+        .data_descriptor = true,
+        .zip64 = .always,
+    });
+    defer allocator.free(source);
+    var fixture = try makeSplitTestFixture(allocator, source, .descriptor);
+    defer fixture.deinit();
+
+    var reader = try SplitIncrementalReader.initAlloc(
+        allocator,
+        &fixture.parts,
+        .{
+            .reader_options = .{ .password = password },
+            .input_buffer_size = 17,
+        },
+    );
+    defer reader.deinit();
+    var decoded: std.ArrayList(u8) = .empty;
+    defer decoded.deinit(allocator);
+    var headers: usize = 0;
+    var completed: usize = 0;
+    while (true) {
+        var output: [23]u8 = undefined;
+        const result = try reader.step(&output);
+        try decoded.appendSlice(allocator, output[0..result.progress.output_written]);
+        switch (result.status) {
+            .entry_header => headers += 1,
+            .entry_done => completed += 1,
+            .done => break,
+            .need_output => {},
+            .need_input => return error.TestUnexpectedResult,
+        }
+    }
+    try reader.finish();
+    try std.testing.expectEqual(entries.len, headers);
+    try std.testing.expectEqual(entries.len, completed);
+    try std.testing.expectEqual(aes_payload.len + traditional_payload.len, decoded.items.len);
+    try std.testing.expectEqualSlices(u8, aes_payload, decoded.items[0..aes_payload.len]);
+    try std.testing.expectEqualSlices(u8, traditional_payload, decoded.items[aes_payload.len..]);
+
+    var missing_password = try SplitIncrementalReader.initAlloc(
+        allocator,
+        &fixture.parts,
+        .{ .input_buffer_size = 19 },
+    );
+    defer missing_password.deinit();
+    try std.testing.expectError(
+        error.PasswordRequired,
+        drainSplitIncrementalReader(&missing_password),
+    );
+
+    var wrong_password = try SplitIncrementalReader.initAlloc(
+        allocator,
+        &fixture.parts,
+        .{
+            .reader_options = .{ .password = "wrong" },
+            .input_buffer_size = 19,
+        },
+    );
+    defer wrong_password.deinit();
+    try std.testing.expectError(
+        error.InvalidZipPassword,
+        drainSplitIncrementalReader(&wrong_password),
+    );
+}
+
+test "ZIP split archive accepts empty ZIP32 and ZIP64 disk sets" {
+    inline for (.{ Zip64Mode.never, .always }) |zip64_mode| {
+        var fixture = try makeEmptySplitTestFixture(std.testing.allocator, zip64_mode);
+        defer fixture.deinit();
+        var owned = try parseSplitArchiveAlloc(
+            std.testing.allocator,
+            &fixture.parts,
+            .{},
+        );
+        defer owned.deinit();
+        try std.testing.expectEqual(@as(usize, 0), owned.archive.entry_count);
+        var reader = try SplitIncrementalReader.initAlloc(
+            std.testing.allocator,
+            &fixture.parts,
+            .{ .input_buffer_size = 1 },
+        );
+        defer reader.deinit();
+        var output: [1]u8 = undefined;
+        const result = try reader.step(&output);
+        try std.testing.expectEqual(IncrementalReaderStepResult.Status.done, result.status);
+        try std.testing.expectEqual(@as(usize, 0), result.progress.output_written);
+        try reader.finish();
     }
 }
 
