@@ -24,6 +24,7 @@ pub fn main(init: std.process.Init) !void {
     var implode_large = true;
     var implode_literal_tree = true;
     var implode_mode = false;
+    var implode_descriptor_mode = false;
     var dcl_dictionary_bits: u3 = 6;
     var dcl_literal_coded = true;
     var dcl_mode = false;
@@ -36,7 +37,11 @@ pub fn main(init: std.process.Init) !void {
             ppmd_cutoff = true;
         } else if (std.mem.startsWith(u8, value, "implode-")) {
             implode_mode = true;
-            const specification = value["implode-".len..];
+            var specification: []const u8 = value["implode-".len..];
+            if (std.mem.endsWith(u8, specification, "-descriptor")) {
+                implode_descriptor_mode = true;
+                specification = specification[0 .. specification.len - "-descriptor".len];
+            }
             if (std.mem.startsWith(u8, specification, "4k-"))
                 implode_large = false
             else if (!std.mem.startsWith(u8, specification, "8k-"))
@@ -133,11 +138,14 @@ pub fn main(init: std.process.Init) !void {
     try bytes.appendSlice(init.gpa, "MZ-VORT-ZIP-PREFIX\n");
     const selected_entries: []const vort.ZipEncodeEntry = if (reduce_mode or reduce_descriptor_mode)
         entries[3..7]
+    else if (implode_mode)
+        entries[2..3]
     else
         &entries;
     _ = try vort.zipEncodeAppend(init.gpa, &bytes, selected_entries, .{
         .archive_comment = "vort zip writer differential",
-        .data_descriptor = reduce_descriptor_mode or !(implode_mode or reduce_mode or dcl_mode),
+        .data_descriptor = implode_descriptor_mode or reduce_descriptor_mode or
+            !(implode_mode or reduce_mode or dcl_mode),
         .zip64 = zip64,
         .implode_options = .{
             .dictionary = if (implode_large) .large_8k else .small_4k,

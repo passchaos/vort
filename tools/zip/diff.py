@@ -98,7 +98,7 @@ def make_legacy_payload(prefix_len: int, seed: int) -> bytes:
 
 def validate_python_archive_with_vort(
     cli: Path, temp: Path
-) -> tuple[int, int, int, int, int, int, int, int]:
+) -> tuple[int, int, int, int, int, int, int, int, int]:
     payloads = {
         "stored.bin": bytes(range(64)) + b"\x00stored\xff",
         "folder/deflated.txt": b"Vort ZIP deflate differential.\n" * 256,
@@ -310,6 +310,33 @@ def validate_python_archive_with_vort(
                 f"Vort sequential Apache Commons ZIP Shrink extraction mismatch for {name!r}"
             )
         incremental_archive_shrink_cases += 1
+
+    incremental_archive_implode_fixture_cases = 0
+    fixture_root = Path(__file__).resolve().parents[2] / "src/zip/testdata"
+    for fixture_name in (
+        "commons-compress-implode-4k-2trees.zip.b64",
+        "commons-compress-implode-8k-3trees.zip.b64",
+    ):
+        fixture_path = temp / fixture_name.removesuffix(".b64")
+        fixture_path.write_bytes(
+            binascii.a2b_base64((fixture_root / fixture_name).read_bytes())
+        )
+        with zipfile.ZipFile(fixture_path) as parsed:
+            info = parsed.infolist()[0]
+        output = temp / f"{fixture_path.stem}-stream.out"
+        run(
+            cli,
+            "extract-zip-stream-file",
+            str(fixture_path),
+            info.filename,
+            str(output),
+        )
+        actual = output.read_bytes()
+        if len(actual) != info.file_size or (binascii.crc32(actual) & 0xFFFFFFFF) != info.CRC:
+            raise AssertionError(
+                f"Vort sequential Apache Commons ZIP Implode extraction mismatch for {fixture_name}"
+            )
+        incremental_archive_implode_fixture_cases += 1
     local_offset = fixture.index(b"python-force-zip64.bin") - 30
     local_name_len = struct.unpack_from("<H", fixture, local_offset + 26)[0]
     local_extra_len = struct.unpack_from("<H", fixture, local_offset + 28)[0]
@@ -375,6 +402,7 @@ def validate_python_archive_with_vort(
         incremental_archive_deflate64_cases,
         incremental_archive_dcl_cases,
         incremental_archive_shrink_cases,
+        incremental_archive_implode_fixture_cases,
     )
 
 
@@ -597,33 +625,57 @@ def validate_vort_ppmd_cutoff_with_seven_zip(writer: Path, tool: str, temp: Path
             raise AssertionError("Vort ZIP PPMd writer omitted cut-off restore mode")
 
 
-def validate_vort_implode_modes_with_seven_zip(writer: Path, tool: str, temp: Path) -> int:
+def validate_vort_implode_modes(
+    cli: Path, writer: Path, tool: str | None, temp: Path
+) -> tuple[int, int]:
     expected = make_legacy_payload(5000, 0x193A72D5)
     sizes: dict[str, int] = {}
+    stream_cases = 0
+    external_cases = 0
     for dictionary, dictionary_flag in (("4k", 0), ("8k", 2)):
         for literals, literal_flag in (("raw", 0), ("tree", 4)):
             mode = f"implode-{dictionary}-{literals}"
-            archive = temp / f"vort-{mode}.zip"
-            run(writer, str(archive), mode)
-            actual = subprocess.run(
-                [tool, "x", "-so", "-bd", str(archive), "folder/implode.txt"],
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            ).stdout
-            if actual != expected:
-                raise AssertionError(f"7-Zip could not extract Vort ZIP {mode} entry")
-            with zipfile.ZipFile(archive) as parsed:
-                info = parsed.getinfo("folder/implode.txt")
-                if info.compress_type != 6:
-                    raise AssertionError("Vort Implode writer used the wrong method ID")
-                if (info.flag_bits & 6) != (dictionary_flag | literal_flag):
-                    raise AssertionError(f"Vort ZIP {mode} flags mismatch")
-                sizes[mode] = info.compress_size
+            for descriptor_mode in (False, True):
+                suffix = "-descriptor" if descriptor_mode else ""
+                archive = temp / f"vort-{mode}{suffix}.zip"
+                run(writer, str(archive), mode + suffix)
+                output = temp / f"vort-{mode}{suffix}-stream.out"
+                run(
+                    cli,
+                    "extract-zip-stream-file",
+                    str(archive),
+                    "folder/implode.txt",
+                    str(output),
+                )
+                if output.read_bytes() != expected:
+                    raise AssertionError(
+                        f"Vort sequential ZIP {mode}{suffix} extraction mismatch"
+                    )
+                stream_cases += 1
+                with zipfile.ZipFile(archive) as parsed:
+                    info = parsed.getinfo("folder/implode.txt")
+                    if info.compress_type != 6:
+                        raise AssertionError("Vort Implode writer used the wrong method ID")
+                    if (info.flag_bits & 6) != (dictionary_flag | literal_flag):
+                        raise AssertionError(f"Vort ZIP {mode}{suffix} flags mismatch")
+                    if bool(info.flag_bits & 8) != descriptor_mode:
+                        raise AssertionError(f"Vort ZIP {mode}{suffix} descriptor flag mismatch")
+                    if not descriptor_mode:
+                        sizes[mode] = info.compress_size
+                if tool is not None and not descriptor_mode:
+                    actual = subprocess.run(
+                        [tool, "x", "-so", "-bd", str(archive), "folder/implode.txt"],
+                        check=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    ).stdout
+                    if actual != expected:
+                        raise AssertionError(f"7-Zip could not extract Vort ZIP {mode} entry")
+                    external_cases += 1
     for literals in ("raw", "tree"):
         if sizes[f"implode-8k-{literals}"] >= sizes[f"implode-4k-{literals}"]:
             raise AssertionError("Vort 8 KiB Implode mode did not use its long-distance match")
-    return len(sizes)
+    return stream_cases, external_cases
 
 
 def validate_vort_reduce_modes(cli: Path, writer: Path, temp: Path) -> tuple[int, int]:
@@ -1186,6 +1238,7 @@ def main() -> None:
             incremental_archive_deflate64_cases,
             incremental_archive_dcl_cases,
             incremental_archive_shrink_cases,
+            incremental_archive_implode_fixture_cases,
         ) = validate_python_archive_with_vort(args.cli, temp)
         vort_zip32_bytes = validate_vort_archive_with_python(
             args.cli, args.writer, temp, False, seven_zip_tool
@@ -1205,7 +1258,9 @@ def main() -> None:
         )
         deflate64_cases = 0
         ppmd_cases = 0
-        implode_modes = 0
+        incremental_archive_implode_cases, implode_modes = validate_vort_implode_modes(
+            args.cli, args.writer, seven_zip_tool, temp
+        )
         reduce_methods, incremental_reduce_known_cases = validate_vort_reduce_modes(
             args.cli, args.writer, temp
         )
@@ -1215,9 +1270,6 @@ def main() -> None:
         if seven_zip_tool is not None:
             validate_seven_zip_xz_with_vort(args.cli, seven_zip_tool, temp)
             validate_vort_ppmd_cutoff_with_seven_zip(
-                args.writer, seven_zip_tool, temp
-            )
-            implode_modes = validate_vort_implode_modes_with_seven_zip(
                 args.writer, seven_zip_tool, temp
             )
             deflate64_cases = validate_seven_zip_deflate64_with_vort(
@@ -1238,6 +1290,8 @@ def main() -> None:
         f"incremental_archive_dcl_cases={incremental_archive_dcl_cases} "
         f"incremental_archive_shrink_cases={incremental_archive_shrink_cases} "
         f"incremental_archive_reduce_cases={incremental_reduce_known_cases} "
+        f"incremental_archive_implode_cases={incremental_archive_implode_cases} "
+        f"incremental_archive_implode_fixture_cases={incremental_archive_implode_fixture_cases} "
         f"vort_zip32_bytes={vort_zip32_bytes} vort_zip64_bytes={vort_zip64_bytes} "
         f"incremental_entries={len(INCREMENTAL_PAYLOADS)} "
         f"incremental_zip32_bytes={incremental_zip32_bytes} "
