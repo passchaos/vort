@@ -5,6 +5,7 @@ const deflate = @import("../../deflate.zig");
 const deflate64 = @import("../../deflate64.zig");
 const lzma_codec = @import("lzma_codec.zig");
 const ppmd_codec = @import("ppmd_codec.zig");
+const shrink = @import("../shrink.zig");
 const types = @import("../types.zig");
 const zstd = @import("../../zstd.zig");
 const xz = @import("../../xz.zig");
@@ -18,8 +19,9 @@ pub const LzmaOptions = lzma_codec.Options;
 pub const XzOptions = xz.IncrementalEncoder.Options;
 pub const XzFilter = xz.Filter;
 pub const PpmdOptions = ppmd_codec.Options;
+pub const ShrinkOptions = shrink.IncrementalEncoder.Options;
 
-pub const Error = deflate.Error || deflate64.Error || bzip2.IncrementalEncoder.Error || zstd.Error || lzma_codec.Error || xz.IncrementalEncoder.Error || ppmd_codec.Error || std.mem.Allocator.Error || error{
+pub const Error = deflate.Error || deflate64.Error || bzip2.IncrementalEncoder.Error || zstd.Error || lzma_codec.Error || xz.IncrementalEncoder.Error || ppmd_codec.Error || shrink.Error || std.mem.Allocator.Error || error{
     UnsupportedZipCompressionMethod,
 };
 
@@ -32,6 +34,7 @@ pub const Options = struct {
     lzma: LzmaOptions,
     xz: XzOptions,
     ppmd: PpmdOptions,
+    shrink: ShrinkOptions,
 };
 
 pub const State = union(enum) {
@@ -43,6 +46,7 @@ pub const State = union(enum) {
     lzma: lzma_codec.State,
     xz: xz.IncrementalEncoder,
     ppmd: ppmd_codec.State,
+    shrink: shrink.IncrementalEncoder,
 
     const Self = @This();
 
@@ -124,6 +128,17 @@ pub const State = union(enum) {
                 options.ppmd,
                 expected_size,
             ) },
+            .shrink => .{ .shrink = if (expected_size) |expected|
+                try shrink.IncrementalEncoder.initExactSize(
+                    allocator,
+                    options.shrink,
+                    @intCast(expected),
+                )
+            else
+                try shrink.IncrementalEncoder.initWithOptions(
+                    allocator,
+                    options.shrink,
+                ) },
             else => error.UnsupportedZipCompressionMethod,
         };
     }
@@ -138,6 +153,7 @@ pub const State = union(enum) {
             .lzma => |*encoder| encoder.deinit(),
             .xz => |*encoder| encoder.deinit(),
             .ppmd => |*encoder| encoder.deinit(),
+            .shrink => |*encoder| encoder.deinit(),
         }
         self.* = undefined;
     }
@@ -152,6 +168,7 @@ pub const State = union(enum) {
             .lzma => |*encoder| encoder.finish(),
             .xz => |*encoder| encoder.finish(),
             .ppmd => |*encoder| encoder.finish(),
+            .shrink => |*encoder| encoder.finish(),
         }
     }
 
@@ -165,6 +182,7 @@ pub const State = union(enum) {
             .lzma => |*encoder| encoder.step(input, output),
             .xz => |*encoder| encoder.step(input, output),
             .ppmd => |*encoder| encoder.step(input, output),
+            .shrink => |*encoder| encoder.step(input, output),
         };
     }
 };
@@ -215,6 +233,11 @@ pub fn validate(
             try validateExpectedSize(expected_size, options.xz.max_input_len);
         },
         .ppmd => try ppmd_codec.validateOptions(options.ppmd, expected_size),
+        .shrink => {
+            if (options.shrink.max_pending_output_len == 0)
+                return error.OutputLimitExceeded;
+            try validateExpectedSize(expected_size, options.shrink.max_input_len);
+        },
         else => return error.UnsupportedZipCompressionMethod,
     }
 }
@@ -228,6 +251,7 @@ pub fn inputLimit(method: CompressionMethod, options: Options) ?usize {
         .lzma => options.lzma.max_input_len,
         .xz => options.xz.max_input_len,
         .ppmd => options.ppmd.max_input_len,
+        .shrink => options.shrink.max_input_len,
         else => null,
     };
 }
