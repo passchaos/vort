@@ -26,6 +26,7 @@ const shrink_incremental_tests = @import("zip/shrink_incremental_tests.zig");
 const shrink_incremental_encoder_tests = @import("zip/shrink_incremental_encoder_tests.zig");
 const split = @import("zip/split.zig");
 const split_incremental_reader = @import("zip/split_incremental_reader.zig");
+const split_writer = @import("zip/split_writer.zig");
 const traditional_encryption = @import("vail_archive_crypto").zipcrypto;
 const winzip_aes = @import("vail_archive_crypto").winzip_aes;
 const types = @import("zip/types.zig");
@@ -35,7 +36,7 @@ pub const incremental_writer = @import("zip/incremental_writer.zig");
 pub const incremental_entry_decoder = @import("zip/incremental_entry_decoder.zig");
 pub const incremental_reader = @import("zip/incremental_reader.zig");
 
-pub const Error = writer.Error || split.Error || bzip2.Error || dcl_implode.Error || deflate64.Error || implode.Error || lzma.Error || ppmd8.Error || reduce.Error || shrink.Error || xz.Error || zstd.Error || error{
+pub const Error = writer.Error || split.Error || split_writer.Error || bzip2.Error || dcl_implode.Error || deflate64.Error || implode.Error || lzma.Error || ppmd8.Error || reduce.Error || shrink.Error || xz.Error || zstd.Error || error{
     InvalidZipArchive,
     UnsupportedZipFeature,
     EncryptedZipEntry,
@@ -64,6 +65,9 @@ pub const SplitNormalizedStream = split.NormalizedStream;
 pub const SplitIncrementalReader = split_incremental_reader.Reader;
 pub const SplitIncrementalReaderOptions = split_incremental_reader.Options;
 pub const SplitIncrementalReaderError = split_incremental_reader.Error;
+pub const SplitEncodeOptions = split_writer.Options;
+pub const SplitEncodedArchive = split_writer.EncodedArchive;
+pub const SplitWriterError = split_writer.Error;
 pub const IncrementalWriter = incremental_writer.Writer;
 pub const IncrementalWriterError = incremental_writer.Error;
 pub const IncrementalWriterOptions = incremental_writer.Options;
@@ -100,6 +104,7 @@ pub const ImplodeIncrementalWorkspace = implode.IncrementalWorkspace;
 pub const ImplodeIncrementalEncoder = implode_incremental_encoder.Encoder;
 pub const encodeAlloc = writer.encodeAlloc;
 pub const encodeAppend = writer.encodeAppend;
+pub const encodeSplitAlloc = split_writer.encodeAlloc;
 
 test "ZIP incremental writer test suite" {
     _ = incremental_writer;
@@ -1251,6 +1256,20 @@ const SplitReaderAllocationTest = struct {
     }
 };
 
+const SplitWriterAllocationTest = struct {
+    fn run(allocator: std.mem.Allocator) !void {
+        const entries = [_]EncodeEntry{.{
+            .name = "oom.bin",
+            .data = "split writer allocation coverage" ** 4,
+            .method = .stored,
+        }};
+        var encoded = try encodeSplitAlloc(allocator, &entries, .{
+            .max_part_size = 80,
+        });
+        defer encoded.deinit();
+    }
+};
+
 fn makeSplitTestFixture(
     allocator: std.mem.Allocator,
     source: []const u8,
@@ -1733,6 +1752,199 @@ test "ZIP split archive accepts empty ZIP32 and ZIP64 disk sets" {
         try std.testing.expectEqual(@as(usize, 0), result.progress.output_written);
         try reader.finish();
     }
+}
+
+test "ZIP split writer plans standard atomic records and round trips" {
+    const allocator = std.testing.allocator;
+    const payload = try allocator.alloc(u8, 128 * 1024);
+    defer allocator.free(payload);
+    var state: u32 = 0x51a7_2026;
+    var block: usize = 0;
+    while (block < payload.len / 128) : (block += 1) {
+        for (0..64) |index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            const value: u8 = @truncate(state >> 24);
+            payload[block * 128 + index] = value;
+            payload[block * 128 + 64 + index] = value;
+        }
+    }
+    const entries = [_]EncodeEntry{
+        .{ .name = "crossing.bin", .data = payload, .method = .deflate },
+        .{ .name = "tail.bin", .data = "split writer stored tail" ** 97, .method = .stored },
+    };
+    inline for (.{ false, true }) |descriptor| {
+        inline for (.{ Zip64Mode.never, .always }) |zip64_mode| {
+            const options: SplitEncodeOptions = .{
+                .zip_options = .{
+                    .archive_comment = "split writer comment",
+                    .data_descriptor = descriptor,
+                    .zip64 = zip64_mode,
+                },
+                .max_part_size = 4096,
+            };
+            var encoded = try encodeSplitAlloc(allocator, &entries, options);
+            defer encoded.deinit();
+            var repeated = try encodeSplitAlloc(allocator, &entries, options);
+            defer repeated.deinit();
+            try std.testing.expect(encoded.parts.len > 2);
+            try std.testing.expectEqual(encoded.parts.len, repeated.parts.len);
+            try std.testing.expectEqualSlices(u8, encoded.bytes, repeated.bytes);
+            for (encoded.parts, repeated.parts) |part, repeated_part| {
+                try std.testing.expect(part.len <= options.max_part_size);
+                try std.testing.expectEqual(part.len, repeated_part.len);
+            }
+            try std.testing.expectEqual(
+                @as(u32, wire.data_descriptor_signature),
+                std.mem.readInt(u32, encoded.parts[0][0..4], .little),
+            );
+
+            var archive = try parseSplitArchiveAlloc(allocator, encoded.parts, .{});
+            defer archive.deinit();
+            try std.testing.expectEqual(entries.len, archive.archive.entry_count);
+            try std.testing.expectEqualSlices(
+                u8,
+                "split writer comment",
+                archive.archive.comment,
+            );
+            for (entries, 0..) |expected, index| {
+                const decoded = try archive.archive.extractAlloc(
+                    allocator,
+                    try archive.archive.entryAt(index),
+                );
+                defer allocator.free(decoded);
+                try std.testing.expectEqualSlices(u8, expected.data, decoded);
+            }
+            var stream_reader = try SplitIncrementalReader.initAlloc(
+                allocator,
+                encoded.parts,
+                .{ .input_buffer_size = 127 },
+            );
+            defer stream_reader.deinit();
+            try drainSplitIncrementalReader(&stream_reader);
+        }
+    }
+
+    var single = try encodeSplitAlloc(allocator, &entries, .{
+        .max_part_size = 1024 * 1024,
+    });
+    defer single.deinit();
+    try std.testing.expectEqual(@as(usize, 1), single.parts.len);
+    const single_archive = try parse(single.parts[0]);
+    try std.testing.expectEqual(entries.len, single_archive.entry_count);
+
+    inline for (.{ Zip64Mode.never, .always }) |zip64_mode| {
+        var empty = try encodeSplitAlloc(allocator, &.{}, .{
+            .zip_options = .{ .zip64 = zip64_mode },
+            .max_part_size = 128,
+        });
+        defer empty.deinit();
+        try std.testing.expectEqual(@as(usize, 1), empty.parts.len);
+        try std.testing.expectEqual(
+            @as(usize, 0),
+            (try parse(empty.parts[0])).entry_count,
+        );
+    }
+
+    try std.testing.expectError(
+        error.InvalidZipSplitSize,
+        encodeSplitAlloc(allocator, &entries, .{ .max_part_size = 3 }),
+    );
+    try std.testing.expectError(
+        error.InvalidZipSplitSize,
+        encodeSplitAlloc(allocator, &entries, .{ .max_part_size = 16 }),
+    );
+    try std.testing.expectError(
+        error.ZipSplitLimitExceeded,
+        encodeSplitAlloc(allocator, &entries, .{
+            .max_part_size = 4096,
+            .max_parts = 1,
+        }),
+    );
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        encodeSplitAlloc(allocator, &entries, .{
+            .max_archive_size = 1,
+        }),
+    );
+    try std.testing.expectError(
+        error.ZipSplitLimitExceeded,
+        encodeSplitAlloc(allocator, &entries, .{
+            .max_parts = @as(usize, std.math.maxInt(u16)) + 1,
+        }),
+    );
+    try std.testing.checkAllAllocationFailures(
+        allocator,
+        SplitWriterAllocationTest.run,
+        .{},
+    );
+}
+
+test "ZIP split writer composes WinZip AES and ZipCrypto" {
+    const allocator = std.testing.allocator;
+    const password = "split writer encryption password";
+    const salt = [_]u8{0xa5} ** 16;
+    const entries = [_]EncodeEntry{
+        .{
+            .name = "aes.txt",
+            .data = "split writer authenticated data" ** 43,
+            .method = .deflate,
+            .winzip_aes = .{
+                .password = password,
+                .salt = &salt,
+                .strength = .aes256,
+                .version = .ae2,
+            },
+        },
+        .{
+            .name = "legacy.bin",
+            .data = "split writer encrypted stored tail" ** 11,
+            .method = .stored,
+            .traditional_encryption = .{
+                .password = password,
+                .header_random = .{ 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0 },
+            },
+        },
+    };
+    var encoded = try encodeSplitAlloc(allocator, &entries, .{
+        .zip_options = .{
+            .data_descriptor = true,
+            .zip64 = .always,
+        },
+        .max_part_size = 128,
+    });
+    defer encoded.deinit();
+    try std.testing.expect(encoded.parts.len > 2);
+    var archive = try parseSplitArchiveAlloc(allocator, encoded.parts, .{});
+    defer archive.deinit();
+    for (entries, 0..) |expected, index| {
+        const entry = try archive.archive.entryAt(index);
+        try std.testing.expect(entry.isEncrypted());
+        try std.testing.expectError(
+            error.InvalidZipPassword,
+            archive.archive.extractAllocWithOptions(
+                allocator,
+                entry,
+                .{ .password = "wrong" },
+            ),
+        );
+        const decoded = try archive.archive.extractAllocWithOptions(
+            allocator,
+            entry,
+            .{ .password = password },
+        );
+        defer allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, expected.data, decoded);
+    }
+    var stream_reader = try SplitIncrementalReader.initAlloc(
+        allocator,
+        encoded.parts,
+        .{
+            .reader_options = .{ .password = password },
+            .input_buffer_size = 29,
+        },
+    );
+    defer stream_reader.deinit();
+    try drainSplitIncrementalReader(&stream_reader);
 }
 
 test "ZIP writer appends a valid archive after a prefix and rejects inputs transactionally" {
