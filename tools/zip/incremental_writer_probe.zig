@@ -67,6 +67,8 @@ pub fn main(init: std.process.Init) !void {
     const unknown_reduce_3 = "unknown Reduce factor 3 incremental ZIP payload.\n" ** 61;
     const known_reduce_4 = "known Reduce factor 4 incremental ZIP payload.\n" ** 79;
     const unknown_reduce_4 = "unknown Reduce factor 4 incremental ZIP payload.\n" ** 63;
+    const known_implode = "known traditional Implode incremental ZIP payload.\n" ** 83;
+    const unknown_implode = "unknown traditional Implode incremental ZIP payload.\n" ** 67;
     const entries = [_]Entry{
         .{
             .name = "known-stored.bin",
@@ -321,6 +323,24 @@ pub fn main(init: std.process.Init) !void {
             .name = "empty-reduce-4.bin",
             .data = "",
             .method = .reduce_4,
+            .expected_size = 0,
+        },
+        .{
+            .name = "known-implode.txt",
+            .data = known_implode,
+            .method = .implode,
+            .expected_size = known_implode.len,
+        },
+        .{
+            .name = "unknown-implode.txt",
+            .data = unknown_implode,
+            .method = .implode,
+            .expected_size = null,
+        },
+        .{
+            .name = "empty-implode.bin",
+            .data = "",
+            .method = .implode,
             .expected_size = 0,
         },
     };

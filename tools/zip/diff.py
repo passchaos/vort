@@ -915,6 +915,9 @@ INCREMENTAL_PAYLOADS = {
     "known-reduce-4.txt": b"known Reduce factor 4 incremental ZIP payload.\n" * 79,
     "unknown-reduce-4.txt": b"unknown Reduce factor 4 incremental ZIP payload.\n" * 63,
     "empty-reduce-4.bin": b"",
+    "known-implode.txt": b"known traditional Implode incremental ZIP payload.\n" * 83,
+    "unknown-implode.txt": b"unknown traditional Implode incremental ZIP payload.\n" * 67,
+    "empty-implode.bin": b"",
 }
 INCREMENTAL_METHODS = {
     "known-stored.bin": zipfile.ZIP_STORED,
@@ -959,6 +962,9 @@ INCREMENTAL_METHODS = {
     "known-reduce-4.txt": 5,
     "unknown-reduce-4.txt": 5,
     "empty-reduce-4.bin": 5,
+    "known-implode.txt": 6,
+    "unknown-implode.txt": 6,
+    "empty-implode.bin": 6,
 }
 
 
@@ -1094,8 +1100,11 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
             raise AssertionError(f"incremental central flags omit bit 3/11 for {name!r}")
         if method != INCREMENTAL_METHODS[name] or disk_start != 0:
             raise AssertionError(f"incremental central method/disk mismatch for {name!r}")
-        if bool(flags & 0x0002) != (method == zipfile.ZIP_LZMA):
-            raise AssertionError(f"incremental central LZMA EOS flag mismatch for {name!r}")
+        expected_codec_flags = (
+            0x0006 if method == 6 else 0x0002 if method == zipfile.ZIP_LZMA else 0
+        )
+        if flags & 0x0006 != expected_codec_flags:
+            raise AssertionError(f"incremental central codec flags mismatch for {name!r}")
         expected_crc = binascii.crc32(expected_payload) & 0xFFFFFFFF
         if crc32 != expected_crc:
             raise AssertionError(f"incremental central CRC mismatch for {name!r}")
@@ -1179,8 +1188,11 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
             raise AssertionError(f"incremental local flags omit bit 3/11 for {name!r}")
         if method != entry["method"] or crc32 != 0:
             raise AssertionError(f"incremental local method/CRC placeholder mismatch for {name!r}")
-        if bool(flags & 0x0002) != (method == zipfile.ZIP_LZMA):
-            raise AssertionError(f"incremental local LZMA EOS flag mismatch for {name!r}")
+        expected_codec_flags = (
+            0x0006 if method == 6 else 0x0002 if method == zipfile.ZIP_LZMA else 0
+        )
+        if flags & 0x0006 != expected_codec_flags:
+            raise AssertionError(f"incremental local codec flags mismatch for {name!r}")
         fields = parse_extra_fields(extra, f"local entry {name!r}")
         expected_needed = (
             63
@@ -1220,6 +1232,16 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
             raise AssertionError(f"incremental DCL Implode header mismatch for {name!r}")
         if method in (2, 3, 4, 5) and raw[data_offset : data_offset + 192] != bytes(192):
             raise AssertionError(f"incremental Reduce follower header mismatch for {name!r}")
+        implode_header = (
+            bytes((15,))
+            + bytes((0xF7,)) * 16
+            + (bytes((3,)) + bytes((0xF5,)) * 4) * 2
+        )
+        if (
+            method == 6
+            and raw[data_offset : data_offset + len(implode_header)] != implode_header
+        ):
+            raise AssertionError(f"incremental Implode tree header mismatch for {name!r}")
         descriptor_end = descriptor_offset + descriptor_len
         if descriptor_end > len(raw):
             raise AssertionError(f"truncated incremental descriptor for {name!r}")
@@ -1316,7 +1338,7 @@ def validate_incremental_writer_archive(
                     raw[data_offset : data_offset + info.compress_size],
                     -15,
                 )
-            elif info.compress_type in (1, 2, 3, 4, 5, 10, 98):
+            elif info.compress_type in (1, 2, 3, 4, 5, 6, 10, 98):
                 output = temp / f"incremental-{suffix}-{name}.out"
                 run(
                     cli,
@@ -1337,7 +1359,7 @@ def validate_incremental_writer_archive(
             payload
             for name, payload in INCREMENTAL_PAYLOADS.items()
             if INCREMENTAL_METHODS[name]
-            in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED, zipfile.ZIP_BZIP2, 9, 1)
+            in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED, zipfile.ZIP_BZIP2, 9, 1, 6)
         )
         extracted = subprocess.run(
             [unzip_tool, "-p", str(one_byte_path)],
