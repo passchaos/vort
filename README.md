@@ -280,8 +280,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   multi-entry encoding/extraction (including fixed-Huffman or stored
   Deflate64 output with the extended 64 KiB distance alphabet),
   transactional one-shot prefix append plus caller-output incremental
-  Stored/raw-Deflate/stored-Deflate64/Bzip2/LZMA/XZ/PPMd/Zstandard-20/93 writing with signed data descriptors, known or unknown
-  size pledges, ZIP32/ZIP64 policy, SFX offsets, and payload-bounded memory;
+  writing for every listed method, including per-entry Traditional ZipCrypto,
+  signed data descriptors, known or unknown size pledges, ZIP32/ZIP64 policy,
+  SFX offsets, and payload-bounded memory;
   archive/entry comments, CRC-32/size validation, UTF-8 flags, per-entry
   Traditional ZipCrypto one-shot writing/reading backed by Vail's dedicated
   archive-crypto package with explicit caller-supplied header entropy and
@@ -1712,6 +1713,8 @@ result makes the incremental wire byte-identical to the trained one-shot path.
 Traditional Implode retains its selected 4/8 KiB history, at most 323 bytes of
 lookahead, fixed Shannon–Fano tree header, rolling matcher and bounded pending
 bits. Raw/tree literal modes share the same single-pass core.
+Encrypted incremental entries retain only Vail's three-key cipher state and
+the 12-byte header; codec bytes are encrypted in place in caller output.
 Memory therefore scales with those bounds plus central-directory
 metadata, not with the complete archive.
 Archive comments are copied by initialization, and names/comments by
@@ -1737,8 +1740,9 @@ validation errors from `beginEntry` and a premature short `finishEntry` remain
 recoverable. The existing one-shot `zipEncodeAppend` retains its transactional
 guarantee and broader method support. Every compression method currently
 supported by the sequential reader now has a bounded incremental writer.
-Incremental encryption, WinZip AES, and multi-disk archives remain unsupported.
-The one-shot surface supports per-entry Traditional ZipCrypto. See
+The incremental writer and one-shot surface support per-entry Traditional
+ZipCrypto. Sequential-reader encryption, WinZip AES, and multi-disk archives
+remain unsupported. See
 [the ZIP format status](docs/formats/zip.md) for the full state and wire
 contract. Writer-specific additive errors are exposed separately as
 `ZipIncrementalWriterError`; the established `ZipError` set is unchanged.
@@ -1803,7 +1807,10 @@ Missing/wrong passwords, encrypted-header corruption, ciphertext corruption,
 deterministic caller entropy and allocation failures are required coverage.
 The reusable cipher and secure-memory handling come from `../vail/archive_crypto`;
 Vort owns only ZIP wire policy and codec composition.
-Focused writer tests pass 71/71; the DCL, Reduce and Legacy Implode encoder
+The incremental writer adds six known/unknown/empty ZIP32/ZIP64 cases in
+separate deterministic archives (1,695/1,939 bytes), decoded independently by
+Python, Vort's one-shot reader, and Info-ZIP.
+Focused writer tests pass 72/72; the DCL, Reduce and Legacy Implode encoder
 suites pass 4/4 each, and the
 incremental entry decoder suite passes
 15/15, the DCL Implode, Shrink, Reduce and Legacy Implode incremental decoder
@@ -1817,7 +1824,7 @@ signed/unsigned descriptors, ZIP32/ZIP64, arbitrary tree descriptions,
 implicit-zero and overlapping matches. PPMd restart/cut-off,
 descriptor and ZIP64 paths are required Vort coverage; third-party PPMd remains
 unclaimed because this host has no 7z/7zz and Python has no method-98 codec.
-The full repository graph passes 2700/2700 and `zig build check` passes 113/113.
+The full repository graph passes 2701/2701 and `zig build check` passes 113/113.
 The refactored one-shot writer remains byte-identical to HEAD across 14 probe
 modes. The current host has no 7z/7zz, so that optional extraction branch is
 reported as skipped rather than passed.

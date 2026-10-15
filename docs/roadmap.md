@@ -20379,3 +20379,22 @@ reuse, so production keeps the simpler independently owned plans.
   ZipCrypto is unauthenticated legacy
   compatibility; incremental encryption and WinZip AES remain explicit next
   functionality increments.
+
+- Extended `ZipIncrementalWriter` with per-entry Traditional ZipCrypto using
+  the same Vail archive-crypto `Cipher`. `beginEntry` consumes the password and
+  copies 11 caller entropy bytes, emits a bit-3/time-check encrypted header
+  immediately after the local record, initializes compressed-size accounting
+  at 12 bytes, and encrypts Stored or codec output in place under arbitrary
+  caller backpressure. No plaintext member or compressed block is added beyond
+  each codec's established bounds. Known/unknown/empty Stored/Deflate entries,
+  one-byte deterministic output, ZIP32/ZIP64 policy, wrong passwords and
+  allocation failures pass focused tests; the writer suite grows to 72/72.
+  Separate ZIP32/ZIP64 archives add six required cases decoded by Python,
+  Vort's one-shot reader and Info-ZIP
+  (`incremental_zipcrypto_cases=6`, 1,695/1,939 bytes). The main 45-entry
+  archive remains unencrypted so the complete sequential reader continues to
+  validate it end-to-end. The ZIP differential remains 13/13, the full Vort
+  graph passes 2701/2701, and `zig build check` passes all 113 steps.
+  Sequential-reader encryption still requires a raw-descriptor-tail
+  transactional adapter for non-self-delimiting codecs and is not implied by
+  this writer completion.

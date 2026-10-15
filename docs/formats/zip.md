@@ -107,6 +107,14 @@ Traditional ZipCrypto is legacy compatibility, not authenticated modern
 encryption; applications requiring confidentiality and integrity should use a
 WinZip-AES-capable surface.
 
+`ZipIncrementalEntryOptions.traditional_encryption` uses the same Vail state.
+Because every incremental entry has bit 3, the writer encrypts the 12-byte
+header with the deterministic DOS-time high-byte check before accepting input,
+then encrypts Stored or codec output directly in the caller's output slice.
+Compressed-size and ZIP64 policy include the 12-byte header. Password slices
+are consumed by `beginEntry`; only derived key state and copied header bytes
+survive the call.
+
 ## Incremental entry decoder
 
 `ZipIncrementalEntryDecoder` is the caller-memory data plane for a single
@@ -438,9 +446,9 @@ The incremental writer's additive error set is exported as
 one-shot and reader APIs is unchanged.
 
 Every compression method currently supported by the sequential reader has a
-bounded incremental writer. Incremental encryption, WinZip AES, and multi-disk/
-split archives remain unsupported; the one-shot surface supports Traditional
-ZipCrypto.
+bounded incremental writer. The incremental writer also supports Traditional
+ZipCrypto. Sequential-reader encryption, WinZip AES, and multi-disk/split
+archives remain unsupported.
 
 The incremental differential uses forty-five entries: known Stored data containing a
 descriptor-signature byte sequence, unknown Stored data containing two such
@@ -494,6 +502,9 @@ all four 4/8 KiB × raw/tree modes plus the two Apache Commons fixtures.
 Traditional ZipCrypto adds four Vort-to-Python/Info-ZIP Stored/Deflate cases
 covering CRC- and descriptor-time verification bytes, plus two independently
 written Info-ZIP-to-Vort cases. Wrong passwords must fail in both directions.
+Separate incremental ZIP32/ZIP64 archives add six known/unknown/empty encrypted
+writer cases. One-byte and micro-output schedules are byte-identical; Python,
+Vort one-shot extraction and Info-ZIP decode the 1,695/1,939-byte archives.
 The aggregate reports 13/13 ZIP differential steps. The Python-to-Vort half
 also decodes five
 Stored/Deflate members through `ZipOwnedIncrementalEntryDecoder` with 3-byte
@@ -524,7 +535,7 @@ is not claimed as validation. Info-ZIP coverage uses `unzip -p` for
 contents, not pathname rendering; its 6.00 ZIP32 UTF-8 filename rendering issue
 also affects the pre-existing one-shot output and is not claimed as fixed here.
 
-`zig test src/root.zig --test-filter 'ZIP incremental writer'` passes 71/71;
+`zig test src/root.zig --test-filter 'ZIP incremental writer'` passes 72/72;
 `zig test src/zip.zig --test-filter 'DCL Implode incremental encoder'` passes
 4/4;
 `zig test src/zip.zig --test-filter 'Reduce incremental encoder'` passes 4/4;
@@ -546,7 +557,7 @@ implicit-zero and overlapping matches. PPMd
 restart/cut-off, descriptor and ZIP64 combinations are required
 Vort coverage. Third-party method-98 evidence remains explicitly unavailable:
 Python `zipfile` has no PPMd codec and this host has no 7z/7zz. The full
-repository graph passes 2700/2700 and `zig build check` passes 113/113.
+repository graph passes 2701/2701 and `zig build check` passes 113/113.
 The wire refactor also leaves 14 one-shot probe modes byte-identical to HEAD,
 including every existing method and ZIP32/ZIP64 descriptor choice. Default and
 forced-ZIP64 SHA-256 values remain
@@ -639,7 +650,7 @@ archives, malformed/duplicate ZIP64 extra fields, and compression methods other 
 stored/Shrink/Reduce1-4/Implode/Deflate/Deflate64/DCL-Implode/Bzip2/LZMA/
 Zstandard-20/Zstandard-93/XZ/PPMd with specific errors.
 Addressable entry and archive sizes remain bounded by the target's `usize` and
-the caller's available memory. Incremental/WinZip-AES encryption, split
+the caller's available memory. Sequential-reader/WinZip-AES encryption, split
 archives, and additional entry compression methods remain explicit future
 compatibility increments.
 
