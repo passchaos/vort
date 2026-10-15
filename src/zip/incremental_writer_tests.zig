@@ -13,7 +13,7 @@ const TestEntry = struct {
     comment: []const u8 = "",
 };
 
-test "ZIP incremental writer round trips known and unknown Stored Deflate Bzip2 and Zstd entries" {
+test "ZIP incremental writer round trips known and unknown common codec entries" {
     const allocator = std.testing.allocator;
     const repetitive = "incremental raw deflate data\n" ** 96;
     const entries = [_]TestEntry{
@@ -25,9 +25,12 @@ test "ZIP incremental writer round trips known and unknown Stored Deflate Bzip2 
         .{ .name = "unknown-bzip2.txt", .data = "unknown bzip2 payload" ** 61, .method = .bzip2, .expected_size = null },
         .{ .name = "known-zstd.txt", .data = "known zstd payload" ** 83, .method = .zstandard, .expected_size = ("known zstd payload" ** 83).len },
         .{ .name = "unknown-zstd-legacy.txt", .data = "unknown legacy zstd payload" ** 59, .method = .zstandard_legacy, .expected_size = null },
+        .{ .name = "known-lzma.txt", .data = "known lzma payload" ** 71, .method = .lzma, .expected_size = ("known lzma payload" ** 71).len },
+        .{ .name = "unknown-lzma.txt", .data = "unknown lzma payload" ** 57, .method = .lzma, .expected_size = null },
         .{ .name = "empty", .data = "", .method = .stored, .expected_size = 0 },
         .{ .name = "empty-bzip2", .data = "", .method = .bzip2, .expected_size = 0 },
         .{ .name = "empty-zstd", .data = "", .method = .zstandard, .expected_size = 0 },
+        .{ .name = "empty-lzma", .data = "", .method = .lzma, .expected_size = 0 },
     };
     const bytes = try encodeEntries(allocator, &entries, .{ .archive_comment = "streamed" }, 7, 5);
     defer allocator.free(bytes);
@@ -56,6 +59,7 @@ test "ZIP incremental writer handles one-byte input and output and is determinis
         .{ .name = "deflate.txt", .data = "deterministic stream" ** 200, .method = .deflate, .expected_size = null },
         .{ .name = "bzip2.txt", .data = "deterministic Bzip2 stream" ** 79, .method = .bzip2, .expected_size = null },
         .{ .name = "zstd.txt", .data = "deterministic Zstd stream" ** 91, .method = .zstandard, .expected_size = null },
+        .{ .name = "lzma.txt", .data = "deterministic LZMA stream" ** 67, .method = .lzma, .expected_size = null },
     };
     const tiny = try encodeEntries(allocator, &entries, .{}, 1, 1);
     defer allocator.free(tiny);
@@ -106,6 +110,7 @@ test "ZIP incremental writer emits precise ZIP32 and conservative ZIP64 layouts"
         .{ .name = "deflated", .data = "aaaaaaaa", .method = .deflate, .expected_size = 8 },
         .{ .name = "bzip2", .data = "bbbbbbbb", .method = .bzip2, .expected_size = 8 },
         .{ .name = "zstd", .data = "zzzzzzzz", .method = .zstandard, .expected_size = 8 },
+        .{ .name = "lzma", .data = "llllllll", .method = .lzma, .expected_size = 8 },
     };
     const bytes = try encodeEntries(allocator, &entries, .{}, 2, 3);
     defer allocator.free(bytes);
@@ -115,11 +120,13 @@ test "ZIP incremental writer emits precise ZIP32 and conservative ZIP64 layouts"
     const deflated = try archive.entryAt(2);
     const bzip2_entry = try archive.entryAt(3);
     const zstd_entry = try archive.entryAt(4);
+    const lzma_entry = try archive.entryAt(5);
     try std.testing.expect(!known.zip64);
     try std.testing.expect(unknown.zip64);
     try std.testing.expect(deflated.zip64);
     try std.testing.expect(bzip2_entry.zip64);
     try std.testing.expect(zstd_entry.zip64);
+    try std.testing.expect(lzma_entry.zip64);
 
     try std.testing.expectEqual(@as(u32, 0), readU32(bytes, known.local_header_offset + 18));
     try std.testing.expectEqual(@as(u16, 0), readU16(bytes, known.local_header_offset + 28));
@@ -229,7 +236,7 @@ test "ZIP incremental writer enforces method and metadata limits" {
     defer unsupported.deinit();
     try std.testing.expectError(
         error.UnsupportedZipCompressionMethod,
-        unsupported.beginEntry(.{ .name = "bad", .method = .lzma }),
+        unsupported.beginEntry(.{ .name = "bad", .method = .shrink }),
     );
     try std.testing.expectEqual(incremental.Phase.ready, unsupported.snapshot().phase);
     try unsupported.beginEntry(.{ .name = "retry", .method = .stored, .expected_size = 0 });
@@ -254,7 +261,7 @@ test "ZIP incremental writer enforces method and metadata limits" {
     );
 }
 
-test "ZIP incremental writer preflights Deflate Bzip2 and Zstd configuration before headers" {
+test "ZIP incremental writer preflights codec configuration before headers" {
     var invalid = try incremental.Writer.initWithOptions(std.testing.allocator, .{
         .deflate_options = .{ .block_len = 0 },
     });
@@ -345,6 +352,30 @@ test "ZIP incremental writer preflights Deflate Bzip2 and Zstd configuration bef
         dictionary_zstd.beginEntry(.{ .name = "dictionary-zstd", .method = .zstandard }),
     );
     try std.testing.expectEqual(incremental.Phase.ready, dictionary_zstd.snapshot().phase);
+
+    var invalid_lzma = try incremental.Writer.initWithOptions(std.testing.allocator, .{
+        .lzma_options = .{ .dictionary_size = 1024 },
+    });
+    defer invalid_lzma.deinit();
+    try std.testing.expectError(
+        error.InvalidLzmaOptions,
+        invalid_lzma.beginEntry(.{ .name = "bad-lzma", .method = .lzma }),
+    );
+    try std.testing.expectEqual(incremental.Phase.ready, invalid_lzma.snapshot().phase);
+
+    var input_limited_lzma = try incremental.Writer.initWithOptions(std.testing.allocator, .{
+        .lzma_options = .{ .max_input_len = 3 },
+    });
+    defer input_limited_lzma.deinit();
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        input_limited_lzma.beginEntry(.{
+            .name = "long-lzma",
+            .method = .lzma,
+            .expected_size = 4,
+        }),
+    );
+    try std.testing.expectEqual(incremental.Phase.ready, input_limited_lzma.snapshot().phase);
 }
 
 test "ZIP incremental writer emits multi-block Bzip2 payloads" {
@@ -403,6 +434,37 @@ test "ZIP incremental writer emits multi-block Zstandard frames" {
     try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
+test "ZIP incremental writer emits ZIP LZMA prefix and end marker" {
+    const allocator = std.testing.allocator;
+    const payload = "ZIP method-14 incremental LZMA payload\n" ** 113;
+    const entries = [_]TestEntry{.{
+        .name = "payload.lzma",
+        .data = payload,
+        .method = .lzma,
+        .expected_size = payload.len,
+    }};
+    const bytes = try encodeEntries(allocator, &entries, .{
+        .zip64 = .never,
+        .lzma_options = .{
+            .dictionary_size = 4096,
+            .mode = .literal_only,
+            .input_buffer_len = 4096,
+        },
+    }, 37, 7);
+    defer allocator.free(bytes);
+    const archive = try zip.parse(bytes);
+    const entry = try archive.entryAt(0);
+    try std.testing.expect(!entry.zip64);
+    try std.testing.expect(entry.flags & wire.lzma_end_marker_flag != 0);
+    const compressed = try archive.compressedData(entry);
+    try std.testing.expect(compressed.len > 9);
+    try std.testing.expectEqualSlices(u8, &.{ 9, 4, 5, 0 }, compressed[0..4]);
+    try std.testing.expectEqual(@as(u32, 4096), std.mem.readInt(u32, compressed[5..9], .little));
+    const decoded = try archive.extractAlloc(allocator, entry);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
 test "ZIP incremental writer preflights archive finish and output limits" {
     var finish_limited = try incremental.Writer.initWithOptions(std.testing.allocator, .{
         .archive_comment = "comment",
@@ -453,13 +515,14 @@ test "ZIP incremental writer releases every allocation failure" {
                 .{ .name = "deflated", .data = "allocation-safe deflate" ** 80, .method = .deflate, .expected_size = null },
                 .{ .name = "bzip2", .data = "allocation-safe bzip2" ** 47, .method = .bzip2, .expected_size = null },
                 .{ .name = "zstd", .data = "allocation-safe zstd" ** 53, .method = .zstandard, .expected_size = null },
+                .{ .name = "lzma", .data = "allocation-safe lzma" ** 41, .method = .lzma, .expected_size = null },
             };
             const encoded = try encodeEntries(allocator, &entries, .{ .archive_comment = "oom" }, 17, 19);
             defer allocator.free(encoded);
             const archive = try zip.parse(encoded);
-            const decoded = try archive.extractAlloc(allocator, try archive.entryAt(3));
+            const decoded = try archive.extractAlloc(allocator, try archive.entryAt(4));
             defer allocator.free(decoded);
-            try std.testing.expectEqualSlices(u8, entries[3].data, decoded);
+            try std.testing.expectEqualSlices(u8, entries[4].data, decoded);
         }
     };
     try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{});

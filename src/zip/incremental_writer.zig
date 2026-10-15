@@ -37,6 +37,9 @@ pub const Options = struct {
     /// Zstandard block/window/parser policy. Content-size signaling is derived
     /// from each entry's `expected_size`; preset dictionaries are not yet used.
     zstd_options: codecs.ZstdOptions = .{},
+    /// ZIP LZMA properties/dictionary/buffering policy. Method 14 always uses
+    /// an end marker; `size_mode` is normalized accordingly.
+    lzma_options: codecs.LzmaOptions = .{},
     max_entries: u64 = std.math.maxInt(u64),
     max_central_directory_size: usize = std.math.maxInt(usize),
     max_uncompressed_size: u64 = std.math.maxInt(u64),
@@ -72,6 +75,7 @@ pub const Phase = enum {
 /// history/match state, and one encoded pending block. Bzip2 retains at most
 /// one configured RLE/BWT block plus bounded encoded output. Zstandard retains
 /// one configured frame block, bounded rolling history, and pending output.
+/// LZMA retains bounded input/lookahead, dictionary history, and range output.
 pub const Writer = struct {
     allocator: std.mem.Allocator,
     options: Options,
@@ -286,7 +290,8 @@ pub const Writer = struct {
             .name = current.name(),
             .comment = current.comment(),
             .method = current.method,
-            .flags = wire.descriptor_flag | (if (self.options.utf8) wire.utf8_flag else 0),
+            .flags = wire.descriptor_flag | codecs.zipFlags(&current.codec) |
+                (if (self.options.utf8) wire.utf8_flag else 0),
             .crc32 = 0,
             .compressed_size = 0,
             .uncompressed_size = 0,
@@ -547,6 +552,7 @@ pub const Writer = struct {
             .max_deflate_buffer_size = self.options.max_deflate_buffer_size,
             .bzip2 = self.options.bzip2_options,
             .zstd = self.options.zstd_options,
+            .lzma = self.options.lzma_options,
         };
     }
 
@@ -565,7 +571,8 @@ pub const Writer = struct {
             .name = entry.name(),
             .comment = entry.comment(),
             .method = entry.method,
-            .flags = wire.descriptor_flag | (if (self.options.utf8) wire.utf8_flag else 0),
+            .flags = wire.descriptor_flag | codecs.zipFlags(&entry.codec) |
+                (if (self.options.utf8) wire.utf8_flag else 0),
             .crc32 = entry.crc.digest(),
             .compressed_size = entry.compressed_size,
             .uncompressed_size = entry.uncompressed_size,

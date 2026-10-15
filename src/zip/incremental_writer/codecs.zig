@@ -2,6 +2,7 @@ const std = @import("std");
 const bzip2 = @import("../../bzip2.zig");
 const core = @import("../../core.zig");
 const deflate = @import("../../deflate.zig");
+const lzma_codec = @import("lzma_codec.zig");
 const types = @import("../types.zig");
 const zstd = @import("../../zstd.zig");
 
@@ -9,8 +10,9 @@ pub const CompressionMethod = types.CompressionMethod;
 pub const DeflateOptions = deflate.RawDeflateIncrementalBestEncoder.Options;
 pub const Bzip2Options = bzip2.IncrementalEncoder.Options;
 pub const ZstdOptions = zstd.NativeFrameOptions;
+pub const LzmaOptions = lzma_codec.Options;
 
-pub const Error = deflate.Error || bzip2.IncrementalEncoder.Error || zstd.Error || std.mem.Allocator.Error || error{
+pub const Error = deflate.Error || bzip2.IncrementalEncoder.Error || zstd.Error || lzma_codec.Error || std.mem.Allocator.Error || error{
     UnsupportedZipCompressionMethod,
 };
 
@@ -19,6 +21,7 @@ pub const Options = struct {
     max_deflate_buffer_size: usize,
     bzip2: Bzip2Options,
     zstd: ZstdOptions,
+    lzma: LzmaOptions,
 };
 
 pub const State = union(enum) {
@@ -26,6 +29,7 @@ pub const State = union(enum) {
     deflate: deflate.RawDeflateIncrementalBestEncoder,
     bzip2: bzip2.IncrementalEncoder,
     zstd: zstd.NativeIncrementalFrameEncoder,
+    lzma: lzma_codec.State,
 
     const Self = @This();
 
@@ -75,6 +79,11 @@ pub const State = union(enum) {
                         zstd_options,
                     ) };
             },
+            .lzma => .{ .lzma = try lzma_codec.State.init(
+                allocator,
+                options.lzma,
+                expected_size,
+            ) },
             else => error.UnsupportedZipCompressionMethod,
         };
     }
@@ -85,6 +94,7 @@ pub const State = union(enum) {
             .deflate => |*encoder| encoder.deinit(),
             .bzip2 => |*encoder| encoder.deinit(),
             .zstd => |*encoder| encoder.deinit(),
+            .lzma => |*encoder| encoder.deinit(),
         }
         self.* = undefined;
     }
@@ -95,6 +105,7 @@ pub const State = union(enum) {
             .deflate => |*encoder| encoder.finish(),
             .bzip2 => |*encoder| encoder.finish(),
             .zstd => |*encoder| encoder.finish(),
+            .lzma => |*encoder| encoder.finish(),
         }
     }
 
@@ -104,6 +115,7 @@ pub const State = union(enum) {
             .deflate => |*encoder| encoder.step(input, output),
             .bzip2 => |*encoder| encoder.step(input, output),
             .zstd => |*encoder| encoder.step(input, output),
+            .lzma => |*encoder| encoder.step(input, output),
         };
     }
 };
@@ -135,6 +147,12 @@ pub fn validate(
             if (options.zstd.dictionary_id != 0) return error.InvalidBlockPlan;
             try validateExpectedSize(expected_size, std.math.maxInt(usize));
         },
+        .lzma => {
+            if (options.lzma.dictionary_size < 4096 or
+                options.lzma.dictionary_size > std.math.maxInt(u16))
+                return error.InvalidLzmaOptions;
+            try validateExpectedSize(expected_size, options.lzma.max_input_len);
+        },
         else => return error.UnsupportedZipCompressionMethod,
     }
 }
@@ -144,7 +162,15 @@ pub fn inputLimit(method: CompressionMethod, options: Options) ?usize {
         .deflate => options.deflate.max_input_len,
         .bzip2 => options.bzip2.max_input_len,
         .zstandard_legacy, .zstandard => std.math.maxInt(usize),
+        .lzma => options.lzma.max_input_len,
         else => null,
+    };
+}
+
+pub fn zipFlags(state: *const State) u16 {
+    return switch (state.*) {
+        .lzma => 1 << 1,
+        else => 0,
     };
 }
 
