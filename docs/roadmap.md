@@ -19962,6 +19962,41 @@ reuse, so production keeps the simpler independently owned plans.
   UTF-8/empty entries and a forced-ZIP64 local header
   (`incremental_reader_cases=5`); `run-zip-diff` passes all 13 build steps. The
   full repository graph passes 2628/2628 and `zig build check` passes all 113
-  steps. This completes a reusable entry codec, not the still-open sequential
-  local-header/data-descriptor/central-directory archive state machine;
+  steps. This completes the reusable entry codec used by the following
+  sequential local-header/data-descriptor/central-directory state machine;
   non-Stored/Deflate methods retain complete-buffer extraction.
+
+- Added the complete sequential `ZipIncrementalReader` state machine for Stored
+  and raw-Deflate ZIP32/ZIP64 archives. It parses arbitrarily fragmented local
+  headers, streams payload bytes through caller output, emits explicit
+  `entry_header`/`entry_done` events, and accepts signed or unsigned 32-/64-bit
+  descriptors. Deflate final-block detection provides an unambiguous boundary;
+  Stored uses only a 16-/24-byte lookbehind and requires CRC, compressed size,
+  uncompressed size, and the following ZIP record signature to agree. Payload
+  copies of `PK\x07\x08` therefore remain data, while an unsigned Deflate case
+  whose CRC itself equals `0x08074b50` exercises and passes the signed/unsigned
+  ambiguity fallback. Before `.done`, the reader matches central entries by
+  local offset rather than order, validates names/flags/methods/CRC/sizes,
+  accepts a bounded central-directory digital signature, cross-checks ZIP64
+  EOCD and locator values, then validates legacy EOCD counts/offsets/sizes and
+  copies the archive comment. Python's `force_zip64=True` descriptor layout --
+  zero legacy local sizes plus a ZIP64 extra placeholder and a 64-bit
+  descriptor -- is accepted independently of sentinel-based Vort output.
+  `initial_offset` supports callers that already skipped an SFX prefix;
+  `reset` retains working allocations; strict trailing data is the default;
+  entry count, retained names/comment, central bytes, one control record,
+  per-entry output, and total output all have explicit limits. The code is
+  split into public API types, wire-record parsing, descriptor scanning,
+  directory validation, and the orchestrating state machine. A 5×4
+  input/output fragmentation matrix covers both Vort ZIP32 and ZIP64 signed
+  descriptor archives; additional tests cover unsigned Stored/Deflate,
+  ZIP64 unsigned scanning, known sizes, empty archives, reordered central
+  records, a digital signature, SFX offsets, zero-output backpressure, reset,
+  corruption, limits, truncation, locator mismatch, and trailing policy. The
+  focused suite passes 16/16. The required external gate feeds a four-entry
+  non-seekable Python Stored/Deflate/force-ZIP64/empty archive through 3-byte
+  input and 5-byte output (`incremental_archive_reader_cases=4`), and
+  `run-zip-diff` passes all 13 build steps. Encryption, multi-disk archives,
+  archive-extra-data records, and incremental codecs beyond Stored/Deflate
+  remain open rather than being implied by this slice. The full repository
+  graph passes 2635/2635 and `zig build check` passes all 113 steps.

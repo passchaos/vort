@@ -1587,7 +1587,7 @@ _ = gzip_cat_chunked_written;
 // defer allocator.free(dict_encoded);
 ```
 
-### ZIP incremental entry decoder and writer
+### ZIP incremental reader, entry decoder, and writer
 
 After parsing an archive and selecting a canonical `ZipEntry`,
 `archive.compressedData(entry)` returns its validated borrowed payload.
@@ -1601,11 +1601,25 @@ Both variants can `reset` across independent Stored and Deflate members, expose
 snapshots/streaming diagnostics, and treat a `step` error as terminal until
 reset. `finish` distinguishes truncated input when a source ends early.
 
-This is the member data plane needed by a future sequential archive reader; it
-does not yet parse local headers, descriptors, and the central directory from
-an arriving byte stream. Complete-buffer ZIP parsing remains responsible for
-producing authoritative `ZipEntry` metadata. Other ZIP compression methods
-continue to use the broader one-shot extraction APIs.
+`ZipIncrementalReader` builds the complete sequential archive state machine on
+that data plane. It parses local headers, streams Stored and Deflate payloads,
+accepts ZIP32/ZIP64 descriptors with or without the optional signature, emits
+`entry_header` and `entry_done` boundaries, and validates every central record,
+optional central-directory digital signature, ZIP64 EOCD/locator, legacy EOCD,
+entry count, offset, size, CRC, and archive comment before returning `done`.
+Stored unsigned descriptors use a bounded 16/24-byte lookbehind and require a
+following ZIP record signature plus matching CRC and sizes, so payload copies
+of `PK\x07\x08` do not create false boundaries. Deflate uses its final block as
+the unambiguous compressed boundary. Arbitrary input/output fragmentation,
+zero-output backpressure, reset reuse, SFX `initial_offset`, strict or allowed
+trailing data, and explicit entry/total-output, entry-count, metadata, central-
+directory, and control-record limits share one API.
+
+The sequential reader retains a 32 KiB Deflate history, entry names and compact
+validation records until the central directory, the final archive comment,
+and one bounded control record; it never retains complete payloads or the whole
+archive. It currently accepts Stored and Deflate entries. Other ZIP compression
+methods continue to use the broader complete-buffer extraction APIs.
 
 `ZipIncrementalWriter` streams Stored and raw-Deflate entries into caller-owned
 output. `ZipIncrementalWriterOptions` configures archive comment, UTF-8, ZIP64,
@@ -1642,9 +1656,10 @@ invalid and must not be committed. After an error, mutating calls return
 validation errors from `beginEntry` and a premature short `finishEntry` remain
 recoverable. The existing one-shot `zipEncodeAppend` retains its transactional
 guarantee and broader method support. Incremental writing does not yet cover
-the other ZIP methods, a whole-archive streaming reader, encryption, or
-multi-disk archives. See [the ZIP format status](docs/formats/zip.md) for the
-full state and wire contract. Its additive errors are exposed separately as
+the other ZIP methods; the sequential reader likewise currently streams only
+Stored and Deflate. Encryption and multi-disk archives remain unsupported. See
+[the ZIP format status](docs/formats/zip.md) for the full state and wire
+contract. Writer-specific additive errors are exposed separately as
 `ZipIncrementalWriterError`; the established `ZipError` set is unchanged.
 
 The incremental `run-zip-diff` matrix generates the same six-entry archive,
@@ -1654,9 +1669,12 @@ ZIP32 `.never` and ZIP64 `.always` modes. Python raw-wire checks, `zipfile`, and
 system Info-ZIP validate both outputs and all member contents; the aggregate
 reports 13/13 ZIP differential steps. The same gate incrementally decodes five
 Python-generated Stored/Deflate entries, including non-seekable descriptors
-and a forced-ZIP64 local header, with 3-byte input and 5-byte output. Focused
-writer tests pass 61/61 and the incremental entry decoder suite passes 15/15.
-The full repository graph passes 2628/2628 and `zig build check` passes 113/113.
+and a forced-ZIP64 local header, with 3-byte input and 5-byte output. A separate
+four-entry Python non-seekable archive passes through the complete sequential
+reader with the same fragmentation (`incremental_archive_reader_cases=4`).
+Focused writer tests pass 61/61, the incremental entry decoder suite passes
+15/15, and the archive reader suite passes 16/16. The full repository graph
+passes 2635/2635 and `zig build check` passes 113/113.
 The refactored one-shot writer remains byte-identical to HEAD across 14 probe
 modes. The current host has no 7z/7zz, so that optional extraction branch is
 reported as skipped rather than passed.

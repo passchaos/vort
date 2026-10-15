@@ -124,10 +124,61 @@ while (true) {
 
 Stored members accept an empty history slice. The allocator-owned
 `ZipOwnedIncrementalEntryDecoder` always retains one reusable 32 KiB history
-buffer, making Stored-to-Deflate reset straightforward. This API does not yet
-parse an entire arriving ZIP archive: sequential local-header/data-descriptor/
-central-directory streaming remains open. Methods other than Stored and
-Deflate retain their complete-buffer extraction paths.
+buffer, making Stored-to-Deflate reset straightforward. Methods other than
+Stored and Deflate retain their complete-buffer extraction paths.
+
+## Incremental archive reader
+
+`ZipIncrementalReader` consumes a complete ZIP archive sequentially without
+retaining payload bytes. It accepts Stored and Deflate local entries, including
+known-size entries and bit-3 descriptors in all four ZIP32/ZIP64 × signed/
+unsigned layouts. Deflate's final block determines its compressed boundary.
+Stored unsigned descriptors are inherently ambiguous, so the reader holds only
+the final 16 or 24 bytes and accepts a boundary when CRC, compressed size,
+uncompressed size, and the following local/central/end signature all agree.
+Signed descriptor-looking payload bytes that fail those invariants are emitted
+as ordinary data.
+
+The reader returns `entry_header` after copying and validating a local name,
+then `need_input`/`need_output` while streaming its payload, `entry_done` only
+after descriptor/CRC/size validation, and `done` only after validating the
+central directory and archive ending. `currentEntry()` exposes reader-owned
+metadata valid until `reset` or `deinit`; descriptor-derived fields become
+non-null at `entry_done`. Central records are matched by local-header offset,
+not assumed to be in local-entry order. ZIP64 EOCD/locator and legacy EOCD
+counts, sizes, offsets and disk fields are cross-checked; a central-directory
+digital signature is bounded and skipped after the signed entry records.
+
+```zig
+var reader = try vort.ZipIncrementalReader.initWithOptions(allocator, .{
+    .max_entries = 100_000,
+    .max_entry_output_len = 512 * 1024 * 1024,
+    .max_total_output_len = 4 * 1024 * 1024 * 1024,
+});
+defer reader.deinit();
+
+while (true) {
+    const result = try reader.step(input_chunk, output_chunk);
+    input_chunk = input_chunk[result.progress.input_read..];
+    try payload_sink.writeAll(output_chunk[0..result.progress.output_written]);
+    switch (result.status) {
+        .entry_header => beginMember(reader.currentEntry().?),
+        .entry_done => finishMember(reader.currentEntry().?),
+        .done => break,
+        .need_input, .need_output => {},
+    }
+}
+```
+
+`initial_offset` lets a caller start at the first local header of an SFX archive
+while preserving absolute central-directory offsets. `allow_trailing_data` is
+false by default. `max_metadata_size` bounds retained names plus the archive
+comment; `max_central_directory_size` bounds encoded central records;
+`max_control_record_size` bounds any one variable header/end/signature record.
+Any `step` error makes the state terminal until `reset`, because payload may
+already have reached an external sink. `finish()` distinguishes a truncated
+source. Encryption, multi-disk/split archives, archive-extra-data records, and
+incremental payload codecs other than Stored/Deflate remain unsupported.
 
 ## Incremental writer
 
@@ -246,10 +297,10 @@ The incremental writer's additive error set is exported as
 one-shot and reader APIs is unchanged.
 
 The incremental writer does not yet support Shrink, Reduce, Implode, Deflate64,
-DCL Implode, Bzip2, LZMA, Zstandard, XZ, or PPMd entries. It also does not add
-an entire sequential ZIP reader, encryption, or multi-disk/split archive
-support; the existing complete-buffer reader and broader one-shot writer retain
-their documented method coverage.
+DCL Implode, Bzip2, LZMA, Zstandard, XZ, or PPMd entries. The sequential reader
+likewise currently streams only Stored and Deflate. Encryption and multi-disk/
+split archives remain unsupported; the existing complete-buffer reader and
+broader one-shot writer retain their documented method coverage.
 
 The incremental differential uses six entries: known Stored data containing a
 descriptor-signature byte sequence, unknown Stored data containing two such
@@ -268,15 +319,21 @@ Info-ZIP extracts every entry's contents byte-for-byte, and the aggregate
 reports 13/13 ZIP differential steps. The Python-to-Vort half also decodes five
 Stored/Deflate members through `ZipOwnedIncrementalEntryDecoder` with 3-byte
 input and 5-byte output, covering descriptor-backed entries, UTF-8, empty
-Stored, and a forced-ZIP64 local header (`incremental_reader_cases=5`). No
-7z/7zz is installed on the current host, so the optional 7-Zip branch reports
+Stored, and a forced-ZIP64 local header (`incremental_reader_cases=5`). The
+complete sequential reader separately validates a four-entry non-seekable
+Python archive under the same 3/5-byte schedule, covering Stored descriptor-
+signature payload bytes, Deflate, force-ZIP64 local metadata with a 64-bit
+descriptor, empty Stored, central records and the archive comment
+(`incremental_archive_reader_cases=4`). No 7z/7zz is installed on the current
+host, so the optional 7-Zip branch reports
 false and is not claimed as validation. Info-ZIP coverage uses `unzip -p` for
 contents, not pathname rendering; its 6.00 ZIP32 UTF-8 filename rendering issue
 also affects the pre-existing one-shot output and is not claimed as fixed here.
 
 `zig test src/root.zig --test-filter 'ZIP incremental writer'` passes 61/61;
 `zig test src/zip.zig --test-filter 'ZIP incremental entry decoder'` passes
-15/15. The full repository graph passes 2628/2628 and `zig build check` passes
+15/15; `zig test src/zip.zig --test-filter 'ZIP incremental reader'` passes
+16/16. The full repository graph passes 2635/2635 and `zig build check` passes
 113/113.
 The wire refactor also leaves 14 one-shot probe modes byte-identical to HEAD,
 including every existing method and ZIP32/ZIP64 descriptor choice. Default and
