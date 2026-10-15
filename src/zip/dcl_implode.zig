@@ -24,9 +24,9 @@ pub const Options = struct {
 };
 
 const max_bits: usize = 13;
-const max_match_length: usize = 518;
-const length_base = [16]u16{ 3, 2, 4, 5, 6, 7, 8, 9, 10, 12, 16, 24, 40, 72, 136, 264 };
-const length_extra = [16]u4{ 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8 };
+pub const max_match_length: usize = 518;
+pub const length_base = [16]u16{ 3, 2, 4, 5, 6, 7, 8, 9, 10, 12, 16, 24, 40, 72, 136, 264 };
+pub const length_extra = [16]u4{ 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8 };
 
 const literal_repetitions = [_]u8{
     11, 124, 8,   7,  28, 7,   188, 13,  76,  4,   10,  8,  12, 10, 12, 10, 8,  23, 8,
@@ -90,7 +90,7 @@ const BitWriter = struct {
     }
 };
 
-fn Table(comptime symbol_count: usize) type {
+pub fn Table(comptime symbol_count: usize) type {
     return struct {
         counts: [max_bits + 1]u16 = @splat(0),
         symbols: [symbol_count]u16 = @splat(0),
@@ -160,7 +160,7 @@ fn Table(comptime symbol_count: usize) type {
             return error.InvalidDclStream;
         }
 
-        fn encode(self: *const Self, writer: *BitWriter, symbol: u16) Error!void {
+        pub fn encode(self: *const Self, writer: anytype, symbol: u16) Error!void {
             if (symbol >= symbol_count) return error.InvalidDclStream;
             const length = self.lengths[symbol];
             if (length == 0) return error.InvalidDclStream;
@@ -180,15 +180,15 @@ fn reverseBits(value: u16, count: u4) u16 {
     return result;
 }
 
-const fixed_literal_table = blk: {
+pub const fixed_literal_table = blk: {
     @setEvalBranchQuota(20_000);
     break :blk Table(256).init(&literal_repetitions) catch unreachable;
 };
-const fixed_length_table = blk: {
+pub const fixed_length_table = blk: {
     @setEvalBranchQuota(5_000);
     break :blk Table(16).init(&length_repetitions) catch unreachable;
 };
-const fixed_distance_table = blk: {
+pub const fixed_distance_table = blk: {
     @setEvalBranchQuota(10_000);
     break :blk Table(64).init(&distance_repetitions) catch unreachable;
 };
@@ -582,7 +582,7 @@ fn findMatch(
     return best;
 }
 
-fn lengthSymbol(length: usize) ?u16 {
+pub fn lengthSymbol(length: usize) ?u16 {
     if (length > max_match_length) return null;
     for (0..length_base.len) |symbol| {
         const base = length_base[symbol];

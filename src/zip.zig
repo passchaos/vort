@@ -3,6 +3,8 @@ const bzip2 = @import("bzip2.zig");
 const core = @import("core.zig");
 const checksum = @import("checksum.zig");
 const dcl_implode = @import("zip/dcl_implode.zig");
+const dcl_implode_incremental_encoder = @import("zip/dcl_implode/incremental_encoder.zig");
+const dcl_implode_incremental_encoder_tests = @import("zip/dcl_implode_incremental_encoder_tests.zig");
 const dcl_implode_incremental_tests = @import("zip/dcl_implode_incremental_tests.zig");
 const deflate = @import("deflate.zig");
 const deflate64 = @import("deflate64.zig");
@@ -61,6 +63,7 @@ pub const IncrementalReaderEntryInfo = incremental_reader.EntryInfo;
 pub const DclImplodeDictionary = dcl_implode.Dictionary;
 pub const DclImplodeOptions = dcl_implode.Options;
 pub const DclImplodeIncrementalDecoder = dcl_implode.IncrementalDecoder;
+pub const DclImplodeIncrementalEncoder = dcl_implode_incremental_encoder.Encoder;
 pub const ShrinkIncrementalDecoder = shrink.IncrementalDecoder;
 pub const ShrinkIncrementalWorkspace = shrink.IncrementalWorkspace;
 pub const ShrinkIncrementalEncoder = shrink.IncrementalEncoder;
@@ -88,6 +91,10 @@ test "ZIP incremental reader test suite" {
 
 test "ZIP DCL Implode incremental test suite" {
     _ = dcl_implode_incremental_tests;
+}
+
+test "ZIP DCL Implode incremental encoder test suite" {
+    _ = dcl_implode_incremental_encoder_tests;
 }
 
 test "ZIP Shrink incremental test suite" {

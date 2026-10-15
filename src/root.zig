@@ -178,6 +178,7 @@ pub const ZipIncrementalReaderEntryInfo = zip.IncrementalReaderEntryInfo;
 pub const ZipDclImplodeDictionary = zip.DclImplodeDictionary;
 pub const ZipDclImplodeOptions = zip.DclImplodeOptions;
 pub const ZipDclImplodeIncrementalDecoder = zip.DclImplodeIncrementalDecoder;
+pub const ZipDclImplodeIncrementalEncoder = zip.DclImplodeIncrementalEncoder;
 pub const ZipShrinkIncrementalDecoder = zip.ShrinkIncrementalDecoder;
 pub const ZipShrinkIncrementalWorkspace = zip.ShrinkIncrementalWorkspace;
 pub const ZipShrinkIncrementalEncoder = zip.ShrinkIncrementalEncoder;
