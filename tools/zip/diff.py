@@ -894,6 +894,9 @@ INCREMENTAL_PAYLOADS = {
     "known-deflate64.bin": b"known Deflate64 incremental ZIP payload.\n" * 101,
     "unknown-deflate64.bin": b"unknown Deflate64 incremental ZIP payload.\n" * 83,
     "empty-deflate64.bin": b"",
+    "known-ppmd.txt": b"known PPMd incremental ZIP payload.\n" * 107,
+    "unknown-ppmd.txt": b"unknown PPMd incremental ZIP payload.\n" * 89,
+    "empty-ppmd.bin": b"",
 }
 INCREMENTAL_METHODS = {
     "known-stored.bin": zipfile.ZIP_STORED,
@@ -917,6 +920,9 @@ INCREMENTAL_METHODS = {
     "known-deflate64.bin": 9,
     "unknown-deflate64.bin": 9,
     "empty-deflate64.bin": 9,
+    "known-ppmd.txt": 98,
+    "unknown-ppmd.txt": 98,
+    "empty-ppmd.bin": 98,
 }
 
 
@@ -1061,7 +1067,7 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
         fields = parse_extra_fields(extra, f"central entry {name!r}")
         expected_needed = (
             63
-            if method in (14, 20, 93, 95)
+            if method in (14, 20, 93, 95, 98)
             else 46
             if method == zipfile.ZIP_BZIP2
             else 45
@@ -1142,7 +1148,7 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
         fields = parse_extra_fields(extra, f"local entry {name!r}")
         expected_needed = (
             63
-            if method in (14, 20, 93, 95)
+            if method in (14, 20, 93, 95, 98)
             else 46
             if method == zipfile.ZIP_BZIP2
             else 45
@@ -1172,6 +1178,8 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
             descriptor_len = 16
 
         descriptor_offset = data_offset + int(entry["compressed_size"])
+        if method == 98 and raw[data_offset : data_offset + 2] != b"\x0b\x10":
+            raise AssertionError(f"incremental PPMd properties mismatch for {name!r}")
         descriptor_end = descriptor_offset + descriptor_len
         if descriptor_end > len(raw):
             raise AssertionError(f"truncated incremental descriptor for {name!r}")
@@ -1210,6 +1218,7 @@ def validate_extracted_tree(root: Path) -> None:
 
 
 def validate_incremental_writer_archive(
+    cli: Path,
     writer: Path,
     temp: Path,
     force_zip64: bool,
@@ -1274,6 +1283,16 @@ def validate_incremental_writer_archive(
                     raw[data_offset : data_offset + info.compress_size],
                     -15,
                 )
+            elif info.compress_type == 98:
+                output = temp / f"incremental-{suffix}-{name}.out"
+                run(
+                    cli,
+                    "extract-zip-stream-file",
+                    str(one_byte_path),
+                    name,
+                    str(output),
+                )
+                actual = output.read_bytes()
             else:
                 actual = archive.read(name)
             if actual != expected:
@@ -1348,12 +1367,12 @@ def main() -> None:
         )
         incremental_zip32_bytes, incremental_zip32_unzip, incremental_zip32_7zip = (
             validate_incremental_writer_archive(
-                args.incremental_writer, temp, False, unzip_tool, seven_zip_tool
+                args.cli, args.incremental_writer, temp, False, unzip_tool, seven_zip_tool
             )
         )
         incremental_zip64_bytes, incremental_zip64_unzip, incremental_zip64_7zip = (
             validate_incremental_writer_archive(
-                args.incremental_writer, temp, True, unzip_tool, seven_zip_tool
+                args.cli, args.incremental_writer, temp, True, unzip_tool, seven_zip_tool
             )
         )
         deflate64_cases = 0

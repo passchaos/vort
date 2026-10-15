@@ -53,6 +53,8 @@ pub fn main(init: std.process.Init) !void {
     const unknown_xz = "unknown XZ incremental ZIP payload.\n" ** 79;
     const known_deflate64 = "known Deflate64 incremental ZIP payload.\n" ** 101;
     const unknown_deflate64 = "unknown Deflate64 incremental ZIP payload.\n" ** 83;
+    const known_ppmd = "known PPMd incremental ZIP payload.\n" ** 107;
+    const unknown_ppmd = "unknown PPMd incremental ZIP payload.\n" ** 89;
     const entries = [_]Entry{
         .{
             .name = "known-stored.bin",
@@ -183,6 +185,24 @@ pub fn main(init: std.process.Init) !void {
             .method = .deflate64,
             .expected_size = 0,
         },
+        .{
+            .name = "known-ppmd.txt",
+            .data = known_ppmd,
+            .method = .ppmd,
+            .expected_size = known_ppmd.len,
+        },
+        .{
+            .name = "unknown-ppmd.txt",
+            .data = unknown_ppmd,
+            .method = .ppmd,
+            .expected_size = null,
+        },
+        .{
+            .name = "empty-ppmd.bin",
+            .data = "",
+            .method = .ppmd,
+            .expected_size = 0,
+        },
     };
 
     const encoded = try encodeArchive(init.gpa, &entries, zip64, output_pattern);
@@ -216,6 +236,13 @@ fn encodeArchive(
             .dictionary_size = 4096,
         },
         .deflate64_options = .{ .block_len = 4096 },
+        .ppmd_options = .{
+            .properties = .{
+                .order = 12,
+                .memory_size = 1024 * 1024,
+                .restore_method = .cut_off,
+            },
+        },
     });
     defer writer.deinit();
 
