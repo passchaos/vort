@@ -1063,11 +1063,18 @@ pub fn main(init: std.process.Init) !void {
         const max_output_len = (try parseOptionalLimit(args.next())) orelse std.math.maxInt(usize);
         const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
         defer init.gpa.free(bytes);
-        var reader = try vort.ZipIncrementalReader.init(init.gpa);
+        const parsed_archive = try vort.parseZipArchive(bytes);
+        const stream_offset = if (parsed_archive.entry_count == 0)
+            parsed_archive.central_directory_offset
+        else
+            (try parsed_archive.entryAt(0)).local_header_offset;
+        var reader = try vort.ZipIncrementalReader.initWithOptions(init.gpa, .{
+            .initial_offset = stream_offset,
+        });
         defer reader.deinit();
         var decoded: std.ArrayList(u8) = .empty;
         defer decoded.deinit(init.gpa);
-        var input_offset: usize = 0;
+        var input_offset = stream_offset;
         var selected = false;
         var found = false;
         var calls: usize = 0;
