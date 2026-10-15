@@ -1,5 +1,6 @@
 const std = @import("std");
 const checksum = @import("../checksum.zig");
+const ppmd8 = @import("../ppmd8.zig");
 const zip = @import("../zip.zig");
 const incremental = @import("incremental_reader.zig");
 const descriptor = @import("incremental_reader/descriptor.zig");
@@ -353,6 +354,41 @@ test "ZIP incremental reader streams Deflate64 extended-window members" {
             try decodeArchiveFragmented(allocator, bytes, &expected, .{}, 3, 17);
         }
     }
+}
+
+test "ZIP incremental reader streams PPMd restart and cut-off members" {
+    const allocator = std.testing.allocator;
+    const payload = "incremental ZIP PPMd method-98 member\n" ** 61;
+    const entries = [_]zip.EncodeEntry{.{
+        .name = "codec/ppmd.txt",
+        .data = payload,
+        .method = .ppmd,
+    }};
+    const expected = [_]ExpectedEntry{.{ .name = entries[0].name, .data = payload }};
+    inline for (.{ zip.Zip64Mode.never, zip.Zip64Mode.always }) |zip64_mode| {
+        inline for (.{ false, true }) |uses_descriptor| {
+            inline for (.{ ppmd8.RestoreMethod.restart, .cut_off }) |restore_method| {
+                const bytes = try zip.encodeAlloc(allocator, &entries, .{
+                    .data_descriptor = uses_descriptor,
+                    .zip64 = zip64_mode,
+                    .ppmd_options = .{
+                        .memory_size = 1024 * 1024,
+                        .restore_method = restore_method,
+                    },
+                });
+                defer allocator.free(bytes);
+                try decodeArchiveFragmented(allocator, bytes, &expected, .{}, 3, 7);
+            }
+        }
+    }
+
+    const limited = try zip.encodeAlloc(allocator, &entries, .{
+        .ppmd_options = .{ .memory_size = 1024 * 1024 },
+    });
+    defer allocator.free(limited);
+    try expectReaderError(allocator, limited, .{
+        .max_ppmd_memory_size = 512 * 1024,
+    }, error.OutputLimitExceeded);
 }
 
 test "ZIP incremental reader accepts unsigned Stored and Deflate descriptors" {

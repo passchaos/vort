@@ -58,6 +58,7 @@ pub const Reader = struct {
         deflate64: codecs.Deflate64State,
         bzip2: codecs.Bzip2State,
         lzma: codecs.LzmaZipState,
+        ppmd: codecs.PpmdZipState,
         xz: codecs.XzState,
         zstd: codecs.ZstdState,
 
@@ -67,6 +68,7 @@ pub const Reader = struct {
                 .deflate64 => |*state| state.deinit(),
                 .bzip2 => |*state| state.deinit(),
                 .lzma => |*state| state.deinit(),
+                .ppmd => |*state| state.deinit(),
                 .xz => |*state| state.deinit(),
                 .zstd => |*state| state.deinit(),
                 .known, .stored_descriptor => {},
@@ -424,7 +426,7 @@ pub const Reader = struct {
                 return error.InvalidZipArchive,
             .bzip2 => if (local.version_needed < wire.version_46)
                 return error.InvalidZipArchive,
-            .lzma, .xz, .zstandard_legacy, .zstandard => if (local.version_needed < wire.version_63)
+            .lzma, .xz, .ppmd, .zstandard_legacy, .zstandard => if (local.version_needed < wire.version_63)
                 return error.InvalidZipArchive,
             else => return error.UnsupportedZipCompressionMethod,
         }
@@ -466,6 +468,14 @@ pub const Reader = struct {
                     self.options,
                     entry_limit,
                     local.flags,
+                    local.compressed_size,
+                    local.uncompressed_size,
+                    layout,
+                ) },
+                .ppmd => .{ .ppmd = codecs.PpmdZipState.init(
+                    self.allocator,
+                    self.options,
+                    entry_limit,
                     local.compressed_size,
                     local.uncompressed_size,
                     layout,
@@ -512,6 +522,15 @@ pub const Reader = struct {
                     self.options,
                     entry_limit,
                     local.flags,
+                    local.compressed_size,
+                    local.uncompressed_size,
+                    null,
+                ) };
+            if (local.method == .ppmd)
+                break :blk .{ .ppmd = codecs.PpmdZipState.init(
+                    self.allocator,
+                    self.options,
+                    entry_limit,
                     local.compressed_size,
                     local.uncompressed_size,
                     null,
@@ -628,6 +647,13 @@ pub const Reader = struct {
                 output_written,
             ),
             .lzma => |*codec_state| return try self.stepContainerCodec(
+                codec_state,
+                input,
+                output,
+                input_read,
+                output_written,
+            ),
+            .ppmd => |*codec_state| return try self.stepContainerCodec(
                 codec_state,
                 input,
                 output,
