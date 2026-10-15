@@ -20198,3 +20198,20 @@ reuse, so production keeps the simpler independently owned plans.
   with version-needed 4.6 and exact descriptor fields. `run-zip-diff` remains
   13/13, the writer suite passes 62/62, the full repository graph passes
   2670/2670, and `zig build check` passes all 113 steps.
+
+- Extended `ZipIncrementalWriter` with current Zstandard method 93 and legacy
+  method 20 through the shared codec union. Both carry complete standard Zstd
+  frames with caller-selected block/window/parser/checksum policy; pledged
+  entries automatically advertise content size, while unknown entries emit a
+  legal no-size frame. Known/unknown/empty, one-byte deterministic output,
+  checksum, methods 20/93, ZIP32/ZIP64, invalid block/dictionary preflight,
+  allocation failure and a 4 KiB multi-block frame share the existing CRC-32,
+  signed descriptor, central metadata and poison/recovery paths. Preset Zstd
+  dictionaries remain outside this first ZIP writer surface. The external
+  incremental archive grows from nine to twelve entries: Python validates raw
+  ZIP structure and supported codecs, Info-ZIP extracts every non-Zstd member,
+  and system `zstd` independently decodes known/current, unknown/legacy and
+  empty/current frames with version-needed 6.3. ZIP32/ZIP64 outputs are
+  10,025/10,773 bytes, `run-zip-diff` remains 13/13, the writer suite passes
+  63/63, the full repository graph passes 2671/2671, and `zig build check`
+  passes all 113 steps.
