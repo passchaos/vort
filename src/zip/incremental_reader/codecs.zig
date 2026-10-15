@@ -9,12 +9,13 @@ const descriptor = @import("descriptor.zig");
 const dcl_codec = @import("dcl_codec.zig");
 const lzma = @import("../../lzma.zig");
 const ppmd_codec = @import("ppmd_codec.zig");
+const reduce_codec = @import("reduce_codec.zig");
 const shrink_codec = @import("shrink_codec.zig");
 const wire = @import("../wire.zig");
 const xz = @import("../../xz.zig");
 const zstd = @import("../../zstd.zig");
 
-pub const Error = deflate.Error || deflate64.Error || dcl_codec.Error || bzip2.Error || lzma.Error || ppmd_codec.Error || shrink_codec.Error || xz.Error || zstd.Error || error{
+pub const Error = deflate.Error || deflate64.Error || dcl_codec.Error || bzip2.Error || lzma.Error || ppmd_codec.Error || reduce_codec.Error || shrink_codec.Error || xz.Error || zstd.Error || error{
     InvalidZipArchive,
     UnsupportedZipFeature,
     SizeMismatch,
@@ -23,6 +24,8 @@ pub const Error = deflate.Error || deflate64.Error || dcl_codec.Error || bzip2.E
 
 pub const DclImplodeState = dcl_codec.State;
 pub const PpmdZipState = ppmd_codec.State;
+pub const ReduceFactor = reduce_codec.Factor;
+pub const ReduceState = reduce_codec.State;
 pub const ShrinkState = shrink_codec.State;
 
 pub const Deflate64State = struct {

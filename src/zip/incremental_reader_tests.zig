@@ -496,6 +496,85 @@ test "ZIP incremental reader streams Shrink known descriptor and reference membe
     try decodeArchiveFragmented(allocator, fixture, &fixture_expected, .{}, 5, 7);
 }
 
+test "ZIP incremental reader streams every Reduce factor and descriptor layout" {
+    const allocator = std.testing.allocator;
+    const payload = ("incremental ZIP Reduce follower payload \x90\n" ** 149) ++
+        ([_]u8{ 0, 1, 2, 3, 4, 5, 0xfe, 0xff } ** 97);
+    inline for (.{
+        zip.CompressionMethod.reduce_1,
+        .reduce_2,
+        .reduce_3,
+        .reduce_4,
+    }) |method| {
+        const entries = [_]zip.EncodeEntry{.{
+            .name = "codec/reduce.bin",
+            .data = payload,
+            .method = method,
+        }};
+        const expected = [_]ExpectedEntry{.{ .name = entries[0].name, .data = payload }};
+        inline for (.{ false, true }) |uses_descriptor| {
+            inline for (.{ zip.Zip64Mode.never, zip.Zip64Mode.always }) |zip64_mode| {
+                const bytes = try zip.encodeAlloc(allocator, &entries, .{
+                    .data_descriptor = uses_descriptor,
+                    .zip64 = zip64_mode,
+                });
+                defer allocator.free(bytes);
+                try decodeArchiveFragmented(allocator, bytes, &expected, .{}, 1, 1);
+                try decodeArchiveFragmented(allocator, bytes, &expected, .{}, 7, 13);
+
+                if (uses_descriptor and zip64_mode == .never) {
+                    const unsigned = try withoutDescriptorSignature(allocator, bytes);
+                    defer allocator.free(unsigned);
+                    try decodeArchiveFragmented(allocator, unsigned, &expected, .{}, 1, 3);
+                }
+            }
+        }
+    }
+
+    const empty_entries = [_]zip.EncodeEntry{.{
+        .name = "codec/empty-reduce",
+        .data = "",
+        .method = .reduce_4,
+    }};
+    const empty_expected = [_]ExpectedEntry{.{ .name = empty_entries[0].name, .data = "" }};
+    inline for (.{ false, true }) |uses_descriptor| {
+        const bytes = try zip.encodeAlloc(allocator, &empty_entries, .{
+            .data_descriptor = uses_descriptor,
+        });
+        defer allocator.free(bytes);
+        try decodeArchiveFragmented(allocator, bytes, &empty_expected, .{}, 1, 1);
+    }
+
+    // The six zero pad bits after two follower-coded 'A' symbols are also
+    // valid one-bit follower selections. Descriptor output size must stop the
+    // transactional final-byte decode before those pads become extra output.
+    const ambiguous_entries = [_]zip.EncodeEntry{.{
+        .name = "codec/reduce-padding.bin",
+        .data = "AA",
+        .method = .reduce_1,
+    }};
+    const ambiguous_expected = [_]ExpectedEntry{.{
+        .name = ambiguous_entries[0].name,
+        .data = ambiguous_entries[0].data,
+    }};
+    const ambiguous_archive = try zip.encodeAlloc(allocator, &ambiguous_entries, .{
+        .data_descriptor = true,
+    });
+    defer allocator.free(ambiguous_archive);
+    try decodeArchiveFragmented(allocator, ambiguous_archive, &ambiguous_expected, .{}, 1, 1);
+
+    const limited_entries = [_]zip.EncodeEntry{.{
+        .name = "codec/reduce-limit.bin",
+        .data = payload,
+        .method = .reduce_4,
+    }};
+    const limited_archive = try zip.encodeAlloc(allocator, &limited_entries, .{});
+    defer allocator.free(limited_archive);
+    try expectReaderError(allocator, limited_archive, .{
+        .max_entry_output_len = payload.len - 1,
+    }, error.OutputLimitExceeded);
+}
+
 test "ZIP incremental reader accepts unsigned Stored and Deflate descriptors" {
     const allocator = std.testing.allocator;
     const cases = [_]struct {

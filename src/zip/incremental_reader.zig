@@ -56,6 +56,7 @@ pub const Reader = struct {
         stored_descriptor: descriptor.StoredScanner,
         deflate_descriptor: codecs.DeflateState,
         shrink: codecs.ShrinkState,
+        reduce: codecs.ReduceState,
         deflate64: codecs.Deflate64State,
         dcl_implode: codecs.DclImplodeState,
         bzip2: codecs.Bzip2State,
@@ -68,6 +69,7 @@ pub const Reader = struct {
             switch (self.*) {
                 .deflate_descriptor => |*state| state.deinit(),
                 .shrink => |*state| state.deinit(),
+                .reduce => |*state| state.deinit(),
                 .deflate64 => |*state| state.deinit(),
                 .dcl_implode => |*state| state.deinit(),
                 .bzip2 => |*state| state.deinit(),
@@ -426,6 +428,8 @@ pub const Reader = struct {
             .stored => {},
             .shrink => if (local.version_needed < wire.version_10)
                 return error.InvalidZipArchive,
+            .reduce_1, .reduce_2, .reduce_3, .reduce_4 => if (local.version_needed < wire.version_10)
+                return error.InvalidZipArchive,
             .deflate => if (local.version_needed < wire.version_20)
                 return error.InvalidZipArchive,
             .deflate64 => if (local.version_needed < wire.version_21)
@@ -453,6 +457,14 @@ pub const Reader = struct {
                 .stored => .{ .stored_descriptor = descriptor.StoredScanner.init(layout, entry_limit) },
                 .shrink => .{ .shrink = try codecs.ShrinkState.init(
                     self.allocator,
+                    entry_limit,
+                    local.compressed_size,
+                    local.uncompressed_size,
+                    layout,
+                ) },
+                .reduce_1, .reduce_2, .reduce_3, .reduce_4 => .{ .reduce = try codecs.ReduceState.init(
+                    self.allocator,
+                    reduceFactor(local.method).?,
                     entry_limit,
                     local.compressed_size,
                     local.uncompressed_size,
@@ -520,6 +532,15 @@ pub const Reader = struct {
                 else => unreachable,
             }
         else blk: {
+            if (reduceFactor(local.method)) |factor|
+                break :blk .{ .reduce = try codecs.ReduceState.init(
+                    self.allocator,
+                    factor,
+                    entry_limit,
+                    local.compressed_size,
+                    local.uncompressed_size,
+                    null,
+                ) };
             if (local.method == .shrink)
                 break :blk .{ .shrink = try codecs.ShrinkState.init(
                     self.allocator,
@@ -668,33 +689,20 @@ pub const Reader = struct {
                 input_read,
                 output_written,
             ),
-            .shrink => |*codec_state| {
-                const stepped = try codec_state.step(input, output);
-                try self.accountEntryProgress(stepped.progress, input_read, output_written);
-                if (stepped.status == .done) {
-                    if (codec_state.layout() != null) {
-                        const parsed = codec_state.descriptorValue() orelse
-                            return error.InvalidZipArchive;
-                        var record = &self.directory.records.items[self.current_index.?];
-                        record.crc32 = parsed.crc32;
-                        record.compressed_size = try u64ToUsize(parsed.compressed_size);
-                        record.uncompressed_size = try u64ToUsize(parsed.uncompressed_size);
-                        const prefix = codec_state.retainedRecordPrefix();
-                        if (prefix.len != 0) try self.prepareRecordPrefix(prefix);
-                        try self.completeCurrentEntry();
-                    } else {
-                        try self.validateKnownCodec(
-                            codec_state.crc32(),
-                            codec_state.actualCompressedSize(),
-                            codec_state.outputSize(),
-                            &.{},
-                        );
-                    }
-                    return .entry_done;
-                }
-                if (stepped.status == .need_output) return .need_output;
-                return null;
-            },
+            .shrink => |*codec_state| return try self.stepScannedCodec(
+                codec_state,
+                input,
+                output,
+                input_read,
+                output_written,
+            ),
+            .reduce => |*codec_state| return try self.stepScannedCodec(
+                codec_state,
+                input,
+                output,
+                input_read,
+                output_written,
+            ),
             .deflate64 => |*codec_state| return try self.stepContainerCodec(
                 codec_state,
                 input,
@@ -758,6 +766,41 @@ pub const Reader = struct {
         const stepped = try state.step(input, output);
         try self.accountEntryProgress(stepped.progress, input_read, output_written);
         if (stepped.status == .done) return try self.finishContainerCodec(state);
+        if (stepped.status == .need_output) return .need_output;
+        return null;
+    }
+
+    fn stepScannedCodec(
+        self: *Self,
+        state: anytype,
+        input: []const u8,
+        output: []u8,
+        input_read: *usize,
+        output_written: *usize,
+    ) Error!?StepResult.Status {
+        const stepped = try state.step(input, output);
+        try self.accountEntryProgress(stepped.progress, input_read, output_written);
+        if (stepped.status == .done) {
+            if (state.layout() != null) {
+                const parsed = state.descriptorValue() orelse
+                    return error.InvalidZipArchive;
+                var record = &self.directory.records.items[self.current_index.?];
+                record.crc32 = parsed.crc32;
+                record.compressed_size = try u64ToUsize(parsed.compressed_size);
+                record.uncompressed_size = try u64ToUsize(parsed.uncompressed_size);
+                const prefix = state.retainedRecordPrefix();
+                if (prefix.len != 0) try self.prepareRecordPrefix(prefix);
+                try self.completeCurrentEntry();
+            } else {
+                try self.validateKnownCodec(
+                    state.crc32(),
+                    state.actualCompressedSize(),
+                    state.outputSize(),
+                    &.{},
+                );
+            }
+            return .entry_done;
+        }
         if (stepped.status == .need_output) return .need_output;
         return null;
     }
@@ -889,6 +932,16 @@ pub const Reader = struct {
 
 fn u64ToUsize(value: u64) Error!usize {
     return std.math.cast(usize, value) orelse error.UnsupportedZipFeature;
+}
+
+fn reduceFactor(method: CompressionMethod) ?codecs.ReduceFactor {
+    return switch (method) {
+        .reduce_1 => .factor_1,
+        .reduce_2 => .factor_2,
+        .reduce_3 => .factor_3,
+        .reduce_4 => .factor_4,
+        else => null,
+    };
 }
 
 fn checkedAdd(a: usize, b: usize) Error!usize {
