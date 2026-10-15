@@ -18,19 +18,24 @@ pub const Error = shrink.Error || std.mem.Allocator.Error || error{
 /// bytes to the LZW decoder one at a time. This keeps false signatures byte-
 /// exact without buffering the member or rolling decoder/output state back.
 pub const State = struct {
+    const max_authentication_code_len: usize = 10;
+
     allocator: std.mem.Allocator,
     workspace: *shrink.IncrementalWorkspace,
     decoder: shrink.IncrementalDecoder,
     descriptor_layout: ?descriptor.Layout,
     expected_compressed_size: ?usize,
     compressed_size_prefix: usize,
+    authentication_code_len: usize,
+    verify_crc32: bool,
     finish_requested: bool = false,
-    probe: [wire.zip64_data_descriptor_len]u8 = undefined,
-    payload_probe: [wire.zip64_data_descriptor_len]u8 = undefined,
+    probe: [wire.zip64_data_descriptor_len + max_authentication_code_len]u8 = undefined,
+    payload_probe: [wire.zip64_data_descriptor_len + max_authentication_code_len]u8 = undefined,
     probe_len: usize = 0,
     result_descriptor: ?descriptor.Descriptor = null,
     next_prefix: [4]u8 = undefined,
     next_prefix_len: usize = 0,
+    result_authentication: [max_authentication_code_len]u8 = undefined,
     crc: checksum.Crc32Best = checksum.Crc32Best.init(),
     compressed_size: usize = 0,
     uncompressed_size: usize = 0,
@@ -44,6 +49,8 @@ pub const State = struct {
         expected_uncompressed_size: ?usize,
         descriptor_layout: ?descriptor.Layout,
         compressed_size_prefix: usize,
+        authentication_code_len: usize,
+        verify_crc32: bool,
     ) Error!Self {
         if ((expected_compressed_size == null) != (descriptor_layout != null))
             return error.InvalidZipArchive;
@@ -59,6 +66,8 @@ pub const State = struct {
             .descriptor_layout = descriptor_layout,
             .expected_compressed_size = expected_compressed_size,
             .compressed_size_prefix = compressed_size_prefix,
+            .authentication_code_len = authentication_code_len,
+            .verify_crc32 = verify_crc32,
         };
     }
 
@@ -94,6 +103,10 @@ pub const State = struct {
 
     pub fn retainedRecordPrefix(self: *const Self) []const u8 {
         return self.next_prefix[0..self.next_prefix_len];
+    }
+
+    pub fn authenticationCode(self: *const Self) []const u8 {
+        return self.result_authentication[0..self.authentication_code_len];
     }
 
     pub fn actualCompressedSize(self: *const Self) usize {
@@ -148,7 +161,7 @@ pub const State = struct {
     ) Error!core.StepResult {
         var input_read: usize = 0;
         var output_written: usize = 0;
-        const capacity = self.descriptor_layout.?.signedLen();
+        const capacity = self.authentication_code_len + self.descriptor_layout.?.signedLen();
 
         while (true) {
             const drained = try self.decoder.step("", output[output_written..]);
@@ -204,17 +217,22 @@ pub const State = struct {
 
     fn detectBoundary(self: *Self) bool {
         const layout_value = self.descriptor_layout.?;
+        const descriptor_offset = self.authentication_code_len;
         const signed_len = layout_value.signedLen();
-        std.debug.assert(self.probe_len == signed_len);
+        std.debug.assert(self.probe_len == descriptor_offset + signed_len);
         if (!self.decoder.canFinish()) return false;
 
-        if (std.mem.readInt(u32, self.probe[0..4], .little) == wire.data_descriptor_signature) {
+        if (std.mem.readInt(u32, self.probe[descriptor_offset..][0..4], .little) == wire.data_descriptor_signature) {
             const candidate = descriptor.parseDescriptor(
                 layout_value,
-                self.probe[0..signed_len],
+                self.probe[descriptor_offset..][0..signed_len],
                 true,
             );
             if (self.matches(candidate)) {
+                @memcpy(
+                    self.result_authentication[0..self.authentication_code_len],
+                    self.probe[0..self.authentication_code_len],
+                );
                 self.result_descriptor = candidate;
                 self.probe_len = 0;
                 return true;
@@ -222,16 +240,25 @@ pub const State = struct {
         }
 
         const unsigned_len = layout_value.unsignedLen();
-        if (!descriptor.isFollowingRecordSignature(self.probe[unsigned_len..][0..4]))
+        if (!descriptor.isFollowingRecordSignature(
+            self.probe[descriptor_offset + unsigned_len ..][0..4],
+        ))
             return false;
         const candidate = descriptor.parseDescriptor(
             layout_value,
-            self.probe[0..unsigned_len],
+            self.probe[descriptor_offset..][0..unsigned_len],
             false,
         );
         if (!self.matches(candidate)) return false;
+        @memcpy(
+            self.result_authentication[0..self.authentication_code_len],
+            self.probe[0..self.authentication_code_len],
+        );
         self.result_descriptor = candidate;
-        @memcpy(&self.next_prefix, self.probe[unsigned_len..][0..4]);
+        @memcpy(
+            &self.next_prefix,
+            self.probe[descriptor_offset + unsigned_len ..][0..4],
+        );
         self.next_prefix_len = 4;
         self.probe_len = 0;
         return true;
@@ -244,7 +271,7 @@ pub const State = struct {
         ) catch return false;
         const compressed_u64 = std.math.cast(u64, prefixed_size) orelse return false;
         const uncompressed_u64 = std.math.cast(u64, self.uncompressed_size) orelse return false;
-        return candidate.crc32 == self.crc.digest() and
+        return (!self.verify_crc32 or candidate.crc32 == self.crc.digest()) and
             candidate.compressed_size == compressed_u64 and
             candidate.uncompressed_size == uncompressed_u64;
     }

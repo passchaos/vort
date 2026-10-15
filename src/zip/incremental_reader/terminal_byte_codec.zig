@@ -20,6 +20,8 @@ const max_speculative_output: usize = 8 * 1024;
 /// `initDecoder` function; Decoder supplies step/finish/setExpectedOutputLen.
 pub fn State(comptime Codec: type) type {
     return struct {
+        const max_authentication_code_len: usize = 10;
+
         allocator: std.mem.Allocator,
         workspace: *Codec.Workspace,
         trial_workspace: *Codec.Workspace,
@@ -28,15 +30,18 @@ pub fn State(comptime Codec: type) type {
         descriptor_layout: ?descriptor.Layout,
         expected_compressed_size: ?usize,
         compressed_size_prefix: usize,
+        authentication_code_len: usize,
+        verify_crc32: bool,
         finish_requested: bool = false,
-        probe: [wire.zip64_data_descriptor_len + 1]u8 = undefined,
-        payload_probe: [wire.zip64_data_descriptor_len + 1]u8 = undefined,
+        probe: [wire.zip64_data_descriptor_len + 1 + max_authentication_code_len]u8 = undefined,
+        payload_probe: [wire.zip64_data_descriptor_len + 1 + max_authentication_code_len]u8 = undefined,
         probe_len: usize = 0,
         pending_pos: usize = 0,
         pending_len: usize = 0,
         result_descriptor: ?descriptor.Descriptor = null,
         next_prefix: [4]u8 = undefined,
         next_prefix_len: usize = 0,
+        result_authentication: [max_authentication_code_len]u8 = undefined,
         crc: checksum.Crc32Best = checksum.Crc32Best.init(),
         compressed_size: usize = 0,
         uncompressed_size: usize = 0,
@@ -52,6 +57,8 @@ pub fn State(comptime Codec: type) type {
             expected_uncompressed_size: ?usize,
             descriptor_layout: ?descriptor.Layout,
             compressed_size_prefix: usize,
+            authentication_code_len: usize,
+            verify_crc32: bool,
         ) AdapterError!Self {
             if ((expected_compressed_size == null) != (descriptor_layout != null))
                 return error.InvalidZipArchive;
@@ -75,6 +82,8 @@ pub fn State(comptime Codec: type) type {
                 .descriptor_layout = descriptor_layout,
                 .expected_compressed_size = expected_compressed_size,
                 .compressed_size_prefix = compressed_size_prefix,
+                .authentication_code_len = authentication_code_len,
+                .verify_crc32 = verify_crc32,
             };
         }
 
@@ -112,6 +121,10 @@ pub fn State(comptime Codec: type) type {
 
         pub fn retainedRecordPrefix(self: *const Self) []const u8 {
             return self.next_prefix[0..self.next_prefix_len];
+        }
+
+        pub fn authenticationCode(self: *const Self) []const u8 {
+            return self.result_authentication[0..self.authentication_code_len];
         }
 
         pub fn actualCompressedSize(self: *const Self) usize {
@@ -166,7 +179,8 @@ pub fn State(comptime Codec: type) type {
         ) AdapterError!core.StepResult {
             var input_read: usize = 0;
             var output_written: usize = 0;
-            const capacity = self.descriptor_layout.?.signedLen() + 1;
+            const capacity = self.descriptor_layout.?.signedLen() + 1 +
+                self.authentication_code_len;
 
             while (true) {
                 if (self.pending_pos != self.pending_len) {
@@ -235,16 +249,22 @@ pub fn State(comptime Codec: type) type {
 
         fn detectBoundary(self: *Self) AdapterError!bool {
             const layout_value = self.descriptor_layout.?;
-            const capacity = layout_value.signedLen() + 1;
+            const authentication_offset: usize = 1;
+            const descriptor_offset = authentication_offset + self.authentication_code_len;
+            const capacity = layout_value.signedLen() + descriptor_offset;
             std.debug.assert(self.probe_len == capacity);
 
-            if (std.mem.readInt(u32, self.probe[1..5], .little) == wire.data_descriptor_signature) {
+            if (std.mem.readInt(u32, self.probe[descriptor_offset..][0..4], .little) == wire.data_descriptor_signature) {
                 const candidate = descriptor.parseDescriptor(
                     layout_value,
-                    self.probe[1..capacity],
+                    self.probe[descriptor_offset..][0..layout_value.signedLen()],
                     true,
                 );
                 if (try self.tryCandidate(candidate)) {
+                    @memcpy(
+                        self.result_authentication[0..self.authentication_code_len],
+                        self.probe[authentication_offset..descriptor_offset],
+                    );
                     self.result_descriptor = candidate;
                     self.probe_len = 0;
                     return true;
@@ -253,16 +273,23 @@ pub fn State(comptime Codec: type) type {
 
             const unsigned_len = layout_value.unsignedLen();
             if (!descriptor.isFollowingRecordSignature(
-                self.probe[1 + unsigned_len ..][0..4],
+                self.probe[descriptor_offset + unsigned_len ..][0..4],
             )) return false;
             const candidate = descriptor.parseDescriptor(
                 layout_value,
-                self.probe[1..][0..unsigned_len],
+                self.probe[descriptor_offset..][0..unsigned_len],
                 false,
             );
             if (!try self.tryCandidate(candidate)) return false;
+            @memcpy(
+                self.result_authentication[0..self.authentication_code_len],
+                self.probe[authentication_offset..descriptor_offset],
+            );
             self.result_descriptor = candidate;
-            @memcpy(&self.next_prefix, self.probe[1 + unsigned_len ..][0..4]);
+            @memcpy(
+                &self.next_prefix,
+                self.probe[descriptor_offset + unsigned_len ..][0..4],
+            );
             self.next_prefix_len = 4;
             self.probe_len = 0;
             return true;
@@ -304,7 +331,7 @@ pub fn State(comptime Codec: type) type {
 
             var trial_crc = self.crc;
             trial_crc.update(self.speculative_output[0..written]);
-            if (trial_crc.digest() != candidate.crc32) return false;
+            if (self.verify_crc32 and trial_crc.digest() != candidate.crc32) return false;
 
             const committed_workspace = self.trial_workspace;
             self.trial_workspace = self.workspace;

@@ -47,17 +47,22 @@ pub const StepResult = struct {
 /// accepted only when followed by a supported ZIP record signature and when
 /// CRC/compressed/uncompressed values all match the payload released so far.
 pub const StoredScanner = struct {
+    const max_trailer_len: usize = 10;
+
     layout: Layout,
     max_output_len: usize,
     compressed_size_prefix: usize,
-    buffer: [wire.zip64_data_descriptor_len]u8 = undefined,
-    payload_buffer: [wire.zip64_data_descriptor_len]u8 = undefined,
+    authentication_code_len: usize,
+    verify_crc32: bool,
+    buffer: [wire.zip64_data_descriptor_len + max_trailer_len]u8 = undefined,
+    payload_buffer: [wire.zip64_data_descriptor_len + max_trailer_len]u8 = undefined,
     buffer_len: usize = 0,
     crc: checksum.Crc32Best = checksum.Crc32Best.init(),
     payload_size: usize = 0,
     result_descriptor: ?Descriptor = null,
     next_prefix: [4]u8 = undefined,
     next_prefix_len: usize = 0,
+    result_authentication: [max_trailer_len]u8 = undefined,
 
     const Self = @This();
 
@@ -70,10 +75,29 @@ pub const StoredScanner = struct {
         max_output_len: usize,
         compressed_size_prefix: usize,
     ) Self {
+        return initWithEncryption(
+            layout,
+            max_output_len,
+            compressed_size_prefix,
+            0,
+            true,
+        );
+    }
+
+    pub fn initWithEncryption(
+        layout: Layout,
+        max_output_len: usize,
+        compressed_size_prefix: usize,
+        authentication_code_len: usize,
+        verify_crc32: bool,
+    ) Self {
+        std.debug.assert(authentication_code_len <= max_trailer_len);
         return .{
             .layout = layout,
             .max_output_len = max_output_len,
             .compressed_size_prefix = compressed_size_prefix,
+            .authentication_code_len = authentication_code_len,
+            .verify_crc32 = verify_crc32,
         };
     }
 
@@ -92,6 +116,10 @@ pub const StoredScanner = struct {
 
     pub fn retainedRecordPrefix(self: *const Self) []const u8 {
         return self.next_prefix[0..self.next_prefix_len];
+    }
+
+    pub fn authenticationCode(self: *const Self) []const u8 {
+        return self.result_authentication[0..self.authentication_code_len];
     }
 
     pub fn outputWritten(self: *const Self) usize {
@@ -118,7 +146,7 @@ pub const StoredScanner = struct {
         if (self.result_descriptor != null) return .{ .status = .done };
         var input_read: usize = 0;
         var output_written: usize = 0;
-        const capacity = self.layout.signedLen();
+        const capacity = self.authentication_code_len + self.layout.signedLen();
 
         while (true) {
             if (self.buffer_len == capacity) {
@@ -153,11 +181,20 @@ pub const StoredScanner = struct {
     }
 
     fn detectBoundary(self: *Self) bool {
+        const descriptor_offset = self.authentication_code_len;
         const signed_len = self.layout.signedLen();
-        std.debug.assert(self.buffer_len == signed_len);
-        if (std.mem.readInt(u32, self.buffer[0..4], .little) == wire.data_descriptor_signature) {
-            const candidate = parseDescriptor(self.layout, self.buffer[0..signed_len], true);
+        std.debug.assert(self.buffer_len == descriptor_offset + signed_len);
+        if (std.mem.readInt(u32, self.buffer[descriptor_offset..][0..4], .little) == wire.data_descriptor_signature) {
+            const candidate = parseDescriptor(
+                self.layout,
+                self.buffer[descriptor_offset..][0..signed_len],
+                true,
+            );
             if (self.matches(candidate)) {
+                @memcpy(
+                    self.result_authentication[0..self.authentication_code_len],
+                    self.buffer[0..self.authentication_code_len],
+                );
                 self.result_descriptor = candidate;
                 self.buffer_len = 0;
                 return true;
@@ -165,11 +202,24 @@ pub const StoredScanner = struct {
         }
 
         const unsigned_len = self.layout.unsignedLen();
-        if (!isFollowingRecordSignature(self.buffer[unsigned_len..][0..4])) return false;
-        const candidate = parseDescriptor(self.layout, self.buffer[0..unsigned_len], false);
+        if (!isFollowingRecordSignature(
+            self.buffer[descriptor_offset + unsigned_len ..][0..4],
+        )) return false;
+        const candidate = parseDescriptor(
+            self.layout,
+            self.buffer[descriptor_offset..][0..unsigned_len],
+            false,
+        );
         if (!self.matches(candidate)) return false;
+        @memcpy(
+            self.result_authentication[0..self.authentication_code_len],
+            self.buffer[0..self.authentication_code_len],
+        );
         self.result_descriptor = candidate;
-        @memcpy(&self.next_prefix, self.buffer[unsigned_len..][0..4]);
+        @memcpy(
+            &self.next_prefix,
+            self.buffer[descriptor_offset + unsigned_len ..][0..4],
+        );
         self.next_prefix_len = 4;
         self.buffer_len = 0;
         return true;
@@ -181,7 +231,7 @@ pub const StoredScanner = struct {
             self.payload_size,
             self.compressed_size_prefix,
         ) catch return false;
-        return candidate.crc32 == self.crc.digest() and
+        return (!self.verify_crc32 or candidate.crc32 == self.crc.digest()) and
             candidate.compressed_size == compressed_size and
             candidate.uncompressed_size == self.payload_size;
     }
@@ -217,6 +267,7 @@ pub const Parser = struct {
     target_len: usize = 4,
     layout: Layout = .zip32,
     expected_crc32: u32 = 0,
+    verify_crc32: bool = true,
     expected_compressed_size: usize = 0,
     expected_uncompressed_size: usize = 0,
 
@@ -233,6 +284,7 @@ pub const Parser = struct {
         compressed_size: usize,
         uncompressed_size: usize,
         buffered_suffix: []const u8,
+        verify_crc32: bool,
     ) error{InvalidZipArchive}!void {
         if (buffered_suffix.len >= layout.unsignedLen() or buffered_suffix.len > self.buffer.len)
             return error.InvalidZipArchive;
@@ -241,6 +293,7 @@ pub const Parser = struct {
             .expected_crc32 = crc32,
             .expected_compressed_size = compressed_size,
             .expected_uncompressed_size = uncompressed_size,
+            .verify_crc32 = verify_crc32,
         };
         @memcpy(self.buffer[0..buffered_suffix.len], buffered_suffix);
         self.buffer_len = buffered_suffix.len;
@@ -288,7 +341,7 @@ pub const Parser = struct {
     }
 
     fn matches(self: *const Self, parsed: Descriptor) bool {
-        return parsed.crc32 == self.expected_crc32 and
+        return (!self.verify_crc32 or parsed.crc32 == self.expected_crc32) and
             parsed.compressed_size == self.expected_compressed_size and
             parsed.uncompressed_size == self.expected_uncompressed_size;
     }

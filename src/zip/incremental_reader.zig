@@ -69,12 +69,18 @@ pub const Reader = struct {
         };
 
         const WinZipAesState = struct {
+            const raw_tail_capacity = winzip_aes.authentication_code_len +
+                wire.zip64_data_descriptor_len + 1;
+
             info: types.WinZipAesInfo,
             header: [winzip_aes.max_salt_len + winzip_aes.password_verifier_len]u8 = undefined,
             header_len: usize = 0,
             cipher: ?winzip_aes.Cipher = null,
             authentication: [winzip_aes.authentication_code_len]u8 = undefined,
             authentication_len: usize = 0,
+            raw_tail: [raw_tail_capacity]u8 = undefined,
+            raw_tail_len: usize = 0,
+            checkpoint: ?winzip_aes.Cipher = null,
         };
 
         fn initTraditional(password: []const u8, check_byte: u8) EncryptionState {
@@ -104,15 +110,23 @@ pub const Reader = struct {
                 },
                 .winzip_aes => |*state| {
                     if (state.cipher) |*cipher| cipher.deinit();
+                    if (state.checkpoint) |*checkpoint| checkpoint.deinit();
                     std.crypto.secureZero(u8, &state.header);
                     std.crypto.secureZero(u8, &state.authentication);
+                    std.crypto.secureZero(u8, &state.raw_tail);
                 },
             }
             self.* = undefined;
         }
 
         fn appendRawTail(self: *EncryptionState, bytes: []const u8) void {
-            const state = &self.traditional;
+            return switch (self.*) {
+                .traditional => |*state| appendTraditionalRawTail(state, bytes),
+                .winzip_aes => |*state| appendWinZipAesRawTail(state, bytes),
+            };
+        }
+
+        fn appendTraditionalRawTail(state: *TraditionalState, bytes: []const u8) void {
             if (bytes.len >= state.raw_tail.len) {
                 @memcpy(&state.raw_tail, bytes[bytes.len - state.raw_tail.len ..]);
                 state.raw_tail_len = state.raw_tail.len;
@@ -130,9 +144,68 @@ pub const Reader = struct {
         }
 
         fn rawSuffix(self: *const EncryptionState, len: usize) error{InvalidZipArchive}![]const u8 {
-            const state = &self.traditional;
-            if (len > state.raw_tail_len) return error.InvalidZipArchive;
+            return switch (self.*) {
+                .traditional => |*state| blk: {
+                    if (len > state.raw_tail_len) return error.InvalidZipArchive;
+                    break :blk state.raw_tail[state.raw_tail_len - len .. state.raw_tail_len];
+                },
+                .winzip_aes => |*state| blk: {
+                    if (len > state.raw_tail_len) return error.InvalidZipArchive;
+                    break :blk state.raw_tail[state.raw_tail_len - len .. state.raw_tail_len];
+                },
+            };
+        }
+
+        fn rollbackWinZipAesTrailing(
+            self: *EncryptionState,
+            len: usize,
+        ) error{InvalidZipArchive}![]const u8 {
+            const state = &self.winzip_aes;
+            if (len > state.raw_tail_len or state.checkpoint == null or state.cipher == null)
+                return error.InvalidZipArchive;
+            var corrected = state.checkpoint.?;
+            defer corrected.deinit();
+            decryptDiscard(&corrected, state.raw_tail[0 .. state.raw_tail_len - len]);
+            state.cipher.?.deinit();
+            state.cipher = corrected;
             return state.raw_tail[state.raw_tail_len - len .. state.raw_tail_len];
+        }
+
+        fn appendWinZipAesRawTail(state: *WinZipAesState, bytes: []const u8) void {
+            const capacity = state.raw_tail.len;
+            if (bytes.len >= capacity) {
+                advanceCheckpoint(state, state.raw_tail[0..state.raw_tail_len]);
+                advanceCheckpoint(state, bytes[0 .. bytes.len - capacity]);
+                @memcpy(&state.raw_tail, bytes[bytes.len - capacity ..]);
+                state.raw_tail_len = capacity;
+                return;
+            }
+            const discard = state.raw_tail_len + bytes.len -| capacity;
+            advanceCheckpoint(state, state.raw_tail[0..discard]);
+            const retained = state.raw_tail_len - discard;
+            std.mem.copyForwards(
+                u8,
+                state.raw_tail[0..retained],
+                state.raw_tail[discard..state.raw_tail_len],
+            );
+            @memcpy(state.raw_tail[retained..][0..bytes.len], bytes);
+            state.raw_tail_len = retained + bytes.len;
+        }
+
+        fn advanceCheckpoint(state: *WinZipAesState, bytes: []const u8) void {
+            if (bytes.len == 0) return;
+            decryptDiscard(&state.checkpoint.?, bytes);
+        }
+
+        fn decryptDiscard(cipher: *winzip_aes.Cipher, bytes: []const u8) void {
+            var discarded: [256]u8 = undefined;
+            defer std.crypto.secureZero(u8, &discarded);
+            var offset: usize = 0;
+            while (offset < bytes.len) {
+                const take = @min(discarded.len, bytes.len - offset);
+                cipher.decrypt(bytes[offset..][0..take], discarded[0..take]);
+                offset += take;
+            }
         }
     };
 
@@ -410,6 +483,10 @@ pub const Reader = struct {
                     return result(input_read, output_written, .need_input);
                 if (!encryption.cipher.?.verifyAuthenticationCode(encryption.authentication))
                     return error.InvalidAuthenticationCode;
+                if (self.directory.records.items[self.current_index.?].uses_descriptor) {
+                    self.phase = .entry_descriptor;
+                    continue;
+                }
                 try self.completeCurrentEntry();
                 return result(input_read, output_written, .entry_done);
             },
@@ -533,15 +610,21 @@ pub const Reader = struct {
             return error.OutputLimitExceeded;
         const encrypted = local.flags & wire.encrypted_flag != 0;
         const uses_winzip_aes = local.winzip_aes != null;
-        if (uses_winzip_aes and local.descriptor_layout != null)
-            return error.EncryptedZipEntry;
         if (encrypted and !uses_winzip_aes and local.flags & (1 << 6) != 0)
             return error.UnsupportedZipFeature;
         const outer_compressed_size = local.compressed_size;
-        const compressed_size_prefix = if (encrypted and !uses_winzip_aes and local.descriptor_layout != null)
-            traditional_encryption.header_len
+        const compressed_size_prefix = if (encrypted and local.descriptor_layout != null)
+            if (local.winzip_aes) |aes|
+                aes.strength.overhead()
+            else
+                traditional_encryption.header_len
         else
             0;
+        const authentication_code_len = if (uses_winzip_aes and local.descriptor_layout != null)
+            winzip_aes.authentication_code_len
+        else
+            0;
+        const verify_crc32 = if (local.winzip_aes) |aes| aes.version == .ae1 else true;
         var encryption_state: ?EncryptionState = null;
         errdefer if (encryption_state) |*state| state.deinit();
         if (encrypted) {
@@ -603,10 +686,12 @@ pub const Reader = struct {
         );
         const state: EntryState = if (local.descriptor_layout) |layout|
             switch (local.method) {
-                .stored => .{ .stored_descriptor = descriptor.StoredScanner.initWithCompressedSizePrefix(
+                .stored => .{ .stored_descriptor = descriptor.StoredScanner.initWithEncryption(
                     layout,
                     entry_limit,
                     compressed_size_prefix,
+                    authentication_code_len,
+                    verify_crc32,
                 ) },
                 .shrink => .{ .shrink = try codecs.ShrinkState.init(
                     self.allocator,
@@ -615,6 +700,8 @@ pub const Reader = struct {
                     local.uncompressed_size,
                     layout,
                     compressed_size_prefix,
+                    authentication_code_len,
+                    verify_crc32,
                 ) },
                 .reduce_1, .reduce_2, .reduce_3, .reduce_4 => .{ .reduce = try codecs.ReduceState.init(
                     self.allocator,
@@ -624,6 +711,8 @@ pub const Reader = struct {
                     local.uncompressed_size,
                     layout,
                     compressed_size_prefix,
+                    authentication_code_len,
+                    verify_crc32,
                 ) },
                 .implode => .{ .implode = try codecs.ImplodeState.init(
                     self.allocator,
@@ -633,6 +722,8 @@ pub const Reader = struct {
                     local.uncompressed_size,
                     layout,
                     compressed_size_prefix,
+                    authentication_code_len,
+                    verify_crc32,
                 ) },
                 .deflate => .{ .deflate_descriptor = try codecs.DeflateState.init(
                     entry_limit,
@@ -705,6 +796,8 @@ pub const Reader = struct {
                     local.uncompressed_size,
                     null,
                     0,
+                    0,
+                    true,
                 ) };
             if (reduceFactor(local.method)) |factor|
                 break :blk .{ .reduce = try codecs.ReduceState.init(
@@ -715,6 +808,8 @@ pub const Reader = struct {
                     local.uncompressed_size,
                     null,
                     0,
+                    0,
+                    true,
                 ) };
             if (local.method == .shrink)
                 break :blk .{ .shrink = try codecs.ShrinkState.init(
@@ -724,6 +819,8 @@ pub const Reader = struct {
                     local.uncompressed_size,
                     null,
                     0,
+                    0,
+                    true,
                 ) };
             if (local.method == .bzip2)
                 break :blk .{ .bzip2 = codecs.Bzip2State.init(
@@ -954,11 +1051,12 @@ pub const Reader = struct {
                 encryption.header[0..salt_len],
                 encryption.info.strength,
             );
-            errdefer cipher.deinit();
+            defer cipher.deinit();
             if (!cipher.verifyPassword(
                 encryption.header[salt_len..][0..winzip_aes.password_verifier_len].*,
             )) return error.InvalidZipPassword;
             encryption.cipher = cipher;
+            encryption.checkpoint = cipher;
         }
         if (input_read.* == input.len) return null;
 
@@ -970,26 +1068,30 @@ pub const Reader = struct {
         var trial = encryption.cipher.?;
         defer trial.deinit();
         trial.decrypt(raw, decrypted[0..take]);
+        var committed = encryption.cipher.?;
+        defer committed.deinit();
         var decrypted_read: usize = 0;
         const status = try self.stepEntryDataDecoded(
             raw,
             decrypted[0..take],
-            false,
+            self.directory.records.items[self.current_index.?].uses_descriptor,
             output,
             &decrypted_read,
             output_written,
         );
         input_read.* = try checkedAdd(input_read.*, decrypted_read);
 
-        var committed = encryption.cipher.?;
-        defer committed.deinit();
         var discarded: [256]u8 = undefined;
         defer std.crypto.secureZero(u8, &discarded);
         committed.decrypt(raw[0..decrypted_read], discarded[0..decrypted_read]);
         if (self.current_encryption) |*active_union| {
-            const active = &active_union.winzip_aes;
-            active.cipher.?.deinit();
-            active.cipher = committed;
+            const descriptor_boundary = self.phase == .entry_authentication and
+                self.directory.records.items[self.current_index.?].uses_descriptor;
+            if (!descriptor_boundary) {
+                const active = &active_union.winzip_aes;
+                active.cipher.?.deinit();
+                active.cipher = committed;
+            }
         }
         return status;
     }
@@ -1032,14 +1134,11 @@ pub const Reader = struct {
                 );
                 if (stepped.status == .done) {
                     const parsed = scanner.descriptor().?;
-                    var record = &self.directory.records.items[self.current_index.?];
-                    record.crc32 = parsed.crc32;
-                    record.compressed_size = try u64ToUsize(parsed.compressed_size);
-                    record.uncompressed_size = try u64ToUsize(parsed.uncompressed_size);
-                    const prefix = scanner.retainedRecordPrefix();
-                    if (prefix.len != 0) try self.prepareRecordPrefix(prefix);
-                    try self.completeCurrentEntry();
-                    return .entry_done;
+                    return try self.finishScannedDescriptor(
+                        parsed,
+                        scanner.retainedRecordPrefix(),
+                        scanner.authenticationCode(),
+                    );
                 }
                 if (stepped.status == .need_output) return .need_output;
                 return null;
@@ -1192,13 +1291,11 @@ pub const Reader = struct {
             if (state.layout() != null) {
                 const parsed = state.descriptorValue() orelse
                     return error.InvalidZipArchive;
-                var record = &self.directory.records.items[self.current_index.?];
-                record.crc32 = parsed.crc32;
-                record.compressed_size = try u64ToUsize(parsed.compressed_size);
-                record.uncompressed_size = try u64ToUsize(parsed.uncompressed_size);
-                const prefix = state.retainedRecordPrefix();
-                if (prefix.len != 0) try self.prepareRecordPrefix(prefix);
-                try self.completeCurrentEntry();
+                return try self.finishScannedDescriptor(
+                    parsed,
+                    state.retainedRecordPrefix(),
+                    state.authenticationCode(),
+                );
             } else {
                 return try self.validateKnownCodec(
                     state.crc32(),
@@ -1213,6 +1310,34 @@ pub const Reader = struct {
         return null;
     }
 
+    fn finishScannedDescriptor(
+        self: *Self,
+        parsed: descriptor.Descriptor,
+        record_prefix: []const u8,
+        authentication: []const u8,
+    ) Error!?StepResult.Status {
+        var record = &self.directory.records.items[self.current_index.?];
+        record.crc32 = parsed.crc32;
+        record.compressed_size = try u64ToUsize(parsed.compressed_size);
+        record.uncompressed_size = try u64ToUsize(parsed.uncompressed_size);
+        if (record.winzip_aes != null) {
+            if (authentication.len != winzip_aes.authentication_code_len)
+                return error.InvalidZipArchive;
+            const layout: descriptor.Layout = if (parsed.zip64) .zip64 else .zip32;
+            _ = try self.current_encryption.?.rollbackWinZipAesTrailing(
+                winzip_aes.authentication_code_len + layout.signedLen(),
+            );
+            const aes = &self.current_encryption.?.winzip_aes;
+            aes.authentication = authentication[0..winzip_aes.authentication_code_len].*;
+            aes.authentication_len = winzip_aes.authentication_code_len;
+            if (!aes.cipher.?.verifyAuthenticationCode(aes.authentication))
+                return error.InvalidAuthenticationCode;
+        }
+        if (record_prefix.len != 0) try self.prepareRecordPrefix(record_prefix);
+        try self.completeCurrentEntry();
+        return .entry_done;
+    }
+
     fn finishContainerCodec(
         self: *Self,
         state: anytype,
@@ -1221,20 +1346,47 @@ pub const Reader = struct {
         const decoded_trailing = state.trailingInput();
         const compressed_size = try state.actualCompressedSize();
         if (state.layout()) |layout| {
-            const trailing = if (encrypted_descriptor)
-                try self.current_encryption.?.rawSuffix(decoded_trailing.len)
-            else
-                decoded_trailing;
+            var descriptor_suffix = decoded_trailing;
+            var expected_crc32 = state.crc32();
+            var verify_crc32 = true;
+            var encryption_overhead: usize = 0;
+            if (encrypted_descriptor) {
+                const encryption = &self.current_encryption.?;
+                switch (encryption.*) {
+                    .traditional => {
+                        descriptor_suffix = try encryption.rawSuffix(decoded_trailing.len);
+                        encryption_overhead = traditional_encryption.header_len;
+                    },
+                    .winzip_aes => |*aes| {
+                        const raw_trailing = try encryption.rollbackWinZipAesTrailing(
+                            decoded_trailing.len,
+                        );
+                        const auth_take = @min(
+                            winzip_aes.authentication_code_len,
+                            raw_trailing.len,
+                        );
+                        @memcpy(aes.authentication[0..auth_take], raw_trailing[0..auth_take]);
+                        aes.authentication_len = auth_take;
+                        descriptor_suffix = raw_trailing[auth_take..];
+                        encryption_overhead = aes.info.strength.overhead();
+                        if (aes.info.version == .ae2) {
+                            expected_crc32 = 0;
+                            verify_crc32 = false;
+                        }
+                    },
+                }
+            }
             try self.beginDescriptor(
                 layout,
-                state.crc32(),
-                try checkedAdd(
-                    compressed_size,
-                    if (encrypted_descriptor) traditional_encryption.header_len else 0,
-                ),
+                expected_crc32,
+                try checkedAdd(compressed_size, encryption_overhead),
                 state.outputSize(),
-                trailing,
+                descriptor_suffix,
+                verify_crc32,
             );
+            if (encrypted_descriptor and
+                std.meta.activeTag(self.current_encryption.?) == .winzip_aes)
+                self.phase = .entry_authentication;
             return null;
         }
         return try self.validateKnownCodec(
@@ -1284,6 +1436,7 @@ pub const Reader = struct {
         compressed_size: usize,
         uncompressed_size: usize,
         buffered_suffix: []const u8,
+        verify_crc32: bool,
     ) Error!void {
         try self.descriptor_parser.begin(
             layout,
@@ -1291,6 +1444,7 @@ pub const Reader = struct {
             compressed_size,
             uncompressed_size,
             buffered_suffix,
+            verify_crc32,
         );
         self.phase = .entry_descriptor;
     }

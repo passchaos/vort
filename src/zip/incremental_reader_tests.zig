@@ -1162,16 +1162,227 @@ test "ZIP incremental reader streams known-size WinZip AES entries" {
 
     const descriptor_bytes = try zip.encodeAlloc(allocator, entries[0..1], .{ .data_descriptor = true });
     defer allocator.free(descriptor_bytes);
-    try std.testing.expectError(
-        error.EncryptedZipEntry,
-        decodeArchiveFragmented(
-            allocator,
-            descriptor_bytes,
-            expected[0..1],
-            .{ .password = password },
-            1,
-            1,
-        ),
+    try decodeArchiveFragmented(
+        allocator,
+        descriptor_bytes,
+        expected[0..1],
+        .{ .password = password },
+        1,
+        1,
+    );
+}
+
+test "ZIP incremental reader streams descriptor WinZip AES across every codec" {
+    const allocator = std.testing.allocator;
+    const password = "descriptor WinZip AES password";
+    const payload = "authenticated descriptor payload spanning every ZIP codec\n" ** 37;
+    const salt = [_]u8{0x6a} ** 16;
+    const methods = [_]zip.CompressionMethod{
+        .stored,
+        .shrink,
+        .reduce_1,
+        .implode,
+        .deflate,
+        .deflate64,
+        .dcl_implode,
+        .bzip2,
+        .lzma,
+        .zstandard_legacy,
+        .zstandard,
+        .xz,
+        .ppmd,
+    };
+    const names = [_][]const u8{
+        "aes-descriptor/stored.bin",
+        "aes-descriptor/shrink.bin",
+        "aes-descriptor/reduce.bin",
+        "aes-descriptor/implode.bin",
+        "aes-descriptor/deflate.bin",
+        "aes-descriptor/deflate64.bin",
+        "aes-descriptor/dcl.bin",
+        "aes-descriptor/bzip2.bin",
+        "aes-descriptor/lzma.bin",
+        "aes-descriptor/zstd-legacy.bin",
+        "aes-descriptor/zstd.bin",
+        "aes-descriptor/xz.bin",
+        "aes-descriptor/ppmd.bin",
+    };
+    var entries: [methods.len]zip.EncodeEntry = undefined;
+    var expected: [methods.len]ExpectedEntry = undefined;
+
+    inline for (.{ zip.WinZipAesVendorVersion.ae1, .ae2 }) |version| {
+        for (methods, names, 0..) |method, name, index| {
+            entries[index] = .{
+                .name = name,
+                .data = payload,
+                .method = method,
+                .winzip_aes = .{
+                    .password = password,
+                    .strength = .aes256,
+                    .salt = &salt,
+                    .version = version,
+                },
+            };
+            expected[index] = .{ .name = name, .data = payload };
+        }
+        inline for (.{ zip.Zip64Mode.never, .always }) |zip64_mode| {
+            const bytes = try zip.encodeAlloc(allocator, &entries, .{
+                .data_descriptor = true,
+                .zip64 = zip64_mode,
+                .ppmd_options = .{ .memory_size = 1024 * 1024 },
+            });
+            defer allocator.free(bytes);
+            try decodeArchiveFragmented(
+                allocator,
+                bytes,
+                &expected,
+                .{ .password = password },
+                1,
+                1,
+            );
+            try decodeArchiveFragmented(
+                allocator,
+                bytes,
+                &expected,
+                .{ .password = password },
+                257,
+                31,
+            );
+            try std.testing.expectError(
+                error.InvalidZipPassword,
+                decodeArchiveFragmented(
+                    allocator,
+                    bytes,
+                    &expected,
+                    .{ .password = "wrong" },
+                    3,
+                    5,
+                ),
+            );
+
+            if (version == .ae1 and zip64_mode == .never) {
+                const archive = try zip.parse(bytes);
+                const first = try archive.entryAt(0);
+                const name_len = std.mem.readInt(
+                    u16,
+                    bytes[first.local_header_offset + 26 ..][0..2],
+                    .little,
+                );
+                const extra_len = std.mem.readInt(
+                    u16,
+                    bytes[first.local_header_offset + 28 ..][0..2],
+                    .little,
+                );
+                const data_offset = first.local_header_offset + wire.local_file_header_len +
+                    name_len + extra_len;
+                const corrupt = try allocator.dupe(u8, bytes);
+                defer allocator.free(corrupt);
+                corrupt[data_offset + first.compressed_size - 1] ^= 1;
+                try expectReaderError(
+                    allocator,
+                    corrupt,
+                    .{ .password = password },
+                    error.InvalidAuthenticationCode,
+                );
+            }
+        }
+    }
+
+    inline for (.{ zip.Zip64Mode.never, .always }) |zip64_mode| {
+        inline for (.{
+            zip.CompressionMethod.stored,
+            zip.CompressionMethod.shrink,
+            zip.CompressionMethod.reduce_1,
+            zip.CompressionMethod.implode,
+            zip.CompressionMethod.deflate,
+            zip.CompressionMethod.dcl_implode,
+            zip.CompressionMethod.bzip2,
+        }) |method| {
+            const single_entries = [_]zip.EncodeEntry{.{
+                .name = "aes-descriptor/unsigned.bin",
+                .data = payload,
+                .method = method,
+                .winzip_aes = .{
+                    .password = password,
+                    .strength = .aes256,
+                    .salt = &salt,
+                    .version = .ae2,
+                },
+            }};
+            const single_expected = [_]ExpectedEntry{.{
+                .name = single_entries[0].name,
+                .data = payload,
+            }};
+            const signed = try zip.encodeAlloc(allocator, &single_entries, .{
+                .data_descriptor = true,
+                .zip64 = zip64_mode,
+            });
+            defer allocator.free(signed);
+            const unsigned = try withoutDescriptorSignature(allocator, signed);
+            defer allocator.free(unsigned);
+            try decodeArchiveFragmented(
+                allocator,
+                unsigned,
+                &single_expected,
+                .{ .password = password },
+                1,
+                1,
+            );
+        }
+    }
+
+    const nonzero_crc_entries = [_]zip.EncodeEntry{.{
+        .name = "aes-descriptor/ae2-nonzero-crc.bin",
+        .data = payload,
+        .method = .deflate,
+        .winzip_aes = .{
+            .password = password,
+            .strength = .aes256,
+            .salt = &salt,
+            .version = .ae2,
+        },
+    }};
+    const nonzero_crc_expected = [_]ExpectedEntry{.{
+        .name = nonzero_crc_entries[0].name,
+        .data = payload,
+    }};
+    const canonical = try zip.encodeAlloc(allocator, &nonzero_crc_entries, .{
+        .data_descriptor = true,
+        .zip64 = .never,
+    });
+    defer allocator.free(canonical);
+    const canonical_archive = try zip.parse(canonical);
+    const canonical_entry = try canonical_archive.entryAt(0);
+    const local_name_len = std.mem.readInt(
+        u16,
+        canonical[canonical_entry.local_header_offset + 26 ..][0..2],
+        .little,
+    );
+    const local_extra_len = std.mem.readInt(
+        u16,
+        canonical[canonical_entry.local_header_offset + 28 ..][0..2],
+        .little,
+    );
+    const data_offset = canonical_entry.local_header_offset + wire.local_file_header_len +
+        local_name_len + local_extra_len;
+    const descriptor_offset = data_offset + canonical_entry.compressed_size;
+    const nonzero_crc = try allocator.dupe(u8, canonical);
+    defer allocator.free(nonzero_crc);
+    const ignored_crc: u32 = 0xa5c3_19e7;
+    std.mem.writeInt(u32, nonzero_crc[descriptor_offset + 4 ..][0..4], ignored_crc, .little);
+    std.mem.writeInt(
+        u32,
+        nonzero_crc[canonical_entry.central_header_offset + 16 ..][0..4],
+        ignored_crc,
+        .little,
+    );
+    try decodeArchiveFragmented(
+        allocator,
+        nonzero_crc,
+        &nonzero_crc_expected,
+        .{ .password = password },
+        3,
+        7,
     );
 }
 
