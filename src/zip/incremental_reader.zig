@@ -56,6 +56,7 @@ pub const Reader = struct {
         stored_descriptor: descriptor.StoredScanner,
         deflate_descriptor: codecs.DeflateState,
         deflate64: codecs.Deflate64State,
+        dcl_implode: codecs.DclImplodeState,
         bzip2: codecs.Bzip2State,
         lzma: codecs.LzmaZipState,
         ppmd: codecs.PpmdZipState,
@@ -66,6 +67,7 @@ pub const Reader = struct {
             switch (self.*) {
                 .deflate_descriptor => |*state| state.deinit(),
                 .deflate64 => |*state| state.deinit(),
+                .dcl_implode => |*state| state.deinit(),
                 .bzip2 => |*state| state.deinit(),
                 .lzma => |*state| state.deinit(),
                 .ppmd => |*state| state.deinit(),
@@ -424,6 +426,8 @@ pub const Reader = struct {
                 return error.InvalidZipArchive,
             .deflate64 => if (local.version_needed < wire.version_21)
                 return error.InvalidZipArchive,
+            .dcl_implode => if (local.version_needed < wire.version_20)
+                return error.InvalidZipArchive,
             .bzip2 => if (local.version_needed < wire.version_46)
                 return error.InvalidZipArchive,
             .lzma, .xz, .ppmd, .zstandard_legacy, .zstandard => if (local.version_needed < wire.version_63)
@@ -450,6 +454,12 @@ pub const Reader = struct {
                 ) },
                 .deflate64 => .{ .deflate64 = try codecs.Deflate64State.init(
                     self.allocator,
+                    entry_limit,
+                    local.compressed_size,
+                    local.uncompressed_size,
+                    layout,
+                ) },
+                .dcl_implode => .{ .dcl_implode = codecs.DclImplodeState.init(
                     entry_limit,
                     local.compressed_size,
                     local.uncompressed_size,
@@ -511,6 +521,13 @@ pub const Reader = struct {
             if (local.method == .deflate64)
                 break :blk .{ .deflate64 = try codecs.Deflate64State.init(
                     self.allocator,
+                    entry_limit,
+                    local.compressed_size,
+                    local.uncompressed_size,
+                    null,
+                ) };
+            if (local.method == .dcl_implode)
+                break :blk .{ .dcl_implode = codecs.DclImplodeState.init(
                     entry_limit,
                     local.compressed_size,
                     local.uncompressed_size,
@@ -633,6 +650,13 @@ pub const Reader = struct {
                 output_written,
             ),
             .deflate64 => |*codec_state| return try self.stepContainerCodec(
+                codec_state,
+                input,
+                output,
+                input_read,
+                output_written,
+            ),
+            .dcl_implode => |*codec_state| return try self.stepContainerCodec(
                 codec_state,
                 input,
                 output,

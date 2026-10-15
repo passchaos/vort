@@ -142,6 +142,8 @@ pub fn parseCentral(bytes: []const u8) Error!CentralHeader {
         return error.InvalidZipArchive;
     if (method == .deflate64 and version_needed < wire.version_21)
         return error.InvalidZipArchive;
+    if (method == .dcl_implode and version_needed < wire.version_20)
+        return error.InvalidZipArchive;
     if ((method == .lzma or method == .xz or method == .ppmd or
         method == .zstandard_legacy or method == .zstandard) and
         version_needed < wire.version_63)

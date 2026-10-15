@@ -391,6 +391,35 @@ test "ZIP incremental reader streams PPMd restart and cut-off members" {
     }, error.OutputLimitExceeded);
 }
 
+test "ZIP incremental reader streams every DCL Implode mode" {
+    const allocator = std.testing.allocator;
+    const payload = "incremental ZIP DCL Implode method-10 member\n" ** 79;
+    const entries = [_]zip.EncodeEntry{.{
+        .name = "codec/dcl-implode.txt",
+        .data = payload,
+        .method = .dcl_implode,
+    }};
+    const expected = [_]ExpectedEntry{.{ .name = entries[0].name, .data = payload }};
+    inline for (.{ false, true }) |literal_coded| {
+        inline for (std.meta.tags(zip.DclImplodeDictionary)) |dictionary| {
+            inline for (.{ false, true }) |uses_descriptor| {
+                inline for (.{ zip.Zip64Mode.never, zip.Zip64Mode.always }) |zip64_mode| {
+                    const bytes = try zip.encodeAlloc(allocator, &entries, .{
+                        .data_descriptor = uses_descriptor,
+                        .zip64 = zip64_mode,
+                        .dcl_implode_options = .{
+                            .literal_coded = literal_coded,
+                            .dictionary = dictionary,
+                        },
+                    });
+                    defer allocator.free(bytes);
+                    try decodeArchiveFragmented(allocator, bytes, &expected, .{}, 3, 7);
+                }
+            }
+        }
+    }
+}
+
 test "ZIP incremental reader accepts unsigned Stored and Deflate descriptors" {
     const allocator = std.testing.allocator;
     const cases = [_]struct {
