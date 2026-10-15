@@ -7,14 +7,16 @@ const descriptor = @import("incremental_reader/descriptor.zig");
 const directory = @import("incremental_reader/directory.zig");
 const entry_decoder = @import("incremental_entry_decoder.zig");
 const types = @import("types.zig");
+const traditional_encryption = @import("vail_archive_crypto").zipcrypto;
 const wire = @import("wire.zig");
 
 pub const CompressionMethod = api.CompressionMethod;
 
-pub const Error = codecs.Error || entry_decoder.Error || archive_records.Error || std.mem.Allocator.Error || error{
+pub const Error = codecs.Error || entry_decoder.Error || archive_records.Error || traditional_encryption.Error || std.mem.Allocator.Error || error{
     ZipReaderFailed,
     UnsupportedZipCompressionMethod,
     EncryptedZipEntry,
+    PasswordRequired,
 };
 
 pub const Options = api.Options;
@@ -39,6 +41,7 @@ pub const Reader = struct {
     directory: directory.State = .{},
     current_index: ?usize = null,
     current_state: ?EntryState = null,
+    current_encryption: ?EncryptionState = null,
     descriptor_parser: descriptor.Parser = .{},
     total_input: usize = 0,
     total_output: usize = 0,
@@ -50,6 +53,26 @@ pub const Reader = struct {
     last_error_name: []const u8 = "",
 
     const Self = @This();
+
+    const EncryptionState = struct {
+        cipher: traditional_encryption.Cipher,
+        header: [traditional_encryption.header_len]u8 = undefined,
+        header_len: usize = 0,
+        check_byte: u8,
+
+        fn init(password: []const u8, check_byte: u8) EncryptionState {
+            return .{
+                .cipher = traditional_encryption.Cipher.init(password),
+                .check_byte = check_byte,
+            };
+        }
+
+        fn deinit(self: *EncryptionState) void {
+            self.cipher.deinit();
+            std.crypto.secureZero(u8, &self.header);
+            self.* = undefined;
+        }
+    };
 
     const EntryState = union(enum) {
         known: entry_decoder.Decoder,
@@ -124,6 +147,7 @@ pub const Reader = struct {
 
     pub fn resetWithOptions(self: *Self, options: Options) Error!void {
         try validateOptions(options);
+        if (self.current_encryption) |*encryption| encryption.deinit();
         if (self.current_state) |*state| state.deinit();
         self.directory.reset(self.allocator);
         if (self.archive_comment.len != 0) self.allocator.free(self.archive_comment);
@@ -134,6 +158,7 @@ pub const Reader = struct {
         self.record_offset = 0;
         self.current_index = null;
         self.current_state = null;
+        self.current_encryption = null;
         self.descriptor_parser.reset();
         self.total_input = 0;
         self.total_output = 0;
@@ -146,6 +171,7 @@ pub const Reader = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        if (self.current_encryption) |*encryption| encryption.deinit();
         if (self.current_state) |*state| state.deinit();
         self.directory.deinit(self.allocator);
         self.control.deinit(self.allocator);
@@ -297,12 +323,16 @@ pub const Reader = struct {
                 return result(input_read, output_written, .entry_header);
             },
             .entry_data => {
+                var entry_input_read: usize = 0;
+                var entry_output_written: usize = 0;
                 const status = try self.stepEntryData(
                     input[input_read..],
                     output[output_written..],
-                    &input_read,
-                    &output_written,
+                    &entry_input_read,
+                    &entry_output_written,
                 );
+                input_read = try checkedAdd(input_read, entry_input_read);
+                output_written = try checkedAdd(output_written, entry_output_written);
                 if (status) |finished_status|
                     return result(input_read, output_written, finished_status);
                 if (input_read == input.len)
@@ -422,10 +452,29 @@ pub const Reader = struct {
         };
     }
 
-    fn startEntry(self: *Self, local: archive_records.LocalHeader) Error!void {
+    fn startEntry(self: *Self, local_value: archive_records.LocalHeader) Error!void {
+        var local = local_value;
         if (self.directory.records.items.len == self.options.max_entries)
             return error.OutputLimitExceeded;
-        if (local.flags & 1 != 0) return error.EncryptedZipEntry;
+        const encrypted = local.flags & wire.encrypted_flag != 0;
+        if (encrypted and local.flags & (1 << 6) != 0)
+            return error.UnsupportedZipFeature;
+        if (encrypted and local.descriptor_layout != null)
+            return error.EncryptedZipEntry;
+        const outer_compressed_size = local.compressed_size;
+        var encryption_state: ?EncryptionState = null;
+        errdefer if (encryption_state) |*state| state.deinit();
+        if (encrypted) {
+            const password = self.options.password orelse return error.PasswordRequired;
+            const compressed_size = local.compressed_size orelse return error.InvalidZipArchive;
+            if (compressed_size < traditional_encryption.header_len)
+                return error.TruncatedZipEncryptionHeader;
+            local.compressed_size = compressed_size - traditional_encryption.header_len;
+            encryption_state = EncryptionState.init(
+                password,
+                @truncate(local.crc32.? >> 24),
+            );
+        }
         switch (local.method) {
             .stored => {},
             .shrink => if (local.version_needed < wire.version_10)
@@ -634,7 +683,7 @@ pub const Reader = struct {
             const synthetic: types.Entry = .{
                 .name = name,
                 .method = local.method,
-                .flags = local.flags,
+                .flags = local.flags & ~wire.encrypted_flag,
                 .crc32 = local.crc32.?,
                 .compressed_size = local.compressed_size.?,
                 .uncompressed_size = local.uncompressed_size.?,
@@ -655,7 +704,7 @@ pub const Reader = struct {
             .method = local.method,
             .flags = local.flags,
             .crc32 = local.crc32 orelse 0,
-            .compressed_size = local.compressed_size orelse 0,
+            .compressed_size = outer_compressed_size orelse 0,
             .uncompressed_size = local.uncompressed_size orelse 0,
             .local_header_offset = self.record_offset,
             .zip64_local = local.zip64,
@@ -664,10 +713,63 @@ pub const Reader = struct {
         self.directory.retained_metadata_size += name.len;
         self.current_index = record_index;
         self.current_state = state;
+        self.current_encryption = encryption_state;
+        encryption_state = null;
         self.descriptor_parser.reset();
     }
 
     fn stepEntryData(
+        self: *Self,
+        input: []const u8,
+        output: []u8,
+        input_read: *usize,
+        output_written: *usize,
+    ) Error!?StepResult.Status {
+        if (self.current_encryption == null)
+            return self.stepEntryDataPlain(input, output, input_read, output_written);
+
+        var encryption = &self.current_encryption.?;
+        while (encryption.header_len < traditional_encryption.header_len and
+            input_read.* < input.len)
+        {
+            encryption.header[encryption.header_len] = encryption.cipher.decryptByte(
+                input[input_read.*],
+            );
+            encryption.header_len += 1;
+            input_read.* += 1;
+            self.total_input = try checkedAdd(self.total_input, 1);
+        }
+        if (encryption.header_len != traditional_encryption.header_len) return null;
+        if (encryption.header[traditional_encryption.header_random_len] != encryption.check_byte)
+            return error.InvalidZipPassword;
+        if (input_read.* == input.len) return null;
+
+        const raw_offset = input_read.*;
+        const take = @min(input.len - raw_offset, 256);
+        var decrypted: [256]u8 = undefined;
+        defer std.crypto.secureZero(u8, &decrypted);
+        var trial = encryption.cipher;
+        defer trial.deinit();
+        trial.decrypt(input[raw_offset..][0..take], decrypted[0..take]);
+        var committed = encryption.cipher;
+        defer committed.deinit();
+        var decrypted_read: usize = 0;
+        const status = try self.stepEntryDataPlain(
+            decrypted[0..take],
+            output,
+            &decrypted_read,
+            output_written,
+        );
+        input_read.* = try checkedAdd(input_read.*, decrypted_read);
+        for (input[raw_offset..][0..decrypted_read]) |byte| _ = committed.decryptByte(byte);
+        if (self.current_encryption) |*active| {
+            active.cipher.deinit();
+            active.cipher = committed;
+        }
+        return status;
+    }
+
+    fn stepEntryDataPlain(
         self: *Self,
         input: []const u8,
         output: []u8,
@@ -864,7 +966,11 @@ pub const Reader = struct {
     ) Error!void {
         if (trailing.len != 0) return error.InvalidZipArchive;
         const record = &self.directory.records.items[self.current_index.?];
-        if (record.compressed_size != compressed_size or record.uncompressed_size != uncompressed_size)
+        const outer_compressed_size = try checkedAdd(
+            compressed_size,
+            if (self.current_encryption != null) traditional_encryption.header_len else 0,
+        );
+        if (record.compressed_size != outer_compressed_size or record.uncompressed_size != uncompressed_size)
             return error.SizeMismatch;
         if (record.crc32 != crc32) return error.ChecksumMismatch;
         try self.completeCurrentEntry();
@@ -891,6 +997,8 @@ pub const Reader = struct {
     fn completeCurrentEntry(self: *Self) Error!void {
         const index = self.current_index orelse return error.InvalidZipArchive;
         try self.directory.complete(index);
+        if (self.current_encryption) |*encryption| encryption.deinit();
+        self.current_encryption = null;
         if (self.current_state) |*state| state.deinit();
         self.current_state = null;
         if (self.phase != .record_signature) {

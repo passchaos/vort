@@ -1067,6 +1067,11 @@ pub fn main(init: std.process.Init) !void {
         const entry_name = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
         const max_output_len = (try parseOptionalLimit(args.next())) orelse std.math.maxInt(usize);
+        const password_arg = args.next();
+        const password = if (password_arg) |value|
+            if (std.mem.eql(u8, value, "-")) null else value
+        else
+            null;
         const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
         defer init.gpa.free(bytes);
         const parsed_archive = try vort.parseZipArchive(bytes);
@@ -1076,6 +1081,7 @@ pub fn main(init: std.process.Init) !void {
             (try parsed_archive.entryAt(0)).local_header_offset;
         var reader = try vort.ZipIncrementalReader.initWithOptions(init.gpa, .{
             .initial_offset = stream_offset,
+            .password = password,
         });
         defer reader.deinit();
         var decoded: std.ArrayList(u8) = .empty;
@@ -2906,8 +2912,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Extract a supported ZIP entry with CRC validation
         \\  extract-zip-file-incremental <zip> <entry> <out> [max_output]
         \\                              Incrementally extract one Stored/Deflate ZIP entry
-        \\  extract-zip-stream-file <zip> <entry> <out> [max_output]
-        \\                              Sequentially parse and extract a Stored/Deflate ZIP archive
+        \\  extract-zip-stream-file <zip> <entry> <out> [max_output] [password|-]
+        \\                              Sequentially parse and extract a supported ZIP entry
         \\  size-br-file <path> [max_output]
         \\                              Preflight dependency-free Brotli stored stream decoded size
         \\  encode-zstd-native-hex [text] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size]

@@ -28,6 +28,7 @@ pub const Options = struct {
     max_xz_block_count: usize = 1024 * 1024,
     max_ppmd_memory_size: usize = 64 * 1024 * 1024,
     max_ppmd_compressed_buffer_len: usize = 1024 * 1024,
+    password: ?[]const u8 = null,
     allow_trailing_data: bool = false,
 };
 

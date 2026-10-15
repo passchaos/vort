@@ -815,6 +815,90 @@ test "ZIP incremental reader handles known-size entries empty archives and reset
     );
 }
 
+test "ZIP incremental reader streams known-size Traditional ZipCrypto entries" {
+    const allocator = std.testing.allocator;
+    const password = "sequential-reader-password";
+    const stored = "known encrypted stored payload" ** 37;
+    const deflated = "known encrypted Deflate payload\n" ** 83;
+    const imploded = "known encrypted Implode payload\n" ** 79;
+    const bzip2_data = "known encrypted Bzip2 payload\n" ** 73;
+    const entries = [_]zip.EncodeEntry{
+        .{
+            .name = "encrypted/stored.bin",
+            .data = stored,
+            .method = .stored,
+            .traditional_encryption = .{
+                .password = password,
+                .header_random = .{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 },
+            },
+        },
+        .{
+            .name = "encrypted/deflate.txt",
+            .data = deflated,
+            .method = .deflate,
+            .traditional_encryption = .{
+                .password = password,
+                .header_random = .{ 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0 },
+            },
+        },
+        .{
+            .name = "encrypted/implode.txt",
+            .data = imploded,
+            .method = .implode,
+            .traditional_encryption = .{
+                .password = password,
+                .header_random = .{ 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a },
+            },
+        },
+        .{
+            .name = "encrypted/bzip2.txt",
+            .data = bzip2_data,
+            .method = .bzip2,
+            .traditional_encryption = .{
+                .password = password,
+                .header_random = .{ 0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa },
+            },
+        },
+    };
+    const expected = [_]ExpectedEntry{
+        .{ .name = entries[0].name, .data = stored },
+        .{ .name = entries[1].name, .data = deflated },
+        .{ .name = entries[2].name, .data = imploded },
+        .{ .name = entries[3].name, .data = bzip2_data },
+    };
+    const bytes = try zip.encodeAlloc(allocator, &entries, .{ .data_descriptor = false });
+    defer allocator.free(bytes);
+    try decodeArchiveFragmented(allocator, bytes, &expected, .{ .password = password }, 1, 1);
+    try decodeArchiveFragmented(allocator, bytes, &expected, .{ .password = password }, 7, 13);
+    try decodeArchiveFragmented(allocator, bytes, &expected, .{ .password = password }, 4096, 31);
+    try std.testing.expectError(
+        error.PasswordRequired,
+        decodeArchiveFragmented(allocator, bytes, &expected, .{}, 3, 5),
+    );
+    try std.testing.expectError(
+        error.InvalidZipPassword,
+        decodeArchiveFragmented(allocator, bytes, &expected, .{ .password = "wrong" }, 3, 5),
+    );
+
+    const descriptor_entries = [_]zip.EncodeEntry{entries[0]};
+    const descriptor_bytes = try zip.encodeAlloc(allocator, &descriptor_entries, .{
+        .data_descriptor = true,
+    });
+    defer allocator.free(descriptor_bytes);
+    const descriptor_expected = [_]ExpectedEntry{expected[0]};
+    try std.testing.expectError(
+        error.EncryptedZipEntry,
+        decodeArchiveFragmented(
+            allocator,
+            descriptor_bytes,
+            &descriptor_expected,
+            .{ .password = password },
+            1,
+            1,
+        ),
+    );
+}
+
 test "ZIP incremental reader enforces backpressure limits central validation and truncation" {
     const allocator = std.testing.allocator;
     const payload = "bounded archive payload" ** 32;

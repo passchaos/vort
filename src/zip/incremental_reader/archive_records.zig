@@ -11,6 +11,7 @@ pub const LocalHeader = struct {
     version_needed: u16,
     flags: u16,
     method: CompressionMethod,
+    dos_time: u16,
     name: []const u8,
     extra: []const u8,
     descriptor_layout: ?descriptor.Layout,
@@ -39,6 +40,7 @@ pub fn parseLocal(bytes: []const u8) Error!LocalHeader {
     const version_needed = std.mem.readInt(u16, bytes[4..6], .little);
     const flags = std.mem.readInt(u16, bytes[6..8], .little);
     const method: CompressionMethod = @enumFromInt(std.mem.readInt(u16, bytes[8..10], .little));
+    const dos_time = std.mem.readInt(u16, bytes[10..12], .little);
     const crc32 = std.mem.readInt(u32, bytes[14..18], .little);
     const compressed_u32 = std.mem.readInt(u32, bytes[18..22], .little);
     const uncompressed_u32 = std.mem.readInt(u32, bytes[22..26], .little);
@@ -62,6 +64,7 @@ pub fn parseLocal(bytes: []const u8) Error!LocalHeader {
             .version_needed = version_needed,
             .flags = flags,
             .method = method,
+            .dos_time = dos_time,
             .name = bytes[wire.local_file_header_len..name_end],
             .extra = extra,
             .descriptor_layout = if (zip64) .zip64 else .zip32,
@@ -77,6 +80,7 @@ pub fn parseLocal(bytes: []const u8) Error!LocalHeader {
         .version_needed = version_needed,
         .flags = flags,
         .method = method,
+        .dos_time = dos_time,
         .name = bytes[wire.local_file_header_len..name_end],
         .extra = extra,
         .descriptor_layout = null,
