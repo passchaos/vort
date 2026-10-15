@@ -20141,3 +20141,23 @@ reuse, so production keeps the simpler independently owned plans.
   the complete reader suite passes 22/22, the full repository graph passes
   2659/2659, and `zig build check` passes all 113 steps. Reduce and traditional
   Implode remain the sequential reader's complete-buffer-only methods.
+
+- Added caller-output Reduce decoding and ZIP methods 2...5 sequential support.
+  One factor-parameterized state machine preserves the 256 follower sets,
+  partial LSB-first symbols, DLE literal/match command state, implicit-zero and
+  512-byte...4 KiB circular history, overlapping copies, and caller
+  backpressure across arbitrary calls. The implementation was split into a
+  dedicated incremental submodule so the established one-shot codec/encoder
+  remains cohesive. Reduce has no EOS and its padding can itself decode as
+  one-bit follower symbols; the ZIP adapter therefore withholds the last
+  compressed byte, clones the fixed workspace, applies the descriptor output
+  pledge, and commits the trial state/output only after CRC-32 and both sizes
+  agree. Tests pin the `AA` six-pad-bit ambiguity plus all four factors,
+  known/signed/unsigned descriptor, ZIP32/ZIP64, empty, DLE, match, limit,
+  malformed follower, truncation and reset paths under one-byte fragmentation.
+  Four known-size and four descriptor-backed SFX members are required CLI
+  cases (`incremental_archive_reduce_cases=8`); `run-zip-diff` remains 13/13.
+  The Reduce incremental suite passes 4/4, the reader suite passes 23/23, the
+  full repository graph passes 2664/2664, and `zig build check` passes all 113
+  steps. Traditional Implode method 6 is now the sequential reader's only
+  complete-buffer-only compression method.

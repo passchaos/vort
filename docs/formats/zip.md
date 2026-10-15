@@ -130,8 +130,9 @@ Stored and Deflate retain their complete-buffer extraction paths.
 ## Incremental archive reader
 
 `ZipIncrementalReader` consumes a complete ZIP archive sequentially without
-retaining decoded payload bytes. It accepts Stored, Shrink, Deflate, Deflate64,
-Bzip2, LZMA, XZ, DCL Implode, PPMd8, and legacy/current Zstandard local entries,
+retaining decoded payload bytes. It accepts Stored, Shrink, Reduce factors
+1...4, Deflate, Deflate64, Bzip2, LZMA, XZ, DCL Implode, PPMd8, and
+legacy/current Zstandard local entries,
 including known-size entries and bit-3 descriptors in all four ZIP32/ZIP64 × signed/unsigned
 layouts. Deflate's
 final block, Bzip2's validated stream terminator, LZMA's EOS marker, XZ's
@@ -155,6 +156,13 @@ It has no in-band terminator, so descriptor mode delays at most 16/24 bytes,
 feeds disproven candidate bytes to LZW one at a time, and commits only when
 zero padding, CRC-32, compressed size and output size all agree. Unsigned
 descriptors additionally require the following ZIP record signature.
+Reduce methods 2...5 preserve all 256 follower sets, partial LSB-first symbol
+state, DLE commands, implicit zero history, 512-byte...4 KiB circular windows,
+and overlapping match copies. Padding bits can be legal one-bit follower
+selections, so descriptor mode holds the final compressed byte and decodes it
+transactionally in a second fixed workspace under the candidate output size.
+Only matching CRC-32/compressed/output sizes commit that state and its bounded
+pending output; false candidates cannot reach the caller.
 Stored unsigned descriptors are inherently ambiguous, so the reader holds only
 the final 16 or 24 bytes and accepts a boundary when CRC, compressed size,
 uncompressed size, and the following local/central/end signature all agree.
@@ -212,9 +220,10 @@ by ZIP.
 Any `step` error makes the state terminal until `reset`, because payload may
 already have reached an external sink. `finish()` distinguishes a truncated
 source. Encryption, multi-disk/split archives, archive-extra-data records, and
-incremental Reduce/Implode payloads remain unsupported. Shrink uses one fixed
-approximately 40 KiB workspace while its member is active and never retains
-the complete compressed or decoded member.
+incremental traditional Implode payloads remain unsupported. Shrink uses one
+fixed approximately 40 KiB workspace while its member is active. Reduce uses
+two approximately 12 KiB workspaces plus an 8 KiB speculative tail buffer.
+Neither retains the complete compressed or decoded member.
 
 ## Incremental writer
 
@@ -369,7 +378,9 @@ Deflate64 payload wrapped as method 9 passes the required sequential path
 (`incremental_archive_deflate64_cases=1`). A fixed zlib-blast method-10 payload
 passes the required sequential path (`incremental_archive_dcl_cases=1`). Both
 Apache Commons Compress `SHRUNK.ZIP` members pass the required sequential path
-(`incremental_archive_shrink_cases=2`). No
+(`incremental_archive_shrink_cases=2`). Four known-size and four descriptor-
+backed SFX members cover Reduce methods 2...5 through the required CLI path
+(`incremental_archive_reduce_cases=8`). No
 7z/7zz is installed on the current host, so the optional 7-Zip branch reports
 false and
 is not claimed as validation. Info-ZIP coverage uses `unzip -p` for
@@ -380,13 +391,17 @@ also affects the pre-existing one-shot output and is not claimed as fixed here.
 `zig test src/zip.zig --test-filter 'ZIP incremental entry decoder'` passes
 15/15; `zig test src/zip.zig --test-filter 'DCL Implode incremental'` passes
 4/4; `zig test src/zip.zig --test-filter 'Shrink incremental'` passes 4/4; and
-`zig test src/zip.zig --test-filter 'ZIP incremental reader'` passes 22/22.
+`zig test src/zip.zig --test-filter 'Reduce incremental'` passes 4/4;
+`zig test src/zip.zig --test-filter 'ZIP incremental reader'` passes 23/23.
 Shrink covers known/signed/unsigned-descriptor, empty, ZIP32/ZIP64 and output-
-limit paths. DCL Implode's six modes cover known/descriptor and ZIP32/ZIP64. PPMd
+limit paths. Reduce covers every factor, signed/unsigned descriptors,
+ZIP32/ZIP64, empty members, DLE/matches, invalid followers and follower-coded
+padding ambiguity. DCL Implode's six modes cover known/descriptor and
+ZIP32/ZIP64. PPMd
 restart/cut-off, descriptor and ZIP64 combinations are required
 Vort coverage. Third-party method-98 evidence remains explicitly unavailable:
 Python `zipfile` has no PPMd codec and this host has no 7z/7zz. The full
-repository graph passes 2659/2659 and `zig build check` passes 113/113.
+repository graph passes 2664/2664 and `zig build check` passes 113/113.
 The wire refactor also leaves 14 one-shot probe modes byte-identical to HEAD,
 including every existing method and ZIP32/ZIP64 descriptor choice. Default and
 forced-ZIP64 SHA-256 values remain
@@ -408,9 +423,9 @@ validates width controls, partial clears, orphan protection, truncation, exact
 decoded size, and packed-input consumption.
 The Reduce implementation shares one parameterized core across factors 1...4.
 Its writer trains deterministic follower sets and applies a bounded greedy DLE
-matcher; its decoder accepts arbitrary valid sets, escaped DLE literals,
-extended lengths, implicit zero history, overlapping matches, and exact packed
-input/output accounting. Locally available 7-Zip and copyright-clean Info-ZIP
+matcher; its one-shot and caller-output decoders accept arbitrary valid sets,
+escaped DLE literals, extended lengths, implicit zero history, overlapping
+matches, and exact packed input/output accounting. Locally available 7-Zip and copyright-clean Info-ZIP
 builds omit Reduce decompression, so the required differential reports these
 four methods as Vort self-coverage rather than overstating external validation.
 `EncodeOptions.implode_options` selects a 4 or 8 KiB dictionary and raw or

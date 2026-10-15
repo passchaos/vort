@@ -1602,9 +1602,9 @@ snapshots/streaming diagnostics, and treat a `step` error as terminal until
 reset. `finish` distinguishes truncated input when a source ends early.
 
 `ZipIncrementalReader` builds the complete sequential archive state machine on
-that data plane. It parses local headers and streams Stored, Shrink, Deflate,
-Deflate64, Bzip2, DCL Implode, LZMA, XZ, PPMd8, and legacy/current Zstandard
-payloads.
+that data plane. It parses local headers and streams Stored, Shrink, all four
+Reduce factors, Deflate, Deflate64, Bzip2, DCL Implode, LZMA, XZ, PPMd8, and
+legacy/current Zstandard payloads.
 ZIP32/ZIP64 descriptors with
 or without the optional signature are accepted; the reader emits `entry_header`
 and `entry_done` boundaries and validates every central record,
@@ -1631,6 +1631,13 @@ descriptor entries hold one bounded 16/24-byte candidate window: disproven
 bytes enter the decoder one at a time, while a boundary commits only after
 zero pad bits, CRC-32, compressed size and output size agree; unsigned
 descriptors additionally require a following ZIP record signature.
+Reduce methods 2...5 retain their complete 256-context follower tables,
+LSB-first reservoir, DLE command state, 512-byte...4 KiB circular history and
+overlapping match continuation. Reduce also lacks an EOS marker, and padding
+bits can themselves be valid one-bit follower selections. Descriptor mode
+therefore withholds the final compressed byte, transactionally decodes it in a
+second fixed workspace under the candidate descriptor's exact output size,
+and commits the state plus output only after CRC-32 and both sizes match.
 Arbitrary input/output fragmentation,
 zero-output backpressure, reset reuse, SFX `initial_offset`, strict or allowed
 trailing data, and explicit entry/total-output, entry-count, metadata, central-
@@ -1641,10 +1648,12 @@ at most one bounded Bzip2 block, bounded Zstandard frame/block scratch, LZMA
 range/dictionary state, at most one bounded XZ block, entry names and compact
 validation records, and the configured PPMd model arena until the central
 directory. DCL Implode keeps a fixed 4 KiB maximum history and Shrink uses a
-fixed 8,192-entry, approximately 40 KiB caller-owned LZW workspace. The reader
-also retains the final archive comment and one bounded control record, but
-never complete decoded payloads or the whole archive. Reduce and traditional
-Implode continue to use the broader complete-buffer extraction APIs.
+fixed 8,192-entry, approximately 40 KiB caller-owned LZW workspace. Reduce
+uses two approximately 12 KiB workspaces plus an 8 KiB speculative tail
+buffer only while a method-2...5 member is active. The reader also retains the
+final archive comment and one bounded control record, but never complete
+decoded payloads or the whole archive. Traditional Implode is the remaining
+method that uses the broader complete-buffer extraction API.
 
 `ZipIncrementalWriter` streams Stored and raw-Deflate entries into caller-owned
 output. `ZipIncrementalWriterOptions` configures archive comment, UTF-8, ZIP64,
@@ -1682,8 +1691,9 @@ validation errors from `beginEntry` and a premature short `finishEntry` remain
 recoverable. The existing one-shot `zipEncodeAppend` retains its transactional
 guarantee and broader method support. Incremental writing does not yet cover
 the other ZIP methods; the sequential reader additionally covers Shrink,
-Deflate64, Bzip2, DCL Implode, LZMA, XZ, PPMd8, and legacy/current Zstandard.
-Encryption and multi-disk archives remain unsupported. See
+Reduce methods 2...5, Deflate64, Bzip2, DCL Implode, LZMA, XZ, PPMd8, and
+legacy/current Zstandard. Encryption and multi-disk archives remain
+unsupported. See
 [the ZIP format status](docs/formats/zip.md) for the full state and wire
 contract. Writer-specific additive errors are exposed separately as
 `ZipIncrementalWriterError`; the established `ZipError` set is unchanged.
@@ -1708,14 +1718,18 @@ A fixed zlib-blast DCL Implode payload wrapped as method 10 passes the required
 sequential path (`incremental_archive_dcl_cases=1`).
 Both Apache Commons Compress `SHRUNK.ZIP` members pass the required sequential
 path (`incremental_archive_shrink_cases=2`).
+Four known-size and four descriptor-backed SFX Reduce members cover methods
+2...5 through the required CLI path (`incremental_archive_reduce_cases=8`).
 Focused writer tests pass 61/61, the incremental entry decoder suite passes
-15/15, the DCL Implode and Shrink incremental decoder suites each pass 4/4,
-and the archive reader suite passes 22/22. Shrink covers known/signed/
+15/15, the DCL Implode, Shrink and Reduce incremental decoder suites each pass
+4/4, and the archive reader suite passes 23/23. Shrink covers known/signed/
 unsigned-descriptor, empty, ZIP32/ZIP64 and output-limit paths; DCL Implode's
-six literal/dictionary modes cover known/descriptor and ZIP32/ZIP64. PPMd restart/cut-off,
+six literal/dictionary modes cover known/descriptor and ZIP32/ZIP64. Reduce
+covers all four factors, signed/unsigned descriptors, ZIP32/ZIP64, empty
+members and follower-coded padding ambiguity. PPMd restart/cut-off,
 descriptor and ZIP64 paths are required Vort coverage; third-party PPMd remains
 unclaimed because this host has no 7z/7zz and Python has no method-98 codec.
-The full repository graph passes 2659/2659 and `zig build check` passes 113/113.
+The full repository graph passes 2664/2664 and `zig build check` passes 113/113.
 The refactored one-shot writer remains byte-identical to HEAD across 14 probe
 modes. The current host has no 7z/7zz, so that optional extraction branch is
 reported as skipped rather than passed.
