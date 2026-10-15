@@ -239,24 +239,28 @@ Deflate retains its configured block/lookahead, history, token, and pending-
 output working state. Bzip2 retains one configured RLE/BWT block plus bounded
 encoded pending output. The public slice accepts Stored (`method 0`), raw
 Deflate (`method 8`), Bzip2 (`method 12`), legacy Zstandard (`method 20`), and
-current Zstandard (`method 93`) entries.
+current Zstandard (`method 93`), plus LZMA (`method 14`) entries.
 Every entry sets general-purpose flag bit 3 and ends with a signed
 `0x08074b50` data descriptor; there is no seek-back or header-patching mode.
 
 The public option types are `ZipIncrementalWriterOptions` and
 `ZipIncrementalEntryOptions`. Archive options include `archive_comment`,
-`initial_offset`, UTF-8 and ZIP64 policy, raw-Deflate/Bzip2/Zstandard options,
+`initial_offset`, UTF-8 and ZIP64 policy, raw-Deflate/Bzip2/LZMA/Zstandard options,
 and limits for entry count, central-directory bytes, retained Deflate input,
 uncompressed input, and emitted archive bytes. `bzip2_options` independently selects the
 100...900 KiB block size plus total-input and pending-output limits.
 `zstd_options` selects standard block/window/parser/checksum policy; the writer
 forces content-size presence for pledged entries and absence for unknown-size
 entries. This initial ZIP surface does not attach preset Zstandard dictionaries.
+`lzma_options` selects properties, a 4...65,535-byte dictionary, literal/greedy
+mode, bounded input/lookahead and pending output. ZIP always uses an EOS marker:
+the adapter streams the 9-byte ZIP properties prefix, validates/discards the
+underlying 13-byte Alone header, and sets general-purpose bit 1.
 `max_deflate_buffer_size` defaults to 1 MiB
 and bounds one planning block plus lookahead before a Deflate entry starts; it
 excludes the encoder's fixed 32 KiB history and one encoded pending block.
-Entry options contain the copied name/comment, Stored, Deflate, Bzip2, or
-legacy/current Zstandard method, and an optional exact `expected_size`. A null
+Entry options contain the copied name/comment, Stored, Deflate, Bzip2, LZMA,
+or legacy/current Zstandard method, and an optional exact `expected_size`. A null
 size accepts input until the configured
 limit. A known size rejects an overlong offered slice and `finishEntry()`
 rejects a short entry; a premature short finish is recoverable, so the caller
@@ -266,7 +270,7 @@ The state sequence is `beginEntry` -> repeated `step` -> `finishEntry` -> drain
 to `.ready`, followed by more entries or `finishArchive` -> drain to `.done`.
 `step` returns the common `need_input`, `need_output`, or `done` status with
 exact input/output progress. Tiny output slices may split local headers,
-Deflate/Bzip2/Zstandard bytes, descriptors, central-directory records, and
+Deflate/Bzip2/LZMA/Zstandard bytes, descriptors, central-directory records, and
 archive endings.
 Zero-length output returns `need_output` without consuming entry input whenever
 output is pending. With empty input, an idle `.ready` boundary or active
@@ -313,7 +317,7 @@ central-directory, ZIP64 locator, and EOCD offsets include the supplied value.
 ZIP64 selection is frozen before each unpatchable local header is emitted:
 
 - `.auto` keeps a known-size Stored entry in ZIP32 when its size and local
-  offset fit. Unknown-size entries and all Deflate/Bzip2/Zstandard entries
+  offset fit. Unknown-size entries and all Deflate/Bzip2/LZMA/Zstandard entries
   conservatively use
   ZIP64 because their final sizes are not known at header time. Archive count,
   central size/offset, or any ZIP64 entry also promotes the archive ending;
@@ -344,6 +348,8 @@ bounded pending encoded output rather than the complete entry.
 Zstandard retains one configured block, bounded rolling history and one pending
 encoded block; content checksum and frame-size metadata follow `zstd_options`
 and the entry pledge.
+LZMA retains its configured dictionary, bounded input/lookahead and pending
+range output; it never retains the complete entry.
 `max_central_directory_size` bounds the logical encoded central directory;
 the independently copied archive comment is governed only by ZIP's `u16`
 length limit and is not charged to this field.
@@ -363,30 +369,29 @@ The incremental writer's additive error set is exported as
 one-shot and reader APIs is unchanged.
 
 The incremental writer does not yet support Shrink, Reduce, Implode, Deflate64,
-DCL Implode, LZMA, XZ, or PPMd entries. The sequential reader
-additionally streams Shrink, Reduce, traditional Implode, Deflate64, LZMA, XZ,
-PPMd8, and DCL Implode. Encryption and
+DCL Implode, XZ, or PPMd entries. The sequential reader additionally streams
+Shrink, Reduce, traditional Implode, Deflate64, XZ, PPMd8, and DCL Implode. Encryption and
 multi-disk/split archives remain unsupported; the existing complete-buffer
 reader and broader one-shot writer retain their documented method coverage.
 
-The incremental differential uses twelve entries: known Stored data containing a
+The incremental differential uses fifteen entries: known Stored data containing a
 descriptor-signature byte sequence, unknown Stored data containing two such
 sequences, a known Deflate entry larger than 32 KiB that crosses an actual
 planning-block boundary, a UTF-8-path cross-block unknown Deflate entry, empty
-Stored, empty Deflate, known/unknown/empty Bzip2, and known-current/unknown-
-legacy/empty-current Zstandard. Input uses repeating
+Stored, empty Deflate, known/unknown/empty Bzip2, known-current/unknown-legacy/
+empty-current Zstandard, and known/unknown/empty LZMA. Input uses repeating
 1/2/3/5/7-byte chunks. For each ZIP mode, a one-byte-output run must be
 byte-identical to a 2/3/5/7-byte micro-output run; a zero-output local-header
 probe must return `need_output` with zero progress.
 
-`zig build run-zip-diff` passes for a 10,025-byte ZIP32 `.never` archive and a
-10,773-byte ZIP64 `.always` archive. Python raw parsing checks bit 3/bit 11,
+`zig build run-zip-diff` passes for a 13,398-byte ZIP32 `.never` archive and a
+14,314-byte ZIP64 `.always` archive. Python raw parsing checks bit 3/bit 11,
 local placeholders, signed 16-/24-byte descriptors, central CRC/size/offset and
-ZIP64 extras/end records and Bzip2's version-needed 4.6; `zipfile` tests and
-Zstandard's version-needed 6.3; `zipfile` tests and reads every method it
-supports. System Info-ZIP extracts the non-Zstandard
-members byte-for-byte, while system `zstd` independently decodes methods 20/93;
-the aggregate
+ZIP64 extras/end records, Bzip2's version-needed 4.6, and LZMA/Zstandard's
+version-needed 6.3; `zipfile` tests and reads every method it supports. System
+Info-ZIP validates the ordered member prefix before the first unsupported
+Zstandard entry, system `zstd` independently decodes methods 20/93, and Python
+`zipfile` independently extracts method-14 entries and checks bit 1. The aggregate
 reports 13/13 ZIP differential steps. The Python-to-Vort half also decodes five
 Stored/Deflate members through `ZipOwnedIncrementalEntryDecoder` with 3-byte
 input and 5-byte output, covering descriptor-backed entries, UTF-8, empty
@@ -416,7 +421,7 @@ is not claimed as validation. Info-ZIP coverage uses `unzip -p` for
 contents, not pathname rendering; its 6.00 ZIP32 UTF-8 filename rendering issue
 also affects the pre-existing one-shot output and is not claimed as fixed here.
 
-`zig test src/root.zig --test-filter 'ZIP incremental writer'` passes 63/63;
+`zig test src/root.zig --test-filter 'ZIP incremental writer'` passes 64/64;
 `zig test src/zip.zig --test-filter 'ZIP incremental entry decoder'` passes
 15/15; `zig test src/zip.zig --test-filter 'DCL Implode incremental'` passes
 4/4; `zig test src/zip.zig --test-filter 'Shrink incremental'` passes 4/4;
@@ -433,7 +438,7 @@ implicit-zero and overlapping matches. PPMd
 restart/cut-off, descriptor and ZIP64 combinations are required
 Vort coverage. Third-party method-98 evidence remains explicitly unavailable:
 Python `zipfile` has no PPMd codec and this host has no 7z/7zz. The full
-repository graph passes 2671/2671 and `zig build check` passes 113/113.
+repository graph passes 2672/2672 and `zig build check` passes 113/113.
 The wire refactor also leaves 14 one-shot probe modes byte-identical to HEAD,
 including every existing method and ZIP32/ZIP64 descriptor choice. Default and
 forced-ZIP64 SHA-256 values remain

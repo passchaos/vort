@@ -20215,3 +20215,18 @@ reuse, so production keeps the simpler independently owned plans.
   10,025/10,773 bytes, `run-zip-diff` remains 13/13, the writer suite passes
   63/63, the full repository graph passes 2671/2671, and `zig build check`
   passes all 113 steps.
+
+- Extended `ZipIncrementalWriter` with LZMA method 14. A dedicated adapter
+  streams ZIP's `{9,4,properties-size=5,properties}` prefix, internally
+  generates and validates the equivalent 13-byte LZMA-Alone header, discards
+  that header, and forwards the symbol-progressive range stream with a
+  mandatory EOS marker. Local and central flags include bit 1 alongside bit 3;
+  known/unknown/empty inputs, exact pledges, one-byte deterministic output,
+  ZIP32/ZIP64 descriptors, 4...65,535-byte dictionaries, literal/greedy mode,
+  limits, empty finish-before-first-step and allocation failures share the
+  writer codec union. Python `zipfile` independently extracts all three LZMA
+  cases and the raw-wire gate pins version-needed 6.3, property order, flags,
+  sizes and descriptor widths. The external archive grows from twelve to
+  fifteen entries with ZIP32/ZIP64 sizes 13,398/14,314 bytes;
+  `run-zip-diff` remains 13/13, the writer suite passes 64/64, the full
+  repository graph passes 2672/2672, and `zig build check` passes all 113 steps.
