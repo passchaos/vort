@@ -4,6 +4,7 @@ const core = @import("../../core.zig");
 const deflate = @import("../../deflate.zig");
 const deflate64 = @import("../../deflate64.zig");
 const lzma_codec = @import("lzma_codec.zig");
+const ppmd_codec = @import("ppmd_codec.zig");
 const types = @import("../types.zig");
 const zstd = @import("../../zstd.zig");
 const xz = @import("../../xz.zig");
@@ -16,8 +17,9 @@ pub const ZstdOptions = zstd.NativeFrameOptions;
 pub const LzmaOptions = lzma_codec.Options;
 pub const XzOptions = xz.IncrementalEncoder.Options;
 pub const XzFilter = xz.Filter;
+pub const PpmdOptions = ppmd_codec.Options;
 
-pub const Error = deflate.Error || deflate64.Error || bzip2.IncrementalEncoder.Error || zstd.Error || lzma_codec.Error || xz.IncrementalEncoder.Error || std.mem.Allocator.Error || error{
+pub const Error = deflate.Error || deflate64.Error || bzip2.IncrementalEncoder.Error || zstd.Error || lzma_codec.Error || xz.IncrementalEncoder.Error || ppmd_codec.Error || std.mem.Allocator.Error || error{
     UnsupportedZipCompressionMethod,
 };
 
@@ -29,6 +31,7 @@ pub const Options = struct {
     zstd: ZstdOptions,
     lzma: LzmaOptions,
     xz: XzOptions,
+    ppmd: PpmdOptions,
 };
 
 pub const State = union(enum) {
@@ -39,6 +42,7 @@ pub const State = union(enum) {
     zstd: zstd.NativeIncrementalFrameEncoder,
     lzma: lzma_codec.State,
     xz: xz.IncrementalEncoder,
+    ppmd: ppmd_codec.State,
 
     const Self = @This();
 
@@ -115,6 +119,11 @@ pub const State = union(enum) {
                     allocator,
                     options.xz,
                 ) },
+            .ppmd => .{ .ppmd = try ppmd_codec.State.init(
+                allocator,
+                options.ppmd,
+                expected_size,
+            ) },
             else => error.UnsupportedZipCompressionMethod,
         };
     }
@@ -128,6 +137,7 @@ pub const State = union(enum) {
             .zstd => |*encoder| encoder.deinit(),
             .lzma => |*encoder| encoder.deinit(),
             .xz => |*encoder| encoder.deinit(),
+            .ppmd => |*encoder| encoder.deinit(),
         }
         self.* = undefined;
     }
@@ -141,6 +151,7 @@ pub const State = union(enum) {
             .zstd => |*encoder| encoder.finish(),
             .lzma => |*encoder| encoder.finish(),
             .xz => |*encoder| encoder.finish(),
+            .ppmd => |*encoder| encoder.finish(),
         }
     }
 
@@ -153,6 +164,7 @@ pub const State = union(enum) {
             .zstd => |*encoder| encoder.step(input, output),
             .lzma => |*encoder| encoder.step(input, output),
             .xz => |*encoder| encoder.step(input, output),
+            .ppmd => |*encoder| encoder.step(input, output),
         };
     }
 };
@@ -202,6 +214,7 @@ pub fn validate(
                 return error.InvalidBlockPlan;
             try validateExpectedSize(expected_size, options.xz.max_input_len);
         },
+        .ppmd => try ppmd_codec.validateOptions(options.ppmd, expected_size),
         else => return error.UnsupportedZipCompressionMethod,
     }
 }
@@ -214,6 +227,7 @@ pub fn inputLimit(method: CompressionMethod, options: Options) ?usize {
         .zstandard_legacy, .zstandard => std.math.maxInt(usize),
         .lzma => options.lzma.max_input_len,
         .xz => options.xz.max_input_len,
+        .ppmd => options.ppmd.max_input_len,
         else => null,
     };
 }

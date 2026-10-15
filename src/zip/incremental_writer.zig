@@ -46,6 +46,8 @@ pub const Options = struct {
     /// XZ check, block, dictionary, parser, and filter-chain policy. Filters
     /// are copied by initialization and need not outlive the writer.
     xz_options: codecs.XzOptions = .{},
+    /// PPMd order/model/restoration plus total-input and pending-output limits.
+    ppmd_options: codecs.PpmdOptions = .{},
     max_entries: u64 = std.math.maxInt(u64),
     max_central_directory_size: usize = std.math.maxInt(usize),
     max_uncompressed_size: u64 = std.math.maxInt(u64),
@@ -83,6 +85,7 @@ pub const Phase = enum {
 /// one configured frame block, bounded rolling history, and pending output.
 /// LZMA retains bounded input/lookahead, dictionary history, and range output.
 /// XZ retains one configured plaintext block, encoded output, and Index records.
+/// PPMd retains one explicitly bounded model arena and pending range bytes.
 pub const Writer = struct {
     allocator: std.mem.Allocator,
     options: Options,
@@ -568,6 +571,7 @@ pub const Writer = struct {
             .zstd = self.options.zstd_options,
             .lzma = self.options.lzma_options,
             .xz = self.options.xz_options,
+            .ppmd = self.options.ppmd_options,
         };
     }
 
