@@ -884,6 +884,9 @@ INCREMENTAL_PAYLOADS = {
     "known-zstd.txt": b"known Zstandard incremental ZIP payload.\n" * 103,
     "unknown-zstd-legacy.txt": b"unknown legacy Zstandard incremental ZIP payload.\n" * 67,
     "empty-zstd.bin": b"",
+    "known-lzma.txt": b"known LZMA incremental ZIP payload.\n" * 89,
+    "unknown-lzma.txt": b"unknown LZMA incremental ZIP payload.\n" * 71,
+    "empty-lzma.bin": b"",
 }
 INCREMENTAL_METHODS = {
     "known-stored.bin": zipfile.ZIP_STORED,
@@ -898,6 +901,9 @@ INCREMENTAL_METHODS = {
     "known-zstd.txt": 93,
     "unknown-zstd-legacy.txt": 20,
     "empty-zstd.bin": 93,
+    "known-lzma.txt": zipfile.ZIP_LZMA,
+    "unknown-lzma.txt": zipfile.ZIP_LZMA,
+    "empty-lzma.bin": zipfile.ZIP_LZMA,
 }
 
 
@@ -1033,6 +1039,8 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
             raise AssertionError(f"incremental central flags omit bit 3/11 for {name!r}")
         if method != INCREMENTAL_METHODS[name] or disk_start != 0:
             raise AssertionError(f"incremental central method/disk mismatch for {name!r}")
+        if bool(flags & 0x0002) != (method == zipfile.ZIP_LZMA):
+            raise AssertionError(f"incremental central LZMA EOS flag mismatch for {name!r}")
         expected_crc = binascii.crc32(expected_payload) & 0xFFFFFFFF
         if crc32 != expected_crc:
             raise AssertionError(f"incremental central CRC mismatch for {name!r}")
@@ -1040,7 +1048,7 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
         fields = parse_extra_fields(extra, f"central entry {name!r}")
         expected_needed = (
             63
-            if method in (20, 93)
+            if method in (14, 20, 93)
             else 46
             if method == zipfile.ZIP_BZIP2
             else 45
@@ -1114,10 +1122,12 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
             raise AssertionError(f"incremental local flags omit bit 3/11 for {name!r}")
         if method != entry["method"] or crc32 != 0:
             raise AssertionError(f"incremental local method/CRC placeholder mismatch for {name!r}")
+        if bool(flags & 0x0002) != (method == zipfile.ZIP_LZMA):
+            raise AssertionError(f"incremental local LZMA EOS flag mismatch for {name!r}")
         fields = parse_extra_fields(extra, f"local entry {name!r}")
         expected_needed = (
             63
-            if method in (20, 93)
+            if method in (14, 20, 93)
             else 46
             if method == zipfile.ZIP_BZIP2
             else 45
@@ -1229,11 +1239,12 @@ def validate_incremental_writer_archive(
 
     unzip_checked = False
     if unzip_tool is not None:
-        supported_payload = b"".join(
-            payload
-            for name, payload in INCREMENTAL_PAYLOADS.items()
-            if INCREMENTAL_METHODS[name] not in (20, 93)
-        )
+        supported_parts: list[bytes] = []
+        for name, payload in INCREMENTAL_PAYLOADS.items():
+            if INCREMENTAL_METHODS[name] in (20, 93):
+                break
+            supported_parts.append(payload)
+        supported_payload = b"".join(supported_parts)
         extracted = subprocess.run(
             [unzip_tool, "-p", str(one_byte_path)],
             check=False,
