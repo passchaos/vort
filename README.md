@@ -1603,7 +1603,7 @@ reset. `finish` distinguishes truncated input when a source ends early.
 
 `ZipIncrementalReader` builds the complete sequential archive state machine on
 that data plane. It parses local headers and streams Stored, Deflate, Deflate64,
-Bzip2, LZMA, XZ, and legacy/current Zstandard payloads. ZIP32/ZIP64 descriptors with
+Bzip2, LZMA, XZ, PPMd8, and legacy/current Zstandard payloads. ZIP32/ZIP64 descriptors with
 or without the optional signature are accepted; the reader emits `entry_header`
 and `entry_done` boundaries and validates every central record,
 optional central-directory digital signature, ZIP64 EOCD/locator, legacy EOCD,
@@ -1617,7 +1617,10 @@ Bzip2 uses its validated stream terminator and Zstandard its validated frame
 end. ZIP method 14 parses its 9-byte
 properties prefix and uses the mandatory EOS marker in descriptor mode; XZ
 stops after its validated Index/Footer before outer descriptor bytes can be
-mistaken for stream padding. Arbitrary input/output fragmentation,
+mistaken for stream padding.
+PPMd method 98 parses its two-byte order/memory/restore properties, decodes one
+symbol transactionally, and stops exactly at the range-coded EOS.
+Arbitrary input/output fragmentation,
 zero-output backpressure, reset reuse, SFX `initial_offset`, strict or allowed
 trailing data, and explicit entry/total-output, entry-count, metadata, central-
 directory, and control-record limits share one API.
@@ -1625,8 +1628,9 @@ directory, and control-record limits share one API.
 The sequential reader retains 32 KiB Deflate and 64 KiB Deflate64 histories,
 at most one bounded Bzip2 block, bounded Zstandard frame/block scratch, LZMA
 range/dictionary state, at most one bounded XZ block, entry names and compact
-validation records until the central directory, the final archive
-comment, and one bounded control record; it never retains complete decoded
+validation records, and the configured PPMd model arena until the central
+directory. It also retains the final archive comment and one bounded control
+record, but never complete decoded
 payloads or the whole archive. Other ZIP compression methods continue to use
 the broader complete-buffer extraction APIs.
 
@@ -1666,7 +1670,7 @@ validation errors from `beginEntry` and a premature short `finishEntry` remain
 recoverable. The existing one-shot `zipEncodeAppend` retains its transactional
 guarantee and broader method support. Incremental writing does not yet cover
 the other ZIP methods; the sequential reader additionally covers Deflate64,
-Bzip2, LZMA, XZ, and legacy/current Zstandard. Encryption and multi-disk
+Bzip2, LZMA, XZ, PPMd8, and legacy/current Zstandard. Encryption and multi-disk
 archives remain unsupported. See
 [the ZIP format status](docs/formats/zip.md) for the full state and wire
 contract. Writer-specific additive errors are exposed separately as
@@ -1689,8 +1693,10 @@ method-95 member (`incremental_archive_xz_cases=1`). A fixed 7-Zip Deflate64
 payload wrapped as method 9 also passes the required sequential path
 (`incremental_archive_deflate64_cases=1`).
 Focused writer tests pass 61/61, the incremental entry decoder suite passes
-15/15, and the archive reader suite passes 19/19. The full repository graph
-passes 2646/2646 and `zig build check` passes 113/113.
+15/15, and the archive reader suite passes 20/20. PPMd restart/cut-off,
+descriptor and ZIP64 paths are required Vort coverage; third-party PPMd remains
+unclaimed because this host has no 7z/7zz and Python has no method-98 codec.
+The full repository graph passes 2649/2649 and `zig build check` passes 113/113.
 The refactored one-shot writer remains byte-identical to HEAD across 14 probe
 modes. The current host has no 7z/7zz, so that optional extraction branch is
 reported as skipped rather than passed.

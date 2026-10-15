@@ -20079,3 +20079,25 @@ reuse, so production keeps the simpler independently owned plans.
   Implode, DCL Implode and PPMd remain the sequential reader's buffered-only
   methods. The full repository graph passes 2646/2646 and `zig build check`
   passes all 113 steps.
+
+- Added symbol-progressive PPMd8 decoding and ZIP method-98 sequential support.
+  `Ppmd8IncrementalDecoder` owns one explicitly bounded model arena, retains a
+  compact range-input window, streams committed symbols directly to caller
+  output, exposes progress/reset/finish/diagnostics, and enforces compressed-
+  input, output and exact-size limits. A symbol attempt snapshots the small
+  range state plus model metadata/probability tables; if range normalization
+  needs another byte, it restores that checkpoint and accepts exactly one more
+  byte. The large context arena changes only after a complete symbol commits,
+  so arbitrary fragmentation can resume without cloning the arena or buffering
+  the member. ZIP validates the two-byte order/memory/restore properties,
+  applies a separate model-memory limit, supports restart and cut-off recovery,
+  stops exactly at the range-coded EOS, and reuses the shared ZIP32/ZIP64 signed/
+  unsigned descriptor, CRC-32, size and central-directory paths. Focused tests
+  cover both restore modes, one-byte input/output, suffix ownership, output and
+  compressed limits, truncation, reset, known-size and descriptor entries, and
+  ZIP32/ZIP64 combinations; the sequential reader suite passes 20/20. The ZIP
+  gate remains 13/13, but third-party method-98 evidence is deliberately not
+  claimed: Python `zipfile` has no PPMd codec and this host has no 7z/7zz.
+  Shrink, Reduce, Implode and DCL Implode remain the sequential reader's
+  complete-buffer-only methods. The full repository graph passes 2649/2649 and
+  `zig build check` passes all 113 steps.

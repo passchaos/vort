@@ -131,7 +131,7 @@ Stored and Deflate retain their complete-buffer extraction paths.
 
 `ZipIncrementalReader` consumes a complete ZIP archive sequentially without
 retaining decoded payload bytes. It accepts Stored, Deflate, Deflate64, Bzip2,
-LZMA, XZ, and legacy/current Zstandard local entries, including known-size
+LZMA, XZ, PPMd8, and legacy/current Zstandard local entries, including known-size
 entries and bit-3 descriptors in all four ZIP32/ZIP64 × signed/unsigned
 layouts. Deflate's
 final block, Bzip2's validated stream terminator, LZMA's EOS marker, XZ's
@@ -139,8 +139,13 @@ validated Index/Footer, and Zstandard's validated frame end determine their
 compressed boundaries. Deflate64 reuses the byte-progressive Deflate state
 machine with a caller-owned 64 KiB history, 32-symbol distance alphabet, and
 the extended 16-bit code-285 length. ZIP method 14's 9-byte properties prefix
-is translated into the internal LZMA state without becoming decoded data; descriptor mode
-requires its standard general-purpose bit-1 EOS declaration.
+is translated into the internal LZMA state without becoming decoded data;
+descriptor mode requires its standard general-purpose bit-1 EOS declaration.
+PPMd method 98 parses its two-byte order/memory/restore properties, allocates a
+bounded model arena, and decodes one symbol transactionally: insufficient input
+restores range/model metadata before accepting one more byte, while context
+memory changes only after a symbol commits. The range-coded EOS therefore owns
+an exact descriptor boundary without whole-member buffering.
 Stored unsigned descriptors are inherently ambiguous, so the reader holds only
 the final 16 or 24 bytes and accepts a boundary when CRC, compressed size,
 uncompressed size, and the following local/central/end signature all agree.
@@ -193,10 +198,12 @@ XZ dictionary, compressed-block, decoded-block, Index/Footer, and block-count
 limits bound those codec states independently. XZ descriptor mode stops before
 optional XZ stream padding so outer zero-valued descriptor bytes remain owned
 by ZIP.
+`max_ppmd_memory_size` bounds the model arena and
+`max_ppmd_compressed_buffer_len` bounds retained range-coded input.
 Any `step` error makes the state terminal until `reset`, because payload may
 already have reached an external sink. `finish()` distinguishes a truncated
 source. Encryption, multi-disk/split archives, archive-extra-data records, and
-incremental Shrink/Reduce/Implode/DCL Implode/PPMd payloads remain
+incremental Shrink/Reduce/Implode/DCL Implode payloads remain
 unsupported.
 
 ## Incremental writer
@@ -317,9 +324,9 @@ one-shot and reader APIs is unchanged.
 
 The incremental writer does not yet support Shrink, Reduce, Implode, Deflate64,
 DCL Implode, Bzip2, LZMA, Zstandard, XZ, or PPMd entries. The sequential reader
-additionally streams Bzip2 and legacy/current Zstandard. Encryption and multi-
-additionally streams Deflate64, Bzip2, LZMA, XZ, and legacy/current Zstandard. Encryption
-and multi-disk/split archives remain unsupported; the existing complete-buffer reader
+additionally streams Deflate64, Bzip2, LZMA, XZ, PPMd8, and legacy/current
+Zstandard. Encryption and multi-disk/split archives remain unsupported; the
+existing complete-buffer reader
 and broader one-shot writer retain their documented method coverage.
 
 The incremental differential uses six entries: known Stored data containing a
@@ -358,8 +365,10 @@ also affects the pre-existing one-shot output and is not claimed as fixed here.
 `zig test src/root.zig --test-filter 'ZIP incremental writer'` passes 61/61;
 `zig test src/zip.zig --test-filter 'ZIP incremental entry decoder'` passes
 15/15; `zig test src/zip.zig --test-filter 'ZIP incremental reader'` passes
-19/19. The full repository graph passes 2646/2646 and `zig build check` passes
-113/113.
+20/20. PPMd restart/cut-off, descriptor and ZIP64 combinations are required
+Vort coverage. Third-party method-98 evidence remains explicitly unavailable:
+Python `zipfile` has no PPMd codec and this host has no 7z/7zz. The full
+repository graph passes 2649/2649 and `zig build check` passes 113/113.
 The wire refactor also leaves 14 one-shot probe modes byte-identical to HEAD,
 including every existing method and ZIP32/ZIP64 descriptor choice. Default and
 forced-ZIP64 SHA-256 values remain
