@@ -20230,3 +20230,18 @@ reuse, so production keeps the simpler independently owned plans.
   fifteen entries with ZIP32/ZIP64 sizes 13,398/14,314 bytes;
   `run-zip-diff` remains 13/13, the writer suite passes 64/64, the full
   repository graph passes 2672/2672, and `zig build check` passes all 113 steps.
+
+- Extended `ZipIncrementalWriter` with XZ method 95. The codec union now drives
+  the block-bounded XZ encoder through Stream Header, filtered LZMA2/stored
+  blocks, selectable none/CRC-32/CRC-64/SHA-256 checks, Index and Footer before
+  the ZIP descriptor. Writer initialization copies the caller's Delta/BCJ
+  filter chain, preserving the existing options-lifetime contract. Coverage
+  includes known/unknown/empty, one-byte deterministic output, ZIP32/ZIP64,
+  invalid block/dictionary preflight, allocation failure, and a filtered
+  SHA-256 multi-block x86+Delta stream. Python `lzma.FORMAT_XZ` and system `xz`
+  independently decode all three CLI members to identical bytes; raw ZIP
+  checks pin method 95, version-needed 6.3 and descriptors. The external archive
+  grows from fifteen to eighteen entries with ZIP32/ZIP64 sizes
+  14,418/15,502 bytes; `run-zip-diff` remains 13/13, the writer suite passes
+  65/65, the full repository graph passes 2673/2673, and `zig build check`
+  passes all 113 steps.
