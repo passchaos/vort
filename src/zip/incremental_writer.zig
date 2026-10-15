@@ -34,6 +34,9 @@ pub const Options = struct {
     max_deflate_buffer_size: usize = 1024 * 1024,
     /// Bzip2 block size, total-input limit, and pending encoded-output limit.
     bzip2_options: codecs.Bzip2Options = .{},
+    /// Zstandard block/window/parser policy. Content-size signaling is derived
+    /// from each entry's `expected_size`; preset dictionaries are not yet used.
+    zstd_options: codecs.ZstdOptions = .{},
     max_entries: u64 = std.math.maxInt(u64),
     max_central_directory_size: usize = std.math.maxInt(usize),
     max_uncompressed_size: u64 = std.math.maxInt(u64),
@@ -67,7 +70,8 @@ pub const Phase = enum {
 /// bytes are never retained. Central-directory bytes are retained until
 /// `finishArchive`; Deflate additionally keeps one bounded planning block,
 /// history/match state, and one encoded pending block. Bzip2 retains at most
-/// one configured RLE/BWT block plus bounded encoded output.
+/// one configured RLE/BWT block plus bounded encoded output. Zstandard retains
+/// one configured frame block, bounded rolling history, and pending output.
 pub const Writer = struct {
     allocator: std.mem.Allocator,
     options: Options,
@@ -542,6 +546,7 @@ pub const Writer = struct {
             .deflate = self.options.deflate_options,
             .max_deflate_buffer_size = self.options.max_deflate_buffer_size,
             .bzip2 = self.options.bzip2_options,
+            .zstd = self.options.zstd_options,
         };
     }
 
