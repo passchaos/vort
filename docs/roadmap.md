@@ -20161,3 +20161,23 @@ reuse, so production keeps the simpler independently owned plans.
   full repository graph passes 2664/2664, and `zig build check` passes all 113
   steps. Traditional Implode method 6 is now the sequential reader's only
   complete-buffer-only compression method.
+
+- Added caller-output traditional Implode decoding and ZIP method-6 sequential
+  support. The incremental core parses byte-aligned run-length tree records,
+  retains partial 1...16-bit Shannon–Fano literal/length/distance codes, and
+  streams raw/tree literals plus implicit-zero/overlapping matches through a
+  4/8 KiB circular history with caller backpressure, limits, reset, snapshots
+  and terminal diagnostics. Reduce and Implode now share one generic
+  final-byte transactional ZIP adapter: two fixed workspaces test a descriptor
+  output pledge, and CRC-32 plus compressed/decoded sizes must all agree before
+  state and bounded tail output commit. Tests cover every 4/8 KiB × raw/tree
+  mode, known/signed/unsigned descriptor, ZIP32/ZIP64, one-byte fragmentation,
+  empty, limits, arbitrary/malformed trees, truncation and reuse. Eight SFX
+  writer cases are required (`incremental_archive_implode_cases=8`), while two
+  Apache Commons Compress fixtures independently cover the 4 KiB/two-tree and
+  8 KiB/three-tree endpoints (`incremental_archive_implode_fixture_cases=2`);
+  `run-zip-diff` remains 13/13. The Legacy Implode incremental suite passes
+  4/4, the reader suite passes 24/24, the full repository graph passes
+  2669/2669, and `zig build check` passes all 113 steps. Every ZIP compression
+  method currently supported by the sequential reader now operates without a
+  complete compressed or decoded member buffer.

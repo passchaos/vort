@@ -131,8 +131,8 @@ Stored and Deflate retain their complete-buffer extraction paths.
 
 `ZipIncrementalReader` consumes a complete ZIP archive sequentially without
 retaining decoded payload bytes. It accepts Stored, Shrink, Reduce factors
-1...4, Deflate, Deflate64, Bzip2, LZMA, XZ, DCL Implode, PPMd8, and
-legacy/current Zstandard local entries,
+1...4, traditional Implode, Deflate, Deflate64, Bzip2, LZMA, XZ, DCL Implode,
+PPMd8, and legacy/current Zstandard local entries,
 including known-size entries and bit-3 descriptors in all four ZIP32/ZIP64 × signed/unsigned
 layouts. Deflate's
 final block, Bzip2's validated stream terminator, LZMA's EOS marker, XZ's
@@ -163,6 +163,11 @@ selections, so descriptor mode holds the final compressed byte and decodes it
 transactionally in a second fixed workspace under the candidate output size.
 Only matching CRC-32/compressed/output sizes commit that state and its bounded
 pending output; false candidates cannot reach the caller.
+Traditional Implode method 6 parses its byte-aligned run-length code-length
+records progressively, retains partial 1...16-bit Shannon–Fano literal/length/
+distance codes, and uses a 4/8 KiB history for implicit-zero and overlapping
+matches. It shares the final-byte transactional adapter because it has no EOS;
+CRC-32 and descriptor sizes decide whether trial state/output commit.
 Stored unsigned descriptors are inherently ambiguous, so the reader holds only
 the final 16 or 24 bytes and accepts a boundary when CRC, compressed size,
 uncompressed size, and the following local/central/end signature all agree.
@@ -219,11 +224,12 @@ by ZIP.
 `max_ppmd_compressed_buffer_len` bounds retained range-coded input.
 Any `step` error makes the state terminal until `reset`, because payload may
 already have reached an external sink. `finish()` distinguishes a truncated
-source. Encryption, multi-disk/split archives, archive-extra-data records, and
-incremental traditional Implode payloads remain unsupported. Shrink uses one
-fixed approximately 40 KiB workspace while its member is active. Reduce uses
-two approximately 12 KiB workspaces plus an 8 KiB speculative tail buffer.
-Neither retains the complete compressed or decoded member.
+source. Encryption, multi-disk/split archives and archive-extra-data records
+remain unsupported. Shrink uses one fixed approximately 40 KiB workspace while
+its member is active. Reduce uses two approximately 12 KiB workspaces and
+traditional Implode two approximately 10 KiB workspaces; both add one shared-
+design 8 KiB speculative tail buffer. No supported sequential codec retains
+the complete compressed or decoded member.
 
 ## Incremental writer
 
@@ -343,10 +349,10 @@ one-shot and reader APIs is unchanged.
 
 The incremental writer does not yet support Shrink, Reduce, Implode, Deflate64,
 DCL Implode, Bzip2, LZMA, Zstandard, XZ, or PPMd entries. The sequential reader
-additionally streams Deflate64, Bzip2, LZMA, XZ, PPMd8, and legacy/current
-Zstandard plus DCL Implode. Encryption and multi-disk/split archives remain
-unsupported; the existing complete-buffer reader and broader one-shot writer
-retain their documented method coverage.
+additionally streams Shrink, Reduce, traditional Implode, Deflate64, Bzip2,
+LZMA, XZ, PPMd8, legacy/current Zstandard, and DCL Implode. Encryption and
+multi-disk/split archives remain unsupported; the existing complete-buffer
+reader and broader one-shot writer retain their documented method coverage.
 
 The incremental differential uses six entries: known Stored data containing a
 descriptor-signature byte sequence, unknown Stored data containing two such
@@ -380,7 +386,11 @@ passes the required sequential path (`incremental_archive_dcl_cases=1`). Both
 Apache Commons Compress `SHRUNK.ZIP` members pass the required sequential path
 (`incremental_archive_shrink_cases=2`). Four known-size and four descriptor-
 backed SFX members cover Reduce methods 2...5 through the required CLI path
-(`incremental_archive_reduce_cases=8`). No
+(`incremental_archive_reduce_cases=8`). Four known-size and four descriptor-
+backed SFX members cover all traditional Implode modes
+(`incremental_archive_implode_cases=8`); two Apache Commons Compress fixtures
+independently cover its endpoint modes
+(`incremental_archive_implode_fixture_cases=2`). No
 7z/7zz is installed on the current host, so the optional 7-Zip branch reports
 false and
 is not claimed as validation. Info-ZIP coverage uses `unzip -p` for
@@ -390,18 +400,21 @@ also affects the pre-existing one-shot output and is not claimed as fixed here.
 `zig test src/root.zig --test-filter 'ZIP incremental writer'` passes 61/61;
 `zig test src/zip.zig --test-filter 'ZIP incremental entry decoder'` passes
 15/15; `zig test src/zip.zig --test-filter 'DCL Implode incremental'` passes
-4/4; `zig test src/zip.zig --test-filter 'Shrink incremental'` passes 4/4; and
+4/4; `zig test src/zip.zig --test-filter 'Shrink incremental'` passes 4/4;
 `zig test src/zip.zig --test-filter 'Reduce incremental'` passes 4/4;
-`zig test src/zip.zig --test-filter 'ZIP incremental reader'` passes 23/23.
+`zig test src/zip.zig --test-filter 'Legacy Implode incremental'` passes 4/4;
+`zig test src/zip.zig --test-filter 'ZIP incremental reader'` passes 24/24.
 Shrink covers known/signed/unsigned-descriptor, empty, ZIP32/ZIP64 and output-
 limit paths. Reduce covers every factor, signed/unsigned descriptors,
 ZIP32/ZIP64, empty members, DLE/matches, invalid followers and follower-coded
 padding ambiguity. DCL Implode's six modes cover known/descriptor and
-ZIP32/ZIP64. PPMd
+ZIP32/ZIP64. Traditional Implode covers 4/8 KiB dictionaries, raw/tree
+literals, signed/unsigned descriptors, ZIP32/ZIP64, arbitrary trees,
+implicit-zero and overlapping matches. PPMd
 restart/cut-off, descriptor and ZIP64 combinations are required
 Vort coverage. Third-party method-98 evidence remains explicitly unavailable:
 Python `zipfile` has no PPMd codec and this host has no 7z/7zz. The full
-repository graph passes 2664/2664 and `zig build check` passes 113/113.
+repository graph passes 2669/2669 and `zig build check` passes 113/113.
 The wire refactor also leaves 14 one-shot probe modes byte-identical to HEAD,
 including every existing method and ZIP32/ZIP64 descriptor choice. Default and
 forced-ZIP64 SHA-256 values remain
@@ -505,7 +518,8 @@ Two Apache Commons Compress fixtures independently cover Implode's 4 KiB/
 two-tree and 8 KiB/three-tree endpoints. System 7-Zip extracts Vort output in
 all four modes, including a match at distance 5,001. Its 21.07 build rejects
 descriptor-backed Implode, so those legal entries remain covered by Vort
-self-extraction while the independent mode matrix uses ordinary local sizes.
+sequential self-extraction while the independent mode matrix uses ordinary
+local sizes.
 The method-10 matrix covers all six DCL literal/dictionary header modes through
 Vort self-extraction, including high-entropy literals and a 3,001-byte match
 that distinguishes the 4 KiB dictionary. When a `blast` executable is supplied
