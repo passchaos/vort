@@ -1,8 +1,10 @@
 # ZIP archive support
 
 Vort provides dependency-free, library-first reading and deterministic writing
-for common ZIP32 and ZIP64 archives. The direct borrowed parser and both writer
-surfaces use a single-disk view. Ordered split/multi-disk input is accepted by
+for common ZIP32 and ZIP64 archives. The direct borrowed parser and base
+one-shot/incremental writers use a single-disk view; dedicated split adapters
+provide owned writing plus owned or sparse reading. Ordered split/multi-disk
+input is accepted by
 either an owned normalization API or a sparse multi-slice sequential adapter;
 both validate the same disk-local metadata and reuse the established archive
 codecs. The reader parses the ordinary
@@ -632,7 +634,7 @@ implicit-zero and overlapping matches. PPMd
 restart/cut-off, descriptor and ZIP64 combinations are required
 Vort coverage. Third-party method-98 evidence remains explicitly unavailable:
 Python `zipfile` has no PPMd codec and this host has no 7z/7zz. The full
-repository graph passes 2712/2712 and `zig build check` passes 113/113.
+repository graph passes 2714/2714 and `zig build check` passes 113/113.
 The wire refactor also leaves 14 one-shot probe modes byte-identical to HEAD,
 including every existing method and ZIP32/ZIP64 descriptor choice. Default and
 forced-ZIP64 SHA-256 values remain
@@ -734,7 +736,6 @@ The target `usize`,
 pushes a local-header offset past ZIP32 range and that central record has no
 existing ZIP64 offset slot to rewrite, normalization returns
 `UnsupportedZipFeature` rather than resizing/rebuilding the central directory.
-The writers do not yet create split archives.
 
 For bounded sequential extraction, `ZipSplitNormalizedStream` copies only the
 outer slice descriptors, disk bases, and small little-endian metadata patches.
@@ -779,6 +780,42 @@ descriptor array is copied. This removes the complete normalized copy but is
 still an in-memory multi-slice API, not a callback/file-opening source that can
 release earlier physical disks while decoding later ones.
 
+### Split writing
+
+`zipEncodeSplitAlloc` first produces the ordinary deterministic one-shot wire,
+adds the conventional split marker, plans volume boundaries, and rewrites
+central/ending disk-local coordinates without changing any payload bytes. Only
+member payload may cross a boundary. Local headers, signed data descriptors,
+central headers, ZIP64 EOCD/locator, legacy EOCD, and its archive comment are
+atomic records; `InvalidZipSplitSize` is returned when any such record cannot
+fit in `max_part_size`. This matches the boundary policy observed from
+Info-ZIP rather than relying on Vort's more permissive joined reader.
+
+```zig
+var encoded = try vort.zipEncodeSplitAlloc(allocator, &entries, .{
+    .zip_options = .{
+        .data_descriptor = true,
+        .zip64 = .auto,
+    },
+    .max_part_size = 64 * 1024,
+    .max_archive_size = 512 * 1024 * 1024,
+    .max_parts = 1024,
+});
+defer encoded.deinit();
+
+// Write parts[0..len-1] as .z01, .z02, ... and the last part as .zip.
+for (encoded.parts) |part| try destination.writeAll(part);
+```
+
+`ZipSplitEncodedArchive` owns one backing byte allocation plus its small slice
+descriptor array. A small archive may contain one `.zip` part with the split
+marker, matching Info-ZIP. The writer supports the complete one-shot method,
+descriptor, ZIP32/ZIP64, ZipCrypto, and WinZip AES matrix. It caps the current
+slice at 65,535 parts so disk numbers remain in the existing legacy central
+field; supporting more disks would require expanding each relevant ZIP64
+extra. Encoding is owned and whole-archive-first, so `max_archive_size` bounds
+the accepted result but is not yet a pre-allocation/streaming bound.
+
 Convenience functions `zipExtractEntryInto`, `zipExtractEntryAlloc`,
 `zipExtractEntryAllocLimited`, `zipExtractByNameAlloc`, and
 `zipExtractByNameAllocLimited` parse and extract in one call. The corresponding
@@ -801,6 +838,8 @@ CLI validation surfaces:
 
 ```sh
 zig build run -- list-zip-file archive.zip
+zig build run -- create-zip-split-file archive folder/data.txt input.txt \
+  65536 deflate auto descriptor
 zig build run -- extract-zip-file archive.zip folder/data.txt output.txt 67108864 67108864 [password|-]
 zig build run -- extract-zip-split-files folder/data.txt output.txt 67108864 - archive.z01 archive.z02 archive.zip
 zig build run -- extract-zip-split-stream-files folder/data.txt output.txt \
@@ -824,8 +863,8 @@ the owned or sparse split APIs for ordered disk sets. The sequential reader
 accepts known-size and descriptor-backed Traditional ZipCrypto through
 `ZipIncrementalReaderOptions.password`; known-size and descriptor-backed
 WinZip AES use the same option, including through `ZipSplitIncrementalReader`.
-A disk-source callback that releases earlier part storage and split archive
-writing remain future compatibility increments.
+A disk-source callback that releases earlier part storage and an incremental
+split writer remain future compatibility increments.
 
 The required Info-ZIP differential creates a real seven-part archive with
 `zip -s 64k`. Its Deflate member crosses six disk boundaries, its following
@@ -837,6 +876,15 @@ central/local offsets, 3/257-byte input bridges, 5-byte output backpressure,
 ZipCrypto and WinZip AES, wrong/missing passwords, allocation failure,
 missing disks, archive/part/entry/output limits, and extraction of a trailing
 Stored entry.
+
+The writer differential produces four-part ZIP32 and forced-ZIP64 sets with a
+Deflate payload crossing three boundaries plus a trailing Stored member.
+Python parses ZIP64 extras, disk-local central/local offsets, locator/end disk
+fields, and verifies that local headers, descriptors, central headers, and the
+complete ending never cross a volume. Python raw zlib and CRC-32 independently
+validate both members before the owned and sparse Vort readers add eight
+required extraction cases. The normalized views use 8 ZIP32 or 13 ZIP64
+metadata patches.
 
 The differential verifies Vort Shrink output with system 7-Zip, including a
 32 KiB deterministic high-entropy payload that reaches the full dictionary.

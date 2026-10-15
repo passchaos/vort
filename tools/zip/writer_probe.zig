@@ -34,8 +34,14 @@ pub fn main(init: std.process.Init) !void {
     var zipcrypto_descriptor_mode = false;
     var winzip_aes_mode = false;
     var winzip_aes_descriptor_mode = false;
+    var split_mode = false;
     if (mode) |value| {
         if (std.mem.eql(u8, value, "zip64")) {
+            zip64 = .always;
+        } else if (std.mem.eql(u8, value, "split")) {
+            split_mode = true;
+        } else if (std.mem.eql(u8, value, "split-zip64")) {
+            split_mode = true;
             zip64 = .always;
         } else if (std.mem.eql(u8, value, "ppmd-cutoff")) {
             ppmd_cutoff = true;
@@ -126,6 +132,17 @@ pub fn main(init: std.process.Init) !void {
     const zstd_payload = "Vort ZIP Zstandard method 93.\n" ** 96;
     const ppmd_payload = "Vort ZIP PPMd method 98.\n" ** 128;
     const utf8_payload = "ZIP UTF-8 文件名\n" ** 17;
+    const split_payload = try init.gpa.alloc(u8, 384 * 1024);
+    defer init.gpa.free(split_payload);
+    var split_state: u32 = 0x51a7_2026;
+    for (0..split_payload.len / 128) |block| {
+        for (0..64) |index| {
+            split_state = split_state *% 1_664_525 +% 1_013_904_223;
+            const value: u8 = @truncate(split_state >> 24);
+            split_payload[block * 128 + index] = value;
+            split_payload[block * 128 + 64 + index] = value;
+        }
+    }
     const entries = [_]vort.ZipEncodeEntry{
         .{ .name = "stored.bin", .data = &stored, .method = .stored, .comment = "stored entry" },
         .{ .name = "folder/shrink.txt", .data = shrink_payload, .method = .shrink, .comment = "shrink entry" },
@@ -204,11 +221,27 @@ pub fn main(init: std.process.Init) !void {
             },
         },
     };
+    const split_entries = [_]vort.ZipEncodeEntry{
+        .{
+            .name = "split/crossing.bin",
+            .data = split_payload,
+            .method = .deflate,
+            .comment = "cross-volume Deflate",
+        },
+        .{
+            .name = "split/tail.bin",
+            .data = "Vort split writer stored tail.\n" ** 97,
+            .method = .stored,
+            .comment = "final stored entry",
+        },
+    };
 
     var bytes: std.ArrayList(u8) = .empty;
     defer bytes.deinit(init.gpa);
     try bytes.appendSlice(init.gpa, "MZ-VORT-ZIP-PREFIX\n");
-    const selected_entries: []const vort.ZipEncodeEntry = if (winzip_aes_mode)
+    const selected_entries: []const vort.ZipEncodeEntry = if (split_mode)
+        &split_entries
+    else if (winzip_aes_mode)
         &winzip_aes_entries
     else if (zipcrypto_mode)
         &zipcrypto_entries
@@ -218,9 +251,9 @@ pub fn main(init: std.process.Init) !void {
         entries[2..3]
     else
         &entries;
-    _ = try vort.zipEncodeAppend(init.gpa, &bytes, selected_entries, .{
+    const encode_options: vort.ZipEncodeOptions = .{
         .archive_comment = "vort zip writer differential",
-        .data_descriptor = implode_descriptor_mode or reduce_descriptor_mode or
+        .data_descriptor = split_mode or implode_descriptor_mode or reduce_descriptor_mode or
             zipcrypto_descriptor_mode or winzip_aes_descriptor_mode or
             !(implode_mode or reduce_mode or dcl_mode or zipcrypto_mode or winzip_aes_mode),
         .zip64 = zip64,
@@ -243,6 +276,30 @@ pub fn main(init: std.process.Init) !void {
             .restore_method = .cut_off,
         } else .{},
         .zstd_options = .{ .content_checksum = true },
-    });
+    };
+    if (split_mode) {
+        bytes.clearRetainingCapacity();
+        var encoded = try vort.zipEncodeSplitAlloc(init.gpa, selected_entries, .{
+            .zip_options = encode_options,
+            .max_part_size = 64 * 1024,
+        });
+        defer encoded.deinit();
+        for (encoded.parts, 0..) |part, index| {
+            const path = if (index + 1 == encoded.parts.len)
+                try std.fmt.allocPrint(init.gpa, "{s}.zip", .{output_path})
+            else
+                try std.fmt.allocPrint(init.gpa, "{s}.z{d:0>2}", .{
+                    output_path,
+                    index + 1,
+                });
+            defer init.gpa.free(path);
+            try std.Io.Dir.cwd().writeFile(init.io, .{
+                .sub_path = path,
+                .data = part,
+            });
+        }
+        return;
+    }
+    _ = try vort.zipEncodeAppend(init.gpa, &bytes, selected_entries, encode_options);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = bytes.items });
 }

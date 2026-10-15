@@ -963,6 +963,8 @@ pub fn main(init: std.process.Init) !void {
             entry_name,
             output_path,
         });
+    } else if (std.mem.eql(u8, command, "create-zip-split-file")) {
+        try zip_cli.createSplit(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "list-zip-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
@@ -2912,6 +2914,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Extract a Stored/MSZIP/LZX/Quantum CAB entry with explicit limits
         \\  extract-cab-set <entry> <out> <cab1> <cab2> [...]
         \\                              Extract an entry across an explicitly ordered cabinet set
+        \\  create-zip-split-file <prefix> <entry> <in> <max_part> [stored|deflate] [auto|zip32|zip64] [descriptor|sizes]
+        \\                              Create a standard atomic-record split ZIP set
         \\  list-zip-file <path>        List ZIP32/ZIP64 central-directory entries
         \\  extract-zip-file <zip> <entry> <out> [max_output] [max_dictionary] [password|-]
         \\                              Extract a supported ZIP entry with CRC validation

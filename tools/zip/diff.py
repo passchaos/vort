@@ -16,6 +16,7 @@ import subprocess
 import tempfile
 import zipfile
 import zlib
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -1890,7 +1891,93 @@ def ordered_split_parts(archive: Path) -> list[Path]:
     return parts
 
 
-def split_central_entries(parts: list[Path]) -> tuple[bytes, list[int], dict[str, tuple[int, ...]]]:
+@dataclass(frozen=True)
+class SplitEntry:
+    name: str
+    flags: int
+    method: int
+    crc32: int
+    compressed_size: int
+    uncompressed_size: int
+    disk: int
+    local_offset: int
+    central_offset: int
+    central_end: int
+    zip64: bool
+
+
+@dataclass(frozen=True)
+class SplitLayout:
+    joined: bytes
+    bases: list[int]
+    entries: dict[str, SplitEntry]
+    central_start: int
+    central_end: int
+    ending_start: int
+    zip64: bool
+
+
+def resolve_split_zip64_values(
+    extra: bytes,
+    compressed_size: int,
+    uncompressed_size: int,
+    local_offset: int,
+    disk: int,
+) -> tuple[int, int, int, int, bool]:
+    needs_uncompressed = uncompressed_size == 0xFFFFFFFF
+    needs_compressed = compressed_size == 0xFFFFFFFF
+    needs_offset = local_offset == 0xFFFFFFFF
+    needs_disk = disk == 0xFFFF
+    if not (needs_uncompressed or needs_compressed or needs_offset or needs_disk):
+        return compressed_size, uncompressed_size, local_offset, disk, False
+    payloads: list[bytes] = []
+    cursor = 0
+    while cursor < len(extra):
+        if cursor + 4 > len(extra):
+            raise AssertionError("truncated split extra field")
+        field_id, field_len = struct.unpack_from("<HH", extra, cursor)
+        cursor += 4
+        end = cursor + field_len
+        if end > len(extra):
+            raise AssertionError("truncated split extra payload")
+        if field_id == 0x0001:
+            payloads.append(extra[cursor:end])
+        cursor = end
+    if len(payloads) != 1:
+        raise AssertionError("missing or duplicate split ZIP64 extra")
+    payload = payloads[0]
+    cursor = 0
+
+    def take_u64() -> int:
+        nonlocal cursor
+        if cursor + 8 > len(payload):
+            raise AssertionError("truncated split ZIP64 u64")
+        value = struct.unpack_from("<Q", payload, cursor)[0]
+        cursor += 8
+        return value
+
+    def take_u32() -> int:
+        nonlocal cursor
+        if cursor + 4 > len(payload):
+            raise AssertionError("truncated split ZIP64 u32")
+        value = struct.unpack_from("<I", payload, cursor)[0]
+        cursor += 4
+        return value
+
+    resolved_uncompressed = take_u64() if needs_uncompressed else uncompressed_size
+    resolved_compressed = take_u64() if needs_compressed else compressed_size
+    resolved_offset = take_u64() if needs_offset else local_offset
+    resolved_disk = take_u32() if needs_disk else disk
+    return (
+        resolved_compressed,
+        resolved_uncompressed,
+        resolved_offset,
+        resolved_disk,
+        True,
+    )
+
+
+def parse_split_layout(parts: list[Path]) -> SplitLayout:
     raw_parts = [part.read_bytes() for part in parts]
     bases: list[int] = []
     joined = bytearray()
@@ -1906,20 +1993,58 @@ def split_central_entries(parts: list[Path]) -> tuple[bytes, list[int], dict[str
     eocd = struct.unpack_from("<IHHHHIIH", raw_parts[-1], eocd_offset)
     if eocd_offset + 22 + eocd[7] != len(raw_parts[-1]):
         raise AssertionError("Info-ZIP split EOCD comment length is invalid")
-    central_disk, entry_count, central_size, central_offset = (
+    end_disk, central_disk, entries_on_disk, entry_count, central_size, central_offset = (
+        eocd[1],
         eocd[2],
+        eocd[3],
         eocd[4],
         eocd[5],
         eocd[6],
     )
+    end_absolute = bases[-1] + eocd_offset
+    zip64 = (
+        end_disk == 0xFFFF
+        or central_disk == 0xFFFF
+        or entries_on_disk == 0xFFFF
+        or entry_count == 0xFFFF
+        or central_size == 0xFFFFFFFF
+        or central_offset == 0xFFFFFFFF
+    )
+    ending_start = end_absolute
+    if zip64:
+        locator_offset = end_absolute - 20
+        if joined[locator_offset : locator_offset + 4] != b"PK\x06\x07":
+            raise AssertionError("split ZIP64 locator is missing")
+        zip64_disk, zip64_offset, disk_count = struct.unpack_from(
+            "<IQI", joined, locator_offset + 4
+        )
+        if zip64_disk >= len(parts) or disk_count != len(parts):
+            raise AssertionError("split ZIP64 locator disk fields are invalid")
+        zip64_absolute = bases[zip64_disk] + zip64_offset
+        if joined[zip64_absolute : zip64_absolute + 4] != b"PK\x06\x06":
+            raise AssertionError("split ZIP64 EOCD is missing")
+        payload_len = struct.unpack_from("<Q", joined, zip64_absolute + 4)[0]
+        if payload_len < 44 or zip64_absolute + 12 + payload_len != locator_offset:
+            raise AssertionError("split ZIP64 EOCD length is invalid")
+        (
+            end_disk,
+            central_disk,
+            entries_on_disk,
+            entry_count,
+            central_size,
+            central_offset,
+        ) = struct.unpack_from("<IIQQQQ", joined, zip64_absolute + 16)
+        ending_start = zip64_absolute
+    if end_disk != len(parts) - 1 or entries_on_disk > entry_count:
+        raise AssertionError("split ending disk fields are invalid")
     if central_disk >= len(parts):
-        raise AssertionError("Info-ZIP split central disk is invalid")
+        raise AssertionError("split central disk is invalid")
     central_start = bases[central_disk] + central_offset
     central_end = central_start + central_size
-    if central_end > bases[-1] + eocd_offset:
-        raise AssertionError("Info-ZIP split central directory exceeds EOCD")
+    if central_end > ending_start:
+        raise AssertionError("split central directory exceeds archive ending")
 
-    entries: dict[str, tuple[int, ...]] = {}
+    entries: dict[str, SplitEntry] = {}
     cursor = central_start
     fixed_size = struct.calcsize("<IHHHHHHIIIHHHHHII")
     for _ in range(entry_count):
@@ -1935,12 +2060,54 @@ def split_central_entries(parts: list[Path]) -> tuple[bytes, list[int], dict[str
                 "utf-8"
             )
         except UnicodeDecodeError as error:
-            raise AssertionError("Info-ZIP split name is not UTF-8") from error
-        entries[name] = fields
+            raise AssertionError("split name is not UTF-8") from error
+        extra_start = cursor + fixed_size + name_len
+        extra = bytes(joined[extra_start : extra_start + extra_len])
+        (
+            resolved_compressed,
+            resolved_uncompressed,
+            resolved_offset,
+            resolved_disk,
+            entry_zip64,
+        ) = resolve_split_zip64_values(
+            extra,
+            fields[8],
+            fields[9],
+            fields[16],
+            fields[13],
+        )
+        entries[name] = SplitEntry(
+            name=name,
+            flags=fields[3],
+            method=fields[4],
+            crc32=fields[7],
+            compressed_size=resolved_compressed,
+            uncompressed_size=resolved_uncompressed,
+            disk=resolved_disk,
+            local_offset=resolved_offset,
+            central_offset=cursor,
+            central_end=end,
+            zip64=entry_zip64,
+        )
         cursor = end
     if cursor != central_end:
         raise AssertionError("Info-ZIP split central size does not match its entries")
-    return bytes(joined), bases, entries
+    actual_entries_on_end_disk = sum(
+        max(index for index, base in enumerate(bases) if base <= entry.central_offset)
+        == end_disk
+        for entry in entries.values()
+    )
+    if actual_entries_on_end_disk != entries_on_disk:
+        raise AssertionError("split entries-on-disk count is invalid")
+    return SplitLayout(
+        joined=bytes(joined),
+        bases=bases,
+        entries=entries,
+        central_start=central_start,
+        central_end=central_end,
+        ending_start=ending_start,
+        zip64=zip64,
+    )
 
 
 def validate_infozip_split_archive(
@@ -1982,20 +2149,21 @@ def validate_infozip_split_archive(
         stderr=subprocess.PIPE,
     )
     parts = ordered_split_parts(archive)
-    joined, bases, entries = split_central_entries(parts)
+    layout = parse_split_layout(parts)
+    joined, bases, entries = layout.joined, layout.bases, layout.entries
     if set(entries) != set(payloads):
         raise AssertionError(f"unexpected split central directory: {sorted(entries)}")
 
     large_entry = entries["cross-volume.txt"]
-    if large_entry[4] != zipfile.ZIP_DEFLATED:
+    if large_entry.method != zipfile.ZIP_DEFLATED:
         raise AssertionError("Info-ZIP split payload was not Deflate-compressed")
-    large_disk = large_entry[13]
-    large_local = bases[large_disk] + large_entry[16]
+    large_disk = large_entry.disk
+    large_local = bases[large_disk] + large_entry.local_offset
     if joined[large_local : large_local + 4] != b"PK\x03\x04":
         raise AssertionError("split Deflate local header offset is invalid")
     name_len, extra_len = struct.unpack_from("<HH", joined, large_local + 26)
     payload_start = large_local + 30 + name_len + extra_len
-    payload_end = payload_start + large_entry[8]
+    payload_end = payload_start + large_entry.compressed_size
     crossed = sum(payload_start < base < payload_end for base in bases[1:])
     if crossed < 2:
         raise AssertionError(
@@ -2003,9 +2171,11 @@ def validate_infozip_split_archive(
         )
 
     tail_entry = entries["tail-stored.bin"]
-    if tail_entry[4] != zipfile.ZIP_STORED or tail_entry[13] <= large_disk:
+    if tail_entry.method != zipfile.ZIP_STORED or tail_entry.disk <= large_disk:
         raise AssertionError("tail entry is not Stored on a later split disk")
-    first_local_offset = min(bases[entry[13]] + entry[16] for entry in entries.values())
+    first_local_offset = min(
+        bases[entry.disk] + entry.local_offset for entry in entries.values()
+    )
     expected_stream_input = len(joined) - first_local_offset
 
     cases = 0
@@ -2072,6 +2242,133 @@ def validate_infozip_split_archive(
     if rejected.returncode == 0:
         raise AssertionError("Vort accepted reordered Info-ZIP split disks")
     return len(parts), cases, stream_cases, crossed, stream_patch_count or 0
+
+
+def validate_vort_split_writer(
+    cli: Path,
+    writer: Path,
+    temp: Path,
+    force_zip64: bool,
+) -> tuple[int, int, int, int]:
+    suffix = "zip64" if force_zip64 else "zip32"
+    prefix = temp / f"vort-split-{suffix}"
+    run(writer, str(prefix), "split-zip64" if force_zip64 else "split")
+    archive = Path(f"{prefix}.zip")
+    parts = ordered_split_parts(archive)
+    layout = parse_split_layout(parts)
+    if layout.zip64 != force_zip64:
+        raise AssertionError(f"Vort split {suffix} ending mode mismatch")
+    if len(parts) < 3 or any(part.stat().st_size > 64 * 1024 for part in parts):
+        raise AssertionError(f"Vort split {suffix} part planning mismatch")
+
+    large = bytearray(384 * 1024)
+    state = 0x51A7_2026
+    for block in range(len(large) // 128):
+        for index in range(64):
+            state = (state * 1_664_525 + 1_013_904_223) & 0xFFFFFFFF
+            value = state >> 24
+            large[block * 128 + index] = value
+            large[block * 128 + 64 + index] = value
+    payloads = {
+        "split/crossing.bin": bytes(large),
+        "split/tail.bin": b"Vort split writer stored tail.\n" * 97,
+    }
+    expected_methods = {
+        "split/crossing.bin": zipfile.ZIP_DEFLATED,
+        "split/tail.bin": zipfile.ZIP_STORED,
+    }
+    if set(layout.entries) != set(payloads):
+        raise AssertionError(f"unexpected Vort split entries: {sorted(layout.entries)}")
+
+    boundaries = layout.bases[1:]
+    crossing_boundaries = 0
+    extraction_cases = 0
+    patch_count: int | None = None
+    first_local = min(
+        layout.bases[entry.disk] + entry.local_offset
+        for entry in layout.entries.values()
+    )
+    expected_stream_input = len(layout.joined) - first_local
+    for index, (name, expected) in enumerate(payloads.items()):
+        entry = layout.entries[name]
+        if entry.method != expected_methods[name] or entry.flags & 0x0008 == 0:
+            raise AssertionError(f"Vort split metadata mismatch for {name!r}")
+        local = layout.bases[entry.disk] + entry.local_offset
+        if layout.joined[local : local + 4] != b"PK\x03\x04":
+            raise AssertionError(f"Vort split local offset mismatch for {name!r}")
+        name_len, extra_len = struct.unpack_from("<HH", layout.joined, local + 26)
+        data_start = local + 30 + name_len + extra_len
+        payload_end = data_start + entry.compressed_size
+        descriptor_len = 24 if entry.zip64 else 16
+        descriptor_end = payload_end + descriptor_len
+        if layout.joined[payload_end : payload_end + 4] != b"PK\x07\x08":
+            raise AssertionError(f"Vort split descriptor mismatch for {name!r}")
+        if any(local < boundary < data_start for boundary in boundaries):
+            raise AssertionError(f"Vort split local header crossed a disk for {name!r}")
+        if any(payload_end < boundary < descriptor_end for boundary in boundaries):
+            raise AssertionError(f"Vort split descriptor crossed a disk for {name!r}")
+        if any(
+            entry.central_offset < boundary < entry.central_end
+            for boundary in boundaries
+        ):
+            raise AssertionError(f"Vort split central header crossed a disk for {name!r}")
+        compressed = layout.joined[data_start:payload_end]
+        decoded = (
+            zlib.decompress(compressed, -15)
+            if entry.method == zipfile.ZIP_DEFLATED
+            else compressed
+        )
+        if (
+            decoded != expected
+            or entry.uncompressed_size != len(expected)
+            or entry.crc32 != (binascii.crc32(expected) & 0xFFFFFFFF)
+        ):
+            raise AssertionError(f"independent Vort split decode mismatch for {name!r}")
+        crossed = sum(data_start < boundary < payload_end for boundary in boundaries)
+        if name == "split/crossing.bin":
+            if crossed < 1:
+                raise AssertionError("Vort split Deflate payload did not cross a disk")
+            crossing_boundaries = crossed
+
+        for command_suffix in ("", "-stream"):
+            output = temp / f"vort-split-{suffix}-{index}{command_suffix}.out"
+            command = (
+                "extract-zip-split-stream-files"
+                if command_suffix
+                else "extract-zip-split-files"
+            )
+            result = run(
+                cli,
+                command,
+                name,
+                str(output),
+                str(len(expected)),
+                "-",
+                *(str(part) for part in parts),
+            )
+            if output.read_bytes() != expected:
+                raise AssertionError(f"Vort split {suffix} extraction mismatch for {name!r}")
+            if command_suffix:
+                fields = dict(
+                    token.split("=", 1)
+                    for token in result.stdout.split()
+                    if "=" in token
+                )
+                current_patches = int(fields.get("metadata_patches", "0"))
+                if (
+                    int(fields.get("normalized_input_read", "0"))
+                    != expected_stream_input
+                    or current_patches <= 0
+                ):
+                    raise AssertionError(f"Vort split {suffix} stream accounting mismatch")
+                if patch_count is not None and patch_count != current_patches:
+                    raise AssertionError(f"Vort split {suffix} patch count drift")
+                patch_count = current_patches
+            extraction_cases += 1
+
+    if any(layout.ending_start < boundary < len(layout.joined) for boundary in boundaries):
+        raise AssertionError(f"Vort split {suffix} ending crossed a disk")
+    return len(parts), extraction_cases, crossing_boundaries, patch_count or 0
 
 
 def main() -> None:
@@ -2196,6 +2493,18 @@ def main() -> None:
             split_zip_boundaries,
             split_zip_metadata_patches,
         ) = validate_infozip_split_archive(args.cli, zip_tool, temp)
+        (
+            vort_split_zip32_parts,
+            vort_split_zip32_cases,
+            vort_split_zip32_boundaries,
+            vort_split_zip32_patches,
+        ) = validate_vort_split_writer(args.cli, args.writer, temp, False)
+        (
+            vort_split_zip64_parts,
+            vort_split_zip64_cases,
+            vort_split_zip64_boundaries,
+            vort_split_zip64_patches,
+        ) = validate_vort_split_writer(args.cli, args.writer, temp, True)
         deflate64_cases = 0
         ppmd_cases = 0
         incremental_archive_implode_cases, implode_modes = validate_vort_implode_modes(
@@ -2252,6 +2561,13 @@ def main() -> None:
         f"split_zip_stream_cases={split_zip_stream_cases} "
         f"split_zip_boundaries={split_zip_boundaries} "
         f"split_zip_metadata_patches={split_zip_metadata_patches} "
+        f"vort_split_zip32_parts={vort_split_zip32_parts} "
+        f"vort_split_zip64_parts={vort_split_zip64_parts} "
+        f"vort_split_writer_cases={vort_split_zip32_cases + vort_split_zip64_cases} "
+        f"vort_split_zip32_boundaries={vort_split_zip32_boundaries} "
+        f"vort_split_zip64_boundaries={vort_split_zip64_boundaries} "
+        f"vort_split_zip32_patches={vort_split_zip32_patches} "
+        f"vort_split_zip64_patches={vort_split_zip64_patches} "
         f"system_unzip={incremental_zip32_unzip and incremental_zip64_unzip} "
         f"incremental_7zip={incremental_zip32_7zip and incremental_zip64_7zip} "
         f"incremental_zipcrypto_7zip={incremental_zipcrypto_zip32_7zip and incremental_zipcrypto_zip64_7zip} "

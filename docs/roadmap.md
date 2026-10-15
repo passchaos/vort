@@ -20517,3 +20517,27 @@ reuse, so production keeps the simpler independently owned plans.
   `run-zip-diff` all 13 steps, CLI help smoke, and `zig build check` all 113
   steps. Parts must still remain resident; a source callback that can release
   earlier disks and split archive writing remain follow-ups.
+
+- Added deterministic owned split ZIP writing through `zipEncodeSplitAlloc`
+  and `ZipSplitEncodedArchive`. The planner follows Info-ZIP's observed wire
+  rules: the conventional first-disk marker is present; local headers, signed
+  descriptors, central headers, ZIP64 EOCD/locator, legacy EOCD and comments
+  remain atomic; only compressed member payloads can cross part boundaries.
+  Central disk-start/local-offset fields and ZIP32/ZIP64 ending coordinates are
+  rewritten to disk-local values without touching codec or encryption bytes.
+  Every one-shot method, data-descriptor policy, forced/automatic ZIP64,
+  Traditional ZipCrypto, and WinZip AES compose through the same writer. The
+  owned result uses one backing allocation plus part slices, supports the
+  single-part split-marker shape emitted by Info-ZIP, and rejects undersized
+  atomic records, archive/part limits, and more than 65,535 parts explicitly.
+  Focused tests cover deterministic ZIP32/ZIP64 multi-part output, empty and
+  single-part sets, Deflate and Stored crossings, AES-256 AE-2 plus ZipCrypto,
+  OOM sweeps, wrong passwords and both reader surfaces. The required writer
+  gate produces four-part ZIP32/ZIP64 archives; Python independently parses
+  ZIP64 extras and disk fields, enforces atomic record boundaries, and validates
+  both members with raw zlib and CRC-32 before eight Vort owned/sparse extraction
+  cases (`vort_split_writer_cases=8`, three crossings per mode, patch counts
+  8/13). Whole-archive-first memory and the u16 disk-field limit remain explicit
+  follow-ups for an incremental writer. Focused split tests pass 15/15, the
+  full repository graph 2714/2714, `run-zip-diff` all 13 steps, CLI help smoke,
+  and `zig build check` all 113 steps.

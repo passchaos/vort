@@ -52,6 +52,68 @@ const OwnedParts = struct {
     }
 };
 
+pub fn createSplit(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const output_prefix = args.next() orelse return error.MissingCorpusPath;
+    const entry_name = args.next() orelse return error.MissingCorpusPath;
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const max_part_size = try parseRequiredLimit(args.next());
+    const method = try parseCompression(args.next());
+    const zip64 = try parseZip64Mode(args.next());
+    const data_descriptor = try parseDescriptorMode(args.next());
+    const input = try std.Io.Dir.cwd().readFileAlloc(
+        init.io,
+        input_path,
+        init.gpa,
+        .limited(max_archive_size),
+    );
+    defer init.gpa.free(input);
+    const entries = [_]vort.ZipEncodeEntry{.{
+        .name = entry_name,
+        .data = input,
+        .method = method,
+    }};
+    var encoded = try vort.zipEncodeSplitAlloc(init.gpa, &entries, .{
+        .zip_options = .{
+            .data_descriptor = data_descriptor,
+            .zip64 = zip64,
+        },
+        .max_part_size = max_part_size,
+        .max_archive_size = max_archive_size,
+    });
+    defer encoded.deinit();
+    for (encoded.parts, 0..) |part, index| {
+        const path = if (index + 1 == encoded.parts.len)
+            try std.fmt.allocPrint(init.gpa, "{s}.zip", .{output_prefix})
+        else
+            try std.fmt.allocPrint(init.gpa, "{s}.z{d:0>2}", .{
+                output_prefix,
+                index + 1,
+            });
+        defer init.gpa.free(path);
+        try std.Io.Dir.cwd().writeFile(init.io, .{
+            .sub_path = path,
+            .data = part,
+        });
+    }
+    try stdout.print(
+        "zip_parts={d} zip_bytes={d} input_bytes={d} method={s} zip64={s} " ++
+            "descriptor={} prefix={s}\n",
+        .{
+            encoded.parts.len,
+            encoded.bytes.len,
+            input.len,
+            @tagName(method),
+            @tagName(zip64),
+            data_descriptor,
+            output_prefix,
+        },
+    );
+}
+
 pub fn extractSplitOwned(
     init: std.process.Init,
     args: *std.process.Args.Iterator,
@@ -201,4 +263,30 @@ fn parseRequiredLimit(text: ?[]const u8) !usize {
 
 fn parsePassword(value: []const u8) ?[]const u8 {
     return if (std.mem.eql(u8, value, "-")) null else value;
+}
+
+fn parseCompression(value: ?[]const u8) !vort.ZipCompressionMethod {
+    const name = value orelse return .deflate;
+    if (std.mem.eql(u8, name, "stored") or std.mem.eql(u8, name, "store"))
+        return .stored;
+    if (std.mem.eql(u8, name, "deflate")) return .deflate;
+    return error.UnsupportedZipCompressionMethod;
+}
+
+fn parseZip64Mode(value: ?[]const u8) !vort.Zip64Mode {
+    const name = value orelse return .auto;
+    if (std.mem.eql(u8, name, "auto")) return .auto;
+    if (std.mem.eql(u8, name, "zip32") or std.mem.eql(u8, name, "never"))
+        return .never;
+    if (std.mem.eql(u8, name, "zip64") or std.mem.eql(u8, name, "always"))
+        return .always;
+    return error.InvalidZipArchive;
+}
+
+fn parseDescriptorMode(value: ?[]const u8) !bool {
+    const name = value orelse return true;
+    if (std.mem.eql(u8, name, "descriptor")) return true;
+    if (std.mem.eql(u8, name, "sizes") or std.mem.eql(u8, name, "known"))
+        return false;
+    return error.InvalidZipArchive;
 }
