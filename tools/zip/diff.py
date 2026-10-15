@@ -650,22 +650,21 @@ def validate_vort_zipcrypto(
                 )
                 if output.read_bytes() != expected:
                     raise AssertionError(f"Vort ZipCrypto self-extraction mismatch for {name!r}")
-                if not descriptor:
-                    stream_output = temp / f"vort-zipcrypto-{suffix}-{index}.stream.out"
-                    run(
-                        cli,
-                        "extract-zip-stream-file",
-                        str(archive_path),
-                        name,
-                        str(stream_output),
-                        str(512 * 1024 * 1024),
-                        ZIPCRYPTO_PASSWORD,
+                stream_output = temp / f"vort-zipcrypto-{suffix}-{index}.stream.out"
+                run(
+                    cli,
+                    "extract-zip-stream-file",
+                    str(archive_path),
+                    name,
+                    str(stream_output),
+                    str(512 * 1024 * 1024),
+                    ZIPCRYPTO_PASSWORD,
+                )
+                if stream_output.read_bytes() != expected:
+                    raise AssertionError(
+                        f"Vort sequential ZipCrypto mismatch for {name!r}"
                     )
-                    if stream_output.read_bytes() != expected:
-                        raise AssertionError(
-                            f"Vort sequential ZipCrypto mismatch for {name!r}"
-                        )
-                    sequential_cases += 1
+                sequential_cases += 1
                 wrong = subprocess.run(
                     [
                         str(cli),
@@ -699,9 +698,10 @@ def validate_infozip_zipcrypto(
     cli: Path,
     zip_tool: str,
     temp: Path,
-) -> int:
+) -> tuple[int, int]:
     payload = b"Info-ZIP Traditional encryption read by Vort.\n" * 128
     cases = 0
+    sequential_cases = 0
     for index, compression in enumerate(("-0", "-9")):
         source = temp / f"infozip-encrypted-{index}.txt"
         archive = temp / f"infozip-encrypted-{index}.zip"
@@ -736,8 +736,21 @@ def validate_infozip_zipcrypto(
         )
         if output.read_bytes() != payload:
             raise AssertionError("Vort could not decrypt Info-ZIP output")
+        stream_output = temp / f"infozip-encrypted-{index}.stream.out"
+        run(
+            cli,
+            "extract-zip-stream-file",
+            str(archive),
+            source.name,
+            str(stream_output),
+            str(512 * 1024 * 1024),
+            ZIPCRYPTO_PASSWORD,
+        )
+        if stream_output.read_bytes() != payload:
+            raise AssertionError("Vort sequential reader could not decrypt Info-ZIP output")
+        sequential_cases += 1
         cases += 1
-    return cases
+    return cases, sequential_cases
 
 
 def validate_seven_zip_xz_with_vort(cli: Path, tool: str, temp: Path) -> None:
@@ -1571,7 +1584,7 @@ def validate_incremental_zipcrypto_writer(
     force_zip64: bool,
     unzip_tool: str,
     seven_zip_tool: str | None,
-) -> tuple[int, bool]:
+) -> tuple[int, bool, int]:
     suffix = "zip64" if force_zip64 else "zip32"
     one_path = temp / f"incremental-zipcrypto-{suffix}-one.zip"
     micro_path = temp / f"incremental-zipcrypto-{suffix}-micro.zip"
@@ -1587,6 +1600,7 @@ def validate_incremental_zipcrypto_writer(
         raise AssertionError(f"incremental ZipCrypto {suffix} listing mismatch: {listing}")
 
     with zipfile.ZipFile(one_path) as archive:
+        sequential_cases = 0
         if archive.namelist() != list(INCREMENTAL_ZIPCRYPTO_PAYLOADS):
             raise AssertionError("incremental ZipCrypto entry order mismatch")
         for index, (name, expected) in enumerate(INCREMENTAL_ZIPCRYPTO_PAYLOADS.items()):
@@ -1601,6 +1615,21 @@ def validate_incremental_zipcrypto_writer(
             extract_with_vort_password(cli, one_path, name, output, ZIPCRYPTO_PASSWORD)
             if output.read_bytes() != expected:
                 raise AssertionError(f"Vort could not self-extract incremental {name!r}")
+            stream_output = temp / f"incremental-zipcrypto-{suffix}-{index}.stream.out"
+            run(
+                cli,
+                "extract-zip-stream-file",
+                str(one_path),
+                name,
+                str(stream_output),
+                str(512 * 1024 * 1024),
+                ZIPCRYPTO_PASSWORD,
+            )
+            if stream_output.read_bytes() != expected:
+                raise AssertionError(
+                    f"Vort sequential reader could not extract incremental {name!r}"
+                )
+            sequential_cases += 1
 
     extracted = subprocess.run(
         [unzip_tool, "-P", ZIPCRYPTO_PASSWORD, "-p", str(one_path)],
@@ -1631,7 +1660,7 @@ def validate_incremental_zipcrypto_writer(
             if actual != expected:
                 raise AssertionError(f"7-Zip incremental ZipCrypto mismatch for {name!r}")
         seven_zip_checked = True
-    return len(raw), seven_zip_checked
+    return len(raw), seven_zip_checked, sequential_cases
 
 
 def main() -> None:
@@ -1671,12 +1700,13 @@ def main() -> None:
         vort_zip64_bytes = validate_vort_archive_with_python(
             args.cli, args.writer, temp, True, seven_zip_tool
         )
-        vort_zipcrypto_cases, incremental_reader_zipcrypto_cases = validate_vort_zipcrypto(
-            args.cli, args.writer, unzip_tool, temp
+        vort_zipcrypto_cases, vort_incremental_reader_zipcrypto_cases = (
+            validate_vort_zipcrypto(args.cli, args.writer, unzip_tool, temp)
         )
-        infozip_zipcrypto_cases = validate_infozip_zipcrypto(
-            args.cli, zip_tool, temp
-        )
+        (
+            infozip_zipcrypto_cases,
+            infozip_incremental_reader_zipcrypto_cases,
+        ) = validate_infozip_zipcrypto(args.cli, zip_tool, temp)
         incremental_zip32_bytes, incremental_zip32_unzip, incremental_zip32_7zip = (
             validate_incremental_writer_archive(
                 args.cli, args.incremental_writer, temp, False, unzip_tool, seven_zip_tool
@@ -1687,25 +1717,35 @@ def main() -> None:
                 args.cli, args.incremental_writer, temp, True, unzip_tool, seven_zip_tool
             )
         )
-        incremental_zipcrypto_zip32_bytes, incremental_zipcrypto_zip32_7zip = (
-            validate_incremental_zipcrypto_writer(
-                args.cli,
-                args.incremental_writer,
-                temp,
-                False,
-                unzip_tool,
-                seven_zip_tool,
-            )
+        (
+            incremental_zipcrypto_zip32_bytes,
+            incremental_zipcrypto_zip32_7zip,
+            incremental_zipcrypto_zip32_reader,
+        ) = validate_incremental_zipcrypto_writer(
+            args.cli,
+            args.incremental_writer,
+            temp,
+            False,
+            unzip_tool,
+            seven_zip_tool,
         )
-        incremental_zipcrypto_zip64_bytes, incremental_zipcrypto_zip64_7zip = (
-            validate_incremental_zipcrypto_writer(
-                args.cli,
-                args.incremental_writer,
-                temp,
-                True,
-                unzip_tool,
-                seven_zip_tool,
-            )
+        (
+            incremental_zipcrypto_zip64_bytes,
+            incremental_zipcrypto_zip64_7zip,
+            incremental_zipcrypto_zip64_reader,
+        ) = validate_incremental_zipcrypto_writer(
+            args.cli,
+            args.incremental_writer,
+            temp,
+            True,
+            unzip_tool,
+            seven_zip_tool,
+        )
+        incremental_reader_zipcrypto_cases = (
+            vort_incremental_reader_zipcrypto_cases
+            + infozip_incremental_reader_zipcrypto_cases
+            + incremental_zipcrypto_zip32_reader
+            + incremental_zipcrypto_zip64_reader
         )
         deflate64_cases = 0
         ppmd_cases = 0
@@ -1746,6 +1786,7 @@ def main() -> None:
         f"vort_zip32_bytes={vort_zip32_bytes} vort_zip64_bytes={vort_zip64_bytes} "
         f"vort_zipcrypto_cases={vort_zipcrypto_cases} "
         f"infozip_zipcrypto_cases={infozip_zipcrypto_cases} "
+        f"infozip_incremental_reader_zipcrypto_cases={infozip_incremental_reader_zipcrypto_cases} "
         f"incremental_reader_zipcrypto_cases={incremental_reader_zipcrypto_cases} "
         f"incremental_entries={len(INCREMENTAL_PAYLOADS)} "
         f"incremental_zip32_bytes={incremental_zip32_bytes} "
