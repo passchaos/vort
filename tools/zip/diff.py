@@ -613,8 +613,9 @@ def validate_vort_zipcrypto(
     writer: Path,
     unzip_tool: str,
     temp: Path,
-) -> int:
+) -> tuple[int, int]:
     cases = 0
+    sequential_cases = 0
     for descriptor in (False, True):
         suffix = "descriptor" if descriptor else "known"
         archive_path = temp / f"vort-zipcrypto-{suffix}.zip"
@@ -649,6 +650,22 @@ def validate_vort_zipcrypto(
                 )
                 if output.read_bytes() != expected:
                     raise AssertionError(f"Vort ZipCrypto self-extraction mismatch for {name!r}")
+                if not descriptor:
+                    stream_output = temp / f"vort-zipcrypto-{suffix}-{index}.stream.out"
+                    run(
+                        cli,
+                        "extract-zip-stream-file",
+                        str(archive_path),
+                        name,
+                        str(stream_output),
+                        str(512 * 1024 * 1024),
+                        ZIPCRYPTO_PASSWORD,
+                    )
+                    if stream_output.read_bytes() != expected:
+                        raise AssertionError(
+                            f"Vort sequential ZipCrypto mismatch for {name!r}"
+                        )
+                    sequential_cases += 1
                 wrong = subprocess.run(
                     [
                         str(cli),
@@ -675,7 +692,7 @@ def validate_vort_zipcrypto(
         ).stdout
         if extracted != b"".join(ZIPCRYPTO_PAYLOADS.values()):
             raise AssertionError("Info-ZIP could not decrypt Vort ZipCrypto output")
-    return cases
+    return cases, sequential_cases
 
 
 def validate_infozip_zipcrypto(
@@ -1654,7 +1671,7 @@ def main() -> None:
         vort_zip64_bytes = validate_vort_archive_with_python(
             args.cli, args.writer, temp, True, seven_zip_tool
         )
-        vort_zipcrypto_cases = validate_vort_zipcrypto(
+        vort_zipcrypto_cases, incremental_reader_zipcrypto_cases = validate_vort_zipcrypto(
             args.cli, args.writer, unzip_tool, temp
         )
         infozip_zipcrypto_cases = validate_infozip_zipcrypto(
@@ -1729,6 +1746,7 @@ def main() -> None:
         f"vort_zip32_bytes={vort_zip32_bytes} vort_zip64_bytes={vort_zip64_bytes} "
         f"vort_zipcrypto_cases={vort_zipcrypto_cases} "
         f"infozip_zipcrypto_cases={infozip_zipcrypto_cases} "
+        f"incremental_reader_zipcrypto_cases={incremental_reader_zipcrypto_cases} "
         f"incremental_entries={len(INCREMENTAL_PAYLOADS)} "
         f"incremental_zip32_bytes={incremental_zip32_bytes} "
         f"incremental_zip64_bytes={incremental_zip64_bytes} "
