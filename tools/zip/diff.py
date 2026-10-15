@@ -1499,7 +1499,7 @@ def validate_incremental_writer_archive(
             in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED, zipfile.ZIP_BZIP2, 9, 1, 6)
         )
         extracted = subprocess.run(
-            [unzip_tool, "-p", str(one_byte_path)],
+            [unzip_tool, "-P", ZIPCRYPTO_PASSWORD, "-p", str(one_byte_path)],
             check=False,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -1514,7 +1514,15 @@ def validate_incremental_writer_archive(
             if INCREMENTAL_METHODS[name] in (2, 3, 4, 5):
                 continue
             actual = subprocess.run(
-                [seven_zip_tool, "x", "-so", "-bd", str(one_byte_path), name],
+                [
+                    seven_zip_tool,
+                    "x",
+                    "-so",
+                    "-bd",
+                    f"-p{ZIPCRYPTO_PASSWORD}",
+                    str(one_byte_path),
+                    name,
+                ],
                 check=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -1525,6 +1533,88 @@ def validate_incremental_writer_archive(
                 )
         seven_zip_checked = True
     return len(raw), unzip_checked, seven_zip_checked
+
+
+INCREMENTAL_ZIPCRYPTO_PAYLOADS = {
+    "encrypted-known.bin": b"incremental ZipCrypto stored payload\n" * 31,
+    "encrypted-unknown.txt": b"incremental ZipCrypto Deflate payload\n" * 89,
+    "encrypted-empty.bin": b"",
+}
+INCREMENTAL_ZIPCRYPTO_METHODS = {
+    "encrypted-known.bin": zipfile.ZIP_STORED,
+    "encrypted-unknown.txt": zipfile.ZIP_DEFLATED,
+    "encrypted-empty.bin": zipfile.ZIP_STORED,
+}
+
+
+def validate_incremental_zipcrypto_writer(
+    cli: Path,
+    writer: Path,
+    temp: Path,
+    force_zip64: bool,
+    unzip_tool: str,
+    seven_zip_tool: str | None,
+) -> tuple[int, bool]:
+    suffix = "zip64" if force_zip64 else "zip32"
+    one_path = temp / f"incremental-zipcrypto-{suffix}-one.zip"
+    micro_path = temp / f"incremental-zipcrypto-{suffix}-micro.zip"
+    run(writer, str(one_path), suffix, "one", "zipcrypto")
+    run(writer, str(micro_path), suffix, "micro", "zipcrypto")
+    raw = one_path.read_bytes()
+    if raw != micro_path.read_bytes():
+        raise AssertionError(f"incremental ZipCrypto {suffix} output is not deterministic")
+    listing = run(cli, "list-zip-file", str(one_path)).stdout
+    if f"zip_entries={len(INCREMENTAL_ZIPCRYPTO_PAYLOADS)}" not in listing or (
+        f"zip64={str(force_zip64).lower()}" not in listing
+    ):
+        raise AssertionError(f"incremental ZipCrypto {suffix} listing mismatch: {listing}")
+
+    with zipfile.ZipFile(one_path) as archive:
+        if archive.namelist() != list(INCREMENTAL_ZIPCRYPTO_PAYLOADS):
+            raise AssertionError("incremental ZipCrypto entry order mismatch")
+        for index, (name, expected) in enumerate(INCREMENTAL_ZIPCRYPTO_PAYLOADS.items()):
+            info = archive.getinfo(name)
+            if info.compress_type != INCREMENTAL_ZIPCRYPTO_METHODS[name]:
+                raise AssertionError(f"incremental ZipCrypto method mismatch for {name!r}")
+            if info.flag_bits & 1 == 0 or info.flag_bits & 8 == 0:
+                raise AssertionError(f"incremental ZipCrypto flags mismatch for {name!r}")
+            if archive.read(name, pwd=ZIPCRYPTO_PASSWORD.encode()) != expected:
+                raise AssertionError(f"Python could not decrypt incremental {name!r}")
+            output = temp / f"incremental-zipcrypto-{suffix}-{index}.out"
+            extract_with_vort_password(cli, one_path, name, output, ZIPCRYPTO_PASSWORD)
+            if output.read_bytes() != expected:
+                raise AssertionError(f"Vort could not self-extract incremental {name!r}")
+
+    extracted = subprocess.run(
+        [unzip_tool, "-P", ZIPCRYPTO_PASSWORD, "-p", str(one_path)],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ).stdout
+    if extracted != b"".join(INCREMENTAL_ZIPCRYPTO_PAYLOADS.values()):
+        raise AssertionError(f"Info-ZIP incremental ZipCrypto {suffix} mismatch")
+
+    seven_zip_checked = False
+    if seven_zip_tool is not None:
+        for name, expected in INCREMENTAL_ZIPCRYPTO_PAYLOADS.items():
+            actual = subprocess.run(
+                [
+                    seven_zip_tool,
+                    "x",
+                    "-so",
+                    "-bd",
+                    f"-p{ZIPCRYPTO_PASSWORD}",
+                    str(one_path),
+                    name,
+                ],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            ).stdout
+            if actual != expected:
+                raise AssertionError(f"7-Zip incremental ZipCrypto mismatch for {name!r}")
+        seven_zip_checked = True
+    return len(raw), seven_zip_checked
 
 
 def main() -> None:
@@ -1580,6 +1670,26 @@ def main() -> None:
                 args.cli, args.incremental_writer, temp, True, unzip_tool, seven_zip_tool
             )
         )
+        incremental_zipcrypto_zip32_bytes, incremental_zipcrypto_zip32_7zip = (
+            validate_incremental_zipcrypto_writer(
+                args.cli,
+                args.incremental_writer,
+                temp,
+                False,
+                unzip_tool,
+                seven_zip_tool,
+            )
+        )
+        incremental_zipcrypto_zip64_bytes, incremental_zipcrypto_zip64_7zip = (
+            validate_incremental_zipcrypto_writer(
+                args.cli,
+                args.incremental_writer,
+                temp,
+                True,
+                unzip_tool,
+                seven_zip_tool,
+            )
+        )
         deflate64_cases = 0
         ppmd_cases = 0
         incremental_archive_implode_cases, implode_modes = validate_vort_implode_modes(
@@ -1622,8 +1732,12 @@ def main() -> None:
         f"incremental_entries={len(INCREMENTAL_PAYLOADS)} "
         f"incremental_zip32_bytes={incremental_zip32_bytes} "
         f"incremental_zip64_bytes={incremental_zip64_bytes} "
+        f"incremental_zipcrypto_cases={len(INCREMENTAL_ZIPCRYPTO_PAYLOADS) * 2} "
+        f"incremental_zipcrypto_zip32_bytes={incremental_zipcrypto_zip32_bytes} "
+        f"incremental_zipcrypto_zip64_bytes={incremental_zipcrypto_zip64_bytes} "
         f"system_unzip={incremental_zip32_unzip and incremental_zip64_unzip} "
         f"incremental_7zip={incremental_zip32_7zip and incremental_zip64_7zip} "
+        f"incremental_zipcrypto_7zip={incremental_zipcrypto_zip32_7zip and incremental_zipcrypto_zip64_7zip} "
         f"system_7zip={seven_zip_tool is not None} deflate64_cases={deflate64_cases} "
         f"ppmd_cases={ppmd_cases} vort_ppmd_cutoff={seven_zip_tool is not None} "
         f"vort_shrink={seven_zip_tool is not None} implode_modes={implode_modes} "

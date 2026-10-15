@@ -7,6 +7,7 @@ const Entry = struct {
     method: vort.ZipCompressionMethod,
     expected_size: ?u64,
     comment: []const u8 = "",
+    traditional_encryption: ?vort.ZipTraditionalEncryptionOptions = null,
 };
 
 const OutputPattern = enum {
@@ -24,6 +25,7 @@ pub fn main(init: std.process.Init) !void {
     const output_path = args.next() orelse return error.MissingOutputPath;
     const mode_name = args.next() orelse return error.MissingZipMode;
     const pattern_name = args.next() orelse return error.MissingOutputPattern;
+    const entry_mode = args.next();
     if (args.next() != null) return error.UnexpectedArgument;
 
     const zip64: vort.Zip64Mode = if (std.mem.eql(u8, mode_name, "zip32"))
@@ -345,7 +347,45 @@ pub fn main(init: std.process.Init) !void {
         },
     };
 
-    const encoded = try encodeArchive(init.gpa, &entries, zip64, output_pattern);
+    const encrypted_entries = [_]Entry{
+        .{
+            .name = "encrypted-known.bin",
+            .data = "incremental ZipCrypto stored payload\n" ** 31,
+            .method = .stored,
+            .expected_size = ("incremental ZipCrypto stored payload\n" ** 31).len,
+            .traditional_encryption = .{
+                .password = "vort-zip-password",
+                .header_random = .{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 },
+            },
+        },
+        .{
+            .name = "encrypted-unknown.txt",
+            .data = "incremental ZipCrypto Deflate payload\n" ** 89,
+            .method = .deflate,
+            .expected_size = null,
+            .traditional_encryption = .{
+                .password = "vort-zip-password",
+                .header_random = .{ 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0 },
+            },
+        },
+        .{
+            .name = "encrypted-empty.bin",
+            .data = "",
+            .method = .stored,
+            .expected_size = 0,
+            .traditional_encryption = .{
+                .password = "vort-zip-password",
+                .header_random = .{ 0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa },
+            },
+        },
+    };
+
+    const selected_entries: []const Entry = if (entry_mode) |value|
+        if (std.mem.eql(u8, value, "zipcrypto")) &encrypted_entries else return error.InvalidEntryMode
+    else
+        &entries;
+
+    const encoded = try encodeArchive(init.gpa, selected_entries, zip64, output_pattern);
     defer init.gpa.free(encoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
 }
@@ -397,6 +437,7 @@ fn encodeArchive(
             .comment = entry.comment,
             .method = entry.method,
             .expected_size = entry.expected_size,
+            .traditional_encryption = entry.traditional_encryption,
         });
         if (entry_index == 0) {
             const blocked = try writer.step(entry.data[0..1], &.{});
