@@ -575,6 +575,97 @@ test "ZIP incremental reader streams every Reduce factor and descriptor layout" 
     }, error.OutputLimitExceeded);
 }
 
+test "ZIP incremental reader streams every traditional Implode mode" {
+    const allocator = std.testing.allocator;
+    const payload = ("incremental ZIP Implode Shannon-Fano payload\n" ** 173) ++
+        ([_]u8{ 0, 1, 2, 3, 4, 5, 0xfe, 0xff } ** 131);
+    inline for (.{ zip.ImplodeDictionary.small_4k, .large_8k }) |dictionary| {
+        inline for (.{ false, true }) |literal_tree| {
+            const entries = [_]zip.EncodeEntry{.{
+                .name = "codec/implode.bin",
+                .data = payload,
+                .method = .implode,
+            }};
+            const expected = [_]ExpectedEntry{.{ .name = entries[0].name, .data = payload }};
+            inline for (.{ false, true }) |uses_descriptor| {
+                inline for (.{ zip.Zip64Mode.never, zip.Zip64Mode.always }) |zip64_mode| {
+                    const bytes = try zip.encodeAlloc(allocator, &entries, .{
+                        .data_descriptor = uses_descriptor,
+                        .zip64 = zip64_mode,
+                        .implode_options = .{
+                            .dictionary = dictionary,
+                            .literal_tree = literal_tree,
+                        },
+                    });
+                    defer allocator.free(bytes);
+                    try decodeArchiveFragmented(allocator, bytes, &expected, .{}, 1, 1);
+                    try decodeArchiveFragmented(allocator, bytes, &expected, .{}, 7, 13);
+
+                    if (uses_descriptor and zip64_mode == .never) {
+                        const unsigned = try withoutDescriptorSignature(allocator, bytes);
+                        defer allocator.free(unsigned);
+                        try decodeArchiveFragmented(allocator, unsigned, &expected, .{}, 1, 3);
+                    }
+                }
+            }
+        }
+    }
+
+    const empty_entries = [_]zip.EncodeEntry{.{
+        .name = "codec/empty-implode",
+        .data = "",
+        .method = .implode,
+    }};
+    const empty_expected = [_]ExpectedEntry{.{ .name = empty_entries[0].name, .data = "" }};
+    inline for (.{ false, true }) |uses_descriptor| {
+        const bytes = try zip.encodeAlloc(allocator, &empty_entries, .{
+            .data_descriptor = uses_descriptor,
+        });
+        defer allocator.free(bytes);
+        try decodeArchiveFragmented(allocator, bytes, &empty_expected, .{}, 1, 1);
+    }
+
+    const limited_entries = [_]zip.EncodeEntry{.{
+        .name = "codec/implode-limit.bin",
+        .data = payload,
+        .method = .implode,
+    }};
+    const limited_archive = try zip.encodeAlloc(allocator, &limited_entries, .{});
+    defer allocator.free(limited_archive);
+    try expectReaderError(allocator, limited_archive, .{
+        .max_entry_output_len = payload.len - 1,
+    }, error.OutputLimitExceeded);
+
+    const Fixture = struct { encoded: []const u8, name: []const u8 };
+    const fixtures = [_]Fixture{
+        .{
+            .encoded = @embedFile("testdata/commons-compress-implode-4k-2trees.zip.b64"),
+            .name = "HEADER.TXT",
+        },
+        .{
+            .encoded = @embedFile("testdata/commons-compress-implode-8k-3trees.zip.b64"),
+            .name = "LICENSE.TXT",
+        },
+    };
+    const base64_decoder = std.base64.standard.decoderWithIgnore("\r\n \t");
+    for (fixtures) |fixture| {
+        const storage = try allocator.alloc(u8, base64_decoder.calcSizeUpperBound(fixture.encoded.len));
+        defer allocator.free(storage);
+        const archive_len = try base64_decoder.decode(storage, fixture.encoded);
+        const archive_bytes = storage[0..archive_len];
+        const parsed = try zip.parse(archive_bytes);
+        const entry = (try parsed.find(fixture.name)).?;
+        const expected_payload = try parsed.extractAlloc(allocator, entry);
+        defer allocator.free(expected_payload);
+        const expected = [_]ExpectedEntry{.{
+            .name = fixture.name,
+            .data = expected_payload,
+        }};
+        try decodeArchiveFragmented(allocator, archive_bytes, &expected, .{}, 1, 1);
+        try decodeArchiveFragmented(allocator, archive_bytes, &expected, .{}, 5, 7);
+    }
+}
+
 test "ZIP incremental reader accepts unsigned Stored and Deflate descriptors" {
     const allocator = std.testing.allocator;
     const cases = [_]struct {

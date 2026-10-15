@@ -57,6 +57,7 @@ pub const Reader = struct {
         deflate_descriptor: codecs.DeflateState,
         shrink: codecs.ShrinkState,
         reduce: codecs.ReduceState,
+        implode: codecs.ImplodeState,
         deflate64: codecs.Deflate64State,
         dcl_implode: codecs.DclImplodeState,
         bzip2: codecs.Bzip2State,
@@ -70,6 +71,7 @@ pub const Reader = struct {
                 .deflate_descriptor => |*state| state.deinit(),
                 .shrink => |*state| state.deinit(),
                 .reduce => |*state| state.deinit(),
+                .implode => |*state| state.deinit(),
                 .deflate64 => |*state| state.deinit(),
                 .dcl_implode => |*state| state.deinit(),
                 .bzip2 => |*state| state.deinit(),
@@ -430,6 +432,8 @@ pub const Reader = struct {
                 return error.InvalidZipArchive,
             .reduce_1, .reduce_2, .reduce_3, .reduce_4 => if (local.version_needed < wire.version_10)
                 return error.InvalidZipArchive,
+            .implode => if (local.version_needed < wire.version_10)
+                return error.InvalidZipArchive,
             .deflate => if (local.version_needed < wire.version_20)
                 return error.InvalidZipArchive,
             .deflate64 => if (local.version_needed < wire.version_21)
@@ -465,6 +469,14 @@ pub const Reader = struct {
                 .reduce_1, .reduce_2, .reduce_3, .reduce_4 => .{ .reduce = try codecs.ReduceState.init(
                     self.allocator,
                     reduceFactor(local.method).?,
+                    entry_limit,
+                    local.compressed_size,
+                    local.uncompressed_size,
+                    layout,
+                ) },
+                .implode => .{ .implode = try codecs.ImplodeState.init(
+                    self.allocator,
+                    local.flags,
                     entry_limit,
                     local.compressed_size,
                     local.uncompressed_size,
@@ -532,6 +544,15 @@ pub const Reader = struct {
                 else => unreachable,
             }
         else blk: {
+            if (local.method == .implode)
+                break :blk .{ .implode = try codecs.ImplodeState.init(
+                    self.allocator,
+                    local.flags,
+                    entry_limit,
+                    local.compressed_size,
+                    local.uncompressed_size,
+                    null,
+                ) };
             if (reduceFactor(local.method)) |factor|
                 break :blk .{ .reduce = try codecs.ReduceState.init(
                     self.allocator,
@@ -697,6 +718,13 @@ pub const Reader = struct {
                 output_written,
             ),
             .reduce => |*codec_state| return try self.stepScannedCodec(
+                codec_state,
+                input,
+                output,
+                input_read,
+                output_written,
+            ),
+            .implode => |*codec_state| return try self.stepScannedCodec(
                 codec_state,
                 input,
                 output,
