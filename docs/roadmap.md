@@ -20398,3 +20398,22 @@ reuse, so production keeps the simpler independently owned plans.
   Sequential-reader encryption still requires a raw-descriptor-tail
   transactional adapter for non-self-delimiting codecs and is not implied by
   this writer completion.
+
+- Added known-size Traditional ZipCrypto to `ZipIncrementalReader` through a
+  generic decryption layer shared by every supported codec. The reader accepts
+  a borrowed password option, decrypts and verifies arbitrarily fragmented
+  12-byte headers with Vail's archive-crypto `Cipher`, subtracts the header
+  from the codec input pledge, and uses a bounded 256-byte trial window so only
+  ciphertext actually consumed by the codec advances the live keys. Header
+  state, trial plaintext and copied cipher snapshots are securely cleared;
+  reset and completion release the active keys. Stored, Deflate, traditional
+  Implode and Bzip2 fixtures cover one-byte, 7/13-byte, and larger-than-window
+  schedules plus missing/wrong passwords. Two Vort-written non-descriptor
+  entries are now required through the sequential CLI
+  (`incremental_reader_zipcrypto_cases=2`). Info-ZIP emits encrypted entries
+  with bit 3, so its fixtures remain one-shot evidence. Descriptor-backed
+  sequential decryption remains the next ZIP encryption slice and is still
+  rejected explicitly rather than being conflated with this milestone. The
+  focused reader suite passes 25/25, the ZIP differential remains 13/13, the
+  full repository graph passes 2702/2702, and `zig build check` passes all 113
+  steps.

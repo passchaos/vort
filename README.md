@@ -284,9 +284,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   signed data descriptors, known or unknown size pledges, ZIP32/ZIP64 policy,
   SFX offsets, and payload-bounded memory;
   archive/entry comments, CRC-32/size validation, UTF-8 flags, per-entry
-  Traditional ZipCrypto one-shot writing/reading backed by Vail's dedicated
-  archive-crypto package with explicit caller-supplied header entropy and
-  passwords, and explicit WinZip-AES/multi-disk/unknown-
+  Traditional ZipCrypto one-shot writing/reading and known-size sequential
+  reading backed by Vail's dedicated archive-crypto package with explicit
+  caller-supplied header entropy and passwords, and explicit
+  WinZip-AES/multi-disk/unknown-
   method errors;
 - dependency-free Bzip2 `BZh1`...`BZh9` encoding and decoding with canonical Huffman,
   selector/inverse move-to-front, RUNA/RUNB, inverse BWT, first-stage RLE,
@@ -1609,6 +1610,14 @@ reset. `finish` distinguishes truncated input when a source ends early.
 that data plane. It parses local headers and streams Stored, Shrink, all four
 Reduce factors, traditional Implode, Deflate, Deflate64, Bzip2, DCL Implode,
 LZMA, XZ, PPMd8, and legacy/current Zstandard payloads.
+When `ZipIncrementalReaderOptions.password` is provided, the same codec paths
+also stream Traditional ZipCrypto entries whose local headers contain
+authoritative CRC and size fields. The reader incrementally verifies the
+12-byte encrypted header, subtracts it from the codec's compressed-size
+budget, and advances Vail's cipher only for ciphertext the codec actually
+consumes. Descriptor-backed encrypted entries remain explicitly rejected
+until their raw descriptor tail can be decrypted and committed
+transactionally.
 ZIP32/ZIP64 descriptors with
 or without the optional signature are accepted; the reader emits `entry_header`
 and `entry_done` boundaries and validates every central record,
@@ -1741,8 +1750,9 @@ recoverable. The existing one-shot `zipEncodeAppend` retains its transactional
 guarantee and broader method support. Every compression method currently
 supported by the sequential reader now has a bounded incremental writer.
 The incremental writer and one-shot surface support per-entry Traditional
-ZipCrypto. Sequential-reader encryption, WinZip AES, and multi-disk archives
-remain unsupported. See
+ZipCrypto. The sequential reader supports its known-size form; descriptor-
+backed Traditional ZipCrypto, WinZip AES, and multi-disk archives remain
+unsupported. See
 [the ZIP format status](docs/formats/zip.md) for the full state and wire
 contract. Writer-specific additive errors are exposed separately as
 `ZipIncrementalWriterError`; the established `ZipError` set is unchanged.
@@ -1810,11 +1820,15 @@ Vort owns only ZIP wire policy and codec composition.
 The incremental writer adds six known/unknown/empty ZIP32/ZIP64 cases in
 separate deterministic archives (1,695/1,939 bytes), decoded independently by
 Python, Vort's one-shot reader, and Info-ZIP.
+Two non-descriptor Vort entries also pass the sequential CLI reader with a
+password (`incremental_reader_zipcrypto_cases=2`); the external Info-ZIP
+fixtures use bit 3 and therefore remain one-shot evidence until encrypted
+descriptor-tail support lands.
 Focused writer tests pass 72/72; the DCL, Reduce and Legacy Implode encoder
 suites pass 4/4 each, and the
 incremental entry decoder suite passes
 15/15, the DCL Implode, Shrink, Reduce and Legacy Implode incremental decoder
-suites each pass 4/4, and the archive reader suite passes 24/24. Shrink covers known/signed/
+suites each pass 4/4, and the archive reader suite passes 25/25. Shrink covers known/signed/
 unsigned-descriptor, empty, ZIP32/ZIP64 and output-limit paths; DCL Implode's
 six literal/dictionary modes cover known/descriptor and ZIP32/ZIP64. Reduce
 covers all four factors, signed/unsigned descriptors, ZIP32/ZIP64, empty
@@ -1824,7 +1838,7 @@ signed/unsigned descriptors, ZIP32/ZIP64, arbitrary tree descriptions,
 implicit-zero and overlapping matches. PPMd restart/cut-off,
 descriptor and ZIP64 paths are required Vort coverage; third-party PPMd remains
 unclaimed because this host has no 7z/7zz and Python has no method-98 codec.
-The full repository graph passes 2701/2701 and `zig build check` passes 113/113.
+The full repository graph passes 2702/2702 and `zig build check` passes 113/113.
 The refactored one-shot writer remains byte-identical to HEAD across 14 probe
 modes. The current host has no 7z/7zz, so that optional extraction branch is
 reported as skipped rather than passed.
