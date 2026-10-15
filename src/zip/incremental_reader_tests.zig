@@ -287,6 +287,45 @@ test "ZIP incremental reader streams Bzip2 and Zstandard known and descriptor me
     }, error.OutputLimitExceeded);
 }
 
+test "ZIP incremental reader streams LZMA and XZ known and descriptor members" {
+    const allocator = std.testing.allocator;
+    const lzma_payload = "incremental ZIP method-14 LZMA member\n" ** 137;
+    const xz_payload = "incremental ZIP method-95 XZ member\n" ** 163;
+    const entries = [_]zip.EncodeEntry{
+        .{ .name = "codec/lzma.txt", .data = lzma_payload, .method = .lzma },
+        .{ .name = "codec/xz.txt", .data = xz_payload, .method = .xz },
+    };
+    const expected = [_]ExpectedEntry{
+        .{ .name = entries[0].name, .data = lzma_payload },
+        .{ .name = entries[1].name, .data = xz_payload },
+    };
+    inline for (.{ false, true }) |uses_descriptor| {
+        inline for (.{ zip.Zip64Mode.never, zip.Zip64Mode.always }) |zip64_mode| {
+            const bytes = try zip.encodeAlloc(allocator, &entries, .{
+                .data_descriptor = uses_descriptor,
+                .zip64 = zip64_mode,
+            });
+            defer allocator.free(bytes);
+            try decodeArchiveFragmented(allocator, bytes, &expected, .{}, 1, 1);
+            try decodeArchiveFragmented(allocator, bytes, &expected, .{}, 7, 13);
+        }
+    }
+
+    const lzma_only = [_]zip.EncodeEntry{entries[0]};
+    const lzma_bytes = try zip.encodeAlloc(allocator, &lzma_only, .{});
+    defer allocator.free(lzma_bytes);
+    try expectReaderError(allocator, lzma_bytes, .{
+        .max_lzma_dictionary_size = 1024,
+    }, error.OutputLimitExceeded);
+
+    const xz_only = [_]zip.EncodeEntry{entries[1]};
+    const xz_bytes = try zip.encodeAlloc(allocator, &xz_only, .{});
+    defer allocator.free(xz_bytes);
+    try expectReaderError(allocator, xz_bytes, .{
+        .max_xz_dictionary_size = 1024,
+    }, error.OutputLimitExceeded);
+}
+
 test "ZIP incremental reader accepts unsigned Stored and Deflate descriptors" {
     const allocator = std.testing.allocator;
     const cases = [_]struct {

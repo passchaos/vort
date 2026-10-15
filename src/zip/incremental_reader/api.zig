@@ -19,6 +19,13 @@ pub const Options = struct {
     max_bzip2_compressed_block_len: usize = 4 * 1024 * 1024,
     max_bzip2_decoded_block_len: usize = 64 * 1024 * 1024,
     max_zstd_compressed_buffer_len: usize = 1024 * 1024,
+    max_lzma_dictionary_size: usize = 64 * 1024 * 1024,
+    max_lzma_compressed_buffer_len: usize = 1024 * 1024,
+    max_xz_dictionary_size: usize = 64 * 1024 * 1024,
+    max_xz_compressed_block_len: usize = 64 * 1024 * 1024,
+    max_xz_decoded_block_len: usize = 64 * 1024 * 1024,
+    max_xz_index_footer_len: usize = 16 * 1024 * 1024,
+    max_xz_block_count: usize = 1024 * 1024,
     allow_trailing_data: bool = false,
 };
 

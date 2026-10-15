@@ -56,13 +56,17 @@ pub const Reader = struct {
         stored_descriptor: descriptor.StoredScanner,
         deflate_descriptor: codecs.DeflateState,
         bzip2: codecs.Bzip2State,
+        lzma: codecs.LzmaZipState,
+        xz: codecs.XzState,
         zstd: codecs.ZstdState,
 
         fn deinit(self: *EntryState) void {
             switch (self.*) {
-                .bzip2 => |*state| state.decoder.deinit(),
-                .zstd => |*state| state.decoder.deinit(),
                 .deflate_descriptor => |*state| state.deinit(),
+                .bzip2 => |*state| state.deinit(),
+                .lzma => |*state| state.deinit(),
+                .xz => |*state| state.deinit(),
+                .zstd => |*state| state.deinit(),
                 .known, .stored_descriptor => {},
             }
         }
@@ -416,7 +420,7 @@ pub const Reader = struct {
                 return error.InvalidZipArchive,
             .bzip2 => if (local.version_needed < wire.version_46)
                 return error.InvalidZipArchive,
-            .zstandard_legacy, .zstandard => if (local.version_needed < wire.version_63)
+            .lzma, .xz, .zstandard_legacy, .zstandard => if (local.version_needed < wire.version_63)
                 return error.InvalidZipArchive,
             else => return error.UnsupportedZipCompressionMethod,
         }
@@ -446,6 +450,23 @@ pub const Reader = struct {
                     local.uncompressed_size,
                     layout,
                 ) },
+                .lzma => .{ .lzma = try codecs.LzmaZipState.init(
+                    self.allocator,
+                    self.options,
+                    entry_limit,
+                    local.flags,
+                    local.compressed_size,
+                    local.uncompressed_size,
+                    layout,
+                ) },
+                .xz => .{ .xz = codecs.XzState.init(
+                    self.allocator,
+                    self.options,
+                    entry_limit,
+                    local.compressed_size,
+                    local.uncompressed_size,
+                    layout,
+                ) },
                 .zstandard_legacy, .zstandard => .{ .zstd = codecs.ZstdState.init(
                     self.allocator,
                     self.options,
@@ -459,6 +480,25 @@ pub const Reader = struct {
         else blk: {
             if (local.method == .bzip2)
                 break :blk .{ .bzip2 = codecs.Bzip2State.init(
+                    self.allocator,
+                    self.options,
+                    entry_limit,
+                    local.compressed_size,
+                    local.uncompressed_size,
+                    null,
+                ) };
+            if (local.method == .lzma)
+                break :blk .{ .lzma = try codecs.LzmaZipState.init(
+                    self.allocator,
+                    self.options,
+                    entry_limit,
+                    local.flags,
+                    local.compressed_size,
+                    local.uncompressed_size,
+                    null,
+                ) };
+            if (local.method == .xz)
+                break :blk .{ .xz = codecs.XzState.init(
                     self.allocator,
                     self.options,
                     entry_limit,
@@ -555,6 +595,20 @@ pub const Reader = struct {
                 output_written,
             ),
             .bzip2 => |*codec_state| return try self.stepContainerCodec(
+                codec_state,
+                input,
+                output,
+                input_read,
+                output_written,
+            ),
+            .lzma => |*codec_state| return try self.stepContainerCodec(
+                codec_state,
+                input,
+                output,
+                input_read,
+                output_written,
+            ),
+            .xz => |*codec_state| return try self.stepContainerCodec(
                 codec_state,
                 input,
                 output,

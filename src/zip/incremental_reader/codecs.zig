@@ -5,12 +5,157 @@ const checksum = @import("../../checksum.zig");
 const core = @import("../../core.zig");
 const deflate = @import("../../deflate.zig");
 const descriptor = @import("descriptor.zig");
+const lzma = @import("../../lzma.zig");
+const wire = @import("../wire.zig");
+const xz = @import("../../xz.zig");
 const zstd = @import("../../zstd.zig");
 
-pub const Error = deflate.Error || bzip2.Error || zstd.Error || error{
+pub const Error = deflate.Error || bzip2.Error || lzma.Error || xz.Error || zstd.Error || error{
     InvalidZipArchive,
+    UnsupportedZipFeature,
     SizeMismatch,
     IntegerOverflow,
+};
+
+pub const LzmaZipState = struct {
+    decoder: lzma.IncrementalDecoder,
+    descriptor_layout: ?descriptor.Layout,
+    expected_compressed_size: ?usize,
+    expected_uncompressed_size: ?usize,
+    end_marker: bool,
+    prefix: [9]u8 = undefined,
+    prefix_len: usize = 0,
+    header_fed: bool = false,
+    finish_requested: bool = false,
+    crc: checksum.Crc32Best = checksum.Crc32Best.init(),
+    compressed_size: usize = 0,
+    uncompressed_size: usize = 0,
+
+    const Self = @This();
+
+    pub fn init(
+        allocator: std.mem.Allocator,
+        reader_options: api.Options,
+        entry_limit: usize,
+        flags: u16,
+        expected_compressed_size: ?usize,
+        expected_uncompressed_size: ?usize,
+        descriptor_layout: ?descriptor.Layout,
+    ) Error!Self {
+        const end_marker = flags & wire.lzma_end_marker_flag != 0;
+        if (descriptor_layout != null and !end_marker)
+            return error.UnsupportedZipFeature;
+        return .{
+            .decoder = lzma.IncrementalDecoder.initWithOptions(allocator, .{
+                .max_output_len = entry_limit,
+                .max_dictionary_size = reader_options.max_lzma_dictionary_size,
+                .max_compressed_buffer_len = reader_options.max_lzma_compressed_buffer_len,
+                .expected_output_len = expected_uncompressed_size,
+                .stop_after_end_marker = descriptor_layout != null,
+                .end_marker_input_guard = if (descriptor_layout) |layout_value|
+                    layout_value.unsignedLen()
+                else
+                    0,
+            }),
+            .descriptor_layout = descriptor_layout,
+            .expected_compressed_size = expected_compressed_size,
+            .expected_uncompressed_size = expected_uncompressed_size,
+            .end_marker = end_marker,
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.decoder.deinit();
+    }
+
+    pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+        var progress: core.Progress = .{};
+        if (!self.header_fed) {
+            const take = @min(self.prefix.len - self.prefix_len, input.len);
+            @memcpy(self.prefix[self.prefix_len..][0..take], input[0..take]);
+            self.prefix_len += take;
+            self.compressed_size = try checkedAdd(self.compressed_size, take);
+            progress.input_read += take;
+            if (self.prefix_len != self.prefix.len)
+                return .{ .progress = progress, .status = .need_input };
+            try self.feedSyntheticHeader();
+        }
+
+        if (self.expected_compressed_size) |expected| {
+            if (self.compressed_size == expected and !self.finish_requested) {
+                self.decoder.finish();
+                self.finish_requested = true;
+            }
+        }
+        const drained = try self.decoder.step("", output);
+        try self.account(drained.progress, output, &progress);
+        if (drained.status == .done or drained.status == .need_output)
+            return .{ .progress = progress, .status = drained.status };
+
+        const remaining_input = input[progress.input_read..];
+        const offer_len = try inputOffer(
+            self.descriptor_layout,
+            self.expected_compressed_size,
+            self.compressed_size,
+            remaining_input.len,
+        );
+        if (offer_len == 0) return .{ .progress = progress, .status = .need_input };
+        const output_offset = drained.progress.output_written;
+        const supplied = try self.decoder.step(remaining_input[0..offer_len], output[output_offset..]);
+        try self.account(supplied.progress, output[output_offset..], &progress);
+        return .{ .progress = progress, .status = supplied.status };
+    }
+
+    pub fn layout(self: *const Self) ?descriptor.Layout {
+        return self.descriptor_layout;
+    }
+
+    pub fn trailingInput(self: *const Self) []const u8 {
+        return self.decoder.trailingInput();
+    }
+
+    pub fn actualCompressedSize(self: *const Self) Error!usize {
+        const trailing = self.trailingInput();
+        if (trailing.len > self.compressed_size) return error.InvalidZipArchive;
+        return self.compressed_size - trailing.len;
+    }
+
+    pub fn outputSize(self: *const Self) usize {
+        return self.uncompressed_size;
+    }
+
+    pub fn crc32(self: *const Self) u32 {
+        return self.crc.digest();
+    }
+
+    fn feedSyntheticHeader(self: *Self) Error!void {
+        if (std.mem.readInt(u16, self.prefix[2..4], .little) != 5)
+            return error.InvalidLzmaHeader;
+        var header: [13]u8 = undefined;
+        @memcpy(header[0..5], self.prefix[4..9]);
+        const output_size: u64 = if (self.end_marker)
+            std.math.maxInt(u64)
+        else
+            self.expected_uncompressed_size orelse return error.InvalidZipArchive;
+        std.mem.writeInt(u64, header[5..13], output_size, .little);
+        const primed = try self.decoder.step(&header, &.{});
+        if (primed.progress.input_read != header.len or primed.progress.output_written != 0 or
+            primed.status != .need_input)
+            return error.InvalidLzmaStream;
+        self.header_fed = true;
+    }
+
+    fn account(
+        self: *Self,
+        progress: core.Progress,
+        output: []const u8,
+        aggregate: *core.Progress,
+    ) Error!void {
+        self.compressed_size = try checkedAdd(self.compressed_size, progress.input_read);
+        self.uncompressed_size = try checkedAdd(self.uncompressed_size, progress.output_written);
+        self.crc.update(output[0..progress.output_written]);
+        try aggregate.add(progress);
+    }
 };
 
 pub const DeflateState = struct {
@@ -134,6 +279,110 @@ pub const Bzip2State = struct {
             }
         }
 
+        var progress: core.Progress = .{};
+        const drained = try self.decoder.step("", output);
+        try self.account(drained.progress, output, &progress);
+        if (drained.status == .done or drained.status == .need_output)
+            return .{ .progress = progress, .status = drained.status };
+
+        const offer_len = try inputOffer(
+            self.descriptor_layout,
+            self.expected_compressed_size,
+            self.compressed_size,
+            input.len,
+        );
+        if (offer_len == 0) return .{ .progress = progress, .status = .need_input };
+        const output_offset = drained.progress.output_written;
+        const supplied = try self.decoder.step(input[0..offer_len], output[output_offset..]);
+        try self.account(supplied.progress, output[output_offset..], &progress);
+        return .{ .progress = progress, .status = supplied.status };
+    }
+
+    pub fn layout(self: *const Self) ?descriptor.Layout {
+        return self.descriptor_layout;
+    }
+
+    pub fn trailingInput(self: *const Self) []const u8 {
+        return self.decoder.trailingInput();
+    }
+
+    pub fn actualCompressedSize(self: *const Self) Error!usize {
+        const trailing = self.trailingInput();
+        if (trailing.len > self.compressed_size) return error.InvalidZipArchive;
+        return self.compressed_size - trailing.len;
+    }
+
+    pub fn outputSize(self: *const Self) usize {
+        return self.uncompressed_size;
+    }
+
+    pub fn crc32(self: *const Self) u32 {
+        return self.crc.digest();
+    }
+
+    fn account(
+        self: *Self,
+        progress: core.Progress,
+        output: []const u8,
+        aggregate: *core.Progress,
+    ) Error!void {
+        self.compressed_size = try checkedAdd(self.compressed_size, progress.input_read);
+        self.uncompressed_size = try checkedAdd(self.uncompressed_size, progress.output_written);
+        self.crc.update(output[0..progress.output_written]);
+        try aggregate.add(progress);
+    }
+};
+
+pub const XzState = struct {
+    decoder: xz.IncrementalDecoder,
+    descriptor_layout: ?descriptor.Layout,
+    crc: checksum.Crc32Best = checksum.Crc32Best.init(),
+    compressed_size: usize = 0,
+    uncompressed_size: usize = 0,
+    expected_compressed_size: ?usize,
+    finish_requested: bool = false,
+
+    const Self = @This();
+
+    pub fn init(
+        allocator: std.mem.Allocator,
+        reader_options: api.Options,
+        entry_limit: usize,
+        expected_compressed_size: ?usize,
+        expected_uncompressed_size: ?usize,
+        descriptor_layout: ?descriptor.Layout,
+    ) Self {
+        return .{
+            .decoder = xz.IncrementalDecoder.initWithOptions(allocator, .{
+                .max_output_len = entry_limit,
+                .max_dictionary_size = reader_options.max_xz_dictionary_size,
+                .max_compressed_block_len = reader_options.max_xz_compressed_block_len,
+                .max_decoded_block_len = @min(entry_limit, reader_options.max_xz_decoded_block_len),
+                .max_index_footer_len = reader_options.max_xz_index_footer_len,
+                .max_block_count = reader_options.max_xz_block_count,
+                .expected_output_len = expected_uncompressed_size,
+                .stop_after_first_stream = descriptor_layout != null,
+                .first_stream_footer_retry_granularity = if (descriptor_layout) |layout_value|
+                    layout_value.unsignedLen()
+                else
+                    0,
+            }),
+            .descriptor_layout = descriptor_layout,
+            .expected_compressed_size = expected_compressed_size,
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.decoder.deinit();
+    }
+
+    pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+        if (self.expected_compressed_size) |expected| {
+            if (self.compressed_size == expected and !self.finish_requested) {
+                self.decoder.finish();
+                self.finish_requested = true;
+            }
+        }
         var progress: core.Progress = .{};
         const drained = try self.decoder.step("", output);
         try self.account(drained.progress, output, &progress);
