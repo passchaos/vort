@@ -59,6 +59,14 @@ pub fn main(init: std.process.Init) !void {
     const unknown_shrink = "unknown Shrink incremental ZIP payload.\n" ** 91;
     const known_dcl = "known DCL Implode incremental ZIP payload.\n" ** 113;
     const unknown_dcl = "unknown DCL Implode incremental ZIP payload.\n" ** 93;
+    const known_reduce_1 = "known Reduce factor 1 incremental ZIP payload.\n" ** 67;
+    const unknown_reduce_1 = "unknown Reduce factor 1 incremental ZIP payload.\n" ** 53;
+    const known_reduce_2 = "known Reduce factor 2 incremental ZIP payload.\n" ** 71;
+    const unknown_reduce_2 = "unknown Reduce factor 2 incremental ZIP payload.\n" ** 59;
+    const known_reduce_3 = "known Reduce factor 3 incremental ZIP payload.\n" ** 73;
+    const unknown_reduce_3 = "unknown Reduce factor 3 incremental ZIP payload.\n" ** 61;
+    const known_reduce_4 = "known Reduce factor 4 incremental ZIP payload.\n" ** 79;
+    const unknown_reduce_4 = "unknown Reduce factor 4 incremental ZIP payload.\n" ** 63;
     const entries = [_]Entry{
         .{
             .name = "known-stored.bin",
@@ -241,6 +249,78 @@ pub fn main(init: std.process.Init) !void {
             .name = "empty-dcl-implode.bin",
             .data = "",
             .method = .dcl_implode,
+            .expected_size = 0,
+        },
+        .{
+            .name = "known-reduce-1.txt",
+            .data = known_reduce_1,
+            .method = .reduce_1,
+            .expected_size = known_reduce_1.len,
+        },
+        .{
+            .name = "unknown-reduce-1.txt",
+            .data = unknown_reduce_1,
+            .method = .reduce_1,
+            .expected_size = null,
+        },
+        .{
+            .name = "empty-reduce-1.bin",
+            .data = "",
+            .method = .reduce_1,
+            .expected_size = 0,
+        },
+        .{
+            .name = "known-reduce-2.txt",
+            .data = known_reduce_2,
+            .method = .reduce_2,
+            .expected_size = known_reduce_2.len,
+        },
+        .{
+            .name = "unknown-reduce-2.txt",
+            .data = unknown_reduce_2,
+            .method = .reduce_2,
+            .expected_size = null,
+        },
+        .{
+            .name = "empty-reduce-2.bin",
+            .data = "",
+            .method = .reduce_2,
+            .expected_size = 0,
+        },
+        .{
+            .name = "known-reduce-3.txt",
+            .data = known_reduce_3,
+            .method = .reduce_3,
+            .expected_size = known_reduce_3.len,
+        },
+        .{
+            .name = "unknown-reduce-3.txt",
+            .data = unknown_reduce_3,
+            .method = .reduce_3,
+            .expected_size = null,
+        },
+        .{
+            .name = "empty-reduce-3.bin",
+            .data = "",
+            .method = .reduce_3,
+            .expected_size = 0,
+        },
+        .{
+            .name = "known-reduce-4.txt",
+            .data = known_reduce_4,
+            .method = .reduce_4,
+            .expected_size = known_reduce_4.len,
+        },
+        .{
+            .name = "unknown-reduce-4.txt",
+            .data = unknown_reduce_4,
+            .method = .reduce_4,
+            .expected_size = null,
+        },
+        .{
+            .name = "empty-reduce-4.bin",
+            .data = "",
+            .method = .reduce_4,
             .expected_size = 0,
         },
     };

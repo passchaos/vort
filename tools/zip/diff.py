@@ -903,6 +903,18 @@ INCREMENTAL_PAYLOADS = {
     "known-dcl-implode.txt": b"known DCL Implode incremental ZIP payload.\n" * 113,
     "unknown-dcl-implode.txt": b"unknown DCL Implode incremental ZIP payload.\n" * 93,
     "empty-dcl-implode.bin": b"",
+    "known-reduce-1.txt": b"known Reduce factor 1 incremental ZIP payload.\n" * 67,
+    "unknown-reduce-1.txt": b"unknown Reduce factor 1 incremental ZIP payload.\n" * 53,
+    "empty-reduce-1.bin": b"",
+    "known-reduce-2.txt": b"known Reduce factor 2 incremental ZIP payload.\n" * 71,
+    "unknown-reduce-2.txt": b"unknown Reduce factor 2 incremental ZIP payload.\n" * 59,
+    "empty-reduce-2.bin": b"",
+    "known-reduce-3.txt": b"known Reduce factor 3 incremental ZIP payload.\n" * 73,
+    "unknown-reduce-3.txt": b"unknown Reduce factor 3 incremental ZIP payload.\n" * 61,
+    "empty-reduce-3.bin": b"",
+    "known-reduce-4.txt": b"known Reduce factor 4 incremental ZIP payload.\n" * 79,
+    "unknown-reduce-4.txt": b"unknown Reduce factor 4 incremental ZIP payload.\n" * 63,
+    "empty-reduce-4.bin": b"",
 }
 INCREMENTAL_METHODS = {
     "known-stored.bin": zipfile.ZIP_STORED,
@@ -935,6 +947,18 @@ INCREMENTAL_METHODS = {
     "known-dcl-implode.txt": 10,
     "unknown-dcl-implode.txt": 10,
     "empty-dcl-implode.bin": 10,
+    "known-reduce-1.txt": 2,
+    "unknown-reduce-1.txt": 2,
+    "empty-reduce-1.bin": 2,
+    "known-reduce-2.txt": 3,
+    "unknown-reduce-2.txt": 3,
+    "empty-reduce-2.bin": 3,
+    "known-reduce-3.txt": 4,
+    "unknown-reduce-3.txt": 4,
+    "empty-reduce-3.bin": 4,
+    "known-reduce-4.txt": 5,
+    "unknown-reduce-4.txt": 5,
+    "empty-reduce-4.bin": 5,
 }
 
 
@@ -1194,6 +1218,8 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
             raise AssertionError(f"incremental PPMd properties mismatch for {name!r}")
         if method == 10 and raw[data_offset : data_offset + 2] != b"\x01\x06":
             raise AssertionError(f"incremental DCL Implode header mismatch for {name!r}")
+        if method in (2, 3, 4, 5) and raw[data_offset : data_offset + 192] != bytes(192):
+            raise AssertionError(f"incremental Reduce follower header mismatch for {name!r}")
         descriptor_end = descriptor_offset + descriptor_len
         if descriptor_end > len(raw):
             raise AssertionError(f"truncated incremental descriptor for {name!r}")
@@ -1222,13 +1248,6 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
         INCREMENTAL_PAYLOADS["unknown-stored.bin"].count(b"PK\x07\x08") != 2
     ):
         raise AssertionError("incremental stored fixtures lost descriptor-signature payloads")
-
-
-def validate_extracted_tree(root: Path) -> None:
-    for name, expected in INCREMENTAL_PAYLOADS.items():
-        extracted = root / name
-        if not extracted.is_file() or extracted.read_bytes() != expected:
-            raise AssertionError(f"external incremental extraction mismatch for {name!r}")
 
 
 def validate_incremental_writer_archive(
@@ -1297,7 +1316,7 @@ def validate_incremental_writer_archive(
                     raw[data_offset : data_offset + info.compress_size],
                     -15,
                 )
-            elif info.compress_type in (1, 10, 98):
+            elif info.compress_type in (1, 2, 3, 4, 5, 10, 98):
                 output = temp / f"incremental-{suffix}-{name}.out"
                 run(
                     cli,
@@ -1332,15 +1351,19 @@ def validate_incremental_writer_archive(
 
     seven_zip_checked = False
     if seven_zip_tool is not None:
-        seven_zip_root = temp / f"incremental-{suffix}-7zip"
-        seven_zip_root.mkdir()
-        subprocess.run(
-            [seven_zip_tool, "x", "-y", f"-o{seven_zip_root}", str(one_byte_path)],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        validate_extracted_tree(seven_zip_root)
+        for name, expected in INCREMENTAL_PAYLOADS.items():
+            if INCREMENTAL_METHODS[name] in (2, 3, 4, 5):
+                continue
+            actual = subprocess.run(
+                [seven_zip_tool, "x", "-so", "-bd", str(one_byte_path), name],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            ).stdout
+            if actual != expected:
+                raise AssertionError(
+                    f"7-Zip incremental {suffix} extraction mismatch for {name!r}"
+                )
         seven_zip_checked = True
     return len(raw), unzip_checked, seven_zip_checked
 
