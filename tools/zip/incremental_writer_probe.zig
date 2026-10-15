@@ -57,6 +57,8 @@ pub fn main(init: std.process.Init) !void {
     const unknown_ppmd = "unknown PPMd incremental ZIP payload.\n" ** 89;
     const known_shrink = "known Shrink incremental ZIP payload.\n" ** 109;
     const unknown_shrink = "unknown Shrink incremental ZIP payload.\n" ** 91;
+    const known_dcl = "known DCL Implode incremental ZIP payload.\n" ** 113;
+    const unknown_dcl = "unknown DCL Implode incremental ZIP payload.\n" ** 93;
     const entries = [_]Entry{
         .{
             .name = "known-stored.bin",
@@ -221,6 +223,24 @@ pub fn main(init: std.process.Init) !void {
             .name = "empty-shrink.bin",
             .data = "",
             .method = .shrink,
+            .expected_size = 0,
+        },
+        .{
+            .name = "known-dcl-implode.txt",
+            .data = known_dcl,
+            .method = .dcl_implode,
+            .expected_size = known_dcl.len,
+        },
+        .{
+            .name = "unknown-dcl-implode.txt",
+            .data = unknown_dcl,
+            .method = .dcl_implode,
+            .expected_size = null,
+        },
+        .{
+            .name = "empty-dcl-implode.bin",
+            .data = "",
+            .method = .dcl_implode,
             .expected_size = 0,
         },
     };

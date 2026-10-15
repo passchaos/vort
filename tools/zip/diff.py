@@ -900,6 +900,9 @@ INCREMENTAL_PAYLOADS = {
     "known-shrink.txt": b"known Shrink incremental ZIP payload.\n" * 109,
     "unknown-shrink.txt": b"unknown Shrink incremental ZIP payload.\n" * 91,
     "empty-shrink.bin": b"",
+    "known-dcl-implode.txt": b"known DCL Implode incremental ZIP payload.\n" * 113,
+    "unknown-dcl-implode.txt": b"unknown DCL Implode incremental ZIP payload.\n" * 93,
+    "empty-dcl-implode.bin": b"",
 }
 INCREMENTAL_METHODS = {
     "known-stored.bin": zipfile.ZIP_STORED,
@@ -929,6 +932,9 @@ INCREMENTAL_METHODS = {
     "known-shrink.txt": 1,
     "unknown-shrink.txt": 1,
     "empty-shrink.bin": 1,
+    "known-dcl-implode.txt": 10,
+    "unknown-dcl-implode.txt": 10,
+    "empty-dcl-implode.bin": 10,
 }
 
 
@@ -1186,6 +1192,8 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
         descriptor_offset = data_offset + int(entry["compressed_size"])
         if method == 98 and raw[data_offset : data_offset + 2] != b"\x0b\x10":
             raise AssertionError(f"incremental PPMd properties mismatch for {name!r}")
+        if method == 10 and raw[data_offset : data_offset + 2] != b"\x01\x06":
+            raise AssertionError(f"incremental DCL Implode header mismatch for {name!r}")
         descriptor_end = descriptor_offset + descriptor_len
         if descriptor_end > len(raw):
             raise AssertionError(f"truncated incremental descriptor for {name!r}")
@@ -1289,7 +1297,7 @@ def validate_incremental_writer_archive(
                     raw[data_offset : data_offset + info.compress_size],
                     -15,
                 )
-            elif info.compress_type in (1, 98):
+            elif info.compress_type in (1, 10, 98):
                 output = temp / f"incremental-{suffix}-{name}.out"
                 run(
                     cli,
