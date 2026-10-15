@@ -881,6 +881,9 @@ INCREMENTAL_PAYLOADS = {
     "known-bzip2.txt": b"known Bzip2 incremental ZIP payload.\n" * 96,
     "unknown-bzip2.txt": b"unknown Bzip2 incremental ZIP payload.\n" * 73,
     "empty-bzip2.bin": b"",
+    "known-zstd.txt": b"known Zstandard incremental ZIP payload.\n" * 103,
+    "unknown-zstd-legacy.txt": b"unknown legacy Zstandard incremental ZIP payload.\n" * 67,
+    "empty-zstd.bin": b"",
 }
 INCREMENTAL_METHODS = {
     "known-stored.bin": zipfile.ZIP_STORED,
@@ -892,6 +895,9 @@ INCREMENTAL_METHODS = {
     "known-bzip2.txt": zipfile.ZIP_BZIP2,
     "unknown-bzip2.txt": zipfile.ZIP_BZIP2,
     "empty-bzip2.bin": zipfile.ZIP_BZIP2,
+    "known-zstd.txt": 93,
+    "unknown-zstd-legacy.txt": 20,
+    "empty-zstd.bin": 93,
 }
 
 
@@ -1032,7 +1038,15 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
             raise AssertionError(f"incremental central CRC mismatch for {name!r}")
 
         fields = parse_extra_fields(extra, f"central entry {name!r}")
-        expected_needed = 46 if method == zipfile.ZIP_BZIP2 else (45 if force_zip64 else 20)
+        expected_needed = (
+            63
+            if method in (20, 93)
+            else 46
+            if method == zipfile.ZIP_BZIP2
+            else 45
+            if force_zip64
+            else 20
+        )
         if force_zip64:
             if needed != expected_needed:
                 raise AssertionError(f"ZIP64 central version-needed mismatch for {name!r}")
@@ -1101,7 +1115,15 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
         if method != entry["method"] or crc32 != 0:
             raise AssertionError(f"incremental local method/CRC placeholder mismatch for {name!r}")
         fields = parse_extra_fields(extra, f"local entry {name!r}")
-        expected_needed = 46 if method == zipfile.ZIP_BZIP2 else (45 if force_zip64 else 20)
+        expected_needed = (
+            63
+            if method in (20, 93)
+            else 46
+            if method == zipfile.ZIP_BZIP2
+            else 45
+            if force_zip64
+            else 20
+        )
         if force_zip64:
             if needed != expected_needed:
                 raise AssertionError(f"ZIP64 local version-needed mismatch for {name!r}")
@@ -1179,29 +1201,46 @@ def validate_incremental_writer_archive(
         )
     validate_incremental_raw_layout(raw, force_zip64)
 
+    zstd_tool = shutil.which("zstd")
+    if zstd_tool is None:
+        raise AssertionError("zstd CLI is required for incremental ZIP methods 20/93")
     with zipfile.ZipFile(one_byte_path) as archive:
         if archive.comment != INCREMENTAL_COMMENT:
             raise AssertionError(f"Python incremental {suffix} comment mismatch")
         if archive.namelist() != list(INCREMENTAL_PAYLOADS):
             raise AssertionError(f"Python incremental {suffix} entry order mismatch")
-        if archive.testzip() is not None:
-            raise AssertionError(f"Python reported a corrupt incremental {suffix} entry")
         for name, expected in INCREMENTAL_PAYLOADS.items():
             info = archive.getinfo(name)
             if info.compress_type != INCREMENTAL_METHODS[name]:
                 raise AssertionError(f"Python incremental method mismatch for {name!r}")
-            if archive.read(name) != expected:
+            if info.compress_type in (20, 93):
+                name_len, extra_len = struct.unpack_from("<HH", raw, info.header_offset + 26)
+                data_offset = info.header_offset + 30 + name_len + extra_len
+                actual = subprocess.run(
+                    [zstd_tool, "-q", "-d", "-c"],
+                    input=raw[data_offset : data_offset + info.compress_size],
+                    check=True,
+                    stdout=subprocess.PIPE,
+                ).stdout
+            else:
+                actual = archive.read(name)
+            if actual != expected:
                 raise AssertionError(f"Python incremental extraction mismatch for {name!r}")
 
     unzip_checked = False
     if unzip_tool is not None:
+        supported_payload = b"".join(
+            payload
+            for name, payload in INCREMENTAL_PAYLOADS.items()
+            if INCREMENTAL_METHODS[name] not in (20, 93)
+        )
         extracted = subprocess.run(
             [unzip_tool, "-p", str(one_byte_path)],
-            check=True,
+            check=False,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         ).stdout
-        if extracted != b"".join(INCREMENTAL_PAYLOADS.values()):
+        if extracted != supported_payload:
             raise AssertionError(f"Info-ZIP incremental {suffix} extraction mismatch")
         unzip_checked = True
 

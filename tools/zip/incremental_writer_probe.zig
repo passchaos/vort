@@ -45,6 +45,8 @@ pub fn main(init: std.process.Init) !void {
     const unknown_deflate = "unknown deflate UTF-8 path payload.\n" ** 61;
     const known_bzip2 = "known Bzip2 incremental ZIP payload.\n" ** 96;
     const unknown_bzip2 = "unknown Bzip2 incremental ZIP payload.\n" ** 73;
+    const known_zstd = "known Zstandard incremental ZIP payload.\n" ** 103;
+    const unknown_zstd = "unknown legacy Zstandard incremental ZIP payload.\n" ** 67;
     const entries = [_]Entry{
         .{
             .name = "known-stored.bin",
@@ -103,6 +105,24 @@ pub fn main(init: std.process.Init) !void {
             .method = .bzip2,
             .expected_size = 0,
         },
+        .{
+            .name = "known-zstd.txt",
+            .data = known_zstd,
+            .method = .zstandard,
+            .expected_size = known_zstd.len,
+        },
+        .{
+            .name = "unknown-zstd-legacy.txt",
+            .data = unknown_zstd,
+            .method = .zstandard_legacy,
+            .expected_size = null,
+        },
+        .{
+            .name = "empty-zstd.bin",
+            .data = "",
+            .method = .zstandard,
+            .expected_size = 0,
+        },
     };
 
     const encoded = try encodeArchive(init.gpa, &entries, zip64, output_pattern);
@@ -120,6 +140,11 @@ fn encodeArchive(
         .archive_comment = "vort incremental writer interop",
         .zip64 = zip64,
         .bzip2_options = .{ .block_size_100k = 1 },
+        .zstd_options = .{
+            .content_checksum = true,
+            .block_size_max = 4096,
+            .selection = .raw_or_rle,
+        },
     });
     defer writer.deinit();
 
