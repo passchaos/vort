@@ -20029,3 +20029,31 @@ reuse, so production keeps the simpler independently owned plans.
   remain complete-buffer-only in the sequential reader.
   The full repository graph passes 2638/2638 and `zig build check` passes all
   113 steps.
+
+- Extended `ZipIncrementalReader` with ZIP LZMA method 14 and XZ method 95 for
+  known-size and descriptor-backed ZIP32/ZIP64 entries. Method 14 does not
+  carry an LZMA-Alone header: the codec adapter incrementally validates its
+  9-byte ZIP version/property prefix, constructs the internal property/
+  dictionary/size state, and feeds only the following raw range stream to the
+  existing symbol-progressive decoder. Descriptor mode requires general-
+  purpose flag bit 1 and stops at the validated LZMA EOS marker; known-size
+  entries without an EOS remain bounded by their declared compressed and
+  decoded sizes. `LzmaIncrementalDecoder` therefore gains opt-in EOS stop,
+  borrowed trailing bytes and a configurable marker lookahead, while its
+  default strict trailing-data behavior remains unchanged. `XzIncrementalDecoder`
+  similarly gains opt-in first-stream stop immediately after validated Index/
+  Footer, before XZ padding could claim zero-valued ZIP descriptor bytes, plus
+  borrowed trailing input and a footer-only retry granularity; ordinary
+  concatenated streams and padding retain their established behavior. ZIP
+  exposes separate LZMA dictionary/compressed-buffer and XZ dictionary/block/
+  Index/block-count limits, validates outer CRC-32 and exact sizes, and routes
+  both codecs through the shared descriptor parser and lifecycle adapter.
+  Focused coverage spans known headers and descriptors at ZIP32/ZIP64 under
+  1-byte and 7/13-byte fragmentation, dictionary-limit failures, plus direct
+  codec suffix-recovery tests. Python's non-seekable archive adds method 14
+  (`incremental_archive_reader_cases=6`), and an independently generated
+  method-95 member passes the sequential path
+  (`incremental_archive_xz_cases=1`); the ZIP gate remains 13/13. Shrink,
+  Reduce, Implode, Deflate64, DCL Implode, and PPMd remain the sequential
+  reader's complete-buffer-only methods. The full repository graph passes
+  2641/2641 and `zig build check` passes all 113 steps.
