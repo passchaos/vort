@@ -41,6 +41,12 @@ pub const Decoder = struct {
         max_dictionary_size: usize = std.math.maxInt(usize),
         max_compressed_buffer_len: usize = 1024 * 1024,
         expected_output_len: ?usize = null,
+        /// Stop after a validated LZMA end marker and retain accepted suffix
+        /// bytes for an outer container. Known-size streams are unaffected.
+        stop_after_end_marker: bool = false,
+        /// Optional compressed lookahead used while locating the end marker.
+        /// Zero keeps the normal 64-byte symbol guard.
+        end_marker_input_guard: usize = 0,
     };
     pub const Phase = enum {
         header,
@@ -67,6 +73,7 @@ pub const Decoder = struct {
         saw_end_marker: bool,
         last_error_name: []const u8,
         last_error_phase: Phase,
+        trailing_input_bytes: usize,
     };
 
     pub fn init(allocator: std.mem.Allocator) Decoder {
@@ -126,7 +133,14 @@ pub const Decoder = struct {
             .saw_end_marker = self.saw_end_marker,
             .last_error_name = self.last_error_name,
             .last_error_phase = self.last_error_phase,
+            .trailing_input_bytes = self.trailingInput().len,
         };
+    }
+
+    pub fn trailingInput(self: *const Decoder) []const u8 {
+        if (!self.options.stop_after_end_marker or self.phase != .done or !self.saw_end_marker)
+            return &.{};
+        return self.compressed.items[self.compressed_start..];
     }
 
     pub fn diagnostics(self: *const Decoder) core.StreamingDiagnostics {
@@ -165,6 +179,7 @@ pub const Decoder = struct {
 
     fn stepInternal(self: *Decoder, input: []const u8, output: []u8) Error!core.StepResult {
         if (self.phase == .done) {
+            if (self.options.stop_after_end_marker) return .{ .status = .done };
             if (input.len != 0) return error.TrailingData;
             return .{ .status = .done };
         }
@@ -207,10 +222,15 @@ pub const Decoder = struct {
                     }
                 }
 
-                if (!self.input_finished and self.bufferedCompressedLen() < symbol_input_guard) {
+                const input_guard = if (self.options.stop_after_end_marker and
+                    self.options.end_marker_input_guard != 0)
+                    self.options.end_marker_input_guard
+                else
+                    symbol_input_guard;
+                if (!self.input_finished and self.bufferedCompressedLen() < input_guard) {
                     if (input_read == input.len)
                         return result(input_read, output_written, .need_input);
-                    try self.appendCompressedGuard(input, &input_read);
+                    try self.appendCompressedGuard(input_guard, input, &input_read);
                     continue;
                 }
 
@@ -248,9 +268,8 @@ pub const Decoder = struct {
                         self.validated_output = dictionary.len;
                         if (self.declared_size) |size|
                             if (dictionary.len != size) return error.SizeMismatch;
-                        if (self.bufferedCompressedLen() != 0 or input_read != input.len)
-                            return error.TrailingData;
-                        self.phase = .end_marker;
+                        self.staging_offset = 0;
+                        self.phase = if (self.staging.written().len == 0) .end_marker else .output;
                     },
                 }
             },
@@ -265,7 +284,7 @@ pub const Decoder = struct {
                     return result(input_read, output_written, .need_output);
                 self.staging.clearRetainingCapacity();
                 self.staging_offset = 0;
-                self.phase = .decode;
+                self.phase = if (self.saw_end_marker) .end_marker else .decode;
             },
             .known_size_complete => {
                 self.compressed.clearRetainingCapacity();
@@ -278,6 +297,12 @@ pub const Decoder = struct {
                 return result(input_read, output_written, .done);
             },
             .end_marker => {
+                if (self.options.stop_after_end_marker) {
+                    try self.validateFinalSize();
+                    self.phase = .done;
+                    return result(input_read, output_written, .done);
+                }
+                if (self.bufferedCompressedLen() != 0) return error.TrailingData;
                 if (input.len != input_read) return error.TrailingData;
                 if (!self.input_finished)
                     return result(input_read, output_written, .need_input);
@@ -347,6 +372,7 @@ pub const Decoder = struct {
 
     fn appendCompressedGuard(
         self: *Decoder,
+        guard_len: usize,
         input: []const u8,
         input_read: *usize,
     ) Error!void {
@@ -354,7 +380,7 @@ pub const Decoder = struct {
         const buffered = self.bufferedCompressedLen();
         if (buffered >= self.options.max_compressed_buffer_len)
             return error.OutputLimitExceeded;
-        const target = @min(symbol_input_guard, self.options.max_compressed_buffer_len);
+        const target = @min(guard_len, self.options.max_compressed_buffer_len);
         if (target <= buffered) return error.OutputLimitExceeded;
         const take = @min(target - buffered, input.len - input_read.*);
         if (take == 0) return error.OutputLimitExceeded;

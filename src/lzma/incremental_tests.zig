@@ -80,6 +80,34 @@ test "LZMA incremental decoder supports known-size streams and trailing range by
     try std.testing.expectError(error.SizeMismatch, wrong_size.step(encoded, &scratch));
 }
 
+test "LZMA incremental decoder stops at end marker and exposes buffered suffix" {
+    const frame = pythonFrame();
+    const suffix = "ZIP descriptor after LZMA EOS";
+    const input = frame ++ suffix.*;
+    var decoder = lzma.IncrementalDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = python_payload.len,
+        .stop_after_end_marker = true,
+        .end_marker_input_guard = 12,
+    });
+    defer decoder.deinit();
+    var output: [python_payload.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (true) {
+        const stepped = try decoder.step(input[input_offset..], output[output_offset..]);
+        input_offset += stepped.progress.input_read;
+        output_offset += stepped.progress.output_written;
+        if (stepped.status == .done) break;
+    }
+    try std.testing.expectEqualSlices(u8, python_payload, &output);
+    var recovered_suffix: [suffix.len]u8 = undefined;
+    const buffered = decoder.trailingInput();
+    @memcpy(recovered_suffix[0..buffered.len], buffered);
+    @memcpy(recovered_suffix[buffered.len..], input[input_offset..]);
+    try std.testing.expectEqualSlices(u8, suffix, &recovered_suffix);
+    try std.testing.expectEqual(buffered.len, decoder.snapshot().trailing_input_bytes);
+}
+
 test "LZMA incremental decoder rejects trailing bytes after end marker" {
     const frame = pythonFrame();
     var trailing: [frame.len + 1]u8 = undefined;
