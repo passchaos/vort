@@ -1056,6 +1056,61 @@ pub fn main(init: std.process.Init) !void {
             entry_name,
             output_path,
         });
+    } else if (std.mem.eql(u8, command, "extract-zip-stream-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const entry_name = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = (try parseOptionalLimit(args.next())) orelse std.math.maxInt(usize);
+        const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
+        defer init.gpa.free(bytes);
+        var reader = try vort.ZipIncrementalReader.init(init.gpa);
+        defer reader.deinit();
+        var decoded: std.ArrayList(u8) = .empty;
+        defer decoded.deinit(init.gpa);
+        var input_offset: usize = 0;
+        var selected = false;
+        var found = false;
+        var calls: usize = 0;
+        while (true) {
+            const input_end = @min(bytes.len, input_offset + 3);
+            var output: [5]u8 = undefined;
+            const result = try reader.step(bytes[input_offset..input_end], &output);
+            input_offset += result.progress.input_read;
+            if (selected and result.progress.output_written != 0) {
+                if (result.progress.output_written > max_output_len -| decoded.items.len)
+                    return error.OutputLimitExceeded;
+                try decoded.appendSlice(init.gpa, output[0..result.progress.output_written]);
+            }
+            calls += 1;
+            switch (result.status) {
+                .entry_header => {
+                    const current = reader.currentEntry().?;
+                    selected = !found and std.mem.eql(u8, current.name, entry_name);
+                },
+                .entry_done => {
+                    if (selected) found = true;
+                    selected = false;
+                },
+                .done => break,
+                .need_input, .need_output => {},
+            }
+            if (result.status != .done and
+                result.progress.input_read == 0 and
+                result.progress.output_written == 0 and
+                result.status != .entry_header and
+                result.status != .entry_done)
+                return error.InvalidBlockPlan;
+        }
+        if (!found) return error.ZipEntryNotFound;
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded.items });
+        try stdout.print("zip_bytes={d} entries={d} decoded_bytes={d} calls={d} entry={s} path={s}\n", .{
+            bytes.len,
+            reader.snapshot().completed_entries,
+            decoded.items.len,
+            calls,
+            entry_name,
+            output_path,
+        });
     } else if (std.mem.eql(u8, command, "size-br-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -2838,6 +2893,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Extract a supported ZIP entry with CRC validation
         \\  extract-zip-file-incremental <zip> <entry> <out> [max_output]
         \\                              Incrementally extract one Stored/Deflate ZIP entry
+        \\  extract-zip-stream-file <zip> <entry> <out> [max_output]
+        \\                              Sequentially parse and extract a Stored/Deflate ZIP archive
         \\  size-br-file <path> [max_output]
         \\                              Preflight dependency-free Brotli stored stream decoded size
         \\  encode-zstd-native-hex [text] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size]

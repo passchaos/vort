@@ -96,7 +96,7 @@ def make_legacy_payload(prefix_len: int, seed: int) -> bytes:
     return bytes(prefix) + b"\x42" + bytes(prefix)
 
 
-def validate_python_archive_with_vort(cli: Path, temp: Path) -> tuple[int, int]:
+def validate_python_archive_with_vort(cli: Path, temp: Path) -> tuple[int, int, int]:
     payloads = {
         "stored.bin": bytes(range(64)) + b"\x00stored\xff",
         "folder/deflated.txt": b"Vort ZIP deflate differential.\n" * 256,
@@ -224,7 +224,42 @@ def validate_python_archive_with_vort(cli: Path, temp: Path) -> tuple[int, int]:
         b"\x01\x00\x10\x00"
     ):
         raise AssertionError("Python force_zip64 fixture omitted the ZIP64 local extra")
-    return len(fixture), incremental_cases
+    stream_payloads = {
+        "stream/stored.bin": b"stored PK\x07\x08 descriptor marker payload",
+        "stream/deflated.txt": b"Python sequential Deflate member.\n" * 257,
+        "stream/force-zip64.bin": b"Python sequential force ZIP64.\n" * 37,
+        "stream/empty": b"",
+    }
+    stream_sink = NonSeekableBuffer()
+    with zipfile.ZipFile(stream_sink, "w", allowZip64=True) as archive:
+        archive.comment = b"python sequential reader"
+        archive.writestr(
+            "stream/stored.bin",
+            stream_payloads["stream/stored.bin"],
+            compress_type=zipfile.ZIP_STORED,
+        )
+        archive.writestr(
+            "stream/deflated.txt",
+            stream_payloads["stream/deflated.txt"],
+            compress_type=zipfile.ZIP_DEFLATED,
+            compresslevel=9,
+        )
+        force_info = zipfile.ZipInfo("stream/force-zip64.bin")
+        force_info.compress_type = zipfile.ZIP_DEFLATED
+        with archive.open(force_info, "w", force_zip64=True) as member:
+            member.write(stream_payloads["stream/force-zip64.bin"])
+        archive.writestr("stream/empty", b"", compress_type=zipfile.ZIP_STORED)
+    stream_path = temp / "python-stream-fixture.zip"
+    stream_path.write_bytes(stream_sink.getvalue())
+    stream_cases = 0
+    for index, (name, expected) in enumerate(stream_payloads.items()):
+        output = temp / f"python-stream-output-{index}.bin"
+        run(cli, "extract-zip-stream-file", str(stream_path), name, str(output))
+        if output.read_bytes() != expected:
+            raise AssertionError(f"Vort sequential ZIP extraction mismatch for {name!r}")
+        stream_cases += 1
+
+    return len(fixture), incremental_cases, stream_cases
 
 
 def validate_vort_archive_with_python(
@@ -997,9 +1032,11 @@ def main() -> None:
 
     with tempfile.TemporaryDirectory(prefix="vort-zip-diff-") as temp_text:
         temp = Path(temp_text)
-        python_bytes, incremental_reader_cases = validate_python_archive_with_vort(
-            args.cli, temp
-        )
+        (
+            python_bytes,
+            incremental_reader_cases,
+            incremental_archive_reader_cases,
+        ) = validate_python_archive_with_vort(args.cli, temp)
         vort_zip32_bytes = validate_vort_archive_with_python(
             args.cli, args.writer, temp, False, seven_zip_tool
         )
@@ -1042,6 +1079,7 @@ def main() -> None:
         "zip_diff=ok directions=2 "
         f"python_entries=7 vort_entries=18 zstd_methods=2 python_bytes={python_bytes} "
         f"incremental_reader_cases={incremental_reader_cases} "
+        f"incremental_archive_reader_cases={incremental_archive_reader_cases} "
         f"vort_zip32_bytes={vort_zip32_bytes} vort_zip64_bytes={vort_zip64_bytes} "
         f"incremental_entries={len(INCREMENTAL_PAYLOADS)} "
         f"incremental_zip32_bytes={incremental_zip32_bytes} "
