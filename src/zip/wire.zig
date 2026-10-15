@@ -11,6 +11,7 @@ pub const zip64_end_of_central_signature: u32 = 0x0606_4b50;
 pub const zip64_end_of_central_locator_signature: u32 = 0x0706_4b50;
 pub const central_directory_digital_signature: u32 = 0x0505_4b50;
 pub const zip64_extra_id: u16 = 0x0001;
+pub const winzip_aes_extra_id: u16 = 0x9901;
 
 pub const local_file_header_len: usize = 30;
 pub const central_file_header_len: usize = 46;
@@ -26,6 +27,7 @@ pub const version_20: u16 = 20;
 pub const version_21: u16 = 21;
 pub const version_45: u16 = 45;
 pub const version_46: u16 = 46;
+pub const version_51: u16 = 51;
 pub const version_63: u16 = 63;
 
 pub const deterministic_dos_time: u16 = 0;
@@ -46,6 +48,7 @@ pub const EncodedEntry = struct {
     uncompressed_size: u64,
     local_header_offset: u64,
     zip64: bool,
+    winzip_aes: ?types.WinZipAesInfo = null,
 };
 
 pub const LocalHeaderOptions = struct {
@@ -63,16 +66,23 @@ pub fn appendLocalHeader(
 ) !void {
     const descriptor = entry.flags & descriptor_flag != 0;
     try appendU32(allocator, out, local_file_signature);
-    try appendU16(allocator, out, requiredVersion(entry.method, entry.zip64));
+    try appendU16(allocator, out, requiredVersionForEntry(entry));
     try appendU16(allocator, out, entry.flags);
-    try appendU16(allocator, out, @intFromEnum(entry.method));
+    try appendU16(
+        allocator,
+        out,
+        @intFromEnum(if (entry.winzip_aes != null) CompressionMethod.aes else entry.method),
+    );
     try appendU16(allocator, out, deterministic_dos_time);
     try appendU16(allocator, out, deterministic_dos_date);
     try appendU32(allocator, out, if (descriptor) 0 else entry.crc32);
     try appendU32(allocator, out, if (entry.zip64) std.math.maxInt(u32) else if (descriptor) 0 else @intCast(entry.compressed_size));
     try appendU32(allocator, out, if (entry.zip64) std.math.maxInt(u32) else if (descriptor) 0 else @intCast(entry.uncompressed_size));
     try appendU16(allocator, out, @intCast(entry.name.len));
-    try appendU16(allocator, out, if (entry.zip64) 20 else 0);
+    try appendU16(allocator, out, @intCast(
+        (if (entry.zip64) @as(usize, 20) else 0) +
+            (if (entry.winzip_aes != null) @as(usize, 11) else 0),
+    ));
     try out.appendSlice(allocator, entry.name);
     if (entry.zip64) {
         try appendU16(allocator, out, zip64_extra_id);
@@ -80,6 +90,7 @@ pub fn appendLocalHeader(
         try appendU64(allocator, out, if (options.zip64_size_placeholders) 0 else entry.uncompressed_size);
         try appendU64(allocator, out, if (options.zip64_size_placeholders) 0 else entry.compressed_size);
     }
+    if (entry.winzip_aes) |aes| try appendWinZipAesExtra(allocator, out, aes, entry.method);
 }
 
 pub fn appendDataDescriptor(
@@ -104,17 +115,24 @@ pub fn appendCentralHeader(
     entry: EncodedEntry,
 ) !void {
     try appendU32(allocator, out, central_file_signature);
-    try appendU16(allocator, out, requiredVersion(entry.method, entry.zip64));
-    try appendU16(allocator, out, requiredVersion(entry.method, entry.zip64));
+    try appendU16(allocator, out, requiredVersionForEntry(entry));
+    try appendU16(allocator, out, requiredVersionForEntry(entry));
     try appendU16(allocator, out, entry.flags);
-    try appendU16(allocator, out, @intFromEnum(entry.method));
+    try appendU16(
+        allocator,
+        out,
+        @intFromEnum(if (entry.winzip_aes != null) CompressionMethod.aes else entry.method),
+    );
     try appendU16(allocator, out, deterministic_dos_time);
     try appendU16(allocator, out, deterministic_dos_date);
     try appendU32(allocator, out, entry.crc32);
     try appendU32(allocator, out, if (entry.zip64) std.math.maxInt(u32) else @intCast(entry.compressed_size));
     try appendU32(allocator, out, if (entry.zip64) std.math.maxInt(u32) else @intCast(entry.uncompressed_size));
     try appendU16(allocator, out, @intCast(entry.name.len));
-    try appendU16(allocator, out, if (entry.zip64) 28 else 0);
+    try appendU16(allocator, out, @intCast(
+        (if (entry.zip64) @as(usize, 28) else 0) +
+            (if (entry.winzip_aes != null) @as(usize, 11) else 0),
+    ));
     try appendU16(allocator, out, @intCast(entry.comment.len));
     try appendU16(allocator, out, 0);
     try appendU16(allocator, out, 0);
@@ -129,7 +147,22 @@ pub fn appendCentralHeader(
         try appendU64(allocator, out, entry.compressed_size);
         try appendU64(allocator, out, entry.local_header_offset);
     }
+    if (entry.winzip_aes) |aes| try appendWinZipAesExtra(allocator, out, aes, entry.method);
     try out.appendSlice(allocator, entry.comment);
+}
+
+fn appendWinZipAesExtra(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    aes: types.WinZipAesInfo,
+    actual_method: CompressionMethod,
+) !void {
+    try appendU16(allocator, out, winzip_aes_extra_id);
+    try appendU16(allocator, out, 7);
+    try appendU16(allocator, out, @intFromEnum(aes.version));
+    try out.appendSlice(allocator, "AE");
+    try out.append(allocator, @intFromEnum(aes.strength));
+    try appendU16(allocator, out, @intFromEnum(actual_method));
 }
 
 pub fn appendZip64End(
@@ -209,10 +242,16 @@ pub fn appendLegacyEnd(
 }
 
 pub fn requiredVersion(method: CompressionMethod, zip64: bool) u16 {
+    if (method == .aes) return version_51;
     if (method == .deflate64) return if (zip64) version_45 else version_21;
     if (method == .bzip2) return version_46;
     if (method == .lzma or method == .xz or method == .ppmd or isZstandardMethod(method)) return version_63;
     return if (zip64) version_45 else version_20;
+}
+
+pub fn requiredVersionForEntry(entry: EncodedEntry) u16 {
+    const codec_version = requiredVersion(entry.method, entry.zip64);
+    return if (entry.winzip_aes != null) @max(codec_version, version_51) else codec_version;
 }
 
 pub fn selectEntryZip64(

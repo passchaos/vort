@@ -25,6 +25,7 @@ const shrink = @import("zip/shrink.zig");
 const shrink_incremental_tests = @import("zip/shrink_incremental_tests.zig");
 const shrink_incremental_encoder_tests = @import("zip/shrink_incremental_encoder_tests.zig");
 const traditional_encryption = @import("vail_archive_crypto").zipcrypto;
+const winzip_aes = @import("vail_archive_crypto").winzip_aes;
 const types = @import("zip/types.zig");
 const wire = @import("zip/wire.zig");
 pub const writer = @import("zip/writer.zig");
@@ -52,6 +53,10 @@ pub const Zip64Mode = writer.Zip64Mode;
 pub const EncodeEntry = writer.EncodeEntry;
 pub const EncodeOptions = writer.EncodeOptions;
 pub const TraditionalEncryptionOptions = traditional_encryption.Options;
+pub const WinZipAesOptions = writer.WinZipAesOptions;
+pub const WinZipAesStrength = types.WinZipAesStrength;
+pub const WinZipAesVendorVersion = types.WinZipAesVendorVersion;
+pub const WinZipAesInfo = types.WinZipAesInfo;
 pub const IncrementalWriter = incremental_writer.Writer;
 pub const IncrementalWriterError = incremental_writer.Error;
 pub const IncrementalWriterOptions = incremental_writer.Options;
@@ -135,6 +140,10 @@ test "ZIP Legacy Implode incremental encoder test suite" {
 
 test "ZIP Traditional ZipCrypto test suite" {
     _ = traditional_encryption;
+}
+
+test "ZIP WinZip AES test suite" {
+    _ = winzip_aes;
 }
 
 pub const DecodeOptions = struct {
@@ -246,19 +255,28 @@ pub const Archive = struct {
                 unreachable;
         };
         const compressed = if (canonical.isEncrypted()) encrypted: {
-            if (canonical.flags & (1 << 6) != 0) return error.UnsupportedZipFeature;
             const scratch_allocator = allocator orelse return error.ZipEntryRequiresAllocator;
             const password = options.password orelse return error.PasswordRequired;
-            const check_byte: u8 = if (canonical.flags & wire.descriptor_flag != 0)
-                @truncate(local_payload.dos_time >> 8)
-            else
-                @truncate(canonical.crc32 >> 24);
-            const bytes = try traditional_encryption.decryptAlloc(
-                scratch_allocator,
-                local_payload.data,
-                password,
-                check_byte,
-            );
+            const bytes = if (canonical.winzip_aes) |aes|
+                try winzip_aes.decryptAlloc(
+                    scratch_allocator,
+                    local_payload.data,
+                    password,
+                    aes.strength,
+                )
+            else traditional: {
+                if (canonical.flags & (1 << 6) != 0) return error.UnsupportedZipFeature;
+                const check_byte: u8 = if (canonical.flags & wire.descriptor_flag != 0)
+                    @truncate(local_payload.dos_time >> 8)
+                else
+                    @truncate(canonical.crc32 >> 24);
+                break :traditional try traditional_encryption.decryptAlloc(
+                    scratch_allocator,
+                    local_payload.data,
+                    password,
+                    check_byte,
+                );
+            };
             decrypted = bytes;
             break :encrypted bytes;
         } else local_payload.data;
@@ -323,7 +341,9 @@ pub const Archive = struct {
             },
             else => return error.UnsupportedZipCompressionMethod,
         }
-        if (checksum.crc32Best(target) != canonical.crc32) return error.ChecksumMismatch;
+        const verify_crc = if (canonical.winzip_aes) |aes| aes.version == .ae1 else true;
+        if (verify_crc and checksum.crc32Best(target) != canonical.crc32)
+            return error.ChecksumMismatch;
         return target.len;
     }
 
@@ -469,7 +489,7 @@ fn parseCentralEntry(archive: Archive, offset: usize) Error!ParsedCentralEntry {
     const flags = try readU16(archive.bytes, offset + 8);
     const version_needed = try readU16(archive.bytes, offset + 6);
     const method_raw = try readU16(archive.bytes, offset + 10);
-    const method: CompressionMethod = @enumFromInt(method_raw);
+    const wire_method: CompressionMethod = @enumFromInt(method_raw);
     const crc = try readU32(archive.bytes, offset + 16);
     const compressed_u32 = try readU32(archive.bytes, offset + 20);
     const uncompressed_u32 = try readU32(archive.bytes, offset + 24);
@@ -490,6 +510,13 @@ fn parseCentralEntry(archive: Archive, offset: usize) Error!ParsedCentralEntry {
         local_offset_u32,
         disk_start_u16,
     );
+    const parsed_aes = try records.parseWinZipAesExtra(archive.bytes[name_end..extra_end]);
+    if ((wire_method == .aes) != (parsed_aes != null)) return error.InvalidZipArchive;
+    if (parsed_aes != null and flags & wire.encrypted_flag == 0)
+        return error.InvalidZipArchive;
+    const method = if (parsed_aes) |aes| aes.actual_method else wire_method;
+    if (parsed_aes != null and version_needed < wire.version_51)
+        return error.InvalidZipArchive;
     if (values.zip64 and version_needed < 45) return error.InvalidZipArchive;
     if (method == .bzip2 and version_needed < 46) return error.InvalidZipArchive;
     if (method == .lzma and version_needed < 63) return error.InvalidZipArchive;
@@ -509,6 +536,7 @@ fn parseCentralEntry(archive: Archive, offset: usize) Error!ParsedCentralEntry {
             .local_header_offset = values.local_header_offset,
             .central_header_offset = offset,
             .zip64 = values.zip64,
+            .winzip_aes = if (parsed_aes) |aes| aes.info else null,
         },
         .next_offset = next_offset,
     };
@@ -533,14 +561,26 @@ fn localPayloadData(
     _ = try checkedEnd(offset, 30, archive.central_directory_offset);
     const local_flags = try readU16(archive.bytes, offset + 6);
     const local_version_needed = try readU16(archive.bytes, offset + 4);
-    const local_method = try readU16(archive.bytes, offset + 8);
+    const local_method: CompressionMethod = @enumFromInt(try readU16(archive.bytes, offset + 8));
     const local_dos_time = try readU16(archive.bytes, offset + 10);
     const local_crc = try readU32(archive.bytes, offset + 14);
     const local_compressed = try readU32(archive.bytes, offset + 18);
     const local_uncompressed = try readU32(archive.bytes, offset + 22);
     const name_len: usize = try readU16(archive.bytes, offset + 26);
     const extra_len: usize = try readU16(archive.bytes, offset + 28);
-    if (local_method != @intFromEnum(entry.method)) return error.InvalidZipArchive;
+    const name_start = offset + 30;
+    const name_end = try checkedEnd(name_start, name_len, archive.central_directory_offset);
+    const local_extra_start = name_end;
+    const data_start = try checkedEnd(local_extra_start, extra_len, archive.central_directory_offset);
+    const local_aes = try records.parseWinZipAesExtra(archive.bytes[local_extra_start..data_start]);
+    if ((local_method == .aes) != (local_aes != null)) return error.InvalidZipArchive;
+    if (entry.winzip_aes) |expected_aes| {
+        const actual_aes = local_aes orelse return error.InvalidZipArchive;
+        if (!std.meta.eql(expected_aes, actual_aes.info) or actual_aes.actual_method != entry.method)
+            return error.InvalidZipArchive;
+    } else if (local_aes != null or local_method != entry.method) {
+        return error.InvalidZipArchive;
+    }
     const compared_flags: u16 = 0x0009 | switch (entry.method) {
         .lzma => @as(u16, 0x0002),
         .implode => @as(u16, 0x0006),
@@ -550,16 +590,15 @@ fn localPayloadData(
     if (local_flags & wire.encrypted_flag != 0 and !allow_encrypted)
         return error.EncryptedZipEntry;
 
-    const name_start = offset + 30;
-    const name_end = try checkedEnd(name_start, name_len, archive.central_directory_offset);
     if (!std.mem.eql(u8, archive.bytes[name_start..name_end], entry.name)) return error.InvalidZipArchive;
-    const data_start = try checkedEnd(name_end, extra_len, archive.central_directory_offset);
     const data_end = try checkedEnd(data_start, entry.compressed_size, archive.central_directory_offset);
     if ((local_compressed == std.math.maxInt(u32) or local_uncompressed == std.math.maxInt(u32)) and
         local_version_needed < 45) return error.InvalidZipArchive;
     if (entry.method == .bzip2 and local_version_needed < 46) return error.InvalidZipArchive;
     if (entry.method == .lzma and local_version_needed < 63) return error.InvalidZipArchive;
     if (entry.method == .ppmd and local_version_needed < 63) return error.InvalidZipArchive;
+    if (entry.winzip_aes != null and local_version_needed < wire.version_51)
+        return error.InvalidZipArchive;
     if (isZstandardMethod(entry.method) and local_version_needed < 63)
         return error.InvalidZipArchive;
     if (local_flags & 0x0008 == 0) {
@@ -588,7 +627,8 @@ fn sameEntry(a: Entry, b: Entry) bool {
         a.uncompressed_size == b.uncompressed_size and
         a.local_header_offset == b.local_header_offset and
         a.central_header_offset == b.central_header_offset and
-        a.zip64 == b.zip64;
+        a.zip64 == b.zip64 and
+        std.meta.eql(a.winzip_aes, b.winzip_aes);
 }
 
 fn readU16(bytes: []const u8, offset: usize) Error!u16 {
@@ -753,8 +793,8 @@ test "ZIP parses and extracts stored and descriptor-backed deflate entries" {
 
     var unsupported = try allocator.dupe(u8, bytes.items);
     defer allocator.free(unsupported);
-    std.mem.writeInt(u16, unsupported[entries[0].local_offset + 8 ..][0..2], 99, .little);
-    std.mem.writeInt(u16, unsupported[listed[0].central_header_offset + 10 ..][0..2], 99, .little);
+    std.mem.writeInt(u16, unsupported[entries[0].local_offset + 8 ..][0..2], 200, .little);
+    std.mem.writeInt(u16, unsupported[listed[0].central_header_offset + 10 ..][0..2], 200, .little);
     const unsupported_archive = try parse(unsupported);
     const unsupported_entry = try unsupported_archive.entryAt(0);
     try std.testing.expectError(error.UnsupportedZipCompressionMethod, unsupported_archive.extractInto(unsupported_entry, &encrypted_output));
@@ -915,6 +955,193 @@ test "ZIP writer and reader round trip Traditional ZipCrypto entries" {
                 .{ .password = password },
             ),
         );
+    }
+}
+
+test "ZIP writer and reader round trip WinZip AES entries" {
+    const allocator = std.testing.allocator;
+    const password = "WinZip AES password 密码";
+    const stored_payload = "authenticated stored payload";
+    const deflated_payload = "authenticated Deflate payload\n" ** 73;
+    const bzip2_payload = "authenticated Bzip2 payload\n" ** 61;
+    const salt128 = [_]u8{0x11} ** 8;
+    const salt192 = [_]u8{0x22} ** 12;
+    const salt256 = [_]u8{0x33} ** 16;
+    const entries = [_]EncodeEntry{
+        .{
+            .name = "aes/stored.bin",
+            .data = stored_payload,
+            .method = .stored,
+            .winzip_aes = .{
+                .password = password,
+                .strength = .aes128,
+                .salt = &salt128,
+                .version = .ae1,
+            },
+        },
+        .{
+            .name = "aes/deflate.txt",
+            .data = deflated_payload,
+            .method = .deflate,
+            .winzip_aes = .{
+                .password = password,
+                .strength = .aes192,
+                .salt = &salt192,
+                .version = .ae2,
+            },
+        },
+        .{
+            .name = "aes/bzip2.txt",
+            .data = bzip2_payload,
+            .method = .bzip2,
+            .winzip_aes = .{
+                .password = password,
+                .strength = .aes256,
+                .salt = &salt256,
+                .version = .ae1,
+            },
+        },
+    };
+
+    inline for (.{ false, true }) |descriptor| {
+        inline for (.{ Zip64Mode.never, Zip64Mode.always }) |zip64_mode| {
+            const bytes = try encodeAlloc(allocator, &entries, .{
+                .data_descriptor = descriptor,
+                .zip64 = zip64_mode,
+            });
+            defer allocator.free(bytes);
+            const archive = try parse(bytes);
+            for (entries, 0..) |expected, index| {
+                const entry = try archive.entryAt(index);
+                try std.testing.expect(entry.isEncrypted());
+                try std.testing.expect(entry.isWinZipAes());
+                try std.testing.expectEqual(expected.method, entry.method);
+                try std.testing.expectEqual(expected.winzip_aes.?.strength, entry.winzip_aes.?.strength);
+                try std.testing.expectEqual(expected.winzip_aes.?.version, entry.winzip_aes.?.version);
+                try std.testing.expectEqual(@as(u16, 99), try readU16(bytes, entry.local_header_offset + 8));
+                try std.testing.expect((try readU16(bytes, entry.local_header_offset + 4)) >= wire.version_51);
+                try std.testing.expectEqual(
+                    if (entry.winzip_aes.?.version == .ae2)
+                        @as(u32, 0)
+                    else
+                        checksum.crc32Best(expected.data),
+                    entry.crc32,
+                );
+                try std.testing.expectError(error.EncryptedZipEntry, archive.compressedData(entry));
+                try std.testing.expectError(
+                    error.PasswordRequired,
+                    archive.extractAllocWithOptions(allocator, entry, .{}),
+                );
+                try std.testing.expectError(
+                    error.InvalidZipPassword,
+                    archive.extractAllocWithOptions(allocator, entry, .{ .password = "wrong" }),
+                );
+                const decoded = try archive.extractAllocWithOptions(
+                    allocator,
+                    entry,
+                    .{ .password = password },
+                );
+                defer allocator.free(decoded);
+                try std.testing.expectEqualSlices(u8, expected.data, decoded);
+            }
+
+            const first = try archive.entryAt(0);
+            const local_name_len: usize = try readU16(bytes, first.local_header_offset + 26);
+            const local_extra_len: usize = try readU16(bytes, first.local_header_offset + 28);
+            const data_offset = first.local_header_offset + wire.local_file_header_len +
+                local_name_len + local_extra_len;
+            const corrupt = try allocator.dupe(u8, bytes);
+            defer allocator.free(corrupt);
+            corrupt[data_offset + first.compressed_size - 1] ^= 1;
+            const corrupt_archive = try parse(corrupt);
+            const corrupt_entry = try corrupt_archive.entryAt(0);
+            try std.testing.expectError(
+                error.InvalidAuthenticationCode,
+                corrupt_archive.extractAllocWithOptions(
+                    allocator,
+                    corrupt_entry,
+                    .{ .password = password },
+                ),
+            );
+        }
+    }
+
+    const conflict = [_]EncodeEntry{.{
+        .name = "conflict.bin",
+        .data = "conflict",
+        .traditional_encryption = .{
+            .password = password,
+            .header_random = .{0} ** traditional_encryption.header_random_len,
+        },
+        .winzip_aes = .{
+            .password = password,
+            .salt = &salt256,
+        },
+    }};
+    try std.testing.expectError(
+        error.ConflictingZipEncryption,
+        encodeAlloc(allocator, &conflict, .{}),
+    );
+}
+
+test "ZIP extracts Rust zip WinZip AES reference entries" {
+    const allocator = std.testing.allocator;
+    const fixture_hex = std.mem.trim(
+        u8,
+        @embedFile("zip/testdata/winzip-aes-rust.zip.hex"),
+        " \t\r\n",
+    );
+    const fixture = try allocator.alloc(u8, fixture_hex.len / 2);
+    defer allocator.free(fixture);
+    _ = try std.fmt.hexToBytes(fixture, fixture_hex);
+    const expected = [_]struct {
+        name: []const u8,
+        data: []const u8,
+        method: CompressionMethod,
+        strength: WinZipAesStrength,
+        version: WinZipAesVendorVersion,
+    }{
+        .{
+            .name = "aes128-stored.txt",
+            .data = "Rust AES-128 stored reference payload longer than twenty bytes.",
+            .method = .stored,
+            .strength = .aes128,
+            .version = .ae1,
+        },
+        .{
+            .name = "aes192-deflate.txt",
+            .data = "Rust AES-192 Deflate reference payload. Rust AES-192 Deflate reference payload.",
+            .method = .deflate,
+            .strength = .aes192,
+            .version = .ae1,
+        },
+        .{
+            .name = "aes256-small.txt",
+            .data = "small",
+            .method = .stored,
+            .strength = .aes256,
+            .version = .ae2,
+        },
+    };
+    const archive = try parse(fixture);
+    try std.testing.expectEqual(expected.len, archive.entry_count);
+    for (expected, 0..) |reference, index| {
+        const entry = try archive.entryAt(index);
+        try std.testing.expectEqualStrings(reference.name, entry.name);
+        try std.testing.expectEqual(reference.method, entry.method);
+        try std.testing.expectEqual(reference.strength, entry.winzip_aes.?.strength);
+        try std.testing.expectEqual(reference.version, entry.winzip_aes.?.version);
+        try std.testing.expectError(
+            error.InvalidZipPassword,
+            archive.extractAllocWithOptions(allocator, entry, .{ .password = "wrong" }),
+        );
+        const decoded = try archive.extractAllocWithOptions(
+            allocator,
+            entry,
+            .{ .password = "rust-reference-password" },
+        );
+        defer allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, reference.data, decoded);
     }
 }
 

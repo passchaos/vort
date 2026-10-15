@@ -1,4 +1,5 @@
 const std = @import("std");
+const types = @import("types.zig");
 
 pub const Error = error{
     InvalidZipArchive,
@@ -13,6 +14,37 @@ const zip64_end_of_central_min_len: usize = 56;
 const zip64_locator_len: usize = 20;
 const max_comment_len: usize = std.math.maxInt(u16);
 const zip64_extra_id: u16 = 0x0001;
+const winzip_aes_extra_id: u16 = 0x9901;
+
+pub const ParsedWinZipAes = struct {
+    info: types.WinZipAesInfo,
+    actual_method: types.CompressionMethod,
+};
+
+pub fn parseWinZipAesExtra(extra: []const u8) Error!?ParsedWinZipAes {
+    const payload = (try findExtra(extra, winzip_aes_extra_id)) orelse return null;
+    if (payload.len != 7 or !std.mem.eql(u8, payload[2..4], "AE"))
+        return error.InvalidZipArchive;
+    const version: types.WinZipAesVendorVersion = switch (std.mem.readInt(u16, payload[0..2], .little)) {
+        1 => .ae1,
+        2 => .ae2,
+        else => return error.UnsupportedZipFeature,
+    };
+    const strength: types.WinZipAesStrength = switch (payload[4]) {
+        1 => .aes128,
+        2 => .aes192,
+        3 => .aes256,
+        else => return error.UnsupportedZipFeature,
+    };
+    const actual_method: types.CompressionMethod = @enumFromInt(
+        std.mem.readInt(u16, payload[5..7], .little),
+    );
+    if (actual_method == .aes) return error.InvalidZipArchive;
+    return .{
+        .info = .{ .version = version, .strength = strength },
+        .actual_method = actual_method,
+    };
+}
 
 pub const Directory = struct {
     entry_count: usize,
@@ -219,6 +251,10 @@ pub fn resolveLocalSizes(extra: []const u8, compressed_size: u32, uncompressed_s
 }
 
 fn findZip64Extra(extra: []const u8) Error!?[]const u8 {
+    return findExtra(extra, zip64_extra_id);
+}
+
+pub fn findExtra(extra: []const u8, wanted_id: u16) Error!?[]const u8 {
     var offset: usize = 0;
     var result: ?[]const u8 = null;
     while (offset < extra.len) {
@@ -226,7 +262,7 @@ fn findZip64Extra(extra: []const u8) Error!?[]const u8 {
         const id = std.mem.readInt(u16, extra[offset..][0..2], .little);
         const size: usize = std.mem.readInt(u16, extra[offset + 2 ..][0..2], .little);
         const payload_end = try checkedEnd(header_end, size, extra.len);
-        if (id == zip64_extra_id) {
+        if (id == wanted_id) {
             if (result != null) return error.InvalidZipArchive;
             result = extra[header_end..payload_end];
         }

@@ -1,3 +1,17 @@
+const winzip_aes = @import("vail_archive_crypto").winzip_aes;
+
+pub const WinZipAesStrength = winzip_aes.Strength;
+
+pub const WinZipAesVendorVersion = enum(u16) {
+    ae1 = 1,
+    ae2 = 2,
+};
+
+pub const WinZipAesInfo = struct {
+    version: WinZipAesVendorVersion,
+    strength: WinZipAesStrength,
+};
+
 pub const CompressionMethod = enum(u16) {
     stored = 0,
     shrink = 1,
@@ -17,6 +31,7 @@ pub const CompressionMethod = enum(u16) {
     zstandard = 93,
     xz = 95,
     ppmd = 98,
+    aes = 99,
     _,
 };
 
@@ -34,6 +49,7 @@ pub const Entry = struct {
     local_header_offset: usize,
     central_header_offset: usize,
     zip64: bool,
+    winzip_aes: ?WinZipAesInfo = null,
 
     pub fn isDirectory(self: Entry) bool {
         return self.name.len != 0 and self.name[self.name.len - 1] == '/';
@@ -41,5 +57,9 @@ pub const Entry = struct {
 
     pub fn isEncrypted(self: Entry) bool {
         return self.flags & 1 != 0;
+    }
+
+    pub fn isWinZipAes(self: Entry) bool {
+        return self.winzip_aes != null;
     }
 };
