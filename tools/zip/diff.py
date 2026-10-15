@@ -96,7 +96,7 @@ def make_legacy_payload(prefix_len: int, seed: int) -> bytes:
     return bytes(prefix) + b"\x42" + bytes(prefix)
 
 
-def validate_python_archive_with_vort(cli: Path, temp: Path) -> int:
+def validate_python_archive_with_vort(cli: Path, temp: Path) -> tuple[int, int]:
     payloads = {
         "stored.bin": bytes(range(64)) + b"\x00stored\xff",
         "folder/deflated.txt": b"Vort ZIP deflate differential.\n" * 256,
@@ -153,11 +153,28 @@ def validate_python_archive_with_vort(cli: Path, temp: Path) -> int:
         if f"name={name}" not in listing:
             raise AssertionError(f"ZIP listing omitted {name!r}: {listing}")
 
+    with zipfile.ZipFile(io.BytesIO(fixture)) as archive:
+        methods = {info.filename: info.compress_type for info in archive.infolist()}
+    incremental_cases = 0
     for index, (name, expected) in enumerate(payloads.items()):
         output = temp / f"python-output-{index}.bin"
         run(cli, "extract-zip-file", str(zip_path), name, str(output))
         if output.read_bytes() != expected:
             raise AssertionError(f"Vort extraction mismatch for {name!r}")
+        if methods[name] in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
+            incremental_output = temp / f"python-incremental-output-{index}.bin"
+            run(
+                cli,
+                "extract-zip-file-incremental",
+                str(zip_path),
+                name,
+                str(incremental_output),
+            )
+            if incremental_output.read_bytes() != expected:
+                raise AssertionError(
+                    f"Vort incremental extraction mismatch for {name!r}"
+                )
+            incremental_cases += 1
 
     zstd_tool = shutil.which("zstd")
     if zstd_tool is None:
@@ -207,7 +224,7 @@ def validate_python_archive_with_vort(cli: Path, temp: Path) -> int:
         b"\x01\x00\x10\x00"
     ):
         raise AssertionError("Python force_zip64 fixture omitted the ZIP64 local extra")
-    return len(fixture)
+    return len(fixture), incremental_cases
 
 
 def validate_vort_archive_with_python(
@@ -980,7 +997,9 @@ def main() -> None:
 
     with tempfile.TemporaryDirectory(prefix="vort-zip-diff-") as temp_text:
         temp = Path(temp_text)
-        python_bytes = validate_python_archive_with_vort(args.cli, temp)
+        python_bytes, incremental_reader_cases = validate_python_archive_with_vort(
+            args.cli, temp
+        )
         vort_zip32_bytes = validate_vort_archive_with_python(
             args.cli, args.writer, temp, False, seven_zip_tool
         )
@@ -1022,6 +1041,7 @@ def main() -> None:
     print(
         "zip_diff=ok directions=2 "
         f"python_entries=7 vort_entries=18 zstd_methods=2 python_bytes={python_bytes} "
+        f"incremental_reader_cases={incremental_reader_cases} "
         f"vort_zip32_bytes={vort_zip32_bytes} vort_zip64_bytes={vort_zip64_bytes} "
         f"incremental_entries={len(INCREMENTAL_PAYLOADS)} "
         f"incremental_zip32_bytes={incremental_zip32_bytes} "
