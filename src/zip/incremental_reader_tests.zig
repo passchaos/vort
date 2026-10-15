@@ -1,0 +1,479 @@
+const std = @import("std");
+const checksum = @import("../checksum.zig");
+const zip = @import("../zip.zig");
+const incremental = @import("incremental_reader.zig");
+const descriptor = @import("incremental_reader/descriptor.zig");
+const wire = @import("wire.zig");
+
+const ExpectedEntry = struct {
+    name: []const u8,
+    data: []const u8,
+};
+
+fn decodeArchiveFragmented(
+    allocator: std.mem.Allocator,
+    archive: []const u8,
+    expected: []const ExpectedEntry,
+    options: incremental.Options,
+    input_chunk_len: usize,
+    output_chunk_len: usize,
+) !void {
+    var reader = try incremental.Reader.initWithOptions(allocator, options);
+    defer reader.deinit();
+    var input_offset: usize = 0;
+    var entry_index: usize = 0;
+    var output: std.ArrayList(u8) = .empty;
+    defer output.deinit(allocator);
+    var calls: usize = 0;
+    while (true) {
+        calls += 1;
+        if (calls > archive.len * 16 + 4096) return error.TestUnexpectedResult;
+        const input_end = @min(archive.len, input_offset + input_chunk_len);
+        var scratch: [31]u8 = undefined;
+        const stepped = try reader.step(
+            archive[input_offset..input_end],
+            scratch[0..output_chunk_len],
+        );
+        input_offset += stepped.progress.input_read;
+        try output.appendSlice(allocator, scratch[0..stepped.progress.output_written]);
+        switch (stepped.status) {
+            .entry_header => {
+                try std.testing.expect(entry_index < expected.len);
+                try std.testing.expectEqualStrings(expected[entry_index].name, reader.currentEntry().?.name);
+            },
+            .entry_done => {
+                try std.testing.expect(entry_index < expected.len);
+                try std.testing.expectEqualSlices(u8, expected[entry_index].data, output.items);
+                try std.testing.expect(reader.currentEntry().?.crc32 != null);
+                output.clearRetainingCapacity();
+                entry_index += 1;
+            },
+            .done => break,
+            .need_input => if (input_end == archive.len and stepped.progress.input_read == 0)
+                return error.TruncatedFrame,
+            .need_output => {},
+        }
+        if (stepped.status != .done and
+            stepped.progress.input_read == 0 and
+            stepped.progress.output_written == 0 and
+            stepped.status != .entry_header and
+            stepped.status != .entry_done and
+            !(stepped.status == .need_input and input_end != archive.len))
+            return error.TestUnexpectedResult;
+    }
+    try std.testing.expectEqual(archive.len, input_offset);
+    try std.testing.expectEqual(expected.len, entry_index);
+    if (options.initial_offset == 0) {
+        const parsed = try zip.parse(archive);
+        const snapshot = reader.snapshot();
+        try std.testing.expectEqual(parsed.central_directory_offset, snapshot.central_offset.?);
+        try std.testing.expectEqual(parsed.central_directory_size, snapshot.central_size.?);
+        try std.testing.expectEqualStrings(parsed.comment, reader.archiveComment());
+    }
+}
+
+fn withoutDescriptorSignature(
+    allocator: std.mem.Allocator,
+    signed_archive: []const u8,
+) ![]u8 {
+    const archive = try zip.parse(signed_archive);
+    try std.testing.expectEqual(@as(usize, 1), archive.entry_count);
+    try std.testing.expect(!archive.zip64);
+    const entry = try archive.entryAt(0);
+    const compressed = try archive.compressedData(entry);
+    const descriptor_offset = @intFromPtr(compressed.ptr) - @intFromPtr(signed_archive.ptr) + compressed.len;
+    try std.testing.expectEqual(
+        @as(u32, 0x0807_4b50),
+        std.mem.readInt(u32, signed_archive[descriptor_offset..][0..4], .little),
+    );
+    const unsigned = try allocator.alloc(u8, signed_archive.len - 4);
+    errdefer allocator.free(unsigned);
+    @memcpy(unsigned[0..descriptor_offset], signed_archive[0..descriptor_offset]);
+    @memcpy(unsigned[descriptor_offset..], signed_archive[descriptor_offset + 4 ..]);
+    const eocd_offset = unsigned.len - 22 - archive.comment.len;
+    std.mem.writeInt(
+        u32,
+        unsigned[eocd_offset + 16 ..][0..4],
+        @intCast(archive.central_directory_offset - 4),
+        .little,
+    );
+    return unsigned;
+}
+
+fn forgeCrc32Suffix(prefix: []const u8, target: u32) [4]u8 {
+    var zeros: [4]u8 = @splat(0);
+    var state = checksum.Crc32Best.init();
+    state.update(prefix);
+    state.update(&zeros);
+    const base = state.digest();
+    var basis_value: [32]u32 = @splat(0);
+    var basis_mask: [32]u32 = @splat(0);
+    for (0..32) |bit| {
+        var candidate: [4]u8 = @splat(0);
+        candidate[bit / 8] = @as(u8, 1) << @intCast(bit % 8);
+        var candidate_state = checksum.Crc32Best.init();
+        candidate_state.update(prefix);
+        candidate_state.update(&candidate);
+        var value = candidate_state.digest() ^ base;
+        var mask: u32 = @as(u32, 1) << @intCast(bit);
+        while (value != 0) {
+            const pivot: u5 = @intCast(@ctz(value));
+            if (basis_value[pivot] == 0) {
+                basis_value[pivot] = value;
+                basis_mask[pivot] = mask;
+                break;
+            }
+            value ^= basis_value[pivot];
+            mask ^= basis_mask[pivot];
+        }
+    }
+    var remaining = target ^ base;
+    var solution: u32 = 0;
+    while (remaining != 0) {
+        const pivot: u5 = @intCast(@ctz(remaining));
+        std.debug.assert(basis_value[pivot] != 0);
+        remaining ^= basis_value[pivot];
+        solution ^= basis_mask[pivot];
+    }
+    std.mem.writeInt(u32, &zeros, solution, .little);
+    var verification = checksum.Crc32Best.init();
+    verification.update(prefix);
+    verification.update(&zeros);
+    std.debug.assert(verification.digest() == target);
+    return zeros;
+}
+
+fn expectReaderError(
+    allocator: std.mem.Allocator,
+    archive: []const u8,
+    options: incremental.Options,
+    expected_error: anyerror,
+) !void {
+    var reader = try incremental.Reader.initWithOptions(allocator, options);
+    defer reader.deinit();
+    var input_offset: usize = 0;
+    var scratch: [97]u8 = undefined;
+    while (input_offset < archive.len) {
+        const stepped = reader.step(archive[input_offset..], &scratch) catch |err| {
+            try std.testing.expectEqual(expected_error, err);
+            try std.testing.expectEqual(incremental.Phase.failed, reader.snapshot().phase);
+            try std.testing.expectError(error.ZipReaderFailed, reader.step("", &scratch));
+            return;
+        };
+        input_offset += stepped.progress.input_read;
+        if (stepped.status == .done) return error.TestExpectedError;
+        if (stepped.progress.input_read == 0 and stepped.progress.output_written == 0 and
+            stepped.status != .entry_header and stepped.status != .entry_done)
+            return error.TestUnexpectedResult;
+    }
+    return error.TestExpectedError;
+}
+
+fn reverseTwoCentralRecords(
+    allocator: std.mem.Allocator,
+    source: []const u8,
+) ![]u8 {
+    const archive = try zip.parse(source);
+    try std.testing.expectEqual(@as(usize, 2), archive.entry_count);
+    const first = try archive.entryAt(0);
+    const second = try archive.entryAt(1);
+    const central_end = archive.central_directory_offset + archive.central_directory_size;
+    const first_bytes = source[first.central_header_offset..second.central_header_offset];
+    const second_bytes = source[second.central_header_offset..central_end];
+    const reordered = try allocator.dupe(u8, source);
+    @memcpy(reordered[archive.central_directory_offset..][0..second_bytes.len], second_bytes);
+    @memcpy(reordered[archive.central_directory_offset + second_bytes.len ..][0..first_bytes.len], first_bytes);
+    return reordered;
+}
+
+fn withCentralDigitalSignature(
+    allocator: std.mem.Allocator,
+    source: []const u8,
+    signature_payload: []const u8,
+) ![]u8 {
+    const archive = try zip.parse(source);
+    const insertion = archive.central_directory_offset + archive.central_directory_size;
+    const record_len = wire.central_directory_digital_signature_len + signature_payload.len;
+    const result = try allocator.alloc(u8, source.len + record_len);
+    errdefer allocator.free(result);
+    @memcpy(result[0..insertion], source[0..insertion]);
+    std.mem.writeInt(
+        u32,
+        result[insertion..][0..4],
+        wire.central_directory_digital_signature,
+        .little,
+    );
+    std.mem.writeInt(u16, result[insertion + 4 ..][0..2], @intCast(signature_payload.len), .little);
+    @memcpy(result[insertion + wire.central_directory_digital_signature_len ..][0..signature_payload.len], signature_payload);
+    @memcpy(result[insertion + record_len ..], source[insertion..]);
+    return result;
+}
+
+test "ZIP incremental reader streams signed descriptor ZIP32 and ZIP64 archives" {
+    const allocator = std.testing.allocator;
+    const stored = "stored payload containing PK\x07\x08 marker bytes";
+    const deflated = "incremental whole archive deflate payload\n" ** 128;
+    const entries = [_]zip.EncodeEntry{
+        .{ .name = "stored.bin", .data = stored, .method = .stored },
+        .{ .name = "folder/deflated.txt", .data = deflated, .method = .deflate },
+    };
+    const expected = [_]ExpectedEntry{
+        .{ .name = entries[0].name, .data = stored },
+        .{ .name = entries[1].name, .data = deflated },
+    };
+    inline for (.{ zip.Zip64Mode.never, zip.Zip64Mode.always }) |mode| {
+        const bytes = try zip.encodeAlloc(allocator, &entries, .{
+            .data_descriptor = true,
+            .zip64 = mode,
+            .archive_comment = "streamed",
+        });
+        defer allocator.free(bytes);
+        for ([_]usize{ 1, 2, 3, 5, 17 }) |input_chunk_len| {
+            for ([_]usize{ 1, 2, 7, 31 }) |output_chunk_len|
+                try decodeArchiveFragmented(
+                    allocator,
+                    bytes,
+                    &expected,
+                    .{},
+                    input_chunk_len,
+                    output_chunk_len,
+                );
+        }
+    }
+}
+
+test "ZIP incremental reader accepts unsigned Stored and Deflate descriptors" {
+    const allocator = std.testing.allocator;
+    const cases = [_]struct {
+        name: []const u8,
+        data: []const u8,
+        method: zip.CompressionMethod,
+    }{
+        .{
+            .name = "unsigned-stored.bin",
+            .data = "payload PK\x07\x08 false signed descriptor payload",
+            .method = .stored,
+        },
+        .{
+            .name = "unsigned-deflate.txt",
+            .data = "unsigned deflate descriptor" ** 128,
+            .method = .deflate,
+        },
+    };
+    for (cases) |case| {
+        const entries = [_]zip.EncodeEntry{.{
+            .name = case.name,
+            .data = case.data,
+            .method = case.method,
+        }};
+        const signed = try zip.encodeAlloc(allocator, &entries, .{
+            .data_descriptor = true,
+            .zip64 = .never,
+        });
+        defer allocator.free(signed);
+        const unsigned = try withoutDescriptorSignature(allocator, signed);
+        defer allocator.free(unsigned);
+        const expected = [_]ExpectedEntry{.{ .name = case.name, .data = case.data }};
+        try decodeArchiveFragmented(allocator, unsigned, &expected, .{}, 1, 1);
+        try decodeArchiveFragmented(allocator, unsigned, &expected, .{}, 5, 7);
+    }
+
+    const collision_prefix = "unsigned CRC equals the descriptor signature ".*;
+    const collision_suffix = forgeCrc32Suffix(&collision_prefix, wire.data_descriptor_signature);
+    const collision_payload = collision_prefix ++ collision_suffix;
+    try std.testing.expectEqual(
+        wire.data_descriptor_signature,
+        checksum.Crc32Best.hash(&collision_payload),
+    );
+    const collision_entries = [_]zip.EncodeEntry{.{
+        .name = "crc-signature.txt",
+        .data = &collision_payload,
+        .method = .deflate,
+    }};
+    const collision_signed = try zip.encodeAlloc(allocator, &collision_entries, .{
+        .data_descriptor = true,
+        .zip64 = .never,
+    });
+    defer allocator.free(collision_signed);
+    const collision_unsigned = try withoutDescriptorSignature(allocator, collision_signed);
+    defer allocator.free(collision_unsigned);
+    const collision_expected = [_]ExpectedEntry{.{
+        .name = collision_entries[0].name,
+        .data = &collision_payload,
+    }};
+    try decodeArchiveFragmented(allocator, collision_unsigned, &collision_expected, .{}, 1, 1);
+}
+
+test "ZIP incremental reader ZIP64 unsigned Stored scanner retains following record" {
+    const payload = "unsigned ZIP64 stored descriptor".*;
+    var descriptor_bytes: [20]u8 = undefined;
+    std.mem.writeInt(u32, descriptor_bytes[0..4], checksum.Crc32Best.hash(&payload), .little);
+    std.mem.writeInt(u64, descriptor_bytes[4..12], payload.len, .little);
+    std.mem.writeInt(u64, descriptor_bytes[12..20], payload.len, .little);
+    var following: [4]u8 = undefined;
+    std.mem.writeInt(u32, &following, wire.central_file_signature, .little);
+    const input = payload ++ descriptor_bytes ++ following;
+    var scanner = descriptor.StoredScanner.init(.zip64, payload.len);
+    var decoded: [payload.len]u8 = undefined;
+    const stepped = try scanner.step(&input, &decoded);
+    try std.testing.expectEqual(descriptor.StepResult.Status.done, stepped.status);
+    try std.testing.expectEqualSlices(u8, &payload, &decoded);
+    try std.testing.expectEqualSlices(u8, &following, scanner.retainedRecordPrefix());
+    try std.testing.expect(!scanner.descriptor().?.signed);
+}
+
+test "ZIP incremental reader handles known-size entries empty archives and reset" {
+    const allocator = std.testing.allocator;
+    const stored = "known stored";
+    const deflated = "known deflate" ** 48;
+    const entries = [_]zip.EncodeEntry{
+        .{ .name = "known.bin", .data = stored, .method = .stored },
+        .{ .name = "known.txt", .data = deflated, .method = .deflate },
+    };
+    const expected = [_]ExpectedEntry{
+        .{ .name = entries[0].name, .data = stored },
+        .{ .name = entries[1].name, .data = deflated },
+    };
+    const bytes = try zip.encodeAlloc(allocator, &entries, .{
+        .data_descriptor = false,
+        .archive_comment = "known sizes",
+    });
+    defer allocator.free(bytes);
+    try decodeArchiveFragmented(allocator, bytes, &expected, .{}, 2, 3);
+    const reordered = try reverseTwoCentralRecords(allocator, bytes);
+    defer allocator.free(reordered);
+    try decodeArchiveFragmented(allocator, reordered, &expected, .{}, 1, 2);
+    const signed_central = try withCentralDigitalSignature(allocator, bytes, "signed central directory");
+    defer allocator.free(signed_central);
+    try decodeArchiveFragmented(allocator, signed_central, &expected, .{}, 1, 1);
+
+    const empty_entries: [0]zip.EncodeEntry = .{};
+    const empty = try zip.encodeAlloc(allocator, &empty_entries, .{
+        .archive_comment = "empty archive",
+    });
+    defer allocator.free(empty);
+    try decodeArchiveFragmented(allocator, empty, &.{}, .{}, 1, 1);
+
+    var reader = try incremental.Reader.init(allocator);
+    defer reader.deinit();
+    var scratch: [4096]u8 = undefined;
+    var first_offset: usize = 0;
+    while (true) {
+        const stepped = try reader.step(bytes[first_offset..], &scratch);
+        first_offset += stepped.progress.input_read;
+        if (stepped.status == .done) break;
+    }
+    try std.testing.expectEqual(@as(usize, 2), reader.snapshot().completed_entries);
+    reader.reset();
+    var empty_offset: usize = 0;
+    while (true) {
+        const stepped = try reader.step(empty[empty_offset..], &scratch);
+        empty_offset += stepped.progress.input_read;
+        if (stepped.status == .done) break;
+    }
+    try std.testing.expectEqual(@as(usize, 0), reader.snapshot().completed_entries);
+    try std.testing.expectEqualStrings("empty archive", reader.archiveComment());
+
+    const prefix = "MZ incremental reader prefix\n";
+    var prefixed: std.ArrayList(u8) = .empty;
+    defer prefixed.deinit(allocator);
+    try prefixed.appendSlice(allocator, prefix);
+    _ = try zip.encodeAppend(allocator, &prefixed, &entries, .{
+        .data_descriptor = true,
+    });
+    try decodeArchiveFragmented(
+        allocator,
+        prefixed.items[prefix.len..],
+        &expected,
+        .{ .initial_offset = prefix.len },
+        3,
+        5,
+    );
+}
+
+test "ZIP incremental reader enforces backpressure limits central validation and truncation" {
+    const allocator = std.testing.allocator;
+    const payload = "bounded archive payload" ** 32;
+    const entries = [_]zip.EncodeEntry{
+        .{ .name = "bounded.bin", .data = payload, .method = .stored },
+    };
+    const bytes = try zip.encodeAlloc(allocator, &entries, .{
+        .data_descriptor = true,
+    });
+    defer allocator.free(bytes);
+
+    var blocked = try incremental.Reader.init(allocator);
+    defer blocked.deinit();
+    var input_offset: usize = 0;
+    while (true) {
+        const stepped = try blocked.step(bytes[input_offset..], &.{});
+        input_offset += stepped.progress.input_read;
+        try std.testing.expectEqual(@as(usize, 0), stepped.progress.output_written);
+        if (stepped.status == .need_output) break;
+        try std.testing.expect(stepped.status == .entry_header or stepped.status == .need_input);
+    }
+    try std.testing.expect(input_offset < bytes.len);
+
+    try expectReaderError(allocator, bytes, .{
+        .max_entry_output_len = payload.len - 1,
+    }, error.OutputLimitExceeded);
+    try expectReaderError(allocator, bytes, .{
+        .max_total_output_len = payload.len - 1,
+    }, error.OutputLimitExceeded);
+    try expectReaderError(allocator, bytes, .{
+        .max_entries = 0,
+    }, error.OutputLimitExceeded);
+    try expectReaderError(allocator, bytes, .{
+        .max_metadata_size = 0,
+    }, error.OutputLimitExceeded);
+    try expectReaderError(allocator, bytes, .{
+        .max_central_directory_size = 1,
+    }, error.OutputLimitExceeded);
+
+    const parsed = try zip.parse(bytes);
+    const entry = try parsed.entryAt(0);
+    const corrupt = try allocator.dupe(u8, bytes);
+    defer allocator.free(corrupt);
+    corrupt[entry.central_header_offset + 16] ^= 1;
+    try expectReaderError(allocator, corrupt, .{}, error.InvalidZipArchive);
+
+    const zip64 = try zip.encodeAlloc(allocator, &entries, .{
+        .data_descriptor = true,
+        .zip64 = .always,
+    });
+    defer allocator.free(zip64);
+    const corrupt_locator = try allocator.dupe(u8, zip64);
+    defer allocator.free(corrupt_locator);
+    const eocd_offset = zip64.len - wire.end_of_central_len;
+    const locator_offset = eocd_offset - wire.zip64_end_of_central_locator_len;
+    corrupt_locator[locator_offset + 8] ^= 1;
+    try expectReaderError(allocator, corrupt_locator, .{}, error.UnsupportedZipFeature);
+
+    var truncated = try incremental.Reader.init(allocator);
+    defer truncated.deinit();
+    var scratch: [4096]u8 = undefined;
+    var truncated_offset: usize = 0;
+    const short = bytes[0 .. bytes.len - 1];
+    while (truncated_offset < short.len) {
+        const stepped = try truncated.step(short[truncated_offset..], &scratch);
+        truncated_offset += stepped.progress.input_read;
+        if (stepped.status == .done) return error.TestUnexpectedResult;
+        if (stepped.status == .need_input and truncated_offset == short.len) break;
+    }
+    try std.testing.expectError(error.TruncatedFrame, truncated.finish());
+
+    const with_suffix = try std.mem.concat(allocator, u8, &.{ bytes, "suffix" });
+    defer allocator.free(with_suffix);
+    try expectReaderError(allocator, with_suffix, .{}, error.TrailingData);
+    var trailing = try incremental.Reader.initWithOptions(allocator, .{
+        .allow_trailing_data = true,
+    });
+    defer trailing.deinit();
+    var trailing_offset: usize = 0;
+    while (true) {
+        const stepped = try trailing.step(with_suffix[trailing_offset..], &scratch);
+        trailing_offset += stepped.progress.input_read;
+        if (stepped.status == .done) break;
+    }
+    try std.testing.expectEqual(bytes.len, trailing_offset);
+}

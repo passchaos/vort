@@ -9,6 +9,7 @@ pub const data_descriptor_signature: u32 = 0x0807_4b50;
 pub const end_of_central_signature: u32 = 0x0605_4b50;
 pub const zip64_end_of_central_signature: u32 = 0x0606_4b50;
 pub const zip64_end_of_central_locator_signature: u32 = 0x0706_4b50;
+pub const central_directory_digital_signature: u32 = 0x0505_4b50;
 pub const zip64_extra_id: u16 = 0x0001;
 
 pub const local_file_header_len: usize = 30;
@@ -18,6 +19,7 @@ pub const zip64_data_descriptor_len: usize = 24;
 pub const end_of_central_len: usize = 22;
 pub const zip64_end_of_central_len: usize = 56;
 pub const zip64_end_of_central_locator_len: usize = 20;
+pub const central_directory_digital_signature_len: usize = 6;
 
 pub const version_20: u16 = 20;
 pub const version_21: u16 = 21;

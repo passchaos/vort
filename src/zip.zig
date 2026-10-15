@@ -17,6 +17,7 @@ const types = @import("zip/types.zig");
 pub const writer = @import("zip/writer.zig");
 pub const incremental_writer = @import("zip/incremental_writer.zig");
 pub const incremental_entry_decoder = @import("zip/incremental_entry_decoder.zig");
+pub const incremental_reader = @import("zip/incremental_reader.zig");
 
 pub const Error = writer.Error || bzip2.Error || dcl_implode.Error || deflate64.Error || implode.Error || lzma.Error || ppmd8.Error || reduce.Error || shrink.Error || xz.Error || zstd.Error || error{
     InvalidZipArchive,
@@ -46,6 +47,12 @@ pub const OwnedIncrementalEntryDecoder = incremental_entry_decoder.OwnedDecoder;
 pub const IncrementalEntryDecoderError = incremental_entry_decoder.Error;
 pub const IncrementalEntryDecoderOptions = incremental_entry_decoder.Options;
 pub const IncrementalEntryDecoderPhase = incremental_entry_decoder.Phase;
+pub const IncrementalReader = incremental_reader.Reader;
+pub const IncrementalReaderError = incremental_reader.Error;
+pub const IncrementalReaderOptions = incremental_reader.Options;
+pub const IncrementalReaderPhase = incremental_reader.Phase;
+pub const IncrementalReaderStepResult = incremental_reader.StepResult;
+pub const IncrementalReaderEntryInfo = incremental_reader.EntryInfo;
 pub const DclImplodeDictionary = dcl_implode.Dictionary;
 pub const DclImplodeOptions = dcl_implode.Options;
 pub const encodeAlloc = writer.encodeAlloc;
@@ -57,6 +64,10 @@ test "ZIP incremental writer test suite" {
 
 test "ZIP incremental entry decoder test suite" {
     _ = incremental_entry_decoder;
+}
+
+test "ZIP incremental reader test suite" {
+    _ = incremental_reader;
 }
 
 pub const DecodeOptions = struct {
