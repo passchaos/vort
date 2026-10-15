@@ -11,18 +11,36 @@ pub const Error = model_mod.Error || error{
 const top_value: u32 = 1 << 24;
 const bottom_value: u32 = 1 << 15;
 
-const RangeDecoder = struct {
+pub const RangeDecoder = struct {
     input: []const u8,
     position: usize = 0,
     range: u32 = std.math.maxInt(u32),
     code: u32 = 0,
     low: u32 = 0,
 
-    fn init(input: []const u8) Error!RangeDecoder {
+    pub fn init(input: []const u8) Error!RangeDecoder {
         var result = RangeDecoder{ .input = input };
         for (0..4) |_| result.code = result.code *% 256 | try result.readByte();
         if (result.code == std.math.maxInt(u32)) return error.InvalidPpmdData;
         return result;
+    }
+
+    pub fn setInput(self: *RangeDecoder, input: []const u8) Error!void {
+        if (input.len < self.position) return error.TruncatedPpmdInput;
+        self.input = input;
+    }
+
+    pub fn replaceConsumedInput(self: *RangeDecoder, remaining: []const u8) void {
+        self.input = remaining;
+        self.position = 0;
+    }
+
+    pub fn consumed(self: *const RangeDecoder) usize {
+        return self.position;
+    }
+
+    pub fn codeValue(self: *const RangeDecoder) u32 {
+        return self.code;
     }
 
     fn readByte(self: *RangeDecoder) Error!u8 {
@@ -98,7 +116,7 @@ pub fn decodeInto(
     if (range_decoder.position != input.len) return error.PpmdTrailingData;
 }
 
-fn decodeSymbol(model: *model_mod.Model, range_decoder: *RangeDecoder) Error!?u8 {
+pub fn decodeSymbol(model: *model_mod.Model, range_decoder: *RangeDecoder) Error!?u8 {
     var symbol_mask: [256]u8 = undefined;
     const min_context = model.context(model.min_context);
     if (min_context.num_stats != 0) {
