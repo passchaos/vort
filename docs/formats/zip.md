@@ -130,9 +130,11 @@ Stored and Deflate retain their complete-buffer extraction paths.
 ## Incremental archive reader
 
 `ZipIncrementalReader` consumes a complete ZIP archive sequentially without
-retaining payload bytes. It accepts Stored and Deflate local entries, including
-known-size entries and bit-3 descriptors in all four ZIP32/ZIP64 × signed/
-unsigned layouts. Deflate's final block determines its compressed boundary.
+retaining decoded payload bytes. It accepts Stored, Deflate, Bzip2, and legacy/
+current Zstandard local entries, including known-size entries and bit-3
+descriptors in all four ZIP32/ZIP64 × signed/unsigned layouts. Deflate's final
+block, Bzip2's validated stream terminator, and Zstandard's validated frame end
+determine their compressed boundaries.
 Stored unsigned descriptors are inherently ambiguous, so the reader holds only
 the final 16 or 24 bytes and accepts a boundary when CRC, compressed size,
 uncompressed size, and the following local/central/end signature all agree.
@@ -175,10 +177,16 @@ while preserving absolute central-directory offsets. `allow_trailing_data` is
 false by default. `max_metadata_size` bounds retained names plus the archive
 comment; `max_central_directory_size` bounds encoded central records;
 `max_control_record_size` bounds any one variable header/end/signature record.
+`max_bzip2_compressed_block_len` and `max_bzip2_decoded_block_len` bound one
+Bzip2 block's working storage; `max_zstd_compressed_buffer_len` selects whole-
+frame buffering versus the Zstandard block-streaming path. Both codecs expose
+container stop modes that retain accepted bytes after the first stream/frame;
+the ZIP reader limits descriptor probing to 12/20-byte increments.
 Any `step` error makes the state terminal until `reset`, because payload may
 already have reached an external sink. `finish()` distinguishes a truncated
 source. Encryption, multi-disk/split archives, archive-extra-data records, and
-incremental payload codecs other than Stored/Deflate remain unsupported.
+incremental Shrink/Reduce/Implode/Deflate64/DCL Implode/LZMA/XZ/PPMd payloads
+remain unsupported.
 
 ## Incremental writer
 
@@ -298,9 +306,9 @@ one-shot and reader APIs is unchanged.
 
 The incremental writer does not yet support Shrink, Reduce, Implode, Deflate64,
 DCL Implode, Bzip2, LZMA, Zstandard, XZ, or PPMd entries. The sequential reader
-likewise currently streams only Stored and Deflate. Encryption and multi-disk/
-split archives remain unsupported; the existing complete-buffer reader and
-broader one-shot writer retain their documented method coverage.
+additionally streams Bzip2 and legacy/current Zstandard. Encryption and multi-
+disk/split archives remain unsupported; the existing complete-buffer reader
+and broader one-shot writer retain their documented method coverage.
 
 The incremental differential uses six entries: known Stored data containing a
 descriptor-signature byte sequence, unknown Stored data containing two such
@@ -320,11 +328,13 @@ reports 13/13 ZIP differential steps. The Python-to-Vort half also decodes five
 Stored/Deflate members through `ZipOwnedIncrementalEntryDecoder` with 3-byte
 input and 5-byte output, covering descriptor-backed entries, UTF-8, empty
 Stored, and a forced-ZIP64 local header (`incremental_reader_cases=5`). The
-complete sequential reader separately validates a four-entry non-seekable
+complete sequential reader separately validates a five-entry non-seekable
 Python archive under the same 3/5-byte schedule, covering Stored descriptor-
-signature payload bytes, Deflate, force-ZIP64 local metadata with a 64-bit
-descriptor, empty Stored, central records and the archive comment
-(`incremental_archive_reader_cases=4`). No 7z/7zz is installed on the current
+signature payload bytes, Deflate, Bzip2, force-ZIP64 local metadata with a
+64-bit descriptor, empty Stored, central records and the archive comment
+(`incremental_archive_reader_cases=5`). Two system-zstd frames wrapped as
+legacy method 20 and current method 93 also pass the sequential path
+(`incremental_archive_zstd_cases=2`). No 7z/7zz is installed on the current
 host, so the optional 7-Zip branch reports
 false and is not claimed as validation. Info-ZIP coverage uses `unzip -p` for
 contents, not pathname rendering; its 6.00 ZIP32 UTF-8 filename rendering issue
@@ -333,7 +343,7 @@ also affects the pre-existing one-shot output and is not claimed as fixed here.
 `zig test src/root.zig --test-filter 'ZIP incremental writer'` passes 61/61;
 `zig test src/zip.zig --test-filter 'ZIP incremental entry decoder'` passes
 15/15; `zig test src/zip.zig --test-filter 'ZIP incremental reader'` passes
-16/16. The full repository graph passes 2635/2635 and `zig build check` passes
+17/17. The full repository graph passes 2638/2638 and `zig build check` passes
 113/113.
 The wire refactor also leaves 14 one-shot probe modes byte-identical to HEAD,
 including every existing method and ZIP32/ZIP64 descriptor choice. Default and

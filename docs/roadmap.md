@@ -20000,3 +20000,32 @@ reuse, so production keeps the simpler independently owned plans.
   archive-extra-data records, and incremental codecs beyond Stored/Deflate
   remain open rather than being implied by this slice. The full repository
   graph passes 2635/2635 and `zig build check` passes all 113 steps.
+
+- Extended `ZipIncrementalReader` with Bzip2 method 12 and legacy/current
+  Zstandard methods 20/93 for both known-size and bit-3 descriptor entries.
+  The underlying `Bzip2IncrementalDecoder` now has an opt-in first-stream stop
+  mode with borrowed trailing input and a container-selected retry granularity;
+  its default concatenated-stream behavior and exponential retry policy remain
+  unchanged. ZIP selects the 12-/20-byte unsigned descriptor width so buffered
+  lookahead remains smaller than one descriptor even when the Bzip2 block
+  parser needs another bounded retry. `NativeIncrementalFrameDecoder` likewise
+  has an opt-in first-data-frame stop mode, borrowed trailing input, and frame
+  count diagnostics across whole-frame, direct-output, and block-streaming
+  paths; default concatenated/skippable behavior remains unchanged. The ZIP
+  state machine drains codec output before accepting more bytes, subtracts
+  buffered suffix bytes from the compressed member size, feeds them into the
+  existing signed/unsigned descriptor parser, validates outer ZIP CRC-32 and
+  exact sizes, and releases codec allocations at `entry_done`, reset, failure
+  teardown, or deinit. New reader options separately bound one Bzip2 compressed
+  and decoded block plus Zstandard compressed buffering; Zstandard switches to
+  its block-streaming path above that bound. Focused tests cover all three
+  methods with known headers and descriptors under ZIP32/ZIP64 plus 1-byte and
+  7/13-byte fragmentation, while codec-level tests pin suffix recovery and
+  unchanged caller-output bytes. Python's non-seekable ZIP writer adds Bzip2
+  to the sequential archive matrix (`incremental_archive_reader_cases=5`), and
+  system-zstd frames wrapped as methods 20 and 93 pass the same sequential CLI
+  path (`incremental_archive_zstd_cases=2`); the required ZIP gate remains
+  13/13. Shrink, Reduce, Implode, Deflate64, DCL Implode, LZMA, XZ, and PPMd
+  remain complete-buffer-only in the sequential reader.
+  The full repository graph passes 2638/2638 and `zig build check` passes all
+  113 steps.
