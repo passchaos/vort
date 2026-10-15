@@ -20436,3 +20436,21 @@ reuse, so production keeps the simpler independently owned plans.
   ZIP encryption compatibility increment. The focused reader suite passes
   26/26, the ZIP differential remains 13/13, the full repository graph passes
   2703/2703, and `zig build check` passes all 113 steps.
+
+- Added WinZip AES as the first authenticated ZIP encryption family. Vail's
+  independent `archive_crypto` package now owns PBKDF2-HMAC-SHA1/1000,
+  little-endian AES-128/192/256 CTR, HMAC-SHA1-80, constant-time password/tag
+  checks, allocation-safe helpers, secure clearing, and the AES-192 key
+  schedule missing from Zig's standard AES core. Its FIPS, p7zip CTR,
+  Python/OpenSSL full-wire, round-trip, corruption and OOM suites pass 9/9.
+  Vort adds method 99, strict local/central `0x9901` parsing, AE-1/AE-2 CRC
+  policy, explicit caller salt, one-shot read/write, bounded incremental
+  writing and known-size sequential reading. Rust `zip 8.6.0` independently
+  supplies and reads AES-128/192/256 plus AE-1/AE-2 fixtures; the required ZIP
+  gate adds six one-shot, six incremental-writer and three sequential-reader
+  cases, all decrypted independently through Python PBKDF2/HMAC and OpenSSL
+  AES. Descriptor-backed AES sequential extraction remains explicit future
+  work because its ten-byte authentication code precedes the ZIP descriptor.
+  The incremental writer suite passes 73/73, the reader suite 27/27, the ZIP
+  differential 13/13, the full repository graph 2708/2708, and `zig build
+  check` all 113 steps.

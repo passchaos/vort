@@ -102,10 +102,10 @@ surface retains `EncryptedZipEntry`. Missing and rejected passwords return
 `PasswordRequired` and `InvalidZipPassword`, while the ordinary outer CRC-32
 still detects ciphertext corruption that passes the one-byte password check.
 `Archive.compressedData` deliberately does not expose ciphertext as if it were
-a codec payload. Strong-encryption flags and WinZip AES remain unsupported.
+a codec payload. PKWARE strong-encryption flags remain unsupported.
 Traditional ZipCrypto is legacy compatibility, not authenticated modern
-encryption; applications requiring confidentiality and integrity should use a
-WinZip-AES-capable surface.
+encryption; applications requiring confidentiality and integrity should use
+the WinZip AES surface below.
 
 `ZipIncrementalEntryOptions.traditional_encryption` uses the same Vail state.
 Because every incremental entry has bit 3, the writer encrypts the 12-byte
@@ -127,6 +127,38 @@ raw tail and substitute it for any decrypted trailing input before the shared
 descriptor parser runs. Descriptor compressed sizes include the 12-byte
 header. Missing/wrong passwords, header/time-check corruption, strong-
 encryption flags and corrupt descriptors remain distinct failures.
+
+## WinZip AES
+
+Vort reads and writes WinZip AE-1 and AE-2 method-99 entries with AES-128,
+AES-192, or AES-256. The local and central `0x9901` extra fields carry vendor
+`AE`, vendor version, strength, and the actual compression method. Compressed
+size includes the strength-dependent 8/12/16-byte salt, two-byte password
+verifier, encrypted codec payload, and ten-byte HMAC-SHA1-80 authentication
+code. AE-1 retains and validates the ordinary CRC-32; AE-2 writes zero and
+uses authentication as specified.
+
+`ZipEncodeEntry.winzip_aes` requires a password and exact caller-supplied salt,
+keeping CSPRNG ownership explicit and deterministic fixtures reproducible.
+The one-shot and incremental writers encrypt after compression and authenticate
+ciphertext before writing the ZIP descriptor. The incremental path retains
+only derived cipher/HMAC state and a bounded header/trailer, not a member.
+`ZipDecodeOptions.password` performs constant-time verifier and authentication-
+code checks before one-shot extraction succeeds.
+
+PBKDF2-HMAC-SHA1/1000, the little-endian counter-mode AES stream, HMAC-SHA1-80,
+AES-192 key expansion, constant-time comparisons and secure state wiping live
+in `../vail/archive_crypto`; Vort owns only method 99, extra fields, AE-1/AE-2
+CRC policy, sizes and codec composition. Fixed vectors independently combine
+Python PBKDF2/HMAC with OpenSSL AES, while a Rust `zip 8.6.0` fixture covers all
+three strengths, AE-1/AE-2, Stored and Deflate wire compatibility.
+
+`ZipIncrementalReaderOptions.password` streams known-size WinZip AES entries,
+including arbitrary salt/verifier/ciphertext/authentication fragmentation, and
+does not report `entry_done` until the authentication code succeeds. Because
+incremental writers necessarily use bit 3, descriptor-backed WinZip AES still
+requires a combined authentication-code/descriptor tail adapter and is
+explicitly rejected by the sequential reader in this slice.
 
 ## Incremental entry decoder
 
@@ -272,8 +304,9 @@ by ZIP.
 `max_ppmd_compressed_buffer_len` bounds retained range-coded input.
 Any `step` error makes the state terminal until `reset`, because payload may
 already have reached an external sink. `finish()` distinguishes a truncated
-source. Strong/WinZip-AES encryption, multi-disk/split archives and archive-
-extra-data records remain unsupported.
+source. Descriptor-backed WinZip AES sequential extraction, PKWARE strong
+encryption, multi-disk/split archives and archive-extra-data records remain
+unsupported.
 Shrink uses one fixed approximately 40 KiB workspace while
 its member is active. Reduce uses two approximately 12 KiB workspaces and
 traditional Implode two approximately 10 KiB workspaces; both add one shared-
@@ -464,7 +497,9 @@ one-shot and reader APIs is unchanged.
 Every compression method currently supported by the sequential reader has a
 bounded incremental writer. The incremental writer also supports Traditional
 ZipCrypto. The sequential reader supports its known-size and descriptor-backed
-forms; WinZip AES and multi-disk/split archives remain unsupported.
+forms. The incremental writer also supports WinZip AES; its known-size form is
+accepted by the sequential reader, while descriptor-backed AES sequential
+extraction and multi-disk/split archives remain unsupported.
 
 The incremental differential uses forty-five entries: known Stored data containing a
 descriptor-signature byte sequence, unknown Stored data containing two such
@@ -526,6 +561,14 @@ and all six ZIP32/ZIP64 incremental-writer cases additionally pass the
 sequential CLI reader with a password
 (`incremental_reader_zipcrypto_cases=12`,
 `infozip_incremental_reader_zipcrypto_cases=2`).
+WinZip AES adds six deterministic one-shot AE-1/AE-2 cases across both
+descriptor policies, six ZIP32/ZIP64 incremental-writer cases (1,797/2,041
+bytes), and three known-size sequential-reader cases. Python independently
+derives PBKDF2/HMAC values and OpenSSL supplies AES-ECB counter blocks
+(`winzip_aes_cases=6`, `incremental_winzip_aes_cases=6`,
+`incremental_reader_winzip_aes_cases=3`). Rust `zip 8.6.0` independently
+writes the committed three-strength fixture and extracts both Vort writer
+surfaces.
 The aggregate reports 13/13 ZIP differential steps. The Python-to-Vort half
 also decodes five
 Stored/Deflate members through `ZipOwnedIncrementalEntryDecoder` with 3-byte
@@ -556,7 +599,7 @@ is not claimed as validation. Info-ZIP coverage uses `unzip -p` for
 contents, not pathname rendering; its 6.00 ZIP32 UTF-8 filename rendering issue
 also affects the pre-existing one-shot output and is not claimed as fixed here.
 
-`zig test src/root.zig --test-filter 'ZIP incremental writer'` passes 72/72;
+`zig test src/root.zig --test-filter 'ZIP incremental writer'` passes 73/73;
 `zig test src/zip.zig --test-filter 'DCL Implode incremental encoder'` passes
 4/4;
 `zig test src/zip.zig --test-filter 'Reduce incremental encoder'` passes 4/4;
@@ -567,7 +610,7 @@ passes 4/4;
 4/4; `zig test src/zip.zig --test-filter 'Shrink incremental'` passes 4/4;
 `zig test src/zip.zig --test-filter 'Reduce incremental'` passes 4/4;
 `zig test src/zip.zig --test-filter 'Legacy Implode incremental'` passes 4/4;
-`zig test src/zip.zig --test-filter 'ZIP incremental reader'` passes 26/26.
+`zig test src/zip.zig --test-filter 'ZIP incremental reader'` passes 27/27.
 Shrink covers known/signed/unsigned-descriptor, empty, ZIP32/ZIP64 and output-
 limit paths. Reduce covers every factor, signed/unsigned descriptors,
 ZIP32/ZIP64, empty members, DLE/matches, invalid followers and follower-coded
@@ -578,7 +621,7 @@ implicit-zero and overlapping matches. PPMd
 restart/cut-off, descriptor and ZIP64 combinations are required
 Vort coverage. Third-party method-98 evidence remains explicitly unavailable:
 Python `zipfile` has no PPMd codec and this host has no 7z/7zz. The full
-repository graph passes 2703/2703 and `zig build check` passes 113/113.
+repository graph passes 2708/2708 and `zig build check` passes 113/113.
 The wire refactor also leaves 14 one-shot probe modes byte-identical to HEAD,
 including every existing method and ZIP32/ZIP64 descriptor choice. Default and
 forced-ZIP64 SHA-256 values remain
@@ -666,16 +709,17 @@ zig build run-zip-diff
 The writer rejects empty names, invalid UTF-8 names/comments when UTF-8 mode is
 enabled, fields longer than ZIP's 16-bit name/comment limit, and methods other
 than stored/Shrink/Reduce1-4/Implode/Deflate/Deflate64/DCL-Implode/Bzip2/LZMA/Zstandard-20/Zstandard-93/XZ/PPMd. The
-one-shot reader accepts Traditional ZipCrypto when
-`ZipDecodeOptions.password` is provided, and deliberately rejects
-strong/WinZip-AES encryption, multi-disk
+one-shot reader accepts Traditional ZipCrypto and WinZip AES when
+`ZipDecodeOptions.password` is provided, and deliberately rejects PKWARE
+strong encryption, multi-disk
 archives, malformed/duplicate ZIP64 extra fields, and compression methods other than
 stored/Shrink/Reduce1-4/Implode/Deflate/Deflate64/DCL-Implode/Bzip2/LZMA/
 Zstandard-20/Zstandard-93/XZ/PPMd with specific errors.
 Addressable entry and archive sizes remain bounded by the target's `usize` and
 the caller's available memory. The sequential reader accepts known-size and
 descriptor-backed Traditional ZipCrypto through
-`ZipIncrementalReaderOptions.password`; WinZip AES, split archives, and
+`ZipIncrementalReaderOptions.password`; known-size WinZip AES uses the same
+option, while descriptor-backed AES, split archives, and
 additional entry compression methods remain explicit future compatibility
 increments.
 
