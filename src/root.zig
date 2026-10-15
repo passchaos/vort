@@ -152,6 +152,8 @@ pub const encodeCabinetSetAlloc = cab.encodeSetAlloc;
 
 pub const ZipError = zip.Error;
 pub const ZipArchive = zip.Archive;
+pub const ZipSplitArchive = zip.SplitArchive;
+pub const ZipSplitOptions = zip.SplitOptions;
 pub const ZipEntry = zip.Entry;
 pub const ZipIterator = zip.Iterator;
 pub const ZipCompressionMethod = zip.CompressionMethod;
@@ -203,6 +205,7 @@ pub const Ppmd8IncrementalEncoder = ppmd8.IncrementalEncoder;
 pub const Ppmd8RestoreMethod = ppmd8.RestoreMethod;
 pub const Ppmd8ZipProperties = ppmd8.ZipProperties;
 pub const parseZipArchive = zip.parse;
+pub const parseSplitZipArchiveAlloc = zip.parseSplitArchiveAlloc;
 pub const zipEncodeAlloc = zip.encodeAlloc;
 pub const zipEncodeAppend = zip.encodeAppend;
 pub const zipExtractEntryInto = zip.extractEntryInto;

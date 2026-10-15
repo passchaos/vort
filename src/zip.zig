@@ -24,6 +24,7 @@ const reduce_incremental_tests = @import("zip/reduce_incremental_tests.zig");
 const shrink = @import("zip/shrink.zig");
 const shrink_incremental_tests = @import("zip/shrink_incremental_tests.zig");
 const shrink_incremental_encoder_tests = @import("zip/shrink_incremental_encoder_tests.zig");
+const split = @import("zip/split.zig");
 const traditional_encryption = @import("vail_archive_crypto").zipcrypto;
 const winzip_aes = @import("vail_archive_crypto").winzip_aes;
 const types = @import("zip/types.zig");
@@ -33,7 +34,7 @@ pub const incremental_writer = @import("zip/incremental_writer.zig");
 pub const incremental_entry_decoder = @import("zip/incremental_entry_decoder.zig");
 pub const incremental_reader = @import("zip/incremental_reader.zig");
 
-pub const Error = writer.Error || bzip2.Error || dcl_implode.Error || deflate64.Error || implode.Error || lzma.Error || ppmd8.Error || reduce.Error || shrink.Error || xz.Error || zstd.Error || error{
+pub const Error = writer.Error || split.Error || bzip2.Error || dcl_implode.Error || deflate64.Error || implode.Error || lzma.Error || ppmd8.Error || reduce.Error || shrink.Error || xz.Error || zstd.Error || error{
     InvalidZipArchive,
     UnsupportedZipFeature,
     EncryptedZipEntry,
@@ -57,6 +58,7 @@ pub const WinZipAesOptions = writer.WinZipAesOptions;
 pub const WinZipAesStrength = types.WinZipAesStrength;
 pub const WinZipAesVendorVersion = types.WinZipAesVendorVersion;
 pub const WinZipAesInfo = types.WinZipAesInfo;
+pub const SplitOptions = split.Options;
 pub const IncrementalWriter = incremental_writer.Writer;
 pub const IncrementalWriterError = incremental_writer.Error;
 pub const IncrementalWriterOptions = incremental_writer.Options;
@@ -388,6 +390,35 @@ pub const Archive = struct {
         return self.extractAllocWithOptions(allocator, entry, options);
     }
 };
+
+/// Allocator-owned single-disk view of an ordered split/multi-disk ZIP set.
+/// `archive` borrows `bytes` and remains valid until `deinit`.
+pub const SplitArchive = struct {
+    allocator: std.mem.Allocator,
+    bytes: []u8,
+    archive: Archive,
+
+    pub fn deinit(self: *SplitArchive) void {
+        self.allocator.free(self.bytes);
+        self.* = undefined;
+    }
+};
+
+/// Validates and joins explicitly ordered split/multi-disk ZIP slices, then
+/// rewrites only disk-local metadata into the owned single-disk view.
+pub fn parseSplitArchiveAlloc(
+    allocator: std.mem.Allocator,
+    ordered_parts: []const []const u8,
+    options: SplitOptions,
+) !SplitArchive {
+    const bytes = try split.normalizeAlloc(allocator, ordered_parts, options);
+    errdefer allocator.free(bytes);
+    return .{
+        .allocator = allocator,
+        .bytes = bytes,
+        .archive = try parse(bytes),
+    };
+}
 
 pub const Iterator = struct {
     archive: Archive,
@@ -1142,6 +1173,214 @@ test "ZIP extracts Rust zip WinZip AES reference entries" {
         );
         defer allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, reference.data, decoded);
+    }
+}
+
+const SplitTestFixture = struct {
+    allocator: std.mem.Allocator,
+    bytes: []u8,
+    parts: [3][]const u8,
+
+    fn deinit(self: *SplitTestFixture) void {
+        self.allocator.free(self.bytes);
+        self.* = undefined;
+    }
+};
+
+const SplitTestCut = enum {
+    descriptor,
+    central_directory,
+};
+
+fn makeSplitTestFixture(
+    allocator: std.mem.Allocator,
+    source: []const u8,
+    cut: SplitTestCut,
+) !SplitTestFixture {
+    const archive = try parse(source);
+    const first = try archive.entryAt(0);
+    const second = try archive.entryAt(1);
+    const first_name_len: usize = try readU16(source, first.local_header_offset + 26);
+    const first_extra_len: usize = try readU16(source, first.local_header_offset + 28);
+    const first_data = first.local_header_offset + wire.local_file_header_len +
+        first_name_len + first_extra_len;
+    const first_descriptor = first_data + first.compressed_size;
+
+    const bytes = try allocator.alloc(u8, source.len + 4);
+    errdefer allocator.free(bytes);
+    std.mem.writeInt(u32, bytes[0..4], wire.data_descriptor_signature, .little);
+    @memcpy(bytes[4..], source);
+    const cut1 = 4 + first_data + first.compressed_size / 2;
+    const cut2 = switch (cut) {
+        .descriptor => 4 + first_descriptor + 5,
+        .central_directory => 4 + second.central_header_offset,
+    };
+    const virtual_central = 4 + archive.central_directory_offset;
+    const virtual_central_end = virtual_central + archive.central_directory_size;
+    if (cut1 <= 4 or cut1 >= cut2) return error.TestUnexpectedResult;
+    switch (cut) {
+        .descriptor => if (cut2 >= virtual_central) return error.TestUnexpectedResult,
+        .central_directory => if (cut2 <= virtual_central or cut2 >= virtual_central_end)
+            return error.TestUnexpectedResult,
+    }
+    const bases = [3]usize{ 0, cut1, cut2 };
+
+    var iterator = archive.iterator();
+    while (try iterator.next()) |entry| {
+        const central = 4 + entry.central_header_offset;
+        const virtual_local = 4 + entry.local_header_offset;
+        const disk: usize = if (virtual_local < cut1)
+            0
+        else if (virtual_local < cut2)
+            1
+        else
+            2;
+        const relative_local = virtual_local - bases[disk];
+        std.mem.writeInt(u16, bytes[central + 34 ..][0..2], @intCast(disk), .little);
+        if (entry.zip64) {
+            const name_len: usize = std.mem.readInt(u16, bytes[central + 28 ..][0..2], .little);
+            const extra_len: usize = std.mem.readInt(u16, bytes[central + 30 ..][0..2], .little);
+            const extra = bytes[central + wire.central_file_header_len + name_len ..][0..extra_len];
+            if (extra.len < 28 or
+                std.mem.readInt(u16, extra[0..2], .little) != wire.zip64_extra_id or
+                std.mem.readInt(u16, extra[2..4], .little) < 24)
+                return error.InvalidZipArchive;
+            std.mem.writeInt(u64, extra[20..28], relative_local, .little);
+        } else {
+            std.mem.writeInt(u32, bytes[central + 42 ..][0..4], @intCast(relative_local), .little);
+        }
+    }
+
+    const source_eocd = source.len - wire.end_of_central_len - archive.comment.len;
+    const eocd = source_eocd + 4;
+    const central_disk: usize = if (virtual_central < cut1)
+        0
+    else if (virtual_central < cut2)
+        1
+    else
+        2;
+    const central_offset = virtual_central - bases[central_disk];
+    var entries_on_end_disk: usize = 0;
+    var central_iterator = archive.iterator();
+    while (try central_iterator.next()) |entry| {
+        if (4 + entry.central_header_offset >= cut2)
+            entries_on_end_disk += 1;
+    }
+    if (archive.zip64) {
+        const source_locator = source_eocd - wire.zip64_end_of_central_locator_len;
+        const locator = source_locator + 4;
+        const source_zip64 = std.math.cast(
+            usize,
+            std.mem.readInt(u64, source[source_locator + 8 ..][0..8], .little),
+        ) orelse return error.UnsupportedZipFeature;
+        const zip64 = source_zip64 + 4;
+        std.mem.writeInt(u32, bytes[zip64 + 16 ..][0..4], 2, .little);
+        std.mem.writeInt(u32, bytes[zip64 + 20 ..][0..4], @intCast(central_disk), .little);
+        std.mem.writeInt(u64, bytes[zip64 + 24 ..][0..8], entries_on_end_disk, .little);
+        std.mem.writeInt(
+            u64,
+            bytes[zip64 + 48 ..][0..8],
+            central_offset,
+            .little,
+        );
+        std.mem.writeInt(u32, bytes[locator + 4 ..][0..4], 2, .little);
+        std.mem.writeInt(u64, bytes[locator + 8 ..][0..8], zip64 - cut2, .little);
+        std.mem.writeInt(u32, bytes[locator + 16 ..][0..4], 3, .little);
+    } else {
+        std.mem.writeInt(u16, bytes[eocd + 4 ..][0..2], 2, .little);
+        std.mem.writeInt(u16, bytes[eocd + 6 ..][0..2], @intCast(central_disk), .little);
+        std.mem.writeInt(u16, bytes[eocd + 8 ..][0..2], @intCast(entries_on_end_disk), .little);
+        std.mem.writeInt(
+            u32,
+            bytes[eocd + 16 ..][0..4],
+            @intCast(central_offset),
+            .little,
+        );
+    }
+    return .{
+        .allocator = allocator,
+        .bytes = bytes,
+        .parts = .{ bytes[0..cut1], bytes[cut1..cut2], bytes[cut2..] },
+    };
+}
+
+test "ZIP split archive normalization round trips cross-disk entries" {
+    const allocator = std.testing.allocator;
+    const large = "split ZIP payload crosses disk boundaries\n" ** 4096;
+    const entries = [_]EncodeEntry{
+        .{ .name = "large.txt", .data = large, .method = .deflate },
+        .{ .name = "tail.bin", .data = "tail entry", .method = .stored },
+    };
+    inline for (.{ Zip64Mode.never, .always }) |zip64_mode| {
+        const source = try encodeAlloc(allocator, &entries, .{
+            .data_descriptor = true,
+            .zip64 = zip64_mode,
+        });
+        defer allocator.free(source);
+        inline for (.{ SplitTestCut.descriptor, .central_directory }) |cut| {
+            var fixture = try makeSplitTestFixture(allocator, source, cut);
+            defer fixture.deinit();
+            var split_archive = try parseSplitArchiveAlloc(
+                allocator,
+                &fixture.parts,
+                .{},
+            );
+            defer split_archive.deinit();
+            try std.testing.expectEqual(entries.len, split_archive.archive.entry_count);
+            for (entries, 0..) |expected, index| {
+                const decoded = try split_archive.archive.extractAlloc(
+                    allocator,
+                    try split_archive.archive.entryAt(index),
+                );
+                defer allocator.free(decoded);
+                try std.testing.expectEqualSlices(u8, expected.data, decoded);
+            }
+            try std.testing.expectEqual(
+                @as(u32, wire.data_descriptor_signature),
+                std.mem.readInt(u32, split_archive.bytes[0..4], .little),
+            );
+
+            const reordered = [_][]const u8{ fixture.parts[1], fixture.parts[0], fixture.parts[2] };
+            try std.testing.expectError(
+                error.InvalidZipDiskOrder,
+                parseSplitArchiveAlloc(allocator, &reordered, .{}),
+            );
+            const missing = [_][]const u8{ fixture.parts[0], fixture.parts[2] };
+            try std.testing.expectError(
+                error.InvalidZipDiskOrder,
+                parseSplitArchiveAlloc(allocator, &missing, .{}),
+            );
+            try std.testing.expectError(
+                error.OutputLimitExceeded,
+                parseSplitArchiveAlloc(allocator, &fixture.parts, .{
+                    .max_archive_size = fixture.bytes.len - 1,
+                }),
+            );
+            try std.testing.expectError(
+                error.OutputLimitExceeded,
+                parseSplitArchiveAlloc(allocator, &fixture.parts, .{ .max_parts = 2 }),
+            );
+            const with_empty = [_][]const u8{ fixture.parts[0], "", fixture.parts[2] };
+            try std.testing.expectError(
+                error.InvalidZipArchive,
+                parseSplitArchiveAlloc(allocator, &with_empty, .{}),
+            );
+            const single = [_][]const u8{fixture.parts[0]};
+            try std.testing.expectError(
+                error.InvalidZipArchive,
+                parseSplitArchiveAlloc(allocator, &single, .{}),
+            );
+
+            std.mem.writeInt(u32, fixture.bytes[0..4], 0, .little);
+            try std.testing.expectError(
+                error.InvalidZipDiskOrder,
+                parseSplitArchiveAlloc(allocator, &fixture.parts, .{}),
+            );
+            var marker_optional = try parseSplitArchiveAlloc(allocator, &fixture.parts, .{
+                .require_split_signature = false,
+            });
+            marker_optional.deinit();
+        }
     }
 }
 

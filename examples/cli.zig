@@ -1021,6 +1021,62 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(decoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
         try stdout.print("zip_bytes={d} decoded_bytes={d} entry={s} path={s}\n", .{ bytes.len, decoded.len, entry_name, output_path });
+    } else if (std.mem.eql(u8, command, "extract-zip-split-files")) {
+        const entry_name = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = (try parseOptionalLimit(args.next())) orelse
+            return error.MissingCorpusPath;
+        const password_arg = args.next() orelse return error.MissingCorpusPath;
+        const password = if (std.mem.eql(u8, password_arg, "-")) null else password_arg;
+        var parts: std.ArrayList([]u8) = .empty;
+        defer {
+            for (parts.items) |bytes| init.gpa.free(bytes);
+            parts.deinit(init.gpa);
+        }
+        const max_archive_size = 512 * 1024 * 1024;
+        var archive_size: usize = 0;
+        while (args.next()) |input_path| {
+            const bytes = try std.Io.Dir.cwd().readFileAlloc(
+                init.io,
+                input_path,
+                init.gpa,
+                .limited(512 * 1024 * 1024),
+            );
+            archive_size = std.math.add(usize, archive_size, bytes.len) catch {
+                init.gpa.free(bytes);
+                return error.OutputLimitExceeded;
+            };
+            if (archive_size > max_archive_size) {
+                init.gpa.free(bytes);
+                return error.OutputLimitExceeded;
+            }
+            parts.append(init.gpa, bytes) catch |err| {
+                init.gpa.free(bytes);
+                return err;
+            };
+        }
+        if (parts.items.len < 2) return error.MissingCorpusPath;
+        var split_archive = try vort.parseSplitZipArchiveAlloc(init.gpa, parts.items, .{
+            .max_archive_size = max_archive_size,
+        });
+        defer split_archive.deinit();
+        const decoded = try split_archive.archive.extractByNameAllocWithOptions(
+            init.gpa,
+            entry_name,
+            .{
+                .max_output_len = max_output_len,
+                .password = password,
+            },
+        );
+        defer init.gpa.free(decoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+        try stdout.print("zip_parts={d} zip_bytes={d} decoded_bytes={d} entry={s} path={s}\n", .{
+            parts.items.len,
+            split_archive.bytes.len,
+            decoded.len,
+            entry_name,
+            output_path,
+        });
     } else if (std.mem.eql(u8, command, "extract-zip-file-incremental")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const entry_name = args.next() orelse return error.MissingCorpusPath;
@@ -2910,6 +2966,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  list-zip-file <path>        List ZIP32/ZIP64 central-directory entries
         \\  extract-zip-file <zip> <entry> <out> [max_output] [max_dictionary] [password|-]
         \\                              Extract a supported ZIP entry with CRC validation
+        \\  extract-zip-split-files <entry> <out> <max_output> <password|-> <part1> <part2> [...]
+        \\                              Extract from explicitly ordered split/multi-disk ZIP parts
         \\  extract-zip-file-incremental <zip> <entry> <out> [max_output]
         \\                              Incrementally extract one Stored/Deflate ZIP entry
         \\  extract-zip-stream-file <zip> <entry> <out> [max_output] [password|-]
