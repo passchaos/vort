@@ -20469,3 +20469,27 @@ reuse, so production keeps the simpler independently owned plans.
   (`incremental_reader_winzip_aes_cases=12`). The reader suite passes 28/28,
   the ZIP differential remains 13/13, the full repository graph passes
   2709/2709, and `zig build check` passes all 113 steps.
+
+- Added strict ordered split/multi-disk ZIP32/ZIP64 reading through
+  `parseSplitZipArchiveAlloc`. The allocator-owned compatibility surface accepts
+  explicit caller order and checks non-empty parts, the conventional first-disk
+  split marker, caller total-size/part-count limits, legacy EOCD disk fields,
+  ZIP64 EOCD/locator disk
+  coordinates, and central ZIP64 local-offset/disk fields before exposing the
+  established `Archive` parser and every existing extraction codec. It joins
+  the parts once and rewrites only disk-local metadata; local headers,
+  ciphertext/authentication bytes, compressed payloads, and descriptors remain
+  byte-identical across boundaries. Synthetic forced ZIP32/ZIP64 fixtures cover
+  a Deflate payload, its descriptor, and the central directory crossing disks,
+  a trailing Stored entry, optional marker policy, reordered/missing parts, and
+  allocation limits. The required Info-ZIP gate creates a real seven-part
+  `zip -s 64k` archive whose Deflate payload crosses six boundaries and whose
+  Stored tail begins on the final disk; both public-CLI extractions pass and a
+  first-two-disk reorder is rejected (`split_zip_parts=7`,
+  `split_zip_cases=2`, `split_zip_boundaries=6`). This
+  slice intentionally owns the complete normalized view; disk-at-a-time
+  streaming and split writing remain follow-ups, and a virtual local offset
+  beyond ZIP32 range without an existing ZIP64 offset slot is rejected instead
+  of rebuilding variable-length central metadata. The focused command passes
+  9/9, the full repository graph 2710/2710, `run-zip-diff` all 13 steps, CLI
+  help smoke, and `zig build check` all 113 steps.

@@ -289,8 +289,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   with explicit caller-supplied header entropy and passwords; WinZip AE-1/AE-2
   AES-128/192/256 one-shot reading/writing, bounded incremental writing, and
   known-size/descriptor-backed sequential reading with explicit caller salt and Vail-backed
-  PBKDF2/CTR/HMAC; and explicit strong-encryption/multi-disk/unknown-
-  method errors;
+  PBKDF2/CTR/HMAC; ordered split/multi-disk ZIP32/ZIP64 normalization with
+  strict disk-coordinate and allocation limits, cross-volume payload/descriptor
+  extraction through the ordinary archive codecs; and explicit PKWARE strong-
+  encryption/unknown-method errors;
 - dependency-free Bzip2 `BZh1`...`BZh9` encoding and decoding with canonical Huffman,
   selector/inverse move-to-front, RUNA/RUNB, inverse BWT, first-stage RLE,
   legacy randomized-block reversal, multi-block and explicit
@@ -1755,7 +1757,14 @@ The incremental writer and one-shot surface support per-entry Traditional
 ZipCrypto. The sequential reader supports both known-size and descriptor-
 backed forms. WinZip AES supports one-shot reading/writing, descriptor-backed
 incremental writing, and both known-size and descriptor-backed sequential
-reading; PKWARE strong encryption and multi-disk archives remain unsupported. See
+reading. `parseSplitZipArchiveAlloc` accepts explicitly ordered `.z01` ...
+`.zip` disk slices, validates ZIP32/ZIP64 disk-local offsets, the leading split
+marker, metadata-inconsistent missing/reordered layouts, part count and total
+size, then exposes an owned normalized `ZipArchive`; compressed data and
+descriptors are not rewritten. This compatibility surface allocates the
+complete joined archive.
+The writers and direct incremental reader remain single-disk, while PKWARE
+strong encryption remains unsupported. See
 [the ZIP format status](docs/formats/zip.md) for the full state and wire
 contract. Writer-specific additive errors are exposed separately as
 `ZipIncrementalWriterError`; the established `ZipError` set is unchanged.
@@ -1832,6 +1841,11 @@ known-size/descriptor-backed sequential-reader cases. A committed Rust
 `zip 8.6.0` archive independently
 covers AE-1/AE-2, AES-128/192/256, Stored and Deflate, and Rust also extracts
 both Vort writer surfaces.
+The required Info-ZIP gate also generates a seven-part `zip -s 64k` archive:
+one Deflate payload crosses six volume boundaries, a trailing Stored member
+starts on the final disk, both extract through `parseSplitZipArchiveAlloc`, and
+a first-two-disk reorder is rejected (`split_zip_parts=7`,
+`split_zip_cases=2`, `split_zip_boundaries=6`).
 Focused writer tests pass 73/73; the DCL, Reduce and Legacy Implode encoder
 suites pass 4/4 each, and the
 incremental entry decoder suite passes
@@ -1846,7 +1860,7 @@ signed/unsigned descriptors, ZIP32/ZIP64, arbitrary tree descriptions,
 implicit-zero and overlapping matches. PPMd restart/cut-off,
 descriptor and ZIP64 paths are required Vort coverage; third-party PPMd remains
 unclaimed because this host has no 7z/7zz and Python has no method-98 codec.
-The full repository graph passes 2709/2709 and `zig build check` passes 113/113.
+The full repository graph passes 2710/2710 and `zig build check` passes 113/113.
 The refactored one-shot writer remains byte-identical to HEAD across 14 probe
 modes. The current host has no 7z/7zz, so that optional extraction branch is
 reported as skipped rather than passed.

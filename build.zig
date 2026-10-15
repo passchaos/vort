@@ -1642,7 +1642,7 @@ pub fn build(b: *std.Build) void {
     zip_diff.addArg("--incremental-writer");
     zip_diff.addArtifactArg(zip_incremental_writer_probe_exe);
     if (b.args) |args| zip_diff.addArgs(args);
-    const zip_diff_step = b.step("run-zip-diff", "Validate ZIP32/ZIP64 codecs plus incremental Stored/Deflate descriptors against Python, Info-ZIP, and optional 7-Zip");
+    const zip_diff_step = b.step("run-zip-diff", "Validate ZIP32/ZIP64 codecs, split archives, and incremental descriptors against Python, Info-ZIP, and optional 7-Zip");
     zip_diff_step.dependOn(&zip_diff.step);
 
     const bzip2_diff = b.addSystemCommand(&.{ "python3", "tools/bzip2/diff.py", "--cli" });

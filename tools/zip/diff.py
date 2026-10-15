@@ -1875,6 +1875,173 @@ def validate_incremental_winzip_aes_writer(
     return len(raw), cases, sequential_cases
 
 
+def ordered_split_parts(archive: Path) -> list[Path]:
+    parts: list[Path] = []
+    disk = 1
+    while True:
+        candidate = archive.with_suffix(f".z{disk:02d}")
+        if not candidate.exists():
+            break
+        parts.append(candidate)
+        disk += 1
+    if not parts or not archive.exists():
+        raise AssertionError("Info-ZIP did not create a split archive")
+    parts.append(archive)
+    return parts
+
+
+def split_central_entries(parts: list[Path]) -> tuple[bytes, list[int], dict[str, tuple[int, ...]]]:
+    raw_parts = [part.read_bytes() for part in parts]
+    bases: list[int] = []
+    joined = bytearray()
+    for part in raw_parts:
+        bases.append(len(joined))
+        joined.extend(part)
+    if raw_parts[0][:4] != b"PK\x07\x08":
+        raise AssertionError("Info-ZIP split marker is missing")
+
+    eocd_offset = raw_parts[-1].rfind(b"PK\x05\x06")
+    if eocd_offset < 0 or eocd_offset + 22 > len(raw_parts[-1]):
+        raise AssertionError("Info-ZIP split EOCD is missing")
+    eocd = struct.unpack_from("<IHHHHIIH", raw_parts[-1], eocd_offset)
+    if eocd_offset + 22 + eocd[7] != len(raw_parts[-1]):
+        raise AssertionError("Info-ZIP split EOCD comment length is invalid")
+    central_disk, entry_count, central_size, central_offset = (
+        eocd[2],
+        eocd[4],
+        eocd[5],
+        eocd[6],
+    )
+    if central_disk >= len(parts):
+        raise AssertionError("Info-ZIP split central disk is invalid")
+    central_start = bases[central_disk] + central_offset
+    central_end = central_start + central_size
+    if central_end > bases[-1] + eocd_offset:
+        raise AssertionError("Info-ZIP split central directory exceeds EOCD")
+
+    entries: dict[str, tuple[int, ...]] = {}
+    cursor = central_start
+    fixed_size = struct.calcsize("<IHHHHHHIIIHHHHHII")
+    for _ in range(entry_count):
+        if joined[cursor : cursor + 4] != b"PK\x01\x02":
+            raise AssertionError("Info-ZIP split central entry is invalid")
+        fields = struct.unpack_from("<IHHHHHHIIIHHHHHII", joined, cursor)
+        name_len, extra_len, comment_len = fields[10:13]
+        end = cursor + fixed_size + name_len + extra_len + comment_len
+        if end > central_end:
+            raise AssertionError("Info-ZIP split central entry is truncated")
+        try:
+            name = bytes(joined[cursor + fixed_size : cursor + fixed_size + name_len]).decode(
+                "utf-8"
+            )
+        except UnicodeDecodeError as error:
+            raise AssertionError("Info-ZIP split name is not UTF-8") from error
+        entries[name] = fields
+        cursor = end
+    if cursor != central_end:
+        raise AssertionError("Info-ZIP split central size does not match its entries")
+    return bytes(joined), bases, entries
+
+
+def validate_infozip_split_archive(
+    cli: Path, zip_tool: str, temp: Path
+) -> tuple[int, int, int]:
+    source_dir = temp / "infozip-split-source"
+    source_dir.mkdir()
+    rng = random.Random(0x5A17_2026)
+    large = bytearray()
+    for _ in range(4096):
+        block = rng.randbytes(96)
+        large.extend(block)
+        large.extend(block)
+    payloads = {
+        "cross-volume.txt": bytes(large),
+        "tail-stored.bin": bytes(range(256)) * 17 + b"split ZIP tail\n",
+    }
+    for name, payload in payloads.items():
+        (source_dir / name).write_bytes(payload)
+
+    archive = temp / "infozip-split.zip"
+    subprocess.run(
+        [
+            zip_tool,
+            "-q",
+            # Info-ZIP -9 deliberately overrides -n, so -8 keeps the .bin
+            # member Stored while still exercising high-ratio Deflate.
+            "-8",
+            "-s",
+            "64k",
+            "-n",
+            ".bin",
+            str(archive),
+            *payloads,
+        ],
+        cwd=source_dir,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    parts = ordered_split_parts(archive)
+    joined, bases, entries = split_central_entries(parts)
+    if set(entries) != set(payloads):
+        raise AssertionError(f"unexpected split central directory: {sorted(entries)}")
+
+    large_entry = entries["cross-volume.txt"]
+    if large_entry[4] != zipfile.ZIP_DEFLATED:
+        raise AssertionError("Info-ZIP split payload was not Deflate-compressed")
+    large_disk = large_entry[13]
+    large_local = bases[large_disk] + large_entry[16]
+    if joined[large_local : large_local + 4] != b"PK\x03\x04":
+        raise AssertionError("split Deflate local header offset is invalid")
+    name_len, extra_len = struct.unpack_from("<HH", joined, large_local + 26)
+    payload_start = large_local + 30 + name_len + extra_len
+    payload_end = payload_start + large_entry[8]
+    crossed = sum(payload_start < base < payload_end for base in bases[1:])
+    if crossed < 2:
+        raise AssertionError(
+            f"Deflate payload crossed only {crossed} split boundaries"
+        )
+
+    tail_entry = entries["tail-stored.bin"]
+    if tail_entry[4] != zipfile.ZIP_STORED or tail_entry[13] <= large_disk:
+        raise AssertionError("tail entry is not Stored on a later split disk")
+
+    cases = 0
+    for index, (name, expected) in enumerate(payloads.items()):
+        output = temp / f"infozip-split-{index}.out"
+        result = run(
+            cli,
+            "extract-zip-split-files",
+            name,
+            str(output),
+            str(len(expected)),
+            "-",
+            *(str(part) for part in parts),
+        )
+        if f"zip_parts={len(parts)}" not in result.stdout or output.read_bytes() != expected:
+            raise AssertionError(f"Vort split extraction mismatch for {name!r}")
+        cases += 1
+
+    reordered = [parts[1], parts[0], *parts[2:]]
+    rejected = subprocess.run(
+        [
+            str(cli),
+            "extract-zip-split-files",
+            "cross-volume.txt",
+            str(temp / "infozip-split-reordered.out"),
+            str(len(payloads["cross-volume.txt"])),
+            "-",
+            *(str(part) for part in reordered),
+        ],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if rejected.returncode == 0:
+        raise AssertionError("Vort accepted reordered Info-ZIP split disks")
+    return len(parts), cases, crossed
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
@@ -1990,6 +2157,9 @@ def main() -> None:
         incremental_reader_winzip_aes_cases += (
             incremental_winzip_aes_zip32_reader + incremental_winzip_aes_zip64_reader
         )
+        split_zip_parts, split_zip_cases, split_zip_boundaries = validate_infozip_split_archive(
+            args.cli, zip_tool, temp
+        )
         deflate64_cases = 0
         ppmd_cases = 0
         incremental_archive_implode_cases, implode_modes = validate_vort_implode_modes(
@@ -2042,6 +2212,8 @@ def main() -> None:
         f"incremental_winzip_aes_cases={incremental_winzip_aes_zip32_cases + incremental_winzip_aes_zip64_cases} "
         f"incremental_winzip_aes_zip32_bytes={incremental_winzip_aes_zip32_bytes} "
         f"incremental_winzip_aes_zip64_bytes={incremental_winzip_aes_zip64_bytes} "
+        f"split_zip_parts={split_zip_parts} split_zip_cases={split_zip_cases} "
+        f"split_zip_boundaries={split_zip_boundaries} "
         f"system_unzip={incremental_zip32_unzip and incremental_zip64_unzip} "
         f"incremental_7zip={incremental_zip32_7zip and incremental_zip64_7zip} "
         f"incremental_zipcrypto_7zip={incremental_zipcrypto_zip32_7zip and incremental_zipcrypto_zip64_7zip} "
