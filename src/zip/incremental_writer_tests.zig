@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("../core.zig");
+const dcl = @import("dcl_implode.zig");
 const zip = @import("../zip.zig");
 const zstd = @import("../zstd.zig");
 const incremental = @import("incremental_writer.zig");
@@ -37,6 +38,8 @@ test "ZIP incremental writer round trips known and unknown common codec entries"
         .{ .name = "unknown-ppmd.txt", .data = "unknown ppmd payload" ** 59, .method = .ppmd, .expected_size = null },
         .{ .name = "known-shrink.txt", .data = "known shrink payload" ** 71, .method = .shrink, .expected_size = ("known shrink payload" ** 71).len },
         .{ .name = "unknown-shrink.txt", .data = "unknown shrink payload" ** 57, .method = .shrink, .expected_size = null },
+        .{ .name = "known-dcl.txt", .data = "known dcl implode payload" ** 71, .method = .dcl_implode, .expected_size = ("known dcl implode payload" ** 71).len },
+        .{ .name = "unknown-dcl.txt", .data = "unknown dcl implode payload" ** 57, .method = .dcl_implode, .expected_size = null },
         .{ .name = "empty", .data = "", .method = .stored, .expected_size = 0 },
         .{ .name = "empty-bzip2", .data = "", .method = .bzip2, .expected_size = 0 },
         .{ .name = "empty-zstd", .data = "", .method = .zstandard, .expected_size = 0 },
@@ -45,6 +48,7 @@ test "ZIP incremental writer round trips known and unknown common codec entries"
         .{ .name = "empty-deflate64", .data = "", .method = .deflate64, .expected_size = 0 },
         .{ .name = "empty-ppmd", .data = "", .method = .ppmd, .expected_size = 0 },
         .{ .name = "empty-shrink", .data = "", .method = .shrink, .expected_size = 0 },
+        .{ .name = "empty-dcl", .data = "", .method = .dcl_implode, .expected_size = 0 },
     };
     const bytes = try encodeEntries(allocator, &entries, .{
         .archive_comment = "streamed",
@@ -81,6 +85,7 @@ test "ZIP incremental writer handles one-byte input and output and is determinis
         .{ .name = "deflate64.bin", .data = "deterministic Deflate64 stream" ** 83, .method = .deflate64, .expected_size = null },
         .{ .name = "ppmd.txt", .data = "deterministic PPMd stream" ** 61, .method = .ppmd, .expected_size = null },
         .{ .name = "shrink.txt", .data = "deterministic Shrink stream" ** 79, .method = .shrink, .expected_size = null },
+        .{ .name = "dcl.txt", .data = "deterministic DCL Implode stream" ** 79, .method = .dcl_implode, .expected_size = null },
     };
     const tiny = try encodeEntries(allocator, &entries, .{
         .ppmd_options = .{ .properties = .{ .memory_size = 1024 * 1024 } },
@@ -140,6 +145,7 @@ test "ZIP incremental writer emits precise ZIP32 and conservative ZIP64 layouts"
         .{ .name = "deflate64", .data = "dddddddd", .method = .deflate64, .expected_size = 8 },
         .{ .name = "ppmd", .data = "pppppppp", .method = .ppmd, .expected_size = 8 },
         .{ .name = "shrink", .data = "ssssssss", .method = .shrink, .expected_size = 8 },
+        .{ .name = "dcl", .data = "iiiiiiii", .method = .dcl_implode, .expected_size = 8 },
     };
     const bytes = try encodeEntries(allocator, &entries, .{}, 2, 3);
     defer allocator.free(bytes);
@@ -154,6 +160,7 @@ test "ZIP incremental writer emits precise ZIP32 and conservative ZIP64 layouts"
     const deflate64_entry = try archive.entryAt(7);
     const ppmd_entry = try archive.entryAt(8);
     const shrink_entry = try archive.entryAt(9);
+    const dcl_entry = try archive.entryAt(10);
     try std.testing.expect(!known.zip64);
     try std.testing.expect(unknown.zip64);
     try std.testing.expect(deflated.zip64);
@@ -164,6 +171,7 @@ test "ZIP incremental writer emits precise ZIP32 and conservative ZIP64 layouts"
     try std.testing.expect(deflate64_entry.zip64);
     try std.testing.expect(ppmd_entry.zip64);
     try std.testing.expect(shrink_entry.zip64);
+    try std.testing.expect(dcl_entry.zip64);
 
     try std.testing.expectEqual(@as(u32, 0), readU32(bytes, known.local_header_offset + 18));
     try std.testing.expectEqual(@as(u16, 0), readU16(bytes, known.local_header_offset + 28));
@@ -476,6 +484,30 @@ test "ZIP incremental writer preflights codec configuration before headers" {
         pending_shrink.beginEntry(.{ .name = "pending-shrink", .method = .shrink }),
     );
     try std.testing.expectEqual(incremental.Phase.ready, pending_shrink.snapshot().phase);
+
+    var invalid_dcl = try incremental.Writer.initWithOptions(std.testing.allocator, .{
+        .dcl_implode_options = .{ .max_chain = 0 },
+    });
+    defer invalid_dcl.deinit();
+    try std.testing.expectError(
+        error.InvalidDclOptions,
+        invalid_dcl.beginEntry(.{ .name = "invalid-dcl", .method = .dcl_implode }),
+    );
+    try std.testing.expectEqual(incremental.Phase.ready, invalid_dcl.snapshot().phase);
+
+    var input_limited_dcl = try incremental.Writer.initWithOptions(std.testing.allocator, .{
+        .dcl_implode_options = .{ .max_input_len = 3 },
+    });
+    defer input_limited_dcl.deinit();
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        input_limited_dcl.beginEntry(.{
+            .name = "long-dcl",
+            .method = .dcl_implode,
+            .expected_size = 4,
+        }),
+    );
+    try std.testing.expectEqual(incremental.Phase.ready, input_limited_dcl.snapshot().phase);
 }
 
 test "ZIP incremental writer emits multi-block Bzip2 payloads" {
@@ -683,6 +715,53 @@ test "ZIP incremental writer grows and freezes the Shrink dictionary" {
     try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
+test "ZIP incremental writer emits byte-exact DCL Implode modes" {
+    const allocator = std.testing.allocator;
+    const prefix_len = 3000;
+    const payload = try allocator.alloc(u8, prefix_len * 2 + 1);
+    defer allocator.free(payload);
+    var random_state: u32 = 0xdca1_0010;
+    for (payload[0..prefix_len]) |*byte| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(random_state >> 24);
+    }
+    payload[prefix_len] = 0x42;
+    @memcpy(payload[prefix_len + 1 ..], payload[0..prefix_len]);
+
+    inline for (.{ false, true }) |literal_coded| {
+        inline for (std.meta.tags(dcl.Dictionary)) |dictionary| {
+            const entries = [_]TestEntry{.{
+                .name = "payload.dcl",
+                .data = payload,
+                .method = .dcl_implode,
+                .expected_size = payload.len,
+            }};
+            const bytes = try encodeEntries(allocator, &entries, .{
+                .zip64 = .never,
+                .dcl_implode_options = .{
+                    .literal_coded = literal_coded,
+                    .dictionary = dictionary,
+                },
+            }, 3, 1);
+            defer allocator.free(bytes);
+            const archive = try zip.parse(bytes);
+            const entry = try archive.entryAt(0);
+            try std.testing.expect(!entry.zip64);
+            try std.testing.expectEqual(@as(u16, 20), readU16(bytes, entry.local_header_offset + 4));
+            const compressed = try archive.compressedData(entry);
+            const expected = try dcl.encodeAlloc(allocator, payload, .{
+                .literal_coded = literal_coded,
+                .dictionary = dictionary,
+            });
+            defer allocator.free(expected);
+            try std.testing.expectEqualSlices(u8, expected, compressed);
+            const decoded = try archive.extractAlloc(allocator, entry);
+            defer allocator.free(decoded);
+            try std.testing.expectEqualSlices(u8, payload, decoded);
+        }
+    }
+}
+
 test "ZIP incremental writer preflights archive finish and output limits" {
     var finish_limited = try incremental.Writer.initWithOptions(std.testing.allocator, .{
         .archive_comment = "comment",
@@ -738,6 +817,7 @@ test "ZIP incremental writer releases every allocation failure" {
                 .{ .name = "deflate64", .data = "allocation-safe deflate64" ** 37, .method = .deflate64, .expected_size = null },
                 .{ .name = "ppmd", .data = "allocation-safe ppmd" ** 31, .method = .ppmd, .expected_size = null },
                 .{ .name = "shrink", .data = "allocation-safe shrink" ** 47, .method = .shrink, .expected_size = null },
+                .{ .name = "dcl", .data = "allocation-safe dcl implode" ** 47, .method = .dcl_implode, .expected_size = null },
             };
             const encoded = try encodeEntries(allocator, &entries, .{
                 .archive_comment = "oom",
@@ -745,9 +825,9 @@ test "ZIP incremental writer releases every allocation failure" {
             }, 17, 19);
             defer allocator.free(encoded);
             const archive = try zip.parse(encoded);
-            const decoded = try archive.extractAlloc(allocator, try archive.entryAt(8));
+            const decoded = try archive.extractAlloc(allocator, try archive.entryAt(9));
             defer allocator.free(decoded);
-            try std.testing.expectEqualSlices(u8, entries[8].data, decoded);
+            try std.testing.expectEqualSlices(u8, entries[9].data, decoded);
         }
     };
     try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{});

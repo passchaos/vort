@@ -3,6 +3,8 @@ const bzip2 = @import("../../bzip2.zig");
 const core = @import("../../core.zig");
 const deflate = @import("../../deflate.zig");
 const deflate64 = @import("../../deflate64.zig");
+const dcl_implode = @import("../dcl_implode.zig");
+const dcl_implode_encoder = @import("../dcl_implode/incremental_encoder.zig");
 const lzma_codec = @import("lzma_codec.zig");
 const ppmd_codec = @import("ppmd_codec.zig");
 const shrink = @import("../shrink.zig");
@@ -13,6 +15,7 @@ const xz = @import("../../xz.zig");
 pub const CompressionMethod = types.CompressionMethod;
 pub const DeflateOptions = deflate.RawDeflateIncrementalBestEncoder.Options;
 pub const Deflate64Options = deflate64.IncrementalStoredEncoder.Options;
+pub const DclImplodeOptions = dcl_implode_encoder.Encoder.Options;
 pub const Bzip2Options = bzip2.IncrementalEncoder.Options;
 pub const ZstdOptions = zstd.NativeFrameOptions;
 pub const LzmaOptions = lzma_codec.Options;
@@ -21,7 +24,7 @@ pub const XzFilter = xz.Filter;
 pub const PpmdOptions = ppmd_codec.Options;
 pub const ShrinkOptions = shrink.IncrementalEncoder.Options;
 
-pub const Error = deflate.Error || deflate64.Error || bzip2.IncrementalEncoder.Error || zstd.Error || lzma_codec.Error || xz.IncrementalEncoder.Error || ppmd_codec.Error || shrink.Error || std.mem.Allocator.Error || error{
+pub const Error = deflate.Error || deflate64.Error || dcl_implode.Error || bzip2.IncrementalEncoder.Error || zstd.Error || lzma_codec.Error || xz.IncrementalEncoder.Error || ppmd_codec.Error || shrink.Error || std.mem.Allocator.Error || error{
     UnsupportedZipCompressionMethod,
 };
 
@@ -29,6 +32,7 @@ pub const Options = struct {
     deflate: DeflateOptions,
     max_deflate_buffer_size: usize,
     deflate64: Deflate64Options,
+    dcl_implode: DclImplodeOptions,
     bzip2: Bzip2Options,
     zstd: ZstdOptions,
     lzma: LzmaOptions,
@@ -41,6 +45,7 @@ pub const State = union(enum) {
     stored,
     deflate: deflate.RawDeflateIncrementalBestEncoder,
     deflate64: deflate64.IncrementalStoredEncoder,
+    dcl_implode: dcl_implode_encoder.Encoder,
     bzip2: bzip2.IncrementalEncoder,
     zstd: zstd.NativeIncrementalFrameEncoder,
     lzma: lzma_codec.State,
@@ -80,6 +85,17 @@ pub const State = union(enum) {
                 deflate64.IncrementalStoredEncoder.initWithOptions(
                     allocator,
                     options.deflate64,
+                ) },
+            .dcl_implode => .{ .dcl_implode = if (expected_size) |expected|
+                try dcl_implode_encoder.Encoder.initExactSize(
+                    allocator,
+                    options.dcl_implode,
+                    @intCast(expected),
+                )
+            else
+                try dcl_implode_encoder.Encoder.initWithOptions(
+                    allocator,
+                    options.dcl_implode,
                 ) },
             .bzip2 => .{ .bzip2 = if (expected_size) |expected|
                 try bzip2.IncrementalEncoder.initExactSize(
@@ -148,6 +164,7 @@ pub const State = union(enum) {
             .stored => {},
             .deflate => |*encoder| encoder.deinit(),
             .deflate64 => |*encoder| encoder.deinit(),
+            .dcl_implode => |*encoder| encoder.deinit(),
             .bzip2 => |*encoder| encoder.deinit(),
             .zstd => |*encoder| encoder.deinit(),
             .lzma => |*encoder| encoder.deinit(),
@@ -163,6 +180,7 @@ pub const State = union(enum) {
             .stored => {},
             .deflate => |*encoder| encoder.finish(),
             .deflate64 => |*encoder| encoder.finish(),
+            .dcl_implode => |*encoder| encoder.finish(),
             .bzip2 => |*encoder| encoder.finish(),
             .zstd => |*encoder| encoder.finish(),
             .lzma => |*encoder| encoder.finish(),
@@ -177,6 +195,7 @@ pub const State = union(enum) {
             .stored => error.InvalidBlockPlan,
             .deflate => |*encoder| encoder.step(input, output),
             .deflate64 => |*encoder| encoder.step(input, output),
+            .dcl_implode => |*encoder| encoder.step(input, output),
             .bzip2 => |*encoder| encoder.step(input, output),
             .zstd => |*encoder| encoder.step(input, output),
             .lzma => |*encoder| encoder.step(input, output),
@@ -208,6 +227,11 @@ pub fn validate(
                 options.deflate64.block_len > std.math.maxInt(u16))
                 return error.InvalidBlockPlan;
             try validateExpectedSize(expected_size, options.deflate64.max_input_len);
+        },
+        .dcl_implode => {
+            if (options.dcl_implode.max_chain == 0)
+                return error.InvalidDclOptions;
+            try validateExpectedSize(expected_size, options.dcl_implode.max_input_len);
         },
         .bzip2 => {
             if (options.bzip2.block_size_100k < 1 or options.bzip2.block_size_100k > 9)
@@ -246,6 +270,7 @@ pub fn inputLimit(method: CompressionMethod, options: Options) ?usize {
     return switch (method) {
         .deflate => options.deflate.max_input_len,
         .deflate64 => options.deflate64.max_input_len,
+        .dcl_implode => options.dcl_implode.max_input_len,
         .bzip2 => options.bzip2.max_input_len,
         .zstandard_legacy, .zstandard => std.math.maxInt(usize),
         .lzma => options.lzma.max_input_len,

@@ -35,6 +35,8 @@ pub const Options = struct {
     /// Stored-block Deflate64 policy. Fixed/match-producing streaming output is
     /// a later ratio optimization; this path is fully method-9 compatible.
     deflate64_options: codecs.Deflate64Options = .{},
+    /// DCL Implode literal/dictionary/matcher policy plus total-input limit.
+    dcl_implode_options: codecs.DclImplodeOptions = .{},
     /// Bzip2 block size, total-input limit, and pending encoded-output limit.
     bzip2_options: codecs.Bzip2Options = .{},
     /// Zstandard block/window/parser policy. Content-size signaling is derived
@@ -570,6 +572,7 @@ pub const Writer = struct {
             .deflate = self.options.deflate_options,
             .max_deflate_buffer_size = self.options.max_deflate_buffer_size,
             .deflate64 = self.options.deflate64_options,
+            .dcl_implode = self.options.dcl_implode_options,
             .bzip2 = self.options.bzip2_options,
             .zstd = self.options.zstd_options,
             .lzma = self.options.lzma_options,
