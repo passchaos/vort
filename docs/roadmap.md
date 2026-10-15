@@ -20454,3 +20454,18 @@ reuse, so production keeps the simpler independently owned plans.
   The incremental writer suite passes 73/73, the reader suite 27/27, the ZIP
   differential 13/13, the full repository graph 2708/2708, and `zig build
   check` all 113 steps.
+
+- Completed descriptor-backed WinZip AES sequential extraction for every
+  supported ZIP codec without buffering a member. Scanning codecs now retain a
+  paired raw/decrypted window containing the ten-byte authentication code and
+  signed or unsigned ZIP32/ZIP64 descriptor candidate. Self-delimiting codecs
+  use a bounded 35-byte raw journal plus a copied Vail cipher/HMAC checkpoint;
+  EOS rolls back trial authentication/descriptor bytes so HMAC covers exactly
+  ciphertext. AE-1 validates both HMAC and CRC, while AE-2 authenticates with
+  the specified zero CRC. Tests cover all methods, AE-1/AE-2, ZIP32/ZIP64,
+  signed/unsigned descriptors, one-byte and 257/31-byte fragmentation, wrong
+  passwords and corrupted authentication codes. Both Vort writer surfaces now
+  contribute twelve required sequential CLI cases
+  (`incremental_reader_winzip_aes_cases=12`). The reader suite passes 28/28,
+  the ZIP differential remains 13/13, the full repository graph passes
+  2709/2709, and `zig build check` passes all 113 steps.

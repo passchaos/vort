@@ -153,12 +153,15 @@ CRC policy, sizes and codec composition. Fixed vectors independently combine
 Python PBKDF2/HMAC with OpenSSL AES, while a Rust `zip 8.6.0` fixture covers all
 three strengths, AE-1/AE-2, Stored and Deflate wire compatibility.
 
-`ZipIncrementalReaderOptions.password` streams known-size WinZip AES entries,
-including arbitrary salt/verifier/ciphertext/authentication fragmentation, and
-does not report `entry_done` until the authentication code succeeds. Because
-incremental writers necessarily use bit 3, descriptor-backed WinZip AES still
-requires a combined authentication-code/descriptor tail adapter and is
-explicitly rejected by the sequential reader in this slice.
+`ZipIncrementalReaderOptions.password` streams known-size and descriptor-backed
+WinZip AES entries, including arbitrary salt/verifier/ciphertext/
+authentication fragmentation, and does not report `entry_done` until the
+authentication code succeeds. Descriptor mode retains a bounded raw suffix
+and a cipher/HMAC checkpoint. Scanning codecs test the ten-byte authentication
+code beside signed/unsigned ZIP32/ZIP64 descriptor candidates; self-delimiting
+codecs roll back any accepted authentication/descriptor bytes at EOS. Only
+confirmed ciphertext remains in HMAC state before the authentication code is
+checked and the ordinary descriptor parser resumes.
 
 ## Incremental entry decoder
 
@@ -304,9 +307,8 @@ by ZIP.
 `max_ppmd_compressed_buffer_len` bounds retained range-coded input.
 Any `step` error makes the state terminal until `reset`, because payload may
 already have reached an external sink. `finish()` distinguishes a truncated
-source. Descriptor-backed WinZip AES sequential extraction, PKWARE strong
-encryption, multi-disk/split archives and archive-extra-data records remain
-unsupported.
+source. PKWARE strong encryption, multi-disk/split archives and archive-extra-
+data records remain unsupported.
 Shrink uses one fixed approximately 40 KiB workspace while
 its member is active. Reduce uses two approximately 12 KiB workspaces and
 traditional Implode two approximately 10 KiB workspaces; both add one shared-
@@ -498,8 +500,8 @@ Every compression method currently supported by the sequential reader has a
 bounded incremental writer. The incremental writer also supports Traditional
 ZipCrypto. The sequential reader supports its known-size and descriptor-backed
 forms. The incremental writer also supports WinZip AES; its known-size form is
-accepted by the sequential reader, while descriptor-backed AES sequential
-extraction and multi-disk/split archives remain unsupported.
+accepted by the sequential reader alongside descriptor-backed AES. Multi-disk/
+split archives remain unsupported.
 
 The incremental differential uses forty-five entries: known Stored data containing a
 descriptor-signature byte sequence, unknown Stored data containing two such
@@ -563,10 +565,10 @@ sequential CLI reader with a password
 `infozip_incremental_reader_zipcrypto_cases=2`).
 WinZip AES adds six deterministic one-shot AE-1/AE-2 cases across both
 descriptor policies, six ZIP32/ZIP64 incremental-writer cases (1,797/2,041
-bytes), and three known-size sequential-reader cases. Python independently
+bytes), and twelve sequential-reader cases across both writer surfaces. Python independently
 derives PBKDF2/HMAC values and OpenSSL supplies AES-ECB counter blocks
 (`winzip_aes_cases=6`, `incremental_winzip_aes_cases=6`,
-`incremental_reader_winzip_aes_cases=3`). Rust `zip 8.6.0` independently
+`incremental_reader_winzip_aes_cases=12`). Rust `zip 8.6.0` independently
 writes the committed three-strength fixture and extracts both Vort writer
 surfaces.
 The aggregate reports 13/13 ZIP differential steps. The Python-to-Vort half
@@ -610,7 +612,7 @@ passes 4/4;
 4/4; `zig test src/zip.zig --test-filter 'Shrink incremental'` passes 4/4;
 `zig test src/zip.zig --test-filter 'Reduce incremental'` passes 4/4;
 `zig test src/zip.zig --test-filter 'Legacy Implode incremental'` passes 4/4;
-`zig test src/zip.zig --test-filter 'ZIP incremental reader'` passes 27/27.
+`zig test src/zip.zig --test-filter 'ZIP incremental reader'` passes 28/28.
 Shrink covers known/signed/unsigned-descriptor, empty, ZIP32/ZIP64 and output-
 limit paths. Reduce covers every factor, signed/unsigned descriptors,
 ZIP32/ZIP64, empty members, DLE/matches, invalid followers and follower-coded
@@ -621,7 +623,7 @@ implicit-zero and overlapping matches. PPMd
 restart/cut-off, descriptor and ZIP64 combinations are required
 Vort coverage. Third-party method-98 evidence remains explicitly unavailable:
 Python `zipfile` has no PPMd codec and this host has no 7z/7zz. The full
-repository graph passes 2708/2708 and `zig build check` passes 113/113.
+repository graph passes 2709/2709 and `zig build check` passes 113/113.
 The wire refactor also leaves 14 one-shot probe modes byte-identical to HEAD,
 including every existing method and ZIP32/ZIP64 descriptor choice. Default and
 forced-ZIP64 SHA-256 values remain
@@ -718,8 +720,8 @@ Zstandard-20/Zstandard-93/XZ/PPMd with specific errors.
 Addressable entry and archive sizes remain bounded by the target's `usize` and
 the caller's available memory. The sequential reader accepts known-size and
 descriptor-backed Traditional ZipCrypto through
-`ZipIncrementalReaderOptions.password`; known-size WinZip AES uses the same
-option, while descriptor-backed AES, split archives, and
+`ZipIncrementalReaderOptions.password`; known-size and descriptor-backed
+WinZip AES use the same option, while split archives and
 additional entry compression methods remain explicit future compatibility
 increments.
 

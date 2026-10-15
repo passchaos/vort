@@ -288,7 +288,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   backed sequential reading backed by Vail's dedicated archive-crypto package
   with explicit caller-supplied header entropy and passwords; WinZip AE-1/AE-2
   AES-128/192/256 one-shot reading/writing, bounded incremental writing, and
-  known-size sequential reading with explicit caller salt and Vail-backed
+  known-size/descriptor-backed sequential reading with explicit caller salt and Vail-backed
   PBKDF2/CTR/HMAC; and explicit strong-encryption/multi-disk/unknown-
   method errors;
 - dependency-free Bzip2 `BZh1`...`BZh9` encoding and decoding with canonical Huffman,
@@ -1754,9 +1754,8 @@ supported by the sequential reader now has a bounded incremental writer.
 The incremental writer and one-shot surface support per-entry Traditional
 ZipCrypto. The sequential reader supports both known-size and descriptor-
 backed forms. WinZip AES supports one-shot reading/writing, descriptor-backed
-incremental writing, and known-size sequential reading; descriptor-backed AES
-sequential reading, PKWARE strong encryption, and multi-disk archives remain
-unsupported. See
+incremental writing, and both known-size and descriptor-backed sequential
+reading; PKWARE strong encryption and multi-disk archives remain unsupported. See
 [the ZIP format status](docs/formats/zip.md) for the full state and wire
 contract. Writer-specific additive errors are exposed separately as
 `ZipIncrementalWriterError`; the established `ZipError` set is unchanged.
@@ -1828,15 +1827,16 @@ All four Vort one-shot cases, both independently written Info-ZIP bit-3 cases,
 and all six ZIP32/ZIP64 incremental-writer cases pass the sequential CLI reader
 with a password (`incremental_reader_zipcrypto_cases=12`).
 WinZip AES adds six OpenSSL/Python-verified one-shot cases, six deterministic
-ZIP32/ZIP64 incremental-writer cases (1,797/2,041 bytes), and three known-size
-sequential-reader cases. A committed Rust `zip 8.6.0` archive independently
+ZIP32/ZIP64 incremental-writer cases (1,797/2,041 bytes), and twelve
+known-size/descriptor-backed sequential-reader cases. A committed Rust
+`zip 8.6.0` archive independently
 covers AE-1/AE-2, AES-128/192/256, Stored and Deflate, and Rust also extracts
 both Vort writer surfaces.
 Focused writer tests pass 73/73; the DCL, Reduce and Legacy Implode encoder
 suites pass 4/4 each, and the
 incremental entry decoder suite passes
 15/15, the DCL Implode, Shrink, Reduce and Legacy Implode incremental decoder
-suites each pass 4/4, and the archive reader suite passes 27/27. Shrink covers known/signed/
+suites each pass 4/4, and the archive reader suite passes 28/28. Shrink covers known/signed/
 unsigned-descriptor, empty, ZIP32/ZIP64 and output-limit paths; DCL Implode's
 six literal/dictionary modes cover known/descriptor and ZIP32/ZIP64. Reduce
 covers all four factors, signed/unsigned descriptors, ZIP32/ZIP64, empty
@@ -1846,7 +1846,7 @@ signed/unsigned descriptors, ZIP32/ZIP64, arbitrary tree descriptions,
 implicit-zero and overlapping matches. PPMd restart/cut-off,
 descriptor and ZIP64 paths are required Vort coverage; third-party PPMd remains
 unclaimed because this host has no 7z/7zz and Python has no method-98 codec.
-The full repository graph passes 2708/2708 and `zig build check` passes 113/113.
+The full repository graph passes 2709/2709 and `zig build check` passes 113/113.
 The refactored one-shot writer remains byte-identical to HEAD across 14 probe
 modes. The current host has no 7z/7zz, so that optional extraction branch is
 reported as skipped rather than passed.
