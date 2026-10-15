@@ -16,6 +16,9 @@ pub const Options = struct {
     max_control_record_size: usize = 256 * 1024,
     max_entry_output_len: usize = std.math.maxInt(usize),
     max_total_output_len: usize = std.math.maxInt(usize),
+    max_bzip2_compressed_block_len: usize = 4 * 1024 * 1024,
+    max_bzip2_decoded_block_len: usize = 64 * 1024 * 1024,
+    max_zstd_compressed_buffer_len: usize = 1024 * 1024,
     allow_trailing_data: bool = false,
 };
 

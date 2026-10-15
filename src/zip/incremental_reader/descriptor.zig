@@ -152,6 +152,106 @@ pub const StoredScanner = struct {
     }
 };
 
+pub const ParsedBoundary = struct {
+    descriptor: Descriptor,
+    next_prefix: [4]u8 = undefined,
+    next_prefix_len: usize = 0,
+
+    pub fn retainedRecordPrefix(self: *const ParsedBoundary) []const u8 {
+        return self.next_prefix[0..self.next_prefix_len];
+    }
+};
+
+pub const ParserStep = struct {
+    input_read: usize,
+    boundary: ?ParsedBoundary = null,
+};
+
+/// Descriptor parser used after a self-delimiting codec (Deflate, Bzip2, or
+/// Zstandard) has established its compressed and decoded byte counts.
+pub const Parser = struct {
+    buffer: [wire.zip64_data_descriptor_len]u8 = undefined,
+    buffer_len: usize = 0,
+    target_len: usize = 4,
+    layout: Layout = .zip32,
+    expected_crc32: u32 = 0,
+    expected_compressed_size: usize = 0,
+    expected_uncompressed_size: usize = 0,
+
+    const Self = @This();
+
+    pub fn reset(self: *Self) void {
+        self.* = .{};
+    }
+
+    pub fn begin(
+        self: *Self,
+        layout: Layout,
+        crc32: u32,
+        compressed_size: usize,
+        uncompressed_size: usize,
+        buffered_suffix: []const u8,
+    ) error{InvalidZipArchive}!void {
+        if (buffered_suffix.len >= layout.unsignedLen() or buffered_suffix.len > self.buffer.len)
+            return error.InvalidZipArchive;
+        self.* = .{
+            .layout = layout,
+            .expected_crc32 = crc32,
+            .expected_compressed_size = compressed_size,
+            .expected_uncompressed_size = uncompressed_size,
+        };
+        @memcpy(self.buffer[0..buffered_suffix.len], buffered_suffix);
+        self.buffer_len = buffered_suffix.len;
+    }
+
+    pub fn step(self: *Self, input: []const u8) error{InvalidZipArchive}!ParserStep {
+        var input_read: usize = 0;
+        while (true) {
+            if (self.target_len == 4 and self.buffer_len >= 4) {
+                self.target_len = if (std.mem.readInt(u32, self.buffer[0..4], .little) == wire.data_descriptor_signature)
+                    self.layout.signedLen()
+                else
+                    self.layout.unsignedLen();
+                continue;
+            }
+            while (self.buffer_len < self.target_len and input_read < input.len) {
+                self.buffer[self.buffer_len] = input[input_read];
+                self.buffer_len += 1;
+                input_read += 1;
+            }
+            if (self.buffer_len != self.target_len) return .{ .input_read = input_read };
+            if (self.target_len == 4) continue;
+            break;
+        }
+
+        const signed_prefix = std.mem.readInt(u32, self.buffer[0..4], .little) == wire.data_descriptor_signature;
+        var parsed = parseDescriptor(
+            self.layout,
+            self.buffer[0..self.target_len],
+            signed_prefix,
+        );
+        var boundary: ParsedBoundary = .{ .descriptor = parsed };
+        if (!self.matches(parsed)) {
+            if (!signed_prefix) return error.InvalidZipArchive;
+            const unsigned_len = self.layout.unsignedLen();
+            parsed = parseDescriptor(self.layout, self.buffer[0..unsigned_len], false);
+            if (!self.matches(parsed) or
+                !isFollowingRecordSignature(self.buffer[unsigned_len..][0..4]))
+                return error.InvalidZipArchive;
+            boundary.descriptor = parsed;
+            @memcpy(&boundary.next_prefix, self.buffer[unsigned_len..][0..4]);
+            boundary.next_prefix_len = 4;
+        }
+        return .{ .input_read = input_read, .boundary = boundary };
+    }
+
+    fn matches(self: *const Self, parsed: Descriptor) bool {
+        return parsed.crc32 == self.expected_crc32 and
+            parsed.compressed_size == self.expected_compressed_size and
+            parsed.uncompressed_size == self.expected_uncompressed_size;
+    }
+};
+
 pub fn parseDescriptor(layout: Layout, bytes: []const u8, signed: bool) Descriptor {
     const prefix: usize = if (signed) 4 else 0;
     std.debug.assert(bytes.len == if (signed) layout.signedLen() else layout.unsignedLen());

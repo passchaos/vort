@@ -25,9 +25,12 @@ fn decodeArchiveFragmented(
     var output: std.ArrayList(u8) = .empty;
     defer output.deinit(allocator);
     var calls: usize = 0;
+    var expected_output_len: usize = 0;
+    for (expected) |entry| expected_output_len += entry.data.len;
+    const max_calls = archive.len * 16 + expected_output_len * 2 + 4096;
     while (true) {
         calls += 1;
-        if (calls > archive.len * 16 + 4096) return error.TestUnexpectedResult;
+        if (calls > max_calls) return error.TestUnexpectedResult;
         const input_end = @min(archive.len, input_offset + input_chunk_len);
         var scratch: [31]u8 = undefined;
         const stepped = try reader.step(
@@ -240,6 +243,48 @@ test "ZIP incremental reader streams signed descriptor ZIP32 and ZIP64 archives"
                 );
         }
     }
+}
+
+test "ZIP incremental reader streams Bzip2 and Zstandard known and descriptor members" {
+    const allocator = std.testing.allocator;
+    const bzip2_payload = "incremental ZIP Bzip2 member\n" ** 173;
+    const zstd_legacy_payload = "incremental ZIP legacy Zstandard member\n" ** 149;
+    const zstd_payload = "incremental ZIP current Zstandard member\n" ** 181;
+    const entries = [_]zip.EncodeEntry{
+        .{ .name = "codec/bzip2.txt", .data = bzip2_payload, .method = .bzip2 },
+        .{ .name = "codec/zstd-legacy.txt", .data = zstd_legacy_payload, .method = .zstandard_legacy },
+        .{ .name = "codec/zstd.txt", .data = zstd_payload, .method = .zstandard },
+    };
+    const expected = [_]ExpectedEntry{
+        .{ .name = entries[0].name, .data = bzip2_payload },
+        .{ .name = entries[1].name, .data = zstd_legacy_payload },
+        .{ .name = entries[2].name, .data = zstd_payload },
+    };
+    inline for (.{ false, true }) |uses_descriptor| {
+        inline for (.{ zip.Zip64Mode.never, zip.Zip64Mode.always }) |zip64_mode| {
+            const bytes = try zip.encodeAlloc(allocator, &entries, .{
+                .data_descriptor = uses_descriptor,
+                .zip64 = zip64_mode,
+            });
+            defer allocator.free(bytes);
+            try decodeArchiveFragmented(allocator, bytes, &expected, .{}, 1, 1);
+            try decodeArchiveFragmented(allocator, bytes, &expected, .{}, 7, 13);
+        }
+    }
+
+    const bzip2_only = [_]zip.EncodeEntry{entries[0]};
+    const bzip2_bytes = try zip.encodeAlloc(allocator, &bzip2_only, .{});
+    defer allocator.free(bzip2_bytes);
+    try expectReaderError(allocator, bzip2_bytes, .{
+        .max_bzip2_compressed_block_len = 8,
+    }, error.OutputLimitExceeded);
+
+    const zstd_only = [_]zip.EncodeEntry{entries[2]};
+    const zstd_bytes = try zip.encodeAlloc(allocator, &zstd_only, .{});
+    defer allocator.free(zstd_bytes);
+    try expectReaderError(allocator, zstd_bytes, .{
+        .max_zstd_compressed_buffer_len = 4,
+    }, error.OutputLimitExceeded);
 }
 
 test "ZIP incremental reader accepts unsigned Stored and Deflate descriptors" {

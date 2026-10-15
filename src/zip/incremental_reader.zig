@@ -1,9 +1,8 @@
 const std = @import("std");
 const api = @import("incremental_reader/api.zig");
 const archive_records = @import("incremental_reader/archive_records.zig");
-const checksum = @import("../checksum.zig");
+const codecs = @import("incremental_reader/codecs.zig");
 const core = @import("../core.zig");
-const deflate = @import("../deflate.zig");
 const descriptor = @import("incremental_reader/descriptor.zig");
 const directory = @import("incremental_reader/directory.zig");
 const entry_decoder = @import("incremental_entry_decoder.zig");
@@ -12,7 +11,7 @@ const wire = @import("wire.zig");
 
 pub const CompressionMethod = api.CompressionMethod;
 
-pub const Error = deflate.Error || entry_decoder.Error || archive_records.Error || std.mem.Allocator.Error || error{
+pub const Error = codecs.Error || entry_decoder.Error || archive_records.Error || std.mem.Allocator.Error || error{
     ZipReaderFailed,
     UnsupportedZipCompressionMethod,
     EncryptedZipEntry,
@@ -40,9 +39,7 @@ pub const Reader = struct {
     directory: directory.State = .{},
     current_index: ?usize = null,
     current_state: ?EntryState = null,
-    descriptor_bytes: [wire.zip64_data_descriptor_len]u8 = undefined,
-    descriptor_len: usize = 0,
-    descriptor_target: usize = 4,
+    descriptor_parser: descriptor.Parser = .{},
     total_input: usize = 0,
     total_output: usize = 0,
     zip64_end: ?archive_records.Zip64End = null,
@@ -54,18 +51,21 @@ pub const Reader = struct {
 
     const Self = @This();
 
-    const DeflateDescriptorState = struct {
-        decoder: deflate.RawDeflateIncrementalFixedLiteralDecoder,
-        layout: descriptor.Layout,
-        crc: checksum.Crc32Best = checksum.Crc32Best.init(),
-        compressed_size: usize = 0,
-        uncompressed_size: usize = 0,
-    };
-
     const EntryState = union(enum) {
         known: entry_decoder.Decoder,
         stored_descriptor: descriptor.StoredScanner,
-        deflate_descriptor: DeflateDescriptorState,
+        deflate_descriptor: codecs.DeflateState,
+        bzip2: codecs.Bzip2State,
+        zstd: codecs.ZstdState,
+
+        fn deinit(self: *EntryState) void {
+            switch (self.*) {
+                .bzip2 => |*state| state.decoder.deinit(),
+                .zstd => |*state| state.decoder.deinit(),
+                .deflate_descriptor => |*state| state.deinit(),
+                .known, .stored_descriptor => {},
+            }
+        }
     };
 
     pub const Snapshot = struct {
@@ -108,6 +108,7 @@ pub const Reader = struct {
 
     pub fn resetWithOptions(self: *Self, options: Options) Error!void {
         try validateOptions(options);
+        if (self.current_state) |*state| state.deinit();
         self.directory.reset(self.allocator);
         if (self.archive_comment.len != 0) self.allocator.free(self.archive_comment);
         self.options = options;
@@ -117,8 +118,7 @@ pub const Reader = struct {
         self.record_offset = 0;
         self.current_index = null;
         self.current_state = null;
-        self.descriptor_len = 0;
-        self.descriptor_target = 4;
+        self.descriptor_parser.reset();
         self.total_input = 0;
         self.total_output = 0;
         self.zip64_end = null;
@@ -130,6 +130,7 @@ pub const Reader = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        if (self.current_state) |*state| state.deinit();
         self.directory.deinit(self.allocator);
         self.control.deinit(self.allocator);
         self.allocator.free(self.history);
@@ -292,7 +293,17 @@ pub const Reader = struct {
                     return result(input_read, output_written, .need_input);
             },
             .entry_descriptor => {
-                if (try self.stepDeflateDescriptor(input, &input_read)) {
+                const parsed = try self.descriptor_parser.step(input[input_read..]);
+                input_read = try checkedAdd(input_read, parsed.input_read);
+                self.total_input = try checkedAdd(self.total_input, parsed.input_read);
+                if (parsed.boundary) |boundary| {
+                    const descriptor_value = boundary.descriptor;
+                    var record = &self.directory.records.items[self.current_index.?];
+                    record.crc32 = descriptor_value.crc32;
+                    record.compressed_size = try u64ToUsize(descriptor_value.compressed_size);
+                    record.uncompressed_size = try u64ToUsize(descriptor_value.uncompressed_size);
+                    const prefix = boundary.retainedRecordPrefix();
+                    if (prefix.len != 0) try self.prepareRecordPrefix(prefix);
                     try self.completeCurrentEntry();
                     return result(input_read, output_written, .entry_done);
                 }
@@ -399,10 +410,16 @@ pub const Reader = struct {
         if (self.directory.records.items.len == self.options.max_entries)
             return error.OutputLimitExceeded;
         if (local.flags & 1 != 0) return error.EncryptedZipEntry;
-        if (local.method != .stored and local.method != .deflate)
-            return error.UnsupportedZipCompressionMethod;
-        if (local.method == .deflate and local.version_needed < wire.version_20)
-            return error.InvalidZipArchive;
+        switch (local.method) {
+            .stored => {},
+            .deflate => if (local.version_needed < wire.version_20)
+                return error.InvalidZipArchive,
+            .bzip2 => if (local.version_needed < wire.version_46)
+                return error.InvalidZipArchive,
+            .zstandard_legacy, .zstandard => if (local.version_needed < wire.version_63)
+                return error.InvalidZipArchive,
+            else => return error.UnsupportedZipCompressionMethod,
+        }
         if (local.name.len > self.options.max_metadata_size -| self.directory.retained_metadata_size)
             return error.OutputLimitExceeded;
         const name = try self.allocator.dupe(u8, local.name);
@@ -416,16 +433,48 @@ pub const Reader = struct {
         const state: EntryState = if (local.descriptor_layout) |layout|
             switch (local.method) {
                 .stored => .{ .stored_descriptor = descriptor.StoredScanner.init(layout, entry_limit) },
-                .deflate => .{ .deflate_descriptor = .{
-                    .decoder = try deflate.RawDeflateIncrementalFixedLiteralDecoder.initWithHistory(.{
-                        .max_output_len = entry_limit,
-                        .allow_trailing_data = true,
-                    }, self.history),
-                    .layout = layout,
-                } },
+                .deflate => .{ .deflate_descriptor = try codecs.DeflateState.init(
+                    entry_limit,
+                    self.history,
+                    layout,
+                ) },
+                .bzip2 => .{ .bzip2 = codecs.Bzip2State.init(
+                    self.allocator,
+                    self.options,
+                    entry_limit,
+                    local.compressed_size,
+                    local.uncompressed_size,
+                    layout,
+                ) },
+                .zstandard_legacy, .zstandard => .{ .zstd = codecs.ZstdState.init(
+                    self.allocator,
+                    self.options,
+                    entry_limit,
+                    local.compressed_size,
+                    local.uncompressed_size,
+                    layout,
+                ) },
                 else => unreachable,
             }
         else blk: {
+            if (local.method == .bzip2)
+                break :blk .{ .bzip2 = codecs.Bzip2State.init(
+                    self.allocator,
+                    self.options,
+                    entry_limit,
+                    local.compressed_size,
+                    local.uncompressed_size,
+                    null,
+                ) };
+            if (local.method == .zstandard_legacy or local.method == .zstandard)
+                break :blk .{ .zstd = codecs.ZstdState.init(
+                    self.allocator,
+                    self.options,
+                    entry_limit,
+                    local.compressed_size,
+                    local.uncompressed_size,
+                    null,
+                ) };
             const synthetic: types.Entry = .{
                 .name = name,
                 .method = local.method,
@@ -459,8 +508,7 @@ pub const Reader = struct {
         self.directory.retained_metadata_size += name.len;
         self.current_index = record_index;
         self.current_state = state;
-        self.descriptor_len = 0;
-        self.descriptor_target = 4;
+        self.descriptor_parser.reset();
     }
 
     fn stepEntryData(
@@ -499,115 +547,104 @@ pub const Reader = struct {
                 if (stepped.status == .need_output) return .need_output;
                 return null;
             },
-            .deflate_descriptor => |*deflated| {
-                // Decode an already-buffered EOB before supplying bytes that
-                // may belong to the following data descriptor. This mirrors
-                // the zlib/gzip incremental wrappers and prevents Huffman
-                // lookup staging from claiming the descriptor's first byte.
-                const drained = try deflated.decoder.step("", output);
-                try self.accountDeflateProgress(
-                    deflated,
-                    drained.progress,
-                    output,
-                    input_read,
-                    output_written,
-                );
-                if (drained.status == .done) {
-                    self.descriptor_len = 0;
-                    self.descriptor_target = 4;
-                    self.phase = .entry_descriptor;
-                    return null;
-                }
-                if (drained.status == .need_output) return .need_output;
-                if (input.len == 0) return null;
-
-                const output_offset = drained.progress.output_written;
-                const supplied = try deflated.decoder.step(input, output[output_offset..]);
-                try self.accountDeflateProgress(
-                    deflated,
-                    supplied.progress,
-                    output[output_offset..],
-                    input_read,
-                    output_written,
-                );
-                if (supplied.status == .done) {
-                    self.descriptor_len = 0;
-                    self.descriptor_target = 4;
-                    self.phase = .entry_descriptor;
-                    return null;
-                }
-                if (supplied.status == .need_output) return .need_output;
-                return null;
-            },
+            .deflate_descriptor => |*codec_state| return try self.stepContainerCodec(
+                codec_state,
+                input,
+                output,
+                input_read,
+                output_written,
+            ),
+            .bzip2 => |*codec_state| return try self.stepContainerCodec(
+                codec_state,
+                input,
+                output,
+                input_read,
+                output_written,
+            ),
+            .zstd => |*codec_state| return try self.stepContainerCodec(
+                codec_state,
+                input,
+                output,
+                input_read,
+                output_written,
+            ),
         }
     }
 
-    fn accountDeflateProgress(
+    fn stepContainerCodec(
         self: *Self,
-        state: *DeflateDescriptorState,
-        progress: core.Progress,
-        output: []const u8,
+        state: anytype,
+        input: []const u8,
+        output: []u8,
         input_read: *usize,
         output_written: *usize,
-    ) Error!void {
-        state.compressed_size = try checkedAdd(state.compressed_size, progress.input_read);
-        state.uncompressed_size = try checkedAdd(state.uncompressed_size, progress.output_written);
-        state.crc.update(output[0..progress.output_written]);
-        try self.accountEntryProgress(progress, input_read, output_written);
+    ) Error!?StepResult.Status {
+        const stepped = try state.step(input, output);
+        try self.accountEntryProgress(stepped.progress, input_read, output_written);
+        if (stepped.status == .done) return try self.finishContainerCodec(state);
+        if (stepped.status == .need_output) return .need_output;
+        return null;
     }
 
-    fn stepDeflateDescriptor(self: *Self, input: []const u8, input_read: *usize) Error!bool {
-        const state = &self.current_state.?;
-        const deflated = &state.deflate_descriptor;
-        while (self.descriptor_len < self.descriptor_target and input_read.* < input.len) {
-            self.descriptor_bytes[self.descriptor_len] = input[input_read.*];
-            self.descriptor_len += 1;
-            input_read.* += 1;
-            self.total_input = try checkedAdd(self.total_input, 1);
+    fn finishContainerCodec(self: *Self, state: anytype) Error!?StepResult.Status {
+        const trailing = state.trailingInput();
+        const compressed_size = try state.actualCompressedSize();
+        if (state.layout()) |layout| {
+            try self.beginDescriptor(
+                layout,
+                state.crc32(),
+                compressed_size,
+                state.outputSize(),
+                trailing,
+            );
+            return null;
         }
-        if (self.descriptor_len != self.descriptor_target) return false;
-        if (self.descriptor_target == 4) {
-            self.descriptor_target = if (std.mem.readInt(u32, self.descriptor_bytes[0..4], .little) == wire.data_descriptor_signature)
-                deflated.layout.signedLen()
-            else
-                deflated.layout.unsignedLen();
-            return self.stepDeflateDescriptor(input, input_read);
-        }
-
-        const signed_prefix = std.mem.readInt(u32, self.descriptor_bytes[0..4], .little) == wire.data_descriptor_signature;
-        var parsed = descriptor.parseDescriptor(
-            deflated.layout,
-            self.descriptor_bytes[0..self.descriptor_target],
-            signed_prefix,
+        try self.validateKnownCodec(
+            state.crc32(),
+            compressed_size,
+            state.outputSize(),
+            trailing,
         );
-        var retained_prefix: []const u8 = &.{};
-        if (!descriptorMatches(parsed, deflated)) {
-            if (!signed_prefix) return error.InvalidZipArchive;
-            const unsigned_len = deflated.layout.unsignedLen();
-            parsed = descriptor.parseDescriptor(deflated.layout, self.descriptor_bytes[0..unsigned_len], false);
-            if (!descriptorMatches(parsed, deflated) or
-                !descriptor.isFollowingRecordSignature(self.descriptor_bytes[unsigned_len..][0..4]))
-                return error.InvalidZipArchive;
-            retained_prefix = self.descriptor_bytes[unsigned_len..][0..4];
-        }
-
-        var record = &self.directory.records.items[self.current_index.?];
-        record.crc32 = parsed.crc32;
-        record.compressed_size = try u64ToUsize(parsed.compressed_size);
-        record.uncompressed_size = try u64ToUsize(parsed.uncompressed_size);
-        if (retained_prefix.len != 0) try self.prepareRecordPrefix(retained_prefix);
-        return true;
+        return .entry_done;
     }
 
-    fn descriptorMatches(parsed: descriptor.Descriptor, state: *const DeflateDescriptorState) bool {
-        return parsed.crc32 == state.crc.digest() and
-            parsed.compressed_size == state.compressed_size and
-            parsed.uncompressed_size == state.uncompressed_size;
+    fn validateKnownCodec(
+        self: *Self,
+        crc32: u32,
+        compressed_size: usize,
+        uncompressed_size: usize,
+        trailing: []const u8,
+    ) Error!void {
+        if (trailing.len != 0) return error.InvalidZipArchive;
+        const record = &self.directory.records.items[self.current_index.?];
+        if (record.compressed_size != compressed_size or record.uncompressed_size != uncompressed_size)
+            return error.SizeMismatch;
+        if (record.crc32 != crc32) return error.ChecksumMismatch;
+        try self.completeCurrentEntry();
+    }
+
+    fn beginDescriptor(
+        self: *Self,
+        layout: descriptor.Layout,
+        crc32: u32,
+        compressed_size: usize,
+        uncompressed_size: usize,
+        buffered_suffix: []const u8,
+    ) Error!void {
+        try self.descriptor_parser.begin(
+            layout,
+            crc32,
+            compressed_size,
+            uncompressed_size,
+            buffered_suffix,
+        );
+        self.phase = .entry_descriptor;
     }
 
     fn completeCurrentEntry(self: *Self) Error!void {
         const index = self.current_index orelse return error.InvalidZipArchive;
         try self.directory.complete(index);
+        if (self.current_state) |*state| state.deinit();
         self.current_state = null;
         if (self.phase != .record_signature) {
             self.phase = .record_signature;
