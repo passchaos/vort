@@ -7,6 +7,8 @@ const dcl_implode = @import("../dcl_implode.zig");
 const dcl_implode_encoder = @import("../dcl_implode/incremental_encoder.zig");
 const lzma_codec = @import("lzma_codec.zig");
 const ppmd_codec = @import("ppmd_codec.zig");
+const reduce = @import("../reduce.zig");
+const reduce_encoder = @import("../reduce/incremental_encoder.zig");
 const shrink = @import("../shrink.zig");
 const types = @import("../types.zig");
 const zstd = @import("../../zstd.zig");
@@ -22,9 +24,10 @@ pub const LzmaOptions = lzma_codec.Options;
 pub const XzOptions = xz.IncrementalEncoder.Options;
 pub const XzFilter = xz.Filter;
 pub const PpmdOptions = ppmd_codec.Options;
+pub const ReduceOptions = reduce_encoder.Encoder.Options;
 pub const ShrinkOptions = shrink.IncrementalEncoder.Options;
 
-pub const Error = deflate.Error || deflate64.Error || dcl_implode.Error || bzip2.IncrementalEncoder.Error || zstd.Error || lzma_codec.Error || xz.IncrementalEncoder.Error || ppmd_codec.Error || shrink.Error || std.mem.Allocator.Error || error{
+pub const Error = deflate.Error || deflate64.Error || dcl_implode.Error || reduce.Error || bzip2.IncrementalEncoder.Error || zstd.Error || lzma_codec.Error || xz.IncrementalEncoder.Error || ppmd_codec.Error || shrink.Error || std.mem.Allocator.Error || error{
     UnsupportedZipCompressionMethod,
 };
 
@@ -38,6 +41,7 @@ pub const Options = struct {
     lzma: LzmaOptions,
     xz: XzOptions,
     ppmd: PpmdOptions,
+    reduce: ReduceOptions,
     shrink: ShrinkOptions,
 };
 
@@ -51,6 +55,7 @@ pub const State = union(enum) {
     lzma: lzma_codec.State,
     xz: xz.IncrementalEncoder,
     ppmd: ppmd_codec.State,
+    reduce: reduce_encoder.Encoder,
     shrink: shrink.IncrementalEncoder,
 
     const Self = @This();
@@ -144,6 +149,19 @@ pub const State = union(enum) {
                 options.ppmd,
                 expected_size,
             ) },
+            .reduce_1, .reduce_2, .reduce_3, .reduce_4 => .{ .reduce = if (expected_size) |expected|
+                try reduce_encoder.Encoder.initExactSize(
+                    allocator,
+                    reduceFactor(method).?,
+                    options.reduce,
+                    @intCast(expected),
+                )
+            else
+                try reduce_encoder.Encoder.initWithOptions(
+                    allocator,
+                    reduceFactor(method).?,
+                    options.reduce,
+                ) },
             .shrink => .{ .shrink = if (expected_size) |expected|
                 try shrink.IncrementalEncoder.initExactSize(
                     allocator,
@@ -170,6 +188,7 @@ pub const State = union(enum) {
             .lzma => |*encoder| encoder.deinit(),
             .xz => |*encoder| encoder.deinit(),
             .ppmd => |*encoder| encoder.deinit(),
+            .reduce => |*encoder| encoder.deinit(),
             .shrink => |*encoder| encoder.deinit(),
         }
         self.* = undefined;
@@ -186,6 +205,7 @@ pub const State = union(enum) {
             .lzma => |*encoder| encoder.finish(),
             .xz => |*encoder| encoder.finish(),
             .ppmd => |*encoder| encoder.finish(),
+            .reduce => |*encoder| encoder.finish(),
             .shrink => |*encoder| encoder.finish(),
         }
     }
@@ -201,6 +221,7 @@ pub const State = union(enum) {
             .lzma => |*encoder| encoder.step(input, output),
             .xz => |*encoder| encoder.step(input, output),
             .ppmd => |*encoder| encoder.step(input, output),
+            .reduce => |*encoder| encoder.step(input, output),
             .shrink => |*encoder| encoder.step(input, output),
         };
     }
@@ -257,6 +278,10 @@ pub fn validate(
             try validateExpectedSize(expected_size, options.xz.max_input_len);
         },
         .ppmd => try ppmd_codec.validateOptions(options.ppmd, expected_size),
+        .reduce_1, .reduce_2, .reduce_3, .reduce_4 => {
+            try reduce_encoder.Encoder.validateOptions(options.reduce);
+            try validateExpectedSize(expected_size, options.reduce.max_input_len);
+        },
         .shrink => {
             if (options.shrink.max_pending_output_len == 0)
                 return error.OutputLimitExceeded;
@@ -276,6 +301,7 @@ pub fn inputLimit(method: CompressionMethod, options: Options) ?usize {
         .lzma => options.lzma.max_input_len,
         .xz => options.xz.max_input_len,
         .ppmd => options.ppmd.max_input_len,
+        .reduce_1, .reduce_2, .reduce_3, .reduce_4 => options.reduce.max_input_len,
         .shrink => options.shrink.max_input_len,
         else => null,
     };
@@ -294,4 +320,14 @@ fn validateExpectedSize(expected_size: ?u64, max_input_len: usize) Error!void {
             return error.OutputLimitExceeded;
         if (expected_usize > max_input_len) return error.OutputLimitExceeded;
     }
+}
+
+fn reduceFactor(method: CompressionMethod) ?reduce.Factor {
+    return switch (method) {
+        .reduce_1 => .factor_1,
+        .reduce_2 => .factor_2,
+        .reduce_3 => .factor_3,
+        .reduce_4 => .factor_4,
+        else => null,
+    };
 }

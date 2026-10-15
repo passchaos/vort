@@ -53,6 +53,8 @@ pub const Options = struct {
     /// Shrink input and pending-output limits. The current deterministic
     /// encoder grows through 13 bits and freezes a full dictionary.
     shrink_options: codecs.ShrinkOptions = .{},
+    /// Reduce matcher/input policy and optional pre-trained follower table.
+    reduce_options: codecs.ReduceOptions = .{},
     max_entries: u64 = std.math.maxInt(u64),
     max_central_directory_size: usize = std.math.maxInt(usize),
     max_uncompressed_size: u64 = std.math.maxInt(u64),
@@ -578,6 +580,7 @@ pub const Writer = struct {
             .lzma = self.options.lzma_options,
             .xz = self.options.xz_options,
             .ppmd = self.options.ppmd_options,
+            .reduce = self.options.reduce_options,
             .shrink = self.options.shrink_options,
         };
     }
