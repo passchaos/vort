@@ -3,6 +3,7 @@ const checksum = @import("../checksum.zig");
 const core = @import("../core.zig");
 const codecs = @import("incremental_writer/codecs.zig");
 const types = @import("types.zig");
+const traditional_encryption = @import("vail_archive_crypto").zipcrypto;
 const wire = @import("wire.zig");
 const zip_writer = @import("writer.zig");
 
@@ -73,6 +74,7 @@ pub const EntryOptions = struct {
     comment: []const u8 = "",
     method: CompressionMethod = .deflate,
     expected_size: ?u64 = null,
+    traditional_encryption: ?traditional_encryption.Options = null,
 };
 
 pub const Phase = enum {
@@ -128,6 +130,31 @@ pub const Writer = struct {
         uncompressed_size: u64 = 0,
         compressed_size: u64 = 0,
         codec: codecs.State,
+        encryption: ?EncryptionState = null,
+
+        const EncryptionState = struct {
+            cipher: traditional_encryption.Cipher,
+            header: [traditional_encryption.header_len]u8,
+
+            fn init(options: traditional_encryption.Options) EncryptionState {
+                var cipher = traditional_encryption.Cipher.init(options.password);
+                var header: [traditional_encryption.header_len]u8 = undefined;
+                cipher.encrypt(
+                    &options.header_random,
+                    header[0..traditional_encryption.header_random_len],
+                );
+                header[traditional_encryption.header_random_len] = cipher.encryptByte(
+                    @truncate(wire.deterministic_dos_time >> 8),
+                );
+                return .{ .cipher = cipher, .header = header };
+            }
+
+            fn deinit(self: *EncryptionState) void {
+                self.cipher.deinit();
+                std.crypto.secureZero(u8, &self.header);
+                self.* = undefined;
+            }
+        };
 
         fn init(
             allocator: std.mem.Allocator,
@@ -151,6 +178,10 @@ pub const Writer = struct {
             const metadata = try allocator.alloc(u8, metadata_len);
             @memcpy(metadata[0..entry_options.name.len], entry_options.name);
             @memcpy(metadata[entry_options.name.len..], entry_options.comment);
+            const encryption = if (entry_options.traditional_encryption) |options|
+                EncryptionState.init(options)
+            else
+                null;
             return .{
                 .metadata = metadata,
                 .name_len = entry_options.name.len,
@@ -159,6 +190,8 @@ pub const Writer = struct {
                 .local_header_offset = local_header_offset,
                 .zip64 = zip64,
                 .codec = codec,
+                .compressed_size = if (encryption != null) traditional_encryption.header_len else 0,
+                .encryption = encryption,
             };
         }
 
@@ -170,7 +203,27 @@ pub const Writer = struct {
             return self.metadata[self.name_len..];
         }
 
+        fn encryptionFlag(self: *const CurrentEntry) u16 {
+            return if (self.encryption != null) wire.encrypted_flag else 0;
+        }
+
+        fn appendEncryptionHeader(
+            self: *const CurrentEntry,
+            allocator: std.mem.Allocator,
+            output: *std.ArrayList(u8),
+        ) Error!void {
+            if (self.encryption) |*encryption|
+                try output.appendSlice(allocator, &encryption.header);
+        }
+
+        fn encryptOutput(self: *CurrentEntry, output: []u8) void {
+            if (self.encryption) |*encryption| {
+                for (output) |*byte| byte.* = encryption.cipher.encryptByte(byte.*);
+            }
+        }
+
         fn deinit(self: *CurrentEntry, allocator: std.mem.Allocator) void {
+            if (self.encryption) |*encryption| encryption.deinit();
             self.codec.deinit();
             allocator.free(self.metadata);
             self.* = undefined;
@@ -272,6 +325,13 @@ pub const Writer = struct {
             try checkedAdd(wire.local_file_header_len, entry_options.name.len),
             if (entry_zip64) 20 else 0,
         );
+        const entry_prefix_len = try checkedAdd(
+            local_header_len,
+            if (entry_options.traditional_encryption != null)
+                traditional_encryption.header_len
+            else
+                0,
+        );
         const descriptor_len = if (entry_zip64)
             wire.zip64_data_descriptor_len
         else
@@ -286,12 +346,12 @@ pub const Writer = struct {
         if (central_header_len > self.options.max_central_directory_size or
             self.central.items.len > self.options.max_central_directory_size - central_header_len)
             return error.OutputLimitExceeded;
-        try self.checkArchiveAddition(local_header_len);
+        try self.checkArchiveAddition(entry_prefix_len);
 
         // Reserve every control record that depends on this entry before any
         // payload byte can be emitted. Capacity changes are harmless if one of
         // these transactional preparations fails; phase remains `ready`.
-        try self.pending.ensureTotalCapacity(self.allocator, @max(local_header_len, descriptor_len));
+        try self.pending.ensureTotalCapacity(self.allocator, @max(entry_prefix_len, descriptor_len));
         try self.central.ensureUnusedCapacity(self.allocator, central_header_len);
 
         var current = try CurrentEntry.init(
@@ -316,6 +376,7 @@ pub const Writer = struct {
             .comment = current.comment(),
             .method = current.method,
             .flags = wire.descriptor_flag | codecs.zipFlags(&current.codec) |
+                current.encryptionFlag() |
                 (if (self.options.utf8) wire.utf8_flag else 0),
             .crc32 = 0,
             .compressed_size = 0,
@@ -323,7 +384,8 @@ pub const Writer = struct {
             .local_header_offset = local_offset,
             .zip64 = entry_zip64,
         }, .{ .zip64_size_placeholders = entry_zip64 });
-        std.debug.assert(self.pending.items.len == local_header_len);
+        try current.appendEncryptionHeader(self.allocator, &self.pending);
+        std.debug.assert(self.pending.items.len == entry_prefix_len);
 
         self.current = current;
         self.finish_entry_requested = false;
@@ -423,6 +485,7 @@ pub const Writer = struct {
                         const codec_output = output[output_written..][0..self.limitArchiveWrite(output.len - output_written)];
                         if (codec_output.len == 0) return error.OutputLimitExceeded;
                         const encoded = try entry.codec.step("", codec_output);
+                        entry.encryptOutput(codec_output[0..encoded.progress.output_written]);
                         try self.accountCodecProgress(entry, "", encoded.progress, &input_read, &output_written);
                         if (encoded.status == .done) {
                             try self.finalizeEntry();
@@ -444,6 +507,7 @@ pub const Writer = struct {
                         const bytes = input[input_read..][0..take];
                         @memcpy(output[output_written..][0..take], bytes);
                         entry.crc.update(bytes);
+                        entry.encryptOutput(output[output_written..][0..take]);
                         try self.addEntryInput(entry, take);
                         try self.addArchiveOutput(take);
                         entry.compressed_size = std.math.add(u64, entry.compressed_size, @as(u64, @intCast(take))) catch
@@ -461,6 +525,7 @@ pub const Writer = struct {
                         input[input_read..],
                         codec_output,
                     );
+                    entry.encryptOutput(codec_output[0..encoded.progress.output_written]);
                     const before = input_read;
                     try self.accountCodecProgress(entry, input[input_read..], encoded.progress, &input_read, &output_written);
                     if (encoded.status == .need_output)
@@ -508,6 +573,15 @@ pub const Writer = struct {
             if (expected > self.options.max_uncompressed_size) return error.OutputLimitExceeded;
             if (self.options.zip64 == .never and expected >= std.math.maxInt(u32))
                 return error.Zip32LimitExceeded;
+            if (entry.method == .stored and entry.traditional_encryption != null) {
+                const compressed_size = std.math.add(
+                    u64,
+                    expected,
+                    traditional_encryption.header_len,
+                ) catch return error.IntegerOverflow;
+                if (self.options.zip64 == .never and compressed_size >= std.math.maxInt(u32))
+                    return error.Zip32LimitExceeded;
+            }
         }
         try codecs.validate(entry.method, entry.expected_size, self.codecOptions());
         if (self.options.utf8 and
@@ -527,7 +601,13 @@ pub const Writer = struct {
         // Streaming codecs have no cheap exact compressed-size bound in this
         // layer; conservatively reserve ZIP64 before their unpatchable header.
         if (entry.method != .stored) return true;
-        return expected >= std.math.maxInt(u32);
+        const encryption_len: u64 = if (entry.traditional_encryption != null)
+            traditional_encryption.header_len
+        else
+            0;
+        const compressed_size = std.math.add(u64, expected, encryption_len) catch
+            return error.IntegerOverflow;
+        return compressed_size >= std.math.maxInt(u32);
     }
 
     fn checkInputOffer(self: *const Self, offered: usize) Error!void {
@@ -604,6 +684,7 @@ pub const Writer = struct {
             .comment = entry.comment(),
             .method = entry.method,
             .flags = wire.descriptor_flag | codecs.zipFlags(&entry.codec) |
+                entry.encryptionFlag() |
                 (if (self.options.utf8) wire.utf8_flag else 0),
             .crc32 = entry.crc.digest(),
             .compressed_size = entry.compressed_size,

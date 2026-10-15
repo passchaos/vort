@@ -16,6 +16,7 @@ const TestEntry = struct {
     method: zip.CompressionMethod,
     expected_size: ?u64,
     comment: []const u8 = "",
+    traditional_encryption: ?zip.TraditionalEncryptionOptions = null,
 };
 
 test "ZIP incremental writer round trips known and unknown common codec entries" {
@@ -116,6 +117,71 @@ test "ZIP incremental writer handles one-byte input and output and is determinis
         defer allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, expected.data, decoded);
     }
+}
+
+test "ZIP incremental writer streams Traditional ZipCrypto entries" {
+    const allocator = std.testing.allocator;
+    const password = "incremental-zip-password";
+    const entries = [_]TestEntry{
+        .{
+            .name = "encrypted-known.bin",
+            .data = "known encrypted stored payload",
+            .method = .stored,
+            .expected_size = "known encrypted stored payload".len,
+            .traditional_encryption = .{
+                .password = password,
+                .header_random = .{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 },
+            },
+        },
+        .{
+            .name = "encrypted-unknown.txt",
+            .data = "unknown encrypted Deflate payload\n" ** 97,
+            .method = .deflate,
+            .expected_size = null,
+            .traditional_encryption = .{
+                .password = password,
+                .header_random = .{ 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0 },
+            },
+        },
+        .{
+            .name = "encrypted-empty.bin",
+            .data = "",
+            .method = .stored,
+            .expected_size = 0,
+            .traditional_encryption = .{
+                .password = password,
+                .header_random = .{ 0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa },
+            },
+        },
+    };
+    const tiny = try encodeEntries(allocator, &entries, .{}, 1, 1);
+    defer allocator.free(tiny);
+    const coalesced = try encodeEntries(allocator, &entries, .{}, 4096, 8192);
+    defer allocator.free(coalesced);
+    try std.testing.expectEqualSlices(u8, coalesced, tiny);
+
+    const archive = try zip.parse(tiny);
+    for (entries, 0..) |expected, index| {
+        const entry = try archive.entryAt(index);
+        try std.testing.expect(entry.isEncrypted());
+        try std.testing.expect(entry.flags & wire.descriptor_flag != 0);
+        try std.testing.expect(entry.compressed_size >= 12);
+        try std.testing.expectError(error.EncryptedZipEntry, archive.compressedData(entry));
+        try std.testing.expectError(
+            error.InvalidZipPassword,
+            archive.extractAllocWithOptions(allocator, entry, .{ .password = "wrong" }),
+        );
+        const decoded = try archive.extractAllocWithOptions(
+            allocator,
+            entry,
+            .{ .password = password },
+        );
+        defer allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, expected.data, decoded);
+    }
+    try std.testing.expect(!(try archive.entryAt(0)).zip64);
+    try std.testing.expect((try archive.entryAt(1)).zip64);
+    try std.testing.expect(!(try archive.entryAt(2)).zip64);
 }
 
 test "ZIP incremental writer applies zero-output backpressure" {
@@ -984,6 +1050,16 @@ test "ZIP incremental writer releases every allocation failure" {
                 .{ .name = "dcl", .data = "allocation-safe dcl implode" ** 47, .method = .dcl_implode, .expected_size = null },
                 .{ .name = "reduce", .data = "allocation-safe reduce" ** 47, .method = .reduce_4, .expected_size = null },
                 .{ .name = "implode", .data = "allocation-safe traditional implode" ** 47, .method = .implode, .expected_size = null },
+                .{
+                    .name = "encrypted",
+                    .data = "allocation-safe encrypted Deflate" ** 47,
+                    .method = .deflate,
+                    .expected_size = null,
+                    .traditional_encryption = .{
+                        .password = "allocation-safe password",
+                        .header_random = .{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 },
+                    },
+                },
             };
             const encoded = try encodeEntries(allocator, &entries, .{
                 .archive_comment = "oom",
@@ -991,9 +1067,13 @@ test "ZIP incremental writer releases every allocation failure" {
             }, 17, 19);
             defer allocator.free(encoded);
             const archive = try zip.parse(encoded);
-            const decoded = try archive.extractAlloc(allocator, try archive.entryAt(11));
+            const decoded = try archive.extractAllocWithOptions(
+                allocator,
+                try archive.entryAt(12),
+                .{ .password = "allocation-safe password" },
+            );
             defer allocator.free(decoded);
-            try std.testing.expectEqualSlices(u8, entries[11].data, decoded);
+            try std.testing.expectEqualSlices(u8, entries[12].data, decoded);
         }
     };
     try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{});
@@ -1019,6 +1099,7 @@ fn encodeEntries(
             .comment = entry.comment,
             .method = entry.method,
             .expected_size = entry.expected_size,
+            .traditional_encryption = entry.traditional_encryption,
         });
         var input_offset: usize = 0;
         while (input_offset < entry.data.len) {
