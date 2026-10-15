@@ -626,15 +626,18 @@ def validate_vort_implode_modes_with_seven_zip(writer: Path, tool: str, temp: Pa
     return len(sizes)
 
 
-def validate_vort_reduce_modes(cli: Path, writer: Path, temp: Path) -> int:
+def validate_vort_reduce_modes(cli: Path, writer: Path, temp: Path) -> tuple[int, int]:
     archive = temp / "vort-reduce.zip"
     run(writer, str(archive), "reduce")
+    descriptor_archive = temp / "vort-reduce-descriptor.zip"
+    run(writer, str(descriptor_archive), "reduce-descriptor")
     cases = {
         "folder/reduce1.txt": make_legacy_payload(400, 0x10203041),
         "folder/reduce2.txt": make_legacy_payload(800, 0x20304052),
         "folder/reduce3.txt": make_legacy_payload(1500, 0x30405063),
         "folder/reduce4.txt": make_legacy_payload(3000, 0x40506074),
     }
+    stream_cases = 0
     with zipfile.ZipFile(archive) as parsed:
         for index, (name, expected) in enumerate(cases.items(), start=1):
             info = parsed.getinfo(name)
@@ -644,7 +647,33 @@ def validate_vort_reduce_modes(cli: Path, writer: Path, temp: Path) -> int:
             run(cli, "extract-zip-file", str(archive), name, str(output))
             if output.read_bytes() != expected:
                 raise AssertionError(f"Vort ZIP Reduce self-extraction mismatch for {name}")
-    return len(cases)
+            stream_output = temp / f"reduce-stream-{index}.out"
+            run(
+                cli,
+                "extract-zip-stream-file",
+                str(archive),
+                name,
+                str(stream_output),
+            )
+            if stream_output.read_bytes() != expected:
+                raise AssertionError(
+                    f"Vort sequential known-size Reduce extraction mismatch for {name}"
+                )
+            stream_cases += 1
+            descriptor_stream_output = temp / f"reduce-descriptor-stream-{index}.out"
+            run(
+                cli,
+                "extract-zip-stream-file",
+                str(descriptor_archive),
+                name,
+                str(descriptor_stream_output),
+            )
+            if descriptor_stream_output.read_bytes() != expected:
+                raise AssertionError(
+                    f"Vort sequential descriptor-backed Reduce extraction mismatch for {name}"
+                )
+            stream_cases += 1
+    return len(cases), stream_cases
 
 
 def validate_vort_dcl_implode_modes(
@@ -1177,7 +1206,9 @@ def main() -> None:
         deflate64_cases = 0
         ppmd_cases = 0
         implode_modes = 0
-        reduce_methods = validate_vort_reduce_modes(args.cli, args.writer, temp)
+        reduce_methods, incremental_reduce_known_cases = validate_vort_reduce_modes(
+            args.cli, args.writer, temp
+        )
         dcl_self_modes, dcl_blast_modes = validate_vort_dcl_implode_modes(
             args.cli, args.writer, temp, args.blast
         )
@@ -1206,6 +1237,7 @@ def main() -> None:
         f"incremental_archive_deflate64_cases={incremental_archive_deflate64_cases} "
         f"incremental_archive_dcl_cases={incremental_archive_dcl_cases} "
         f"incremental_archive_shrink_cases={incremental_archive_shrink_cases} "
+        f"incremental_archive_reduce_cases={incremental_reduce_known_cases} "
         f"vort_zip32_bytes={vort_zip32_bytes} vort_zip64_bytes={vort_zip64_bytes} "
         f"incremental_entries={len(INCREMENTAL_PAYLOADS)} "
         f"incremental_zip32_bytes={incremental_zip32_bytes} "
