@@ -1,19 +1,13 @@
 const std = @import("std");
+const incremental = @import("reduce/incremental_decoder.zig");
 
-pub const Error = std.mem.Allocator.Error || error{
-    InvalidReduceStream,
-    TruncatedReduceInput,
-    ReduceSizeMismatch,
-    ReduceTrailingData,
+pub const Error = incremental.Error || std.mem.Allocator.Error || error{
     InvalidReduceOptions,
 };
 
-pub const Factor = enum(u3) {
-    factor_1 = 1,
-    factor_2 = 2,
-    factor_3 = 3,
-    factor_4 = 4,
-};
+pub const Factor = incremental.Factor;
+pub const IncrementalDecoder = incremental.Decoder;
+pub const IncrementalWorkspace = incremental.Workspace;
 
 pub const Options = struct {
     max_chain: u16 = 64,

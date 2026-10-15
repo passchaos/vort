@@ -13,6 +13,7 @@ const xz = @import("xz.zig");
 const zstd = @import("zstd.zig");
 const records = @import("zip/records.zig");
 const reduce = @import("zip/reduce.zig");
+const reduce_incremental_tests = @import("zip/reduce_incremental_tests.zig");
 const shrink = @import("zip/shrink.zig");
 const shrink_incremental_tests = @import("zip/shrink_incremental_tests.zig");
 const types = @import("zip/types.zig");
@@ -60,6 +61,9 @@ pub const DclImplodeOptions = dcl_implode.Options;
 pub const DclImplodeIncrementalDecoder = dcl_implode.IncrementalDecoder;
 pub const ShrinkIncrementalDecoder = shrink.IncrementalDecoder;
 pub const ShrinkIncrementalWorkspace = shrink.IncrementalWorkspace;
+pub const ReduceIncrementalDecoder = reduce.IncrementalDecoder;
+pub const ReduceIncrementalWorkspace = reduce.IncrementalWorkspace;
+pub const ReduceFactor = reduce.Factor;
 pub const encodeAlloc = writer.encodeAlloc;
 pub const encodeAppend = writer.encodeAppend;
 
@@ -81,6 +85,10 @@ test "ZIP DCL Implode incremental test suite" {
 
 test "ZIP Shrink incremental test suite" {
     _ = shrink_incremental_tests;
+}
+
+test "ZIP Reduce incremental test suite" {
+    _ = reduce_incremental_tests;
 }
 
 pub const DecodeOptions = struct {
