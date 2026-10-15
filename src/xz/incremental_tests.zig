@@ -38,6 +38,34 @@ test "XZ incremental decoder accepts byte input tiny output padding and concaten
     try std.testing.expectEqual(@as(usize, 0), decoder.snapshot().stream_count);
 }
 
+test "XZ incremental decoder stops after first stream and exposes buffered suffix" {
+    const frame = crc32Frame();
+    const suffix = "ZIP descriptor after XZ footer";
+    const input = frame ++ suffix.*;
+    var decoder = xz.IncrementalDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = payload.len,
+        .stop_after_first_stream = true,
+        .first_stream_footer_retry_granularity = 12,
+    });
+    defer decoder.deinit();
+    var output: [payload.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (true) {
+        const stepped = try decoder.step(input[input_offset..], output[output_offset..]);
+        input_offset += stepped.progress.input_read;
+        output_offset += stepped.progress.output_written;
+        if (stepped.status == .done) break;
+    }
+    try std.testing.expectEqualSlices(u8, payload, &output);
+    var recovered_suffix: [suffix.len]u8 = undefined;
+    const buffered = decoder.trailingInput();
+    @memcpy(recovered_suffix[0..buffered.len], buffered);
+    @memcpy(recovered_suffix[buffered.len..], input[input_offset..]);
+    try std.testing.expectEqualSlices(u8, suffix, &recovered_suffix);
+    try std.testing.expectEqual(buffered.len, decoder.snapshot().trailing_input_bytes);
+}
+
 test "XZ incremental decoder handles filtered multi-block output" {
     const input = try std.testing.allocator.alloc(u8, 4099);
     defer std.testing.allocator.free(input);

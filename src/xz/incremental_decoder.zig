@@ -37,6 +37,12 @@ pub const Decoder = struct {
         max_index_footer_len: usize = 16 * 1024 * 1024,
         max_block_count: usize = 1024 * 1024,
         expected_output_len: ?usize = null,
+        /// Stop after the first validated Index/Footer, before consuming XZ
+        /// stream padding or a following container record.
+        stop_after_first_stream: bool = false,
+        /// Optional retry granularity used only while locating that first
+        /// Index/Footer boundary. Zero preserves exponential retry growth.
+        first_stream_footer_retry_granularity: usize = 0,
     };
     pub const Phase = enum {
         stream_header,
@@ -63,6 +69,7 @@ pub const Decoder = struct {
         input_finished: bool,
         last_error_name: []const u8,
         last_error_phase: Phase,
+        trailing_input_bytes: usize,
     };
 
     pub fn init(allocator: std.mem.Allocator) Decoder {
@@ -116,7 +123,14 @@ pub const Decoder = struct {
             .input_finished = self.input_finished,
             .last_error_name = self.last_error_name,
             .last_error_phase = self.last_error_phase,
+            .trailing_input_bytes = self.trailingInput().len,
         };
+    }
+
+    pub fn trailingInput(self: *const Decoder) []const u8 {
+        if (!self.options.stop_after_first_stream or self.phase != .done)
+            return &.{};
+        return self.buffer.items[self.buffer_start..];
     }
 
     pub fn diagnostics(self: *const Decoder) core.StreamingDiagnostics {
@@ -155,6 +169,7 @@ pub const Decoder = struct {
 
     fn stepInternal(self: *Decoder, input: []const u8, output: []u8) Error!core.StepResult {
         if (self.phase == .done) {
+            if (self.options.stop_after_first_stream) return .{ .status = .done };
             if (input.len != 0) return error.TrailingData;
             return .{ .status = .done };
         }
@@ -289,6 +304,12 @@ pub const Decoder = struct {
                     self.records.clearRetainingCapacity();
                     self.stream_count = next_stream_count;
                     self.current_padding_bytes = 0;
+                    if (self.options.stop_after_first_stream) {
+                        if (self.options.expected_output_len) |expected|
+                            if (self.validated_output != expected) return error.SizeMismatch;
+                        self.phase = .done;
+                        return result(input_read, output_written, .done);
+                    }
                     self.phase = .stream_padding;
                 } else {
                     if (input_read == input.len)
@@ -377,7 +398,12 @@ pub const Decoder = struct {
     fn scheduleRetry(self: *Decoder, limit: usize) Error!void {
         const buffered = self.bufferedLen();
         if (buffered >= limit) return error.OutputLimitExceeded;
-        const growth = @max(buffered, 64);
+        const growth = if (self.phase == .index_footer and
+            self.options.stop_after_first_stream and
+            self.options.first_stream_footer_retry_granularity != 0)
+            self.options.first_stream_footer_retry_granularity
+        else
+            @max(buffered, 64);
         const wanted = std.math.add(usize, buffered, growth) catch limit;
         self.retry_at_len = @min(wanted, limit);
         if (self.retry_at_len <= buffered) return error.OutputLimitExceeded;
