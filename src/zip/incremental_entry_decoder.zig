@@ -16,6 +16,7 @@ pub const Error = deflate.Error || error{
 
 pub const Options = struct {
     max_output_len: usize = std.math.maxInt(usize),
+    verify_crc32: bool = true,
 };
 
 pub const Phase = enum {
@@ -220,7 +221,7 @@ pub const Decoder = struct {
             return error.SizeMismatch;
         if (self.total_output != self.entry.uncompressed_size)
             return error.SizeMismatch;
-        if (self.crc.digest() != self.entry.crc32)
+        if (self.options.verify_crc32 and self.crc.digest() != self.entry.crc32)
             return error.ChecksumMismatch;
         self.phase = .done;
     }

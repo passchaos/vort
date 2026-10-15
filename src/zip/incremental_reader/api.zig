@@ -3,6 +3,7 @@ const core = @import("../../core.zig");
 const types = @import("../types.zig");
 
 pub const CompressionMethod = types.CompressionMethod;
+pub const WinZipAesInfo = types.WinZipAesInfo;
 
 pub const Options = struct {
     /// Absolute file offset represented by the first byte passed to `step`.
@@ -37,6 +38,7 @@ pub const Phase = enum {
     local_fixed,
     local_variable,
     entry_data,
+    entry_authentication,
     entry_descriptor,
     central_fixed,
     central_variable,
@@ -73,6 +75,7 @@ pub const EntryInfo = struct {
     local_header_offset: usize,
     uses_descriptor: bool,
     zip64_local: bool,
+    winzip_aes: ?types.WinZipAesInfo = null,
     crc32: ?u32,
     compressed_size: ?usize,
     uncompressed_size: ?usize,

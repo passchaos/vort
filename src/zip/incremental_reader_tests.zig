@@ -1083,6 +1083,98 @@ test "ZIP incremental reader streams descriptor Traditional ZipCrypto across eve
     }
 }
 
+test "ZIP incremental reader streams known-size WinZip AES entries" {
+    const allocator = std.testing.allocator;
+    const password = "sequential WinZip AES password";
+    const stored = "known AES stored payload" ** 31;
+    const deflated = "known AES Deflate payload\n" ** 79;
+    const bzip2_data = "known AES Bzip2 payload\n" ** 67;
+    const salt128 = [_]u8{0x51} ** 8;
+    const salt192 = [_]u8{0x52} ** 12;
+    const salt256 = [_]u8{0x53} ** 16;
+    const entries = [_]zip.EncodeEntry{
+        .{
+            .name = "aes/stored.bin",
+            .data = stored,
+            .method = .stored,
+            .winzip_aes = .{
+                .password = password,
+                .strength = .aes128,
+                .salt = &salt128,
+                .version = .ae1,
+            },
+        },
+        .{
+            .name = "aes/deflate.txt",
+            .data = deflated,
+            .method = .deflate,
+            .winzip_aes = .{
+                .password = password,
+                .strength = .aes192,
+                .salt = &salt192,
+                .version = .ae2,
+            },
+        },
+        .{
+            .name = "aes/bzip2.txt",
+            .data = bzip2_data,
+            .method = .bzip2,
+            .winzip_aes = .{
+                .password = password,
+                .strength = .aes256,
+                .salt = &salt256,
+                .version = .ae1,
+            },
+        },
+    };
+    const expected = [_]ExpectedEntry{
+        .{ .name = entries[0].name, .data = stored },
+        .{ .name = entries[1].name, .data = deflated },
+        .{ .name = entries[2].name, .data = bzip2_data },
+    };
+    const bytes = try zip.encodeAlloc(allocator, &entries, .{});
+    defer allocator.free(bytes);
+    try decodeArchiveFragmented(allocator, bytes, &expected, .{ .password = password }, 1, 1);
+    try decodeArchiveFragmented(allocator, bytes, &expected, .{ .password = password }, 257, 31);
+    try std.testing.expectError(
+        error.PasswordRequired,
+        decodeArchiveFragmented(allocator, bytes, &expected, .{}, 3, 5),
+    );
+    try std.testing.expectError(
+        error.InvalidZipPassword,
+        decodeArchiveFragmented(allocator, bytes, &expected, .{ .password = "wrong" }, 3, 5),
+    );
+
+    const archive = try zip.parse(bytes);
+    const first = try archive.entryAt(0);
+    const name_len = std.mem.readInt(u16, bytes[first.local_header_offset + 26 ..][0..2], .little);
+    const extra_len = std.mem.readInt(u16, bytes[first.local_header_offset + 28 ..][0..2], .little);
+    const data_offset = first.local_header_offset + wire.local_file_header_len + name_len + extra_len;
+    const corrupt = try allocator.dupe(u8, bytes);
+    defer allocator.free(corrupt);
+    corrupt[data_offset + first.compressed_size - 1] ^= 1;
+    try expectReaderError(
+        allocator,
+        corrupt,
+        .{ .password = password },
+        error.InvalidAuthenticationCode,
+    );
+
+    const descriptor_bytes = try zip.encodeAlloc(allocator, entries[0..1], .{ .data_descriptor = true });
+    defer allocator.free(descriptor_bytes);
+    try std.testing.expectError(
+        error.EncryptedZipEntry,
+        decodeArchiveFragmented(
+            allocator,
+            descriptor_bytes,
+            expected[0..1],
+            .{ .password = password },
+            1,
+            1,
+        ),
+    );
+}
+
 test "ZIP incremental reader enforces backpressure limits central validation and truncation" {
     const allocator = std.testing.allocator;
     const payload = "bounded archive payload" ** 32;

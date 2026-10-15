@@ -19,6 +19,7 @@ pub const LocalHeader = struct {
     compressed_size: ?usize,
     uncompressed_size: ?usize,
     zip64: bool,
+    winzip_aes: ?types.WinZipAesInfo,
 };
 
 pub fn localEncodedLen(fixed: *const [wire.local_file_header_len]u8) Error!usize {
@@ -39,7 +40,7 @@ pub fn parseLocal(bytes: []const u8) Error!LocalHeader {
     if (try localEncodedLen(fixed) != bytes.len) return error.InvalidZipArchive;
     const version_needed = std.mem.readInt(u16, bytes[4..6], .little);
     const flags = std.mem.readInt(u16, bytes[6..8], .little);
-    const method: CompressionMethod = @enumFromInt(std.mem.readInt(u16, bytes[8..10], .little));
+    const wire_method: CompressionMethod = @enumFromInt(std.mem.readInt(u16, bytes[8..10], .little));
     const dos_time = std.mem.readInt(u16, bytes[10..12], .little);
     const crc32 = std.mem.readInt(u32, bytes[14..18], .little);
     const compressed_u32 = std.mem.readInt(u32, bytes[18..22], .little);
@@ -49,6 +50,12 @@ pub fn parseLocal(bytes: []const u8) Error!LocalHeader {
     const name_end = wire.local_file_header_len + name_len;
     const extra_end = name_end + extra_len;
     const extra = bytes[name_end..extra_end];
+    const parsed_aes = try records.parseWinZipAesExtra(extra);
+    if ((wire_method == .aes) != (parsed_aes != null)) return error.InvalidZipArchive;
+    if (parsed_aes != null and
+        (flags & wire.encrypted_flag == 0 or version_needed < wire.version_51))
+        return error.InvalidZipArchive;
+    const method = if (parsed_aes) |aes| aes.actual_method else wire_method;
     const uses_descriptor = flags & wire.descriptor_flag != 0;
     const has_zip64_extra = try hasZip64Extra(extra);
     const has_zip64_sentinel = compressed_u32 == std.math.maxInt(u32) or
@@ -72,6 +79,7 @@ pub fn parseLocal(bytes: []const u8) Error!LocalHeader {
             .compressed_size = null,
             .uncompressed_size = null,
             .zip64 = zip64,
+            .winzip_aes = if (parsed_aes) |aes| aes.info else null,
         };
     }
 
@@ -88,6 +96,7 @@ pub fn parseLocal(bytes: []const u8) Error!LocalHeader {
         .compressed_size = sizes.compressed_size,
         .uncompressed_size = sizes.uncompressed_size,
         .zip64 = zip64,
+        .winzip_aes = if (parsed_aes) |aes| aes.info else null,
     };
 }
 
@@ -101,6 +110,7 @@ pub const CentralHeader = struct {
     uncompressed_size: usize,
     local_header_offset: usize,
     zip64: bool,
+    winzip_aes: ?types.WinZipAesInfo,
 };
 
 pub fn centralEncodedLen(fixed: *const [wire.central_file_header_len]u8) Error!usize {
@@ -124,7 +134,7 @@ pub fn parseCentral(bytes: []const u8) Error!CentralHeader {
     if (try centralEncodedLen(fixed) != bytes.len) return error.InvalidZipArchive;
     const version_needed = std.mem.readInt(u16, bytes[6..8], .little);
     const flags = std.mem.readInt(u16, bytes[8..10], .little);
-    const method: CompressionMethod = @enumFromInt(std.mem.readInt(u16, bytes[10..12], .little));
+    const wire_method: CompressionMethod = @enumFromInt(std.mem.readInt(u16, bytes[10..12], .little));
     const crc32 = std.mem.readInt(u32, bytes[16..20], .little);
     const compressed_u32 = std.mem.readInt(u32, bytes[20..24], .little);
     const uncompressed_u32 = std.mem.readInt(u32, bytes[24..28], .little);
@@ -141,6 +151,12 @@ pub fn parseCentral(bytes: []const u8) Error!CentralHeader {
         local_offset_u32,
         disk_start,
     );
+    const parsed_aes = try records.parseWinZipAesExtra(bytes[name_end..extra_end]);
+    if ((wire_method == .aes) != (parsed_aes != null)) return error.InvalidZipArchive;
+    if (parsed_aes != null and
+        (flags & wire.encrypted_flag == 0 or version_needed < wire.version_51))
+        return error.InvalidZipArchive;
+    const method = if (parsed_aes) |aes| aes.actual_method else wire_method;
     if (values.zip64 and version_needed < wire.version_45) return error.InvalidZipArchive;
     if (method == .shrink and version_needed < wire.version_10)
         return error.InvalidZipArchive;
@@ -170,6 +186,7 @@ pub fn parseCentral(bytes: []const u8) Error!CentralHeader {
         .uncompressed_size = values.uncompressed_size,
         .local_header_offset = values.local_header_offset,
         .zip64 = values.zip64,
+        .winzip_aes = if (parsed_aes) |aes| aes.info else null,
     };
 }
 

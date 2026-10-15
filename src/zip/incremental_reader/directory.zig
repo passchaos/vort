@@ -12,6 +12,7 @@ pub const Record = struct {
     local_header_offset: usize,
     zip64_local: bool,
     uses_descriptor: bool,
+    winzip_aes: ?api.WinZipAesInfo = null,
     complete: bool = false,
     central_seen: bool = false,
 
@@ -23,6 +24,7 @@ pub const Record = struct {
             .local_header_offset = self.local_header_offset,
             .uses_descriptor = self.uses_descriptor,
             .zip64_local = self.zip64_local,
+            .winzip_aes = self.winzip_aes,
             .crc32 = if (self.complete or !self.uses_descriptor) self.crc32 else null,
             .compressed_size = if (self.complete or !self.uses_descriptor) self.compressed_size else null,
             .uncompressed_size = if (self.complete or !self.uses_descriptor) self.uncompressed_size else null,
@@ -90,7 +92,8 @@ pub const State = struct {
             local.flags != central.flags or
             local.crc32 != central.crc32 or
             local.compressed_size != central.compressed_size or
-            local.uncompressed_size != central.uncompressed_size)
+            local.uncompressed_size != central.uncompressed_size or
+            !std.meta.eql(local.winzip_aes, central.winzip_aes))
             return error.InvalidZipArchive;
         local.central_seen = true;
         self.central_entries = std.math.add(usize, self.central_entries, 1) catch
