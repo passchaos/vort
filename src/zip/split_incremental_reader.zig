@@ -21,12 +21,53 @@ pub const Options = struct {
 pub const StepResult = incremental_reader.StepResult;
 pub const EntryInfo = incremental_reader.EntryInfo;
 
+const InputStream = union(enum) {
+    slices: split.NormalizedStream,
+    source: split.NormalizedSourceStream,
+
+    fn deinit(self: *InputStream) void {
+        switch (self.*) {
+            .slices => |*stream| stream.deinit(),
+            .source => |*stream| stream.deinit(),
+        }
+        self.* = undefined;
+    }
+
+    fn len(self: *const InputStream) usize {
+        return switch (self.*) {
+            .slices => |*stream| stream.len(),
+            .source => |*stream| stream.len(),
+        };
+    }
+
+    fn firstRecordOffset(self: *const InputStream) usize {
+        return switch (self.*) {
+            .slices => |*stream| stream.firstRecordOffset(),
+            .source => |*stream| stream.firstRecordOffset(),
+        };
+    }
+
+    fn patchCount(self: *const InputStream) usize {
+        return switch (self.*) {
+            .slices => |*stream| stream.patchCount(),
+            .source => |*stream| stream.patchCount(),
+        };
+    }
+
+    fn readAt(self: *const InputStream, offset: usize, output: []u8) Error!usize {
+        return switch (self.*) {
+            .slices => |*stream| stream.readAt(offset, output),
+            .source => |*stream| stream.readAt(offset, output),
+        };
+    }
+};
+
 /// Sequentially decodes a sparse normalized view without allocating a joined
-/// archive. The part payload slices remain caller-owned and must outlive this
-/// reader; their outer descriptor array is copied by the normalized stream.
+/// archive. Slice-backed part payloads or a callback context remain
+/// caller-owned and must outlive this reader; descriptor arrays are copied.
 pub const Reader = struct {
     allocator: std.mem.Allocator,
-    stream: split.NormalizedStream,
+    stream: InputStream,
     inner: incremental_reader.Reader,
     input: []u8,
     input_pos: usize = 0,
@@ -41,12 +82,37 @@ pub const Reader = struct {
         options: Options,
     ) (Error || std.mem.Allocator.Error)!Self {
         if (options.input_buffer_size == 0) return error.OutputLimitExceeded;
-        var stream = try split.NormalizedStream.initAlloc(
+        const stream = try split.NormalizedStream.initAlloc(
             allocator,
             ordered_parts,
             options.split_options,
         );
+        return initWithStream(allocator, .{ .slices = stream }, options);
+    }
+
+    /// Initializes from on-demand part reads. The callback context and part
+    /// storage must outlive the reader; only part lengths are copied.
+    pub fn initSourceAlloc(
+        allocator: std.mem.Allocator,
+        source: split.PartSource,
+        options: Options,
+    ) (Error || std.mem.Allocator.Error)!Self {
+        const stream = try split.NormalizedSourceStream.initAlloc(
+            allocator,
+            source,
+            options.split_options,
+        );
+        return initWithStream(allocator, .{ .source = stream }, options);
+    }
+
+    fn initWithStream(
+        allocator: std.mem.Allocator,
+        stream_value: InputStream,
+        options: Options,
+    ) (Error || std.mem.Allocator.Error)!Self {
+        var stream = stream_value;
         errdefer stream.deinit();
+        if (options.input_buffer_size == 0) return error.OutputLimitExceeded;
         var reader_options = options.reader_options;
         reader_options.initial_offset = stream.firstRecordOffset();
         var inner = try incremental_reader.Reader.initWithOptions(

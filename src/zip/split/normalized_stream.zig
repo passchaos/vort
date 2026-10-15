@@ -13,6 +13,18 @@ pub const Error = records.Error || error{
     OutputLimitExceeded,
     IntegerOverflow,
     RangeOutOfBounds,
+    PartSourceReadFailed,
+};
+
+pub const PartSource = struct {
+    context: *anyopaque,
+    part_lengths: []const usize,
+    read_at: *const fn (
+        context: *anyopaque,
+        disk: usize,
+        offset: usize,
+        output: []u8,
+    ) error{PartSourceReadFailed}!usize,
 };
 
 pub const Options = struct {
@@ -60,10 +72,56 @@ const Patch = struct {
     }
 };
 
+const Backing = union(enum) {
+    slices: []const []const u8,
+    callback: PartSource,
+};
+
 const Source = struct {
-    parts: []const []const u8,
+    backing: Backing,
     bases: []const usize,
     total_len: usize,
+
+    fn partCount(self: Source) usize {
+        return switch (self.backing) {
+            .slices => |parts| parts.len,
+            .callback => |source| source.part_lengths.len,
+        };
+    }
+
+    fn partLen(self: Source, disk: usize) usize {
+        return switch (self.backing) {
+            .slices => |parts| parts[disk].len,
+            .callback => |source| source.part_lengths[disk],
+        };
+    }
+
+    fn readPartExact(
+        self: Source,
+        disk: usize,
+        offset: usize,
+        output: []u8,
+    ) Error!void {
+        return switch (self.backing) {
+            .slices => |parts| {
+                @memcpy(output, parts[disk][offset..][0..output.len]);
+            },
+            .callback => |source| {
+                var written: usize = 0;
+                while (written < output.len) {
+                    const amount = try source.read_at(
+                        source.context,
+                        disk,
+                        offset + written,
+                        output[written..],
+                    );
+                    if (amount == 0 or amount > output.len - written)
+                        return error.InvalidZipArchive;
+                    written += amount;
+                }
+            },
+        };
+    }
 
     fn copyExact(self: Source, offset: usize, output: []u8) Error!void {
         _ = try checkedEnd(offset, output.len, self.total_len);
@@ -72,11 +130,11 @@ const Source = struct {
         var absolute = offset;
         var written: usize = 0;
         while (written < output.len) : (disk += 1) {
-            if (disk >= self.parts.len) return error.InvalidZipArchive;
+            if (disk >= self.partCount()) return error.InvalidZipArchive;
             const local = absolute - self.bases[disk];
-            const take = @min(output.len - written, self.parts[disk].len - local);
+            const take = @min(output.len - written, self.partLen(disk) - local);
             if (take == 0) return error.InvalidZipArchive;
-            @memcpy(output[written..][0..take], self.parts[disk][local..][0..take]);
+            try self.readPartExact(disk, local, output[written..][0..take]);
             written += take;
             absolute += take;
         }
@@ -89,7 +147,7 @@ const Source = struct {
     }
 
     fn diskOffset(self: Source, disk: usize, offset: usize) Error!usize {
-        if (disk >= self.parts.len or offset >= self.parts[disk].len)
+        if (disk >= self.partCount() or offset >= self.partLen(disk))
             return error.InvalidZipDiskOrder;
         return checkedAdd(self.bases[disk], offset);
     }
@@ -109,6 +167,105 @@ const Source = struct {
     }
 };
 
+const Plan = struct {
+    bases: []usize,
+    patches: std.ArrayList(Patch),
+    total_len: usize,
+    first_record_offset: usize,
+
+    fn deinit(self: *Plan, allocator: std.mem.Allocator) void {
+        self.patches.deinit(allocator);
+        allocator.free(self.bases);
+        self.* = undefined;
+    }
+};
+
+fn backingPartCount(backing: Backing) usize {
+    return switch (backing) {
+        .slices => |parts| parts.len,
+        .callback => |source| source.part_lengths.len,
+    };
+}
+
+fn backingPartLen(backing: Backing, disk: usize) usize {
+    return switch (backing) {
+        .slices => |parts| parts[disk].len,
+        .callback => |source| source.part_lengths[disk],
+    };
+}
+
+fn buildPlan(
+    allocator: std.mem.Allocator,
+    backing: Backing,
+    options: Options,
+) InitError!Plan {
+    const part_count = backingPartCount(backing);
+    if (part_count < 2 or part_count > std.math.maxInt(u32))
+        return error.InvalidZipArchive;
+    if (part_count > options.max_parts) return error.OutputLimitExceeded;
+    const bases = try allocator.alloc(usize, part_count);
+    errdefer allocator.free(bases);
+    var total_len: usize = 0;
+    for (bases, 0..) |*base, disk| {
+        const part_len = backingPartLen(backing, disk);
+        if (part_len == 0) return error.InvalidZipArchive;
+        base.* = total_len;
+        total_len = try checkedAdd(total_len, part_len);
+        if (total_len > options.max_archive_size)
+            return error.OutputLimitExceeded;
+    }
+    const source: Source = .{
+        .backing = backing,
+        .bases = bases,
+        .total_len = total_len,
+    };
+    if (options.require_split_signature) {
+        if (source.partLen(0) < 4 or
+            try source.readInt(u32, 0) != wire.data_descriptor_signature)
+            return error.InvalidZipDiskOrder;
+    }
+    const end = try parseEnd(allocator, source);
+    var patches: std.ArrayList(Patch) = .empty;
+    errdefer patches.deinit(allocator);
+    const directory = if (hasZip64Sentinel(end))
+        try normalizeZip64Plan(allocator, &patches, source, end)
+    else
+        try normalizeZip32Plan(allocator, &patches, source, end);
+    if (directory.entry_count > options.max_entries)
+        return error.OutputLimitExceeded;
+    const central_offset = try source.diskOffset(directory.disk, directory.offset);
+    const central_end = try checkedEnd(central_offset, directory.size, end.offset);
+    var central_cursor = central_offset;
+    var first_record_offset = central_offset;
+    for (0..directory.entry_count) |index| {
+        const normalized = try normalizeCentralEntryPlan(
+            allocator,
+            &patches,
+            source,
+            central_cursor,
+            central_end,
+        );
+        central_cursor = normalized.next;
+        if (index == 0 or normalized.local_offset < first_record_offset)
+            first_record_offset = normalized.local_offset;
+    }
+    if (central_cursor != central_end) return error.InvalidZipArchive;
+    std.mem.sort(Patch, patches.items, {}, patchLessThan);
+    var previous_end: usize = 0;
+    for (patches.items, 0..) |metadata_patch, index| {
+        const patch_end = try metadata_patch.end();
+        if (patch_end > total_len or (index != 0 and metadata_patch.offset < previous_end))
+            return error.InvalidZipArchive;
+        previous_end = patch_end;
+    }
+    return .{
+        .bases = bases,
+        .patches = patches,
+        .total_len = total_len,
+        .first_record_offset = first_record_offset,
+    };
+}
+
 /// Borrowed multi-slice ZIP bytes exposed as a logically normalized single-
 /// disk byte stream. The caller-owned part payloads must outlive this value;
 /// the outer slice descriptor array is copied during initialization.
@@ -127,78 +284,18 @@ pub const Stream = struct {
         ordered_parts: []const []const u8,
         options: Options,
     ) InitError!Self {
-        if (ordered_parts.len < 2 or ordered_parts.len > std.math.maxInt(u32))
-            return error.InvalidZipArchive;
-        if (ordered_parts.len > options.max_parts) return error.OutputLimitExceeded;
-
         const parts = try allocator.alloc([]const u8, ordered_parts.len);
         errdefer allocator.free(parts);
         @memcpy(parts, ordered_parts);
-        const bases = try allocator.alloc(usize, parts.len);
-        errdefer allocator.free(bases);
-
-        var total_len: usize = 0;
-        for (parts, bases) |part, *base| {
-            if (part.len == 0) return error.InvalidZipArchive;
-            base.* = total_len;
-            total_len = try checkedAdd(total_len, part.len);
-            if (total_len > options.max_archive_size)
-                return error.OutputLimitExceeded;
-        }
-        if (options.require_split_signature and
-            (parts[0].len < 4 or
-                std.mem.readInt(u32, parts[0][0..4], .little) !=
-                    wire.data_descriptor_signature))
-            return error.InvalidZipDiskOrder;
-
-        const source: Source = .{
-            .parts = parts,
-            .bases = bases,
-            .total_len = total_len,
-        };
-        const end = try parseEnd(parts[parts.len - 1], bases[parts.len - 1]);
-        var patches: std.ArrayList(Patch) = .empty;
-        errdefer patches.deinit(allocator);
-        const directory = if (hasZip64Sentinel(end))
-            try normalizeZip64Plan(allocator, &patches, source, end)
-        else
-            try normalizeZip32Plan(allocator, &patches, source, end);
-        if (directory.entry_count > options.max_entries)
-            return error.OutputLimitExceeded;
-
-        const central_offset = try source.diskOffset(directory.disk, directory.offset);
-        const central_end = try checkedEnd(central_offset, directory.size, end.offset);
-        var central_cursor = central_offset;
-        var first_record_offset = central_offset;
-        for (0..directory.entry_count) |index| {
-            const normalized = try normalizeCentralEntryPlan(
-                allocator,
-                &patches,
-                source,
-                central_cursor,
-                central_end,
-            );
-            central_cursor = normalized.next;
-            if (index == 0 or normalized.local_offset < first_record_offset)
-                first_record_offset = normalized.local_offset;
-        }
-        if (central_cursor != central_end) return error.InvalidZipArchive;
-
-        std.mem.sort(Patch, patches.items, {}, patchLessThan);
-        var previous_end: usize = 0;
-        for (patches.items, 0..) |metadata_patch, index| {
-            const patch_end = try metadata_patch.end();
-            if (patch_end > total_len or (index != 0 and metadata_patch.offset < previous_end))
-                return error.InvalidZipArchive;
-            previous_end = patch_end;
-        }
+        var plan = try buildPlan(allocator, .{ .slices = parts }, options);
+        errdefer plan.deinit(allocator);
         return .{
             .allocator = allocator,
             .parts = parts,
-            .bases = bases,
-            .patches = patches,
-            .total_len = total_len,
-            .first_record_offset = first_record_offset,
+            .bases = plan.bases,
+            .patches = plan.patches,
+            .total_len = plan.total_len,
+            .first_record_offset = plan.first_record_offset,
         };
     }
 
@@ -227,13 +324,13 @@ pub const Stream = struct {
         const written = @min(output.len, self.total_len - offset);
         if (written == 0) return 0;
         const source: Source = .{
-            .parts = self.parts,
+            .backing = .{ .slices = self.parts },
             .bases = self.bases,
             .total_len = self.total_len,
         };
         try source.copyExact(offset, output[0..written]);
         const read_end = offset + written;
-        const first_patch = self.firstPatchEndingAfter(offset);
+        const first_patch = firstPatchEndingAfter(self.patches.items, offset);
         for (self.patches.items[first_patch..]) |metadata_patch| {
             const patch_end = metadata_patch.offset + metadata_patch.len;
             if (metadata_patch.offset >= read_end) break;
@@ -249,21 +346,105 @@ pub const Stream = struct {
         }
         return written;
     }
+};
 
-    fn firstPatchEndingAfter(self: *const Self, offset: usize) usize {
-        var low: usize = 0;
-        var high = self.patches.items.len;
-        while (low < high) {
-            const middle = low + (high - low) / 2;
-            const metadata_patch = self.patches.items[middle];
-            if (metadata_patch.offset + metadata_patch.len <= offset)
-                low = middle + 1
-            else
-                high = middle;
+/// Sparse normalized stream backed by caller-defined on-demand part reads.
+/// The callback context and the underlying parts must outlive this value; the
+/// part-length descriptor array is copied during initialization.
+pub const SourceStream = struct {
+    allocator: std.mem.Allocator,
+    source: PartSource,
+    part_lengths: []usize,
+    bases: []usize,
+    patches: std.ArrayList(Patch),
+    total_len: usize,
+    first_record_offset: usize,
+
+    const Self = @This();
+
+    pub fn initAlloc(
+        allocator: std.mem.Allocator,
+        source_value: PartSource,
+        options: Options,
+    ) InitError!Self {
+        const part_lengths = try allocator.dupe(usize, source_value.part_lengths);
+        errdefer allocator.free(part_lengths);
+        var source = source_value;
+        source.part_lengths = part_lengths;
+        var plan = try buildPlan(allocator, .{ .callback = source }, options);
+        errdefer plan.deinit(allocator);
+        return .{
+            .allocator = allocator,
+            .source = source,
+            .part_lengths = part_lengths,
+            .bases = plan.bases,
+            .patches = plan.patches,
+            .total_len = plan.total_len,
+            .first_record_offset = plan.first_record_offset,
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.patches.deinit(self.allocator);
+        self.allocator.free(self.bases);
+        self.allocator.free(self.part_lengths);
+        self.* = undefined;
+    }
+
+    pub fn len(self: *const Self) usize {
+        return self.total_len;
+    }
+
+    pub fn firstRecordOffset(self: *const Self) usize {
+        return self.first_record_offset;
+    }
+
+    pub fn patchCount(self: *const Self) usize {
+        return self.patches.items.len;
+    }
+
+    pub fn readAt(self: *const Self, offset: usize, output: []u8) Error!usize {
+        if (offset > self.total_len) return error.RangeOutOfBounds;
+        const written = @min(output.len, self.total_len - offset);
+        if (written == 0) return 0;
+        const source: Source = .{
+            .backing = .{ .callback = self.source },
+            .bases = self.bases,
+            .total_len = self.total_len,
+        };
+        try source.copyExact(offset, output[0..written]);
+        const read_end = offset + written;
+        const first_patch = firstPatchEndingAfter(self.patches.items, offset);
+        for (self.patches.items[first_patch..]) |metadata_patch| {
+            const patch_end = metadata_patch.offset + metadata_patch.len;
+            if (metadata_patch.offset >= read_end) break;
+            const overlap_start = @max(offset, metadata_patch.offset);
+            const overlap_end = @min(read_end, patch_end);
+            const source_start = overlap_start - metadata_patch.offset;
+            const target_start = overlap_start - offset;
+            const overlap_len = overlap_end - overlap_start;
+            @memcpy(
+                output[target_start..][0..overlap_len],
+                metadata_patch.bytes[source_start..][0..overlap_len],
+            );
         }
-        return low;
+        return written;
     }
 };
+
+fn firstPatchEndingAfter(patches: []const Patch, offset: usize) usize {
+    var low: usize = 0;
+    var high = patches.len;
+    while (low < high) {
+        const middle = low + (high - low) / 2;
+        const metadata_patch = patches[middle];
+        if (metadata_patch.offset + metadata_patch.len <= offset)
+            low = middle + 1
+        else
+            high = middle;
+    }
+    return low;
+}
 
 fn normalizeZip32Plan(
     allocator: std.mem.Allocator,
@@ -271,7 +452,7 @@ fn normalizeZip32Plan(
     source: Source,
     end: End,
 ) InitError!Directory {
-    if (end.disk != source.parts.len - 1 or end.central_disk >= source.parts.len or
+    if (end.disk != source.partCount() - 1 or end.central_disk >= source.partCount() or
         end.entries_on_disk > end.entry_count)
         return error.InvalidZipDiskOrder;
     const directory: Directory = .{
@@ -310,7 +491,7 @@ fn normalizeZip64Plan(
     const zip64_disk = try source.readInt(u32, locator_offset + 4);
     const zip64_offset_on_disk = try source.readInt(u64, locator_offset + 8);
     const disk_count = try source.readInt(u32, locator_offset + 16);
-    if (zip64_disk >= source.parts.len or disk_count != source.parts.len)
+    if (zip64_disk >= source.partCount() or disk_count != source.partCount())
         return error.InvalidZipDiskOrder;
     const zip64_offset = try source.diskOffset(
         @intCast(zip64_disk),
@@ -333,7 +514,7 @@ fn normalizeZip64Plan(
     const entry_count = try source.readInt(u64, zip64_offset + 32);
     const central_size = try source.readInt(u64, zip64_offset + 40);
     const central_offset_on_disk = try source.readInt(u64, zip64_offset + 48);
-    if (disk != source.parts.len - 1 or central_disk >= source.parts.len or
+    if (disk != source.partCount() - 1 or central_disk >= source.partCount() or
         entries_on_disk > entry_count)
         return error.InvalidZipDiskOrder;
     const virtual_central = try source.diskOffset(
@@ -474,33 +655,40 @@ fn findExtra(
     return result;
 }
 
-fn parseEnd(last_part: []const u8, last_base: usize) Error!End {
-    if (last_part.len < wire.end_of_central_len) return error.InvalidZipArchive;
+fn parseEnd(allocator: std.mem.Allocator, source: Source) InitError!End {
+    const last_disk = source.partCount() - 1;
+    const last_len = source.partLen(last_disk);
+    const last_base = source.bases[last_disk];
+    if (last_len < wire.end_of_central_len) return error.InvalidZipArchive;
     const search_len = @min(
-        last_part.len,
+        last_len,
         wire.end_of_central_len + @as(usize, std.math.maxInt(u16)),
     );
-    const lower = last_part.len - search_len;
-    var offset = last_part.len - wire.end_of_central_len;
+    const search = try allocator.alloc(u8, search_len);
+    defer allocator.free(search);
+    const lower = last_len - search_len;
+    try source.copyExact(last_base + lower, search);
+    var offset = search.len - wire.end_of_central_len;
     while (true) {
-        if (std.mem.readInt(u32, last_part[offset..][0..4], .little) ==
+        if (std.mem.readInt(u32, search[offset..][0..4], .little) ==
             wire.end_of_central_signature)
         {
-            const comment_len = std.mem.readInt(u16, last_part[offset + 20 ..][0..2], .little);
+            const comment_len = std.mem.readInt(u16, search[offset + 20 ..][0..2], .little);
             const record_len = wire.end_of_central_len + @as(usize, comment_len);
-            if (record_len <= last_part.len and offset == last_part.len - record_len) {
+            if (record_len <= search.len and offset == search.len - record_len) {
+                const absolute = try checkedAdd(last_base, lower + offset);
                 return .{
-                    .offset = try checkedAdd(last_base, offset),
-                    .disk = std.mem.readInt(u16, last_part[offset + 4 ..][0..2], .little),
-                    .central_disk = std.mem.readInt(u16, last_part[offset + 6 ..][0..2], .little),
-                    .entries_on_disk = std.mem.readInt(u16, last_part[offset + 8 ..][0..2], .little),
-                    .entry_count = std.mem.readInt(u16, last_part[offset + 10 ..][0..2], .little),
-                    .central_size = std.mem.readInt(u32, last_part[offset + 12 ..][0..4], .little),
-                    .central_offset = std.mem.readInt(u32, last_part[offset + 16 ..][0..4], .little),
+                    .offset = absolute,
+                    .disk = std.mem.readInt(u16, search[offset + 4 ..][0..2], .little),
+                    .central_disk = std.mem.readInt(u16, search[offset + 6 ..][0..2], .little),
+                    .entries_on_disk = std.mem.readInt(u16, search[offset + 8 ..][0..2], .little),
+                    .entry_count = std.mem.readInt(u16, search[offset + 10 ..][0..2], .little),
+                    .central_size = std.mem.readInt(u32, search[offset + 12 ..][0..4], .little),
+                    .central_offset = std.mem.readInt(u32, search[offset + 16 ..][0..4], .little),
                 };
             }
         }
-        if (offset == lower) break;
+        if (offset == 0) break;
         offset -= 1;
     }
     return error.InvalidZipArchive;

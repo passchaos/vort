@@ -64,6 +64,8 @@ pub const WinZipAesVendorVersion = types.WinZipAesVendorVersion;
 pub const WinZipAesInfo = types.WinZipAesInfo;
 pub const SplitOptions = split.Options;
 pub const SplitNormalizedStream = split.NormalizedStream;
+pub const SplitPartSource = split.PartSource;
+pub const SplitNormalizedSourceStream = split.NormalizedSourceStream;
 pub const SplitIncrementalReader = split_incremental_reader.Reader;
 pub const SplitIncrementalReaderOptions = split_incremental_reader.Options;
 pub const SplitIncrementalReaderError = split_incremental_reader.Error;
@@ -1214,6 +1216,41 @@ const EmptySplitTestFixture = struct {
     }
 };
 
+const SplitPartSourceContext = struct {
+    parts: []const []const u8,
+    active_disk: ?usize = null,
+    switches: usize = 0,
+    releases: usize = 0,
+    reads: usize = 0,
+    max_read: usize = std.math.maxInt(usize),
+    fail_after: ?usize = null,
+
+    fn readAt(
+        context: *anyopaque,
+        disk: usize,
+        offset: usize,
+        output: []u8,
+    ) error{PartSourceReadFailed}!usize {
+        const self: *SplitPartSourceContext = @ptrCast(@alignCast(context));
+        if (self.fail_after) |limit| if (self.reads >= limit)
+            return error.PartSourceReadFailed;
+        self.reads += 1;
+        if (disk >= self.parts.len or offset > self.parts[disk].len)
+            return error.PartSourceReadFailed;
+        if (self.active_disk != disk) {
+            if (self.active_disk != null) self.releases += 1;
+            self.active_disk = disk;
+            self.switches += 1;
+        }
+        const amount = @min(
+            output.len,
+            @min(self.max_read, self.parts[disk].len - offset),
+        );
+        @memcpy(output[0..amount], self.parts[disk][offset..][0..amount]);
+        return amount;
+    }
+};
+
 const SplitTestCut = enum {
     descriptor,
     central_directory,
@@ -1733,6 +1770,30 @@ test "ZIP split incremental reader streams WinZip AES and ZipCrypto entries" {
         error.InvalidZipPassword,
         drainSplitIncrementalReader(&wrong_password),
     );
+
+    var part_lengths = [_]usize{
+        fixture.parts[0].len,
+        fixture.parts[1].len,
+        fixture.parts[2].len,
+    };
+    var source_context: SplitPartSourceContext = .{
+        .parts = &fixture.parts,
+        .max_read = 5,
+    };
+    var source_reader = try SplitIncrementalReader.initSourceAlloc(
+        allocator,
+        .{
+            .context = &source_context,
+            .part_lengths = &part_lengths,
+            .read_at = SplitPartSourceContext.readAt,
+        },
+        .{
+            .reader_options = .{ .password = password },
+            .input_buffer_size = 13,
+        },
+    );
+    defer source_reader.deinit();
+    try drainSplitIncrementalReader(&source_reader);
 }
 
 test "ZIP split archive accepts empty ZIP32 and ZIP64 disk sets" {
@@ -1758,6 +1819,137 @@ test "ZIP split archive accepts empty ZIP32 and ZIP64 disk sets" {
         try std.testing.expectEqual(@as(usize, 0), result.progress.output_written);
         try reader.finish();
     }
+}
+
+test "ZIP split source reader loads parts on demand and propagates failures" {
+    const allocator = std.testing.allocator;
+    const entries = [_]EncodeEntry{
+        .{
+            .name = "source-crossing.txt",
+            .data = "on-demand split source payload\n" ** 257,
+            .method = .deflate,
+        },
+        .{
+            .name = "source-tail.bin",
+            .data = "on-demand tail",
+            .method = .stored,
+        },
+    };
+    const source = try encodeAlloc(allocator, &entries, .{
+        .archive_comment = "source callback",
+        .data_descriptor = true,
+        .zip64 = .always,
+    });
+    defer allocator.free(source);
+    var fixture = try makeSplitTestFixture(allocator, source, .central_directory);
+    defer fixture.deinit();
+    var part_lengths = [_]usize{
+        fixture.parts[0].len,
+        fixture.parts[1].len,
+        fixture.parts[2].len,
+    };
+    var context: SplitPartSourceContext = .{
+        .parts = &fixture.parts,
+        .max_read = 3,
+    };
+    var normalized = try SplitNormalizedSourceStream.initAlloc(
+        allocator,
+        .{
+            .context = &context,
+            .part_lengths = &part_lengths,
+            .read_at = SplitPartSourceContext.readAt,
+        },
+        .{},
+    );
+    defer normalized.deinit();
+    part_lengths = @splat(0);
+    var owned = try parseSplitArchiveAlloc(allocator, &fixture.parts, .{});
+    defer owned.deinit();
+    var offset: usize = 0;
+    var scratch: [7]u8 = undefined;
+    while (offset < normalized.len()) {
+        const written = try normalized.readAt(offset, &scratch);
+        try std.testing.expect(written != 0);
+        try std.testing.expectEqualSlices(
+            u8,
+            owned.bytes[offset..][0..written],
+            scratch[0..written],
+        );
+        offset += written;
+    }
+    try std.testing.expect(context.reads > normalized.patchCount());
+    try std.testing.expect(context.switches > fixture.parts.len);
+    try std.testing.expectEqual(context.switches - 1, context.releases);
+
+    part_lengths = .{
+        fixture.parts[0].len,
+        fixture.parts[1].len,
+        fixture.parts[2].len,
+    };
+    context = .{ .parts = &fixture.parts, .max_read = 3 };
+    var reader = try SplitIncrementalReader.initSourceAlloc(
+        allocator,
+        .{
+            .context = &context,
+            .part_lengths = &part_lengths,
+            .read_at = SplitPartSourceContext.readAt,
+        },
+        .{ .input_buffer_size = 11 },
+    );
+    defer reader.deinit();
+    try drainSplitIncrementalReader(&reader);
+    try std.testing.expect(context.switches > fixture.parts.len);
+    try std.testing.expectEqual(context.switches - 1, context.releases);
+
+    var failing_context: SplitPartSourceContext = .{
+        .parts = &fixture.parts,
+        .fail_after = 0,
+    };
+    try std.testing.expectError(
+        error.PartSourceReadFailed,
+        SplitIncrementalReader.initSourceAlloc(
+            allocator,
+            .{
+                .context = &failing_context,
+                .part_lengths = &part_lengths,
+                .read_at = SplitPartSourceContext.readAt,
+            },
+            .{},
+        ),
+    );
+
+    var short_marker_lengths = part_lengths;
+    short_marker_lengths[0] = 3;
+    try std.testing.expectError(
+        error.InvalidZipDiskOrder,
+        SplitIncrementalReader.initSourceAlloc(
+            allocator,
+            .{
+                .context = &context,
+                .part_lengths = &short_marker_lengths,
+                .read_at = SplitPartSourceContext.readAt,
+            },
+            .{},
+        ),
+    );
+
+    context = .{ .parts = &fixture.parts };
+    var failing_reader = try SplitIncrementalReader.initSourceAlloc(
+        allocator,
+        .{
+            .context = &context,
+            .part_lengths = &part_lengths,
+            .read_at = SplitPartSourceContext.readAt,
+        },
+        .{},
+    );
+    defer failing_reader.deinit();
+    context.fail_after = context.reads;
+    var output: [16]u8 = undefined;
+    try std.testing.expectError(
+        error.PartSourceReadFailed,
+        failing_reader.step(&output),
+    );
 }
 
 test "ZIP split writer plans standard atomic records and round trips" {

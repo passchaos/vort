@@ -11,6 +11,8 @@ const normalized_stream = @import("split/normalized_stream.zig");
 pub const Error = normalized_stream.Error;
 pub const Options = normalized_stream.Options;
 pub const NormalizedStream = normalized_stream.Stream;
+pub const PartSource = normalized_stream.PartSource;
+pub const NormalizedSourceStream = normalized_stream.SourceStream;
 
 pub fn normalizeAlloc(
     allocator: std.mem.Allocator,
