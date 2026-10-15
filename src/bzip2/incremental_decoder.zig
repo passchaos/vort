@@ -36,6 +36,13 @@ pub const Decoder = struct {
         max_compressed_block_len: usize = 4 * 1024 * 1024,
         max_decoded_block_len: usize = 64 * 1024 * 1024,
         expected_output_len: ?usize = null,
+        /// Stop after the first validated Bzip2 stream and retain any bytes
+        /// already buffered beyond its terminator for an outer container.
+        stop_after_first_stream: bool = false,
+        /// Optional retry granularity while locating the first stream end.
+        /// Outer containers set this to their smallest descriptor width to
+        /// bound accepted suffix bytes. Zero preserves exponential retries.
+        first_stream_retry_granularity: usize = 0,
     };
     pub const Phase = enum {
         header,
@@ -61,6 +68,7 @@ pub const Decoder = struct {
         input_finished: bool,
         last_error_name: []const u8,
         last_error_phase: Phase,
+        trailing_input_bytes: usize,
     };
 
     pub fn init(allocator: std.mem.Allocator) Decoder {
@@ -117,7 +125,17 @@ pub const Decoder = struct {
             .input_finished = self.input_finished,
             .last_error_name = self.last_error_name,
             .last_error_phase = self.last_error_phase,
+            .trailing_input_bytes = self.trailingInput().len,
         };
+    }
+
+    /// Bytes accepted from the latest caller slice but proven to follow the
+    /// first stream. This is non-empty only with `stop_after_first_stream` and
+    /// remains borrowed until the next mutating call, reset, or deinit.
+    pub fn trailingInput(self: *const Decoder) []const u8 {
+        if (!self.options.stop_after_first_stream or self.phase != .done or self.bit_offset != 0)
+            return &.{};
+        return self.compressed.items[self.compressed_start..];
     }
 
     pub fn diagnostics(self: *const Decoder) core.StreamingDiagnostics {
@@ -250,6 +268,12 @@ pub const Decoder = struct {
                 self.phase = .input;
             },
             .between_streams => {
+                if (self.options.stop_after_first_stream) {
+                    if (self.options.expected_output_len) |expected|
+                        if (self.validated_output != expected) return error.SizeMismatch;
+                    self.phase = .done;
+                    return result(input_read, output_written, .done);
+                }
                 self.header_len = 0;
                 self.combined_crc = 0;
                 self.block_limit = 0;
@@ -304,7 +328,11 @@ pub const Decoder = struct {
     fn scheduleRetry(self: *Decoder) Error!void {
         const buffered = self.bufferedCompressedLen();
         if (buffered >= self.options.max_compressed_block_len) return error.OutputLimitExceeded;
-        const growth = @max(buffered, 64);
+        const growth = if (self.options.stop_after_first_stream and
+            self.options.first_stream_retry_granularity != 0)
+            self.options.first_stream_retry_granularity
+        else
+            @max(buffered, 64);
         const wanted = std.math.add(usize, buffered, growth) catch
             self.options.max_compressed_block_len;
         self.retry_at_len = @min(wanted, self.options.max_compressed_block_len);

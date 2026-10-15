@@ -37,6 +37,35 @@ test "Bzip2 incremental decoder accepts byte input tiny output and concatenation
     try std.testing.expectEqual(@as(usize, 0), decoder.snapshot().stream_count);
 }
 
+test "Bzip2 incremental decoder stops after first stream and exposes buffered suffix" {
+    const frame = pythonFrame();
+    const suffix = "ZIP descriptor and next header";
+    const input = frame ++ suffix.*;
+    var decoder = bzip2.IncrementalDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = python_payload.len,
+        .max_output_len = python_payload.len,
+        .stop_after_first_stream = true,
+        .first_stream_retry_granularity = 12,
+    });
+    defer decoder.deinit();
+    var decoded: [python_payload.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (true) {
+        const stepped = try decoder.step(input[input_offset..], decoded[output_offset..]);
+        input_offset += stepped.progress.input_read;
+        output_offset += stepped.progress.output_written;
+        if (stepped.status == .done) break;
+    }
+    try std.testing.expectEqualSlices(u8, python_payload, &decoded);
+    var recovered_suffix: [suffix.len]u8 = undefined;
+    const buffered = decoder.trailingInput();
+    @memcpy(recovered_suffix[0..buffered.len], buffered);
+    @memcpy(recovered_suffix[buffered.len..], input[input_offset..]);
+    try std.testing.expectEqualSlices(u8, suffix, &recovered_suffix);
+    try std.testing.expectEqual(buffered.len, decoder.snapshot().trailing_input_bytes);
+}
+
 test "Bzip2 incremental decoder crosses non-byte-aligned multi-block boundaries" {
     const input = try std.testing.allocator.alloc(u8, 100_321);
     defer std.testing.allocator.free(input);
