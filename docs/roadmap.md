@@ -20580,3 +20580,23 @@ reuse, so production keeps the simpler independently owned plans.
   (`split_zip_source_cases=2`, `split_zip_source_switches=11`). The full
   repository graph passes 2719/2719, `run-zip-diff` all 13 steps, CLI help
   smoke, and `zig build check` all 113 steps.
+
+- Added one-shot password-based PKWARE Strong Encryption for AES-128/192/256.
+  The independent `../vail/archive_crypto` package owns the APPNOTE SHA-1/
+  CryptDeriveKey-compatible master/file derivation, AES-CBC, PKCS#7, encrypted
+  random data, validator CRC, AES-192 decryption and secret wiping; Vort owns
+  bits 0/6, version-needed 5.1, central-only format-2 `0x0017`, format-3
+  decryption-header parsing, compressed-size accounting and codec composition.
+  `ZipEncodeEntry.pkware_strong_encryption` takes explicit IV/random/validation
+  entropy, while the reader also accepts APPNOTE's CRC+size synthesized IV.
+  ZIP32/ZIP64 and known/descriptor entries compose with every one-shot method
+  and the owned split writer. Focused tests cover all strengths, Stored/
+  Deflate/Bzip2, deterministic output, wrong passwords, corrupt validation/
+  padding, malformed flags/algorithm/version, zero-length IV, OOM and encryption
+  conflicts. A locally built 7-Zip 26.04 at commit
+  `9128b80e3a471108678e2b3ec3c985861c8d7b0f` independently decrypts all six
+  known/descriptor cases. Certificate recipients, non-AES algorithms, central-
+  directory encryption, incremental writing and sequential/split-stream
+  decryption remain explicit follow-ups. The focused gate passes 55/55,
+  `run-zip-diff` remains green across all 13 build steps with
+  `pkware_strong_cases=6`, and `zig build check` passes all 113 steps.

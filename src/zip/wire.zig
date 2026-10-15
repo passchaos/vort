@@ -11,6 +11,7 @@ pub const zip64_end_of_central_signature: u32 = 0x0606_4b50;
 pub const zip64_end_of_central_locator_signature: u32 = 0x0706_4b50;
 pub const central_directory_digital_signature: u32 = 0x0505_4b50;
 pub const zip64_extra_id: u16 = 0x0001;
+pub const pkware_strong_extra_id: u16 = 0x0017;
 pub const winzip_aes_extra_id: u16 = 0x9901;
 
 pub const local_file_header_len: usize = 30;
@@ -33,6 +34,7 @@ pub const version_63: u16 = 63;
 pub const deterministic_dos_time: u16 = 0;
 pub const deterministic_dos_date: u16 = 0x0021;
 pub const encrypted_flag: u16 = 1 << 0;
+pub const strong_encryption_flag: u16 = 1 << 6;
 pub const descriptor_flag: u16 = 1 << 3;
 pub const lzma_end_marker_flag: u16 = 1 << 1;
 pub const utf8_flag: u16 = 1 << 11;
@@ -49,6 +51,7 @@ pub const EncodedEntry = struct {
     local_header_offset: u64,
     zip64: bool,
     winzip_aes: ?types.WinZipAesInfo = null,
+    pkware_strong_encryption: ?types.PkwareStrongEncryptionInfo = null,
 };
 
 pub const LocalHeaderOptions = struct {
@@ -131,7 +134,8 @@ pub fn appendCentralHeader(
     try appendU16(allocator, out, @intCast(entry.name.len));
     try appendU16(allocator, out, @intCast(
         (if (entry.zip64) @as(usize, 28) else 0) +
-            (if (entry.winzip_aes != null) @as(usize, 11) else 0),
+            (if (entry.winzip_aes != null) @as(usize, 11) else 0) +
+            (if (entry.pkware_strong_encryption != null) @as(usize, 12) else 0),
     ));
     try appendU16(allocator, out, @intCast(entry.comment.len));
     try appendU16(allocator, out, 0);
@@ -148,7 +152,26 @@ pub fn appendCentralHeader(
         try appendU64(allocator, out, entry.local_header_offset);
     }
     if (entry.winzip_aes) |aes| try appendWinZipAesExtra(allocator, out, aes, entry.method);
+    if (entry.pkware_strong_encryption) |strong|
+        try appendPkwareStrongEncryptionExtra(allocator, out, strong);
     try out.appendSlice(allocator, entry.comment);
+}
+
+fn appendPkwareStrongEncryptionExtra(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    strong: types.PkwareStrongEncryptionInfo,
+) !void {
+    try appendU16(allocator, out, pkware_strong_extra_id);
+    try appendU16(allocator, out, 8);
+    try appendU16(allocator, out, 2);
+    try appendU16(allocator, out, switch (strong.strength) {
+        .aes128 => 0x660e,
+        .aes192 => 0x660f,
+        .aes256 => 0x6610,
+    });
+    try appendU16(allocator, out, @intCast(strong.strength.keyLen() * 8));
+    try appendU16(allocator, out, 0x0001);
 }
 
 fn appendWinZipAesExtra(
@@ -251,7 +274,10 @@ pub fn requiredVersion(method: CompressionMethod, zip64: bool) u16 {
 
 pub fn requiredVersionForEntry(entry: EncodedEntry) u16 {
     const codec_version = requiredVersion(entry.method, entry.zip64);
-    return if (entry.winzip_aes != null) @max(codec_version, version_51) else codec_version;
+    return if (entry.winzip_aes != null or entry.pkware_strong_encryption != null)
+        @max(codec_version, version_51)
+    else
+        codec_version;
 }
 
 pub fn selectEntryZip64(

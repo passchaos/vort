@@ -34,6 +34,8 @@ pub fn main(init: std.process.Init) !void {
     var zipcrypto_descriptor_mode = false;
     var winzip_aes_mode = false;
     var winzip_aes_descriptor_mode = false;
+    var pkware_strong_mode = false;
+    var pkware_strong_descriptor_mode = false;
     var split_mode = false;
     if (mode) |value| {
         if (std.mem.eql(u8, value, "zip64")) {
@@ -76,6 +78,11 @@ pub fn main(init: std.process.Init) !void {
         } else if (std.mem.eql(u8, value, "winzip-aes-descriptor")) {
             winzip_aes_mode = true;
             winzip_aes_descriptor_mode = true;
+        } else if (std.mem.eql(u8, value, "pkware-strong")) {
+            pkware_strong_mode = true;
+        } else if (std.mem.eql(u8, value, "pkware-strong-descriptor")) {
+            pkware_strong_mode = true;
+            pkware_strong_descriptor_mode = true;
         } else if (std.mem.startsWith(u8, value, "dcl-")) {
             dcl_mode = true;
             const specification = value["dcl-".len..];
@@ -221,6 +228,53 @@ pub fn main(init: std.process.Init) !void {
             },
         },
     };
+    const strong_iv128 = [_]u8{0x71} ** 16;
+    const strong_iv192 = [_]u8{0x72} ** 16;
+    const strong_iv256 = [_]u8{0x73} ** 16;
+    const strong_random128 = [_]u8{0x81} ** 16;
+    const strong_random192 = [_]u8{0x82} ** 16;
+    const strong_random256 = [_]u8{0x83} ** 32;
+    const strong_validation128 = [_]u8{0x91} ** 12;
+    const strong_validation192 = [_]u8{0x92} ** 12;
+    const strong_validation256 = [_]u8{0x93} ** 12;
+    const pkware_strong_entries = [_]vort.ZipEncodeEntry{
+        .{
+            .name = "strong/stored-128.bin",
+            .data = "Vort PKWARE Strong AES-128 stored payload.",
+            .method = .stored,
+            .pkware_strong_encryption = .{
+                .password = "vort-strong-password",
+                .strength = .aes128,
+                .iv = strong_iv128,
+                .random_data = &strong_random128,
+                .validation_data = &strong_validation128,
+            },
+        },
+        .{
+            .name = "strong/deflate-192.txt",
+            .data = "Vort PKWARE Strong AES-192 Deflate payload.\n" ** 67,
+            .method = .deflate,
+            .pkware_strong_encryption = .{
+                .password = "vort-strong-password",
+                .strength = .aes192,
+                .iv = strong_iv192,
+                .random_data = &strong_random192,
+                .validation_data = &strong_validation192,
+            },
+        },
+        .{
+            .name = "strong/bzip2-256.txt",
+            .data = "Vort PKWARE Strong AES-256 Bzip2 payload.\n" ** 53,
+            .method = .bzip2,
+            .pkware_strong_encryption = .{
+                .password = "vort-strong-password",
+                .strength = .aes256,
+                .iv = strong_iv256,
+                .random_data = &strong_random256,
+                .validation_data = &strong_validation256,
+            },
+        },
+    };
     const split_entries = [_]vort.ZipEncodeEntry{
         .{
             .name = "split/crossing.bin",
@@ -243,6 +297,8 @@ pub fn main(init: std.process.Init) !void {
         &split_entries
     else if (winzip_aes_mode)
         &winzip_aes_entries
+    else if (pkware_strong_mode)
+        &pkware_strong_entries
     else if (zipcrypto_mode)
         &zipcrypto_entries
     else if (reduce_mode or reduce_descriptor_mode)
@@ -254,8 +310,8 @@ pub fn main(init: std.process.Init) !void {
     const encode_options: vort.ZipEncodeOptions = .{
         .archive_comment = "vort zip writer differential",
         .data_descriptor = split_mode or implode_descriptor_mode or reduce_descriptor_mode or
-            zipcrypto_descriptor_mode or winzip_aes_descriptor_mode or
-            !(implode_mode or reduce_mode or dcl_mode or zipcrypto_mode or winzip_aes_mode),
+            zipcrypto_descriptor_mode or winzip_aes_descriptor_mode or pkware_strong_descriptor_mode or
+            !(implode_mode or reduce_mode or dcl_mode or zipcrypto_mode or winzip_aes_mode or pkware_strong_mode),
         .zip64 = zip64,
         .implode_options = .{
             .dictionary = if (implode_large) .large_8k else .small_4k,

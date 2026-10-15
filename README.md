@@ -289,7 +289,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   with explicit caller-supplied header entropy and passwords; WinZip AE-1/AE-2
   AES-128/192/256 one-shot reading/writing, bounded incremental writing, and
   known-size/descriptor-backed sequential reading with explicit caller salt and Vail-backed
-  PBKDF2/CTR/HMAC; ordered split/multi-disk ZIP32/ZIP64 normalization with
+  PBKDF2/CTR/HMAC; password-based PKWARE Strong Encryption AES-128/192/256
+  one-shot reading/writing with caller-owned IV/random/validation entropy,
+  strict `0x0017`/bit-6/decryption-header validation, and Vail-backed SHA-1
+  key derivation/AES-CBC/PKCS#7; ordered split/multi-disk ZIP32/ZIP64 normalization with
   strict disk-coordinate and allocation limits, cross-volume payload/descriptor
   extraction through the ordinary archive codecs, plus an O(parts + entries)
   sparse metadata-patch stream and bounded sequential reader that avoid a
@@ -297,8 +300,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   physical volumes, plus deterministic owned split writing that keeps all
   structural records atomic while allowing payloads to cross volumes, and an
   incremental split writer with bounded current-part/control storage plus
-  explicit `part_done` sink transitions; and explicit PKWARE strong-encryption/
-  unknown-method errors;
+  explicit `part_done` sink transitions; and explicit unsupported certificate/
+  non-AES strong-encryption and unknown-method errors;
 - dependency-free Bzip2 `BZh1`...`BZh9` encoding and decoding with canonical Huffman,
   selector/inverse move-to-front, RUNA/RUNB, inverse BWT, first-stage RLE,
   legacy randomized-block reversal, multi-block and explicit
@@ -1777,14 +1780,15 @@ joined archive is allocated. For non-resident media, `ZipSplitPartSource` plus
 `ZipSplitIncrementalReader.initSourceAlloc` copies only part lengths and uses a
 short-read callback, allowing the caller to open one volume and release the
 previous one on disk switches. `zipEncodeSplitAlloc` adds a deterministic owned
-writer for every one-shot method and both supported encryption families. It
+writer for every one-shot method and all three supported encryption families. It
 emits the conventional split marker, keeps local headers/descriptors/central
 records/endings within one part, and exposes borrowed part slices over one
 owned backing allocation. `ZipSplitIncrementalWriter` reuses every incremental
 codec/encryption path, retains only the established codec state, central
 metadata, one atomic control record and caller-selected current-part storage,
-and reports `part_done` before output switches volumes. PKWARE strong
-encryption remains unsupported. See
+and reports `part_done` before output switches volumes. PKWARE Strong
+Encryption is currently one-shot only; its incremental writer and sequential
+reader paths remain unsupported. See
 [the ZIP format status](docs/formats/zip.md) for the full state and wire
 contract. Writer-specific additive errors are exposed separately as
 `ZipIncrementalWriterError`; the established `ZipError` set is unchanged.
@@ -1849,6 +1853,14 @@ Missing/wrong passwords, encrypted-header corruption, ciphertext corruption,
 deterministic caller entropy and allocation failures are required coverage.
 The reusable cipher and secure-memory handling come from `../vail/archive_crypto`;
 Vort owns only ZIP wire policy and codec composition.
+PKWARE Strong Encryption adds six deterministic password-based AES-128/192/256
+one-shot cases across known-size and descriptor-backed entries. A locally built
+7-Zip 26.04 at source commit `9128b80e3a471108678e2b3ec3c985861c8d7b0f`
+independently decrypts all six Stored/Deflate/Bzip2 cases. Reader coverage also
+includes APPNOTE's synthesized zero-length-IV form, wrong passwords, corrupt
+validation/padding, malformed flags/algorithm metadata, and allocation failure.
+Certificate recipients, non-AES algorithms, central-directory encryption and
+incremental Strong Encryption remain explicit gaps.
 The incremental writer adds six known/unknown/empty ZIP32/ZIP64 cases in
 separate deterministic archives (1,695/1,939 bytes), decoded independently by
 Python, Vort's one-shot reader, and Info-ZIP.

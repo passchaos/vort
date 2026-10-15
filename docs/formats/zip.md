@@ -108,7 +108,7 @@ surface retains `EncryptedZipEntry`. Missing and rejected passwords return
 `PasswordRequired` and `InvalidZipPassword`, while the ordinary outer CRC-32
 still detects ciphertext corruption that passes the one-byte password check.
 `Archive.compressedData` deliberately does not expose ciphertext as if it were
-a codec payload. PKWARE strong-encryption flags remain unsupported.
+a codec payload.
 Traditional ZipCrypto is legacy compatibility, not authenticated modern
 encryption; applications requiring confidentiality and integrity should use
 the WinZip AES surface below.
@@ -168,6 +168,36 @@ code beside signed/unsigned ZIP32/ZIP64 descriptor candidates; self-delimiting
 codecs roll back any accepted authentication/descriptor bytes at EOS. Only
 confirmed ciphertext remains in HMAC state before the authentication code is
 checked and the ordinary descriptor parser resumes.
+
+## PKWARE Strong Encryption
+
+The one-shot reader and writer support APPNOTE password-based Strong Encryption
+with AES-128, AES-192, or AES-256. `ZipEncodeEntry.pkware_strong_encryption`
+requires the password plus a caller-supplied 16-byte IV, block-aligned random
+data, and validation entropy whose length plus CRC-32 is block-aligned. This
+keeps CSPRNG ownership explicit and deterministic fixtures reproducible. The
+writer emits bits 0 and 6, version-needed 5.1 or higher, the format-2 `0x0017`
+record in the central header only, and a format-3 decryption header before the
+compressed ciphertext. Both ZIP32/ZIP64 and known-size/descriptor layouts are
+supported for every one-shot compression method.
+
+Vail's `archive_crypto.pkware_strong` owns SHA-1/CryptDeriveKey-compatible
+master/file keys, AES-CBC, PKCS#7 padding, encrypted random data, password
+validation CRC-32, AES-192 decryption, and secret wiping. Vort owns AlgID/flags,
+extra/decryption-header layout, synthesized-IV policy, compressed-size
+accounting, and codec composition. The reader accepts both an explicit 16-byte
+IV and APPNOTE's zero-length form derived from entry CRC-32 plus uncompressed
+size. It rejects mismatched algorithms/key sizes, certificate flags, reserved
+data, and malformed lengths before codec work.
+
+This legacy profile provides confidentiality but no ciphertext authentication;
+the ordinary ZIP CRC-32 remains the final content check. New applications
+should prefer WinZip AES when authenticated encryption compatibility is
+required. Certificate recipients, DES/3DES/RC2/RC4/Blowfish/Twofish, encrypted
+central directories, incremental writing, and sequential/split-stream reading
+are not yet supported. A fixed 7-Zip 26.04 source build at commit
+`9128b80e3a471108678e2b3ec3c985861c8d7b0f` independently extracts six
+Vort-produced AES strength × known/descriptor Stored/Deflate/Bzip2 cases.
 
 ## Incremental entry decoder
 
@@ -313,8 +343,8 @@ by ZIP.
 `max_ppmd_compressed_buffer_len` bounds retained range-coded input.
 Any `step` error makes the state terminal until `reset`, because payload may
 already have reached an external sink. `finish()` distinguishes a truncated
-source. PKWARE strong encryption and archive-extra-data records remain
-unsupported. This sequential state machine does not directly consume separate
+source. PKWARE Strong Encryption and archive-extra-data records remain
+unsupported by this sequential state machine. It does not directly consume separate
 split/multi-disk slices; `ZipSplitIncrementalReader` supplies their sparse
 normalized view without changing the codec state machine.
 Shrink uses one fixed approximately 40 KiB workspace while
@@ -512,7 +542,7 @@ accepted by the sequential reader alongside descriptor-backed AES. The writers
 remain single-disk, and the sequential reader does not directly coordinate
 separate split/multi-disk sources. The split adapter described below validates
 and supplies them as one logical stream without allocating joined archive
-bytes.
+bytes. PKWARE Strong Encryption remains one-shot on both sides.
 
 The incremental differential uses forty-five entries: known Stored data containing a
 descriptor-signature byte sequence, unknown Stored data containing two such
@@ -919,9 +949,10 @@ zig build run-zip-diff
 The writer rejects empty names, invalid UTF-8 names/comments when UTF-8 mode is
 enabled, fields longer than ZIP's 16-bit name/comment limit, and methods other
 than stored/Shrink/Reduce1-4/Implode/Deflate/Deflate64/DCL-Implode/Bzip2/LZMA/Zstandard-20/Zstandard-93/XZ/PPMd. The
-one-shot reader accepts Traditional ZipCrypto and WinZip AES when
-`ZipDecodeOptions.password` is provided, and deliberately rejects PKWARE
-strong encryption, malformed/duplicate ZIP64 extra fields, and compression methods other than
+one-shot reader accepts Traditional ZipCrypto, WinZip AES, and password-based
+PKWARE Strong AES when `ZipDecodeOptions.password` is provided. It deliberately
+rejects certificate/non-AES Strong Encryption, malformed/duplicate ZIP64 extra
+fields, and compression methods other than
 stored/Shrink/Reduce1-4/Implode/Deflate/Deflate64/DCL-Implode/Bzip2/LZMA/
 Zstandard-20/Zstandard-93/XZ/PPMd with specific errors.
 Addressable entry and archive sizes remain bounded by the target's `usize` and

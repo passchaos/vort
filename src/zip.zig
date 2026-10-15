@@ -14,6 +14,7 @@ const implode_incremental_encoder = @import("zip/implode/incremental_encoder.zig
 const implode_incremental_encoder_tests = @import("zip/implode_incremental_encoder_tests.zig");
 const implode_incremental_tests = @import("zip/implode_incremental_tests.zig");
 const ppmd8 = @import("ppmd8.zig");
+const pkware_strong = @import("zip/pkware_strong.zig");
 const xz = @import("xz.zig");
 const zstd = @import("zstd.zig");
 const records = @import("zip/records.zig");
@@ -28,6 +29,7 @@ const split = @import("zip/split.zig");
 const split_incremental_reader = @import("zip/split_incremental_reader.zig");
 const split_incremental_writer = @import("zip/split_incremental_writer.zig");
 const split_incremental_writer_tests = @import("zip/split_incremental_writer_tests.zig");
+const pkware_strong_tests = @import("zip/pkware_strong_tests.zig");
 const split_writer = @import("zip/split_writer.zig");
 const traditional_encryption = @import("vail_archive_crypto").zipcrypto;
 const winzip_aes = @import("vail_archive_crypto").winzip_aes;
@@ -62,6 +64,9 @@ pub const WinZipAesOptions = writer.WinZipAesOptions;
 pub const WinZipAesStrength = types.WinZipAesStrength;
 pub const WinZipAesVendorVersion = types.WinZipAesVendorVersion;
 pub const WinZipAesInfo = types.WinZipAesInfo;
+pub const PkwareStrongEncryptionOptions = writer.PkwareStrongEncryptionOptions;
+pub const PkwareStrongEncryptionStrength = types.PkwareStrongEncryptionStrength;
+pub const PkwareStrongEncryptionInfo = types.PkwareStrongEncryptionInfo;
 pub const SplitOptions = split.Options;
 pub const SplitNormalizedStream = split.NormalizedStream;
 pub const SplitPartSource = split.PartSource;
@@ -164,6 +169,11 @@ test "ZIP Traditional ZipCrypto test suite" {
 
 test "ZIP WinZip AES test suite" {
     _ = winzip_aes;
+}
+
+test "ZIP PKWARE Strong Encryption crypto suite" {
+    _ = pkware_strong;
+    _ = pkware_strong_tests;
 }
 
 pub const DecodeOptions = struct {
@@ -283,6 +293,15 @@ pub const Archive = struct {
                     local_payload.data,
                     password,
                     aes.strength,
+                )
+            else if (canonical.pkware_strong_encryption) |strong|
+                try pkware_strong.decryptAlloc(
+                    scratch_allocator,
+                    local_payload.data,
+                    password,
+                    strong.strength,
+                    canonical.crc32,
+                    canonical.uncompressed_size,
                 )
             else traditional: {
                 if (canonical.flags & (1 << 6) != 0) return error.UnsupportedZipFeature;
@@ -560,11 +579,21 @@ fn parseCentralEntry(archive: Archive, offset: usize) Error!ParsedCentralEntry {
         disk_start_u16,
     );
     const parsed_aes = try records.parseWinZipAesExtra(archive.bytes[name_end..extra_end]);
+    const parsed_strong = try records.parsePkwareStrongEncryptionExtra(
+        archive.bytes[name_end..extra_end],
+    );
     if ((wire_method == .aes) != (parsed_aes != null)) return error.InvalidZipArchive;
     if (parsed_aes != null and flags & wire.encrypted_flag == 0)
         return error.InvalidZipArchive;
+    if (parsed_aes != null and parsed_strong != null) return error.InvalidZipArchive;
+    const strong_flag = flags & wire.strong_encryption_flag != 0;
+    if (strong_flag != (parsed_strong != null) or
+        (strong_flag and flags & wire.encrypted_flag == 0))
+        return error.InvalidZipArchive;
     const method = if (parsed_aes) |aes| aes.actual_method else wire_method;
     if (parsed_aes != null and version_needed < wire.version_51)
+        return error.InvalidZipArchive;
+    if (parsed_strong != null and version_needed < wire.version_51)
         return error.InvalidZipArchive;
     if (values.zip64 and version_needed < 45) return error.InvalidZipArchive;
     if (method == .bzip2 and version_needed < 46) return error.InvalidZipArchive;
@@ -586,6 +615,7 @@ fn parseCentralEntry(archive: Archive, offset: usize) Error!ParsedCentralEntry {
             .central_header_offset = offset,
             .zip64 = values.zip64,
             .winzip_aes = if (parsed_aes) |aes| aes.info else null,
+            .pkware_strong_encryption = parsed_strong,
         },
         .next_offset = next_offset,
     };
@@ -622,6 +652,10 @@ fn localPayloadData(
     const local_extra_start = name_end;
     const data_start = try checkedEnd(local_extra_start, extra_len, archive.central_directory_offset);
     const local_aes = try records.parseWinZipAesExtra(archive.bytes[local_extra_start..data_start]);
+    const local_strong = try records.parsePkwareStrongEncryptionExtra(
+        archive.bytes[local_extra_start..data_start],
+    );
+    if (local_strong != null) return error.InvalidZipArchive;
     if ((local_method == .aes) != (local_aes != null)) return error.InvalidZipArchive;
     if (entry.winzip_aes) |expected_aes| {
         const actual_aes = local_aes orelse return error.InvalidZipArchive;
@@ -630,7 +664,7 @@ fn localPayloadData(
     } else if (local_aes != null or local_method != entry.method) {
         return error.InvalidZipArchive;
     }
-    const compared_flags: u16 = 0x0009 | switch (entry.method) {
+    const compared_flags: u16 = 0x0049 | switch (entry.method) {
         .lzma => @as(u16, 0x0002),
         .implode => @as(u16, 0x0006),
         else => @as(u16, 0),
@@ -647,6 +681,8 @@ fn localPayloadData(
     if (entry.method == .lzma and local_version_needed < 63) return error.InvalidZipArchive;
     if (entry.method == .ppmd and local_version_needed < 63) return error.InvalidZipArchive;
     if (entry.winzip_aes != null and local_version_needed < wire.version_51)
+        return error.InvalidZipArchive;
+    if (entry.pkware_strong_encryption != null and local_version_needed < wire.version_51)
         return error.InvalidZipArchive;
     if (isZstandardMethod(entry.method) and local_version_needed < 63)
         return error.InvalidZipArchive;
@@ -677,7 +713,8 @@ fn sameEntry(a: Entry, b: Entry) bool {
         a.local_header_offset == b.local_header_offset and
         a.central_header_offset == b.central_header_offset and
         a.zip64 == b.zip64 and
-        std.meta.eql(a.winzip_aes, b.winzip_aes);
+        std.meta.eql(a.winzip_aes, b.winzip_aes) and
+        std.meta.eql(a.pkware_strong_encryption, b.pkware_strong_encryption);
 }
 
 fn readU16(bytes: []const u8, offset: usize) Error!u16 {

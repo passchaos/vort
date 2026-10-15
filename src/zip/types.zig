@@ -1,4 +1,5 @@
 const winzip_aes = @import("vail_archive_crypto").winzip_aes;
+const pkware_strong = @import("vail_archive_crypto").pkware_strong;
 
 pub const WinZipAesStrength = winzip_aes.Strength;
 
@@ -10,6 +11,12 @@ pub const WinZipAesVendorVersion = enum(u16) {
 pub const WinZipAesInfo = struct {
     version: WinZipAesVendorVersion,
     strength: WinZipAesStrength,
+};
+
+pub const PkwareStrongEncryptionStrength = pkware_strong.Strength;
+
+pub const PkwareStrongEncryptionInfo = struct {
+    strength: PkwareStrongEncryptionStrength,
 };
 
 pub const CompressionMethod = enum(u16) {
@@ -50,6 +57,7 @@ pub const Entry = struct {
     central_header_offset: usize,
     zip64: bool,
     winzip_aes: ?WinZipAesInfo = null,
+    pkware_strong_encryption: ?PkwareStrongEncryptionInfo = null,
 
     pub fn isDirectory(self: Entry) bool {
         return self.name.len != 0 and self.name[self.name.len - 1] == '/';
@@ -61,5 +69,9 @@ pub const Entry = struct {
 
     pub fn isWinZipAes(self: Entry) bool {
         return self.winzip_aes != null;
+    }
+
+    pub fn isPkwareStrongEncrypted(self: Entry) bool {
+        return self.pkware_strong_encryption != null;
     }
 };

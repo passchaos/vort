@@ -8,6 +8,7 @@ const deflate64 = @import("../deflate64.zig");
 const implode = @import("implode.zig");
 const lzma_writer = @import("../lzma/writer.zig");
 const ppmd8 = @import("../ppmd8.zig");
+const pkware_strong = @import("pkware_strong.zig");
 const reduce = @import("reduce.zig");
 const shrink = @import("shrink.zig");
 const types = @import("types.zig");
@@ -17,7 +18,7 @@ const wire = @import("wire.zig");
 const xz = @import("../xz.zig");
 const zstd = @import("../zstd.zig");
 
-pub const Error = core.Error || bzip2.Error || dcl_implode.Error || deflate64.Error || implode.Error || lzma_writer.Error || ppmd8.Error || reduce.Error || shrink.Error || traditional_encryption.Error || winzip_aes.Error || xz.Error || zstd.Error || error{
+pub const Error = core.Error || bzip2.Error || dcl_implode.Error || deflate64.Error || implode.Error || lzma_writer.Error || ppmd8.Error || pkware_strong.Error || reduce.Error || shrink.Error || traditional_encryption.Error || winzip_aes.Error || xz.Error || zstd.Error || error{
     InvalidZipEntryName,
     InvalidZipTextEncoding,
     UnsupportedZipCompressionMethod,
@@ -40,6 +41,8 @@ pub const WinZipAesOptions = struct {
     version: types.WinZipAesVendorVersion = .ae2,
 };
 
+pub const PkwareStrongEncryptionOptions = pkware_strong.Options;
+
 pub const EncodeEntry = struct {
     name: []const u8,
     data: []const u8,
@@ -47,6 +50,7 @@ pub const EncodeEntry = struct {
     comment: []const u8 = "",
     traditional_encryption: ?traditional_encryption.Options = null,
     winzip_aes: ?WinZipAesOptions = null,
+    pkware_strong_encryption: ?PkwareStrongEncryptionOptions = null,
 };
 
 pub const EncodeOptions = struct {
@@ -105,7 +109,9 @@ pub fn encodeAppend(
         const uncompressed_size = try wire.usizeToU64(entry.data.len);
         const flags: u16 = (if (entry.method == .lzma) wire.lzma_end_marker_flag else 0) |
             (if (entry.method == .implode) options.implode_options.flags() else 0) |
-            (if (entry.traditional_encryption != null or entry.winzip_aes != null) wire.encrypted_flag else 0) |
+            (if (entry.traditional_encryption != null or entry.winzip_aes != null or
+                entry.pkware_strong_encryption != null) wire.encrypted_flag else 0) |
+            (if (entry.pkware_strong_encryption != null) wire.strong_encryption_flag else 0) |
             (if (options.data_descriptor) wire.descriptor_flag else 0) |
             (if (options.utf8) wire.utf8_flag else 0);
 
@@ -206,6 +212,10 @@ pub fn encodeAppend(
             });
             owned_encrypted = bytes;
             break :encrypted bytes;
+        } else if (entry.pkware_strong_encryption) |encryption| encrypted: {
+            const bytes = try pkware_strong.encryptAlloc(allocator, codec_payload, encryption);
+            owned_encrypted = bytes;
+            break :encrypted bytes;
         } else codec_payload;
         const compressed_size = try wire.usizeToU64(compressed.len);
         const entry_zip64 = wire.selectEntryZip64(
@@ -232,6 +242,9 @@ pub fn encodeAppend(
             .winzip_aes = if (entry.winzip_aes) |aes| .{
                 .version = aes.version,
                 .strength = aes.strength,
+            } else null,
+            .pkware_strong_encryption = if (entry.pkware_strong_encryption) |strong| .{
+                .strength = strong.strength,
             } else null,
         };
         try wire.appendLocalHeader(allocator, &archive, encoded.*, .{});
@@ -284,10 +297,14 @@ fn validateInputs(entries: []const EncodeEntry, options: EncodeOptions) Error!vo
         return error.Zip32LimitExceeded;
     if (options.archive_comment.len > std.math.maxInt(u16)) return error.Zip32LimitExceeded;
     for (entries) |entry| {
-        if (entry.traditional_encryption != null and entry.winzip_aes != null)
+        if ((entry.traditional_encryption != null and entry.winzip_aes != null) or
+            (entry.traditional_encryption != null and entry.pkware_strong_encryption != null) or
+            (entry.winzip_aes != null and entry.pkware_strong_encryption != null))
             return error.ConflictingZipEncryption;
         if (entry.winzip_aes) |aes|
             if (aes.salt.len != aes.strength.saltLen()) return error.InvalidSaltLength;
+        if (entry.pkware_strong_encryption) |strong|
+            try pkware_strong.validateOptions(strong);
         if (entry.name.len == 0) return error.InvalidZipEntryName;
         if (entry.name.len > std.math.maxInt(u16) or entry.comment.len > std.math.maxInt(u16))
             return error.Zip32LimitExceeded;

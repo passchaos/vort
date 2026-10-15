@@ -14,6 +14,7 @@ const zip64_end_of_central_min_len: usize = 56;
 const zip64_locator_len: usize = 20;
 const max_comment_len: usize = std.math.maxInt(u16);
 const zip64_extra_id: u16 = 0x0001;
+const pkware_strong_extra_id: u16 = 0x0017;
 const winzip_aes_extra_id: u16 = 0x9901;
 
 pub const ParsedWinZipAes = struct {
@@ -44,6 +45,26 @@ pub fn parseWinZipAesExtra(extra: []const u8) Error!?ParsedWinZipAes {
         .info = .{ .version = version, .strength = strength },
         .actual_method = actual_method,
     };
+}
+
+pub fn parsePkwareStrongEncryptionExtra(
+    extra: []const u8,
+) Error!?types.PkwareStrongEncryptionInfo {
+    const payload = (try findExtra(extra, pkware_strong_extra_id)) orelse return null;
+    if (payload.len != 8) return error.InvalidZipArchive;
+    if (std.mem.readInt(u16, payload[0..2], .little) != 2)
+        return error.InvalidZipArchive;
+    const strength: types.PkwareStrongEncryptionStrength = switch (std.mem.readInt(u16, payload[2..4], .little)) {
+        0x660e => .aes128,
+        0x660f => .aes192,
+        0x6610 => .aes256,
+        else => return error.UnsupportedZipFeature,
+    };
+    if (std.mem.readInt(u16, payload[4..6], .little) != strength.keyLen() * 8)
+        return error.InvalidZipArchive;
+    const flags = std.mem.readInt(u16, payload[6..8], .little);
+    if (flags != 0x0001) return error.UnsupportedZipFeature;
+    return .{ .strength = strength };
 }
 
 pub const Directory = struct {

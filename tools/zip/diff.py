@@ -602,6 +602,13 @@ WINZIP_AES_PAYLOADS = {
     "aes/small-256.bin": b"small",
 }
 
+PKWARE_STRONG_PASSWORD = "vort-strong-password"
+PKWARE_STRONG_PAYLOADS = {
+    "strong/stored-128.bin": b"Vort PKWARE Strong AES-128 stored payload.",
+    "strong/deflate-192.txt": b"Vort PKWARE Strong AES-192 Deflate payload.\n" * 67,
+    "strong/bzip2-256.txt": b"Vort PKWARE Strong AES-256 Bzip2 payload.\n" * 53,
+}
+
 
 def decrypt_winzip_aes_reference(
     raw: bytes,
@@ -844,6 +851,100 @@ def validate_vort_zipcrypto(
         if extracted != b"".join(ZIPCRYPTO_PAYLOADS.values()):
             raise AssertionError("Info-ZIP could not decrypt Vort ZipCrypto output")
     return cases, sequential_cases
+
+
+def validate_vort_pkware_strong(
+    cli: Path,
+    writer: Path,
+    temp: Path,
+    seven_zip_tool: str | None,
+) -> tuple[int, int]:
+    cases = 0
+    seven_zip_cases = 0
+    expected_algorithms = (0x660E, 0x660F, 0x6610)
+    for descriptor in (False, True):
+        suffix = "descriptor" if descriptor else "known"
+        archive_path = temp / f"vort-pkware-strong-{suffix}.zip"
+        run(
+            writer,
+            str(archive_path),
+            "pkware-strong-descriptor" if descriptor else "pkware-strong",
+        )
+        with zipfile.ZipFile(archive_path) as archive:
+            if archive.namelist() != list(PKWARE_STRONG_PAYLOADS):
+                raise AssertionError("Vort PKWARE Strong entry order mismatch")
+            for index, (name, expected) in enumerate(PKWARE_STRONG_PAYLOADS.items()):
+                info = archive.getinfo(name)
+                if info.flag_bits & 0x41 != 0x41 or bool(info.flag_bits & 8) != descriptor:
+                    raise AssertionError(f"Vort PKWARE Strong flags mismatch for {name!r}")
+                fields = parse_extra_fields(
+                    info.extra, f"PKWARE Strong central {name!r}"
+                )
+                strong = fields.get(0x0017)
+                if strong is None or len(strong) != 8:
+                    raise AssertionError(f"missing PKWARE Strong extra field for {name!r}")
+                record_format, algorithm, bit_length, flags = struct.unpack(
+                    "<HHHH", strong
+                )
+                if (
+                    record_format != 2
+                    or algorithm != expected_algorithms[index]
+                    or bit_length != (128, 192, 256)[index]
+                    or flags != 1
+                ):
+                    raise AssertionError(f"invalid PKWARE Strong extra field for {name!r}")
+
+                output = temp / f"vort-pkware-strong-{suffix}-{index}.out"
+                extract_with_vort_password(
+                    cli,
+                    archive_path,
+                    name,
+                    output,
+                    PKWARE_STRONG_PASSWORD,
+                )
+                if output.read_bytes() != expected:
+                    raise AssertionError(
+                        f"Vort PKWARE Strong self-extraction mismatch for {name!r}"
+                    )
+                wrong = subprocess.run(
+                    [
+                        str(cli),
+                        "extract-zip-file",
+                        str(archive_path),
+                        name,
+                        str(temp / f"vort-pkware-strong-{suffix}-{index}.wrong"),
+                        str(512 * 1024 * 1024),
+                        str(64 * 1024 * 1024),
+                        "wrong-password",
+                    ],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+                if wrong.returncode == 0:
+                    raise AssertionError("Vort accepted a wrong PKWARE Strong password")
+                cases += 1
+
+                if seven_zip_tool is not None:
+                    extracted = subprocess.run(
+                        [
+                            seven_zip_tool,
+                            "x",
+                            "-so",
+                            "-bd",
+                            f"-p{PKWARE_STRONG_PASSWORD}",
+                            str(archive_path),
+                            name,
+                        ],
+                        check=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    ).stdout
+                    if extracted != expected:
+                        raise AssertionError(
+                            f"7-Zip could not decrypt Vort PKWARE Strong {name!r}"
+                        )
+                    seven_zip_cases += 1
+    return cases, seven_zip_cases
 
 
 def validate_infozip_zipcrypto(
@@ -2564,6 +2665,9 @@ def main() -> None:
         winzip_aes_cases, incremental_reader_winzip_aes_cases = validate_vort_winzip_aes(
             args.cli, args.writer, temp, openssl_tool
         )
+        pkware_strong_cases, pkware_strong_7zip_cases = validate_vort_pkware_strong(
+            args.cli, args.writer, temp, seven_zip_tool
+        )
         incremental_zip32_bytes, incremental_zip32_unzip, incremental_zip32_7zip = (
             validate_incremental_writer_archive(
                 args.cli, args.incremental_writer, temp, False, unzip_tool, seven_zip_tool
@@ -2715,6 +2819,8 @@ def main() -> None:
         f"incremental_reader_zipcrypto_cases={incremental_reader_zipcrypto_cases} "
         f"winzip_aes_cases={winzip_aes_cases} "
         f"incremental_reader_winzip_aes_cases={incremental_reader_winzip_aes_cases} "
+        f"pkware_strong_cases={pkware_strong_cases} "
+        f"pkware_strong_7zip_cases={pkware_strong_7zip_cases} "
         f"incremental_entries={len(INCREMENTAL_PAYLOADS)} "
         f"incremental_zip32_bytes={incremental_zip32_bytes} "
         f"incremental_zip64_bytes={incremental_zip64_bytes} "
