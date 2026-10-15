@@ -1602,8 +1602,8 @@ snapshots/streaming diagnostics, and treat a `step` error as terminal until
 reset. `finish` distinguishes truncated input when a source ends early.
 
 `ZipIncrementalReader` builds the complete sequential archive state machine on
-that data plane. It parses local headers and streams Stored, Deflate, Bzip2,
-LZMA, XZ, and legacy/current Zstandard payloads. ZIP32/ZIP64 descriptors with
+that data plane. It parses local headers and streams Stored, Deflate, Deflate64,
+Bzip2, LZMA, XZ, and legacy/current Zstandard payloads. ZIP32/ZIP64 descriptors with
 or without the optional signature are accepted; the reader emits `entry_header`
 and `entry_done` boundaries and validates every central record,
 optional central-directory digital signature, ZIP64 EOCD/locator, legacy EOCD,
@@ -1611,8 +1611,10 @@ entry count, offset, size, CRC, and archive comment before returning `done`.
 Stored unsigned descriptors use a bounded 16/24-byte lookbehind and require a
 following ZIP record signature plus matching CRC and sizes, so payload copies
 of `PK\x07\x08` do not create false boundaries. Deflate uses its final block as
-the unambiguous compressed boundary; Bzip2 uses its validated stream terminator
-and Zstandard its validated frame end. ZIP method 14 parses its 9-byte
+the unambiguous compressed boundary; Deflate64 shares the resumable block
+machine with a 64 KiB history, 32 distance symbols and extended code 285;
+Bzip2 uses its validated stream terminator and Zstandard its validated frame
+end. ZIP method 14 parses its 9-byte
 properties prefix and uses the mandatory EOS marker in descriptor mode; XZ
 stops after its validated Index/Footer before outer descriptor bytes can be
 mistaken for stream padding. Arbitrary input/output fragmentation,
@@ -1620,10 +1622,10 @@ zero-output backpressure, reset reuse, SFX `initial_offset`, strict or allowed
 trailing data, and explicit entry/total-output, entry-count, metadata, central-
 directory, and control-record limits share one API.
 
-The sequential reader retains a 32 KiB Deflate history, at most one bounded
-Bzip2 block, bounded Zstandard frame/block scratch, LZMA range/dictionary
-state, at most one bounded XZ block, entry names and
-compact validation records until the central directory, the final archive
+The sequential reader retains 32 KiB Deflate and 64 KiB Deflate64 histories,
+at most one bounded Bzip2 block, bounded Zstandard frame/block scratch, LZMA
+range/dictionary state, at most one bounded XZ block, entry names and compact
+validation records until the central directory, the final archive
 comment, and one bounded control record; it never retains complete decoded
 payloads or the whole archive. Other ZIP compression methods continue to use
 the broader complete-buffer extraction APIs.
@@ -1663,9 +1665,9 @@ invalid and must not be committed. After an error, mutating calls return
 validation errors from `beginEntry` and a premature short `finishEntry` remain
 recoverable. The existing one-shot `zipEncodeAppend` retains its transactional
 guarantee and broader method support. Incremental writing does not yet cover
-the other ZIP methods; the sequential reader additionally covers Bzip2, LZMA,
-XZ, and legacy/current Zstandard. Encryption and multi-disk archives remain
-unsupported. See
+the other ZIP methods; the sequential reader additionally covers Deflate64,
+Bzip2, LZMA, XZ, and legacy/current Zstandard. Encryption and multi-disk
+archives remain unsupported. See
 [the ZIP format status](docs/formats/zip.md) for the full state and wire
 contract. Writer-specific additive errors are exposed separately as
 `ZipIncrementalWriterError`; the established `ZipError` set is unchanged.
@@ -1683,10 +1685,12 @@ reader with the same fragmentation, including Bzip2 method 12 and LZMA method
 14 (`incremental_archive_reader_cases=6`). System-zstd frames wrapped as legacy
 method 20 and current method 93 also pass the sequential path
 (`incremental_archive_zstd_cases=2`), as does an independently generated XZ
-method-95 member (`incremental_archive_xz_cases=1`).
+method-95 member (`incremental_archive_xz_cases=1`). A fixed 7-Zip Deflate64
+payload wrapped as method 9 also passes the required sequential path
+(`incremental_archive_deflate64_cases=1`).
 Focused writer tests pass 61/61, the incremental entry decoder suite passes
-15/15, and the archive reader suite passes 18/18. The full repository graph
-passes 2641/2641 and `zig build check` passes 113/113.
+15/15, and the archive reader suite passes 19/19. The full repository graph
+passes 2646/2646 and `zig build check` passes 113/113.
 The refactored one-shot writer remains byte-identical to HEAD across 14 probe
 modes. The current host has no 7z/7zz, so that optional extraction branch is
 reported as skipped rather than passed.

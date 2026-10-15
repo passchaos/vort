@@ -130,13 +130,16 @@ Stored and Deflate retain their complete-buffer extraction paths.
 ## Incremental archive reader
 
 `ZipIncrementalReader` consumes a complete ZIP archive sequentially without
-retaining decoded payload bytes. It accepts Stored, Deflate, Bzip2, LZMA, XZ,
-and legacy/current Zstandard local entries, including known-size entries and
-bit-3 descriptors in all four ZIP32/ZIP64 × signed/unsigned layouts. Deflate's
+retaining decoded payload bytes. It accepts Stored, Deflate, Deflate64, Bzip2,
+LZMA, XZ, and legacy/current Zstandard local entries, including known-size
+entries and bit-3 descriptors in all four ZIP32/ZIP64 × signed/unsigned
+layouts. Deflate's
 final block, Bzip2's validated stream terminator, LZMA's EOS marker, XZ's
 validated Index/Footer, and Zstandard's validated frame end determine their
-compressed boundaries. ZIP method 14's 9-byte properties prefix is translated
-into the internal LZMA state without becoming decoded data; descriptor mode
+compressed boundaries. Deflate64 reuses the byte-progressive Deflate state
+machine with a caller-owned 64 KiB history, 32-symbol distance alphabet, and
+the extended 16-bit code-285 length. ZIP method 14's 9-byte properties prefix
+is translated into the internal LZMA state without becoming decoded data; descriptor mode
 requires its standard general-purpose bit-1 EOS declaration.
 Stored unsigned descriptors are inherently ambiguous, so the reader holds only
 the final 16 or 24 bytes and accepts a boundary when CRC, compressed size,
@@ -193,7 +196,7 @@ by ZIP.
 Any `step` error makes the state terminal until `reset`, because payload may
 already have reached an external sink. `finish()` distinguishes a truncated
 source. Encryption, multi-disk/split archives, archive-extra-data records, and
-incremental Shrink/Reduce/Implode/Deflate64/DCL Implode/PPMd payloads remain
+incremental Shrink/Reduce/Implode/DCL Implode/PPMd payloads remain
 unsupported.
 
 ## Incremental writer
@@ -315,7 +318,7 @@ one-shot and reader APIs is unchanged.
 The incremental writer does not yet support Shrink, Reduce, Implode, Deflate64,
 DCL Implode, Bzip2, LZMA, Zstandard, XZ, or PPMd entries. The sequential reader
 additionally streams Bzip2 and legacy/current Zstandard. Encryption and multi-
-additionally streams Bzip2, LZMA, XZ, and legacy/current Zstandard. Encryption
+additionally streams Deflate64, Bzip2, LZMA, XZ, and legacy/current Zstandard. Encryption
 and multi-disk/split archives remain unsupported; the existing complete-buffer reader
 and broader one-shot writer retain their documented method coverage.
 
@@ -344,7 +347,9 @@ signature payload bytes, Deflate, Bzip2, LZMA, force-ZIP64 local metadata with a
 (`incremental_archive_reader_cases=6`). Two system-zstd frames wrapped as
 legacy method 20 and current method 93 also pass the sequential path
 (`incremental_archive_zstd_cases=2`). An independently generated XZ method-95
-member passes the same path (`incremental_archive_xz_cases=1`). No 7z/7zz is
+member passes the same path (`incremental_archive_xz_cases=1`). A fixed 7-Zip
+Deflate64 payload wrapped as method 9 passes the required sequential path
+(`incremental_archive_deflate64_cases=1`). No 7z/7zz is
 installed on the current host, so the optional 7-Zip branch reports false and
 is not claimed as validation. Info-ZIP coverage uses `unzip -p` for
 contents, not pathname rendering; its 6.00 ZIP32 UTF-8 filename rendering issue
@@ -353,7 +358,7 @@ also affects the pre-existing one-shot output and is not claimed as fixed here.
 `zig test src/root.zig --test-filter 'ZIP incremental writer'` passes 61/61;
 `zig test src/zip.zig --test-filter 'ZIP incremental entry decoder'` passes
 15/15; `zig test src/zip.zig --test-filter 'ZIP incremental reader'` passes
-18/18. The full repository graph passes 2641/2641 and `zig build check` passes
+19/19. The full repository graph passes 2646/2646 and `zig build check` passes
 113/113.
 The wire refactor also leaves 14 one-shot probe modes byte-identical to HEAD,
 including every existing method and ZIP32/ZIP64 descriptor choice. Default and

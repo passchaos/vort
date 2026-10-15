@@ -20057,3 +20057,25 @@ reuse, so production keeps the simpler independently owned plans.
   Reduce, Implode, Deflate64, DCL Implode, and PPMd remain the sequential
   reader's complete-buffer-only methods. The full repository graph passes
   2641/2641 and `zig build check` passes all 113 steps.
+
+- Added true caller-output Deflate64 decoding and ZIP method-9 sequential
+  support without copying the standard DEFLATE state machine. The established
+  raw incremental decoder is now parameterized by history size, distance-
+  alphabet width, and code-285 semantics: standard DEFLATE remains the 32 KiB/
+  30-symbol/length-258 instance, while `Deflate64IncrementalDecoder` uses a
+  caller-owned 64 KiB ring, all 32 distance symbols, and code 285's 16-bit
+  length extension. Stored, fixed and dynamic blocks retain the same
+  fragmentation-independent bit/Huffman state, exact progress, match-copy,
+  expected/output limits, suffix preservation, reset and diagnostics behavior.
+  ZIP owns a 64 KiB history only while a Deflate64 member is active, reuses the
+  shared self-delimiting codec adapter, validates signed/unsigned ZIP32/ZIP64
+  descriptors plus outer CRC-32 and sizes, and checks version-needed 2.1 in
+  local and central records. Tests stream a genuine >32 KiB-distance round
+  trip, known and descriptor entries in ZIP32/ZIP64, one-byte backpressure,
+  truncation/limits/history errors, and the fixed 7-Zip Deflate64 reference
+  payload. That reference is also wrapped as a required method-9 archive in the
+  CLI gate (`incremental_archive_deflate64_cases=1`), independent of the absent
+  optional 7z executable; `run-zip-diff` remains 13/13. Shrink, Reduce,
+  Implode, DCL Implode and PPMd remain the sequential reader's buffered-only
+  methods. The full repository graph passes 2646/2646 and `zig build check`
+  passes all 113 steps.
