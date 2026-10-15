@@ -19,3 +19,27 @@ pub const CompressionMethod = enum(u16) {
     ppmd = 98,
     _,
 };
+
+/// Canonical central-directory metadata for one ZIP member.
+///
+/// `name` borrows the parsed archive bytes. The remaining fields are copied
+/// values and can be used to configure an incremental entry decoder.
+pub const Entry = struct {
+    name: []const u8,
+    method: CompressionMethod,
+    flags: u16,
+    crc32: u32,
+    compressed_size: usize,
+    uncompressed_size: usize,
+    local_header_offset: usize,
+    central_header_offset: usize,
+    zip64: bool,
+
+    pub fn isDirectory(self: Entry) bool {
+        return self.name.len != 0 and self.name[self.name.len - 1] == '/';
+    }
+
+    pub fn isEncrypted(self: Entry) bool {
+        return self.flags & 1 != 0;
+    }
+};

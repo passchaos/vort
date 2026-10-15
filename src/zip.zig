@@ -13,8 +13,10 @@ const zstd = @import("zstd.zig");
 const records = @import("zip/records.zig");
 const reduce = @import("zip/reduce.zig");
 const shrink = @import("zip/shrink.zig");
+const types = @import("zip/types.zig");
 pub const writer = @import("zip/writer.zig");
 pub const incremental_writer = @import("zip/incremental_writer.zig");
+pub const incremental_entry_decoder = @import("zip/incremental_entry_decoder.zig");
 
 pub const Error = writer.Error || bzip2.Error || dcl_implode.Error || deflate64.Error || implode.Error || lzma.Error || ppmd8.Error || reduce.Error || shrink.Error || xz.Error || zstd.Error || error{
     InvalidZipArchive,
@@ -39,6 +41,11 @@ pub const IncrementalWriterError = incremental_writer.Error;
 pub const IncrementalWriterOptions = incremental_writer.Options;
 pub const IncrementalEntryOptions = incremental_writer.EntryOptions;
 pub const IncrementalWriterPhase = incremental_writer.Phase;
+pub const IncrementalEntryDecoder = incremental_entry_decoder.Decoder;
+pub const OwnedIncrementalEntryDecoder = incremental_entry_decoder.OwnedDecoder;
+pub const IncrementalEntryDecoderError = incremental_entry_decoder.Error;
+pub const IncrementalEntryDecoderOptions = incremental_entry_decoder.Options;
+pub const IncrementalEntryDecoderPhase = incremental_entry_decoder.Phase;
 pub const DclImplodeDictionary = dcl_implode.Dictionary;
 pub const DclImplodeOptions = dcl_implode.Options;
 pub const encodeAlloc = writer.encodeAlloc;
@@ -48,30 +55,16 @@ test "ZIP incremental writer test suite" {
     _ = incremental_writer;
 }
 
+test "ZIP incremental entry decoder test suite" {
+    _ = incremental_entry_decoder;
+}
+
 pub const DecodeOptions = struct {
     max_output_len: usize = std.math.maxInt(usize),
     max_dictionary_size: usize = 64 * 1024 * 1024,
 };
 
-pub const Entry = struct {
-    name: []const u8,
-    method: CompressionMethod,
-    flags: u16,
-    crc32: u32,
-    compressed_size: usize,
-    uncompressed_size: usize,
-    local_header_offset: usize,
-    central_header_offset: usize,
-    zip64: bool,
-
-    pub fn isDirectory(self: Entry) bool {
-        return self.name.len != 0 and self.name[self.name.len - 1] == '/';
-    }
-
-    pub fn isEncrypted(self: Entry) bool {
-        return self.flags & 1 != 0;
-    }
-};
+pub const Entry = types.Entry;
 
 pub const Archive = struct {
     bytes: []const u8,
@@ -120,6 +113,15 @@ pub const Archive = struct {
             error.OutOfMemory => unreachable,
             else => |zip_error| return zip_error,
         };
+    }
+
+    /// Returns the checksum- and size-described compressed payload after
+    /// validating that the local header agrees with the canonical central
+    /// entry. The returned slice borrows the archive bytes.
+    pub fn compressedData(self: Archive, entry: Entry) Error![]const u8 {
+        const canonical = (try parseCentralEntry(self, entry.central_header_offset)).entry;
+        if (!sameEntry(entry, canonical)) return error.InvalidZipArchive;
+        return localCompressedData(self, canonical);
     }
 
     pub fn extractIntoWithAllocator(
@@ -453,6 +455,18 @@ fn localCompressedData(archive: Archive, entry: Entry) Error![]const u8 {
             return error.InvalidZipArchive;
     }
     return archive.bytes[data_start..data_end];
+}
+
+fn sameEntry(a: Entry, b: Entry) bool {
+    return std.mem.eql(u8, a.name, b.name) and
+        a.method == b.method and
+        a.flags == b.flags and
+        a.crc32 == b.crc32 and
+        a.compressed_size == b.compressed_size and
+        a.uncompressed_size == b.uncompressed_size and
+        a.local_header_offset == b.local_header_offset and
+        a.central_header_offset == b.central_header_offset and
+        a.zip64 == b.zip64;
 }
 
 fn readU16(bytes: []const u8, offset: usize) Error!u16 {
