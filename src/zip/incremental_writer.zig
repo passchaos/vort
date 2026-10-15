@@ -64,6 +64,9 @@ pub const Options = struct {
     max_central_directory_size: usize = std.math.maxInt(usize),
     max_uncompressed_size: u64 = std.math.maxInt(u64),
     max_archive_size: u64 = std.math.maxInt(u64),
+    /// Return before emitting the next control-record class. This is used by
+    /// the split-volume adapter; ordinary callers should keep the default.
+    stop_at_record_boundaries: bool = false,
 };
 
 /// Metadata for one streaming entry. Stored, raw Deflate, and Bzip2 are accepted.
@@ -534,6 +537,7 @@ pub const Writer = struct {
                     continue;
                 },
                 .entry_header, .entry_descriptor, .archive_end => {
+                    const completed_phase = self.phase;
                     try self.drainPending(output, &output_written);
                     if (self.pending_offset != self.pending.items.len)
                         return result(input_read, output_written, .need_output);
@@ -548,6 +552,9 @@ pub const Writer = struct {
                         },
                         else => unreachable,
                     }
+                    if (self.options.stop_at_record_boundaries and
+                        completed_phase != .archive_end)
+                        return result(input_read, output_written, .need_input);
                     if (output_written == output.len) {
                         const status: core.StepResult.Status = if (self.phase == .ready and !self.finish_archive_requested)
                             .need_input
@@ -562,6 +569,8 @@ pub const Writer = struct {
                         if (input_read != input.len) return error.TrailingData;
                         if (self.current.?.method == .stored) {
                             try self.finalizeEntry();
+                            if (self.options.stop_at_record_boundaries)
+                                return result(input_read, output_written, .need_output);
                             continue;
                         }
                         var entry = &self.current.?;
@@ -573,6 +582,8 @@ pub const Writer = struct {
                         try self.accountCodecProgress(entry, "", encoded.progress, &input_read, &output_written);
                         if (encoded.status == .done) {
                             try self.finalizeEntry();
+                            if (self.options.stop_at_record_boundaries)
+                                return result(input_read, output_written, .need_output);
                             continue;
                         }
                         if (encoded.status == .need_output or output_written == output.len)
@@ -640,6 +651,8 @@ pub const Writer = struct {
                     self.central.clearRetainingCapacity();
                     self.central_offset = 0;
                     try self.buildArchiveEnd();
+                    if (self.options.stop_at_record_boundaries)
+                        return result(input_read, output_written, .need_output);
                     if (output_written == output.len)
                         return result(input_read, output_written, .need_output);
                     continue;

@@ -26,6 +26,8 @@ const shrink_incremental_tests = @import("zip/shrink_incremental_tests.zig");
 const shrink_incremental_encoder_tests = @import("zip/shrink_incremental_encoder_tests.zig");
 const split = @import("zip/split.zig");
 const split_incremental_reader = @import("zip/split_incremental_reader.zig");
+const split_incremental_writer = @import("zip/split_incremental_writer.zig");
+const split_incremental_writer_tests = @import("zip/split_incremental_writer_tests.zig");
 const split_writer = @import("zip/split_writer.zig");
 const traditional_encryption = @import("vail_archive_crypto").zipcrypto;
 const winzip_aes = @import("vail_archive_crypto").winzip_aes;
@@ -36,7 +38,7 @@ pub const incremental_writer = @import("zip/incremental_writer.zig");
 pub const incremental_entry_decoder = @import("zip/incremental_entry_decoder.zig");
 pub const incremental_reader = @import("zip/incremental_reader.zig");
 
-pub const Error = writer.Error || split.Error || split_writer.Error || bzip2.Error || dcl_implode.Error || deflate64.Error || implode.Error || lzma.Error || ppmd8.Error || reduce.Error || shrink.Error || xz.Error || zstd.Error || error{
+pub const Error = writer.Error || split.Error || split_writer.Error || split_incremental_writer.Error || bzip2.Error || dcl_implode.Error || deflate64.Error || implode.Error || lzma.Error || ppmd8.Error || reduce.Error || shrink.Error || xz.Error || zstd.Error || error{
     InvalidZipArchive,
     UnsupportedZipFeature,
     EncryptedZipEntry,
@@ -68,6 +70,10 @@ pub const SplitIncrementalReaderError = split_incremental_reader.Error;
 pub const SplitEncodeOptions = split_writer.Options;
 pub const SplitEncodedArchive = split_writer.EncodedArchive;
 pub const SplitWriterError = split_writer.Error;
+pub const SplitIncrementalWriter = split_incremental_writer.Writer;
+pub const SplitIncrementalWriterOptions = split_incremental_writer.Options;
+pub const SplitIncrementalWriterStepResult = split_incremental_writer.StepResult;
+pub const SplitIncrementalWriterError = split_incremental_writer.Error;
 pub const IncrementalWriter = incremental_writer.Writer;
 pub const IncrementalWriterError = incremental_writer.Error;
 pub const IncrementalWriterOptions = incremental_writer.Options;
@@ -1945,6 +1951,10 @@ test "ZIP split writer composes WinZip AES and ZipCrypto" {
     );
     defer stream_reader.deinit();
     try drainSplitIncrementalReader(&stream_reader);
+}
+
+test "ZIP split incremental writer test suite" {
+    _ = split_incremental_writer_tests;
 }
 
 test "ZIP writer appends a valid archive after a prefix and rejects inputs transactionally" {
