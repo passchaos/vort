@@ -52,6 +52,95 @@ const OwnedParts = struct {
     }
 };
 
+const FilePartSource = struct {
+    init: std.process.Init,
+    paths: []const []const u8,
+    part_lengths: []usize,
+    active_disk: ?usize = null,
+    active_bytes: ?[]u8 = null,
+    switches: usize = 0,
+    releases: usize = 0,
+
+    fn discover(
+        init: std.process.Init,
+        args: *std.process.Args.Iterator,
+    ) !FilePartSource {
+        var paths: std.ArrayList([]const u8) = .empty;
+        errdefer paths.deinit(init.gpa);
+        var lengths: std.ArrayList(usize) = .empty;
+        errdefer lengths.deinit(init.gpa);
+        var total_len: usize = 0;
+        while (args.next()) |path| {
+            const bytes = try std.Io.Dir.cwd().readFileAlloc(
+                init.io,
+                path,
+                init.gpa,
+                .limited(max_archive_size),
+            );
+            const part_len = bytes.len;
+            init.gpa.free(bytes);
+            if (part_len == 0) return error.InvalidZipArchive;
+            total_len = std.math.add(usize, total_len, part_len) catch
+                return error.IntegerOverflow;
+            if (total_len > max_archive_size) return error.OutputLimitExceeded;
+            try paths.append(init.gpa, path);
+            try lengths.append(init.gpa, part_len);
+        }
+        if (paths.items.len < 2) return error.MissingCorpusPath;
+        const owned_paths = try paths.toOwnedSlice(init.gpa);
+        errdefer init.gpa.free(owned_paths);
+        const owned_lengths = try lengths.toOwnedSlice(init.gpa);
+        return .{
+            .init = init,
+            .paths = owned_paths,
+            .part_lengths = owned_lengths,
+        };
+    }
+
+    fn deinit(self: *FilePartSource) void {
+        if (self.active_bytes) |bytes| self.init.gpa.free(bytes);
+        self.init.gpa.free(self.paths);
+        self.init.gpa.free(self.part_lengths);
+        self.* = undefined;
+    }
+
+    fn readAt(
+        context: *anyopaque,
+        disk: usize,
+        offset: usize,
+        output: []u8,
+    ) error{PartSourceReadFailed}!usize {
+        const self: *FilePartSource = @ptrCast(@alignCast(context));
+        if (disk >= self.paths.len) return error.PartSourceReadFailed;
+        if (self.active_disk != disk) {
+            if (self.active_bytes) |bytes| {
+                self.init.gpa.free(bytes);
+                self.active_bytes = null;
+                self.active_disk = null;
+                self.releases += 1;
+            }
+            const bytes = std.Io.Dir.cwd().readFileAlloc(
+                self.init.io,
+                self.paths[disk],
+                self.init.gpa,
+                .limited(max_archive_size),
+            ) catch return error.PartSourceReadFailed;
+            if (bytes.len != self.part_lengths[disk]) {
+                self.init.gpa.free(bytes);
+                return error.PartSourceReadFailed;
+            }
+            self.active_bytes = bytes;
+            self.active_disk = disk;
+            self.switches += 1;
+        }
+        const bytes = self.active_bytes.?;
+        if (offset > bytes.len) return error.PartSourceReadFailed;
+        const amount = @min(output.len, bytes.len - offset);
+        @memcpy(output[0..amount], bytes[offset..][0..amount]);
+        return amount;
+    }
+};
+
 pub fn createSplit(
     init: std.process.Init,
     args: *std.process.Args.Iterator,
@@ -335,8 +424,110 @@ pub fn extractSplitStream(
     );
     defer reader.deinit();
 
+    const extracted = try extractSelectedAlloc(
+        init.gpa,
+        &reader,
+        entry_name,
+        max_output_len,
+    );
+    defer init.gpa.free(extracted.bytes);
+    try std.Io.Dir.cwd().writeFile(init.io, .{
+        .sub_path = output_path,
+        .data = extracted.bytes,
+    });
+    try stdout.print(
+        "zip_parts={d} zip_bytes={d} normalized_input_read={d} " ++
+            "metadata_patches={d} decoded_bytes={d} calls={d} " ++
+            "entry={s} path={s}\n",
+        .{
+            parts.items.items.len,
+            reader.normalizedLength(),
+            extracted.input_read,
+            reader.metadataPatchCount(),
+            extracted.bytes.len,
+            extracted.calls,
+            entry_name,
+            output_path,
+        },
+    );
+}
+
+pub fn extractSplitSource(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const entry_name = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const max_output_len = try parseRequiredLimit(args.next());
+    const password = parsePassword(args.next() orelse return error.MissingCorpusPath);
+    var source = try FilePartSource.discover(init, args);
+    defer source.deinit();
+    var reader = try vort.ZipSplitIncrementalReader.initSourceAlloc(
+        init.gpa,
+        .{
+            .context = &source,
+            .part_lengths = source.part_lengths,
+            .read_at = FilePartSource.readAt,
+        },
+        .{
+            .split_options = .{
+                .max_archive_size = max_archive_size,
+                .max_entries = max_entries,
+            },
+            .reader_options = .{
+                .max_entries = max_entries,
+                .max_entry_output_len = max_total_decoded_size,
+                .max_total_output_len = max_total_decoded_size,
+                .password = password,
+            },
+        },
+    );
+    defer reader.deinit();
+    const extracted = try extractSelectedAlloc(
+        init.gpa,
+        &reader,
+        entry_name,
+        max_output_len,
+    );
+    defer init.gpa.free(extracted.bytes);
+    try std.Io.Dir.cwd().writeFile(init.io, .{
+        .sub_path = output_path,
+        .data = extracted.bytes,
+    });
+    try stdout.print(
+        "zip_parts={d} zip_bytes={d} normalized_input_read={d} " ++
+            "metadata_patches={d} source_switches={d} source_releases={d} " ++
+            "decoded_bytes={d} calls={d} entry={s} path={s}\n",
+        .{
+            source.paths.len,
+            reader.normalizedLength(),
+            extracted.input_read,
+            reader.metadataPatchCount(),
+            source.switches,
+            source.releases,
+            extracted.bytes.len,
+            extracted.calls,
+            entry_name,
+            output_path,
+        },
+    );
+}
+
+const Extraction = struct {
+    bytes: []u8,
+    calls: usize,
+    input_read: usize,
+};
+
+fn extractSelectedAlloc(
+    allocator: std.mem.Allocator,
+    reader: *vort.ZipSplitIncrementalReader,
+    entry_name: []const u8,
+    max_output_len: usize,
+) !Extraction {
     var decoded: std.ArrayList(u8) = .empty;
-    defer decoded.deinit(init.gpa);
+    errdefer decoded.deinit(allocator);
     var selected = false;
     var found = false;
     var calls: usize = 0;
@@ -353,7 +544,7 @@ pub fn extractSplitStream(
             if (result.progress.output_written > max_output_len -| decoded.items.len)
                 return error.OutputLimitExceeded;
             try decoded.appendSlice(
-                init.gpa,
+                allocator,
                 output[0..result.progress.output_written],
             );
         }
@@ -379,25 +570,11 @@ pub fn extractSplitStream(
     }
     try reader.finish();
     if (!found) return error.ZipEntryNotFound;
-    try std.Io.Dir.cwd().writeFile(init.io, .{
-        .sub_path = output_path,
-        .data = decoded.items,
-    });
-    try stdout.print(
-        "zip_parts={d} zip_bytes={d} normalized_input_read={d} " ++
-            "metadata_patches={d} decoded_bytes={d} calls={d} " ++
-            "entry={s} path={s}\n",
-        .{
-            parts.items.items.len,
-            reader.normalizedLength(),
-            normalized_input_read,
-            reader.metadataPatchCount(),
-            decoded.items.len,
-            calls,
-            entry_name,
-            output_path,
-        },
-    );
+    return .{
+        .bytes = try decoded.toOwnedSlice(allocator),
+        .calls = calls,
+        .input_read = normalized_input_read,
+    };
 }
 
 fn parseRequiredLimit(text: ?[]const u8) !usize {

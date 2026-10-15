@@ -1030,6 +1030,8 @@ pub fn main(init: std.process.Init) !void {
         try zip_cli.extractSplitOwned(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-zip-split-stream-files")) {
         try zip_cli.extractSplitStream(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-zip-split-source-files")) {
+        try zip_cli.extractSplitSource(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-zip-file-incremental")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const entry_name = args.next() orelse return error.MissingCorpusPath;
@@ -2927,6 +2929,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Extract from an owned normalized split/multi-disk ZIP view
         \\  extract-zip-split-stream-files <entry> <out> <max_output> <password|-> <part1> <part2> [...]
         \\                              Sequentially extract split ZIP without a joined archive copy
+        \\  extract-zip-split-source-files <entry> <out> <max_output> <password|-> <part1> <part2> [...]
+        \\                              Extract while retaining at most one physical part file
         \\  extract-zip-file-incremental <zip> <entry> <out> [max_output]
         \\                              Incrementally extract one Stored/Deflate ZIP entry
         \\  extract-zip-stream-file <zip> <entry> <out> [max_output] [password|-]

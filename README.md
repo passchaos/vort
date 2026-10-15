@@ -293,7 +293,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   strict disk-coordinate and allocation limits, cross-volume payload/descriptor
   extraction through the ordinary archive codecs, plus an O(parts + entries)
   sparse metadata-patch stream and bounded sequential reader that avoid a
-  joined archive copy, plus deterministic owned split writing that keeps all
+  joined archive copy, an on-demand `PartSource` reader that can release prior
+  physical volumes, plus deterministic owned split writing that keeps all
   structural records atomic while allowing payloads to cross volumes, and an
   incremental split writer with bounded current-part/control storage plus
   explicit `part_done` sink transitions; and explicit PKWARE strong-encryption/
@@ -1772,7 +1773,10 @@ part payloads plus O(parts + entries) disk bases/metadata patches, and
 `ZipSplitIncrementalReader` feeds that view through the existing all-codec,
 descriptor, ZipCrypto, and WinZip AES sequential state machine with a bounded
 32 KiB bridge buffer. All part payload slices must remain alive, but no second
-joined archive is allocated. `zipEncodeSplitAlloc` adds a deterministic owned
+joined archive is allocated. For non-resident media, `ZipSplitPartSource` plus
+`ZipSplitIncrementalReader.initSourceAlloc` copies only part lengths and uses a
+short-read callback, allowing the caller to open one volume and release the
+previous one on disk switches. `zipEncodeSplitAlloc` adds a deterministic owned
 writer for every one-shot method and both supported encryption families. It
 emits the conventional split marker, keeps local headers/descriptors/central
 records/endings within one part, and exposes borrowed part slices over one
@@ -1864,6 +1868,10 @@ a first-two-disk reorder is rejected. Both entries also pass the sparse
 sequential surface (`split_zip_parts=7`, `split_zip_cases=2`,
 `split_zip_stream_cases=2`, `split_zip_boundaries=6`,
 `split_zip_metadata_patches=8`).
+The same Info-ZIP set passes `ZipSplitPartSource` extraction while the CLI
+retains one physical part at a time; callback switch/release accounting is
+required so the gate cannot silently fall back to resident multi-slice input
+(`split_zip_source_cases=2`, `split_zip_source_switches=11`).
 Vort's split writer independently produces four-part ZIP32 and forced-ZIP64
 sets. Python wire parsing checks disk-local offsets and atomic record
 boundaries, raw zlib plus CRC-32 independently validate both payloads, and both
@@ -1888,7 +1896,7 @@ signed/unsigned descriptors, ZIP32/ZIP64, arbitrary tree descriptions,
 implicit-zero and overlapping matches. PPMd restart/cut-off,
 descriptor and ZIP64 paths are required Vort coverage; third-party PPMd remains
 unclaimed because this host has no 7z/7zz and Python has no method-98 codec.
-The full repository graph passes 2718/2718 and `zig build check` passes 113/113.
+The full repository graph passes 2719/2719 and `zig build check` passes 113/113.
 The refactored one-shot writer remains byte-identical to HEAD across 14 probe
 modes. The current host has no 7z/7zz, so that optional extraction branch is
 reported as skipped rather than passed.

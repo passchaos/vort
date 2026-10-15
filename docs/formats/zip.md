@@ -634,7 +634,7 @@ implicit-zero and overlapping matches. PPMd
 restart/cut-off, descriptor and ZIP64 combinations are required
 Vort coverage. Third-party method-98 evidence remains explicitly unavailable:
 Python `zipfile` has no PPMd codec and this host has no 7z/7zz. The full
-repository graph passes 2718/2718 and `zig build check` passes 113/113.
+repository graph passes 2719/2719 and `zig build check` passes 113/113.
 The wire refactor also leaves 14 one-shot probe modes byte-identical to HEAD,
 including every existing method and ZIP32/ZIP64 descriptor choice. Default and
 forced-ZIP64 SHA-256 values remain
@@ -780,6 +780,34 @@ descriptor array is copied. This removes the complete normalized copy but is
 still an in-memory multi-slice API, not a callback/file-opening source that can
 release earlier physical disks while decoding later ones.
 
+`ZipSplitPartSource` closes that lifetime gap. The caller supplies immutable
+part lengths, an opaque context, and a short-read-capable `read_at` callback.
+`ZipSplitNormalizedSourceStream` copies the length descriptors, builds the same
+sparse patch plan, and requests only the bytes needed for metadata parsing or
+sequential decode. `ZipSplitIncrementalReader.initSourceAlloc` selects this
+backing without changing entry/output semantics. Callback implementations map
+their platform I/O failures to `PartSourceReadFailed`; zero-length or oversized
+reads are rejected as malformed source behavior.
+
+```zig
+var reader = try vort.ZipSplitIncrementalReader.initSourceAlloc(
+    allocator,
+    .{
+        .context = source_context,
+        .part_lengths = part_lengths,
+        .read_at = readPartAt,
+    },
+    .{ .reader_options = .{ .password = password } },
+);
+defer reader.deinit();
+```
+
+The callback may open a volume on first access and release the previously
+active volume when `disk` changes. Initialization performs bounded random reads
+of the last record, central directory, and referenced local signatures; decode
+then proceeds from the first local record through the archive ending. Part
+contents and callback context remain caller-owned.
+
 ### Split writing
 
 `zipEncodeSplitAlloc` first produces the ordinary deterministic one-shot wire,
@@ -882,6 +910,8 @@ zig build run -- extract-zip-file archive.zip folder/data.txt output.txt 6710886
 zig build run -- extract-zip-split-files folder/data.txt output.txt 67108864 - archive.z01 archive.z02 archive.zip
 zig build run -- extract-zip-split-stream-files folder/data.txt output.txt \
   67108864 - archive.z01 archive.z02 archive.zip
+zig build run -- extract-zip-split-source-files folder/data.txt output.txt \
+  67108864 - archive.z01 archive.z02 archive.zip
 zig build run -- extract-zip-stream-file archive.zip folder/data.txt output.txt 67108864 [password|-]
 zig build run-zip-diff
 ```
@@ -901,9 +931,8 @@ the owned or sparse split APIs for ordered disk sets. The sequential reader
 accepts known-size and descriptor-backed Traditional ZipCrypto through
 `ZipIncrementalReaderOptions.password`; known-size and descriptor-backed
 WinZip AES use the same option, including through `ZipSplitIncrementalReader`.
-A disk-source callback that releases earlier reader part storage and a
-disk-count extension beyond the existing u16 central field remain future
-compatibility increments.
+A disk-count extension beyond the existing u16 central field remains a future
+compatibility increment.
 
 The required Info-ZIP differential creates a real seven-part archive with
 `zip -s 64k`. Its Deflate member crosses six disk boundaries, its following
@@ -924,6 +953,10 @@ complete ending never cross a volume. Python raw zlib and CRC-32 independently
 validate both members before the owned and sparse Vort readers add eight
 required extraction cases. The normalized views use 8 ZIP32 or 13 ZIP64
 metadata patches.
+The same two Info-ZIP entries are required through the on-demand file source.
+The gate checks source switches exceed the seven physical parts, every prior
+active file is released, exact logical input is consumed, and output matches
+byte-for-byte (`split_zip_source_cases=2`, `split_zip_source_switches=11`).
 
 The incremental-writer differential uses one-byte and 2/3/5/7-byte output
 schedules and requires byte-identical parts/boundaries. ZIP32 produces ten

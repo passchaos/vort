@@ -20562,3 +20562,21 @@ reuse, so production keeps the simpler independently owned plans.
   incremental split tests pass 15/15, the complete split surface 17/17, the full
   repository graph 2718/2718, `run-zip-diff` all 13 steps, CLI help smoke, and
   `zig build check` all 113 steps.
+
+- Added on-demand split reading through `ZipSplitPartSource`,
+  `ZipSplitNormalizedSourceStream`, and
+  `ZipSplitIncrementalReader.initSourceAlloc`. Slice-backed and callback-backed
+  inputs now share one sparse metadata-plan builder; the callback supplies
+  copied immutable part lengths plus short-read-capable per-disk `read_at`
+  operations. Metadata discovery performs bounded random reads, after which
+  the established all-codec reader progresses sequentially, allowing a source
+  to release its previous physical volume on each disk switch. Tests cover
+  three-byte short reads, copied length descriptors, sparse/materialized byte
+  equality, switch/release accounting, initialization and decode failures, and
+  descriptor-backed ZIP64 WinZip AES plus ZipCrypto. The CLI source adapter
+  discovers lengths without retaining parts and then caches at most one file.
+  The real seven-part Info-ZIP gate requires both entries through this path and
+  verifies exact logical consumption plus non-fallback switch/release counts
+  (`split_zip_source_cases=2`, `split_zip_source_switches=11`). The full
+  repository graph passes 2719/2719, `run-zip-diff` all 13 steps, CLI help
+  smoke, and `zig build check` all 113 steps.
