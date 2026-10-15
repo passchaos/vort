@@ -41,6 +41,10 @@ pub fn main(init: std.process.Init) !void {
         .micro
     else
         return error.InvalidOutputPattern;
+    const split_mode = if (entry_mode) |value|
+        std.mem.eql(u8, value, "split")
+    else
+        false;
 
     const known_stored = "\x00known-stored-PK\x07\x08-payload\xff";
     const unknown_stored = "PK\x07\x08unknown-stored-PK\x07\x08tail";
@@ -427,14 +431,159 @@ pub fn main(init: std.process.Init) !void {
             &encrypted_entries
         else if (std.mem.eql(u8, value, "winzip-aes"))
             &winzip_aes_entries
+        else if (std.mem.eql(u8, value, "split"))
+            entries[0..6]
         else
             return error.InvalidEntryMode
     else
         &entries;
 
-    const encoded = try encodeArchive(init.gpa, selected_entries, zip64, output_pattern);
-    defer init.gpa.free(encoded);
-    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+    if (split_mode) {
+        var encoded = try encodeSplitArchive(
+            init.gpa,
+            selected_entries,
+            zip64,
+            output_pattern,
+        );
+        defer encoded.deinit();
+        for (encoded.parts, 0..) |part, index| {
+            const path = if (index + 1 == encoded.parts.len)
+                try std.fmt.allocPrint(init.gpa, "{s}.zip", .{output_path})
+            else
+                try std.fmt.allocPrint(init.gpa, "{s}.z{d:0>2}", .{
+                    output_path,
+                    index + 1,
+                });
+            defer init.gpa.free(path);
+            try std.Io.Dir.cwd().writeFile(init.io, .{
+                .sub_path = path,
+                .data = part,
+            });
+        }
+    } else {
+        const encoded = try encodeArchive(init.gpa, selected_entries, zip64, output_pattern);
+        defer init.gpa.free(encoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+    }
+}
+
+const SplitArchive = struct {
+    allocator: std.mem.Allocator,
+    parts: [][]u8,
+
+    fn deinit(self: *SplitArchive) void {
+        for (self.parts) |part| self.allocator.free(part);
+        self.allocator.free(self.parts);
+        self.* = undefined;
+    }
+};
+
+fn encodeSplitArchive(
+    allocator: std.mem.Allocator,
+    entries: []const Entry,
+    zip64: vort.Zip64Mode,
+    output_pattern: OutputPattern,
+) !SplitArchive {
+    var writer = try vort.ZipSplitIncrementalWriter.initWithOptions(allocator, .{
+        .writer_options = .{
+            .archive_comment = "vort incremental split writer interop",
+            .zip64 = zip64,
+            .max_deflate_buffer_size = 1024 * 1024,
+        },
+        .max_part_size = 160,
+    });
+    defer writer.deinit();
+    var parts: std.ArrayList([]u8) = .empty;
+    errdefer {
+        for (parts.items) |part| allocator.free(part);
+        parts.deinit(allocator);
+    }
+    var current: std.ArrayList(u8) = .empty;
+    defer current.deinit(allocator);
+    var output_storage: [7]u8 = undefined;
+    var output_index: usize = 0;
+
+    for (entries, 0..) |entry, entry_index| {
+        try writer.beginEntry(.{
+            .name = entry.name,
+            .comment = entry.comment,
+            .method = entry.method,
+            .expected_size = entry.expected_size,
+            .traditional_encryption = entry.traditional_encryption,
+            .winzip_aes = entry.winzip_aes,
+        });
+        if (entry_index == 0) {
+            const blocked = try writer.step(entry.data[0..1], &.{});
+            if (blocked.status != .need_output or
+                blocked.progress.input_read != 0 or
+                blocked.progress.output_written != 0)
+                return error.ZeroOutputBackpressureMismatch;
+        }
+        var input_offset: usize = 0;
+        var input_index: usize = 0;
+        while (input_offset < entry.data.len) {
+            const input_end = @min(
+                entry.data.len,
+                input_offset + input_chunks[input_index % input_chunks.len],
+            );
+            input_index += 1;
+            while (input_offset < input_end) {
+                const output = nextOutput(&output_storage, output_pattern, &output_index);
+                const stepped = try writer.step(entry.data[input_offset..input_end], output);
+                input_offset += stepped.progress.input_read;
+                try current.appendSlice(allocator, output[0..stepped.progress.output_written]);
+                try finishSplitPart(allocator, &parts, &current, stepped.status);
+                if (stepped.progress.input_read == 0 and
+                    stepped.progress.output_written == 0 and
+                    stepped.status != .part_done)
+                    return error.WriterMadeNoProgress;
+            }
+        }
+        try writer.finishEntry();
+        while (writer.snapshot().phase != .ready) {
+            const output = nextOutput(&output_storage, output_pattern, &output_index);
+            const stepped = try writer.step("", output);
+            try current.appendSlice(allocator, output[0..stepped.progress.output_written]);
+            try finishSplitPart(allocator, &parts, &current, stepped.status);
+            if (stepped.progress.output_written == 0 and stepped.status != .part_done)
+                return error.WriterMadeNoProgress;
+        }
+    }
+    try writer.finishArchive();
+    while (true) {
+        const output = nextOutput(&output_storage, output_pattern, &output_index);
+        const stepped = try writer.step("", output);
+        try current.appendSlice(allocator, output[0..stepped.progress.output_written]);
+        try finishSplitPart(allocator, &parts, &current, stepped.status);
+        if (stepped.status == .done) break;
+        if (stepped.progress.output_written == 0 and stepped.status != .part_done)
+            return error.WriterMadeNoProgress;
+    }
+    if (current.items.len == 0) return error.WriterMadeNoProgress;
+    const final_part = try current.toOwnedSlice(allocator);
+    parts.append(allocator, final_part) catch |err| {
+        allocator.free(final_part);
+        return err;
+    };
+    return .{
+        .allocator = allocator,
+        .parts = try parts.toOwnedSlice(allocator),
+    };
+}
+
+fn finishSplitPart(
+    allocator: std.mem.Allocator,
+    parts: *std.ArrayList([]u8),
+    current: *std.ArrayList(u8),
+    status: vort.ZipSplitIncrementalWriterStepResult.Status,
+) !void {
+    if (status != .part_done) return;
+    if (current.items.len == 0) return error.WriterMadeNoProgress;
+    const part = try current.toOwnedSlice(allocator);
+    parts.append(allocator, part) catch |err| {
+        allocator.free(part);
+        return err;
+    };
 }
 
 fn encodeArchive(

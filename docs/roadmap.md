@@ -20541,3 +20541,24 @@ reuse, so production keeps the simpler independently owned plans.
   follow-ups for an incremental writer. Focused split tests pass 15/15, the
   full repository graph 2714/2714, `run-zip-diff` all 13 steps, CLI help smoke,
   and `zig build check` all 113 steps.
+
+- Added `ZipSplitIncrementalWriter` with caller-visible `part_done` boundaries.
+  A default-off record-stop mode in the established incremental writer lets the
+  adapter buffer and atomically place local/encryption prefixes, authentication
+  plus descriptors, individual central records, and ZIP32/ZIP64 endings without
+  changing ordinary writer scheduling. Codec payload bytes still stream
+  directly through caller output and may cross volumes. Central records are
+  patched from absolute to tracked disk-local entry locations; ending disk,
+  central-start, entries-on-disk, ZIP64 locator offset, and total-disk fields
+  are produced only after final volume placement is known. Archive/part bases
+  use u64 counters so 32-bit builds retain ZIP64 logical range. Tests cover
+  one-byte versus micro backpressure determinism, ZIP32/ZIP64, empty entries and
+  archives, Stored/Deflate crossings, ZipCrypto, AES-256 AE-2, exact part-size
+  transitions, limits and OOM. The required differential produces ten ZIP32
+  and thirteen ZIP64 parts with identical one/micro schedules; Python validates
+  raw Deflate, CRC, descriptors and atomic records before 24 owned/sparse reader
+  cases. The CLI exposes `create-zip-split-stream-file`; central metadata
+  retention and the 65,535-part limit remain explicit follow-ups. Focused
+  incremental split tests pass 15/15, the complete split surface 17/17, the full
+  repository graph 2718/2718, `run-zip-diff` all 13 steps, CLI help smoke, and
+  `zig build check` all 113 steps.

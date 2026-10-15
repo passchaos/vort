@@ -634,7 +634,7 @@ implicit-zero and overlapping matches. PPMd
 restart/cut-off, descriptor and ZIP64 combinations are required
 Vort coverage. Third-party method-98 evidence remains explicitly unavailable:
 Python `zipfile` has no PPMd codec and this host has no 7z/7zz. The full
-repository graph passes 2714/2714 and `zig build check` passes 113/113.
+repository graph passes 2718/2718 and `zig build check` passes 113/113.
 The wire refactor also leaves 14 one-shot probe modes byte-identical to HEAD,
 including every existing method and ZIP32/ZIP64 descriptor choice. Default and
 forced-ZIP64 SHA-256 values remain
@@ -816,6 +816,42 @@ field; supporting more disks would require expanding each relevant ZIP64
 extra. Encoding is owned and whole-archive-first, so `max_archive_size` bounds
 the accepted result but is not yet a pre-allocation/streaming bound.
 
+`ZipSplitIncrementalWriter` removes that whole-archive requirement. Its control
+surface mirrors `ZipIncrementalWriter`: call `beginEntry`, feed input through
+`step`, call `finishEntry`, then `finishArchive`. The split result adds a
+`part_done` status. All output returned up to and including that result belongs
+to the current volume; the caller switches sinks before its next `step` call.
+The writer retains the existing bounded codec state and central directory,
+plus at most one local header/encryption prefix, authentication+descriptor,
+central record, or archive ending. Payload output flows directly through the
+caller's buffer and may end exactly at a volume boundary.
+
+```zig
+var writer = try vort.ZipSplitIncrementalWriter.initWithOptions(allocator, .{
+    .writer_options = .{ .zip64 = .auto },
+    .max_part_size = 64 * 1024,
+    .max_archive_size = 512 * 1024 * 1024,
+});
+defer writer.deinit();
+
+try writer.beginEntry(.{
+    .name = "folder/data.txt",
+    .method = .deflate,
+    .expected_size = input_size,
+});
+// Repeatedly pass input/output to step. On `.part_done`, close the current
+// .zNN sink and use a fresh sink for the next call.
+try writer.finishEntry();
+try writer.finishArchive();
+```
+
+The adapter sets the underlying writer's initial offset to the four-byte split
+marker and enables internal control-record stop points; default
+`ZipIncrementalWriter` scheduling is unchanged. Logical archive offsets remain
+u64 on 32-bit targets, while individual buffers and part sizes use `usize`.
+The current implementation still retains central metadata until archive finish
+and caps the disk count at 65,535.
+
 Convenience functions `zipExtractEntryInto`, `zipExtractEntryAlloc`,
 `zipExtractEntryAllocLimited`, `zipExtractByNameAlloc`, and
 `zipExtractByNameAllocLimited` parse and extract in one call. The corresponding
@@ -840,6 +876,8 @@ CLI validation surfaces:
 zig build run -- list-zip-file archive.zip
 zig build run -- create-zip-split-file archive folder/data.txt input.txt \
   65536 deflate auto descriptor
+zig build run -- create-zip-split-stream-file archive folder/data.txt \
+  input.txt 65536 deflate auto
 zig build run -- extract-zip-file archive.zip folder/data.txt output.txt 67108864 67108864 [password|-]
 zig build run -- extract-zip-split-files folder/data.txt output.txt 67108864 - archive.z01 archive.z02 archive.zip
 zig build run -- extract-zip-split-stream-files folder/data.txt output.txt \
@@ -863,8 +901,9 @@ the owned or sparse split APIs for ordered disk sets. The sequential reader
 accepts known-size and descriptor-backed Traditional ZipCrypto through
 `ZipIncrementalReaderOptions.password`; known-size and descriptor-backed
 WinZip AES use the same option, including through `ZipSplitIncrementalReader`.
-A disk-source callback that releases earlier part storage and an incremental
-split writer remain future compatibility increments.
+A disk-source callback that releases earlier reader part storage and a
+disk-count extension beyond the existing u16 central field remain future
+compatibility increments.
 
 The required Info-ZIP differential creates a real seven-part archive with
 `zip -s 64k`. Its Deflate member crosses six disk boundaries, its following
@@ -885,6 +924,13 @@ complete ending never cross a volume. Python raw zlib and CRC-32 independently
 validate both members before the owned and sparse Vort readers add eight
 required extraction cases. The normalized views use 8 ZIP32 or 13 ZIP64
 metadata patches.
+
+The incremental-writer differential uses one-byte and 2/3/5/7-byte output
+schedules and requires byte-identical parts/boundaries. ZIP32 produces ten
+parts and forced ZIP64 thirteen; payloads cross two/one boundaries respectively.
+Python independently validates the six known/unknown/empty Stored/Deflate
+members, descriptors, CRCs and atomic records, followed by 24 owned/sparse
+Vort extraction cases.
 
 The differential verifies Vort Shrink output with system 7-Zip, including a
 32 KiB deterministic high-entropy payload that reaches the full dictionary.

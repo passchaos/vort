@@ -2371,6 +2371,112 @@ def validate_vort_split_writer(
     return len(parts), extraction_cases, crossing_boundaries, patch_count or 0
 
 
+def validate_incremental_split_writer(
+    cli: Path,
+    writer: Path,
+    temp: Path,
+    force_zip64: bool,
+) -> tuple[int, int, int, int]:
+    suffix = "zip64" if force_zip64 else "zip32"
+    mode = suffix
+    prefixes = [
+        temp / f"incremental-split-{suffix}-one",
+        temp / f"incremental-split-{suffix}-micro",
+    ]
+    for prefix, schedule in zip(prefixes, ("one", "micro"), strict=True):
+        run(writer, str(prefix), mode, schedule, "split")
+    part_sets = [ordered_split_parts(Path(f"{prefix}.zip")) for prefix in prefixes]
+    if len(part_sets[0]) < 3 or len(part_sets[0]) != len(part_sets[1]):
+        raise AssertionError(f"incremental split {suffix} part count mismatch")
+    for first, second in zip(part_sets[0], part_sets[1], strict=True):
+        if first.read_bytes() != second.read_bytes() or first.stat().st_size > 160:
+            raise AssertionError(f"incremental split {suffix} is not schedule-independent")
+
+    parts = part_sets[0]
+    layout = parse_split_layout(parts)
+    if layout.zip64 != force_zip64:
+        raise AssertionError(f"incremental split {suffix} ending mode mismatch")
+    expected_payloads = dict(list(INCREMENTAL_PAYLOADS.items())[:6])
+    if set(layout.entries) != set(expected_payloads):
+        raise AssertionError(f"incremental split {suffix} entry set mismatch")
+    boundaries = layout.bases[1:]
+    crossing_boundaries = 0
+    extraction_cases = 0
+    patch_count: int | None = None
+    first_local = min(
+        layout.bases[entry.disk] + entry.local_offset
+        for entry in layout.entries.values()
+    )
+    expected_stream_input = len(layout.joined) - first_local
+    for index, (name, expected) in enumerate(expected_payloads.items()):
+        entry = layout.entries[name]
+        if entry.method != INCREMENTAL_METHODS[name] or entry.flags & 0x0008 == 0:
+            raise AssertionError(f"incremental split metadata mismatch for {name!r}")
+        local = layout.bases[entry.disk] + entry.local_offset
+        name_len, extra_len = struct.unpack_from("<HH", layout.joined, local + 26)
+        data_start = local + 30 + name_len + extra_len
+        payload_end = data_start + entry.compressed_size
+        descriptor_len = 24 if entry.zip64 else 16
+        descriptor_end = payload_end + descriptor_len
+        if layout.joined[payload_end : payload_end + 4] != b"PK\x07\x08":
+            raise AssertionError(f"incremental split descriptor mismatch for {name!r}")
+        if any(local < boundary < data_start for boundary in boundaries):
+            raise AssertionError(f"incremental split local header crossed for {name!r}")
+        if any(payload_end < boundary < descriptor_end for boundary in boundaries):
+            raise AssertionError(f"incremental split descriptor crossed for {name!r}")
+        if any(
+            entry.central_offset < boundary < entry.central_end
+            for boundary in boundaries
+        ):
+            raise AssertionError(f"incremental split central header crossed for {name!r}")
+        compressed = layout.joined[data_start:payload_end]
+        decoded = (
+            zlib.decompress(compressed, -15)
+            if entry.method == zipfile.ZIP_DEFLATED
+            else compressed
+        )
+        if decoded != expected or entry.crc32 != (binascii.crc32(expected) & 0xFFFFFFFF):
+            raise AssertionError(f"incremental split independent decode mismatch for {name!r}")
+        crossing_boundaries += sum(
+            data_start < boundary < payload_end for boundary in boundaries
+        )
+        for stream in (False, True):
+            output = temp / f"incremental-split-{suffix}-{index}-{'stream' if stream else 'owned'}.out"
+            result = run(
+                cli,
+                "extract-zip-split-stream-files" if stream else "extract-zip-split-files",
+                name,
+                str(output),
+                str(len(expected)),
+                "-",
+                *(str(part) for part in parts),
+            )
+            if output.read_bytes() != expected:
+                raise AssertionError(f"incremental split extraction mismatch for {name!r}")
+            if stream:
+                fields = dict(
+                    token.split("=", 1)
+                    for token in result.stdout.split()
+                    if "=" in token
+                )
+                current_patches = int(fields.get("metadata_patches", "0"))
+                if (
+                    int(fields.get("normalized_input_read", "0"))
+                    != expected_stream_input
+                    or current_patches <= 0
+                ):
+                    raise AssertionError(f"incremental split stream accounting mismatch")
+                if patch_count is not None and patch_count != current_patches:
+                    raise AssertionError(f"incremental split {suffix} patch count drift")
+                patch_count = current_patches
+            extraction_cases += 1
+    if crossing_boundaries == 0:
+        raise AssertionError(f"incremental split {suffix} had no crossing payload")
+    if any(layout.ending_start < boundary < len(layout.joined) for boundary in boundaries):
+        raise AssertionError(f"incremental split {suffix} ending crossed a disk")
+    return len(parts), extraction_cases, crossing_boundaries, patch_count or 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
@@ -2505,6 +2611,28 @@ def main() -> None:
             vort_split_zip64_boundaries,
             vort_split_zip64_patches,
         ) = validate_vort_split_writer(args.cli, args.writer, temp, True)
+        (
+            incremental_split_zip32_parts,
+            incremental_split_zip32_cases,
+            incremental_split_zip32_boundaries,
+            incremental_split_zip32_patches,
+        ) = validate_incremental_split_writer(
+            args.cli,
+            args.incremental_writer,
+            temp,
+            False,
+        )
+        (
+            incremental_split_zip64_parts,
+            incremental_split_zip64_cases,
+            incremental_split_zip64_boundaries,
+            incremental_split_zip64_patches,
+        ) = validate_incremental_split_writer(
+            args.cli,
+            args.incremental_writer,
+            temp,
+            True,
+        )
         deflate64_cases = 0
         ppmd_cases = 0
         incremental_archive_implode_cases, implode_modes = validate_vort_implode_modes(
@@ -2568,6 +2696,13 @@ def main() -> None:
         f"vort_split_zip64_boundaries={vort_split_zip64_boundaries} "
         f"vort_split_zip32_patches={vort_split_zip32_patches} "
         f"vort_split_zip64_patches={vort_split_zip64_patches} "
+        f"incremental_split_zip32_parts={incremental_split_zip32_parts} "
+        f"incremental_split_zip64_parts={incremental_split_zip64_parts} "
+        f"incremental_split_writer_cases={incremental_split_zip32_cases + incremental_split_zip64_cases} "
+        f"incremental_split_zip32_boundaries={incremental_split_zip32_boundaries} "
+        f"incremental_split_zip64_boundaries={incremental_split_zip64_boundaries} "
+        f"incremental_split_zip32_patches={incremental_split_zip32_patches} "
+        f"incremental_split_zip64_patches={incremental_split_zip64_patches} "
         f"system_unzip={incremental_zip32_unzip and incremental_zip64_unzip} "
         f"incremental_7zip={incremental_zip32_7zip and incremental_zip64_7zip} "
         f"incremental_zipcrypto_7zip={incremental_zipcrypto_zip32_7zip and incremental_zipcrypto_zip64_7zip} "

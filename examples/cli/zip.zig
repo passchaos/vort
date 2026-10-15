@@ -114,6 +114,153 @@ pub fn createSplit(
     );
 }
 
+pub fn createSplitStream(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const output_prefix = args.next() orelse return error.MissingCorpusPath;
+    const entry_name = args.next() orelse return error.MissingCorpusPath;
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const max_part_size = try parseRequiredLimit(args.next());
+    const method = try parseCompression(args.next());
+    const zip64 = try parseZip64Mode(args.next());
+    const input = try std.Io.Dir.cwd().readFileAlloc(
+        init.io,
+        input_path,
+        init.gpa,
+        .limited(max_archive_size),
+    );
+    defer init.gpa.free(input);
+    var writer = try vort.ZipSplitIncrementalWriter.initWithOptions(init.gpa, .{
+        .writer_options = .{
+            .zip64 = zip64,
+            .max_entries = 1,
+            .max_archive_size = max_archive_size,
+        },
+        .max_part_size = max_part_size,
+        .max_archive_size = max_archive_size,
+    });
+    defer writer.deinit();
+    try writer.beginEntry(.{
+        .name = entry_name,
+        .method = method,
+        .expected_size = input.len,
+    });
+    var current: std.ArrayList(u8) = .empty;
+    defer current.deinit(init.gpa);
+    var scratch: [8192]u8 = undefined;
+    var input_offset: usize = 0;
+    var part_number: usize = 1;
+    var archive_bytes: usize = 0;
+    var calls: usize = 0;
+    while (input_offset < input.len) {
+        const input_end = @min(input.len, input_offset + 4096);
+        while (input_offset < input_end) {
+            const result = try writer.step(input[input_offset..input_end], &scratch);
+            input_offset += result.progress.input_read;
+            try current.appendSlice(init.gpa, scratch[0..result.progress.output_written]);
+            calls += 1;
+            if (result.status == .part_done) {
+                archive_bytes = try writeSplitIntermediatePart(
+                    init,
+                    output_prefix,
+                    part_number,
+                    current.items,
+                    archive_bytes,
+                );
+                part_number += 1;
+                current.clearRetainingCapacity();
+            } else if (result.progress.input_read == 0 and
+                result.progress.output_written == 0)
+                return error.InvalidBlockPlan;
+        }
+    }
+    try writer.finishEntry();
+    while (writer.snapshot().phase != .ready) {
+        const result = try writer.step("", &scratch);
+        try current.appendSlice(init.gpa, scratch[0..result.progress.output_written]);
+        calls += 1;
+        if (result.status == .part_done) {
+            archive_bytes = try writeSplitIntermediatePart(
+                init,
+                output_prefix,
+                part_number,
+                current.items,
+                archive_bytes,
+            );
+            part_number += 1;
+            current.clearRetainingCapacity();
+        } else if (result.progress.output_written == 0) {
+            return error.InvalidBlockPlan;
+        }
+    }
+    try writer.finishArchive();
+    while (true) {
+        const result = try writer.step("", &scratch);
+        try current.appendSlice(init.gpa, scratch[0..result.progress.output_written]);
+        calls += 1;
+        if (result.status == .part_done) {
+            archive_bytes = try writeSplitIntermediatePart(
+                init,
+                output_prefix,
+                part_number,
+                current.items,
+                archive_bytes,
+            );
+            part_number += 1;
+            current.clearRetainingCapacity();
+        } else if (result.status == .done) {
+            break;
+        } else if (result.progress.output_written == 0) {
+            return error.InvalidBlockPlan;
+        }
+    }
+    if (current.items.len == 0) return error.InvalidZipArchive;
+    const final_path = try std.fmt.allocPrint(init.gpa, "{s}.zip", .{output_prefix});
+    defer init.gpa.free(final_path);
+    try std.Io.Dir.cwd().writeFile(init.io, .{
+        .sub_path = final_path,
+        .data = current.items,
+    });
+    archive_bytes = std.math.add(usize, archive_bytes, current.items.len) catch
+        return error.IntegerOverflow;
+    try stdout.print(
+        "zip_parts={d} zip_bytes={d} input_bytes={d} calls={d} " ++
+            "method={s} zip64={s} prefix={s}\n",
+        .{
+            part_number,
+            archive_bytes,
+            input.len,
+            calls,
+            @tagName(method),
+            @tagName(zip64),
+            output_prefix,
+        },
+    );
+}
+
+fn writeSplitIntermediatePart(
+    init: std.process.Init,
+    output_prefix: []const u8,
+    part_number: usize,
+    bytes: []const u8,
+    archive_bytes: usize,
+) !usize {
+    if (bytes.len == 0) return error.InvalidZipArchive;
+    const path = try std.fmt.allocPrint(init.gpa, "{s}.z{d:0>2}", .{
+        output_prefix,
+        part_number,
+    });
+    defer init.gpa.free(path);
+    try std.Io.Dir.cwd().writeFile(init.io, .{
+        .sub_path = path,
+        .data = bytes,
+    });
+    return std.math.add(usize, archive_bytes, bytes.len) catch
+        error.IntegerOverflow;
+}
+
 pub fn extractSplitOwned(
     init: std.process.Init,
     args: *std.process.Args.Iterator,

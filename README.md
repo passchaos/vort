@@ -294,8 +294,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   extraction through the ordinary archive codecs, plus an O(parts + entries)
   sparse metadata-patch stream and bounded sequential reader that avoid a
   joined archive copy, plus deterministic owned split writing that keeps all
-  structural records atomic while allowing payloads to cross volumes; and
-  explicit PKWARE strong-encryption/unknown-method errors;
+  structural records atomic while allowing payloads to cross volumes, and an
+  incremental split writer with bounded current-part/control storage plus
+  explicit `part_done` sink transitions; and explicit PKWARE strong-encryption/
+  unknown-method errors;
 - dependency-free Bzip2 `BZh1`...`BZh9` encoding and decoding with canonical Huffman,
   selector/inverse move-to-front, RUNA/RUNB, inverse BWT, first-stage RLE,
   legacy randomized-block reversal, multi-block and explicit
@@ -1774,8 +1776,11 @@ joined archive is allocated. `zipEncodeSplitAlloc` adds a deterministic owned
 writer for every one-shot method and both supported encryption families. It
 emits the conventional split marker, keeps local headers/descriptors/central
 records/endings within one part, and exposes borrowed part slices over one
-owned backing allocation. The incremental writer remains single-disk, while
-PKWARE strong encryption remains unsupported. See
+owned backing allocation. `ZipSplitIncrementalWriter` reuses every incremental
+codec/encryption path, retains only the established codec state, central
+metadata, one atomic control record and caller-selected current-part storage,
+and reports `part_done` before output switches volumes. PKWARE strong
+encryption remains unsupported. See
 [the ZIP format status](docs/formats/zip.md) for the full state and wire
 contract. Writer-specific additive errors are exposed separately as
 `ZipIncrementalWriterError`; the established `ZipError` set is unchanged.
@@ -1864,6 +1869,11 @@ sets. Python wire parsing checks disk-local offsets and atomic record
 boundaries, raw zlib plus CRC-32 independently validate both payloads, and both
 Vort reader paths extract every member (`vort_split_writer_cases=8`, three
 payload boundaries per mode, sparse patch counts 8/13).
+The incremental split writer adds schedule-independent ZIP32/ZIP64 sets under
+one-byte and micro output, including known/unknown/empty Stored and Deflate
+members. Python independently verifies raw Deflate/CRC, disk-local metadata and
+atomic record placement before 24 owned/sparse extraction cases
+(`incremental_split_zip32_parts=10`, `incremental_split_zip64_parts=13`).
 Focused writer tests pass 73/73; the DCL, Reduce and Legacy Implode encoder
 suites pass 4/4 each, and the
 incremental entry decoder suite passes
@@ -1878,7 +1888,7 @@ signed/unsigned descriptors, ZIP32/ZIP64, arbitrary tree descriptions,
 implicit-zero and overlapping matches. PPMd restart/cut-off,
 descriptor and ZIP64 paths are required Vort coverage; third-party PPMd remains
 unclaimed because this host has no 7z/7zz and Python has no method-98 codec.
-The full repository graph passes 2714/2714 and `zig build check` passes 113/113.
+The full repository graph passes 2718/2718 and `zig build check` passes 113/113.
 The refactored one-shot writer remains byte-identical to HEAD across 14 probe
 modes. The current host has no 7z/7zz, so that optional extraction branch is
 reported as skipped rather than passed.
