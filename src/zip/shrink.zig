@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("../core.zig");
+const incremental_encoder = @import("shrink/incremental_encoder.zig");
 
 pub const Error = std.mem.Allocator.Error || error{
     InvalidShrinkStream,
@@ -23,6 +24,7 @@ pub const IncrementalWorkspace = struct {
     stack: [dictionary_size]u8 = undefined,
     parent_marks: [dictionary_size]bool = undefined,
 };
+pub const IncrementalEncoder = incremental_encoder.Encoder;
 
 const BitReader = struct {
     input: []const u8,

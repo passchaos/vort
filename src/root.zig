@@ -180,6 +180,7 @@ pub const ZipDclImplodeOptions = zip.DclImplodeOptions;
 pub const ZipDclImplodeIncrementalDecoder = zip.DclImplodeIncrementalDecoder;
 pub const ZipShrinkIncrementalDecoder = zip.ShrinkIncrementalDecoder;
 pub const ZipShrinkIncrementalWorkspace = zip.ShrinkIncrementalWorkspace;
+pub const ZipShrinkIncrementalEncoder = zip.ShrinkIncrementalEncoder;
 pub const ZipReduceIncrementalDecoder = zip.ReduceIncrementalDecoder;
 pub const ZipReduceIncrementalWorkspace = zip.ReduceIncrementalWorkspace;
 pub const ZipReduceFactor = zip.ReduceFactor;
