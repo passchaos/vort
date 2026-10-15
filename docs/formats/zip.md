@@ -131,8 +131,8 @@ Stored and Deflate retain their complete-buffer extraction paths.
 
 `ZipIncrementalReader` consumes a complete ZIP archive sequentially without
 retaining decoded payload bytes. It accepts Stored, Deflate, Deflate64, Bzip2,
-LZMA, XZ, PPMd8, and legacy/current Zstandard local entries, including known-size
-entries and bit-3 descriptors in all four ZIP32/ZIP64 × signed/unsigned
+LZMA, XZ, DCL Implode, PPMd8, and legacy/current Zstandard local entries,
+including known-size entries and bit-3 descriptors in all four ZIP32/ZIP64 × signed/unsigned
 layouts. Deflate's
 final block, Bzip2's validated stream terminator, LZMA's EOS marker, XZ's
 validated Index/Footer, and Zstandard's validated frame end determine their
@@ -146,6 +146,9 @@ bounded model arena, and decodes one symbol transactionally: insufficient input
 restores range/model metadata before accepting one more byte, while context
 memory changes only after a symbol commits. The range-coded EOS therefore owns
 an exact descriptor boundary without whole-member buffering.
+DCL Implode method 10 preserves partial fixed-Huffman decode state, its
+LSB-first reservoir, 1/2/4 KiB circular history, and match continuation across
+calls; length 519 is the exact container boundary.
 Stored unsigned descriptors are inherently ambiguous, so the reader holds only
 the final 16 or 24 bytes and accepts a boundary when CRC, compressed size,
 uncompressed size, and the following local/central/end signature all agree.
@@ -203,7 +206,7 @@ by ZIP.
 Any `step` error makes the state terminal until `reset`, because payload may
 already have reached an external sink. `finish()` distinguishes a truncated
 source. Encryption, multi-disk/split archives, archive-extra-data records, and
-incremental Shrink/Reduce/Implode/DCL Implode payloads remain
+incremental Shrink/Reduce/Implode payloads remain
 unsupported.
 
 ## Incremental writer
@@ -325,9 +328,9 @@ one-shot and reader APIs is unchanged.
 The incremental writer does not yet support Shrink, Reduce, Implode, Deflate64,
 DCL Implode, Bzip2, LZMA, Zstandard, XZ, or PPMd entries. The sequential reader
 additionally streams Deflate64, Bzip2, LZMA, XZ, PPMd8, and legacy/current
-Zstandard. Encryption and multi-disk/split archives remain unsupported; the
-existing complete-buffer reader
-and broader one-shot writer retain their documented method coverage.
+Zstandard plus DCL Implode. Encryption and multi-disk/split archives remain
+unsupported; the existing complete-buffer reader and broader one-shot writer
+retain their documented method coverage.
 
 The incremental differential uses six entries: known Stored data containing a
 descriptor-signature byte sequence, unknown Stored data containing two such
@@ -356,19 +359,23 @@ legacy method 20 and current method 93 also pass the sequential path
 (`incremental_archive_zstd_cases=2`). An independently generated XZ method-95
 member passes the same path (`incremental_archive_xz_cases=1`). A fixed 7-Zip
 Deflate64 payload wrapped as method 9 passes the required sequential path
-(`incremental_archive_deflate64_cases=1`). No 7z/7zz is
-installed on the current host, so the optional 7-Zip branch reports false and
+(`incremental_archive_deflate64_cases=1`). A fixed zlib-blast method-10 payload
+passes the required sequential path (`incremental_archive_dcl_cases=1`). No
+7z/7zz is installed on the current host, so the optional 7-Zip branch reports
+false and
 is not claimed as validation. Info-ZIP coverage uses `unzip -p` for
 contents, not pathname rendering; its 6.00 ZIP32 UTF-8 filename rendering issue
 also affects the pre-existing one-shot output and is not claimed as fixed here.
 
 `zig test src/root.zig --test-filter 'ZIP incremental writer'` passes 61/61;
 `zig test src/zip.zig --test-filter 'ZIP incremental entry decoder'` passes
-15/15; `zig test src/zip.zig --test-filter 'ZIP incremental reader'` passes
-20/20. PPMd restart/cut-off, descriptor and ZIP64 combinations are required
+15/15; `zig test src/zip.zig --test-filter 'DCL Implode incremental'` passes
+4/4; and `zig test src/zip.zig --test-filter 'ZIP incremental reader'` passes
+21/21. DCL Implode's six modes cover known/descriptor and ZIP32/ZIP64. PPMd
+restart/cut-off, descriptor and ZIP64 combinations are required
 Vort coverage. Third-party method-98 evidence remains explicitly unavailable:
 Python `zipfile` has no PPMd codec and this host has no 7z/7zz. The full
-repository graph passes 2649/2649 and `zig build check` passes 113/113.
+repository graph passes 2654/2654 and `zig build check` passes 113/113.
 The wire refactor also leaves 14 one-shot probe modes byte-identical to HEAD,
 including every existing method and ZIP32/ZIP64 descriptor choice. Default and
 forced-ZIP64 SHA-256 values remain

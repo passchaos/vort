@@ -1603,7 +1603,8 @@ reset. `finish` distinguishes truncated input when a source ends early.
 
 `ZipIncrementalReader` builds the complete sequential archive state machine on
 that data plane. It parses local headers and streams Stored, Deflate, Deflate64,
-Bzip2, LZMA, XZ, PPMd8, and legacy/current Zstandard payloads. ZIP32/ZIP64 descriptors with
+Bzip2, DCL Implode, LZMA, XZ, PPMd8, and legacy/current Zstandard payloads.
+ZIP32/ZIP64 descriptors with
 or without the optional signature are accepted; the reader emits `entry_header`
 and `entry_done` boundaries and validates every central record,
 optional central-directory digital signature, ZIP64 EOCD/locator, legacy EOCD,
@@ -1620,6 +1621,9 @@ stops after its validated Index/Footer before outer descriptor bytes can be
 mistaken for stream padding.
 PPMd method 98 parses its two-byte order/memory/restore properties, decodes one
 symbol transactionally, and stops exactly at the range-coded EOS.
+DCL Implode method 10 retains its partial fixed-Huffman code, LSB-first bit
+reservoir, match continuation, and 1/2/4 KiB history until its explicit
+length-519 end marker.
 Arbitrary input/output fragmentation,
 zero-output backpressure, reset reuse, SFX `initial_offset`, strict or allowed
 trailing data, and explicit entry/total-output, entry-count, metadata, central-
@@ -1629,9 +1633,9 @@ The sequential reader retains 32 KiB Deflate and 64 KiB Deflate64 histories,
 at most one bounded Bzip2 block, bounded Zstandard frame/block scratch, LZMA
 range/dictionary state, at most one bounded XZ block, entry names and compact
 validation records, and the configured PPMd model arena until the central
-directory. It also retains the final archive comment and one bounded control
-record, but never complete decoded
-payloads or the whole archive. Other ZIP compression methods continue to use
+directory. DCL Implode keeps a fixed 4 KiB maximum history. The reader also
+retains the final archive comment and one bounded control record, but never
+complete decoded payloads or the whole archive. Other ZIP compression methods continue to use
 the broader complete-buffer extraction APIs.
 
 `ZipIncrementalWriter` streams Stored and raw-Deflate entries into caller-owned
@@ -1670,8 +1674,8 @@ validation errors from `beginEntry` and a premature short `finishEntry` remain
 recoverable. The existing one-shot `zipEncodeAppend` retains its transactional
 guarantee and broader method support. Incremental writing does not yet cover
 the other ZIP methods; the sequential reader additionally covers Deflate64,
-Bzip2, LZMA, XZ, PPMd8, and legacy/current Zstandard. Encryption and multi-disk
-archives remain unsupported. See
+Bzip2, DCL Implode, LZMA, XZ, PPMd8, and legacy/current Zstandard. Encryption
+and multi-disk archives remain unsupported. See
 [the ZIP format status](docs/formats/zip.md) for the full state and wire
 contract. Writer-specific additive errors are exposed separately as
 `ZipIncrementalWriterError`; the established `ZipError` set is unchanged.
@@ -1692,11 +1696,15 @@ method 20 and current method 93 also pass the sequential path
 method-95 member (`incremental_archive_xz_cases=1`). A fixed 7-Zip Deflate64
 payload wrapped as method 9 also passes the required sequential path
 (`incremental_archive_deflate64_cases=1`).
+A fixed zlib-blast DCL Implode payload wrapped as method 10 passes the required
+sequential path (`incremental_archive_dcl_cases=1`).
 Focused writer tests pass 61/61, the incremental entry decoder suite passes
-15/15, and the archive reader suite passes 20/20. PPMd restart/cut-off,
+15/15, the DCL Implode incremental decoder suite passes 4/4, and the archive
+reader suite passes 21/21. DCL Implode's six literal/dictionary modes cover
+known/descriptor and ZIP32/ZIP64. PPMd restart/cut-off,
 descriptor and ZIP64 paths are required Vort coverage; third-party PPMd remains
 unclaimed because this host has no 7z/7zz and Python has no method-98 codec.
-The full repository graph passes 2649/2649 and `zig build check` passes 113/113.
+The full repository graph passes 2654/2654 and `zig build check` passes 113/113.
 The refactored one-shot writer remains byte-identical to HEAD across 14 probe
 modes. The current host has no 7z/7zz, so that optional extraction branch is
 reported as skipped rather than passed.

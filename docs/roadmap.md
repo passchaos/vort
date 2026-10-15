@@ -20101,3 +20101,24 @@ reuse, so production keeps the simpler independently owned plans.
   Shrink, Reduce, Implode and DCL Implode remain the sequential reader's
   complete-buffer-only methods. The full repository graph passes 2649/2649 and
   `zig build check` passes all 113 steps.
+
+- Added caller-output DCL Implode decoding and ZIP method-10 sequential
+  support. `DclImplodeIncrementalDecoder` retains the two-byte mode/dictionary
+  header, LSB-first reservoir, partial fixed-Huffman code, length/distance
+  continuations, overlapping match state, and a fixed 4 KiB maximum history
+  ring across arbitrary calls. It supports raw or coded literals, 1/2/4 KiB
+  dictionaries, exact length-519 termination, caller backpressure, expected/
+  maximum output limits, suffix preservation, truncation errors, reset and
+  snapshots without allocation. ZIP routes known-size and descriptor entries
+  through the shared self-delimiting adapter, checks version-needed 2.0, outer
+  CRC-32, sizes and central metadata, and covers signed/unsigned ZIP32/ZIP64
+  descriptors. Focused tests pin the zlib-blast reference, all six literal/
+  dictionary modes, one-byte input, match/output fragmentation, zero-output
+  backpressure, limits, corruption/truncation and reuse; the ZIP reader suite
+  passes 21/21. The fixed blast vector is also wrapped as a required method-10
+  archive in the CLI gate (`incremental_archive_dcl_cases=1`), independent of
+  the unavailable optional blast executable; `run-zip-diff` remains 13/13.
+  Shrink, Reduce and Implode remain the sequential reader's complete-buffer-
+  only methods. The DCL incremental suite passes 4/4, the complete reader
+  suite passes 21/21, the full repository graph passes 2654/2654, and
+  `zig build check` passes all 113 steps.
