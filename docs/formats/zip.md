@@ -242,15 +242,16 @@ Deflate (`method 8`), Bzip2 (`method 12`), legacy Zstandard (`method 20`), and
 current Zstandard (`method 93`), plus LZMA (`method 14`) entries.
 XZ (`method 95`) and stored-block Deflate64 (`method 9`) entries use the same
 streaming archive state machine.
-PPMd (`method 98`), Shrink (`method 1`), Reduce (`methods 2...5`), and DCL
-Implode (`method 10`) are also streamed through the codec union.
+PPMd (`method 98`), Shrink (`method 1`), Reduce (`methods 2...5`), traditional
+Implode (`method 6`), and DCL Implode (`method 10`) are also streamed through
+the codec union.
 Every entry sets general-purpose flag bit 3 and ends with a signed
 `0x08074b50` data descriptor; there is no seek-back or header-patching mode.
 
 The public option types are `ZipIncrementalWriterOptions` and
 `ZipIncrementalEntryOptions`. Archive options include `archive_comment`,
 `initial_offset`, UTF-8 and ZIP64 policy, raw-Deflate/Bzip2/LZMA/XZ/PPMd/
-Shrink/Reduce/DCL-Implode/Zstandard options,
+Shrink/Reduce/Implode/DCL-Implode/Zstandard options,
 and limits for entry count, central-directory bytes, retained Deflate input,
 uncompressed input, and emitted archive bytes. `bzip2_options` independently selects the
 100...900 KiB block size plus total-input and pending-output limits.
@@ -281,11 +282,15 @@ follower table shared across factors. Its zero table default permits immediate
 bounded single-pass output. `trainZipReduceFollowerTable` performs the exact
 factor-specific DLE/match prepass for replayable input; supplying that result
 makes incremental output byte-identical to the one-shot trained stream.
+`implode_options` selects a 4/8 KiB dictionary, raw or fixed-tree literals,
+match-chain depth and an input limit. Its fixed tree header is known before
+input, so all four modes remain true bounded single-pass streams.
 `max_deflate_buffer_size` defaults to 1 MiB
 and bounds one planning block plus lookahead before a Deflate entry starts; it
 excludes the encoder's fixed 32 KiB history and one encoded pending block.
-Entry options contain the copied name/comment, Stored, Shrink, Reduce, DCL
-Implode, Deflate, Deflate64, Bzip2, LZMA, XZ, PPMd, or legacy/current Zstandard method,
+Entry options contain the copied name/comment, Stored, Shrink, Reduce,
+traditional Implode, DCL Implode, Deflate, Deflate64, Bzip2, LZMA, XZ, PPMd,
+or legacy/current Zstandard method,
 and an optional exact
 `expected_size`. A null size accepts input until the configured
 limit. A known size rejects an overlong offered slice and `finishEntry()`
@@ -296,7 +301,7 @@ The state sequence is `beginEntry` -> repeated `step` -> `finishEntry` -> drain
 to `.ready`, followed by more entries or `finishArchive` -> drain to `.done`.
 `step` returns the common `need_input`, `need_output`, or `done` status with
 exact input/output progress. Tiny output slices may split local headers,
-Shrink/Reduce/DCL-Implode/Deflate/Deflate64/Bzip2/LZMA/XZ/PPMd/Zstandard bytes,
+Shrink/Reduce/Implode/DCL-Implode/Deflate/Deflate64/Bzip2/LZMA/XZ/PPMd/Zstandard bytes,
 descriptors, central-directory
 records, and archive endings.
 Zero-length output returns `need_output` without consuming entry input whenever
@@ -344,7 +349,7 @@ central-directory, ZIP64 locator, and EOCD offsets include the supplied value.
 ZIP64 selection is frozen before each unpatchable local header is emitted:
 
 - `.auto` keeps a known-size Stored entry in ZIP32 when its size and local
-  offset fit. Unknown-size entries and all Shrink/Reduce/DCL-Implode/Deflate/
+  offset fit. Unknown-size entries and all Shrink/Reduce/Implode/DCL-Implode/Deflate/
   Deflate64/Bzip2/LZMA/XZ/PPMd/Zstandard entries conservatively use
   ZIP64 because their final sizes are not known at header time. Archive count,
   central size/offset, or any ZIP64 entry also promotes the archive ending;
@@ -387,6 +392,8 @@ DCL Implode retains a 1/2/4 KiB history, 520-byte lookahead, rolling hash
 chains and at most 16 pending output bytes.
 Reduce retains a 512-byte...4 KiB history, at most 387 bytes of lookahead,
 rolling hash chains, its 8,448-byte follower table and bounded pending output.
+Traditional Implode retains a 4/8 KiB history, at most 323 bytes of lookahead,
+fixed tree header, rolling hash chains and bounded pending bits.
 `max_central_directory_size` bounds the logical encoded central directory;
 the independently copied archive comment is governed only by ZIP's `u16`
 length limit and is not charged to this field.
@@ -405,12 +412,12 @@ The incremental writer's additive error set is exported as
 `ZipIncrementalWriterError`; the established `ZipError` used by existing
 one-shot and reader APIs is unchanged.
 
-The incremental writer does not yet support traditional Implode entries. The
-sequential reader already streams that method. Encryption and
+Every compression method currently supported by the sequential reader has a
+bounded incremental writer. Encryption and
 multi-disk/split archives remain unsupported; the existing complete-buffer
 reader and broader one-shot writer retain their documented method coverage.
 
-The incremental differential uses forty-two entries: known Stored data containing a
+The incremental differential uses forty-five entries: known Stored data containing a
 descriptor-signature byte sequence, unknown Stored data containing two such
 sequences, a known Deflate entry larger than 32 KiB that crosses an actual
 planning-block boundary, a UTF-8-path cross-block unknown Deflate entry, empty
@@ -423,13 +430,15 @@ and empty method-1 payloads. Known/unknown/empty DCL Implode members cover the
 same method-10 entry shapes with fixed-Huffman literals and a 4 KiB dictionary.
 Every Reduce factor adds known/unknown/empty members using the bounded
 single-pass zero follower table.
+Known/unknown/empty traditional Implode members use the default 8 KiB/tree
+mode; the dedicated four-mode matrix retains complete flag coverage.
 Input uses repeating
 1/2/3/5/7-byte chunks. For each ZIP mode, a one-byte-output run must be
 byte-identical to a 2/3/5/7-byte micro-output run; a zero-output local-header
 probe must return `need_output` with zero progress.
 
-`zig build run-zip-diff` passes for a 29,787-byte ZIP32 `.never` archive and a
-32,215-byte ZIP64 `.always` archive. Python raw parsing checks bit 3/bit 11,
+`zig build run-zip-diff` passes for a 30,453-byte ZIP32 `.never` archive and a
+33,049-byte ZIP64 `.always` archive. Python raw parsing checks bit 3/bit 11,
 local placeholders, signed 16-/24-byte descriptors, central CRC/size/offset and
 ZIP64 extras/end records, Bzip2's version-needed 4.6, and LZMA/Zstandard's
 version-needed 6.3; `zipfile` tests and reads every method it supports. System
@@ -453,6 +462,10 @@ All twelve Reduce members pass the sequential path; Python pins their 192-byte
 zero follower headers and outer metadata. The optional 7-Zip path validates
 every supported member individually and deliberately skips methods 2...5,
 which the available 7-Zip family does not decode.
+All three default traditional Implode members pass the sequential path and
+system Info-ZIP; Python pins bits 1/2, their 27-byte fixed three-tree header,
+descriptors and ZIP64 metadata. The existing dedicated matrix still covers
+all four 4/8 KiB × raw/tree modes plus the two Apache Commons fixtures.
 The aggregate reports 13/13 ZIP differential steps. The Python-to-Vort half
 also decodes five
 Stored/Deflate members through `ZipOwnedIncrementalEntryDecoder` with 3-byte
@@ -483,10 +496,12 @@ is not claimed as validation. Info-ZIP coverage uses `unzip -p` for
 contents, not pathname rendering; its 6.00 ZIP32 UTF-8 filename rendering issue
 also affects the pre-existing one-shot output and is not claimed as fixed here.
 
-`zig test src/root.zig --test-filter 'ZIP incremental writer'` passes 70/70;
+`zig test src/root.zig --test-filter 'ZIP incremental writer'` passes 71/71;
 `zig test src/zip.zig --test-filter 'DCL Implode incremental encoder'` passes
 4/4;
 `zig test src/zip.zig --test-filter 'Reduce incremental encoder'` passes 4/4;
+`zig test src/zip.zig --test-filter 'Legacy Implode incremental encoder'`
+passes 4/4;
 `zig test src/zip.zig --test-filter 'ZIP incremental entry decoder'` passes
 15/15; `zig test src/zip.zig --test-filter 'DCL Implode incremental'` passes
 4/4; `zig test src/zip.zig --test-filter 'Shrink incremental'` passes 4/4;
@@ -503,7 +518,7 @@ implicit-zero and overlapping matches. PPMd
 restart/cut-off, descriptor and ZIP64 combinations are required
 Vort coverage. Third-party method-98 evidence remains explicitly unavailable:
 Python `zipfile` has no PPMd codec and this host has no 7z/7zz. The full
-repository graph passes 2693/2693 and `zig build check` passes 113/113.
+repository graph passes 2698/2698 and `zig build check` passes 113/113.
 The wire refactor also leaves 14 one-shot probe modes byte-identical to HEAD,
 including every existing method and ZIP32/ZIP64 descriptor choice. Default and
 forced-ZIP64 SHA-256 values remain

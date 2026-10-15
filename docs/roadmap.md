@@ -20336,3 +20336,22 @@ reuse, so production keeps the simpler independently owned plans.
   `run-zip-diff` remains 13/13, the Reduce encoder suite passes 4/4, writer
   suite 70/70, full repository graph 2693/2693, and `zig build check` passes
   all 113 steps.
+
+- Added a caller-output traditional Implode encoder and wired ZIP method 6
+  into `ZipIncrementalWriter`, completing bounded writer coverage for every
+  compression method supported by the sequential reader. The encoder emits the
+  fixed two-/three-tree header before input, then preserves 4/8 KiB history,
+  at most 323 bytes of lookahead, bounded greedy hash chains, raw/tree literal
+  coding and match bits across arbitrary caller fragmentation. All four
+  dictionary/literal modes are byte-identical to the one-shot writer, including
+  a genuine distance above 4 KiB. Exact pledges, zero-output backpressure,
+  reset, chain/input limits, mode flags, one-byte output, ZIP32/ZIP64
+  descriptors and allocation failures share the codec union. The external
+  archive grows from forty-two to forty-five members with default 8 KiB/tree
+  known/unknown/empty entries. Vort's sequential reader and system Info-ZIP
+  decode all three; Python pins bits 1/2, the 27-byte fixed tree header and
+  outer metadata. The existing dedicated matrix continues to cover all four
+  modes plus two Apache Commons fixtures. ZIP32/ZIP64 sizes are
+  30,453/33,049 bytes; `run-zip-diff` remains 13/13, the Implode encoder suite
+  passes 4/4, writer suite 71/71, full repository graph 2698/2698, and
+  `zig build check` passes all 113 steps.
