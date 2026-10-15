@@ -20262,3 +20262,18 @@ reuse, so production keeps the simpler independently owned plans.
   `run-zip-diff` remains 13/13, the Deflate64 incremental encoder suite passes
   3/3, the writer suite passes 66/66, the full repository graph passes
   2676/2676, and `zig build check` passes all 113 steps.
+
+- Added a symbol-progressive PPMd8 encoder and wired ZIP method 98 into
+  `ZipIncrementalWriter`. The encoder commits one input symbol directly into a
+  fixed model arena and persistent range state, drains bounded pending bytes,
+  and emits EOS on finish without retaining plaintext. The ZIP adapter prepends
+  the stable two-byte order/memory/restoration properties. Known/unknown/empty,
+  one-byte deterministic output, restart/cut-off, order/model/pending/input
+  limits, ZIP32/ZIP64 descriptors, reset and allocation failures share the
+  codec union. The external archive grows from twenty-one to twenty-four
+  entries; the required raw gate pins order 12, 1 MiB and cut-off (`0x100b`),
+  and the complete sequential reader decodes every member. This host still has
+  no 7z/7zz, so third-party method-98 evidence remains explicitly conditional.
+  ZIP32/ZIP64 sizes are 23,021/24,441 bytes, `run-zip-diff` remains 13/13, the
+  PPMd encoder suite passes 3/3, writer suite 67/67, full repository graph
+  2679/2679, and `zig build check` passes all 113 steps.
