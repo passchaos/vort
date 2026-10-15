@@ -20315,3 +20315,24 @@ reuse, so production keeps the simpler independently owned plans.
   sizes are 25,208/26,964 bytes; `run-zip-diff` remains 13/13, the DCL encoder
   suite passes 4/4, writer suite 69/69, full repository graph 2688/2688, and
   `zig build check` passes all 113 steps.
+
+- Added a caller-output Reduce encoder shared by ZIP methods 2...5 and wired
+  all four factors into `ZipIncrementalWriter`. It retains factor-specific
+  512-byte...4 KiB history, a maximum 387-byte lookahead, bounded greedy hash
+  chains, DLE literal/match state, an explicit follower table and small pending
+  output rather than a member. Because the wire places all 256 follower sets
+  before the payload, the default zero table enables a genuine bounded
+  single-pass stream. The new `trainZipReduceFollowerTable` API offers an exact
+  DLE/match prepass for replayable input; supplying its result makes every
+  factor byte-identical to the established trained one-shot encoder rather
+  than sacrificing follower compression. Exact pledges, zero-output
+  backpressure, reset, match/input limits, one-byte output, ZIP32/ZIP64
+  descriptors and allocation failures share the codec union. The external
+  archive adds known/unknown/empty entries for each factor and grows from
+  thirty to forty-two members. Vort's sequential reader decodes all twelve;
+  Python pins their 192-byte zero follower headers plus outer metadata. The
+  optional 7-Zip path skips methods 2...5 because the available family does
+  not decode them. ZIP32/ZIP64 sizes are 29,787/32,215 bytes;
+  `run-zip-diff` remains 13/13, the Reduce encoder suite passes 4/4, writer
+  suite 70/70, full repository graph 2693/2693, and `zig build check` passes
+  all 113 steps.
