@@ -20417,3 +20417,22 @@ reuse, so production keeps the simpler independently owned plans.
   focused reader suite passes 25/25, the ZIP differential remains 13/13, the
   full repository graph passes 2702/2702, and `zig build check` passes all 113
   steps.
+
+- Completed descriptor-backed Traditional ZipCrypto in
+  `ZipIncrementalReader` without buffering a member. The generic decryption
+  plane now exposes paired raw/decrypted input: Stored, Shrink, Reduce and
+  traditional Implode use raw bytes to validate signed or unsigned ZIP32/ZIP64
+  descriptors while feeding only disproven bytes into the codec decoder;
+  self-delimiting codecs preserve a bounded 24-byte raw tail and substitute it
+  for decrypted trailing bytes before the shared descriptor parser. The
+  DOS-time-high header check, 12-byte compressed-size prefix, central metadata,
+  one-byte/257-byte fragmentation, every supported compression method, empty
+  entries, missing/wrong passwords, corrupt headers/descriptors, strong flags,
+  and signed/unsigned ZIP32/ZIP64 layouts have required coverage. Vort one-
+  shot output, Vort incremental-writer output and two independent Info-ZIP
+  archives provide twelve required sequential CLI cases
+  (`incremental_reader_zipcrypto_cases=12`,
+  `infozip_incremental_reader_zipcrypto_cases=2`). WinZip AES remains the next
+  ZIP encryption compatibility increment. The focused reader suite passes
+  26/26, the ZIP differential remains 13/13, the full repository graph passes
+  2703/2703, and `zig build check` passes all 113 steps.
