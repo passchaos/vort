@@ -13,6 +13,7 @@ import struct
 import subprocess
 import tempfile
 import zipfile
+import zlib
 from pathlib import Path
 
 
@@ -890,6 +891,9 @@ INCREMENTAL_PAYLOADS = {
     "known-xz.txt": b"known XZ incremental ZIP payload.\n" * 97,
     "unknown-xz.txt": b"unknown XZ incremental ZIP payload.\n" * 79,
     "empty-xz.bin": b"",
+    "known-deflate64.bin": b"known Deflate64 incremental ZIP payload.\n" * 101,
+    "unknown-deflate64.bin": b"unknown Deflate64 incremental ZIP payload.\n" * 83,
+    "empty-deflate64.bin": b"",
 }
 INCREMENTAL_METHODS = {
     "known-stored.bin": zipfile.ZIP_STORED,
@@ -910,6 +914,9 @@ INCREMENTAL_METHODS = {
     "known-xz.txt": 95,
     "unknown-xz.txt": 95,
     "empty-xz.bin": 95,
+    "known-deflate64.bin": 9,
+    "unknown-deflate64.bin": 9,
+    "empty-deflate64.bin": 9,
 }
 
 
@@ -1059,6 +1066,8 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
             if method == zipfile.ZIP_BZIP2
             else 45
             if force_zip64
+            else 21
+            if method == 9
             else 20
         )
         if force_zip64:
@@ -1138,6 +1147,8 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
             if method == zipfile.ZIP_BZIP2
             else 45
             if force_zip64
+            else 21
+            if method == 9
             else 20
         )
         if force_zip64:
@@ -1256,6 +1267,13 @@ def validate_incremental_writer_archive(
                     raise AssertionError(
                         f"system xz disagrees with Python for incremental {name!r}"
                     )
+            elif info.compress_type == 9:
+                name_len, extra_len = struct.unpack_from("<HH", raw, info.header_offset + 26)
+                data_offset = info.header_offset + 30 + name_len + extra_len
+                actual = zlib.decompress(
+                    raw[data_offset : data_offset + info.compress_size],
+                    -15,
+                )
             else:
                 actual = archive.read(name)
             if actual != expected:
@@ -1263,12 +1281,12 @@ def validate_incremental_writer_archive(
 
     unzip_checked = False
     if unzip_tool is not None:
-        supported_parts: list[bytes] = []
-        for name, payload in INCREMENTAL_PAYLOADS.items():
-            if INCREMENTAL_METHODS[name] in (20, 93):
-                break
-            supported_parts.append(payload)
-        supported_payload = b"".join(supported_parts)
+        supported_payload = b"".join(
+            payload
+            for name, payload in INCREMENTAL_PAYLOADS.items()
+            if INCREMENTAL_METHODS[name]
+            in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED, zipfile.ZIP_BZIP2, 9)
+        )
         extracted = subprocess.run(
             [unzip_tool, "-p", str(one_byte_path)],
             check=False,

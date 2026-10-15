@@ -51,6 +51,8 @@ pub fn main(init: std.process.Init) !void {
     const unknown_lzma = "unknown LZMA incremental ZIP payload.\n" ** 71;
     const known_xz = "known XZ incremental ZIP payload.\n" ** 97;
     const unknown_xz = "unknown XZ incremental ZIP payload.\n" ** 79;
+    const known_deflate64 = "known Deflate64 incremental ZIP payload.\n" ** 101;
+    const unknown_deflate64 = "unknown Deflate64 incremental ZIP payload.\n" ** 83;
     const entries = [_]Entry{
         .{
             .name = "known-stored.bin",
@@ -163,6 +165,24 @@ pub fn main(init: std.process.Init) !void {
             .method = .xz,
             .expected_size = 0,
         },
+        .{
+            .name = "known-deflate64.bin",
+            .data = known_deflate64,
+            .method = .deflate64,
+            .expected_size = known_deflate64.len,
+        },
+        .{
+            .name = "unknown-deflate64.bin",
+            .data = unknown_deflate64,
+            .method = .deflate64,
+            .expected_size = null,
+        },
+        .{
+            .name = "empty-deflate64.bin",
+            .data = "",
+            .method = .deflate64,
+            .expected_size = 0,
+        },
     };
 
     const encoded = try encodeArchive(init.gpa, &entries, zip64, output_pattern);
@@ -195,6 +215,7 @@ fn encodeArchive(
             .block_size = 1024,
             .dictionary_size = 4096,
         },
+        .deflate64_options = .{ .block_len = 4096 },
     });
     defer writer.deinit();
 
