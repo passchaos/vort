@@ -20181,3 +20181,20 @@ reuse, so production keeps the simpler independently owned plans.
   2669/2669, and `zig build check` passes all 113 steps. Every ZIP compression
   method currently supported by the sequential reader now operates without a
   complete compressed or decoded member buffer.
+
+- Extended `ZipIncrementalWriter` with Bzip2 method 12. A new codec union owns
+  Stored, raw-Deflate, or Bzip2 state behind one finish/step/deinit contract,
+  keeping codec policy out of the archive record machine. Bzip2 reuses the
+  established block-bounded encoder: known/unknown pledges, empty streams,
+  100...900 KiB blocks, cross-call RLE runs, multi-block output, exact progress
+  and caller backpressure feed the same CRC-32, signed ZIP32/ZIP64 descriptor,
+  central-directory and poison/recovery paths. `.auto` conservatively reserves
+  ZIP64 for Bzip2 before the unpatchable local header, while `.never` permits a
+  known small ZIP32 member and still detects late overflow. Focused coverage
+  includes one-byte deterministic output, a 101,321-byte two-block payload,
+  resource preflight, empty/known/unknown entries and allocation failures. The
+  external incremental archive grows from six to nine entries; Python
+  `zipfile` and system Info-ZIP extract all Bzip2 members in ZIP32 and ZIP64,
+  with version-needed 4.6 and exact descriptor fields. `run-zip-diff` remains
+  13/13, the writer suite passes 62/62, the full repository graph passes
+  2670/2670, and `zig build check` passes all 113 steps.

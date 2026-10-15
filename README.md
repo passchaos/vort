@@ -280,7 +280,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   multi-entry encoding/extraction (including fixed-Huffman or stored
   Deflate64 output with the extended 64 KiB distance alphabet),
   transactional one-shot prefix append plus caller-output incremental
-  Stored/raw-Deflate writing with signed data descriptors, known or unknown
+  Stored/raw-Deflate/Bzip2 writing with signed data descriptors, known or unknown
   size pledges, ZIP32/ZIP64 policy, SFX offsets, and payload-bounded memory;
   archive/entry comments, CRC-32/size validation, UTF-8 flags, and explicit
   encrypted/multi-disk/unknown-method errors;
@@ -1660,9 +1660,9 @@ two approximately 10 KiB workspaces plus the same 8 KiB bounded tail. The
 reader also retains the final archive comment and one bounded control record,
 but never complete decoded payloads, compressed members, or the whole archive.
 
-`ZipIncrementalWriter` streams Stored and raw-Deflate entries into caller-owned
-output. `ZipIncrementalWriterOptions` configures archive comment, UTF-8, ZIP64,
-SFX `initial_offset`, Deflate policy, and resource limits;
+`ZipIncrementalWriter` streams Stored, raw-Deflate, and Bzip2 entries into
+caller-owned output. `ZipIncrementalWriterOptions` configures archive comment,
+UTF-8, ZIP64, SFX `initial_offset`, Deflate/Bzip2 policy, and resource limits;
 `ZipIncrementalEntryOptions` supplies the copied name/comment, method, and an
 optional exact `expected_size`. Every entry uses bit 3 and a signed data
 descriptor. Known and unknown sizes, one-byte output, and zero-output
@@ -1672,15 +1672,18 @@ archive ending.
 
 Stored payload and previously emitted bytes are not retained; Deflate keeps one
 bounded planning block/lookahead, its 32 KiB history and match state, and one
-encoded pending block. `max_deflate_buffer_size` defaults to 1 MiB and caps the
-retained input portion before an entry starts. Memory therefore scales with
-that bound plus central-directory metadata, not with the complete archive.
+encoded pending block. Bzip2 keeps one caller-selected 100...900 KiB RLE/BWT
+block plus its bounded encoded pending output. `max_deflate_buffer_size`
+defaults to 1 MiB and caps the retained Deflate input portion before an entry
+starts; `bzip2_options` independently selects block size and input/pending
+limits. Memory therefore scales with those bounds plus central-directory
+metadata, not with the complete archive.
 Archive comments are copied by initialization, and names/comments by
 `beginEntry`, so those caller slices need not outlive the successful call.
 
-With `.auto`, unknown-size entries and every Deflate entry conservatively use
-ZIP64 before their non-seekable local header is emitted; a known-size Stored
-entry remains ZIP32 when its size and local offset fit. `.always` forces ZIP64.
+With `.auto`, unknown-size entries and every Deflate/Bzip2 entry conservatively
+use ZIP64 before their non-seekable local header is emitted; a known-size
+Stored entry remains ZIP32 when its size and local offset fit. `.always` forces ZIP64.
 `.never` rejects known entry overflow up front, while a late unknown entry-size
 or codec overflow detected in `step` poisons the writer. After all descriptors
 drain, `finishArchive` preflights count, central-directory/ending offsets and
@@ -1703,12 +1706,13 @@ archives remain unsupported. See
 contract. Writer-specific additive errors are exposed separately as
 `ZipIncrementalWriterError`; the established `ZipError` set is unchanged.
 
-The incremental `run-zip-diff` matrix generates the same six-entry archive,
+The incremental `run-zip-diff` matrix generates the same nine-entry archive,
 including a known Deflate payload larger than 32 KiB that crosses a real
 planning-block boundary, under one-byte and micro-chunk output schedules in
 ZIP32 `.never` and ZIP64 `.always` modes. Python raw-wire checks, `zipfile`, and
-system Info-ZIP validate both outputs and all member contents; the aggregate
-reports 13/13 ZIP differential steps. The same gate incrementally decodes five
+system Info-ZIP validate both outputs and all member contents, including known,
+unknown-size, and empty Bzip2 method-12 entries with version-needed 4.6; the
+aggregate reports 13/13 ZIP differential steps. The same gate incrementally decodes five
 Python-generated Stored/Deflate entries, including non-seekable descriptors
 and a forced-ZIP64 local header, with 3-byte input and 5-byte output. A separate
 six-entry Python non-seekable archive passes through the complete sequential
@@ -1729,7 +1733,7 @@ Four known-size and four descriptor-backed SFX members cover every traditional
 Implode flag mode (`incremental_archive_implode_cases=8`); two Apache Commons
 Compress fixtures independently cover the 4 KiB/two-tree and 8 KiB/three-tree
 endpoints (`incremental_archive_implode_fixture_cases=2`).
-Focused writer tests pass 61/61, the incremental entry decoder suite passes
+Focused writer tests pass 62/62, the incremental entry decoder suite passes
 15/15, the DCL Implode, Shrink, Reduce and Legacy Implode incremental decoder
 suites each pass 4/4, and the archive reader suite passes 24/24. Shrink covers known/signed/
 unsigned-descriptor, empty, ZIP32/ZIP64 and output-limit paths; DCL Implode's
@@ -1741,7 +1745,7 @@ signed/unsigned descriptors, ZIP32/ZIP64, arbitrary tree descriptions,
 implicit-zero and overlapping matches. PPMd restart/cut-off,
 descriptor and ZIP64 paths are required Vort coverage; third-party PPMd remains
 unclaimed because this host has no 7z/7zz and Python has no method-98 codec.
-The full repository graph passes 2669/2669 and `zig build check` passes 113/113.
+The full repository graph passes 2670/2670 and `zig build check` passes 113/113.
 The refactored one-shot writer remains byte-identical to HEAD across 14 probe
 modes. The current host has no 7z/7zz, so that optional extraction branch is
 reported as skipped rather than passed.
