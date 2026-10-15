@@ -24,7 +24,9 @@ const reduce_incremental_tests = @import("zip/reduce_incremental_tests.zig");
 const shrink = @import("zip/shrink.zig");
 const shrink_incremental_tests = @import("zip/shrink_incremental_tests.zig");
 const shrink_incremental_encoder_tests = @import("zip/shrink_incremental_encoder_tests.zig");
+const traditional_encryption = @import("vail_archive_crypto").zipcrypto;
 const types = @import("zip/types.zig");
+const wire = @import("zip/wire.zig");
 pub const writer = @import("zip/writer.zig");
 pub const incremental_writer = @import("zip/incremental_writer.zig");
 pub const incremental_entry_decoder = @import("zip/incremental_entry_decoder.zig");
@@ -37,6 +39,7 @@ pub const Error = writer.Error || bzip2.Error || dcl_implode.Error || deflate64.
     UnsupportedZipCompressionMethod,
     ZipEntryNotFound,
     ZipEntryRequiresAllocator,
+    PasswordRequired,
 };
 
 const local_file_signature: u32 = 0x0403_4b50;
@@ -48,6 +51,7 @@ pub const CompressionMethod = writer.CompressionMethod;
 pub const Zip64Mode = writer.Zip64Mode;
 pub const EncodeEntry = writer.EncodeEntry;
 pub const EncodeOptions = writer.EncodeOptions;
+pub const TraditionalEncryptionOptions = traditional_encryption.Options;
 pub const IncrementalWriter = incremental_writer.Writer;
 pub const IncrementalWriterError = incremental_writer.Error;
 pub const IncrementalWriterOptions = incremental_writer.Options;
@@ -129,9 +133,14 @@ test "ZIP Legacy Implode incremental encoder test suite" {
     _ = implode_incremental_encoder_tests;
 }
 
+test "ZIP Traditional ZipCrypto test suite" {
+    _ = traditional_encryption;
+}
+
 pub const DecodeOptions = struct {
     max_output_len: usize = std.math.maxInt(usize),
     max_dictionary_size: usize = 64 * 1024 * 1024,
+    password: ?[]const u8 = null,
 };
 
 pub const Entry = types.Entry;
@@ -225,13 +234,38 @@ pub const Archive = struct {
         if (canonical.uncompressed_size > options.max_output_len)
             return error.OutputLimitExceeded;
         if (output.len < canonical.uncompressed_size) return error.OutputTooSmall;
-        if (canonical.isEncrypted()) return error.EncryptedZipEntry;
-
-        const compressed = try localCompressedData(self, canonical);
+        if (canonical.isEncrypted() and allocator == null)
+            return error.EncryptedZipEntry;
+        const local_payload = try localPayloadData(self, canonical, true);
+        var decrypted: ?[]u8 = null;
+        defer if (decrypted) |bytes| {
+            std.crypto.secureZero(u8, bytes);
+            if (allocator) |scratch_allocator|
+                scratch_allocator.free(bytes)
+            else
+                unreachable;
+        };
+        const compressed = if (canonical.isEncrypted()) encrypted: {
+            if (canonical.flags & (1 << 6) != 0) return error.UnsupportedZipFeature;
+            const scratch_allocator = allocator orelse return error.ZipEntryRequiresAllocator;
+            const password = options.password orelse return error.PasswordRequired;
+            const check_byte: u8 = if (canonical.flags & wire.descriptor_flag != 0)
+                @truncate(local_payload.dos_time >> 8)
+            else
+                @truncate(canonical.crc32 >> 24);
+            const bytes = try traditional_encryption.decryptAlloc(
+                scratch_allocator,
+                local_payload.data,
+                password,
+                check_byte,
+            );
+            decrypted = bytes;
+            break :encrypted bytes;
+        } else local_payload.data;
         const target = output[0..canonical.uncompressed_size];
         switch (canonical.method) {
             .stored => {
-                if (canonical.compressed_size != canonical.uncompressed_size) return error.InvalidZipArchive;
+                if (compressed.len != canonical.uncompressed_size) return error.InvalidZipArchive;
                 @memcpy(target, compressed);
             },
             .shrink => try shrink.decodeInto(compressed, target),
@@ -480,13 +514,27 @@ fn parseCentralEntry(archive: Archive, offset: usize) Error!ParsedCentralEntry {
     };
 }
 
+const LocalPayload = struct {
+    data: []const u8,
+    dos_time: u16,
+};
+
 fn localCompressedData(archive: Archive, entry: Entry) Error![]const u8 {
+    return (try localPayloadData(archive, entry, false)).data;
+}
+
+fn localPayloadData(
+    archive: Archive,
+    entry: Entry,
+    allow_encrypted: bool,
+) Error!LocalPayload {
     const offset = entry.local_header_offset;
     if (try readU32(archive.bytes, offset) != local_file_signature) return error.InvalidZipArchive;
     _ = try checkedEnd(offset, 30, archive.central_directory_offset);
     const local_flags = try readU16(archive.bytes, offset + 6);
     const local_version_needed = try readU16(archive.bytes, offset + 4);
     const local_method = try readU16(archive.bytes, offset + 8);
+    const local_dos_time = try readU16(archive.bytes, offset + 10);
     const local_crc = try readU32(archive.bytes, offset + 14);
     const local_compressed = try readU32(archive.bytes, offset + 18);
     const local_uncompressed = try readU32(archive.bytes, offset + 22);
@@ -499,7 +547,8 @@ fn localCompressedData(archive: Archive, entry: Entry) Error![]const u8 {
         else => @as(u16, 0),
     };
     if ((local_flags ^ entry.flags) & compared_flags != 0) return error.InvalidZipArchive;
-    if (local_flags & 1 != 0) return error.EncryptedZipEntry;
+    if (local_flags & wire.encrypted_flag != 0 and !allow_encrypted)
+        return error.EncryptedZipEntry;
 
     const name_start = offset + 30;
     const name_end = try checkedEnd(name_start, name_len, archive.central_directory_offset);
@@ -524,7 +573,10 @@ fn localCompressedData(archive: Archive, entry: Entry) Error![]const u8 {
             local_sizes.uncompressed_size != entry.uncompressed_size)
             return error.InvalidZipArchive;
     }
-    return archive.bytes[data_start..data_end];
+    return .{
+        .data = archive.bytes[data_start..data_end],
+        .dos_time = local_dos_time,
+    };
 }
 
 fn sameEntry(a: Entry, b: Entry) bool {
@@ -774,6 +826,96 @@ test "ZIP writer deterministically round trips multiple stored and deflate entri
         try std.testing.expectEqualSlices(u8, entries[index].data, decoded);
     }
     try std.testing.expectEqual(entries.len, index);
+}
+
+test "ZIP writer and reader round trip Traditional ZipCrypto entries" {
+    const allocator = std.testing.allocator;
+    const password = "zip-password-密码";
+    const stored_payload = "encrypted stored payload";
+    const deflated_payload = "encrypted Deflate payload\n" ** 97;
+    const entries = [_]EncodeEntry{
+        .{
+            .name = "encrypted-stored.bin",
+            .data = stored_payload,
+            .method = .stored,
+            .traditional_encryption = .{
+                .password = password,
+                .header_random = .{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 },
+            },
+        },
+        .{
+            .name = "encrypted-deflate.txt",
+            .data = deflated_payload,
+            .method = .deflate,
+            .traditional_encryption = .{
+                .password = password,
+                .header_random = .{ 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0 },
+            },
+        },
+    };
+
+    inline for (.{ false, true }) |descriptor| {
+        const options = EncodeOptions{ .data_descriptor = descriptor };
+        const bytes = try encodeAlloc(allocator, &entries, options);
+        defer allocator.free(bytes);
+        const repeated = try encodeAlloc(allocator, &entries, options);
+        defer allocator.free(repeated);
+        try std.testing.expectEqualSlices(u8, bytes, repeated);
+
+        const archive = try parse(bytes);
+        for (entries, 0..) |expected, index| {
+            const entry = try archive.entryAt(index);
+            try std.testing.expect(entry.isEncrypted());
+            try std.testing.expectEqual(descriptor, entry.flags & wire.descriptor_flag != 0);
+            try std.testing.expect(entry.compressed_size >= traditional_encryption.header_len);
+            try std.testing.expectError(error.EncryptedZipEntry, archive.compressedData(entry));
+            try std.testing.expectError(
+                error.PasswordRequired,
+                archive.extractAllocWithOptions(allocator, entry, .{}),
+            );
+            try std.testing.expectError(
+                error.InvalidZipPassword,
+                archive.extractAllocWithOptions(allocator, entry, .{ .password = "wrong" }),
+            );
+            const decoded = try archive.extractAllocWithOptions(
+                allocator,
+                entry,
+                .{ .password = password },
+            );
+            defer allocator.free(decoded);
+            try std.testing.expectEqualSlices(u8, expected.data, decoded);
+        }
+
+        var corrupt = try allocator.dupe(u8, bytes);
+        defer allocator.free(corrupt);
+        const first = try archive.entryAt(0);
+        const data_offset = first.local_header_offset + wire.local_file_header_len + first.name.len;
+        corrupt[data_offset + traditional_encryption.header_random_len] ^= 1;
+        const corrupt_archive = try parse(corrupt);
+        const corrupt_entry = try corrupt_archive.entryAt(0);
+        try std.testing.expectError(
+            error.InvalidZipPassword,
+            corrupt_archive.extractAllocWithOptions(
+                allocator,
+                corrupt_entry,
+                .{ .password = password },
+            ),
+        );
+
+        var corrupt_body = try allocator.dupe(u8, bytes);
+        defer allocator.free(corrupt_body);
+        corrupt_body[data_offset + traditional_encryption.header_len] ^= 1;
+        const corrupt_body_archive = try parse(corrupt_body);
+        const corrupt_body_entry = try corrupt_body_archive.entryAt(0);
+        try std.testing.expectError(
+            error.ChecksumMismatch,
+            corrupt_body_archive.extractAllocWithOptions(
+                allocator,
+                corrupt_body_entry,
+                .{ .password = password },
+            ),
+        );
+    }
 }
 
 test "ZIP writer appends a valid archive after a prefix and rejects inputs transactionally" {

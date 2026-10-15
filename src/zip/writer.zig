@@ -11,11 +11,12 @@ const ppmd8 = @import("../ppmd8.zig");
 const reduce = @import("reduce.zig");
 const shrink = @import("shrink.zig");
 const types = @import("types.zig");
+const traditional_encryption = @import("vail_archive_crypto").zipcrypto;
 const wire = @import("wire.zig");
 const xz = @import("../xz.zig");
 const zstd = @import("../zstd.zig");
 
-pub const Error = core.Error || bzip2.Error || dcl_implode.Error || deflate64.Error || implode.Error || lzma_writer.Error || ppmd8.Error || reduce.Error || shrink.Error || xz.Error || zstd.Error || error{
+pub const Error = core.Error || bzip2.Error || dcl_implode.Error || deflate64.Error || implode.Error || lzma_writer.Error || ppmd8.Error || reduce.Error || shrink.Error || traditional_encryption.Error || xz.Error || zstd.Error || error{
     InvalidZipEntryName,
     InvalidZipTextEncoding,
     UnsupportedZipCompressionMethod,
@@ -35,6 +36,7 @@ pub const EncodeEntry = struct {
     data: []const u8,
     method: CompressionMethod = .deflate,
     comment: []const u8 = "",
+    traditional_encryption: ?traditional_encryption.Options = null,
 };
 
 pub const EncodeOptions = struct {
@@ -93,12 +95,13 @@ pub fn encodeAppend(
         const uncompressed_size = try wire.usizeToU64(entry.data.len);
         const flags: u16 = (if (entry.method == .lzma) wire.lzma_end_marker_flag else 0) |
             (if (entry.method == .implode) options.implode_options.flags() else 0) |
+            (if (entry.traditional_encryption != null) wire.encrypted_flag else 0) |
             (if (options.data_descriptor) wire.descriptor_flag else 0) |
             (if (options.utf8) wire.utf8_flag else 0);
 
         var owned_compressed: ?[]u8 = null;
         defer if (owned_compressed) |bytes| allocator.free(bytes);
-        const compressed = switch (entry.method) {
+        const codec_payload = switch (entry.method) {
             .stored => entry.data,
             .shrink => blk: {
                 const bytes = try shrink.encodeAlloc(allocator, entry.data);
@@ -167,6 +170,25 @@ pub fn encodeAppend(
             },
             else => return error.UnsupportedZipCompressionMethod,
         };
+        var owned_encrypted: ?[]u8 = null;
+        defer if (owned_encrypted) |bytes| {
+            std.crypto.secureZero(u8, bytes);
+            allocator.free(bytes);
+        };
+        const compressed = if (entry.traditional_encryption) |encryption| encrypted: {
+            const check_byte: u8 = if (options.data_descriptor)
+                @truncate(wire.deterministic_dos_time >> 8)
+            else
+                @truncate(crc >> 24);
+            const bytes = try traditional_encryption.encryptAlloc(
+                allocator,
+                codec_payload,
+                encryption,
+                check_byte,
+            );
+            owned_encrypted = bytes;
+            break :encrypted bytes;
+        } else codec_payload;
         const compressed_size = try wire.usizeToU64(compressed.len);
         const entry_zip64 = wire.selectEntryZip64(
             options.zip64 == .always,

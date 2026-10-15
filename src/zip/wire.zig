@@ -30,6 +30,7 @@ pub const version_63: u16 = 63;
 
 pub const deterministic_dos_time: u16 = 0;
 pub const deterministic_dos_date: u16 = 0x0021;
+pub const encrypted_flag: u16 = 1 << 0;
 pub const descriptor_flag: u16 = 1 << 3;
 pub const lzma_end_marker_flag: u16 = 1 << 1;
 pub const utf8_flag: u16 = 1 << 11;

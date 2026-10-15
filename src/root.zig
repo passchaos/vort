@@ -158,6 +158,7 @@ pub const ZipCompressionMethod = zip.CompressionMethod;
 pub const Zip64Mode = zip.Zip64Mode;
 pub const ZipEncodeEntry = zip.EncodeEntry;
 pub const ZipEncodeOptions = zip.EncodeOptions;
+pub const ZipTraditionalEncryptionOptions = zip.TraditionalEncryptionOptions;
 pub const ZipDecodeOptions = zip.DecodeOptions;
 pub const ZipIncrementalWriter = zip.IncrementalWriter;
 pub const ZipIncrementalWriterError = zip.IncrementalWriterError;
