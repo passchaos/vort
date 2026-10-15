@@ -10,6 +10,8 @@ const deflate = @import("deflate.zig");
 const deflate64 = @import("deflate64.zig");
 const lzma = @import("lzma.zig");
 const implode = @import("zip/implode.zig");
+const implode_incremental_encoder = @import("zip/implode/incremental_encoder.zig");
+const implode_incremental_encoder_tests = @import("zip/implode_incremental_encoder_tests.zig");
 const implode_incremental_tests = @import("zip/implode_incremental_tests.zig");
 const ppmd8 = @import("ppmd8.zig");
 const xz = @import("xz.zig");
@@ -79,6 +81,7 @@ pub const ImplodeDictionary = implode.Dictionary;
 pub const ImplodeOptions = implode.Options;
 pub const ImplodeIncrementalDecoder = implode.IncrementalDecoder;
 pub const ImplodeIncrementalWorkspace = implode.IncrementalWorkspace;
+pub const ImplodeIncrementalEncoder = implode_incremental_encoder.Encoder;
 pub const encodeAlloc = writer.encodeAlloc;
 pub const encodeAppend = writer.encodeAppend;
 
@@ -120,6 +123,10 @@ test "ZIP Reduce incremental encoder test suite" {
 
 test "ZIP Legacy Implode incremental test suite" {
     _ = implode_incremental_tests;
+}
+
+test "ZIP Legacy Implode incremental encoder test suite" {
+    _ = implode_incremental_encoder_tests;
 }
 
 pub const DecodeOptions = struct {
