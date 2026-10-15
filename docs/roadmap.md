@@ -20277,3 +20277,22 @@ reuse, so production keeps the simpler independently owned plans.
   ZIP32/ZIP64 sizes are 23,021/24,441 bytes, `run-zip-diff` remains 13/13, the
   PPMd encoder suite passes 3/3, writer suite 67/67, full repository graph
   2679/2679, and `zig build check` passes all 113 steps.
+
+- Added a caller-output Shrink encoder and wired ZIP method 1 into
+  `ZipIncrementalWriter`. The encoder preserves its LZW prefix, 9...13-bit
+  LSB-first reservoir, fixed 8,192-code dictionary and bounded pending output
+  across arbitrary caller fragmentation. It supports exact-size pledges,
+  input/pending limits, zero-output backpressure, empty input and reset, and is
+  byte-identical to the established one-shot writer through width growth and a
+  full dictionary. The deterministic writer freezes a full dictionary rather
+  than emitting adaptive partial clears; the reader continues to accept
+  external partial-clear streams, leaving that policy as a later ratio
+  optimization. Known/unknown/empty, one-byte output, ZIP32/ZIP64 descriptors,
+  limit preflight and allocation failures share the codec union. The external
+  archive grows from twenty-four to twenty-seven entries. Vort's sequential
+  reader and system Info-ZIP decode all three Shrink members; Python validates
+  their raw method, flags, CRC, sizes, descriptors and ZIP64 metadata because
+  `zipfile` has no method-1 decoder. ZIP32/ZIP64 sizes are 24,663/26,251 bytes;
+  `run-zip-diff` remains 13/13, the Shrink encoder suite passes 3/3, writer
+  suite 68/68, full repository graph 2683/2683, and `zig build check` passes
+  all 113 steps.

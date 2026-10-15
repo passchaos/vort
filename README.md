@@ -1660,7 +1660,7 @@ two approximately 10 KiB workspaces plus the same 8 KiB bounded tail. The
 reader also retains the final archive comment and one bounded control record,
 but never complete decoded payloads, compressed members, or the whole archive.
 
-`ZipIncrementalWriter` streams Stored, raw-Deflate, stored-block Deflate64,
+`ZipIncrementalWriter` streams Stored, Shrink, raw-Deflate, stored-block Deflate64,
 Bzip2, LZMA, XZ, PPMd8, and
 legacy/current Zstandard entries into caller-owned output. `ZipIncrementalWriterOptions`
 configures archive comment, UTF-8, ZIP64, SFX `initial_offset`, codec policy,
@@ -1693,13 +1693,17 @@ extended 64 KiB distances.
 PPMd8 owns one explicitly bounded 1...256 MiB model arena and small pending
 range buffer; `ppmd_options` selects order, restart/cut-off restoration, model
 memory, input and pending-output limits, while finish emits the range-coded EOS.
+Shrink owns a fixed-capacity 8,192-code LZW dictionary and bounded pending
+output; `shrink_options` selects input and pending-output limits. Its
+deterministic encoder grows from 9 through 13 bits and freezes a full
+dictionary rather than retaining the complete member.
 Memory therefore scales with those bounds plus central-directory
 metadata, not with the complete archive.
 Archive comments are copied by initialization, and names/comments by
 `beginEntry`, so those caller slices need not outlive the successful call.
 
-With `.auto`, unknown-size entries and every Deflate/Deflate64/Bzip2/LZMA/XZ/
-PPMd/Zstandard entry conservatively use ZIP64 before its non-seekable local
+With `.auto`, unknown-size entries and every Shrink/Deflate/Deflate64/Bzip2/
+LZMA/XZ/PPMd/Zstandard entry conservatively use ZIP64 before its non-seekable local
 header is emitted; a known-size Stored entry remains ZIP32 when its size and
 local offset fit.
 `.always` forces ZIP64.
@@ -1717,14 +1721,14 @@ invalid and must not be committed. After an error, mutating calls return
 validation errors from `beginEntry` and a premature short `finishEntry` remain
 recoverable. The existing one-shot `zipEncodeAppend` retains its transactional
 guarantee and broader method support. Incremental writing does not yet cover
-the other ZIP methods; the sequential reader additionally covers Shrink,
-Reduce methods 2...5, traditional Implode, and DCL Implode. Encryption and
+Reduce methods 2...5, traditional Implode, or DCL Implode; the sequential
+reader already streams those methods. Encryption and
 multi-disk archives remain unsupported. See
 [the ZIP format status](docs/formats/zip.md) for the full state and wire
 contract. Writer-specific additive errors are exposed separately as
 `ZipIncrementalWriterError`; the established `ZipError` set is unchanged.
 
-The incremental `run-zip-diff` matrix generates the same twenty-four-entry
+The incremental `run-zip-diff` matrix generates the same twenty-seven-entry
 archive, including a known Deflate payload larger than 32 KiB that crosses a real
 planning-block boundary, under one-byte and micro-chunk output schedules in
 ZIP32 `.never` and ZIP64 `.always` modes. Python raw-wire checks, `zipfile`, and
@@ -1741,6 +1745,11 @@ cover extended-distance reader semantics.
 Known, unknown-size, and empty PPMd method-98 entries use order 12, 1 MiB and
 cut-off restoration; Vort's complete sequential reader validates them, while
 third-party extraction remains conditional on the unavailable 7z/7zz tool.
+Known, unknown-size, and empty Shrink method-1 entries are decoded by Vort's
+complete sequential reader and system Info-ZIP; Python validates their raw
+method, flags, CRC, sizes, descriptors, version metadata, and ZIP64 fields but
+does not provide a method-1 decoder. The ZIP32 and ZIP64 archives are 24,663
+and 26,251 bytes respectively.
 The aggregate reports 13/13 ZIP differential steps. The same gate incrementally decodes five
 Python-generated Stored/Deflate entries, including non-seekable descriptors
 and a forced-ZIP64 local header, with 3-byte input and 5-byte output. A separate
@@ -1762,7 +1771,7 @@ Four known-size and four descriptor-backed SFX members cover every traditional
 Implode flag mode (`incremental_archive_implode_cases=8`); two Apache Commons
 Compress fixtures independently cover the 4 KiB/two-tree and 8 KiB/three-tree
 endpoints (`incremental_archive_implode_fixture_cases=2`).
-Focused writer tests pass 67/67, the incremental entry decoder suite passes
+Focused writer tests pass 68/68, the incremental entry decoder suite passes
 15/15, the DCL Implode, Shrink, Reduce and Legacy Implode incremental decoder
 suites each pass 4/4, and the archive reader suite passes 24/24. Shrink covers known/signed/
 unsigned-descriptor, empty, ZIP32/ZIP64 and output-limit paths; DCL Implode's
@@ -1774,7 +1783,7 @@ signed/unsigned descriptors, ZIP32/ZIP64, arbitrary tree descriptions,
 implicit-zero and overlapping matches. PPMd restart/cut-off,
 descriptor and ZIP64 paths are required Vort coverage; third-party PPMd remains
 unclaimed because this host has no 7z/7zz and Python has no method-98 codec.
-The full repository graph passes 2679/2679 and `zig build check` passes 113/113.
+The full repository graph passes 2683/2683 and `zig build check` passes 113/113.
 The refactored one-shot writer remains byte-identical to HEAD across 14 probe
 modes. The current host has no 7z/7zz, so that optional extraction branch is
 reported as skipped rather than passed.
