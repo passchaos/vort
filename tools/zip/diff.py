@@ -725,22 +725,21 @@ def validate_vort_winzip_aes(
                 )
                 if output.read_bytes() != expected:
                     raise AssertionError(f"Vort WinZip AES self-extraction mismatch for {name!r}")
-                if not descriptor:
-                    stream_output = temp / f"vort-winzip-aes-{suffix}-{index}.stream.out"
-                    run(
-                        cli,
-                        "extract-zip-stream-file",
-                        str(archive_path),
-                        name,
-                        str(stream_output),
-                        str(512 * 1024 * 1024),
-                        WINZIP_AES_PASSWORD,
+                stream_output = temp / f"vort-winzip-aes-{suffix}-{index}.stream.out"
+                run(
+                    cli,
+                    "extract-zip-stream-file",
+                    str(archive_path),
+                    name,
+                    str(stream_output),
+                    str(512 * 1024 * 1024),
+                    WINZIP_AES_PASSWORD,
+                )
+                if stream_output.read_bytes() != expected:
+                    raise AssertionError(
+                        f"Vort sequential WinZip AES mismatch for {name!r}"
                     )
-                    if stream_output.read_bytes() != expected:
-                        raise AssertionError(
-                            f"Vort sequential WinZip AES mismatch for {name!r}"
-                        )
-                    sequential_cases += 1
+                sequential_cases += 1
                 cases += 1
     return cases, sequential_cases
 
@@ -1827,7 +1826,7 @@ def validate_incremental_winzip_aes_writer(
     temp: Path,
     force_zip64: bool,
     openssl_tool: str,
-) -> tuple[int, int]:
+) -> tuple[int, int, int]:
     suffix = "zip64" if force_zip64 else "zip32"
     one_path = temp / f"incremental-winzip-aes-{suffix}-one.zip"
     micro_path = temp / f"incremental-winzip-aes-{suffix}-micro.zip"
@@ -1837,6 +1836,7 @@ def validate_incremental_winzip_aes_writer(
     if raw != micro_path.read_bytes():
         raise AssertionError(f"incremental WinZip AES {suffix} output is not deterministic")
     cases = 0
+    sequential_cases = 0
     with zipfile.ZipFile(one_path) as archive:
         if archive.namelist() != list(INCREMENTAL_WINZIP_AES_PAYLOADS):
             raise AssertionError("incremental WinZip AES entry order mismatch")
@@ -1856,8 +1856,23 @@ def validate_incremental_winzip_aes_writer(
                 raise AssertionError(
                     f"Vort could not self-extract incremental WinZip AES {name!r}"
                 )
+            stream_output = temp / f"incremental-winzip-aes-{suffix}-{index}.stream.out"
+            run(
+                cli,
+                "extract-zip-stream-file",
+                str(one_path),
+                name,
+                str(stream_output),
+                str(512 * 1024 * 1024),
+                WINZIP_AES_PASSWORD,
+            )
+            if stream_output.read_bytes() != expected:
+                raise AssertionError(
+                    f"Vort sequential reader could not extract incremental WinZip AES {name!r}"
+                )
+            sequential_cases += 1
             cases += 1
-    return len(raw), cases
+    return len(raw), cases, sequential_cases
 
 
 def main() -> None:
@@ -1944,29 +1959,36 @@ def main() -> None:
             unzip_tool,
             seven_zip_tool,
         )
-        incremental_winzip_aes_zip32_bytes, incremental_winzip_aes_zip32_cases = (
-            validate_incremental_winzip_aes_writer(
-                args.cli,
-                args.incremental_writer,
-                temp,
-                False,
-                openssl_tool,
-            )
+        (
+            incremental_winzip_aes_zip32_bytes,
+            incremental_winzip_aes_zip32_cases,
+            incremental_winzip_aes_zip32_reader,
+        ) = validate_incremental_winzip_aes_writer(
+            args.cli,
+            args.incremental_writer,
+            temp,
+            False,
+            openssl_tool,
         )
-        incremental_winzip_aes_zip64_bytes, incremental_winzip_aes_zip64_cases = (
-            validate_incremental_winzip_aes_writer(
-                args.cli,
-                args.incremental_writer,
-                temp,
-                True,
-                openssl_tool,
-            )
+        (
+            incremental_winzip_aes_zip64_bytes,
+            incremental_winzip_aes_zip64_cases,
+            incremental_winzip_aes_zip64_reader,
+        ) = validate_incremental_winzip_aes_writer(
+            args.cli,
+            args.incremental_writer,
+            temp,
+            True,
+            openssl_tool,
         )
         incremental_reader_zipcrypto_cases = (
             vort_incremental_reader_zipcrypto_cases
             + infozip_incremental_reader_zipcrypto_cases
             + incremental_zipcrypto_zip32_reader
             + incremental_zipcrypto_zip64_reader
+        )
+        incremental_reader_winzip_aes_cases += (
+            incremental_winzip_aes_zip32_reader + incremental_winzip_aes_zip64_reader
         )
         deflate64_cases = 0
         ppmd_cases = 0
