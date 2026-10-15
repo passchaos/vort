@@ -887,6 +887,9 @@ INCREMENTAL_PAYLOADS = {
     "known-lzma.txt": b"known LZMA incremental ZIP payload.\n" * 89,
     "unknown-lzma.txt": b"unknown LZMA incremental ZIP payload.\n" * 71,
     "empty-lzma.bin": b"",
+    "known-xz.txt": b"known XZ incremental ZIP payload.\n" * 97,
+    "unknown-xz.txt": b"unknown XZ incremental ZIP payload.\n" * 79,
+    "empty-xz.bin": b"",
 }
 INCREMENTAL_METHODS = {
     "known-stored.bin": zipfile.ZIP_STORED,
@@ -904,6 +907,9 @@ INCREMENTAL_METHODS = {
     "known-lzma.txt": zipfile.ZIP_LZMA,
     "unknown-lzma.txt": zipfile.ZIP_LZMA,
     "empty-lzma.bin": zipfile.ZIP_LZMA,
+    "known-xz.txt": 95,
+    "unknown-xz.txt": 95,
+    "empty-xz.bin": 95,
 }
 
 
@@ -1048,7 +1054,7 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
         fields = parse_extra_fields(extra, f"central entry {name!r}")
         expected_needed = (
             63
-            if method in (14, 20, 93)
+            if method in (14, 20, 93, 95)
             else 46
             if method == zipfile.ZIP_BZIP2
             else 45
@@ -1127,7 +1133,7 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
         fields = parse_extra_fields(extra, f"local entry {name!r}")
         expected_needed = (
             63
-            if method in (14, 20, 93)
+            if method in (14, 20, 93, 95)
             else 46
             if method == zipfile.ZIP_BZIP2
             else 45
@@ -1214,6 +1220,9 @@ def validate_incremental_writer_archive(
     zstd_tool = shutil.which("zstd")
     if zstd_tool is None:
         raise AssertionError("zstd CLI is required for incremental ZIP methods 20/93")
+    xz_tool = shutil.which("xz")
+    if xz_tool is None:
+        raise AssertionError("xz CLI is required for incremental ZIP method 95")
     with zipfile.ZipFile(one_byte_path) as archive:
         if archive.comment != INCREMENTAL_COMMENT:
             raise AssertionError(f"Python incremental {suffix} comment mismatch")
@@ -1232,6 +1241,21 @@ def validate_incremental_writer_archive(
                     check=True,
                     stdout=subprocess.PIPE,
                 ).stdout
+            elif info.compress_type == 95:
+                name_len, extra_len = struct.unpack_from("<HH", raw, info.header_offset + 26)
+                data_offset = info.header_offset + 30 + name_len + extra_len
+                frame = raw[data_offset : data_offset + info.compress_size]
+                actual = lzma.decompress(frame, format=lzma.FORMAT_XZ)
+                system_actual = subprocess.run(
+                    [xz_tool, "-q", "-d", "-c"],
+                    input=frame,
+                    check=True,
+                    stdout=subprocess.PIPE,
+                ).stdout
+                if system_actual != actual:
+                    raise AssertionError(
+                        f"system xz disagrees with Python for incremental {name!r}"
+                    )
             else:
                 actual = archive.read(name)
             if actual != expected:

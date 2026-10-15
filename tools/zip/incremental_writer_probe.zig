@@ -49,6 +49,8 @@ pub fn main(init: std.process.Init) !void {
     const unknown_zstd = "unknown legacy Zstandard incremental ZIP payload.\n" ** 67;
     const known_lzma = "known LZMA incremental ZIP payload.\n" ** 89;
     const unknown_lzma = "unknown LZMA incremental ZIP payload.\n" ** 71;
+    const known_xz = "known XZ incremental ZIP payload.\n" ** 97;
+    const unknown_xz = "unknown XZ incremental ZIP payload.\n" ** 79;
     const entries = [_]Entry{
         .{
             .name = "known-stored.bin",
@@ -143,6 +145,24 @@ pub fn main(init: std.process.Init) !void {
             .method = .lzma,
             .expected_size = 0,
         },
+        .{
+            .name = "known-xz.txt",
+            .data = known_xz,
+            .method = .xz,
+            .expected_size = known_xz.len,
+        },
+        .{
+            .name = "unknown-xz.txt",
+            .data = unknown_xz,
+            .method = .xz,
+            .expected_size = null,
+        },
+        .{
+            .name = "empty-xz.bin",
+            .data = "",
+            .method = .xz,
+            .expected_size = 0,
+        },
     };
 
     const encoded = try encodeArchive(init.gpa, &entries, zip64, output_pattern);
@@ -169,6 +189,11 @@ fn encodeArchive(
             .dictionary_size = 4096,
             .mode = .literal_only,
             .input_buffer_len = 4096,
+        },
+        .xz_options = .{
+            .check = .crc64,
+            .block_size = 1024,
+            .dictionary_size = 4096,
         },
     });
     defer writer.deinit();
