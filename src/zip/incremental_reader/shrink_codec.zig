@@ -23,8 +23,10 @@ pub const State = struct {
     decoder: shrink.IncrementalDecoder,
     descriptor_layout: ?descriptor.Layout,
     expected_compressed_size: ?usize,
+    compressed_size_prefix: usize,
     finish_requested: bool = false,
     probe: [wire.zip64_data_descriptor_len]u8 = undefined,
+    payload_probe: [wire.zip64_data_descriptor_len]u8 = undefined,
     probe_len: usize = 0,
     result_descriptor: ?descriptor.Descriptor = null,
     next_prefix: [4]u8 = undefined,
@@ -41,6 +43,7 @@ pub const State = struct {
         expected_compressed_size: ?usize,
         expected_uncompressed_size: ?usize,
         descriptor_layout: ?descriptor.Layout,
+        compressed_size_prefix: usize,
     ) Error!Self {
         if ((expected_compressed_size == null) != (descriptor_layout != null))
             return error.InvalidZipArchive;
@@ -55,6 +58,7 @@ pub const State = struct {
             }),
             .descriptor_layout = descriptor_layout,
             .expected_compressed_size = expected_compressed_size,
+            .compressed_size_prefix = compressed_size_prefix,
         };
     }
 
@@ -64,10 +68,20 @@ pub const State = struct {
     }
 
     pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+        return self.stepPaired(input, input, output);
+    }
+
+    pub fn stepPaired(
+        self: *Self,
+        raw_input: []const u8,
+        payload_input: []const u8,
+        output: []u8,
+    ) Error!core.StepResult {
+        std.debug.assert(raw_input.len == payload_input.len);
         return if (self.descriptor_layout == null)
-            self.stepKnown(input, output)
+            self.stepKnown(payload_input, output)
         else
-            self.stepDescriptor(input, output);
+            self.stepDescriptor(raw_input, payload_input, output);
     }
 
     pub fn layout(self: *const Self) ?descriptor.Layout {
@@ -126,7 +140,12 @@ pub const State = struct {
         }
     }
 
-    fn stepDescriptor(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+    fn stepDescriptor(
+        self: *Self,
+        raw_input: []const u8,
+        payload_input: []const u8,
+        output: []u8,
+    ) Error!core.StepResult {
         var input_read: usize = 0;
         var output_written: usize = 0;
         const capacity = self.descriptor_layout.?.signedLen();
@@ -148,7 +167,7 @@ pub const State = struct {
                 }
 
                 const supplied = try self.decoder.step(
-                    self.probe[0..1],
+                    self.payload_probe[0..1],
                     output[output_written..],
                 );
                 if (supplied.progress.input_read != 1)
@@ -159,16 +178,25 @@ pub const State = struct {
                     &output_written,
                 );
                 std.mem.copyForwards(u8, self.probe[0 .. capacity - 1], self.probe[1..capacity]);
+                std.mem.copyForwards(
+                    u8,
+                    self.payload_probe[0 .. capacity - 1],
+                    self.payload_probe[1..capacity],
+                );
                 self.probe_len -= 1;
                 if (supplied.status == .need_output)
                     return result(input_read, output_written, .need_output);
                 continue;
             }
 
-            if (input_read == input.len)
+            if (input_read == raw_input.len)
                 return result(input_read, output_written, .need_input);
-            const take = @min(capacity - self.probe_len, input.len - input_read);
-            @memcpy(self.probe[self.probe_len..][0..take], input[input_read..][0..take]);
+            const take = @min(capacity - self.probe_len, raw_input.len - input_read);
+            @memcpy(self.probe[self.probe_len..][0..take], raw_input[input_read..][0..take]);
+            @memcpy(
+                self.payload_probe[self.probe_len..][0..take],
+                payload_input[input_read..][0..take],
+            );
             self.probe_len += take;
             input_read += take;
         }
@@ -210,7 +238,11 @@ pub const State = struct {
     }
 
     fn matches(self: *const Self, candidate: descriptor.Descriptor) bool {
-        const compressed_u64 = std.math.cast(u64, self.compressed_size) orelse return false;
+        const prefixed_size = checkedAdd(
+            self.compressed_size,
+            self.compressed_size_prefix,
+        ) catch return false;
+        const compressed_u64 = std.math.cast(u64, prefixed_size) orelse return false;
         const uncompressed_u64 = std.math.cast(u64, self.uncompressed_size) orelse return false;
         return candidate.crc32 == self.crc.digest() and
             candidate.compressed_size == compressed_u64 and

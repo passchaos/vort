@@ -82,10 +82,16 @@ fn withoutDescriptorSignature(
 ) ![]u8 {
     const archive = try zip.parse(signed_archive);
     try std.testing.expectEqual(@as(usize, 1), archive.entry_count);
-    try std.testing.expect(!archive.zip64);
     const entry = try archive.entryAt(0);
-    const compressed = try archive.compressedData(entry);
-    const descriptor_offset = @intFromPtr(compressed.ptr) - @intFromPtr(signed_archive.ptr) + compressed.len;
+    const local_offset = entry.local_header_offset;
+    try std.testing.expectEqual(
+        wire.local_file_signature,
+        std.mem.readInt(u32, signed_archive[local_offset..][0..4], .little),
+    );
+    const name_len = std.mem.readInt(u16, signed_archive[local_offset + 26 ..][0..2], .little);
+    const extra_len = std.mem.readInt(u16, signed_archive[local_offset + 28 ..][0..2], .little);
+    const data_offset = local_offset + wire.local_file_header_len + name_len + extra_len;
+    const descriptor_offset = data_offset + entry.compressed_size;
     try std.testing.expectEqual(
         @as(u32, 0x0807_4b50),
         std.mem.readInt(u32, signed_archive[descriptor_offset..][0..4], .little),
@@ -95,12 +101,25 @@ fn withoutDescriptorSignature(
     @memcpy(unsigned[0..descriptor_offset], signed_archive[0..descriptor_offset]);
     @memcpy(unsigned[descriptor_offset..], signed_archive[descriptor_offset + 4 ..]);
     const eocd_offset = unsigned.len - 22 - archive.comment.len;
-    std.mem.writeInt(
-        u32,
-        unsigned[eocd_offset + 16 ..][0..4],
-        @intCast(archive.central_directory_offset - 4),
-        .little,
-    );
+    const central_offset = archive.central_directory_offset - 4;
+    const legacy_central_offset = std.mem.readInt(u32, unsigned[eocd_offset + 16 ..][0..4], .little);
+    if (legacy_central_offset != std.math.maxInt(u32))
+        std.mem.writeInt(u32, unsigned[eocd_offset + 16 ..][0..4], @intCast(central_offset), .little);
+    if (archive.zip64) {
+        const locator_offset = eocd_offset - wire.zip64_end_of_central_locator_len;
+        try std.testing.expectEqual(
+            wire.zip64_end_of_central_locator_signature,
+            std.mem.readInt(u32, unsigned[locator_offset..][0..4], .little),
+        );
+        const zip64_end_offset = std.mem.readInt(u64, unsigned[locator_offset + 8 ..][0..8], .little) - 4;
+        std.mem.writeInt(u64, unsigned[locator_offset + 8 ..][0..8], zip64_end_offset, .little);
+        const zip64_offset: usize = @intCast(zip64_end_offset);
+        try std.testing.expectEqual(
+            wire.zip64_end_of_central_signature,
+            std.mem.readInt(u32, unsigned[zip64_offset..][0..4], .little),
+        );
+        std.mem.writeInt(u64, unsigned[zip64_offset + 48 ..][0..8], central_offset, .little);
+    }
     return unsigned;
 }
 
@@ -170,6 +189,12 @@ fn expectReaderError(
             stepped.status != .entry_header and stepped.status != .entry_done)
             return error.TestUnexpectedResult;
     }
+    reader.finish() catch |err| {
+        try std.testing.expectEqual(expected_error, err);
+        try std.testing.expectEqual(incremental.Phase.failed, reader.snapshot().phase);
+        try std.testing.expectError(error.ZipReaderFailed, reader.step("", &scratch));
+        return;
+    };
     return error.TestExpectedError;
 }
 
@@ -880,23 +905,182 @@ test "ZIP incremental reader streams known-size Traditional ZipCrypto entries" {
         decodeArchiveFragmented(allocator, bytes, &expected, .{ .password = "wrong" }, 3, 5),
     );
 
-    const descriptor_entries = [_]zip.EncodeEntry{entries[0]};
-    const descriptor_bytes = try zip.encodeAlloc(allocator, &descriptor_entries, .{
+    const descriptor_bytes = try zip.encodeAlloc(allocator, &entries, .{
         .data_descriptor = true,
     });
     defer allocator.free(descriptor_bytes);
-    const descriptor_expected = [_]ExpectedEntry{expected[0]};
-    try std.testing.expectError(
-        error.EncryptedZipEntry,
-        decodeArchiveFragmented(
-            allocator,
-            descriptor_bytes,
-            &descriptor_expected,
-            .{ .password = password },
-            1,
-            1,
-        ),
+    try decodeArchiveFragmented(
+        allocator,
+        descriptor_bytes,
+        &expected,
+        .{ .password = password },
+        1,
+        1,
     );
+    try decodeArchiveFragmented(allocator, descriptor_bytes, &expected, .{ .password = password }, 97, 31);
+}
+
+test "ZIP incremental reader streams descriptor Traditional ZipCrypto across every codec" {
+    const allocator = std.testing.allocator;
+    const password = "descriptor-encryption-password";
+    const payload = "encrypted descriptor payload spanning every ZIP codec\n" ** 37;
+    const encryption: zip.TraditionalEncryptionOptions = .{
+        .password = password,
+        .header_random = .{ 0x31, 0x41, 0x59, 0x26, 0x53, 0x58, 0x97, 0x93, 0x23, 0x84, 0x62 },
+    };
+    const methods = [_]zip.CompressionMethod{
+        .stored,
+        .shrink,
+        .reduce_1,
+        .implode,
+        .deflate,
+        .deflate64,
+        .dcl_implode,
+        .bzip2,
+        .lzma,
+        .zstandard_legacy,
+        .zstandard,
+        .xz,
+        .ppmd,
+    };
+    const names = [_][]const u8{
+        "encrypted/stored.bin",
+        "encrypted/shrink.bin",
+        "encrypted/reduce.bin",
+        "encrypted/implode.bin",
+        "encrypted/deflate.bin",
+        "encrypted/deflate64.bin",
+        "encrypted/dcl.bin",
+        "encrypted/bzip2.bin",
+        "encrypted/lzma.bin",
+        "encrypted/zstd-legacy.bin",
+        "encrypted/zstd.bin",
+        "encrypted/xz.bin",
+        "encrypted/ppmd.bin",
+    };
+    var entries: [methods.len]zip.EncodeEntry = undefined;
+    var expected: [methods.len]ExpectedEntry = undefined;
+    for (methods, names, 0..) |method, name, index| {
+        entries[index] = .{
+            .name = name,
+            .data = payload,
+            .method = method,
+            .traditional_encryption = encryption,
+        };
+        expected[index] = .{ .name = name, .data = payload };
+    }
+
+    inline for (.{ zip.Zip64Mode.never, zip.Zip64Mode.always }) |zip64_mode| {
+        const bytes = try zip.encodeAlloc(allocator, &entries, .{
+            .data_descriptor = true,
+            .zip64 = zip64_mode,
+            .ppmd_options = .{ .memory_size = 1024 * 1024 },
+        });
+        defer allocator.free(bytes);
+        try decodeArchiveFragmented(allocator, bytes, &expected, .{ .password = password }, 1, 1);
+        try decodeArchiveFragmented(allocator, bytes, &expected, .{ .password = password }, 257, 31);
+        try std.testing.expectError(
+            error.PasswordRequired,
+            decodeArchiveFragmented(allocator, bytes, &expected, .{}, 3, 5),
+        );
+        try std.testing.expectError(
+            error.InvalidZipPassword,
+            decodeArchiveFragmented(allocator, bytes, &expected, .{ .password = "wrong" }, 3, 5),
+        );
+        if (zip64_mode == .never) {
+            const archive = try zip.parse(bytes);
+            const first = try archive.entryAt(0);
+            try std.testing.expect(first.crc32 >> 24 != 0);
+            const local_offset = first.local_header_offset;
+            const name_len = std.mem.readInt(u16, bytes[local_offset + 26 ..][0..2], .little);
+            const extra_len = std.mem.readInt(u16, bytes[local_offset + 28 ..][0..2], .little);
+            const data_offset = local_offset + wire.local_file_header_len + name_len + extra_len;
+
+            const wrong_time = try allocator.dupe(u8, bytes);
+            defer allocator.free(wrong_time);
+            wrong_time[local_offset + 11] = 1;
+            try expectReaderError(
+                allocator,
+                wrong_time,
+                .{ .password = password },
+                error.InvalidZipPassword,
+            );
+
+            const corrupt_header = try allocator.dupe(u8, bytes);
+            defer allocator.free(corrupt_header);
+            corrupt_header[data_offset + 11] ^= 1;
+            try expectReaderError(
+                allocator,
+                corrupt_header,
+                .{ .password = password },
+                error.InvalidZipPassword,
+            );
+
+            const strong = try allocator.dupe(u8, bytes);
+            defer allocator.free(strong);
+            const strong_flags = std.mem.readInt(u16, strong[local_offset + 6 ..][0..2], .little) | (1 << 6);
+            std.mem.writeInt(u16, strong[local_offset + 6 ..][0..2], strong_flags, .little);
+            try expectReaderError(
+                allocator,
+                strong,
+                .{ .password = password },
+                error.UnsupportedZipFeature,
+            );
+
+            const corrupt_descriptor = try allocator.dupe(u8, bytes);
+            defer allocator.free(corrupt_descriptor);
+            const descriptor_offset = data_offset + first.compressed_size;
+            try std.testing.expectEqual(
+                wire.data_descriptor_signature,
+                std.mem.readInt(u32, corrupt_descriptor[descriptor_offset..][0..4], .little),
+            );
+            corrupt_descriptor[descriptor_offset + 4] ^= 1;
+            try expectReaderError(
+                allocator,
+                corrupt_descriptor,
+                .{ .password = password },
+                error.TruncatedFrame,
+            );
+        }
+    }
+
+    inline for (.{ zip.Zip64Mode.never, zip.Zip64Mode.always }) |zip64_mode| {
+        inline for (.{
+            zip.CompressionMethod.stored,
+            zip.CompressionMethod.shrink,
+            zip.CompressionMethod.reduce_1,
+            zip.CompressionMethod.implode,
+            zip.CompressionMethod.deflate,
+            zip.CompressionMethod.dcl_implode,
+            zip.CompressionMethod.bzip2,
+        }) |method| {
+            const single_entries = [_]zip.EncodeEntry{.{
+                .name = "encrypted/unsigned.bin",
+                .data = payload,
+                .method = method,
+                .traditional_encryption = encryption,
+            }};
+            const single_expected = [_]ExpectedEntry{.{
+                .name = single_entries[0].name,
+                .data = payload,
+            }};
+            const signed = try zip.encodeAlloc(allocator, &single_entries, .{
+                .data_descriptor = true,
+                .zip64 = zip64_mode,
+            });
+            defer allocator.free(signed);
+            const unsigned = try withoutDescriptorSignature(allocator, signed);
+            defer allocator.free(unsigned);
+            try decodeArchiveFragmented(
+                allocator,
+                unsigned,
+                &single_expected,
+                .{ .password = password },
+                1,
+                1,
+            );
+        }
+    }
 }
 
 test "ZIP incremental reader enforces backpressure limits central validation and truncation" {

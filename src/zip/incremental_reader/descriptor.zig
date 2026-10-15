@@ -49,7 +49,9 @@ pub const StepResult = struct {
 pub const StoredScanner = struct {
     layout: Layout,
     max_output_len: usize,
+    compressed_size_prefix: usize,
     buffer: [wire.zip64_data_descriptor_len]u8 = undefined,
+    payload_buffer: [wire.zip64_data_descriptor_len]u8 = undefined,
     buffer_len: usize = 0,
     crc: checksum.Crc32Best = checksum.Crc32Best.init(),
     payload_size: usize = 0,
@@ -60,11 +62,28 @@ pub const StoredScanner = struct {
     const Self = @This();
 
     pub fn init(layout: Layout, max_output_len: usize) Self {
-        return .{ .layout = layout, .max_output_len = max_output_len };
+        return initWithCompressedSizePrefix(layout, max_output_len, 0);
+    }
+
+    pub fn initWithCompressedSizePrefix(
+        layout: Layout,
+        max_output_len: usize,
+        compressed_size_prefix: usize,
+    ) Self {
+        return .{
+            .layout = layout,
+            .max_output_len = max_output_len,
+            .compressed_size_prefix = compressed_size_prefix,
+        };
     }
 
     pub fn reset(self: *Self, layout: Layout, max_output_len: usize) void {
+        self.deinit();
         self.* = init(layout, max_output_len);
+    }
+
+    pub fn deinit(self: *Self) void {
+        std.crypto.secureZero(u8, &self.payload_buffer);
     }
 
     pub fn descriptor(self: *const Self) ?Descriptor {
@@ -84,6 +103,18 @@ pub const StoredScanner = struct {
     }
 
     pub fn step(self: *Self, input: []const u8, output: []u8) error{OutputLimitExceeded}!StepResult {
+        return self.stepPaired(input, input, output);
+    }
+
+    /// `raw_input` owns ZIP descriptor bytes while `payload_input` contains
+    /// the byte-for-byte codec view. They differ only for encrypted entries.
+    pub fn stepPaired(
+        self: *Self,
+        raw_input: []const u8,
+        payload_input: []const u8,
+        output: []u8,
+    ) error{OutputLimitExceeded}!StepResult {
+        std.debug.assert(raw_input.len == payload_input.len);
         if (self.result_descriptor != null) return .{ .status = .done };
         var input_read: usize = 0;
         var output_written: usize = 0;
@@ -97,19 +128,25 @@ pub const StoredScanner = struct {
                     return result(input_read, output_written, .need_output);
                 if (self.payload_size == self.max_output_len)
                     return error.OutputLimitExceeded;
-                const byte = self.buffer[0];
+                const byte = self.payload_buffer[0];
                 output[output_written] = byte;
                 output_written += 1;
-                self.crc.update(self.buffer[0..1]);
+                self.crc.update(self.payload_buffer[0..1]);
                 self.payload_size += 1;
                 std.mem.copyForwards(u8, self.buffer[0 .. capacity - 1], self.buffer[1..capacity]);
+                std.mem.copyForwards(
+                    u8,
+                    self.payload_buffer[0 .. capacity - 1],
+                    self.payload_buffer[1..capacity],
+                );
                 self.buffer_len -= 1;
                 continue;
             }
 
-            if (input_read == input.len)
+            if (input_read == raw_input.len)
                 return result(input_read, output_written, .need_input);
-            self.buffer[self.buffer_len] = input[input_read];
+            self.buffer[self.buffer_len] = raw_input[input_read];
+            self.payload_buffer[self.buffer_len] = payload_input[input_read];
             self.buffer_len += 1;
             input_read += 1;
         }
@@ -139,8 +176,13 @@ pub const StoredScanner = struct {
     }
 
     fn matches(self: *const Self, candidate: Descriptor) bool {
+        const compressed_size = std.math.add(
+            usize,
+            self.payload_size,
+            self.compressed_size_prefix,
+        ) catch return false;
         return candidate.crc32 == self.crc.digest() and
-            candidate.compressed_size == self.payload_size and
+            candidate.compressed_size == compressed_size and
             candidate.uncompressed_size == self.payload_size;
     }
 

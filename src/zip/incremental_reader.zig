@@ -59,6 +59,8 @@ pub const Reader = struct {
         header: [traditional_encryption.header_len]u8 = undefined,
         header_len: usize = 0,
         check_byte: u8,
+        raw_tail: [wire.zip64_data_descriptor_len]u8 = undefined,
+        raw_tail_len: usize = 0,
 
         fn init(password: []const u8, check_byte: u8) EncryptionState {
             return .{
@@ -70,7 +72,30 @@ pub const Reader = struct {
         fn deinit(self: *EncryptionState) void {
             self.cipher.deinit();
             std.crypto.secureZero(u8, &self.header);
+            std.crypto.secureZero(u8, &self.raw_tail);
             self.* = undefined;
+        }
+
+        fn appendRawTail(self: *EncryptionState, bytes: []const u8) void {
+            if (bytes.len >= self.raw_tail.len) {
+                @memcpy(&self.raw_tail, bytes[bytes.len - self.raw_tail.len ..]);
+                self.raw_tail_len = self.raw_tail.len;
+                return;
+            }
+            const discard = self.raw_tail_len + bytes.len -| self.raw_tail.len;
+            const retained = self.raw_tail_len - discard;
+            std.mem.copyForwards(
+                u8,
+                self.raw_tail[0..retained],
+                self.raw_tail[discard..self.raw_tail_len],
+            );
+            @memcpy(self.raw_tail[retained..][0..bytes.len], bytes);
+            self.raw_tail_len = retained + bytes.len;
+        }
+
+        fn rawSuffix(self: *const EncryptionState, len: usize) error{InvalidZipArchive}![]const u8 {
+            if (len > self.raw_tail_len) return error.InvalidZipArchive;
+            return self.raw_tail[self.raw_tail_len - len .. self.raw_tail_len];
         }
     };
 
@@ -102,7 +127,8 @@ pub const Reader = struct {
                 .ppmd => |*state| state.deinit(),
                 .xz => |*state| state.deinit(),
                 .zstd => |*state| state.deinit(),
-                .known, .stored_descriptor => {},
+                .stored_descriptor => |*state| state.deinit(),
+                .known => {},
             }
         }
     };
@@ -459,20 +485,28 @@ pub const Reader = struct {
         const encrypted = local.flags & wire.encrypted_flag != 0;
         if (encrypted and local.flags & (1 << 6) != 0)
             return error.UnsupportedZipFeature;
-        if (encrypted and local.descriptor_layout != null)
-            return error.EncryptedZipEntry;
         const outer_compressed_size = local.compressed_size;
+        const compressed_size_prefix = if (encrypted and local.descriptor_layout != null)
+            traditional_encryption.header_len
+        else
+            0;
         var encryption_state: ?EncryptionState = null;
         errdefer if (encryption_state) |*state| state.deinit();
         if (encrypted) {
             const password = self.options.password orelse return error.PasswordRequired;
-            const compressed_size = local.compressed_size orelse return error.InvalidZipArchive;
-            if (compressed_size < traditional_encryption.header_len)
-                return error.TruncatedZipEncryptionHeader;
-            local.compressed_size = compressed_size - traditional_encryption.header_len;
+            if (local.compressed_size) |compressed_size| {
+                if (compressed_size < traditional_encryption.header_len)
+                    return error.TruncatedZipEncryptionHeader;
+                local.compressed_size = compressed_size - traditional_encryption.header_len;
+            } else if (local.descriptor_layout == null) {
+                return error.InvalidZipArchive;
+            }
             encryption_state = EncryptionState.init(
                 password,
-                @truncate(local.crc32.? >> 24),
+                if (local.descriptor_layout != null)
+                    @truncate(local.dos_time >> 8)
+                else
+                    @truncate(local.crc32.? >> 24),
             );
         }
         switch (local.method) {
@@ -507,13 +541,18 @@ pub const Reader = struct {
         );
         const state: EntryState = if (local.descriptor_layout) |layout|
             switch (local.method) {
-                .stored => .{ .stored_descriptor = descriptor.StoredScanner.init(layout, entry_limit) },
+                .stored => .{ .stored_descriptor = descriptor.StoredScanner.initWithCompressedSizePrefix(
+                    layout,
+                    entry_limit,
+                    compressed_size_prefix,
+                ) },
                 .shrink => .{ .shrink = try codecs.ShrinkState.init(
                     self.allocator,
                     entry_limit,
                     local.compressed_size,
                     local.uncompressed_size,
                     layout,
+                    compressed_size_prefix,
                 ) },
                 .reduce_1, .reduce_2, .reduce_3, .reduce_4 => .{ .reduce = try codecs.ReduceState.init(
                     self.allocator,
@@ -522,6 +561,7 @@ pub const Reader = struct {
                     local.compressed_size,
                     local.uncompressed_size,
                     layout,
+                    compressed_size_prefix,
                 ) },
                 .implode => .{ .implode = try codecs.ImplodeState.init(
                     self.allocator,
@@ -530,6 +570,7 @@ pub const Reader = struct {
                     local.compressed_size,
                     local.uncompressed_size,
                     layout,
+                    compressed_size_prefix,
                 ) },
                 .deflate => .{ .deflate_descriptor = try codecs.DeflateState.init(
                     entry_limit,
@@ -601,6 +642,7 @@ pub const Reader = struct {
                     local.compressed_size,
                     local.uncompressed_size,
                     null,
+                    0,
                 ) };
             if (reduceFactor(local.method)) |factor|
                 break :blk .{ .reduce = try codecs.ReduceState.init(
@@ -610,6 +652,7 @@ pub const Reader = struct {
                     local.compressed_size,
                     local.uncompressed_size,
                     null,
+                    0,
                 ) };
             if (local.method == .shrink)
                 break :blk .{ .shrink = try codecs.ShrinkState.init(
@@ -618,6 +661,7 @@ pub const Reader = struct {
                     local.compressed_size,
                     local.uncompressed_size,
                     null,
+                    0,
                 ) };
             if (local.method == .bzip2)
                 break :blk .{ .bzip2 = codecs.Bzip2State.init(
@@ -726,7 +770,14 @@ pub const Reader = struct {
         output_written: *usize,
     ) Error!?StepResult.Status {
         if (self.current_encryption == null)
-            return self.stepEntryDataPlain(input, output, input_read, output_written);
+            return self.stepEntryDataDecoded(
+                input,
+                input,
+                false,
+                output,
+                input_read,
+                output_written,
+            );
 
         var encryption = &self.current_encryption.?;
         while (encryption.header_len < traditional_encryption.header_len and
@@ -754,14 +805,17 @@ pub const Reader = struct {
         var committed = encryption.cipher;
         defer committed.deinit();
         var decrypted_read: usize = 0;
-        const status = try self.stepEntryDataPlain(
+        const raw = input[raw_offset..][0..take];
+        const status = try self.stepEntryDataDecoded(
+            raw,
             decrypted[0..take],
+            self.directory.records.items[self.current_index.?].uses_descriptor,
             output,
             &decrypted_read,
             output_written,
         );
         input_read.* = try checkedAdd(input_read.*, decrypted_read);
-        for (input[raw_offset..][0..decrypted_read]) |byte| _ = committed.decryptByte(byte);
+        for (raw[0..decrypted_read]) |byte| _ = committed.decryptByte(byte);
         if (self.current_encryption) |*active| {
             active.cipher.deinit();
             active.cipher = committed;
@@ -769,18 +823,27 @@ pub const Reader = struct {
         return status;
     }
 
-    fn stepEntryDataPlain(
+    fn stepEntryDataDecoded(
         self: *Self,
-        input: []const u8,
+        raw_input: []const u8,
+        payload_input: []const u8,
+        encrypted_descriptor: bool,
         output: []u8,
         input_read: *usize,
         output_written: *usize,
     ) Error!?StepResult.Status {
+        std.debug.assert(raw_input.len == payload_input.len);
         const state = &self.current_state.?;
         switch (state.*) {
             .known => |*decoder_state| {
-                const stepped = try decoder_state.step(input, output);
-                try self.accountEntryProgress(stepped.progress, input_read, output_written);
+                const stepped = try decoder_state.step(payload_input, output);
+                try self.accountDecodedProgress(
+                    raw_input,
+                    encrypted_descriptor,
+                    stepped.progress,
+                    input_read,
+                    output_written,
+                );
                 if (stepped.status == .done) {
                     try self.completeCurrentEntry();
                     return .entry_done;
@@ -789,8 +852,14 @@ pub const Reader = struct {
                 return null;
             },
             .stored_descriptor => |*scanner| {
-                const stepped = try scanner.step(input, output);
-                try self.accountEntryProgress(stepped.progress, input_read, output_written);
+                const stepped = try scanner.stepPaired(raw_input, payload_input, output);
+                try self.accountDecodedProgress(
+                    raw_input,
+                    encrypted_descriptor,
+                    stepped.progress,
+                    input_read,
+                    output_written,
+                );
                 if (stepped.status == .done) {
                     const parsed = scanner.descriptor().?;
                     var record = &self.directory.records.items[self.current_index.?];
@@ -807,77 +876,99 @@ pub const Reader = struct {
             },
             .deflate_descriptor => |*codec_state| return try self.stepContainerCodec(
                 codec_state,
-                input,
+                raw_input,
+                payload_input,
+                encrypted_descriptor,
                 output,
                 input_read,
                 output_written,
             ),
             .shrink => |*codec_state| return try self.stepScannedCodec(
                 codec_state,
-                input,
+                raw_input,
+                payload_input,
+                encrypted_descriptor,
                 output,
                 input_read,
                 output_written,
             ),
             .reduce => |*codec_state| return try self.stepScannedCodec(
                 codec_state,
-                input,
+                raw_input,
+                payload_input,
+                encrypted_descriptor,
                 output,
                 input_read,
                 output_written,
             ),
             .implode => |*codec_state| return try self.stepScannedCodec(
                 codec_state,
-                input,
+                raw_input,
+                payload_input,
+                encrypted_descriptor,
                 output,
                 input_read,
                 output_written,
             ),
             .deflate64 => |*codec_state| return try self.stepContainerCodec(
                 codec_state,
-                input,
+                raw_input,
+                payload_input,
+                encrypted_descriptor,
                 output,
                 input_read,
                 output_written,
             ),
             .dcl_implode => |*codec_state| return try self.stepContainerCodec(
                 codec_state,
-                input,
+                raw_input,
+                payload_input,
+                encrypted_descriptor,
                 output,
                 input_read,
                 output_written,
             ),
             .bzip2 => |*codec_state| return try self.stepContainerCodec(
                 codec_state,
-                input,
+                raw_input,
+                payload_input,
+                encrypted_descriptor,
                 output,
                 input_read,
                 output_written,
             ),
             .lzma => |*codec_state| return try self.stepContainerCodec(
                 codec_state,
-                input,
+                raw_input,
+                payload_input,
+                encrypted_descriptor,
                 output,
                 input_read,
                 output_written,
             ),
             .ppmd => |*codec_state| return try self.stepContainerCodec(
                 codec_state,
-                input,
+                raw_input,
+                payload_input,
+                encrypted_descriptor,
                 output,
                 input_read,
                 output_written,
             ),
             .xz => |*codec_state| return try self.stepContainerCodec(
                 codec_state,
-                input,
+                raw_input,
+                payload_input,
+                encrypted_descriptor,
                 output,
                 input_read,
                 output_written,
             ),
             .zstd => |*codec_state| return try self.stepContainerCodec(
                 codec_state,
-                input,
+                raw_input,
+                payload_input,
+                encrypted_descriptor,
                 output,
                 input_read,
                 output_written,
@@ -888,14 +979,23 @@ pub const Reader = struct {
     fn stepContainerCodec(
         self: *Self,
         state: anytype,
-        input: []const u8,
+        raw_input: []const u8,
+        payload_input: []const u8,
+        encrypted_descriptor: bool,
         output: []u8,
         input_read: *usize,
         output_written: *usize,
     ) Error!?StepResult.Status {
-        const stepped = try state.step(input, output);
-        try self.accountEntryProgress(stepped.progress, input_read, output_written);
-        if (stepped.status == .done) return try self.finishContainerCodec(state);
+        const stepped = try state.step(payload_input, output);
+        try self.accountDecodedProgress(
+            raw_input,
+            encrypted_descriptor,
+            stepped.progress,
+            input_read,
+            output_written,
+        );
+        if (stepped.status == .done)
+            return try self.finishContainerCodec(state, encrypted_descriptor);
         if (stepped.status == .need_output) return .need_output;
         return null;
     }
@@ -903,13 +1003,21 @@ pub const Reader = struct {
     fn stepScannedCodec(
         self: *Self,
         state: anytype,
-        input: []const u8,
+        raw_input: []const u8,
+        payload_input: []const u8,
+        encrypted_descriptor: bool,
         output: []u8,
         input_read: *usize,
         output_written: *usize,
     ) Error!?StepResult.Status {
-        const stepped = try state.step(input, output);
-        try self.accountEntryProgress(stepped.progress, input_read, output_written);
+        const stepped = try state.stepPaired(raw_input, payload_input, output);
+        try self.accountDecodedProgress(
+            raw_input,
+            encrypted_descriptor,
+            stepped.progress,
+            input_read,
+            output_written,
+        );
         if (stepped.status == .done) {
             if (state.layout() != null) {
                 const parsed = state.descriptorValue() orelse
@@ -935,14 +1043,25 @@ pub const Reader = struct {
         return null;
     }
 
-    fn finishContainerCodec(self: *Self, state: anytype) Error!?StepResult.Status {
-        const trailing = state.trailingInput();
+    fn finishContainerCodec(
+        self: *Self,
+        state: anytype,
+        encrypted_descriptor: bool,
+    ) Error!?StepResult.Status {
+        const decoded_trailing = state.trailingInput();
         const compressed_size = try state.actualCompressedSize();
         if (state.layout()) |layout| {
+            const trailing = if (encrypted_descriptor)
+                try self.current_encryption.?.rawSuffix(decoded_trailing.len)
+            else
+                decoded_trailing;
             try self.beginDescriptor(
                 layout,
                 state.crc32(),
-                compressed_size,
+                try checkedAdd(
+                    compressed_size,
+                    if (encrypted_descriptor) traditional_encryption.header_len else 0,
+                ),
                 state.outputSize(),
                 trailing,
             );
@@ -952,7 +1071,7 @@ pub const Reader = struct {
             state.crc32(),
             compressed_size,
             state.outputSize(),
-            trailing,
+            decoded_trailing,
         );
         return .entry_done;
     }
@@ -1005,6 +1124,20 @@ pub const Reader = struct {
             self.phase = .record_signature;
             if (self.control.items.len == 0) self.control_target = 4;
         }
+    }
+
+    fn accountDecodedProgress(
+        self: *Self,
+        raw_input: []const u8,
+        encrypted_descriptor: bool,
+        progress: core.Progress,
+        input_read: *usize,
+        output_written: *usize,
+    ) Error!void {
+        if (progress.input_read > raw_input.len) return error.InvalidZipArchive;
+        if (encrypted_descriptor)
+            self.current_encryption.?.appendRawTail(raw_input[0..progress.input_read]);
+        try self.accountEntryProgress(progress, input_read, output_written);
     }
 
     fn accountEntryProgress(

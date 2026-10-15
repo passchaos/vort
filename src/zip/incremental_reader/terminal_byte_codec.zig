@@ -27,8 +27,10 @@ pub fn State(comptime Codec: type) type {
         decoder: Codec.Decoder,
         descriptor_layout: ?descriptor.Layout,
         expected_compressed_size: ?usize,
+        compressed_size_prefix: usize,
         finish_requested: bool = false,
         probe: [wire.zip64_data_descriptor_len + 1]u8 = undefined,
+        payload_probe: [wire.zip64_data_descriptor_len + 1]u8 = undefined,
         probe_len: usize = 0,
         pending_pos: usize = 0,
         pending_len: usize = 0,
@@ -49,6 +51,7 @@ pub fn State(comptime Codec: type) type {
             expected_compressed_size: ?usize,
             expected_uncompressed_size: ?usize,
             descriptor_layout: ?descriptor.Layout,
+            compressed_size_prefix: usize,
         ) AdapterError!Self {
             if ((expected_compressed_size == null) != (descriptor_layout != null))
                 return error.InvalidZipArchive;
@@ -71,6 +74,7 @@ pub fn State(comptime Codec: type) type {
                 ),
                 .descriptor_layout = descriptor_layout,
                 .expected_compressed_size = expected_compressed_size,
+                .compressed_size_prefix = compressed_size_prefix,
             };
         }
 
@@ -82,10 +86,20 @@ pub fn State(comptime Codec: type) type {
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) AdapterError!core.StepResult {
+            return self.stepPaired(input, input, output);
+        }
+
+        pub fn stepPaired(
+            self: *Self,
+            raw_input: []const u8,
+            payload_input: []const u8,
+            output: []u8,
+        ) AdapterError!core.StepResult {
+            std.debug.assert(raw_input.len == payload_input.len);
             return if (self.descriptor_layout == null)
-                self.stepKnown(input, output)
+                self.stepKnown(payload_input, output)
             else
-                self.stepDescriptor(input, output);
+                self.stepDescriptor(raw_input, payload_input, output);
         }
 
         pub fn layout(self: *const Self) ?descriptor.Layout {
@@ -144,7 +158,12 @@ pub fn State(comptime Codec: type) type {
             }
         }
 
-        fn stepDescriptor(self: *Self, input: []const u8, output: []u8) AdapterError!core.StepResult {
+        fn stepDescriptor(
+            self: *Self,
+            raw_input: []const u8,
+            payload_input: []const u8,
+            output: []u8,
+        ) AdapterError!core.StepResult {
             var input_read: usize = 0;
             var output_written: usize = 0;
             const capacity = self.descriptor_layout.?.signedLen() + 1;
@@ -179,7 +198,7 @@ pub fn State(comptime Codec: type) type {
                     if (try self.detectBoundary()) continue;
 
                     const supplied = try self.decoder.step(
-                        self.probe[0..1],
+                        self.payload_probe[0..1],
                         output[output_written..],
                     );
                     if (supplied.progress.input_read != 1)
@@ -190,16 +209,25 @@ pub fn State(comptime Codec: type) type {
                         &output_written,
                     );
                     std.mem.copyForwards(u8, self.probe[0 .. capacity - 1], self.probe[1..capacity]);
+                    std.mem.copyForwards(
+                        u8,
+                        self.payload_probe[0 .. capacity - 1],
+                        self.payload_probe[1..capacity],
+                    );
                     self.probe_len -= 1;
                     if (supplied.status == .need_output)
                         return result(input_read, output_written, .need_output);
                     continue;
                 }
 
-                if (input_read == input.len)
+                if (input_read == raw_input.len)
                     return result(input_read, output_written, .need_input);
-                const take = @min(capacity - self.probe_len, input.len - input_read);
-                @memcpy(self.probe[self.probe_len..][0..take], input[input_read..][0..take]);
+                const take = @min(capacity - self.probe_len, raw_input.len - input_read);
+                @memcpy(self.probe[self.probe_len..][0..take], raw_input[input_read..][0..take]);
+                @memcpy(
+                    self.payload_probe[self.probe_len..][0..take],
+                    payload_input[input_read..][0..take],
+                );
                 self.probe_len += take;
                 input_read += take;
             }
@@ -243,7 +271,10 @@ pub fn State(comptime Codec: type) type {
         fn tryCandidate(self: *Self, candidate: descriptor.Descriptor) AdapterError!bool {
             const candidate_compressed = std.math.cast(usize, candidate.compressed_size) orelse
                 return false;
-            if (candidate_compressed != try checkedAdd(self.compressed_size, 1))
+            if (candidate_compressed != try checkedAdd(
+                try checkedAdd(self.compressed_size, 1),
+                self.compressed_size_prefix,
+            ))
                 return false;
             const candidate_output = std.math.cast(usize, candidate.uncompressed_size) orelse
                 return false;
@@ -257,7 +288,7 @@ pub fn State(comptime Codec: type) type {
             trial.setExpectedOutputLen(candidate_output) catch return false;
 
             var written: usize = 0;
-            const supplied = trial.step(self.probe[0..1], self.speculative_output) catch return false;
+            const supplied = trial.step(self.payload_probe[0..1], self.speculative_output) catch return false;
             if (supplied.progress.input_read != 1 or supplied.status == .need_output)
                 return false;
             written = supplied.progress.output_written;
@@ -281,7 +312,7 @@ pub fn State(comptime Codec: type) type {
             self.decoder = trial;
             self.decoder.workspace = self.workspace;
             self.crc = trial_crc;
-            self.compressed_size = candidate_compressed;
+            self.compressed_size = candidate_compressed - self.compressed_size_prefix;
             self.uncompressed_size = candidate_output;
             self.pending_pos = 0;
             self.pending_len = written;
