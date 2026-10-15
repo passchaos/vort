@@ -8,6 +8,7 @@ const Entry = struct {
     expected_size: ?u64,
     comment: []const u8 = "",
     traditional_encryption: ?vort.ZipTraditionalEncryptionOptions = null,
+    winzip_aes: ?vort.ZipWinZipAesOptions = null,
 };
 
 const OutputPattern = enum {
@@ -379,9 +380,55 @@ pub fn main(init: std.process.Init) !void {
             },
         },
     };
+    const aes128_salt = [_]u8{0x71} ** 8;
+    const aes192_salt = [_]u8{0x72} ** 12;
+    const aes256_salt = [_]u8{0x73} ** 16;
+    const winzip_aes_entries = [_]Entry{
+        .{
+            .name = "aes-known.bin",
+            .data = "incremental WinZip AES stored payload\n" ** 31,
+            .method = .stored,
+            .expected_size = ("incremental WinZip AES stored payload\n" ** 31).len,
+            .winzip_aes = .{
+                .password = "vort-aes-password",
+                .strength = .aes128,
+                .salt = &aes128_salt,
+                .version = .ae1,
+            },
+        },
+        .{
+            .name = "aes-unknown.txt",
+            .data = "incremental WinZip AES Deflate payload\n" ** 89,
+            .method = .deflate,
+            .expected_size = null,
+            .winzip_aes = .{
+                .password = "vort-aes-password",
+                .strength = .aes192,
+                .salt = &aes192_salt,
+                .version = .ae2,
+            },
+        },
+        .{
+            .name = "aes-empty.bin",
+            .data = "",
+            .method = .stored,
+            .expected_size = 0,
+            .winzip_aes = .{
+                .password = "vort-aes-password",
+                .strength = .aes256,
+                .salt = &aes256_salt,
+                .version = .ae2,
+            },
+        },
+    };
 
     const selected_entries: []const Entry = if (entry_mode) |value|
-        if (std.mem.eql(u8, value, "zipcrypto")) &encrypted_entries else return error.InvalidEntryMode
+        if (std.mem.eql(u8, value, "zipcrypto"))
+            &encrypted_entries
+        else if (std.mem.eql(u8, value, "winzip-aes"))
+            &winzip_aes_entries
+        else
+            return error.InvalidEntryMode
     else
         &entries;
 
@@ -438,6 +485,7 @@ fn encodeArchive(
             .method = entry.method,
             .expected_size = entry.expected_size,
             .traditional_encryption = entry.traditional_encryption,
+            .winzip_aes = entry.winzip_aes,
         });
         if (entry_index == 0) {
             const blocked = try writer.step(entry.data[0..1], &.{});

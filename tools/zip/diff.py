@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import binascii
+import hashlib
+import hmac
 import io
 import lzma
 import random
@@ -591,6 +593,156 @@ ZIPCRYPTO_PAYLOADS = {
     "encrypted/stored.bin": b"Vort Traditional ZipCrypto stored payload.\n" * 17,
     "encrypted/deflate.txt": b"Vort Traditional ZipCrypto Deflate payload.\n" * 97,
 }
+
+WINZIP_AES_PASSWORD = "vort-aes-password"
+WINZIP_AES_PAYLOADS = {
+    "aes/stored-128.bin": b"Vort WinZip AES-128 stored payload longer than twenty bytes.",
+    "aes/deflate-192.txt": b"Vort WinZip AES-192 Deflate payload.\n" * 67,
+    "aes/small-256.bin": b"small",
+}
+
+
+def decrypt_winzip_aes_reference(
+    raw: bytes,
+    info: zipfile.ZipInfo,
+    password: str,
+    openssl_tool: str,
+) -> bytes:
+    local_offset = info.header_offset
+    (
+        signature,
+        version_needed,
+        flags,
+        wire_method,
+        _time,
+        _date,
+        local_crc,
+        _compressed_size,
+        _uncompressed_size,
+        name_len,
+        extra_len,
+    ) = struct.unpack_from("<IHHHHHIIIHH", raw, local_offset)
+    if signature != 0x04034B50 or version_needed < 51 or wire_method != 99 or flags & 1 == 0:
+        raise AssertionError("invalid WinZip AES local metadata")
+    extra_offset = local_offset + 30 + name_len
+    local_extra = raw[extra_offset : extra_offset + extra_len]
+    central_fields = parse_extra_fields(info.extra, f"WinZip AES central {info.filename!r}")
+    local_fields = parse_extra_fields(local_extra, f"WinZip AES local {info.filename!r}")
+    aes = central_fields.get(0x9901)
+    if aes is None or aes != local_fields.get(0x9901) or len(aes) != 7:
+        raise AssertionError("missing or mismatched WinZip AES extra field")
+    vendor_version, vendor, strength, actual_method = struct.unpack("<H2sBH", aes)
+    if vendor_version not in (1, 2) or vendor != b"AE" or strength not in (1, 2, 3):
+        raise AssertionError("invalid WinZip AES parameters")
+    key_len = {1: 16, 2: 24, 3: 32}[strength]
+    salt_len = key_len // 2
+    data_offset = extra_offset + extra_len
+    encrypted = raw[data_offset : data_offset + info.compress_size]
+    if len(encrypted) < salt_len + 12:
+        raise AssertionError("truncated WinZip AES payload")
+    salt = encrypted[:salt_len]
+    verifier = encrypted[salt_len : salt_len + 2]
+    ciphertext = encrypted[salt_len + 2 : -10]
+    authentication = encrypted[-10:]
+    derived = hashlib.pbkdf2_hmac(
+        "sha1", password.encode(), salt, 1000, 2 * key_len + 2
+    )
+    if not hmac.compare_digest(verifier, derived[-2:]):
+        raise AssertionError("WinZip AES password verifier mismatch")
+    expected_authentication = hmac.new(
+        derived[key_len : 2 * key_len], ciphertext, hashlib.sha1
+    ).digest()[:10]
+    if not hmac.compare_digest(authentication, expected_authentication):
+        raise AssertionError("WinZip AES authentication mismatch")
+    counters = b"".join(
+        counter.to_bytes(16, "little")
+        for counter in range(1, (len(ciphertext) + 15) // 16 + 1)
+    )
+    key_stream = subprocess.run(
+        [
+            openssl_tool,
+            "enc",
+            f"-aes-{key_len * 8}-ecb",
+            "-K",
+            derived[:key_len].hex(),
+            "-nopad",
+            "-nosalt",
+        ],
+        input=counters,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ).stdout
+    compressed = bytes(left ^ right for left, right in zip(ciphertext, key_stream))
+    if actual_method == zipfile.ZIP_STORED:
+        payload = compressed
+    elif actual_method == zipfile.ZIP_DEFLATED:
+        payload = zlib.decompress(compressed, -15)
+    else:
+        raise AssertionError(f"unexpected WinZip AES method {actual_method}")
+    if len(payload) != info.file_size:
+        raise AssertionError("WinZip AES uncompressed size mismatch")
+    if vendor_version == 1:
+        expected_crc = binascii.crc32(payload) & 0xFFFFFFFF
+        if info.CRC != expected_crc or local_crc not in (0, expected_crc):
+            raise AssertionError("WinZip AES AE-1 CRC mismatch")
+    elif info.CRC != 0:
+        raise AssertionError("WinZip AES AE-2 CRC is not zero")
+    return payload
+
+
+def validate_vort_winzip_aes(
+    cli: Path,
+    writer: Path,
+    temp: Path,
+    openssl_tool: str,
+) -> tuple[int, int]:
+    cases = 0
+    sequential_cases = 0
+    for descriptor in (False, True):
+        suffix = "descriptor" if descriptor else "known"
+        archive_path = temp / f"vort-winzip-aes-{suffix}.zip"
+        run(
+            writer,
+            str(archive_path),
+            "winzip-aes-descriptor" if descriptor else "winzip-aes",
+        )
+        raw = archive_path.read_bytes()
+        with zipfile.ZipFile(archive_path) as archive:
+            if archive.namelist() != list(WINZIP_AES_PAYLOADS):
+                raise AssertionError("Vort WinZip AES entry order mismatch")
+            for index, (name, expected) in enumerate(WINZIP_AES_PAYLOADS.items()):
+                info = archive.getinfo(name)
+                if info.compress_type != 99 or info.flag_bits & 1 == 0:
+                    raise AssertionError(f"Vort WinZip AES metadata mismatch for {name!r}")
+                if decrypt_winzip_aes_reference(
+                    raw, info, WINZIP_AES_PASSWORD, openssl_tool
+                ) != expected:
+                    raise AssertionError(f"OpenSSL could not decrypt Vort WinZip AES {name!r}")
+                output = temp / f"vort-winzip-aes-{suffix}-{index}.out"
+                extract_with_vort_password(
+                    cli, archive_path, name, output, WINZIP_AES_PASSWORD
+                )
+                if output.read_bytes() != expected:
+                    raise AssertionError(f"Vort WinZip AES self-extraction mismatch for {name!r}")
+                if not descriptor:
+                    stream_output = temp / f"vort-winzip-aes-{suffix}-{index}.stream.out"
+                    run(
+                        cli,
+                        "extract-zip-stream-file",
+                        str(archive_path),
+                        name,
+                        str(stream_output),
+                        str(512 * 1024 * 1024),
+                        WINZIP_AES_PASSWORD,
+                    )
+                    if stream_output.read_bytes() != expected:
+                        raise AssertionError(
+                            f"Vort sequential WinZip AES mismatch for {name!r}"
+                        )
+                    sequential_cases += 1
+                cases += 1
+    return cases, sequential_cases
 
 
 def extract_with_vort_password(
@@ -1576,6 +1728,12 @@ INCREMENTAL_ZIPCRYPTO_METHODS = {
     "encrypted-empty.bin": zipfile.ZIP_STORED,
 }
 
+INCREMENTAL_WINZIP_AES_PAYLOADS = {
+    "aes-known.bin": b"incremental WinZip AES stored payload\n" * 31,
+    "aes-unknown.txt": b"incremental WinZip AES Deflate payload\n" * 89,
+    "aes-empty.bin": b"",
+}
+
 
 def validate_incremental_zipcrypto_writer(
     cli: Path,
@@ -1663,6 +1821,45 @@ def validate_incremental_zipcrypto_writer(
     return len(raw), seven_zip_checked, sequential_cases
 
 
+def validate_incremental_winzip_aes_writer(
+    cli: Path,
+    writer: Path,
+    temp: Path,
+    force_zip64: bool,
+    openssl_tool: str,
+) -> tuple[int, int]:
+    suffix = "zip64" if force_zip64 else "zip32"
+    one_path = temp / f"incremental-winzip-aes-{suffix}-one.zip"
+    micro_path = temp / f"incremental-winzip-aes-{suffix}-micro.zip"
+    run(writer, str(one_path), suffix, "one", "winzip-aes")
+    run(writer, str(micro_path), suffix, "micro", "winzip-aes")
+    raw = one_path.read_bytes()
+    if raw != micro_path.read_bytes():
+        raise AssertionError(f"incremental WinZip AES {suffix} output is not deterministic")
+    cases = 0
+    with zipfile.ZipFile(one_path) as archive:
+        if archive.namelist() != list(INCREMENTAL_WINZIP_AES_PAYLOADS):
+            raise AssertionError("incremental WinZip AES entry order mismatch")
+        for index, (name, expected) in enumerate(INCREMENTAL_WINZIP_AES_PAYLOADS.items()):
+            info = archive.getinfo(name)
+            if info.compress_type != 99 or info.flag_bits & 9 != 9:
+                raise AssertionError(f"incremental WinZip AES flags mismatch for {name!r}")
+            if decrypt_winzip_aes_reference(
+                raw, info, WINZIP_AES_PASSWORD, openssl_tool
+            ) != expected:
+                raise AssertionError(
+                    f"OpenSSL could not decrypt incremental WinZip AES {name!r}"
+                )
+            output = temp / f"incremental-winzip-aes-{suffix}-{index}.out"
+            extract_with_vort_password(cli, one_path, name, output, WINZIP_AES_PASSWORD)
+            if output.read_bytes() != expected:
+                raise AssertionError(
+                    f"Vort could not self-extract incremental WinZip AES {name!r}"
+                )
+            cases += 1
+    return len(raw), cases
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
@@ -1678,8 +1875,11 @@ def main() -> None:
     )
     unzip_tool = shutil.which("unzip")
     zip_tool = shutil.which("zip")
+    openssl_tool = shutil.which("openssl")
     if unzip_tool is None or zip_tool is None:
         raise AssertionError("Info-ZIP zip and unzip CLIs are required for ZipCrypto differential")
+    if openssl_tool is None:
+        raise AssertionError("OpenSSL is required for WinZip AES differential")
 
     with tempfile.TemporaryDirectory(prefix="vort-zip-diff-") as temp_text:
         temp = Path(temp_text)
@@ -1707,6 +1907,9 @@ def main() -> None:
             infozip_zipcrypto_cases,
             infozip_incremental_reader_zipcrypto_cases,
         ) = validate_infozip_zipcrypto(args.cli, zip_tool, temp)
+        winzip_aes_cases, incremental_reader_winzip_aes_cases = validate_vort_winzip_aes(
+            args.cli, args.writer, temp, openssl_tool
+        )
         incremental_zip32_bytes, incremental_zip32_unzip, incremental_zip32_7zip = (
             validate_incremental_writer_archive(
                 args.cli, args.incremental_writer, temp, False, unzip_tool, seven_zip_tool
@@ -1740,6 +1943,24 @@ def main() -> None:
             True,
             unzip_tool,
             seven_zip_tool,
+        )
+        incremental_winzip_aes_zip32_bytes, incremental_winzip_aes_zip32_cases = (
+            validate_incremental_winzip_aes_writer(
+                args.cli,
+                args.incremental_writer,
+                temp,
+                False,
+                openssl_tool,
+            )
+        )
+        incremental_winzip_aes_zip64_bytes, incremental_winzip_aes_zip64_cases = (
+            validate_incremental_winzip_aes_writer(
+                args.cli,
+                args.incremental_writer,
+                temp,
+                True,
+                openssl_tool,
+            )
         )
         incremental_reader_zipcrypto_cases = (
             vort_incremental_reader_zipcrypto_cases
@@ -1788,12 +2009,17 @@ def main() -> None:
         f"infozip_zipcrypto_cases={infozip_zipcrypto_cases} "
         f"infozip_incremental_reader_zipcrypto_cases={infozip_incremental_reader_zipcrypto_cases} "
         f"incremental_reader_zipcrypto_cases={incremental_reader_zipcrypto_cases} "
+        f"winzip_aes_cases={winzip_aes_cases} "
+        f"incremental_reader_winzip_aes_cases={incremental_reader_winzip_aes_cases} "
         f"incremental_entries={len(INCREMENTAL_PAYLOADS)} "
         f"incremental_zip32_bytes={incremental_zip32_bytes} "
         f"incremental_zip64_bytes={incremental_zip64_bytes} "
         f"incremental_zipcrypto_cases={len(INCREMENTAL_ZIPCRYPTO_PAYLOADS) * 2} "
         f"incremental_zipcrypto_zip32_bytes={incremental_zipcrypto_zip32_bytes} "
         f"incremental_zipcrypto_zip64_bytes={incremental_zipcrypto_zip64_bytes} "
+        f"incremental_winzip_aes_cases={incremental_winzip_aes_zip32_cases + incremental_winzip_aes_zip64_cases} "
+        f"incremental_winzip_aes_zip32_bytes={incremental_winzip_aes_zip32_bytes} "
+        f"incremental_winzip_aes_zip64_bytes={incremental_winzip_aes_zip64_bytes} "
         f"system_unzip={incremental_zip32_unzip and incremental_zip64_unzip} "
         f"incremental_7zip={incremental_zip32_7zip and incremental_zip64_7zip} "
         f"incremental_zipcrypto_7zip={incremental_zipcrypto_zip32_7zip and incremental_zipcrypto_zip64_7zip} "

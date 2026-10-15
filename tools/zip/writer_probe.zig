@@ -32,6 +32,8 @@ pub fn main(init: std.process.Init) !void {
     var reduce_descriptor_mode = false;
     var zipcrypto_mode = false;
     var zipcrypto_descriptor_mode = false;
+    var winzip_aes_mode = false;
+    var winzip_aes_descriptor_mode = false;
     if (mode) |value| {
         if (std.mem.eql(u8, value, "zip64")) {
             zip64 = .always;
@@ -63,6 +65,11 @@ pub fn main(init: std.process.Init) !void {
         } else if (std.mem.eql(u8, value, "zipcrypto-descriptor")) {
             zipcrypto_mode = true;
             zipcrypto_descriptor_mode = true;
+        } else if (std.mem.eql(u8, value, "winzip-aes")) {
+            winzip_aes_mode = true;
+        } else if (std.mem.eql(u8, value, "winzip-aes-descriptor")) {
+            winzip_aes_mode = true;
+            winzip_aes_descriptor_mode = true;
         } else if (std.mem.startsWith(u8, value, "dcl-")) {
             dcl_mode = true;
             const specification = value["dcl-".len..];
@@ -159,11 +166,51 @@ pub fn main(init: std.process.Init) !void {
             },
         },
     };
+    const aes128_salt = [_]u8{0x61} ** 8;
+    const aes192_salt = [_]u8{0x62} ** 12;
+    const aes256_salt = [_]u8{0x63} ** 16;
+    const winzip_aes_entries = [_]vort.ZipEncodeEntry{
+        .{
+            .name = "aes/stored-128.bin",
+            .data = "Vort WinZip AES-128 stored payload longer than twenty bytes.",
+            .method = .stored,
+            .winzip_aes = .{
+                .password = "vort-aes-password",
+                .strength = .aes128,
+                .salt = &aes128_salt,
+                .version = .ae1,
+            },
+        },
+        .{
+            .name = "aes/deflate-192.txt",
+            .data = "Vort WinZip AES-192 Deflate payload.\n" ** 67,
+            .method = .deflate,
+            .winzip_aes = .{
+                .password = "vort-aes-password",
+                .strength = .aes192,
+                .salt = &aes192_salt,
+                .version = .ae2,
+            },
+        },
+        .{
+            .name = "aes/small-256.bin",
+            .data = "small",
+            .method = .stored,
+            .winzip_aes = .{
+                .password = "vort-aes-password",
+                .strength = .aes256,
+                .salt = &aes256_salt,
+                .version = .ae2,
+            },
+        },
+    };
 
     var bytes: std.ArrayList(u8) = .empty;
     defer bytes.deinit(init.gpa);
     try bytes.appendSlice(init.gpa, "MZ-VORT-ZIP-PREFIX\n");
-    const selected_entries: []const vort.ZipEncodeEntry = if (zipcrypto_mode)
+    const selected_entries: []const vort.ZipEncodeEntry = if (winzip_aes_mode)
+        &winzip_aes_entries
+    else if (zipcrypto_mode)
         &zipcrypto_entries
     else if (reduce_mode or reduce_descriptor_mode)
         entries[3..7]
@@ -174,8 +221,8 @@ pub fn main(init: std.process.Init) !void {
     _ = try vort.zipEncodeAppend(init.gpa, &bytes, selected_entries, .{
         .archive_comment = "vort zip writer differential",
         .data_descriptor = implode_descriptor_mode or reduce_descriptor_mode or
-            zipcrypto_descriptor_mode or
-            !(implode_mode or reduce_mode or dcl_mode or zipcrypto_mode),
+            zipcrypto_descriptor_mode or winzip_aes_descriptor_mode or
+            !(implode_mode or reduce_mode or dcl_mode or zipcrypto_mode or winzip_aes_mode),
         .zip64 = zip64,
         .implode_options = .{
             .dictionary = if (implode_large) .large_8k else .small_4k,
