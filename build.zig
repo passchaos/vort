@@ -3,16 +3,28 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const vail_dep = b.dependency("vail_archive_crypto", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const vail_crypto = vail_dep.module("vail_archive_crypto");
+    const vail_releasefast_dep = b.dependency("vail_archive_crypto", .{
+        .target = target,
+        .optimize = .ReleaseFast,
+    });
+    const vail_crypto_releasefast = vail_releasefast_dep.module("vail_archive_crypto");
 
     const vort_mod = b.addModule("vort", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
+        .imports = &.{.{ .name = "vail_archive_crypto", .module = vail_crypto }},
     });
     const vort_mod_releasefast = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = .ReleaseFast,
+        .imports = &.{.{ .name = "vail_archive_crypto", .module = vail_crypto_releasefast }},
     });
     const br_record_optimal_obj = b.addObject(.{
         .name = "vort-br-record-optimal",
@@ -47,6 +59,11 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const wasm_target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .wasi });
+    const vail_wasm_dep = b.dependency("vail_archive_crypto", .{
+        .target = wasm_target,
+        .optimize = optimize,
+    });
+    const vail_crypto_wasm = vail_wasm_dep.module("vail_archive_crypto");
     const wasm_br_record_optimal_obj = b.addObject(.{
         .name = "vort-br-record-optimal-wasm-check",
         .root_module = b.createModule(.{
@@ -67,6 +84,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/root.zig"),
         .target = wasm_target,
         .optimize = optimize,
+        .imports = &.{.{ .name = "vail_archive_crypto", .module = vail_crypto_wasm }},
     });
     wasm_mod.addObject(wasm_br_record_optimal_obj);
     wasm_mod.addObject(wasm_zstd_huffman_x2_obj);
@@ -111,6 +129,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
+        .imports = &.{.{ .name = "vail_archive_crypto", .module = vail_crypto }},
     });
     tests_mod.addObject(br_record_optimal_obj);
     tests_mod.addObject(zstd_huffman_x2_obj);
