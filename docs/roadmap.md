@@ -20296,3 +20296,22 @@ reuse, so production keeps the simpler independently owned plans.
   `run-zip-diff` remains 13/13, the Shrink encoder suite passes 3/3, writer
   suite 68/68, full repository graph 2683/2683, and `zig build check` passes
   all 113 steps.
+
+- Added a caller-output DCL Implode encoder and wired ZIP method 10 into
+  `ZipIncrementalWriter`. The encoder keeps the established raw/fixed-Huffman
+  literal modes, 1/2/4 KiB dictionaries, bounded greedy hash-chain matcher and
+  exact length-519 EOS semantics without retaining a member. A fixed 520-byte
+  lookahead preserves maximum 518-byte matches across arbitrary caller input;
+  rolling history/hash state and at most 16 pending output bytes survive
+  output backpressure. Every mode is byte-identical to the one-shot encoder,
+  including a genuine distance above 2 KiB. Exact pledges, empty input,
+  reset, chain/input limits, one-byte output, version-needed 2.0, ZIP32/ZIP64
+  descriptors and allocation failures share the codec union. The external
+  archive grows from twenty-seven to thirty entries. Vort's sequential reader
+  decodes the known/unknown/empty method-10 members; Python pins their
+  `{literal-mode=1,dictionary-bits=6}` header plus outer ZIP metadata, while
+  the fixed zlib-blast vector retains independent decoder evidence. This host
+  has no third-party DCL writer decoder, so no such claim is made. ZIP32/ZIP64
+  sizes are 25,208/26,964 bytes; `run-zip-diff` remains 13/13, the DCL encoder
+  suite passes 4/4, writer suite 69/69, full repository graph 2688/2688, and
+  `zig build check` passes all 113 steps.
