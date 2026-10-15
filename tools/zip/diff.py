@@ -897,6 +897,9 @@ INCREMENTAL_PAYLOADS = {
     "known-ppmd.txt": b"known PPMd incremental ZIP payload.\n" * 107,
     "unknown-ppmd.txt": b"unknown PPMd incremental ZIP payload.\n" * 89,
     "empty-ppmd.bin": b"",
+    "known-shrink.txt": b"known Shrink incremental ZIP payload.\n" * 109,
+    "unknown-shrink.txt": b"unknown Shrink incremental ZIP payload.\n" * 91,
+    "empty-shrink.bin": b"",
 }
 INCREMENTAL_METHODS = {
     "known-stored.bin": zipfile.ZIP_STORED,
@@ -923,6 +926,9 @@ INCREMENTAL_METHODS = {
     "known-ppmd.txt": 98,
     "unknown-ppmd.txt": 98,
     "empty-ppmd.bin": 98,
+    "known-shrink.txt": 1,
+    "unknown-shrink.txt": 1,
+    "empty-shrink.bin": 1,
 }
 
 
@@ -1283,7 +1289,7 @@ def validate_incremental_writer_archive(
                     raw[data_offset : data_offset + info.compress_size],
                     -15,
                 )
-            elif info.compress_type == 98:
+            elif info.compress_type in (1, 98):
                 output = temp / f"incremental-{suffix}-{name}.out"
                 run(
                     cli,
@@ -1304,7 +1310,7 @@ def validate_incremental_writer_archive(
             payload
             for name, payload in INCREMENTAL_PAYLOADS.items()
             if INCREMENTAL_METHODS[name]
-            in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED, zipfile.ZIP_BZIP2, 9)
+            in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED, zipfile.ZIP_BZIP2, 9, 1)
         )
         extracted = subprocess.run(
             [unzip_tool, "-p", str(one_byte_path)],

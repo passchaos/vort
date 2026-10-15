@@ -55,6 +55,8 @@ pub fn main(init: std.process.Init) !void {
     const unknown_deflate64 = "unknown Deflate64 incremental ZIP payload.\n" ** 83;
     const known_ppmd = "known PPMd incremental ZIP payload.\n" ** 107;
     const unknown_ppmd = "unknown PPMd incremental ZIP payload.\n" ** 89;
+    const known_shrink = "known Shrink incremental ZIP payload.\n" ** 109;
+    const unknown_shrink = "unknown Shrink incremental ZIP payload.\n" ** 91;
     const entries = [_]Entry{
         .{
             .name = "known-stored.bin",
@@ -201,6 +203,24 @@ pub fn main(init: std.process.Init) !void {
             .name = "empty-ppmd.bin",
             .data = "",
             .method = .ppmd,
+            .expected_size = 0,
+        },
+        .{
+            .name = "known-shrink.txt",
+            .data = known_shrink,
+            .method = .shrink,
+            .expected_size = known_shrink.len,
+        },
+        .{
+            .name = "unknown-shrink.txt",
+            .data = unknown_shrink,
+            .method = .shrink,
+            .expected_size = null,
+        },
+        .{
+            .name = "empty-shrink.bin",
+            .data = "",
+            .method = .shrink,
             .expected_size = 0,
         },
     };
