@@ -20493,3 +20493,27 @@ reuse, so production keeps the simpler independently owned plans.
   of rebuilding variable-length central metadata. The focused command passes
   9/9, the full repository graph 2710/2710, `run-zip-diff` all 13 steps, CLI
   help smoke, and `zig build check` all 113 steps.
+
+- Reworked split ZIP normalization around `ZipSplitNormalizedStream`, an
+  O(parts + entries) sparse patch plan that copies slice descriptors and disk
+  bases but borrows all archive payload bytes. Binary-search patch lookup keeps
+  each bounded `readAt` at O(log entries + overlapping patches) instead of
+  rescanning the central index. The established allocating
+  `parseSplitZipArchiveAlloc` now materializes this same view, so ZIP32/ZIP64
+  validation and metadata rewriting have one implementation. Added
+  `ZipSplitIncrementalReader`, which bridges the sparse stream through a
+  configurable 32 KiB buffer into the existing all-codec sequential reader;
+  callers receive the same entry boundaries, output backpressure, diagnostics,
+  output/dictionary/model limits, Traditional ZipCrypto, and WinZip AES without
+  allocating a joined archive. Synthetic tests cover empty ZIP32/ZIP64 sets,
+  payload/descriptor/central-directory crossings, 1/3/17/31/257-byte input
+  bridges, 5/23-byte output, ZIP64 AES-256 AE-2 plus ZipCrypto, missing/wrong
+  passwords, entry/output limits, sparse/full OOM sweeps, and byte equality
+  between sparse and materialized views. The real seven-part Info-ZIP gate now
+  requires both entries through both public paths (`split_zip_cases=2`,
+  `split_zip_stream_cases=2`, `split_zip_boundaries=6`,
+  `split_zip_metadata_patches=8`) and exact logical-input consumption. Focused
+  split tests pass 13/13, the full repository graph 2712/2712,
+  `run-zip-diff` all 13 steps, CLI help smoke, and `zig build check` all 113
+  steps. Parts must still remain resident; a source callback that can release
+  earlier disks and split archive writing remain follow-ups.

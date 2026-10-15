@@ -3,8 +3,9 @@
 Vort provides dependency-free, library-first reading and deterministic writing
 for common ZIP32 and ZIP64 archives. The direct borrowed parser and both writer
 surfaces use a single-disk view. Ordered split/multi-disk input is accepted by
-an allocating normalization API that validates disk-local metadata and exposes
-the same `Archive` parser/codec surface. The reader parses the ordinary
+either an owned normalization API or a sparse multi-slice sequential adapter;
+both validate the same disk-local metadata and reuse the established archive
+codecs. The reader parses the ordinary
 end-of-central-directory record, the ZIP64 locator/record when present, and the
 central directory before exposing entries. Data-descriptor archives therefore
 use the authoritative sizes and CRC values instead of trusting incomplete
@@ -312,8 +313,8 @@ Any `step` error makes the state terminal until `reset`, because payload may
 already have reached an external sink. `finish()` distinguishes a truncated
 source. PKWARE strong encryption and archive-extra-data records remain
 unsupported. This sequential state machine does not directly consume separate
-split/multi-disk slices; use the owned normalization API first when whole-set
-allocation is acceptable.
+split/multi-disk slices; `ZipSplitIncrementalReader` supplies their sparse
+normalized view without changing the codec state machine.
 Shrink uses one fixed approximately 40 KiB workspace while
 its member is active. Reduce uses two approximately 12 KiB workspaces and
 traditional Implode two approximately 10 KiB workspaces; both add one shared-
@@ -507,8 +508,9 @@ ZipCrypto. The sequential reader supports its known-size and descriptor-backed
 forms. The incremental writer also supports WinZip AES; its known-size form is
 accepted by the sequential reader alongside descriptor-backed AES. The writers
 remain single-disk, and the sequential reader does not directly coordinate
-separate split/multi-disk sources; the allocating split reader described below
-normalizes them to the established archive view.
+separate split/multi-disk sources. The split adapter described below validates
+and supplies them as one logical stream without allocating joined archive
+bytes.
 
 The incremental differential uses forty-five entries: known Stored data containing a
 descriptor-signature byte sequence, unknown Stored data containing two such
@@ -630,7 +632,7 @@ implicit-zero and overlapping matches. PPMd
 restart/cut-off, descriptor and ZIP64 combinations are required
 Vort coverage. Third-party method-98 evidence remains explicitly unavailable:
 Python `zipfile` has no PPMd codec and this host has no 7z/7zz. The full
-repository graph passes 2710/2710 and `zig build check` passes 113/113.
+repository graph passes 2712/2712 and `zig build check` passes 113/113.
 The wire refactor also leaves 14 one-shot probe modes byte-identical to HEAD,
 including every existing method and ZIP32/ZIP64 descriptor choice. Default and
 forced-ZIP64 SHA-256 values remain
@@ -694,13 +696,13 @@ defer allocator.free(decoded);
 for example `.z01`, `.z02`, ..., followed by `.zip`. It requires the standard
 `PK\x07\x08` split marker on the first disk by default, rejects empty parts and
 metadata-inconsistent missing, reordered, or out-of-range disks, and applies
-both caller-selected total archive and part-count limits before allocating.
+caller-selected total archive, part-count, and entry-count limits before
+allocating.
 ZIP32 disk fields and ZIP64 EOCD/locator plus central `0x0001` disk/offset
 fields are converted from disk-local coordinates to one virtual single-disk
-coordinate space. Local
-headers, compressed payloads, data descriptors, authentication bytes, and
-entry data remain byte-identical, including when a payload crosses multiple
-disk boundaries.
+coordinate space. Local headers, compressed payloads, data descriptors,
+authentication bytes, and entry data remain byte-identical, including when a
+payload crosses multiple disk boundaries.
 
 The caller owns the physical filename/order mapping. ZIP has no per-volume
 sequence header on opaque payload-only intermediate disks, so such disks cannot
@@ -726,13 +728,56 @@ defer allocator.free(decoded);
 
 The returned `ZipSplitArchive` owns one allocation containing the joined,
 normalized bytes; its nested `archive` borrows that allocation and is valid
-until `deinit`. This is deliberately an owned one-shot compatibility surface,
-not a claim of zero-copy or disk-at-a-time streaming. The target `usize`,
+until `deinit`. This remains the convenient one-shot compatibility surface.
+The target `usize`,
 `max_archive_size`, and available memory bound the virtual archive. If joining
 pushes a local-header offset past ZIP32 range and that central record has no
 existing ZIP64 offset slot to rewrite, normalization returns
 `UnsupportedZipFeature` rather than resizing/rebuilding the central directory.
 The writers do not yet create split archives.
+
+For bounded sequential extraction, `ZipSplitNormalizedStream` copies only the
+outer slice descriptors, disk bases, and small little-endian metadata patches.
+`readAt` overlays those patches on borrowed payload bytes. The higher-level
+`ZipSplitIncrementalReader` owns that sparse view, a configurable 32 KiB input
+bridge, and the ordinary `ZipIncrementalReader`; its `step(output)` therefore
+returns the same `entry_header`, `entry_done`, `need_output`, and `done`
+boundaries without accepting an input argument or allocating a joined archive.
+`reader_options` retains all codec, output, metadata, dictionary, encryption,
+and authentication limits; its `initial_offset` is replaced by the first
+normalized ZIP record.
+
+```zig
+var reader = try vort.ZipSplitIncrementalReader.initAlloc(
+    allocator,
+    &parts,
+    .{
+        .split_options = .{
+            .max_archive_size = 512 * 1024 * 1024,
+            .max_parts = 64,
+            .max_entries = 100_000,
+        },
+        .reader_options = .{
+            .max_total_output_len = 512 * 1024 * 1024,
+            .password = password,
+        },
+    },
+);
+defer reader.deinit();
+
+while (true) {
+    var output: [8192]u8 = undefined;
+    const result = try reader.step(&output);
+    // Route output[0..result.progress.output_written] using currentEntry().
+    if (result.status == .done) break;
+}
+try reader.finish();
+```
+
+Part payload slices must remain alive until `deinit`; only their outer
+descriptor array is copied. This removes the complete normalized copy but is
+still an in-memory multi-slice API, not a callback/file-opening source that can
+release earlier physical disks while decoding later ones.
 
 Convenience functions `zipExtractEntryInto`, `zipExtractEntryAlloc`,
 `zipExtractEntryAllocLimited`, `zipExtractByNameAlloc`, and
@@ -758,6 +803,8 @@ CLI validation surfaces:
 zig build run -- list-zip-file archive.zip
 zig build run -- extract-zip-file archive.zip folder/data.txt output.txt 67108864 67108864 [password|-]
 zig build run -- extract-zip-split-files folder/data.txt output.txt 67108864 - archive.z01 archive.z02 archive.zip
+zig build run -- extract-zip-split-stream-files folder/data.txt output.txt \
+  67108864 - archive.z01 archive.z02 archive.zip
 zig build run -- extract-zip-stream-file archive.zip folder/data.txt output.txt 67108864 [password|-]
 zig build run-zip-diff
 ```
@@ -773,19 +820,23 @@ Zstandard-20/Zstandard-93/XZ/PPMd with specific errors.
 Addressable entry and archive sizes remain bounded by the target's `usize` and
 the caller's available memory. A direct call to `parseZipArchive` still rejects
 multi-disk metadata because it has only one borrowed slice; callers must use
-`parseSplitZipArchiveAlloc` for ordered disk sets. The sequential reader accepts known-size and
-descriptor-backed Traditional ZipCrypto through
+the owned or sparse split APIs for ordered disk sets. The sequential reader
+accepts known-size and descriptor-backed Traditional ZipCrypto through
 `ZipIncrementalReaderOptions.password`; known-size and descriptor-backed
-WinZip AES use the same option. Direct disk-at-a-time split streaming and split
-archive writing remain future compatibility increments.
+WinZip AES use the same option, including through `ZipSplitIncrementalReader`.
+A disk-source callback that releases earlier part storage and split archive
+writing remain future compatibility increments.
 
 The required Info-ZIP differential creates a real seven-part archive with
 `zip -s 64k`. Its Deflate member crosses six disk boundaries, its following
 Stored member begins on the final disk, both extract through the public split
-API, and a first-two-disk reorder is rejected. Focused synthetic ZIP32 and forced
+APIs, and a first-two-disk reorder is rejected. The sparse path reports eight
+metadata patches and no joined archive allocation. Focused synthetic ZIP32 and forced
 ZIP64 cases additionally cover a data descriptor split across disks, normalized
-central/local offsets, missing disks, archive/part limits, and extraction of a
-trailing Stored entry.
+central/local offsets, 3/257-byte input bridges, 5-byte output backpressure,
+ZipCrypto and WinZip AES, wrong/missing passwords, allocation failure,
+missing disks, archive/part/entry/output limits, and extraction of a trailing
+Stored entry.
 
 The differential verifies Vort Shrink output with system 7-Zip, including a
 32 KiB deterministic high-entropy payload that reaches the full dictionary.

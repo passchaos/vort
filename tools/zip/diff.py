@@ -1945,7 +1945,7 @@ def split_central_entries(parts: list[Path]) -> tuple[bytes, list[int], dict[str
 
 def validate_infozip_split_archive(
     cli: Path, zip_tool: str, temp: Path
-) -> tuple[int, int, int]:
+) -> tuple[int, int, int, int, int]:
     source_dir = temp / "infozip-split-source"
     source_dir.mkdir()
     rng = random.Random(0x5A17_2026)
@@ -2005,8 +2005,12 @@ def validate_infozip_split_archive(
     tail_entry = entries["tail-stored.bin"]
     if tail_entry[4] != zipfile.ZIP_STORED or tail_entry[13] <= large_disk:
         raise AssertionError("tail entry is not Stored on a later split disk")
+    first_local_offset = min(bases[entry[13]] + entry[16] for entry in entries.values())
+    expected_stream_input = len(joined) - first_local_offset
 
     cases = 0
+    stream_cases = 0
+    stream_patch_count: int | None = None
     for index, (name, expected) in enumerate(payloads.items()):
         output = temp / f"infozip-split-{index}.out"
         result = run(
@@ -2021,6 +2025,34 @@ def validate_infozip_split_archive(
         if f"zip_parts={len(parts)}" not in result.stdout or output.read_bytes() != expected:
             raise AssertionError(f"Vort split extraction mismatch for {name!r}")
         cases += 1
+        stream_output = temp / f"infozip-split-{index}.stream.out"
+        stream_result = run(
+            cli,
+            "extract-zip-split-stream-files",
+            name,
+            str(stream_output),
+            str(len(expected)),
+            "-",
+            *(str(part) for part in parts),
+        )
+        fields = dict(
+            token.split("=", 1)
+            for token in stream_result.stdout.split()
+            if "=" in token
+        )
+        patch_count = int(fields.get("metadata_patches", "0"))
+        if (
+            fields.get("zip_parts") != str(len(parts))
+            or int(fields.get("normalized_input_read", "0"))
+            != expected_stream_input
+            or patch_count != 8
+            or stream_output.read_bytes() != expected
+        ):
+            raise AssertionError(f"Vort split stream extraction mismatch for {name!r}")
+        if stream_patch_count is not None and stream_patch_count != patch_count:
+            raise AssertionError("split stream metadata patch count changed between entries")
+        stream_patch_count = patch_count
+        stream_cases += 1
 
     reordered = [parts[1], parts[0], *parts[2:]]
     rejected = subprocess.run(
@@ -2039,7 +2071,7 @@ def validate_infozip_split_archive(
     )
     if rejected.returncode == 0:
         raise AssertionError("Vort accepted reordered Info-ZIP split disks")
-    return len(parts), cases, crossed
+    return len(parts), cases, stream_cases, crossed, stream_patch_count or 0
 
 
 def main() -> None:
@@ -2157,9 +2189,13 @@ def main() -> None:
         incremental_reader_winzip_aes_cases += (
             incremental_winzip_aes_zip32_reader + incremental_winzip_aes_zip64_reader
         )
-        split_zip_parts, split_zip_cases, split_zip_boundaries = validate_infozip_split_archive(
-            args.cli, zip_tool, temp
-        )
+        (
+            split_zip_parts,
+            split_zip_cases,
+            split_zip_stream_cases,
+            split_zip_boundaries,
+            split_zip_metadata_patches,
+        ) = validate_infozip_split_archive(args.cli, zip_tool, temp)
         deflate64_cases = 0
         ppmd_cases = 0
         incremental_archive_implode_cases, implode_modes = validate_vort_implode_modes(
@@ -2213,7 +2249,9 @@ def main() -> None:
         f"incremental_winzip_aes_zip32_bytes={incremental_winzip_aes_zip32_bytes} "
         f"incremental_winzip_aes_zip64_bytes={incremental_winzip_aes_zip64_bytes} "
         f"split_zip_parts={split_zip_parts} split_zip_cases={split_zip_cases} "
+        f"split_zip_stream_cases={split_zip_stream_cases} "
         f"split_zip_boundaries={split_zip_boundaries} "
+        f"split_zip_metadata_patches={split_zip_metadata_patches} "
         f"system_unzip={incremental_zip32_unzip and incremental_zip64_unzip} "
         f"incremental_7zip={incremental_zip32_7zip and incremental_zip64_7zip} "
         f"incremental_zipcrypto_7zip={incremental_zipcrypto_zip32_7zip and incremental_zipcrypto_zip64_7zip} "
