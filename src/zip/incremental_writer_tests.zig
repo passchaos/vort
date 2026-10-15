@@ -12,7 +12,7 @@ const TestEntry = struct {
     comment: []const u8 = "",
 };
 
-test "ZIP incremental writer round trips known and unknown Stored and Deflate entries" {
+test "ZIP incremental writer round trips known and unknown Stored Deflate and Bzip2 entries" {
     const allocator = std.testing.allocator;
     const repetitive = "incremental raw deflate data\n" ** 96;
     const entries = [_]TestEntry{
@@ -20,7 +20,10 @@ test "ZIP incremental writer round trips known and unknown Stored and Deflate en
         .{ .name = "unknown-stored.bin", .data = "unknown stored", .method = .stored, .expected_size = null },
         .{ .name = "known-deflate.txt", .data = repetitive, .method = .deflate, .expected_size = repetitive.len },
         .{ .name = "unknown-deflate.txt", .data = "unknown deflate payload" ** 50, .method = .deflate, .expected_size = null },
+        .{ .name = "known-bzip2.txt", .data = "known bzip2 payload" ** 73, .method = .bzip2, .expected_size = ("known bzip2 payload" ** 73).len },
+        .{ .name = "unknown-bzip2.txt", .data = "unknown bzip2 payload" ** 61, .method = .bzip2, .expected_size = null },
         .{ .name = "empty", .data = "", .method = .stored, .expected_size = 0 },
+        .{ .name = "empty-bzip2", .data = "", .method = .bzip2, .expected_size = 0 },
     };
     const bytes = try encodeEntries(allocator, &entries, .{ .archive_comment = "streamed" }, 7, 5);
     defer allocator.free(bytes);
@@ -47,6 +50,7 @@ test "ZIP incremental writer handles one-byte input and output and is determinis
     const entries = [_]TestEntry{
         .{ .name = "one-byte.bin", .data = &random, .method = .stored, .expected_size = random.len },
         .{ .name = "deflate.txt", .data = "deterministic stream" ** 200, .method = .deflate, .expected_size = null },
+        .{ .name = "bzip2.txt", .data = "deterministic Bzip2 stream" ** 79, .method = .bzip2, .expected_size = null },
     };
     const tiny = try encodeEntries(allocator, &entries, .{}, 1, 1);
     defer allocator.free(tiny);
@@ -95,6 +99,7 @@ test "ZIP incremental writer emits precise ZIP32 and conservative ZIP64 layouts"
         .{ .name = "known", .data = "abc", .method = .stored, .expected_size = 3 },
         .{ .name = "unknown", .data = "xy", .method = .stored, .expected_size = null },
         .{ .name = "deflated", .data = "aaaaaaaa", .method = .deflate, .expected_size = 8 },
+        .{ .name = "bzip2", .data = "bbbbbbbb", .method = .bzip2, .expected_size = 8 },
     };
     const bytes = try encodeEntries(allocator, &entries, .{}, 2, 3);
     defer allocator.free(bytes);
@@ -102,9 +107,11 @@ test "ZIP incremental writer emits precise ZIP32 and conservative ZIP64 layouts"
     const known = try archive.entryAt(0);
     const unknown = try archive.entryAt(1);
     const deflated = try archive.entryAt(2);
+    const bzip2_entry = try archive.entryAt(3);
     try std.testing.expect(!known.zip64);
     try std.testing.expect(unknown.zip64);
     try std.testing.expect(deflated.zip64);
+    try std.testing.expect(bzip2_entry.zip64);
 
     try std.testing.expectEqual(@as(u32, 0), readU32(bytes, known.local_header_offset + 18));
     try std.testing.expectEqual(@as(u16, 0), readU16(bytes, known.local_header_offset + 28));
@@ -214,7 +221,7 @@ test "ZIP incremental writer enforces method and metadata limits" {
     defer unsupported.deinit();
     try std.testing.expectError(
         error.UnsupportedZipCompressionMethod,
-        unsupported.beginEntry(.{ .name = "bad", .method = .bzip2 }),
+        unsupported.beginEntry(.{ .name = "bad", .method = .lzma }),
     );
     try std.testing.expectEqual(incremental.Phase.ready, unsupported.snapshot().phase);
     try unsupported.beginEntry(.{ .name = "retry", .method = .stored, .expected_size = 0 });
@@ -239,7 +246,7 @@ test "ZIP incremental writer enforces method and metadata limits" {
     );
 }
 
-test "ZIP incremental writer preflights Deflate configuration before headers" {
+test "ZIP incremental writer preflights Deflate and Bzip2 configuration before headers" {
     var invalid = try incremental.Writer.initWithOptions(std.testing.allocator, .{
         .deflate_options = .{ .block_len = 0 },
     });
@@ -276,6 +283,65 @@ test "ZIP incremental writer preflights Deflate configuration before headers" {
         }),
     );
     try std.testing.expectEqual(incremental.Phase.ready, input_limited.snapshot().phase);
+
+    var invalid_bzip2 = try incremental.Writer.initWithOptions(std.testing.allocator, .{
+        .bzip2_options = .{ .block_size_100k = 0 },
+    });
+    defer invalid_bzip2.deinit();
+    try std.testing.expectError(
+        error.InvalidBzip2Header,
+        invalid_bzip2.beginEntry(.{ .name = "bad-bzip2", .method = .bzip2 }),
+    );
+    try std.testing.expectEqual(incremental.Phase.ready, invalid_bzip2.snapshot().phase);
+
+    var bounded_bzip2 = try incremental.Writer.initWithOptions(std.testing.allocator, .{
+        .bzip2_options = .{ .max_pending_output_len = 0 },
+    });
+    defer bounded_bzip2.deinit();
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        bounded_bzip2.beginEntry(.{ .name = "bounded-bzip2", .method = .bzip2 }),
+    );
+    try std.testing.expectEqual(incremental.Phase.ready, bounded_bzip2.snapshot().phase);
+
+    var input_limited_bzip2 = try incremental.Writer.initWithOptions(std.testing.allocator, .{
+        .bzip2_options = .{ .max_input_len = 3 },
+    });
+    defer input_limited_bzip2.deinit();
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        input_limited_bzip2.beginEntry(.{
+            .name = "long-bzip2",
+            .method = .bzip2,
+            .expected_size = 4,
+        }),
+    );
+    try std.testing.expectEqual(incremental.Phase.ready, input_limited_bzip2.snapshot().phase);
+}
+
+test "ZIP incremental writer emits multi-block Bzip2 payloads" {
+    const allocator = std.testing.allocator;
+    const payload = try allocator.alloc(u8, 101_321);
+    defer allocator.free(payload);
+    for (payload, 0..) |*byte, index| byte.* = @truncate(index *% 73 +% index / 251);
+    @memset(payload[49_900..50_700], 0xa5);
+    const entries = [_]TestEntry{.{
+        .name = "multi-block.bz2",
+        .data = payload,
+        .method = .bzip2,
+        .expected_size = payload.len,
+    }};
+    const bytes = try encodeEntries(allocator, &entries, .{
+        .zip64 = .never,
+        .bzip2_options = .{ .block_size_100k = 1 },
+    }, 257, 11);
+    defer allocator.free(bytes);
+    const archive = try zip.parse(bytes);
+    const entry = try archive.entryAt(0);
+    try std.testing.expect(!entry.zip64);
+    const decoded = try archive.extractAlloc(allocator, entry);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
 test "ZIP incremental writer preflights archive finish and output limits" {
@@ -326,13 +392,14 @@ test "ZIP incremental writer releases every allocation failure" {
             const entries = [_]TestEntry{
                 .{ .name = "stored", .data = "small", .method = .stored, .expected_size = null },
                 .{ .name = "deflated", .data = "allocation-safe deflate" ** 80, .method = .deflate, .expected_size = null },
+                .{ .name = "bzip2", .data = "allocation-safe bzip2" ** 47, .method = .bzip2, .expected_size = null },
             };
             const encoded = try encodeEntries(allocator, &entries, .{ .archive_comment = "oom" }, 17, 19);
             defer allocator.free(encoded);
             const archive = try zip.parse(encoded);
-            const decoded = try archive.extractAlloc(allocator, try archive.entryAt(1));
+            const decoded = try archive.extractAlloc(allocator, try archive.entryAt(2));
             defer allocator.free(decoded);
-            try std.testing.expectEqualSlices(u8, entries[1].data, decoded);
+            try std.testing.expectEqualSlices(u8, entries[2].data, decoded);
         }
     };
     try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{});

@@ -1,7 +1,7 @@
 const std = @import("std");
 const checksum = @import("../checksum.zig");
 const core = @import("../core.zig");
-const deflate = @import("../deflate.zig");
+const codecs = @import("incremental_writer/codecs.zig");
 const types = @import("types.zig");
 const wire = @import("wire.zig");
 const zip_writer = @import("writer.zig");
@@ -9,7 +9,7 @@ const zip_writer = @import("writer.zig");
 pub const CompressionMethod = types.CompressionMethod;
 pub const Zip64Mode = zip_writer.Zip64Mode;
 
-pub const Error = deflate.Error || std.mem.Allocator.Error || error{
+pub const Error = codecs.Error || std.mem.Allocator.Error || error{
     InvalidZipEntryName,
     InvalidZipTextEncoding,
     UnsupportedZipCompressionMethod,
@@ -28,17 +28,19 @@ pub const Options = struct {
     initial_offset: u64 = 0,
     utf8: bool = true,
     zip64: Zip64Mode = .auto,
-    deflate_options: deflate.RawDeflateIncrementalBestEncoder.Options = .{},
+    deflate_options: codecs.DeflateOptions = .{},
     /// Maximum input bytes retained for one Deflate planning block, including
     /// lookahead but excluding the fixed 32 KiB history and encoded output.
     max_deflate_buffer_size: usize = 1024 * 1024,
+    /// Bzip2 block size, total-input limit, and pending encoded-output limit.
+    bzip2_options: codecs.Bzip2Options = .{},
     max_entries: u64 = std.math.maxInt(u64),
     max_central_directory_size: usize = std.math.maxInt(usize),
     max_uncompressed_size: u64 = std.math.maxInt(u64),
     max_archive_size: u64 = std.math.maxInt(u64),
 };
 
-/// Metadata for one streaming entry. Only Stored and raw Deflate are accepted.
+/// Metadata for one streaming entry. Stored, raw Deflate, and Bzip2 are accepted.
 ///
 /// `name` and `comment` are copied by `beginEntry` and need not remain alive
 /// afterward. A non-null `expected_size` is checked when input is accepted and
@@ -64,7 +66,8 @@ pub const Phase = enum {
 /// Resumable ZIP archive writer. A complete payload and already-emitted archive
 /// bytes are never retained. Central-directory bytes are retained until
 /// `finishArchive`; Deflate additionally keeps one bounded planning block,
-/// history/match state, and one encoded pending block.
+/// history/match state, and one encoded pending block. Bzip2 retains at most
+/// one configured RLE/BWT block plus bounded encoded output.
 pub const Writer = struct {
     allocator: std.mem.Allocator,
     options: Options,
@@ -96,7 +99,40 @@ pub const Writer = struct {
         crc: checksum.Crc32Best = checksum.Crc32Best.init(),
         uncompressed_size: u64 = 0,
         compressed_size: u64 = 0,
-        deflater: ?deflate.RawDeflateIncrementalBestEncoder = null,
+        codec: codecs.State,
+
+        fn init(
+            allocator: std.mem.Allocator,
+            entry_options: EntryOptions,
+            local_header_offset: u64,
+            zip64: bool,
+            codec_options: codecs.Options,
+        ) Error!CurrentEntry {
+            var codec = try codecs.State.init(
+                allocator,
+                entry_options.method,
+                entry_options.expected_size,
+                codec_options,
+            );
+            errdefer codec.deinit();
+            const metadata_len = std.math.add(
+                usize,
+                entry_options.name.len,
+                entry_options.comment.len,
+            ) catch return error.IntegerOverflow;
+            const metadata = try allocator.alloc(u8, metadata_len);
+            @memcpy(metadata[0..entry_options.name.len], entry_options.name);
+            @memcpy(metadata[entry_options.name.len..], entry_options.comment);
+            return .{
+                .metadata = metadata,
+                .name_len = entry_options.name.len,
+                .method = entry_options.method,
+                .expected_size = entry_options.expected_size,
+                .local_header_offset = local_header_offset,
+                .zip64 = zip64,
+                .codec = codec,
+            };
+        }
 
         fn name(self: *const CurrentEntry) []const u8 {
             return self.metadata[0..self.name_len];
@@ -107,7 +143,7 @@ pub const Writer = struct {
         }
 
         fn deinit(self: *CurrentEntry, allocator: std.mem.Allocator) void {
-            if (self.deflater) |*encoder| encoder.deinit();
+            self.codec.deinit();
             allocator.free(self.metadata);
             self.* = undefined;
         }
@@ -193,9 +229,6 @@ pub const Writer = struct {
         if (self.options.zip64 == .never and next_count >= std.math.maxInt(u16))
             return error.Zip32LimitExceeded;
 
-        const metadata_len = std.math.add(usize, entry_options.name.len, entry_options.comment.len) catch
-            return error.IntegerOverflow;
-
         const local_offset = std.math.add(
             u64,
             self.options.initial_offset,
@@ -228,39 +261,18 @@ pub const Writer = struct {
         try self.pending.ensureTotalCapacity(self.allocator, @max(local_header_len, descriptor_len));
         try self.central.ensureUnusedCapacity(self.allocator, central_header_len);
 
-        const metadata = try self.allocator.alloc(u8, metadata_len);
-        @memcpy(metadata[0..entry_options.name.len], entry_options.name);
-        @memcpy(metadata[entry_options.name.len..], entry_options.comment);
-
-        var current = CurrentEntry{
-            .metadata = metadata,
-            .name_len = entry_options.name.len,
-            .method = entry_options.method,
-            .expected_size = entry_options.expected_size,
-            .local_header_offset = local_offset,
-            .zip64 = entry_zip64,
-        };
+        var current = try CurrentEntry.init(
+            self.allocator,
+            entry_options,
+            local_offset,
+            entry_zip64,
+            self.codecOptions(),
+        );
         errdefer current.deinit(self.allocator);
         errdefer {
             self.pending.clearRetainingCapacity();
             self.pending_offset = 0;
         }
-        if (entry_options.method == .deflate) {
-            if (entry_options.expected_size) |expected| {
-                const expected_usize = std.math.cast(usize, expected) orelse return error.OutputLimitExceeded;
-                current.deflater = deflate.RawDeflateIncrementalBestEncoder.initExactSize(
-                    self.allocator,
-                    self.options.deflate_options,
-                    expected_usize,
-                );
-            } else {
-                current.deflater = deflate.RawDeflateIncrementalBestEncoder.initWithOptions(
-                    self.allocator,
-                    self.options.deflate_options,
-                );
-            }
-        }
-
         self.pending.clearRetainingCapacity();
         self.pending_offset = 0;
         // Every incremental entry uses a descriptor. For a ZIP64 local header,
@@ -284,7 +296,7 @@ pub const Writer = struct {
         self.phase = .entry_header;
     }
 
-    /// Request the active entry's final Deflate block and data descriptor.
+    /// Request the active entry's final codec block/footer and data descriptor.
     /// Continue calling `step` with empty input until it returns `.need_input`.
     pub fn finishEntry(self: *Self) Error!void {
         if (self.phase == .poisoned) return error.ZipWriterPoisoned;
@@ -373,12 +385,11 @@ pub const Writer = struct {
                             continue;
                         }
                         var entry = &self.current.?;
-                        var encoder = &entry.deflater.?;
-                        encoder.finish();
+                        entry.codec.finish();
                         const codec_output = output[output_written..][0..self.limitArchiveWrite(output.len - output_written)];
                         if (codec_output.len == 0) return error.OutputLimitExceeded;
-                        const encoded = try encoder.step("", codec_output);
-                        try self.accountDeflateProgress(entry, "", encoded.progress, &input_read, &output_written);
+                        const encoded = try entry.codec.step("", codec_output);
+                        try self.accountCodecProgress(entry, "", encoded.progress, &input_read, &output_written);
                         if (encoded.status == .done) {
                             try self.finalizeEntry();
                             continue;
@@ -412,12 +423,12 @@ pub const Writer = struct {
 
                     const codec_output = output[output_written..][0..self.limitArchiveWrite(output.len - output_written)];
                     if (codec_output.len == 0) return error.OutputLimitExceeded;
-                    const encoded = try entry.deflater.?.step(
+                    const encoded = try entry.codec.step(
                         input[input_read..],
                         codec_output,
                     );
                     const before = input_read;
-                    try self.accountDeflateProgress(entry, input[input_read..], encoded.progress, &input_read, &output_written);
+                    try self.accountCodecProgress(entry, input[input_read..], encoded.progress, &input_read, &output_written);
                     if (encoded.status == .need_output)
                         return result(input_read, output_written, .need_output);
                     if (encoded.status == .done) return error.InvalidBlockPlan;
@@ -432,7 +443,11 @@ pub const Writer = struct {
                     const remaining = self.central.items[self.central_offset..];
                     const wanted = @min(remaining.len, output.len - output_written);
                     const take = self.limitArchiveWrite(wanted);
-                    if (take == 0 and remaining.len != 0) return error.OutputLimitExceeded;
+                    if (take == 0 and remaining.len != 0) {
+                        if (output_written == output.len)
+                            return result(input_read, output_written, .need_output);
+                        return error.OutputLimitExceeded;
+                    }
                     @memcpy(output[output_written..][0..take], remaining[0..take]);
                     self.central_offset += take;
                     output_written += take;
@@ -455,26 +470,12 @@ pub const Writer = struct {
         if (entry.name.len == 0) return error.InvalidZipEntryName;
         if (entry.name.len > std.math.maxInt(u16) or entry.comment.len > std.math.maxInt(u16))
             return error.Zip32LimitExceeded;
-        if (entry.method != .stored and entry.method != .deflate)
-            return error.UnsupportedZipCompressionMethod;
         if (entry.expected_size) |expected| {
             if (expected > self.options.max_uncompressed_size) return error.OutputLimitExceeded;
             if (self.options.zip64 == .never and expected >= std.math.maxInt(u32))
                 return error.Zip32LimitExceeded;
         }
-        if (entry.method == .deflate) {
-            try deflate.RawDeflateIncrementalBestEncoder.validateOptions(self.options.deflate_options);
-            const retained = try deflate.RawDeflateIncrementalBestEncoder.maxBufferedInput(
-                self.options.deflate_options,
-            );
-            if (retained > self.options.max_deflate_buffer_size)
-                return error.OutputLimitExceeded;
-            if (entry.expected_size) |expected| {
-                if (expected > @as(u64, @intCast(self.options.deflate_options.max_input_len)))
-                    return error.OutputLimitExceeded;
-                _ = std.math.cast(usize, expected) orelse return error.OutputLimitExceeded;
-            }
-        }
+        try codecs.validate(entry.method, entry.expected_size, self.codecOptions());
         if (self.options.utf8 and
             (!std.unicode.utf8ValidateSlice(entry.name) or
                 !std.unicode.utf8ValidateSlice(entry.comment)))
@@ -489,9 +490,9 @@ pub const Writer = struct {
         }
         if (local_offset >= std.math.maxInt(u32)) return true;
         const expected = entry.expected_size orelse return true;
-        // Raw Deflate has no cheap exact compressed-size bound in this layer;
-        // conservatively reserve ZIP64 before emitting its unpatchable header.
-        if (entry.method == .deflate) return true;
+        // Streaming codecs have no cheap exact compressed-size bound in this
+        // layer; conservatively reserve ZIP64 before their unpatchable header.
+        if (entry.method != .stored) return true;
         return expected >= std.math.maxInt(u32);
     }
 
@@ -500,10 +501,10 @@ pub const Writer = struct {
         const next_entry = std.math.add(u64, entry.uncompressed_size, @as(u64, @intCast(offered))) catch
             return error.IntegerOverflow;
         if (next_entry > self.options.max_uncompressed_size) return error.OutputLimitExceeded;
-        if (entry.method == .deflate and
-            (next_entry > std.math.maxInt(usize) or
-                next_entry > @as(u64, @intCast(self.options.deflate_options.max_input_len))))
-            return error.OutputLimitExceeded;
+        if (codecs.inputLimit(entry.method, self.codecOptions())) |limit|
+            if (next_entry > std.math.maxInt(usize) or
+                next_entry > @as(u64, @intCast(limit)))
+                return error.OutputLimitExceeded;
         if (entry.expected_size) |expected| if (next_entry > expected) return error.SizeMismatch;
     }
 
@@ -515,7 +516,7 @@ pub const Writer = struct {
             return error.IntegerOverflow;
     }
 
-    fn accountDeflateProgress(
+    fn accountCodecProgress(
         self: *Self,
         entry: *CurrentEntry,
         input: []const u8,
@@ -534,6 +535,14 @@ pub const Writer = struct {
         try self.addArchiveOutput(progress.output_written);
         input_read.* += progress.input_read;
         output_written.* += progress.output_written;
+    }
+
+    fn codecOptions(self: *const Self) codecs.Options {
+        return .{
+            .deflate = self.options.deflate_options,
+            .max_deflate_buffer_size = self.options.max_deflate_buffer_size,
+            .bzip2 = self.options.bzip2_options,
+        };
     }
 
     fn finalizeEntry(self: *Self) Error!void {
@@ -639,7 +648,10 @@ pub const Writer = struct {
         const remaining = self.pending.items[self.pending_offset..];
         const wanted = @min(remaining.len, output.len - output_written.*);
         const take = self.limitArchiveWrite(wanted);
-        if (take == 0 and remaining.len != 0) return error.OutputLimitExceeded;
+        if (take == 0 and remaining.len != 0) {
+            if (output_written.* == output.len) return;
+            return error.OutputLimitExceeded;
+        }
         @memcpy(output[output_written.*..][0..take], remaining[0..take]);
         self.pending_offset += take;
         output_written.* += take;
