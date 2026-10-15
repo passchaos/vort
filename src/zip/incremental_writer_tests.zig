@@ -17,6 +17,7 @@ const TestEntry = struct {
     expected_size: ?u64,
     comment: []const u8 = "",
     traditional_encryption: ?zip.TraditionalEncryptionOptions = null,
+    winzip_aes: ?zip.WinZipAesOptions = null,
 };
 
 test "ZIP incremental writer round trips known and unknown common codec entries" {
@@ -167,6 +168,80 @@ test "ZIP incremental writer streams Traditional ZipCrypto entries" {
         try std.testing.expect(entry.flags & wire.descriptor_flag != 0);
         try std.testing.expect(entry.compressed_size >= 12);
         try std.testing.expectError(error.EncryptedZipEntry, archive.compressedData(entry));
+        try std.testing.expectError(
+            error.InvalidZipPassword,
+            archive.extractAllocWithOptions(allocator, entry, .{ .password = "wrong" }),
+        );
+        const decoded = try archive.extractAllocWithOptions(
+            allocator,
+            entry,
+            .{ .password = password },
+        );
+        defer allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, expected.data, decoded);
+    }
+    try std.testing.expect(!(try archive.entryAt(0)).zip64);
+    try std.testing.expect((try archive.entryAt(1)).zip64);
+    try std.testing.expect(!(try archive.entryAt(2)).zip64);
+}
+
+test "ZIP incremental writer streams WinZip AES entries" {
+    const allocator = std.testing.allocator;
+    const password = "incremental WinZip AES password";
+    const salt128 = [_]u8{0x41} ** 8;
+    const salt192 = [_]u8{0x42} ** 12;
+    const salt256 = [_]u8{0x43} ** 16;
+    const entries = [_]TestEntry{
+        .{
+            .name = "aes-known.bin",
+            .data = "known WinZip AES stored payload",
+            .method = .stored,
+            .expected_size = "known WinZip AES stored payload".len,
+            .winzip_aes = .{
+                .password = password,
+                .strength = .aes128,
+                .salt = &salt128,
+                .version = .ae1,
+            },
+        },
+        .{
+            .name = "aes-unknown.txt",
+            .data = "unknown WinZip AES Deflate payload\n" ** 83,
+            .method = .deflate,
+            .expected_size = null,
+            .winzip_aes = .{
+                .password = password,
+                .strength = .aes192,
+                .salt = &salt192,
+                .version = .ae2,
+            },
+        },
+        .{
+            .name = "aes-empty.bin",
+            .data = "",
+            .method = .stored,
+            .expected_size = 0,
+            .winzip_aes = .{
+                .password = password,
+                .strength = .aes256,
+                .salt = &salt256,
+                .version = .ae2,
+            },
+        },
+    };
+    const tiny = try encodeEntries(allocator, &entries, .{}, 1, 1);
+    defer allocator.free(tiny);
+    const coalesced = try encodeEntries(allocator, &entries, .{}, 4096, 8192);
+    defer allocator.free(coalesced);
+    try std.testing.expectEqualSlices(u8, coalesced, tiny);
+
+    const archive = try zip.parse(tiny);
+    for (entries, 0..) |expected, index| {
+        const entry = try archive.entryAt(index);
+        try std.testing.expect(entry.isWinZipAes());
+        try std.testing.expect(entry.flags & wire.descriptor_flag != 0);
+        try std.testing.expectEqual(expected.winzip_aes.?.strength, entry.winzip_aes.?.strength);
+        try std.testing.expectEqual(expected.winzip_aes.?.version, entry.winzip_aes.?.version);
         try std.testing.expectError(
             error.InvalidZipPassword,
             archive.extractAllocWithOptions(allocator, entry, .{ .password = "wrong" }),
@@ -1100,6 +1175,7 @@ fn encodeEntries(
             .method = entry.method,
             .expected_size = entry.expected_size,
             .traditional_encryption = entry.traditional_encryption,
+            .winzip_aes = entry.winzip_aes,
         });
         var input_offset: usize = 0;
         while (input_offset < entry.data.len) {
