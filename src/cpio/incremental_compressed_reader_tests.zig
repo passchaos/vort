@@ -372,3 +372,83 @@ test "compressed CPIO incremental reader validates decoded padding after trailer
     }
     try std.testing.expect(reader.snapshot().cpio_done);
 }
+
+fn expectRecoverableSuffix(
+    comptime ReaderType: type,
+    compression: compressed.Compression,
+    decoder_options: anytype,
+) !void {
+    const allocator = std.testing.allocator;
+    const entries = [_]writer.EncodeEntry{.{ .name = "payload", .data = payload }};
+    const encoded = try compressed.encodeAlloc(allocator, &entries, .{
+        .compression = compression,
+    });
+    defer allocator.free(encoded);
+    const suffix = "NEXT-MEMBER";
+    const joined = try allocator.alloc(u8, encoded.len + suffix.len);
+    defer allocator.free(joined);
+    @memcpy(joined[0..encoded.len], encoded);
+    @memcpy(joined[encoded.len..], suffix);
+
+    var reader = try ReaderType.initWithOptions(allocator, .{
+        .decoded_bridge_size = 7,
+        .cpio = .{ .stop_after_trailer = true },
+        .decoder = decoder_options,
+    });
+    defer reader.deinit();
+    var output: [5]u8 = undefined;
+    var input_offset: usize = 0;
+    while (true) {
+        const stepped = try reader.step(joined[input_offset..], &output);
+        input_offset += stepped.input_read;
+        if (stepped.status == .done) break;
+    }
+    const trailing = reader.trailingInput();
+    if (trailing.len > input_offset) return error.TestUnexpectedResult;
+    const logical_consumed = input_offset - trailing.len;
+    try std.testing.expectEqual(encoded.len, logical_consumed);
+    try std.testing.expectEqualSlices(u8, joined[logical_consumed..input_offset], trailing);
+    try std.testing.expectEqualSlices(u8, suffix[0..trailing.len], trailing);
+    try std.testing.expectEqualSlices(u8, suffix[trailing.len..], joined[input_offset..]);
+    try std.testing.expectEqual(trailing.len, reader.snapshot().trailing_input_bytes);
+}
+
+test "compressed CPIO readers expose recoverable first-stream suffixes" {
+    try expectRecoverableSuffix(
+        compressed_reader.GzipReader,
+        .gzip,
+        compressed_reader.codecs.Gzip.Options{
+            .allow_concatenated = false,
+            .allow_trailing_data = true,
+        },
+    );
+    try expectRecoverableSuffix(
+        compressed_reader.Bzip2Reader,
+        .bzip2,
+        compressed_reader.codecs.Bzip2.Options{
+            .stop_after_first_stream = true,
+            .first_stream_retry_granularity = 1,
+        },
+    );
+    try expectRecoverableSuffix(
+        compressed_reader.LzmaReader,
+        .lzma,
+        compressed_reader.codecs.Lzma.Options{
+            .stop_after_end_marker = true,
+            .end_marker_input_guard = 16,
+        },
+    );
+    try expectRecoverableSuffix(
+        compressed_reader.XzReader,
+        .xz,
+        compressed_reader.codecs.Xz.Options{
+            .stop_after_first_stream = true,
+            .first_stream_footer_retry_granularity = 1,
+        },
+    );
+    try expectRecoverableSuffix(
+        compressed_reader.ZstandardReader,
+        .zstandard,
+        compressed_reader.codecs.Zstandard.Options{ .stop_after_first_frame = true },
+    );
+}

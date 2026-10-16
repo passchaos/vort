@@ -48,6 +48,7 @@ pub fn Reader(comptime Codec: type) type {
             finish_requested: bool,
             decoder_done: bool,
             cpio_done: bool,
+            trailing_input_bytes: usize,
             cpio: cpio_reader.Reader.Snapshot,
         };
 
@@ -88,12 +89,19 @@ pub fn Reader(comptime Codec: type) type {
                 .finish_requested = self.finish_requested,
                 .decoder_done = self.decoder_done,
                 .cpio_done = self.cpio_done,
+                .trailing_input_bytes = self.trailingInput().len,
                 .cpio = self.cpio.snapshot(),
             };
         }
 
         pub fn currentEntry(self: *const Self) ?cpio_reader.EntryInfo {
             return self.cpio.currentEntry();
+        }
+
+        /// Bytes accepted by a first-stream decoder but proven to belong to a
+        /// following outer member. Valid until the next mutating call/deinit.
+        pub fn trailingInput(self: *const Self) []const u8 {
+            return Codec.trailingInput(&self.decoder);
         }
 
         /// Records compressed EOF. Continue calling `step("", output)` until
@@ -185,13 +193,11 @@ pub fn Reader(comptime Codec: type) type {
                 ) catch return error.IntegerOverflow;
                 if (self.total_decoded > self.options.max_decoded_size)
                     return error.OutputLimitExceeded;
+                if (decoded.status == .done) self.decoder_done = true;
                 if (self.bridge_len != 0) continue;
 
                 switch (decoded.status) {
-                    .done => {
-                        self.decoder_done = true;
-                        continue;
-                    },
+                    .done => continue,
                     .need_output => return error.InvalidCompressedCpioReaderState,
                     .need_input => {
                         if (input_read != input.len) {

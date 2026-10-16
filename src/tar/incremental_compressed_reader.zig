@@ -53,6 +53,7 @@ pub fn Reader(comptime Codec: type) type {
             finish_requested: bool,
             decoder_done: bool,
             tar_done: bool,
+            trailing_input_bytes: usize,
             tar: tar_reader.Reader.Snapshot,
         };
 
@@ -93,12 +94,17 @@ pub fn Reader(comptime Codec: type) type {
                 .finish_requested = self.finish_requested,
                 .decoder_done = self.decoder_done,
                 .tar_done = self.tar_done,
+                .trailing_input_bytes = self.trailingInput().len,
                 .tar = self.tar.snapshot(),
             };
         }
 
         pub fn currentEntry(self: *const Self) ?tar_reader.EntryInfo {
             return self.tar.currentEntry();
+        }
+
+        pub fn trailingInput(self: *const Self) []const u8 {
+            return Codec.trailingInput(&self.decoder);
         }
 
         /// Records compressed EOF. Continue calling `step("", output)` until
@@ -190,13 +196,11 @@ pub fn Reader(comptime Codec: type) type {
                 ) catch return error.IntegerOverflow;
                 if (self.total_decoded > self.options.max_decoded_size)
                     return error.OutputLimitExceeded;
+                if (decoder_step.status == .done) self.decoder_done = true;
                 if (self.bridge_len != 0) continue;
 
                 switch (decoder_step.status) {
-                    .done => {
-                        self.decoder_done = true;
-                        continue;
-                    },
+                    .done => continue,
                     .need_output => return error.InvalidCompressedTarReaderState,
                     .need_input => {
                         if (input_read != input.len) {

@@ -51,6 +51,11 @@ pub const Gzip = struct {
     pub fn finish(state: *State) Error!void {
         try state.decoder.finish();
     }
+
+    pub fn trailingInput(state: *const State) []const u8 {
+        _ = state;
+        return &.{};
+    }
 };
 
 fn AllocatorDecoder(
@@ -82,6 +87,12 @@ fn AllocatorDecoder(
             } else {
                 state.finish();
             }
+        }
+
+        pub fn trailingInput(state: *const State) []const u8 {
+            if (comptime @hasDecl(Decoder, "trailingInput"))
+                return state.trailingInput();
+            return &.{};
         }
     };
 }

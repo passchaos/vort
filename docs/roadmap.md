@@ -20873,3 +20873,19 @@ reuse, so production keeps the simpler independently owned plans.
   cpio archives (`incremental_sequence_reader_cases=2`,
   `incremental_sequence_reader_external=1`). Mixed raw/compressed member
   dispatch remains the next initramfs layer rather than being implied here.
+
+- Added the compressed-member suffix ownership contract needed by mixed
+  initramfs dispatch. Shared decoder adapters now expose borrowed
+  `trailingInput()` for codecs that buffer bounded lookahead. CPIO and TAR
+  compressed readers report its size in snapshots and keep it valid through
+  terminal inspection. Their bridge state also records a decoder's `.done`
+  before draining simultaneously produced output, fixing a latent path that
+  could otherwise call a completed decoder again. Gzip gains strict-by-default
+  `allow_trailing_data`, which stops at its validated footer without consuming
+  caller suffix bytes; Bzip2, LZMA-Alone, XZ and Zstandard use existing
+  first-stream/end-marker controls. Focused tests append a synthetic next
+  member to all five codecs under tiny output backpressure and require
+  `accepted_input - trailing_input == exact_encoded_size`, with the borrowed
+  bytes plus unaccepted caller suffix reconstructing the next member exactly.
+  The mixed sequence dispatcher can now build on an explicit, tested ownership
+  invariant rather than guessing compressed boundaries.

@@ -41,6 +41,9 @@ pub fn Decoder(comptime Codec: type) type {
             expected_output_len: ?usize = null,
             max_header_metadata_len: usize = 1 << 20,
             allow_concatenated: bool = false,
+            /// Stop after the first validated member and leave following
+            /// caller input unconsumed instead of reporting trailing data.
+            allow_trailing_data: bool = false,
         };
         pub const Phase = enum { header, extra_len, extra_payload, filename, comment, header_crc, raw, footer, between_members, done };
         pub const Snapshot = struct {
@@ -276,7 +279,8 @@ pub fn Decoder(comptime Codec: type) type {
                     self.beginMember();
                 },
                 .done => {
-                    if (input_read != input.len) return self.fail(.done, error.TrailingData);
+                    if (input_read != input.len and !self.options.allow_trailing_data)
+                        return self.fail(.done, error.TrailingData);
                     return result(input_read, output_written, .done);
                 },
             };

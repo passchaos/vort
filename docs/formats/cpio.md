@@ -119,6 +119,16 @@ the raw writer to the corresponding encoder through a caller-sized raw bridge,
 delay `entry_done` until the encoder has consumed the whole CPIO member, and
 bound total compressed output.
 
+For member-oriented containers, explicit compressed readers expose
+`trailingInput()`: bytes accepted into decoder lookahead but proven to follow a
+configured first-stream boundary. Gzip can instead leave suffix bytes directly
+unconsumed with `allow_trailing_data`; Bzip2, LZMA-Alone, XZ and Zstandard use
+their first-stream/end-marker options and borrowed trailing windows. The
+reported cumulative `input_read` remains physical accepted input, while
+`input_read - trailingInput().len` is the exact logical member boundary. A
+decoder that reaches `.done` while still publishing output now retains that
+terminal state until the CPIO bridge drains, rather than re-entering the codec.
+
 All codec lifecycle adapters live in the shared `archive_stream` layer used by
 both TAR and CPIO; container state and wire policy remain in their respective
 modules. The CPIO raw-format option therefore composes independently with all
