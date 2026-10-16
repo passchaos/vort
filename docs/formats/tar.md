@@ -248,15 +248,13 @@ for regular files, long PAX paths, directories and sparse members. Poisoning,
 zero-output backpressure, nonzero sparse holes, compressed limits and complete
 allocation-failure paths have focused coverage.
 
-The required differential generates all eleven formats under both schedules,
+The required differential generates all twelve formats under both schedules,
 requires byte equality, extracts each through Vort, and independently validates
 eight through Python or installed system tools; LZF and LZOP remain Vort-only
 when the corresponding system utilities are unavailable
-(`incremental_compressed_writer_cases=11`,
-`incremental_compressed_writer_external=8` on the current host).
+(`incremental_compressed_writer_cases=12`,
+`incremental_compressed_writer_external=9` on the current host).
 
-Unix compress still has a one-shot tarball writer
-because their underlying codecs do not yet expose incremental encoders. This
-is an encoder-layer gap only; the other eleven formats now have bounded
-incremental writers and all twelve formats already have bounded
-incremental readers.
+All twelve formats now have bounded incremental readers and writers. Automatic
+input dispatch remains reader-only because output format selection is an
+explicit caller policy rather than something discoverable from plaintext.

@@ -250,6 +250,7 @@ pub fn Writer(comptime Codec: type) type {
 pub const GzipWriter = Writer(codecs.Gzip);
 pub const Bzip2Writer = Writer(codecs.Bzip2);
 pub const BrotliWriter = Writer(codecs.Brotli);
+pub const CompressZWriter = Writer(codecs.CompressZ);
 pub const LzmaWriter = Writer(codecs.Lzma);
 pub const XzWriter = Writer(codecs.Xz);
 pub const Lz4Writer = Writer(codecs.Lz4);

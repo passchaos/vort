@@ -155,6 +155,7 @@ def decode_streaming_tarball(
     lzf_tool: str | None,
     lzip_tool: str | None,
     lzop_tool: str | None,
+    uncompress_tool: str | None,
 ) -> bytes | None:
     encoded = archive_path.read_bytes()
     if compression == "gzip":
@@ -163,6 +164,14 @@ def decode_streaming_tarball(
         return __import__("bz2").decompress(encoded)
     if compression == "brotli":
         return brotli_decompress(encoded, 512 * 1024 * 1024)
+    if compression == "compress-z":
+        if uncompress_tool is None:
+            return None
+        return subprocess.run(
+            [uncompress_tool, "-c", str(archive_path)],
+            check=True,
+            stdout=subprocess.PIPE,
+        ).stdout
     if compression == "lzma":
         return __import__("lzma").decompress(
             encoded, format=__import__("lzma").FORMAT_ALONE
@@ -523,6 +532,7 @@ def main() -> None:
             "lzf",
             "lz4-legacy",
             "lzip",
+            "compress-z",
         }
         auto_formats = {
             "none": "raw_tar",
@@ -686,6 +696,7 @@ def main() -> None:
                 lzf_tool,
                 lzip_tool,
                 lzop_tool,
+                uncompress_tool,
             )
             if raw_stream is not None:
                 with tarfile.open(fileobj=io.BytesIO(raw_stream), mode="r:") as archive:

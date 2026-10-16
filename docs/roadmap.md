@@ -20768,3 +20768,15 @@ reuse, so production keeps the simpler independently owned plans.
   external validation remains eight on the current host because system lzip,
   lzf and lzop are unavailable. Unix compress is the final incremental
   encoder/TAR-writer gap.
+
+- Closed that final gap with a bit-progressive
+  `CompressZIncrementalEncoder`. It persists the LZW pair dictionary, current
+  code, code width, LSB reservoir and eight-code group base across arbitrary
+  caller boundaries, including block clears and non-block dictionary freeze.
+  All 9...16-bit block/non-block combinations are byte-identical to the
+  one-shot writer, with exact-size, backpressure, limit and OOM coverage.
+  `TarCompressZIncrementalWriter` raises the required matrix to all twelve
+  formats; system `uncompress` independently validates the new direction
+  (`incremental_compressed_writer_cases=12`,
+  `incremental_compressed_writer_external=9`). The current tarball scope now
+  has bounded incremental read and write coverage for every supported wrapper.

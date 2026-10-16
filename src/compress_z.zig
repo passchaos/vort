@@ -1,12 +1,15 @@
 const decoder = @import("compress_z/decoder.zig");
 const encoder = @import("compress_z/encoder.zig");
 const incremental_decoder = @import("compress_z/incremental_decoder.zig");
+const incremental_encoder = @import("compress_z/incremental_encoder.zig");
+const incremental_encoder_tests = @import("compress_z/incremental_encoder_tests.zig");
 const incremental_tests = @import("compress_z/incremental_tests.zig");
 
-pub const Error = decoder.Error || encoder.Error || incremental_decoder.Decoder.Error;
+pub const Error = decoder.Error || encoder.Error || incremental_decoder.Decoder.Error || incremental_encoder.Encoder.Error;
 pub const Header = decoder.Header;
 pub const EncodeOptions = encoder.EncodeOptions;
 pub const IncrementalDecoder = incremental_decoder.Decoder;
+pub const IncrementalEncoder = incremental_encoder.Encoder;
 pub const parseHeader = decoder.parseHeader;
 pub const decodeInto = decoder.decodeInto;
 pub const decodeAlloc = decoder.decodeAlloc;
@@ -21,6 +24,8 @@ test {
     _ = decoder;
     _ = encoder;
     _ = incremental_decoder;
+    _ = incremental_encoder;
+    _ = incremental_encoder_tests;
     _ = incremental_tests;
 }
 

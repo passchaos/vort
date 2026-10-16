@@ -35,6 +35,8 @@ pub fn main(init: std.process.Init) !void {
         try encode(vort.TarBzip2IncrementalWriter, init.gpa, payload, pattern)
     else if (std.mem.eql(u8, compression, "brotli"))
         try encode(vort.TarBrotliIncrementalWriter, init.gpa, payload, pattern)
+    else if (std.mem.eql(u8, compression, "compress-z"))
+        try encode(vort.TarCompressZIncrementalWriter, init.gpa, payload, pattern)
     else if (std.mem.eql(u8, compression, "lzma"))
         try encode(vort.TarLzmaIncrementalWriter, init.gpa, payload, pattern)
     else if (std.mem.eql(u8, compression, "xz"))

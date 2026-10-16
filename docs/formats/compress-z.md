@@ -31,6 +31,7 @@ Available APIs:
 - `parseCompressZHeader` returns the maximum code width and block-mode flag;
 - `encodeCompressZAlloc`, `encodeCompressZAppend`, and
   `encodeCompressZInto` provide deterministic encoding;
+- `CompressZIncrementalEncoder` preserves the same bitstream progressively;
 - `decodeCompressZInto`, `decodeCompressZAlloc`, and
   `decodeCompressZAllocLimited` decode one stream;
 - `CompressZIncrementalDecoder` performs bit-progressive caller-output decode;
@@ -48,6 +49,13 @@ are valid, while an incomplete full byte fails as `TruncatedFrame`.
 
 `TarCompressZIncrementalReader` connects this state machine directly to the
 bounded TAR reader without materializing the decompressed archive.
+
+The incremental encoder retains the pair dictionary, current LZW code, a small
+LSB reservoir and bounded ready-output bytes. Width growth and block clears
+reuse the same eight-code alignment arithmetic as the one-shot writer;
+non-block mode freezes a full dictionary. Complete 9...16-bit block/non-block
+matrices are byte-identical across one-byte and coalesced schedules.
+`TarCompressZIncrementalWriter` completes the bounded `.tar.Z` composition.
 
 The encoder clears a full dictionary immediately in block mode. This differs
 from ncompress's adaptive ratio heuristic but produces standard streams and

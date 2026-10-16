@@ -4,6 +4,7 @@ const std = @import("std");
 const core = @import("../../core.zig");
 const br = @import("../../br.zig");
 const bzip2 = @import("../../bzip2.zig");
+const compress_z = @import("../../compress_z.zig");
 const deflate = @import("../../deflate.zig");
 const lz4 = @import("../../lz4.zig");
 const lz4_legacy = @import("../../lz4_legacy.zig");
@@ -61,6 +62,11 @@ pub const Brotli = struct {
         try state.finish();
     }
 };
+
+pub const CompressZ = FallibleInitVoidFinish(
+    compress_z.IncrementalEncoder,
+    compress_z.Error,
+);
 
 pub const Lzma = FallibleInitVoidFinish(lzma.IncrementalEncoder, lzma.Error);
 pub const Xz = FallibleInitVoidFinish(xz.IncrementalEncoder, xz.Error);
