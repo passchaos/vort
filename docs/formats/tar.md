@@ -151,13 +151,13 @@ and micro schedules (`incremental_reader_cases=14`).
 
 ### Compressed incremental readers
 
-Eleven outer formats compose directly with the same raw reader without retaining
+All twelve outer formats compose directly with the same raw reader without retaining
 the decompressed TAR: `TarGzipIncrementalReader`,
 `TarBzip2IncrementalReader`, `TarBrotliIncrementalReader`,
 `TarLzmaIncrementalReader`, `TarXzIncrementalReader`,
 `TarLz4IncrementalReader`, `TarLz4LegacyIncrementalReader`,
 `TarLzfIncrementalReader`, `TarLzipIncrementalReader`,
-`TarZstandardIncrementalReader`, and
+`TarCompressZIncrementalReader`, `TarZstandardIncrementalReader`, and
 `TarLzopIncrementalReader`. The first LZ4 type targets modern frames; the
 legacy type handles the original EOF-terminated stream.
 `TarIncrementalCompressedReader(Codec)` is the generic composition surface
@@ -171,18 +171,18 @@ blocks must be zero. `max_decoded_size` bounds all decoded TAR/padding bytes,
 while `Options.decoder` exposes that wrapper's block, dictionary, history and
 compressed-buffer limits. Gzip accepts concatenated members by default.
 
-One-byte and micro-schedule tests cover all eleven Vort writers, and the required
+One-byte and micro-schedule tests cover all twelve Vort writers, and the required
 external differential adds independently produced gzip, Bzip2, Brotli,
 LZMA-Alone, XZ, modern LZ4, legacy LZ4 and Zstandard inputs. The current
-required report is `incremental_compressed_reader_cases=19`; installed external
+required report is `incremental_compressed_reader_cases=20`; installed external
 `lzf` and `lzop` tools add one direction each. Zero-output backpressure,
 decoded limits, nonzero TAR trailers, truncation and full-decode allocation
 failures have focused coverage.
 
-Unix compress remains a one-shot tarball reader because its underlying codec
-does not yet expose a bit-progressive LZW decoder. It is the remaining
-composition gap; the API does not claim it streams by buffering an entire
-decoded TAR internally.
+The twelve-format tarball matrix therefore has no remaining whole-TAR buffering
+gap when callers select the corresponding explicit incremental reader type.
+Automatic compression detection remains a separate one-shot convenience API;
+streaming callers select a type after their own prefix probe.
 
 ## Incremental writer
 

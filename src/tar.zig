@@ -35,6 +35,7 @@ pub const IncrementalCompressedReader = incremental_compressed_reader.Reader;
 pub const GzipIncrementalReader = incremental_compressed_reader.GzipReader;
 pub const Bzip2IncrementalReader = incremental_compressed_reader.Bzip2Reader;
 pub const BrotliIncrementalReader = incremental_compressed_reader.BrotliReader;
+pub const CompressZIncrementalReader = incremental_compressed_reader.CompressZReader;
 pub const LzmaIncrementalReader = incremental_compressed_reader.LzmaReader;
 pub const XzIncrementalReader = incremental_compressed_reader.XzReader;
 pub const Lz4IncrementalReader = incremental_compressed_reader.Lz4Reader;

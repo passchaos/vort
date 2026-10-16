@@ -43,6 +43,8 @@ pub fn main(init: std.process.Init) !void {
         return runReader(vort.TarBzip2IncrementalReader, init.gpa, archive, entry_name, expected, pattern);
     if (std.mem.eql(u8, compression, "brotli"))
         return runReader(vort.TarBrotliIncrementalReader, init.gpa, archive, entry_name, expected, pattern);
+    if (std.mem.eql(u8, compression, "compress-z"))
+        return runReader(vort.TarCompressZIncrementalReader, init.gpa, archive, entry_name, expected, pattern);
     if (std.mem.eql(u8, compression, "lzma"))
         return runReader(vort.TarLzmaIncrementalReader, init.gpa, archive, entry_name, expected, pattern);
     if (std.mem.eql(u8, compression, "xz"))

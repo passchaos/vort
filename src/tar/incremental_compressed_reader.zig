@@ -239,6 +239,7 @@ pub fn Reader(comptime Codec: type) type {
 pub const GzipReader = Reader(codecs.Gzip);
 pub const Bzip2Reader = Reader(codecs.Bzip2);
 pub const BrotliReader = Reader(codecs.Brotli);
+pub const CompressZReader = Reader(codecs.CompressZ);
 pub const LzmaReader = Reader(codecs.Lzma);
 pub const XzReader = Reader(codecs.Xz);
 pub const Lz4Reader = Reader(codecs.Lz4);

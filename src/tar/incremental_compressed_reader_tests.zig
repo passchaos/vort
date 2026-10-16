@@ -174,6 +174,11 @@ test "compressed TAR incremental reader composes lzip" {
     try exercise(compressed_reader.LzipReader, .lzip, 13, 17);
 }
 
+test "compressed TAR incremental reader composes Unix compress" {
+    try exercise(compressed_reader.CompressZReader, .compress_z, 1, 1);
+    try exercise(compressed_reader.CompressZReader, .compress_z, 13, 17);
+}
+
 test "compressed TAR incremental reader validates decoded limit and TAR trailer" {
     const allocator = std.testing.allocator;
     const entries = [_]tar.EncodeEntry{.{ .name = "payload", .data = "bounded" }};

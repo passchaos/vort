@@ -20708,5 +20708,11 @@ reuse, so production keeps the simpler independently owned plans.
   supports concatenation, and composes as `TarLzipIncrementalReader`.
   Python/Vort single and multi-member schedules pass 14 focused differential
   cases; TAR coverage rises to 19
-  (`incremental_compressed_reader_cases=19`). Unix compress is the final
-  one-shot tarball gap.
+  (`incremental_compressed_reader_cases=19`). A final bit-progressive Unix
+  compress decoder now models 9...16-bit LSB codes, pre-growth old-width
+  availability, eight-code alignment, block clears, non-block dictionary
+  freeze, EOF tail ambiguity and output backpressure without retaining the
+  stream. It composes as `TarCompressZIncrementalReader`; seven focused `.Z`
+  differential cases and the Vort TAR direction bring the required TAR count
+  to 20 (`incremental_compressed_reader_cases=20`). All twelve current tarball
+  wrappers now have explicit bounded incremental reader types.

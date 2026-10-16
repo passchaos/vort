@@ -4,6 +4,7 @@ const std = @import("std");
 const core = @import("../../core.zig");
 const br = @import("../../br.zig");
 const bzip2 = @import("../../bzip2.zig");
+const compress_z = @import("../../compress_z.zig");
 const deflate = @import("../../deflate.zig");
 const lz4 = @import("../../lz4.zig");
 const lz4_legacy = @import("../../lz4_legacy.zig");
@@ -87,6 +88,11 @@ fn AllocatorDecoder(
 
 pub const Bzip2 = AllocatorDecoder(bzip2.IncrementalDecoder, bzip2.Error, false);
 pub const Brotli = AllocatorDecoder(br.IncrementalStreamDecoder, br.Error, true);
+pub const CompressZ = AllocatorDecoder(
+    compress_z.IncrementalDecoder,
+    compress_z.Error,
+    false,
+);
 pub const Lzma = AllocatorDecoder(lzma.IncrementalDecoder, lzma.Error, false);
 pub const Xz = AllocatorDecoder(xz.IncrementalDecoder, xz.Error, false);
 pub const Lz4 = AllocatorDecoder(lz4.NativeIncrementalFrameDecoder, lz4.Error, true);

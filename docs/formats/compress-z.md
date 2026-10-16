@@ -33,8 +33,21 @@ Available APIs:
   `encodeCompressZInto` provide deterministic encoding;
 - `decodeCompressZInto`, `decodeCompressZAlloc`, and
   `decodeCompressZAllocLimited` decode one stream;
+- `CompressZIncrementalDecoder` performs bit-progressive caller-output decode;
 - `compressZDecodedSize` and `compressZDecodedSizeLimited` provide validated
   decoded-size preflight.
+
+The incremental decoder retains a bounded prefix/suffix dictionary and one
+current reversed string, not the compressed stream or decoded output. It
+supports every 9...16-bit maximum, block-mode clear codes, non-block dictionary
+freeze, arbitrary input/output splits and exact output pledges. Width changes
+and clears are represented as resumable alignment states, preserving the
+eight-code group rule across byte boundaries. Because `.Z` has no terminator,
+callers must call `finish()` at physical EOF; fewer than eight unused tail bits
+are valid, while an incomplete full byte fails as `TruncatedFrame`.
+
+`TarCompressZIncrementalReader` connects this state machine directly to the
+bounded TAR reader without materializing the decompressed archive.
 
 The encoder clears a full dictionary immediately in block mode. This differs
 from ncompress's adaptive ratio heuristic but produces standard streams and
@@ -53,3 +66,7 @@ The `.Z` format has no end marker, declared uncompressed size, or checksum.
 Consequently, some tail truncations are indistinguishable from a valid stream.
 Use a limited decode API for untrusted input and an outer integrity mechanism
 when corruption detection is required.
+The required differential exercises seven Vort corpus streams through one-byte
+and micro schedules (`incremental_cases=7`) and has system `uncompress` verify
+all Vort output. A fixed ncompress 5.0 stream independently covers external
+LSB code packing when a system `compress` encoder is unavailable.

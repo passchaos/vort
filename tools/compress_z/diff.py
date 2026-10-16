@@ -44,6 +44,7 @@ def external_encode(tool: str, source: Path, max_bits: int) -> bytes:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
+    parser.add_argument("--incremental", required=True, type=Path)
     parser.add_argument("--compress", type=Path)
     parser.add_argument("--uncompress", type=Path)
     args = parser.parse_args()
@@ -67,6 +68,7 @@ def main() -> None:
         encoded_total = 0
         decoded_total = 0
         external_encoded = 0
+        incremental_cases = 0
         for name, payload, max_bits, block_mode in cases:
             source_path = temp / f"{name}.source"
             archive_path = temp / f"{name}.vort.Z"
@@ -93,6 +95,9 @@ def main() -> None:
             run(args.cli, "decode-compress-z-file", str(archive_path), str(output_path), str(len(payload)))
             if output_path.read_bytes() != payload:
                 raise AssertionError(f"Vort .Z round-trip mismatch for {name}")
+            for pattern in ("one", "micro"):
+                run(args.incremental, str(archive_path), str(source_path), pattern)
+            incremental_cases += 1
             size_output = run(
                 args.cli,
                 "size-compress-z-file",
@@ -127,6 +132,9 @@ def main() -> None:
                 )
                 if output_path.read_bytes() != payload:
                     raise AssertionError(f"Vort could not decode ncompress output for {name}")
+                for pattern in ("one", "micro"):
+                    run(args.incremental, str(reference_path), str(source_path), pattern)
+                incremental_cases += 1
                 external_encoded += 1
 
         limited = run(
@@ -155,7 +163,7 @@ def main() -> None:
     print(
         f"compress_z_diff=ok cases={len(cases)} encoded_bytes={encoded_total} "
         f"decoded_bytes={decoded_total} system_uncompress={uncompress_tool is not None} "
-        f"ncompress_cases={external_encoded}"
+        f"ncompress_cases={external_encoded} incremental_cases={incremental_cases}"
     )
 
 

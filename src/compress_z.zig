@@ -1,9 +1,12 @@
 const decoder = @import("compress_z/decoder.zig");
 const encoder = @import("compress_z/encoder.zig");
+const incremental_decoder = @import("compress_z/incremental_decoder.zig");
+const incremental_tests = @import("compress_z/incremental_tests.zig");
 
-pub const Error = decoder.Error || encoder.Error;
+pub const Error = decoder.Error || encoder.Error || incremental_decoder.Decoder.Error;
 pub const Header = decoder.Header;
 pub const EncodeOptions = encoder.EncodeOptions;
+pub const IncrementalDecoder = incremental_decoder.Decoder;
 pub const parseHeader = decoder.parseHeader;
 pub const decodeInto = decoder.decodeInto;
 pub const decodeAlloc = decoder.decodeAlloc;
@@ -17,6 +20,8 @@ pub const encodeInto = encoder.encodeInto;
 test {
     _ = decoder;
     _ = encoder;
+    _ = incremental_decoder;
+    _ = incremental_tests;
 }
 
 test "Unix compress encoder round trips width growth block clears and non-block mode" {

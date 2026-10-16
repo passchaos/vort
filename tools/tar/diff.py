@@ -412,6 +412,7 @@ def main() -> None:
             "gzip",
             "bzip2",
             "brotli",
+            "compress-z",
             "lzma",
             "xz",
             "lz4",
