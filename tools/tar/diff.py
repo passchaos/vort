@@ -117,7 +117,12 @@ def python_archive(format_id: int) -> tuple[bytes, dict[str, bytes]]:
     return sink.getvalue(), payloads
 
 
-def validate_with_vort(cli: Path, archive_path: Path, payloads: dict[str, bytes]) -> None:
+def validate_with_vort(
+    cli: Path,
+    archive_path: Path,
+    payloads: dict[str, bytes],
+    incremental_reader: Path | None = None,
+) -> int:
     listing = run(cli, "list-tar-file", str(archive_path)).stdout
     if "tar_entries=5" not in listing:
         raise AssertionError(f"unexpected TAR listing: {listing}")
@@ -128,6 +133,10 @@ def validate_with_vort(cli: Path, archive_path: Path, payloads: dict[str, bytes]
         run(cli, "extract-tar-file", str(archive_path), name, str(output))
         if output.read_bytes() != payload:
             raise AssertionError(f"Vort TAR extraction mismatch for {name!r}")
+        if incremental_reader is not None:
+            for pattern in ("one", "micro"):
+                run(incremental_reader, str(archive_path), name, str(output), pattern)
+    return len(payloads) if incremental_reader is not None else 0
 
 
 def sparse_payload() -> bytes:
@@ -138,7 +147,12 @@ def sparse_payload() -> bytes:
     return bytes(payload)
 
 
-def validate_gnu_sparse_with_vort(cli: Path, tar_tool: str, temp: Path) -> int:
+def validate_gnu_sparse_with_vort(
+    cli: Path,
+    incremental_reader: Path,
+    tar_tool: str,
+    temp: Path,
+) -> int:
     source = temp / "gnu-sparse.bin"
     with source.open("wb") as stream:
         stream.truncate(1024 * 1024)
@@ -189,6 +203,8 @@ def validate_gnu_sparse_with_vort(cli: Path, tar_tool: str, temp: Path) -> int:
         )
         if output.read_bytes() != expected:
             raise AssertionError(f"Vort could not extract GNU sparse {version}")
+        for pattern in ("one", "micro"):
+            run(incremental_reader, str(archive_path), source.name, str(output), pattern)
         cases += 1
 
     oldgnu_archive = temp / "gnu-sparse-oldgnu.tar"
@@ -221,6 +237,14 @@ def validate_gnu_sparse_with_vort(cli: Path, tar_tool: str, temp: Path) -> int:
     )
     if oldgnu_output.read_bytes() != expected:
         raise AssertionError("Vort could not extract old GNU sparse archive")
+    for pattern in ("one", "micro"):
+        run(
+            incremental_reader,
+            str(oldgnu_archive),
+            source.name,
+            str(oldgnu_output),
+            pattern,
+        )
     cases += 1
 
     many_source = temp / "gnu-many-sparse.bin"
@@ -260,6 +284,14 @@ def validate_gnu_sparse_with_vort(cli: Path, tar_tool: str, temp: Path) -> int:
     )
     if many_output.read_bytes() != bytes(many_expected):
         raise AssertionError("Vort could not extract chained old GNU sparse headers")
+    for pattern in ("one", "micro"):
+        run(
+            incremental_reader,
+            str(many_archive),
+            many_source.name,
+            str(many_output),
+            pattern,
+        )
     cases += 1
     return cases
 
@@ -269,6 +301,7 @@ def main() -> None:
     parser.add_argument("--cli", required=True, type=Path)
     parser.add_argument("--writer", required=True, type=Path)
     parser.add_argument("--incremental-writer", required=True, type=Path)
+    parser.add_argument("--incremental-reader", required=True, type=Path)
     parser.add_argument("--lzip", type=Path)
     parser.add_argument("--lzf", type=Path)
     parser.add_argument("--lzop", type=Path)
@@ -293,14 +326,18 @@ def main() -> None:
 
     with tempfile.TemporaryDirectory(prefix="vort-tar-diff-") as temp_text:
         temp = Path(temp_text)
+        incremental_reader_cases = 0
         for format_name, format_id in (("pax", tarfile.PAX_FORMAT), ("gnu", tarfile.GNU_FORMAT)):
             raw, payloads = python_archive(format_id)
             path = temp / f"python-{format_name}.tar"
             path.write_bytes(raw)
-            validate_with_vort(args.cli, path, payloads)
+            incremental_reader_cases += validate_with_vort(
+                args.cli, path, payloads, args.incremental_reader
+            )
         gnu_sparse_reader_cases = validate_gnu_sparse_with_vort(
-            args.cli, tar_tool, temp
+            args.cli, args.incremental_reader, tar_tool, temp
         )
+        incremental_reader_cases += gnu_sparse_reader_cases
 
         first = temp / "vort-first.tar"
         second = temp / "vort-second.tar"
@@ -316,6 +353,24 @@ def main() -> None:
             raise AssertionError("incremental TAR output changed with scheduling")
         if incremental_one.read_bytes() != first.read_bytes():
             raise AssertionError("incremental TAR output differs from one-shot writer")
+        plain_expected = temp / "vort-plain-expected.bin"
+        plain_expected.write_bytes(b"Vort TAR payload\n")
+        sparse_expected = temp / "vort-sparse-expected.bin"
+        sparse_expected.write_bytes(sparse_payload())
+        for name, expected_path in (
+            ("plain.txt", plain_expected),
+            ("images/sparse.bin", sparse_expected),
+            ("images/sparse-oldgnu.bin", sparse_expected),
+        ):
+            for pattern in ("one", "micro"):
+                run(
+                    args.incremental_reader,
+                    str(first),
+                    name,
+                    str(expected_path),
+                    pattern,
+                )
+            incremental_reader_cases += 1
         with tarfile.open(first, mode="r:") as archive:
             names = archive.getnames()
             if len(names) != 7:
@@ -476,6 +531,7 @@ def main() -> None:
         f"tar_diff=ok raw_formats=2 compressions={len(compressions)} "
         f"brotli_directions=2 lzf_directions={2 if lzf_tool is not None else 0} "
         f"entries=7 gnu_sparse_reader_cases={gnu_sparse_reader_cases} "
+        f"incremental_reader_cases={incremental_reader_cases} "
         "sparse_writer_readers=4 incremental_writer_cases=7"
     )
 

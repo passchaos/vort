@@ -31,7 +31,7 @@ pub const Info = struct {
     data: []const u8,
 
     pub fn iterator(self: Info) Iterator {
-        return Iterator.init(self);
+        return Iterator.init(self.format, self.map, self.extent_count);
     }
 
     pub fn extractInto(self: Info, output: []u8) Error!usize {
@@ -49,37 +49,53 @@ pub const Info = struct {
     }
 };
 
+pub const Plan = struct {
+    format: Format,
+    logical_size: usize,
+    extent_count: usize,
+    map: []const u8,
+    physical_size: usize,
+
+    pub fn iterator(self: Plan) Iterator {
+        return Iterator.init(self.format, self.map, self.extent_count);
+    }
+};
+
 pub const Iterator = struct {
-    info: Info,
+    format: Format,
+    map: []const u8,
+    extent_count: usize,
     cursor: usize,
     remaining: usize,
     data_offset: usize = 0,
 
-    fn init(info: Info) Iterator {
+    fn init(format: Format, map: []const u8, extent_count: usize) Iterator {
         var cursor: usize = 0;
-        if (info.format == .pax_1_0) {
-            const count = parseDelimited(info.map, &cursor, '\n') catch unreachable;
-            std.debug.assert(count == info.extent_count);
+        if (format == .pax_1_0) {
+            const count = parseDelimited(map, &cursor, '\n') catch unreachable;
+            std.debug.assert(count == extent_count);
         }
         return .{
-            .info = info,
+            .format = format,
+            .map = map,
+            .extent_count = extent_count,
             .cursor = cursor,
-            .remaining = info.extent_count,
+            .remaining = extent_count,
         };
     }
 
     pub fn next(self: *Iterator) Error!?Extent {
         if (self.remaining == 0) return null;
-        if (self.info.format == .pax_0_0)
+        if (self.format == .pax_0_0)
             return @as(?Extent, try self.nextPax00());
-        if (self.info.format == .gnu_old)
+        if (self.format == .gnu_old)
             return @as(?Extent, try self.nextOldGnu());
-        const delimiter: u8 = if (self.info.format == .pax_1_0) '\n' else ',';
-        const offset = try parseDelimited(self.info.map, &self.cursor, delimiter);
-        const len = if (self.info.format == .pax_0_1 and self.remaining == 1)
-            try parseFinal(self.info.map, &self.cursor)
+        const delimiter: u8 = if (self.format == .pax_1_0) '\n' else ',';
+        const offset = try parseDelimited(self.map, &self.cursor, delimiter);
+        const len = if (self.format == .pax_0_1 and self.remaining == 1)
+            try parseFinal(self.map, &self.cursor)
         else
-            try parseDelimited(self.info.map, &self.cursor, delimiter);
+            try parseDelimited(self.map, &self.cursor, delimiter);
         const extent = Extent{
             .offset = offset,
             .len = len,
@@ -91,10 +107,10 @@ pub const Iterator = struct {
     }
 
     fn nextPax00(self: *Iterator) Error!Extent {
-        while (self.cursor < self.info.map.len) {
-            const offset_record = try nextPaxRecord(self.info.map, &self.cursor);
+        while (self.cursor < self.map.len) {
+            const offset_record = try nextPaxRecord(self.map, &self.cursor);
             if (!std.mem.eql(u8, offset_record.key, "GNU.sparse.offset")) continue;
-            const size_record = try nextPaxRecord(self.info.map, &self.cursor);
+            const size_record = try nextPaxRecord(self.map, &self.cursor);
             if (!std.mem.eql(u8, size_record.key, "GNU.sparse.numbytes"))
                 return error.InvalidTarHeader;
             const offset = std.fmt.parseInt(usize, offset_record.value, 10) catch
@@ -114,8 +130,8 @@ pub const Iterator = struct {
     }
 
     fn nextOldGnu(self: *Iterator) Error!Extent {
-        const index = self.info.extent_count - self.remaining;
-        const slot = try oldGnuSlot(self.info.map, index);
+        const index = self.extent_count - self.remaining;
+        const slot = try oldGnuSlot(self.map, index);
         const offset = try parseOldGnuNumber(slot[0..12]);
         const len = try parseOldGnuNumber(slot[12..24]);
         const extent = Extent{
@@ -136,6 +152,12 @@ pub fn parseOldGnu(
     logical_size: usize,
     data: []const u8,
 ) Error!Info {
+    const plan = try inspectOldGnu(map, logical_size);
+    return infoFromPlan(plan, data);
+}
+
+/// Validates an old-GNU sparse map without requiring its stored file data.
+pub fn inspectOldGnu(map: []const u8, logical_size: usize) Error!Plan {
     if (map.len < 126 or (map.len - 126) % block_size != 0)
         return error.InvalidTarHeader;
     const extension_count = (map.len - 126) / block_size;
@@ -165,15 +187,13 @@ pub fn parseOldGnu(
         _ = try parseOldGnuNumber(slot[12..24]);
         count = try checkedAdd(count, 1);
     }
-    const info = Info{
+    return validatePlan(.{
         .format = .gnu_old,
         .logical_size = logical_size,
         .extent_count = count,
         .map = map,
-        .data = data,
-    };
-    try validate(info);
-    return info;
+        .physical_size = 0,
+    });
 }
 
 pub fn parsePax00(
@@ -182,6 +202,16 @@ pub fn parsePax00(
     logical_size: usize,
     data: []const u8,
 ) Error!Info {
+    const plan = try inspectPax00(pax_payload, declared_count, logical_size);
+    return infoFromPlan(plan, data);
+}
+
+/// Validates a GNU PAX sparse 0.0 map without requiring its stored file data.
+pub fn inspectPax00(
+    pax_payload: []const u8,
+    declared_count: ?usize,
+    logical_size: usize,
+) Error!Plan {
     var cursor: usize = 0;
     var count: usize = 0;
     while (cursor < pax_payload.len) {
@@ -198,15 +228,13 @@ pub fn parsePax00(
     }
     if (declared_count) |expected|
         if (count != expected) return error.InvalidTarHeader;
-    const info = Info{
+    return validatePlan(.{
         .format = .pax_0_0,
         .logical_size = logical_size,
         .extent_count = count,
         .map = pax_payload,
-        .data = data,
-    };
-    try validate(info);
-    return info;
+        .physical_size = 0,
+    });
 }
 
 pub fn parsePax01(
@@ -215,6 +243,16 @@ pub fn parsePax01(
     logical_size: usize,
     data: []const u8,
 ) Error!Info {
+    const plan = try inspectPax01(map, declared_count, logical_size);
+    return infoFromPlan(plan, data);
+}
+
+/// Validates a GNU PAX sparse 0.1 map without requiring its stored file data.
+pub fn inspectPax01(
+    map: []const u8,
+    declared_count: ?usize,
+    logical_size: usize,
+) Error!Plan {
     if (map.len == 0) return error.InvalidTarHeader;
     var cursor: usize = 0;
     var count: usize = 0;
@@ -230,55 +268,79 @@ pub fn parsePax01(
     }
     if (declared_count) |expected|
         if (count != expected) return error.InvalidTarHeader;
-    const info = Info{
+    return validatePlan(.{
         .format = .pax_0_1,
         .logical_size = logical_size,
         .extent_count = count,
         .map = map,
-        .data = data,
-    };
-    try validate(info);
-    return info;
+        .physical_size = 0,
+    });
 }
 
 pub fn parsePax10(payload: []const u8, logical_size: usize) Error!Info {
-    var cursor: usize = 0;
-    const count = try parseDelimited(payload, &cursor, '\n');
-    for (0..count) |_| {
-        _ = try parseDelimited(payload, &cursor, '\n');
-        _ = try parseDelimited(payload, &cursor, '\n');
-    }
-    const map_end = cursor;
+    const map_end = try pax10MapLen(payload);
     const map_padded_len = try roundUpBlock(map_end);
     if (map_padded_len > payload.len) return error.InvalidTarHeader;
     for (payload[map_end..map_padded_len]) |byte|
         if (byte != 0) return error.InvalidTarHeader;
-    const info = Info{
+    const plan = try inspectPax10(payload[0..map_end], logical_size);
+    return infoFromPlan(plan, payload[map_padded_len..]);
+}
+
+/// Validates a complete GNU PAX sparse 1.0 textual map. `map` ends immediately
+/// after the final newline and does not include its zero block padding.
+pub fn inspectPax10(map: []const u8, logical_size: usize) Error!Plan {
+    const map_end = try pax10MapLen(map);
+    if (map_end != map.len) return error.InvalidTarHeader;
+    var cursor: usize = 0;
+    const count = try parseDelimited(map, &cursor, '\n');
+    return validatePlan(.{
         .format = .pax_1_0,
         .logical_size = logical_size,
         .extent_count = count,
-        .map = payload[0..map_end],
-        .data = payload[map_padded_len..],
-    };
-    try validate(info);
-    return info;
+        .map = map,
+        .physical_size = 0,
+    });
 }
 
-fn validate(info: Info) Error!void {
-    var iterator_value = info.iterator();
+fn infoFromPlan(plan: Plan, data: []const u8) Error!Info {
+    if (plan.physical_size != data.len) return error.InvalidTarHeader;
+    return .{
+        .format = plan.format,
+        .logical_size = plan.logical_size,
+        .extent_count = plan.extent_count,
+        .map = plan.map,
+        .data = data,
+    };
+}
+
+fn validatePlan(plan_arg: Plan) Error!Plan {
+    var plan = plan_arg;
+    var iterator_value = plan.iterator();
     var previous_end: usize = 0;
     var physical_size: usize = 0;
     var count: usize = 0;
     while (try iterator_value.next()) |extent| {
         const end = try checkedAdd(extent.offset, extent.len);
-        if (extent.offset < previous_end or end > info.logical_size)
+        if (extent.offset < previous_end or end > plan.logical_size)
             return error.InvalidTarHeader;
         previous_end = end;
         physical_size = try checkedAdd(physical_size, extent.len);
         count = try checkedAdd(count, 1);
     }
-    if (count != info.extent_count or physical_size != info.data.len)
-        return error.InvalidTarHeader;
+    if (count != plan.extent_count) return error.InvalidTarHeader;
+    plan.physical_size = physical_size;
+    return plan;
+}
+
+fn pax10MapLen(bytes: []const u8) Error!usize {
+    var cursor: usize = 0;
+    const count = try parseDelimited(bytes, &cursor, '\n');
+    for (0..count) |_| {
+        _ = try parseDelimited(bytes, &cursor, '\n');
+        _ = try parseDelimited(bytes, &cursor, '\n');
+    }
+    return cursor;
 }
 
 fn parseDelimited(bytes: []const u8, cursor: *usize, delimiter: u8) Error!usize {

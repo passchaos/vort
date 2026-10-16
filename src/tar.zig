@@ -1,6 +1,7 @@
 const archive = @import("tar/archive.zig");
 const compressed = @import("tar/compressed.zig");
 const writer = @import("tar/writer.zig");
+pub const incremental_reader = @import("tar/incremental_reader.zig");
 pub const incremental_writer = @import("tar/incremental_writer.zig");
 
 pub const Error = archive.Error || writer.Error || compressed.Error;
@@ -23,6 +24,12 @@ pub const SparseWriteFormat = writer.SparseWriteFormat;
 pub const SparseEncodeOptions = writer.SparseOptions;
 pub const encodeAlloc = writer.encodeAlloc;
 pub const encodeAppend = writer.encodeAppend;
+pub const IncrementalReader = incremental_reader.Reader;
+pub const IncrementalReaderOptions = incremental_reader.Options;
+pub const IncrementalReaderEntryInfo = incremental_reader.EntryInfo;
+pub const IncrementalReaderPhase = incremental_reader.Phase;
+pub const IncrementalReaderStepResult = incremental_reader.StepResult;
+pub const IncrementalReaderError = incremental_reader.Error;
 pub const IncrementalWriter = incremental_writer.Writer;
 pub const IncrementalWriterOptions = incremental_writer.Options;
 pub const IncrementalEntryOptions = incremental_writer.EntryOptions;
@@ -43,6 +50,7 @@ pub const decodeAutoAlloc = compressed.decodeAutoAlloc;
 test {
     _ = archive;
     _ = writer;
+    _ = incremental_reader;
     _ = incremental_writer;
     _ = compressed;
 }

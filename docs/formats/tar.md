@@ -1,6 +1,7 @@
 # TAR and compressed tarballs
 
-Vort provides an in-memory, library-first TAR reader and deterministic writer.
+Vort provides in-memory and bounded incremental library-first TAR readers plus
+deterministic one-shot and incremental writers.
 The reader validates every 512-byte header checksum and supports regular files,
 directories, symbolic links, hard links, USTAR prefixes, POSIX PAX `path`,
 `linkpath`, and `size` records, GNU long-name/long-link records, old GNU
@@ -117,6 +118,36 @@ deterministic PAX-1.0 and old-GNU writer output
 round trip through all twelve compressed-tar wrappers. Device/FIFO materialization is
 not implemented. Symbolic and hard links are exposed as metadata but are not
 followed or materialized by the in-memory extraction helpers.
+
+## Incremental reader
+
+`TarIncrementalReader` parses raw TAR under arbitrary input fragmentation and
+writes each member's logical bytes directly into caller output. An
+`.entry_header` result makes `currentEntry()` available before member output;
+`.entry_done` marks the end of that member. Ordinary payload bytes are copied
+directly from caller input. Sparse extents are copied directly while holes are
+zero-filled into caller output, so even a multi-gigabyte logical sparse member
+does not require a member-sized allocation.
+
+PAX headers, GNU long-name/long-link records, PAX 1.0 textual maps and old-GNU
+sparse extension blocks are the only buffered wire data. Options independently
+bound a control record, retained metadata, logical member size, total logical
+output, sparse extent count, entry count and total archive input. PAX sparse
+0.0/0.1/1.0 and old-GNU maps share the same validated plan and direct-output
+data plane. Reader-owned names remain valid until the call that reports the
+matching `.entry_done`.
+
+Call `finish()` when the underlying input reaches EOF. It accepts a clean entry
+boundary or one zero end block for compatibility, while rejecting partial
+headers, control records, maps, members and padding as `TruncatedFrame`. The
+standard two-zero-block terminator returns `.done` directly; `input_read`
+identifies its exact prefix if an outer container supplied trailing bytes.
+
+Tiny-buffer tests exercise every supported sparse dialect, PAX metadata,
+directories and links with one-byte input/output, plus explicit limit,
+malformed-padding, poisoned-state and exhaustive allocation-failure paths. The
+GNU/Python differential rebuilds 14 external/Vort entries under both one-byte
+and micro schedules (`incremental_reader_cases=14`).
 
 ## Incremental writer
 

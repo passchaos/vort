@@ -20669,3 +20669,17 @@ reuse, so production keeps the simpler independently owned plans.
   logical/extent/control/archive limits, nonzero holes, poisoning and allocation
   failure have focused coverage. Shared `tar/wire.zig` now owns USTAR headers,
   PAX records, sparse normalization and both sparse prefix serializers.
+
+- Added `TarIncrementalReader`, a bounded caller-output raw-TAR reader for
+  regular files, directories, links, USTAR/PAX/GNU long metadata, GNU PAX
+  sparse 0.0/0.1/1.0 and old-GNU sparse extension chains. Control records and
+  maps alone are retained under explicit limits; ordinary and physical sparse
+  bytes flow directly from caller input to caller output while logical holes
+  are emitted as zeroes. A shared payload-independent sparse plan keeps
+  one-shot and incremental count/order/overlap/bounds/physical-size validation
+  identical. Entry/control/metadata/logical/total-output/extent/archive limits,
+  exact progress, EOF truncation, poisoning, nonzero PAX-1.0 map padding and
+  exhaustive allocation failures have focused coverage. One-byte and micro
+  schedules rebuild Python PAX/GNU archives, GNU tar sparse 0.0/0.1/1.0,
+  single/chained old-GNU fixtures and Vort output byte-exactly
+  (`incremental_reader_cases=14`).
