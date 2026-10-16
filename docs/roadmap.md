@@ -20716,3 +20716,16 @@ reuse, so production keeps the simpler independently owned plans.
   differential cases and the Vort TAR direction bring the required TAR count
   to 20 (`incremental_compressed_reader_cases=20`). All twelve current tarball
   wrappers now have explicit bounded incremental reader types.
+
+- Added `TarIncrementalAutoReader` on top of those explicit readers. A fixed
+  512-byte prefix validates raw TAR before interpreting magic-looking filename
+  bytes, identifies every signed wrapper, applies structural TAR-size checks to
+  LZMA-Alone and uses configurable Brotli/reject/raw handling for the no-magic
+  remainder. Shared LZ4/Zstandard skippable frames are discarded incrementally
+  before probing the following data frame. Active reader allocation is
+  transactional after an OOM-discovered partial-union bug was fixed. Tests
+  cover all formats, legacy LZ4, empty/raw magic-prefix TAR, skippable payloads,
+  fallback and input/frame limits, truncation and exhaustive allocation
+  failure. The GNU/Python/system TAR differential adds 24 auto-detected archive
+  cases under one-byte and micro schedules
+  (`incremental_auto_reader_cases=24`).

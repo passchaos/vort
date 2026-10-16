@@ -303,6 +303,7 @@ def main() -> None:
     parser.add_argument("--incremental-writer", required=True, type=Path)
     parser.add_argument("--incremental-reader", required=True, type=Path)
     parser.add_argument("--incremental-compressed-reader", required=True, type=Path)
+    parser.add_argument("--incremental-auto-reader", required=True, type=Path)
     parser.add_argument("--lzip", type=Path)
     parser.add_argument("--lzf", type=Path)
     parser.add_argument("--lzop", type=Path)
@@ -328,6 +329,7 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="vort-tar-diff-") as temp_text:
         temp = Path(temp_text)
         incremental_reader_cases = 0
+        incremental_auto_reader_cases = 0
         for format_name, format_id in (("pax", tarfile.PAX_FORMAT), ("gnu", tarfile.GNU_FORMAT)):
             raw, payloads = python_archive(format_id)
             path = temp / f"python-{format_name}.tar"
@@ -335,6 +337,19 @@ def main() -> None:
             incremental_reader_cases += validate_with_vort(
                 args.cli, path, payloads, args.incremental_reader
             )
+            name, payload = next(iter(payloads.items()))
+            expected_path = temp / f"python-{format_name}-auto-expected.bin"
+            expected_path.write_bytes(payload)
+            for pattern in ("one", "micro"):
+                run(
+                    args.incremental_auto_reader,
+                    str(path),
+                    name,
+                    str(expected_path),
+                    "raw_tar",
+                    pattern,
+                )
+            incremental_auto_reader_cases += 1
         gnu_sparse_reader_cases = validate_gnu_sparse_with_vort(
             args.cli, args.incremental_reader, tar_tool, temp
         )
@@ -421,6 +436,21 @@ def main() -> None:
             "zstd",
             "lzop",
         }
+        auto_formats = {
+            "none": "raw_tar",
+            "gzip": "gzip",
+            "bzip2": "bzip2",
+            "brotli": "brotli",
+            "compress-z": "compress_z",
+            "lzma": "lzma",
+            "xz": "xz",
+            "lz4": "lz4",
+            "lzip": "lzip",
+            "lzf": "lzf",
+            "zstd": "zstandard",
+            "lzop": "lzop",
+            "lz4-legacy": "lz4_legacy",
+        }
         incremental_compressed_reader_cases = 0
         for compression in compressions:
             archive_path = temp / f"vort.tar.{compression}"
@@ -440,6 +470,16 @@ def main() -> None:
                         pattern,
                     )
                 incremental_compressed_reader_cases += 1
+            for pattern in ("one", "micro"):
+                run(
+                    args.incremental_auto_reader,
+                    str(archive_path),
+                    "payload.bin",
+                    str(source),
+                    auto_formats[compression],
+                    pattern,
+                )
+            incremental_auto_reader_cases += 1
 
             if compression == "brotli":
                 raw = brotli_decompress(archive_path.read_bytes(), 16 * 1024 * 1024)
@@ -532,6 +572,16 @@ def main() -> None:
                 pattern,
             )
         incremental_compressed_reader_cases += 1
+        for pattern in ("one", "micro"):
+            run(
+                args.incremental_auto_reader,
+                str(legacy_lz4_archive),
+                "plain.txt",
+                str(plain_expected),
+                "lz4_legacy",
+                pattern,
+            )
+        incremental_auto_reader_cases += 1
 
         python_tar, payloads = python_archive(tarfile.PAX_FORMAT)
         compressed_inputs = {
@@ -579,6 +629,19 @@ def main() -> None:
             path = temp / f"python.tar.{compression}"
             path.write_bytes(data)
             validate_with_vort(args.cli, path, payloads)
+            name, payload = next(iter(payloads.items()))
+            expected_path = temp / f"python-{compression}-auto-expected.bin"
+            expected_path.write_bytes(payload)
+            for pattern in ("one", "micro"):
+                run(
+                    args.incremental_auto_reader,
+                    str(path),
+                    name,
+                    str(expected_path),
+                    auto_formats[compression],
+                    pattern,
+                )
+            incremental_auto_reader_cases += 1
             if compression in streaming_compressions or compression == "lz4-legacy":
                 name, payload = next(iter(payloads.items()))
                 expected_path = temp / f"python-{compression}-incremental-expected.bin"
@@ -600,6 +663,7 @@ def main() -> None:
         f"entries=7 gnu_sparse_reader_cases={gnu_sparse_reader_cases} "
         f"incremental_reader_cases={incremental_reader_cases} "
         f"incremental_compressed_reader_cases={incremental_compressed_reader_cases} "
+        f"incremental_auto_reader_cases={incremental_auto_reader_cases} "
         "sparse_writer_readers=4 incremental_writer_cases=7"
     )
 

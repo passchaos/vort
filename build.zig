@@ -1876,6 +1876,15 @@ pub fn build(b: *std.Build) void {
             .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
         }),
     });
+    const tar_incremental_auto_reader_probe_exe = b.addExecutable(.{
+        .name = "vort-tar-incremental-auto-reader-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/tar/incremental_auto_reader_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
     const tar_diff = b.addSystemCommand(&.{ "python3", "tools/tar/diff.py", "--cli" });
     tar_diff.addArtifactArg(cli_exe);
     tar_diff.addArg("--writer");
@@ -1886,6 +1895,8 @@ pub fn build(b: *std.Build) void {
     tar_diff.addArtifactArg(tar_incremental_reader_probe_exe);
     tar_diff.addArg("--incremental-compressed-reader");
     tar_diff.addArtifactArg(tar_incremental_compressed_reader_probe_exe);
+    tar_diff.addArg("--incremental-auto-reader");
+    tar_diff.addArtifactArg(tar_incremental_auto_reader_probe_exe);
     if (b.args) |args| tar_diff.addArgs(args);
     const tar_diff_step = b.step("run-tar-diff", "Validate TAR and common compressed tarballs against Python tarfile, Brotli, lzma, and optional LZF");
     tar_diff_step.dependOn(&tar_diff.step);
@@ -5542,6 +5553,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zip_incremental_writer_probe_exe.step);
     check_step.dependOn(&tar_incremental_reader_probe_exe.step);
     check_step.dependOn(&tar_incremental_compressed_reader_probe_exe.step);
+    check_step.dependOn(&tar_incremental_auto_reader_probe_exe.step);
     check_step.dependOn(&lzip_incremental_probe_exe.step);
     check_step.dependOn(&compress_z_incremental_probe_exe.step);
     check_step.dependOn(&br_rle_probe_exe.step);

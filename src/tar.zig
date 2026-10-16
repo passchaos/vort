@@ -2,6 +2,7 @@ const archive = @import("tar/archive.zig");
 const compressed = @import("tar/compressed.zig");
 const writer = @import("tar/writer.zig");
 pub const incremental_compressed_reader = @import("tar/incremental_compressed_reader.zig");
+pub const incremental_auto_reader = @import("tar/incremental_auto_reader.zig");
 pub const incremental_reader = @import("tar/incremental_reader.zig");
 pub const incremental_writer = @import("tar/incremental_writer.zig");
 
@@ -32,6 +33,11 @@ pub const IncrementalReaderPhase = incremental_reader.Phase;
 pub const IncrementalReaderStepResult = incremental_reader.StepResult;
 pub const IncrementalReaderError = incremental_reader.Error;
 pub const IncrementalCompressedReader = incremental_compressed_reader.Reader;
+pub const IncrementalAutoReader = incremental_auto_reader.Reader;
+pub const IncrementalAutoReaderOptions = incremental_auto_reader.Options;
+pub const IncrementalAutoReaderFormat = incremental_auto_reader.Format;
+pub const IncrementalAutoReaderPhase = incremental_auto_reader.Phase;
+pub const IncrementalAutoReaderError = incremental_auto_reader.Error;
 pub const GzipIncrementalReader = incremental_compressed_reader.GzipReader;
 pub const Bzip2IncrementalReader = incremental_compressed_reader.Bzip2Reader;
 pub const BrotliIncrementalReader = incremental_compressed_reader.BrotliReader;
@@ -65,6 +71,7 @@ test {
     _ = archive;
     _ = writer;
     _ = incremental_compressed_reader;
+    _ = incremental_auto_reader;
     _ = incremental_reader;
     _ = incremental_writer;
     _ = compressed;

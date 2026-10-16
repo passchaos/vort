@@ -181,8 +181,24 @@ failures have focused coverage.
 
 The twelve-format tarball matrix therefore has no remaining whole-TAR buffering
 gap when callers select the corresponding explicit incremental reader type.
-Automatic compression detection remains a separate one-shot convenience API;
-streaming callers select a type after their own prefix probe.
+
+`TarIncrementalAutoReader` adds bounded automatic dispatch. It retains at most
+one 512-byte prefix, gives a checksum-valid raw TAR header priority over magic-
+looking filename bytes, identifies every wrapper with an unambiguous signature,
+and applies the same structural TAR-size restriction used by one-shot detection
+to LZMA-Alone. Brotli has no magic and is the configurable ambiguous fallback;
+callers may instead select `reject` or `raw_tar`. Empty input resolves to an
+empty raw TAR. The shared LZ4/Zstandard skippable magic is handled by streaming
+over each payload and probing the next frame, so metadata size does not expand
+the retained prefix. The active concrete reader is allocator-owned and is only
+installed after fully successful initialization.
+
+The auto reader exposes the same entry events and exact progress contract plus
+the detected `TarIncrementalAutoReaderFormat`. External differential coverage
+currently exercises 24 raw/Vort/Python/system archives under both one-byte and
+micro schedules (`incremental_auto_reader_cases=24`). Explicit reader types
+remain useful when a surrounding protocol already declares the compression or
+when an application wants to avoid the 512-byte detection delay.
 
 ## Incremental writer
 
