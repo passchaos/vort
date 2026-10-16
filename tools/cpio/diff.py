@@ -202,6 +202,7 @@ def main() -> None:
     parser.add_argument("--cli", required=True, type=Path)
     parser.add_argument("--writer", type=Path)
     parser.add_argument("--incremental-reader", type=Path)
+    parser.add_argument("--incremental-sequence-reader", type=Path)
     parser.add_argument("--incremental-compressed-reader", type=Path)
     parser.add_argument("--incremental-auto-reader", type=Path)
     parser.add_argument("--incremental-compressed-writer", type=Path)
@@ -236,6 +237,8 @@ def main() -> None:
     wrapper_cases = 0
     incremental_writer_cases = 0
     incremental_reader_cases = 0
+    incremental_sequence_reader_cases = 0
+    incremental_sequence_reader_external = 0
     incremental_compressed_reader_cases = 0
     incremental_compressed_reader_external = 0
     incremental_auto_reader_cases = 0
@@ -294,6 +297,25 @@ def main() -> None:
                 ) != payload:
                     raise AssertionError(f"GNU cpio extraction mismatch for Vort {format_name}")
                 writer_external += 1
+
+        if args.incremental_sequence_reader is not None:
+            sequence_path = temp / "vort-concatenated.cpio"
+            sequence_data = bytearray(b"\0" * 3)
+            for index, format_name in enumerate(formats):
+                sequence_data.extend((temp / f"vort-{format_name}-first.cpio").read_bytes())
+                sequence_data.extend(b"\0" * (index % 3))
+            sequence_data.extend(b"\0" * 7)
+            sequence_path.write_bytes(sequence_data)
+            for pattern in ("one", "micro"):
+                run(
+                    args.incremental_sequence_reader,
+                    str(sequence_path),
+                    "payload.bin",
+                    str(source),
+                    str(len(formats)),
+                    pattern,
+                )
+            incremental_sequence_reader_cases += 1
 
         for compression in compressions:
             archive = temp / f"wrapper-{compression}.cpio"
@@ -622,6 +644,25 @@ def main() -> None:
                         incremental_reader_cases += 1
                 reference_writer += 1
 
+            if args.incremental_sequence_reader is not None:
+                sequence_path = temp / "gnu-concatenated.cpio"
+                sequence_data = bytearray(b"\0" * 5)
+                for index, format_name in enumerate(reference_formats):
+                    sequence_data.extend((temp / f"reference-{format_name}.cpio").read_bytes())
+                    sequence_data.extend(b"\0" * (index + 1))
+                sequence_path.write_bytes(sequence_data)
+                for pattern in ("one", "micro"):
+                    run(
+                        args.incremental_sequence_reader,
+                        str(sequence_path),
+                        "payload.bin",
+                        str(reference / "payload.bin"),
+                        str(len(reference_formats)),
+                        pattern,
+                    )
+                incremental_sequence_reader_cases += 1
+                incremental_sequence_reader_external += 1
+
         crc_archive = temp / "vort-crc-first.cpio"
         corrupt = bytearray(crc_archive.read_bytes())
         payload_offset = corrupt.find(payload)
@@ -659,6 +700,8 @@ def main() -> None:
         f"reference_writer={reference_writer} wrapper_cases={wrapper_cases} "
         f"incremental_writer_cases={incremental_writer_cases} "
         f"incremental_reader_cases={incremental_reader_cases} "
+        f"incremental_sequence_reader_cases={incremental_sequence_reader_cases} "
+        f"incremental_sequence_reader_external={incremental_sequence_reader_external} "
         f"incremental_compressed_reader_cases={incremental_compressed_reader_cases} "
         f"incremental_compressed_reader_external={incremental_compressed_reader_external} "
         f"incremental_auto_reader_cases={incremental_auto_reader_cases} "

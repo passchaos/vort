@@ -20856,3 +20856,20 @@ reuse, so production keeps the simpler independently owned plans.
   scope now has explicit and automatic bounded input plus bounded output for
   every supported wrapper; concatenated CPIO archives and extended legacy
   header dialects remain future compatibility work.
+
+- Added bounded concatenated raw CPIO support as the first initramfs sequence
+  layer. The raw reader's default-off `stop_after_trailer` mode returns `.done`
+  at the exact validated trailer boundary and leaves record padding or the
+  following archive unconsumed. Compressed composition also understands this
+  mode and validates the rest of the decoded outer stream as zero padding.
+  `CpioIncrementalSequenceReader` skips bounded leading/inter-member/trailing
+  zeros, permits every adjacent archive to select a different one of the five
+  raw header families, emits `archive_done`, and exposes index, global offset,
+  wire size, format, entry count and output size per boundary. Archive count,
+  padding, aggregate input/output and per-archive limits are independent.
+  One-byte and micro schedules cover all five formats in one sequence plus an
+  empty padded sequence, limits, truncation, corrupt next magic and exhaustive
+  OOM. The required differential concatenates five Vort archives and four GNU
+  cpio archives (`incremental_sequence_reader_cases=2`,
+  `incremental_sequence_reader_external=1`). Mixed raw/compressed member
+  dispatch remains the next initramfs layer rather than being implied here.

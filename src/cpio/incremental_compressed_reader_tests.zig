@@ -341,3 +341,34 @@ test "compressed CPIO incremental reader propagates zero-output backpressure" {
         break;
     }
 }
+
+test "compressed CPIO incremental reader validates decoded padding after trailer stop" {
+    const allocator = std.testing.allocator;
+    const entries = [_]writer.EncodeEntry{.{ .name = "payload", .data = "abc" }};
+    const raw = try writer.encodeAlloc(allocator, &entries, .{});
+    defer allocator.free(raw);
+    const encoded = try deflate.encodeGzipBestAlloc(
+        allocator,
+        raw,
+        deflate.optionsForLevel(.default),
+    );
+    defer allocator.free(encoded);
+    var reader = try compressed_reader.GzipReader.initWithOptions(allocator, .{
+        .decoded_bridge_size = 7,
+        .cpio = .{ .stop_after_trailer = true },
+    });
+    defer reader.deinit();
+    var output: [8]u8 = undefined;
+    var input_offset: usize = 0;
+    var finish_sent = false;
+    while (true) {
+        const stepped = try reader.step(encoded[input_offset..], &output);
+        input_offset += stepped.input_read;
+        if (stepped.status == .done) break;
+        if (!finish_sent and input_offset == encoded.len) {
+            try reader.finish();
+            finish_sent = true;
+        }
+    }
+    try std.testing.expect(reader.snapshot().cpio_done);
+}

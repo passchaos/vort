@@ -151,6 +151,35 @@ test "CPIO incremental reader applies caller-output backpressure" {
     try std.testing.expectEqualSlices(u8, "backpressure", output[0..data.output_written]);
 }
 
+test "CPIO incremental reader can stop at trailer and preserve suffix" {
+    const allocator = std.testing.allocator;
+    const entries = [_]writer.EncodeEntry{.{ .name = "payload", .data = "abc" }};
+    const encoded = try writer.encodeAlloc(allocator, &entries, .{});
+    defer allocator.free(encoded);
+    const parsed = try archive.parse(encoded);
+    const suffix = "NEXT-ARCHIVE";
+    const joined = try allocator.alloc(u8, encoded.len + suffix.len);
+    defer allocator.free(joined);
+    @memcpy(joined[0..encoded.len], encoded);
+    @memcpy(joined[encoded.len..], suffix);
+
+    var reader = reader_mod.Reader.initWithOptions(
+        allocator,
+        .{ .stop_after_trailer = true },
+    );
+    defer reader.deinit();
+    var output: [64]u8 = undefined;
+    var input_offset: usize = 0;
+    while (true) {
+        const stepped = try reader.step(joined[input_offset..], &output);
+        input_offset += stepped.input_read;
+        if (stepped.status == .done) break;
+    }
+    try std.testing.expectEqual(parsed.archive_end, input_offset);
+    try std.testing.expectEqualSlices(u8, encoded[parsed.archive_end..], joined[input_offset..encoded.len]);
+    try std.testing.expectEqualSlices(u8, suffix, joined[encoded.len..]);
+}
+
 test "CPIO incremental reader validates CRC and GNU zero-checksum symlinks" {
     const allocator = std.testing.allocator;
     const entries = [_]writer.EncodeEntry{

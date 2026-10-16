@@ -422,7 +422,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   Brotli/compress/LZMA/XZ/modern+legacy-LZ4/lzip/LZF/Zstd/LZOP wrappers,
   14-byte bounded incremental auto-dispatch with structural LZMA probing,
   Brotli fallback and streamed LZ4/Zstd skippable-frame handling, and
-  automatic one-shot composition with the corresponding raw/wrapped modes;
+  bounded concatenated raw-CPIO sequences with explicit archive boundaries,
+  mixed header families and initramfs zero padding, plus automatic one-shot
+  composition with the corresponding raw/wrapped modes;
 - dependency-free RAR4/RAR5 container parsing plus deterministic stored-file
   and directory writing, non-solid RAR15 and RAR20/26 decompression including
   adaptive/ST-mode, dynamic Huffman, multiblock, table reuse, long-history and

@@ -12,6 +12,9 @@ pub const Options = struct {
     max_entry_size: usize = std.math.maxInt(usize),
     max_total_output_size: usize = std.math.maxInt(usize),
     max_archive_size: u64 = std.math.maxInt(u64),
+    /// Return `.done` immediately after the validated trailer record, leaving
+    /// post-trailer padding or a following archive unconsumed.
+    stop_after_trailer: bool = false,
 };
 
 pub const Phase = enum {
@@ -341,7 +344,8 @@ pub const Reader = struct {
                 input_read += take;
                 return result(input_read, output_written, .need_input);
             },
-            .done, .poisoned => unreachable,
+            .done => return result(input_read, output_written, .done),
+            .poisoned => unreachable,
         };
     }
 
@@ -353,7 +357,12 @@ pub const Reader = struct {
             self.header_expected = 0;
             self.fixed = null;
             self.name.clearRetainingCapacity();
-            self.phase = .archive_padding;
+            if (self.options.stop_after_trailer) {
+                self.input_finished = true;
+                self.phase = .done;
+            } else {
+                self.phase = .archive_padding;
+            }
             return;
         }
         if (self.entry_count == self.options.max_entries or

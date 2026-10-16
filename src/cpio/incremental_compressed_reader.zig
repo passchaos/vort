@@ -122,7 +122,12 @@ pub fn Reader(comptime Codec: type) type {
             var output_written: usize = 0;
             while (true) {
                 if (self.bridge_start != self.bridge_len) {
-                    if (self.cpio_done) return error.InvalidCompressedCpioReaderState;
+                    if (self.cpio_done) {
+                        for (self.bridge[self.bridge_start..self.bridge_len]) |byte|
+                            if (byte != 0) return error.InvalidCpioArchive;
+                        self.clearBridge();
+                        continue;
+                    }
                     const raw = try self.cpio.step(
                         self.bridge[self.bridge_start..self.bridge_len],
                         output[output_written..],
@@ -138,7 +143,10 @@ pub fn Reader(comptime Codec: type) type {
                     switch (raw.status) {
                         .entry_header => return result(input_read, output_written, .entry_header),
                         .entry_done => return result(input_read, output_written, .entry_done),
-                        .done => return error.InvalidCompressedCpioReaderState,
+                        .done => {
+                            self.cpio_done = true;
+                            continue;
+                        },
                         .need_output => return result(input_read, output_written, .need_output),
                         .need_input => {
                             if (self.bridge_start != self.bridge_len)

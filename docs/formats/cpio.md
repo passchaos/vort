@@ -39,6 +39,15 @@ one-shot facade, it does not look ahead to replay a later hard-link payload for
 an earlier zero-sized member. Inode, device and link-count metadata are exposed
 so callers can reconstruct such groups without hidden buffering.
 
+For concatenated raw CPIO and initramfs-style layouts,
+`CpioIncrementalSequenceReader` enables the raw reader's default-off
+`stop_after_trailer` mode and returns an `archive_done` event without consuming
+the following bytes. It accepts leading, inter-archive, and trailing zero
+padding; each completed archive reports its index, format, global byte offset,
+wire size, entry count, and output size. Archive count, aggregate padding,
+total input, total output, and each underlying archive remain independently
+bounded. Adjacent archives may use different newc/CRC/ODC/binary formats.
+
 `encodeCpioAlloc`, `encodeCpioAppend`, and `encodeCpioInto` write any of the
 five exposed variants (`newc`, `crc`, `odc`, `binary_little`, or
 `binary_big`). Writers support regular files, directories, symbolic links,
@@ -164,11 +173,17 @@ one-shot raw/wrapper choices plus legacy LZ4, and the same eight independently
 encoded wrapper directions (`incremental_auto_reader_cases=18`,
 `incremental_auto_reader_external=8`).
 
+The sequence differential concatenates all five Vort formats and all four
+GNU-produced formats with varying zero padding under one-byte and micro
+schedules (`incremental_sequence_reader_cases=2`,
+`incremental_sequence_reader_external=1`).
+
 ```sh
 python3 tools/cpio/diff.py --cli path/to/vort --cpio /usr/bin/cpio
 zig build run-cpio-diff -- --cpio /usr/bin/cpio
 ```
 
-Future functionality can add one-shot hard-link writer controls, concatenated
-CPIO members, HP-UX device-number variants, and afio's extended ODC header
-without changing the current entry or compression APIs.
+Future functionality can extend sequence dispatch across mixed raw/compressed
+initramfs members, and add one-shot hard-link writer controls, HP-UX
+device-number variants, and afio's extended ODC header without changing the
+current entry or compression APIs.
