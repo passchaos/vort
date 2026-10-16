@@ -20729,3 +20729,18 @@ reuse, so production keeps the simpler independently owned plans.
   failure. The GNU/Python/system TAR differential adds 24 auto-detected archive
   cases under one-byte and micro schedules
   (`incremental_auto_reader_cases=24`).
+
+- Added bounded compressed TAR writing for every outer format that already has
+  a mature incremental encoder: gzip, Bzip2, Brotli, LZMA-Alone, XZ, modern
+  LZ4, Zstandard and LZOP. `TarIncrementalCompressedWriter(Codec)` connects the
+  raw TAR state machine through one caller-sized bridge, delays `entry_done`
+  until the encoder has consumed the complete TAR entry, and drains the outer
+  footer/checksum/index before archive completion. The named public types retain
+  each encoder's block/history limits and add an explicit compressed-output
+  limit. One-byte and micro schedules with 1/31-byte bridges are byte-identical
+  across regular/PAX/directory/sparse archives; state, nonzero holes, limit and
+  exhaustive OOM tests pass. The required differential generates eight formats,
+  Vort extracts all eight, and Python/system tools independently validate seven
+  on the current host (`incremental_compressed_writer_cases=8`,
+  `incremental_compressed_writer_external=7`). LZF, lzip, Unix compress and
+  legacy LZ4 incremental encoders remain the next writer-side gaps.

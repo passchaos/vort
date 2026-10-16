@@ -147,6 +147,53 @@ def sparse_payload() -> bytes:
     return bytes(payload)
 
 
+def decode_streaming_tarball(
+    compression: str,
+    archive_path: Path,
+    zstd_tool: str | None,
+    lz4_tool: str | None,
+    lzop_tool: str | None,
+) -> bytes | None:
+    encoded = archive_path.read_bytes()
+    if compression == "gzip":
+        return __import__("gzip").decompress(encoded)
+    if compression == "bzip2":
+        return __import__("bz2").decompress(encoded)
+    if compression == "brotli":
+        return brotli_decompress(encoded, 512 * 1024 * 1024)
+    if compression == "lzma":
+        return __import__("lzma").decompress(
+            encoded, format=__import__("lzma").FORMAT_ALONE
+        )
+    if compression == "xz":
+        return __import__("lzma").decompress(encoded)
+    if compression == "lz4":
+        if lz4_tool is None:
+            raise AssertionError("lz4 CLI is required for incremental tar.lz4 writer")
+        return subprocess.run(
+            [lz4_tool, "-q", "-d", "-c", str(archive_path)],
+            check=True,
+            stdout=subprocess.PIPE,
+        ).stdout
+    if compression == "zstd":
+        if zstd_tool is None:
+            raise AssertionError("zstd CLI is required for incremental tar.zst writer")
+        return subprocess.run(
+            [zstd_tool, "-q", "-d", "-c", str(archive_path)],
+            check=True,
+            stdout=subprocess.PIPE,
+        ).stdout
+    if compression == "lzop":
+        if lzop_tool is None:
+            return None
+        return subprocess.run(
+            [lzop_tool, "-dc", str(archive_path)],
+            check=True,
+            stdout=subprocess.PIPE,
+        ).stdout
+    raise AssertionError(f"unsupported streaming tarball compression: {compression}")
+
+
 def validate_gnu_sparse_with_vort(
     cli: Path,
     incremental_reader: Path,
@@ -304,6 +351,7 @@ def main() -> None:
     parser.add_argument("--incremental-reader", required=True, type=Path)
     parser.add_argument("--incremental-compressed-reader", required=True, type=Path)
     parser.add_argument("--incremental-auto-reader", required=True, type=Path)
+    parser.add_argument("--incremental-compressed-writer", required=True, type=Path)
     parser.add_argument("--lzip", type=Path)
     parser.add_argument("--lzf", type=Path)
     parser.add_argument("--lzop", type=Path)
@@ -436,6 +484,16 @@ def main() -> None:
             "zstd",
             "lzop",
         }
+        streaming_writer_compressions = {
+            "gzip",
+            "bzip2",
+            "brotli",
+            "lzma",
+            "xz",
+            "lz4",
+            "zstd",
+            "lzop",
+        }
         auto_formats = {
             "none": "raw_tar",
             "gzip": "gzip",
@@ -452,6 +510,8 @@ def main() -> None:
             "lz4-legacy": "lz4_legacy",
         }
         incremental_compressed_reader_cases = 0
+        incremental_compressed_writer_cases = 0
+        incremental_compressed_writer_external = 0
         for compression in compressions:
             archive_path = temp / f"vort.tar.{compression}"
             output = temp / f"vort-{compression}.out"
@@ -553,6 +613,56 @@ def main() -> None:
                 with tarfile.open(archive_path, mode=mode) as archive:
                     if archive.extractfile("payload.bin").read() != payload:
                         raise AssertionError(f"Python could not read Vort tarball {compression}")
+
+        for compression in sorted(streaming_writer_compressions):
+            first_stream = temp / f"vort-incremental-{compression}-one.tarball"
+            micro_stream = temp / f"vort-incremental-{compression}-micro.tarball"
+            run(
+                args.incremental_compressed_writer,
+                str(first_stream),
+                compression,
+                str(source),
+                "one",
+            )
+            run(
+                args.incremental_compressed_writer,
+                str(micro_stream),
+                compression,
+                str(source),
+                "micro",
+            )
+            if first_stream.read_bytes() != micro_stream.read_bytes():
+                raise AssertionError(
+                    f"incremental compressed TAR wire changed with scheduling: {compression}"
+                )
+            decoded_output = temp / f"vort-incremental-{compression}.out"
+            run(
+                args.cli,
+                "extract-tar-file",
+                str(first_stream),
+                "payload.bin",
+                str(decoded_output),
+                "1048576",
+            )
+            if decoded_output.read_bytes() != payload:
+                raise AssertionError(
+                    f"Vort could not extract incremental tarball: {compression}"
+                )
+            raw_stream = decode_streaming_tarball(
+                compression,
+                first_stream,
+                zstd_tool,
+                lz4_tool,
+                lzop_tool,
+            )
+            if raw_stream is not None:
+                with tarfile.open(fileobj=io.BytesIO(raw_stream), mode="r:") as archive:
+                    if archive.extractfile("payload.bin").read() != payload:
+                        raise AssertionError(
+                            f"external reader could not extract incremental tarball: {compression}"
+                        )
+                incremental_compressed_writer_external += 1
+            incremental_compressed_writer_cases += 1
 
         legacy_lz4_archive = temp / "vort.tar.lz4-legacy"
         run(
@@ -664,6 +774,8 @@ def main() -> None:
         f"incremental_reader_cases={incremental_reader_cases} "
         f"incremental_compressed_reader_cases={incremental_compressed_reader_cases} "
         f"incremental_auto_reader_cases={incremental_auto_reader_cases} "
+        f"incremental_compressed_writer_cases={incremental_compressed_writer_cases} "
+        f"incremental_compressed_writer_external={incremental_compressed_writer_external} "
         "sparse_writer_readers=4 incremental_writer_cases=7"
     )
 

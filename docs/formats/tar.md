@@ -221,3 +221,40 @@ PAX sparse and old-GNU sparse.
 The external differential requires seven schedule-independent incremental
 writer entries (`incremental_writer_cases=7`) and exact byte equality with the
 one-shot writer before Python and GNU tar interoperability checks run.
+
+### Compressed incremental writers
+
+Eight mature streaming encoders compose directly after the raw writer:
+`TarGzipIncrementalWriter`, `TarBzip2IncrementalWriter`,
+`TarBrotliIncrementalWriter`, `TarLzmaIncrementalWriter`,
+`TarXzIncrementalWriter`, `TarLz4IncrementalWriter`,
+`TarZstandardIncrementalWriter`, and `TarLzopIncrementalWriter`.
+`TarIncrementalCompressedWriter(Codec)` is the generic composition surface.
+
+The state retains one caller-sized raw-TAR bridge in addition to the selected
+encoder's documented block/history/pending storage. Entry source bytes flow
+through the established raw writer, including PAX and sparse handling, and the
+outer writer reports `.entry_done` only after the compressor has consumed that
+entry's complete TAR header, stored data and padding and is ready for more
+input. After the raw two-block terminator is consumed, the compressor is
+finished and its footer/checksum/index drains before `.done`.
+
+`Options.tar` and `Options.encoder` preserve the inner safety limits;
+`raw_bridge_size` bounds the composition buffer and `max_compressed_size`
+bounds returned wire bytes. Modern LZ4 and Zstandard omit content size because
+the final raw archive length is not known at initialization. One-byte versus
+micro input/output plus 1-byte versus 31-byte bridge schedules are byte-exact
+for regular files, long PAX paths, directories and sparse members. Poisoning,
+zero-output backpressure, nonzero sparse holes, compressed limits and complete
+allocation-failure paths have focused coverage.
+
+The required differential generates all eight formats under both schedules,
+requires byte equality, extracts each through Vort, and independently validates
+seven through Python or installed system tools; LZOP remains Vort-only when the
+system `lzop` utility is unavailable (`incremental_compressed_writer_cases=8`,
+`incremental_compressed_writer_external=7` on the current host).
+
+LZF, lzip, Unix compress and legacy LZ4 still have one-shot tarball writers
+because their underlying codecs do not yet expose incremental encoders. This
+is an encoder-layer gap only; all twelve formats already have bounded
+incremental readers.

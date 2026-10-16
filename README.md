@@ -407,7 +407,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   raw reading and writing for regular/link/PAX/sparse entries, direct incremental
   gzip/Bzip2/Brotli/Unix-compress/LZMA/XZ/modern+legacy-LZ4/LZF/lzip/
   Zstandard/LZOP-to-TAR reading, bounded 512-byte incremental auto-dispatch
-  with streamed shared skippable frames, and automatic raw/gzip/Bzip2/Brotli/
+  with streamed shared skippable frames, bounded gzip/Bzip2/Brotli/LZMA/XZ/
+  modern-LZ4/Zstandard/LZOP compressed-TAR writing, and automatic raw/gzip/Bzip2/Brotli/
   Unix-compress/LZMA-Alone/XZ/
   LZ4/lzip/LZF/Zstandard/LZOP tarball composition;
 - dependency-free CPIO reading and deterministic writing for SVR4 newc/CRC,
