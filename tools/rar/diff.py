@@ -143,6 +143,9 @@ def main() -> None:
     writer_encrypted = 0
     writer_encrypted_external = 0
     reference_encrypted = 0
+    writer_encrypted_headers = 0
+    writer_encrypted_headers_external = 0
+    reference_encrypted_headers = 0
     reference_stored = 0
     reference_compressed = 0
     reference_compressed_decoded = 0
@@ -308,6 +311,80 @@ def main() -> None:
                     raise AssertionError(f"7-Zip rejected Vort encrypted {compression}")
                 writer_encrypted_external += 1
 
+        header_ivs_hex = (
+            "404142434445464748494a4b4c4d4e4f"
+            "505152535455565758595a5b5c5d5e5f"
+            "606162636465666768696a6b6c6d6e6f"
+        )
+        for index, (compression, salt_hex, iv_hex) in enumerate(encryption_vectors):
+            encrypted_archive = temp / f"vort-rar5-{compression}-encrypted-headers.rar"
+            encrypted_output = temp / f"vort-rar5-{compression}-encrypted-headers.out"
+            run(
+                args.cli,
+                "create-rar-file",
+                str(encrypted_archive),
+                "payload.bin",
+                str(source),
+                "rar5",
+                compression,
+                "none",
+                "non-solid",
+                encryption_password,
+                salt_hex,
+                iv_hex,
+                "3",
+                encryption_password,
+                f"{index + 4:02x}" * 16,
+                header_ivs_hex,
+                "3",
+            )
+            listing = run(
+                args.cli,
+                "list-rar-file",
+                str(encrypted_archive),
+                encryption_password,
+            ).stdout
+            if (
+                "encrypted_headers=true" not in listing
+                or "header_kdf_count=3" not in listing
+                or "encrypted=true" not in listing
+            ):
+                raise AssertionError(f"Vort lost encrypted-header metadata: {listing}")
+            run(
+                args.cli,
+                "extract-rar-file",
+                str(encrypted_archive),
+                "payload.bin",
+                str(encrypted_output),
+                str(len(payload)),
+                encryption_password,
+            )
+            if encrypted_output.read_bytes() != payload:
+                raise AssertionError(
+                    f"Vort failed encrypted-header {compression} self extraction"
+                )
+            wrong_password = run(
+                args.cli,
+                "list-rar-file",
+                str(encrypted_archive),
+                "wrong-password",
+                check=False,
+            )
+            if wrong_password.returncode == 0 or "InvalidRarPassword" not in wrong_password.stderr:
+                raise AssertionError(f"Vort accepted wrong encrypted-header {compression} password")
+            writer_encrypted_headers += 1
+            if seven_zip is not None:
+                if seven_zip_extract(
+                    seven_zip,
+                    encrypted_archive,
+                    temp / f"7z-vort-rar5-{compression}-encrypted-headers",
+                    encryption_password,
+                ) != payload:
+                    raise AssertionError(
+                        f"7-Zip rejected Vort encrypted-header {compression}"
+                    )
+                writer_encrypted_headers_external += 1
+
         if rar_tool is not None:
             reference_root = temp / "rar5-encrypted-reference"
             reference_root.mkdir()
@@ -339,6 +416,34 @@ def main() -> None:
                 if reference_output.read_bytes() != payload:
                     raise AssertionError(f"Vort rejected RAR encrypted {compression}")
                 reference_encrypted += 1
+
+                header_archive = temp / f"reference-rar5-{compression}-encrypted-headers.rar"
+                header_output = temp / f"reference-rar5-{compression}-encrypted-headers.out"
+                run(
+                    rar_tool,
+                    "a",
+                    "-idq",
+                    "-ma5",
+                    f"-m{method}",
+                    "-ep",
+                    f"-hp{encryption_password}",
+                    str(header_archive),
+                    str(reference_source),
+                )
+                run(
+                    args.cli,
+                    "extract-rar-file",
+                    str(header_archive),
+                    "payload.bin",
+                    str(header_output),
+                    str(len(payload)),
+                    encryption_password,
+                )
+                if header_output.read_bytes() != payload:
+                    raise AssertionError(
+                        f"Vort rejected RAR encrypted-header {compression}"
+                    )
+                reference_encrypted_headers += 1
 
         ppmd_first = temp / "vort-rar29-ppmd-first.rar"
         ppmd_second = temp / "vort-rar29-ppmd-second.rar"
@@ -989,6 +1094,9 @@ def main() -> None:
         f"writer_encrypted={writer_encrypted} "
         f"writer_encrypted_external={writer_encrypted_external} "
         f"reference_encrypted={reference_encrypted} "
+        f"writer_encrypted_headers={writer_encrypted_headers} "
+        f"writer_encrypted_headers_external={writer_encrypted_headers_external} "
+        f"reference_encrypted_headers={reference_encrypted_headers} "
         f"reference_stored={reference_stored} reference_compressed={reference_compressed} "
         f"reference_compressed_decoded={reference_compressed_decoded} "
         f"fixture_cases={fixture_cases} rar15_entries={rar15_entries} "

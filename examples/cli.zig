@@ -2872,13 +2872,14 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  list-cpio-file <path>       List newc/CRC/ODC/binary CPIO entries
         \\  extract-cpio-file <cpio> <entry> <out> [max_output]
         \\                              Extract a regular file or symlink target
-        \\  create-rar-file <out> <entry> <in> [rar4|rar5] [stored|rar29|rar29-ppmd|rar50] [filter] [solid] [password|-] [salt_hex] [iv_hex] [kdf_count]
+        \\  create-rar-file <out> <entry> <in> [rar4|rar5] [method] [filter] [solid] [data_password|-] [data_salt] [data_iv] [data_kdf] [header_password|-] [header_salt] [three_header_ivs] [header_kdf]
         \\                              Create a deterministic stored/compressed RAR archive
         \\  create-rar-volumes <prefix> <entry> <in> <payload_size> [stored|rar50] [filter] [solid]
         \\                              Create an ordered RAR5 volume set
-        \\  list-rar-file <path>        List RAR4/RAR5 entries and methods
+        \\  list-rar-file <path> [password]
+        \\                              List RAR4/RAR5 entries and methods
         \\  extract-rar-file <rar> <entry> <out> [max_output] [password]
-        \\                              Extract a supported stored RAR entry
+        \\                              Extract a supported RAR entry
         \\  extract-rar-volumes <entry> <out> <max_output> <vol1> [vol2...]
         \\                              Extract across an ordered RAR5 volume set
         \\  encode-lzop-file <in> <out> [block_size] [adler32|crc32] [compressed-checksum]

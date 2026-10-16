@@ -21,6 +21,14 @@ pub fn createFile(
         args.next(),
         args.next(),
     );
+    var header_ivs: [3][16]u8 = undefined;
+    const header_encryption = try parseHeaderEncryption(
+        args.next(),
+        args.next(),
+        args.next(),
+        args.next(),
+        &header_ivs,
+    );
     const input = try readFile(init, input_path);
     defer init.gpa.free(input);
     const entries = [_]vort.RarEncodeEntry{.{
@@ -33,15 +41,17 @@ pub fn createFile(
         .compression = compression,
         .filter = filter,
         .solid = solid,
+        .header_encryption = header_encryption,
     });
     defer init.gpa.free(encoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
-    try stdout.print("rar_entries=1 version={s} method={s} filter={s} solid={} encrypted={} input_bytes={d} archive_bytes={d} path={s}\n", .{
+    try stdout.print("rar_entries=1 version={s} method={s} filter={s} solid={} encrypted={} encrypted_headers={} input_bytes={d} archive_bytes={d} path={s}\n", .{
         @tagName(version),
         @tagName(compression),
         if (filter) |value| @tagName(value) else "none",
         solid,
         encryption != null,
+        header_encryption != null,
         input.len,
         encoded.len,
         output_path,
@@ -102,10 +112,17 @@ pub fn listFile(
     stdout: *std.Io.Writer,
 ) !void {
     const input_path = args.next() orelse return error.MissingCorpusPath;
+    const password = args.next();
     const bytes = try readFile(init, input_path);
     defer init.gpa.free(bytes);
-    const archive = try vort.parseRarArchive(bytes);
-    try stdout.print("rar_entries={d} version={s} prefix_bytes={d} trailer_bytes={d} volume={} volume_number={?d} next_volume={} solid={} locked={}\n", .{
+    var owned = try vort.parseRarOwnedHeadersAllocWithOptions(
+        init.gpa,
+        bytes,
+        .{ .password = password },
+    );
+    defer owned.deinit();
+    const archive = owned.archive;
+    try stdout.print("rar_entries={d} version={s} prefix_bytes={d} trailer_bytes={d} volume={} volume_number={?d} next_volume={} solid={} locked={} encrypted_headers={} header_kdf_count={?d}\n", .{
         archive.entry_count,
         @tagName(archive.version),
         archive.prefix_size,
@@ -115,6 +132,8 @@ pub fn listFile(
         archive.has_next_volume,
         archive.solid,
         archive.locked,
+        archive.header_encryption != null,
+        if (archive.header_encryption) |encryption| encryption.kdf_count else null,
     });
     var iterator = archive.iterator();
     var index: usize = 0;
@@ -157,7 +176,13 @@ pub fn extractFile(
     const password = args.next();
     const bytes = try readFile(init, input_path);
     defer init.gpa.free(bytes);
-    const archive = try vort.parseRarArchive(bytes);
+    var owned = try vort.parseRarOwnedHeadersAllocWithOptions(
+        init.gpa,
+        bytes,
+        .{ .password = password },
+    );
+    defer owned.deinit();
+    const archive = owned.archive;
     const decoded = try archive.extractByNameAllocWithOptions(
         init.gpa,
         entry_name,
@@ -290,6 +315,36 @@ fn parseEncryption(
             try std.fmt.parseInt(u8, text, 10)
         else
             15,
+    };
+}
+
+fn parseHeaderEncryption(
+    password_text: ?[]const u8,
+    salt_text: ?[]const u8,
+    ivs_text: ?[]const u8,
+    kdf_text: ?[]const u8,
+    ivs: *[3][16]u8,
+) !?vort.RarEncodeHeaderEncryptionOptions {
+    const password = password_text orelse return null;
+    if (std.mem.eql(u8, password, "-")) return null;
+    const salt_hex = salt_text orelse return error.MissingRarHeaderEncryptionSalt;
+    const ivs_hex = ivs_text orelse return error.MissingRarHeaderEncryptionIvs;
+    var salt: [16]u8 = undefined;
+    _ = std.fmt.hexToBytes(&salt, salt_hex) catch
+        return error.InvalidRarHeaderEncryptionSalt;
+    _ = std.fmt.hexToBytes(std.mem.asBytes(ivs), ivs_hex) catch
+        return error.InvalidRarHeaderEncryptionIvs;
+    if (salt_hex.len != 2 * salt.len) return error.InvalidRarHeaderEncryptionSalt;
+    if (ivs_hex.len != 2 * @sizeOf(@TypeOf(ivs.*)))
+        return error.InvalidRarHeaderEncryptionIvs;
+    return .{
+        .password = password,
+        .salt = salt,
+        .kdf_count = if (kdf_text) |text|
+            try std.fmt.parseInt(u8, text, 10)
+        else
+            15,
+        .ivs = ivs,
     };
 }
 

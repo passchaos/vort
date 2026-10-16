@@ -444,7 +444,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   UTF-8 RAR5 names, RAR50 LZ and Delta/E8/E8E9/ARM filters, sequential solid
   sessions with pre-filter history, bounded extraction, RAR5 AES-256-CBC
   Stored/RAR50 file-data encryption through Vail with explicit PBKDF2 limits,
-  password checks and keyed CRCs, explicit RAR4/encrypted-header/
+  password checks and keyed CRCs, owned RAR5 encrypted-header parsing and
+  deterministic writing with independent per-header IVs, explicit RAR4/
   redirection/unknown-size and unsupported RAR15/RAR20-solid errors, ordered RAR5
   multi-volume reconstruction for stored/compressed/solid split entries, and
   deterministic RAR29 compatibility LZ writing with canonical tables,
@@ -454,7 +455,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   E8/E8E9/Delta/Itanium/RGB/Audio VM filters, and 7-Zip interoperability, plus
   deterministic RAR50 LZ writing with canonical tables, multiblock output, and
   Delta/E8/E8E9/ARM filters plus cross-member solid history, post-compression
-  RAR5 file-data encryption, and deterministic stored/compressed/solid volume
+  RAR5 file-data/header encryption, and deterministic stored/compressed/solid volume
   splitting, with RAR, 7-Zip, and rars interoperability;
 - dependency-free deterministic Microsoft CAB writing plus parsing and bounded
   extraction for Stored, MSZIP, 15–21 bit LZX, and 10–21 bit Quantum folders,

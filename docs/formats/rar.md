@@ -68,6 +68,15 @@ blocks, and password-dependent CRC-32 verification. The cryptographic
 primitives come from `../vail/archive_crypto`; Vort owns only the RAR extra
 record, limits, padding, checksum policy, and codec composition. Missing,
 wrong, malformed, and over-budget passwords/KDF records have distinct errors.
+
+RAR5 encrypted headers use `parseRarOwnedHeadersAllocWithOptions`. The returned
+`RarOwnedHeaderArchive` borrows the original archive data but owns decrypted
+entry metadata and names, so those views remain valid until `deinit`. The
+ordinary borrowed parser continues to return `EncryptedRarHeaders` rather than
+hiding temporary allocation. The owned parser validates the clear type-4
+encryption header, derives its key once, then processes each following header
+as an independent 16-byte IV plus block-aligned AES-CBC payload. Entry count and
+copied-name bytes have independent limits in addition to KDF and output limits.
 `Archive.extractSession` exposes explicit sequential decoding and returns owned
 entry data from `nextAlloc`. `extractByNameAllocLimited` and
 `extractByNameAllocWithOptions` automatically replays preceding RAR29 or RAR50
@@ -81,8 +90,8 @@ reversed, interrupted, or metadata-changing fragment chains. Its extraction
 session concatenates packed fragments before decoding and carries RAR50 solid
 state across logical entries and volume boundaries.
 Directories, unsupported compressed data, RAR4 encrypted entries, encrypted
-headers, encrypted multi-volume members, RAR5 redirections, unknown-size
-members, incomplete split-volume members, and unsupported RAR20 solid
+multi-volume members, RAR5 redirections, unknown-size members, incomplete
+split-volume members, and unsupported RAR20 solid
 continuations return specific errors. This prevents an unsupported or
 incomplete member from being copied as if it were stored data.
 
@@ -135,6 +144,13 @@ unique 16-byte salt and IV, and an optional KDF count; the default writer emits
 both the password check and keyed-checksum flags. Salt/IV randomness remains
 explicitly caller-owned so the library has no hidden global state and fixtures
 remain deterministic.
+`RarEncodeOptions.header_encryption` adds the clear archive-encryption header
+and encrypts main, every file/directory, and end header independently. It takes
+one caller-supplied unique IV per encrypted header (`entries.len + 2` in the
+current writer), rejects duplicates, and requires every regular entry to use
+file-data encryption with the same password. Header and file salts, IVs, and
+KDF counts remain independent. This composes with Stored, RAR50, directories,
+and solid RAR50 history without exposing names in the wire.
 `encodeRarVolumesAlloc` splits logical RAR5 members at an explicit maximum
 payload-per-volume budget and returns an owned `EncodedVolumes` collection. It
 writes numbered volume main headers, per-fragment split flags and CRCs, and
@@ -149,9 +165,8 @@ separator. RAR5 output accepts validated UTF-8 names. Both writers reject NUL,
 absolute, empty-component, dot, and parent-component paths. RAR29 compression
 rejects unsupported filter/codec combinations instead of relabeling them.
 RAR50 dictionary sizes must be power-of-two
-multiples of 128 KiB. RAR4 encryption, RAR5 encrypted headers and encrypted
-multi-volume output, recovery records, comments, and redirections remain future
-writer work.
+multiples of 128 KiB. RAR4 encryption, encrypted multi-volume output, recovery
+records, comments, and redirections remain future writer work.
 
 ## CLI
 
@@ -165,8 +180,9 @@ zig build run -- create-rar-file output.rar payload.bin input.bin rar5 rar50
 zig build run -- create-rar-file output.rar payload.bin input.bin rar5 rar50 e8e9
 zig build run -- create-rar-file output.rar payload.bin input.bin rar5 rar50 none solid
 zig build run -- create-rar-file secret.rar payload.bin input.bin rar5 rar50 none non-solid password 000102030405060708090a0b0c0d0e0f 101112131415161718191a1b1c1d1e1f 15
+zig build run -- create-rar-file secret-names.rar payload.bin input.bin rar5 rar50 none non-solid password 000102030405060708090a0b0c0d0e0f 101112131415161718191a1b1c1d1e1f 15 password 202122232425262728292a2b2c2d2e2f 404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f 15
 zig build run -- create-rar-volumes output payload.bin input.bin 1048576 rar50 none solid
-zig build run -- list-rar-file output.rar
+zig build run -- list-rar-file secret-names.rar password
 zig build run -- extract-rar-file secret.rar payload.bin decoded.bin 1048576 password
 ```
 
@@ -187,9 +203,9 @@ its size argument is the packed payload budget per volume.
 multiblock RAR29 LZ, ordinary/solid RAR29 PPMd, and multiblock RAR50 writer
 output plus all six RAR29 and four RAR50 writer filters with 7-Zip, reads stored
 RAR4/RAR5 output from an optional rars-based
-reference helper, verifies encrypted Stored/RAR50 output bidirectionally with
-RAR and 7-Zip, verifies that real compressed reference entries are
-classified correctly, checks SFX parsing and both CRC layers, exercises RAR2
+reference helper, verifies file-data and encrypted-header Stored/RAR50 output
+bidirectionally with RAR and 7-Zip, verifies that real compressed reference
+entries are classified correctly, checks SFX parsing and both CRC layers, exercises RAR2
 and RAR5 split-volume fixtures, and compares RAR15/RAR20 text, multiblock,
 keep-table, long-history and audio plus ordinary RAR29 LZ and PPMd literal,
 escape, match, mixed-member, and solid-member outputs byte-for-byte with
@@ -219,7 +235,7 @@ zig build run -- extract-rar-volumes entry.bin output.bin 1048576 \
   archive.part1.rar archive.part2.rar archive.part3.rar
 ```
 
-The next encryption stages are RAR4 payloads, RAR5 encrypted headers, and
-encrypted multi-volume composition. The next RAR4 writer stages also include
+The next encryption stages are RAR4 payloads and encrypted multi-volume
+composition. The next RAR4 writer stages also include
 PPMd-attached VM filters and multi-volume output. PPMd hybrid match escapes
 remain a later compression-ratio optimization.

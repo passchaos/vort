@@ -19,11 +19,21 @@ pub const Error = core.Error || rar15.Error || rar20.Error || rar29.Error || rar
     RarEntryNotFound,
     RarEntryRequiresAllocator,
     RarExtractSessionPoisoned,
+    RarEntryLimitExceeded,
+    RarMetadataLimitExceeded,
     RarPasswordRequired,
 };
 
 pub const Version = enum { rar4, rar5 };
 pub const Encryption = rar5_encryption.Metadata;
+pub const HeaderEncryption = rar5_encryption.HeaderMetadata;
+
+pub const ParseOptions = struct {
+    password: ?[]const u8 = null,
+    max_rar5_kdf_count: u8 = rar5_encryption.hard_max_kdf_count,
+    max_entries: usize = 1_000_000,
+    max_metadata_size: usize = 256 * 1024 * 1024,
+};
 
 pub const DecodeOptions = struct {
     max_output_len: usize = std.math.maxInt(usize),
@@ -81,6 +91,8 @@ pub const Entry = struct {
     crc32: ?u32,
     compressed_size: usize,
     uncompressed_size: usize,
+    /// For encrypted-header archives this starts at the per-header IV and the
+    /// size includes that IV plus encrypted block padding.
     header_offset: usize,
     header_size: usize,
     data_offset: usize,
@@ -116,9 +128,16 @@ pub const Archive = struct {
     has_next_volume: bool,
     solid: bool,
     locked: bool,
+    header_encryption: ?HeaderEncryption = null,
+    cached_entries: ?[]const Entry = null,
 
     pub fn iterator(self: Archive) Iterator {
-        return .{ .archive = self, .offset = self.entries_offset, .remaining = self.entry_count };
+        return .{
+            .archive = self,
+            .offset = self.entries_offset,
+            .remaining = self.entry_count,
+            .cached_entries = self.cached_entries,
+        };
     }
 
     pub fn extractSession(
@@ -346,6 +365,11 @@ pub const Archive = struct {
     }
 
     fn canonicalEntry(self: Archive, entry: Entry) Error!Entry {
+        if (self.cached_entries) |entries| {
+            for (entries) |candidate|
+                if (sameEntry(candidate, entry)) return candidate;
+            return error.InvalidRarArchive;
+        }
         const block = switch (self.version) {
             .rar4 => try parseRar4Block(self.bytes, entry.header_offset),
             .rar5 => try parseRar5Block(self.bytes, entry.header_offset),
@@ -359,6 +383,24 @@ pub const Archive = struct {
         const canonical = try self.canonicalEntry(entry);
         try validateExtractable(canonical, false, false);
         return canonical;
+    }
+};
+
+/// Parsed archive view that owns copied entry names and cached entry metadata
+/// while continuing to borrow the original archive bytes. Encrypted-header
+/// archives require this surface because names do not exist in plaintext in
+/// the input. Keep this value alive while using `archive` or any entry name.
+pub const OwnedHeaderArchive = struct {
+    allocator: std.mem.Allocator,
+    archive: Archive,
+    entries: []Entry,
+    names: [][]u8,
+
+    pub fn deinit(self: *OwnedHeaderArchive) void {
+        for (self.names) |name| self.allocator.free(name);
+        self.allocator.free(self.names);
+        self.allocator.free(self.entries);
+        self.* = undefined;
     }
 };
 
@@ -489,8 +531,16 @@ pub const Iterator = struct {
     archive: Archive,
     offset: usize,
     remaining: usize,
+    cached_entries: ?[]const Entry = null,
+    cached_index: usize = 0,
 
     pub fn next(self: *Iterator) Error!?Entry {
+        if (self.cached_entries) |entries| {
+            if (self.cached_index == entries.len) return null;
+            defer self.cached_index += 1;
+            self.remaining -= 1;
+            return entries[self.cached_index];
+        }
         if (self.remaining == 0) return null;
         while (self.offset < self.archive.archive_end) {
             const block = switch (self.archive.version) {
@@ -514,6 +564,98 @@ pub fn parse(bytes: []const u8) Error!Archive {
         .rar4 => parseRar4Archive(bytes, signature.offset),
         .rar5 => parseRar5Archive(bytes, signature.offset),
     };
+}
+
+pub fn parseOwnedHeadersAllocWithOptions(
+    allocator: std.mem.Allocator,
+    bytes: []const u8,
+    options: ParseOptions,
+) Error!OwnedHeaderArchive {
+    const signature = try findSignature(bytes);
+    if (signature.version == .rar5) {
+        const first_offset = try checkedAdd(signature.offset, rar5_signature.len);
+        const first = try parseRar5RawBlock(bytes, first_offset);
+        if (first.header_type == rar5_crypt_header)
+            return parseEncryptedRar5HeadersAlloc(
+                allocator,
+                bytes,
+                signature.offset,
+                first,
+                options,
+            );
+    }
+    return copyBorrowedArchiveAlloc(allocator, try parse(bytes), options);
+}
+
+fn copyBorrowedArchiveAlloc(
+    allocator: std.mem.Allocator,
+    borrowed: Archive,
+    options: ParseOptions,
+) Error!OwnedHeaderArchive {
+    var entries: std.ArrayList(Entry) = .empty;
+    defer entries.deinit(allocator);
+    var names: std.ArrayList([]u8) = .empty;
+    defer names.deinit(allocator);
+    errdefer freeNames(allocator, names.items);
+    var metadata_size: usize = 0;
+    var iterator = borrowed.iterator();
+    while (try iterator.next()) |entry|
+        try appendOwnedEntry(
+            allocator,
+            &entries,
+            &names,
+            &metadata_size,
+            options,
+            entry,
+        );
+    return finishOwnedHeaderArchive(allocator, borrowed, &entries, &names);
+}
+
+fn appendOwnedEntry(
+    allocator: std.mem.Allocator,
+    entries: *std.ArrayList(Entry),
+    names: *std.ArrayList([]u8),
+    metadata_size: *usize,
+    options: ParseOptions,
+    entry: Entry,
+) Error!void {
+    if (entries.items.len >= options.max_entries) return error.RarEntryLimitExceeded;
+    const new_metadata_size = std.math.add(usize, metadata_size.*, entry.name.bytes.len) catch
+        return error.IntegerOverflow;
+    if (new_metadata_size > options.max_metadata_size)
+        return error.RarMetadataLimitExceeded;
+    const name = try allocator.dupe(u8, entry.name.bytes);
+    errdefer allocator.free(name);
+    try names.append(allocator, name);
+    errdefer _ = names.pop();
+    var owned = entry;
+    owned.name.bytes = name;
+    try entries.append(allocator, owned);
+    metadata_size.* = new_metadata_size;
+}
+
+fn finishOwnedHeaderArchive(
+    allocator: std.mem.Allocator,
+    borrowed: Archive,
+    entries: *std.ArrayList(Entry),
+    names: *std.ArrayList([]u8),
+) Error!OwnedHeaderArchive {
+    const owned_entries = try entries.toOwnedSlice(allocator);
+    errdefer allocator.free(owned_entries);
+    const owned_names = try names.toOwnedSlice(allocator);
+    var archive = borrowed;
+    archive.entry_count = owned_entries.len;
+    archive.cached_entries = owned_entries;
+    return .{
+        .allocator = allocator,
+        .archive = archive,
+        .entries = owned_entries,
+        .names = owned_names,
+    };
+}
+
+fn freeNames(allocator: std.mem.Allocator, names: []const []u8) void {
+    for (names) |name| allocator.free(name);
 }
 
 const Signature = struct { version: Version, offset: usize };
@@ -615,6 +757,207 @@ fn parseRar5Archive(bytes: []const u8, prefix: usize) Error!Archive {
         .solid = archive_flags & rar5_main_solid != 0,
         .locked = archive_flags & rar5_main_locked != 0,
     };
+}
+
+fn parseEncryptedRar5HeadersAlloc(
+    allocator: std.mem.Allocator,
+    bytes: []const u8,
+    prefix: usize,
+    crypt_block: Rar5RawBlock,
+    options: ParseOptions,
+) Error!OwnedHeaderArchive {
+    const metadata = try parseRar5HeaderEncryption(bytes, crypt_block);
+    const password = options.password orelse return error.RarPasswordRequired;
+    var cipher = try rar5_encryption.HeaderCipher.init(
+        password,
+        metadata,
+        options.max_rar5_kdf_count,
+    );
+    defer cipher.deinit();
+
+    var entries: std.ArrayList(Entry) = .empty;
+    defer entries.deinit(allocator);
+    var names: std.ArrayList([]u8) = .empty;
+    defer names.deinit(allocator);
+    errdefer freeNames(allocator, names.items);
+    var metadata_size: usize = 0;
+
+    var main_header = try decryptRar5HeaderAlloc(
+        allocator,
+        bytes,
+        crypt_block.next_offset,
+        &cipher,
+    );
+    defer main_header.deinit();
+    const main = try parseRar5RawBlockInternal(
+        main_header.bytes[0..main_header.header_size],
+        0,
+        false,
+    );
+    if (main.header_type != rar5_main_header or main.data_size != 0)
+        return error.InvalidRarArchive;
+    var main_cursor = main.type_specific_start;
+    const archive_flags = try readVint(
+        main_header.bytes,
+        &main_cursor,
+        main.type_specific_end,
+    );
+    const volume_number = if (archive_flags & rar5_main_volume_number != 0)
+        try readVint(main_header.bytes, &main_cursor, main.type_specific_end)
+    else
+        null;
+    const entries_offset = try checkedAdd(
+        crypt_block.next_offset,
+        main_header.physical_size,
+    );
+
+    var offset = entries_offset;
+    var end_offset: ?usize = null;
+    var end_flags: u64 = 0;
+    while (offset < bytes.len) {
+        var decrypted = try decryptRar5HeaderAlloc(allocator, bytes, offset, &cipher);
+        defer decrypted.deinit();
+        const clear = decrypted.bytes[0..decrypted.header_size];
+        const raw = try parseRar5RawBlockInternal(clear, 0, false);
+        if (raw.header_type == rar5_crypt_header) return error.InvalidRarArchive;
+        const data_offset = try checkedAdd(offset, decrypted.physical_size);
+        const next_offset = try checkedEnd(data_offset, raw.data_size, bytes.len);
+        const block = try parseRar5Header(clear);
+        if (block.entry) |parsed_entry| {
+            var entry = parsed_entry;
+            entry.header_offset = offset;
+            entry.header_size = decrypted.physical_size;
+            entry.data_offset = data_offset;
+            entry.next_offset = next_offset;
+            try appendOwnedEntry(
+                allocator,
+                &entries,
+                &names,
+                &metadata_size,
+                options,
+                entry,
+            );
+        }
+        offset = next_offset;
+        if (block.end_archive) {
+            if (raw.data_size != 0) return error.InvalidRarArchive;
+            var end_cursor = raw.type_specific_start;
+            end_flags = try readVint(clear, &end_cursor, raw.type_specific_end);
+            end_offset = offset;
+            break;
+        }
+    }
+    const archive_end = end_offset orelse return error.TruncatedFrame;
+    const borrowed = Archive{
+        .bytes = bytes,
+        .version = .rar5,
+        .entry_count = entries.items.len,
+        .prefix_size = prefix,
+        .entries_offset = entries_offset,
+        .archive_end = archive_end,
+        .trailer_size = bytes.len - archive_end,
+        .multi_volume = archive_flags & rar5_main_volume != 0 or end_flags & 1 != 0,
+        .volume_number = volume_number,
+        .has_next_volume = end_flags & 1 != 0,
+        .solid = archive_flags & rar5_main_solid != 0,
+        .locked = archive_flags & rar5_main_locked != 0,
+        .header_encryption = metadata,
+    };
+    return finishOwnedHeaderArchive(allocator, borrowed, &entries, &names);
+}
+
+const DecryptedRar5Header = struct {
+    allocator: std.mem.Allocator,
+    bytes: []u8,
+    header_size: usize,
+    physical_size: usize,
+
+    fn deinit(self: *DecryptedRar5Header) void {
+        std.crypto.secureZero(u8, self.bytes);
+        self.allocator.free(self.bytes);
+        self.* = undefined;
+    }
+};
+
+fn decryptRar5HeaderAlloc(
+    allocator: std.mem.Allocator,
+    bytes: []const u8,
+    offset: usize,
+    cipher: *const rar5_encryption.HeaderCipher,
+) Error!DecryptedRar5Header {
+    const iv_end = try checkedEnd(offset, rar5_encryption.iv_len, bytes.len);
+    const first_end = try checkedEnd(iv_end, 16, bytes.len);
+    const iv = bytes[offset..iv_end][0..rar5_encryption.iv_len].*;
+    var first_plain: [16]u8 = undefined;
+    defer std.crypto.secureZero(u8, &first_plain);
+    try cipher.decryptBlocks(bytes[iv_end..first_end], &first_plain, iv);
+    var cursor: usize = 4;
+    const body_size_u64 = try readVint(&first_plain, &cursor, first_plain.len);
+    const body_size = std.math.cast(usize, body_size_u64) orelse
+        return error.IntegerOverflow;
+    if (body_size == 0 or body_size > rar5_max_header_size)
+        return error.InvalidRarArchive;
+    const header_size = try checkedAdd(cursor, body_size);
+    if (header_size < 7) return error.InvalidRarArchive;
+    const padding = (16 - header_size % 16) % 16;
+    const encrypted_size = try checkedAdd(header_size, padding);
+    const encrypted_end = try checkedEnd(iv_end, encrypted_size, bytes.len);
+    const plaintext = try cipher.decryptAlloc(
+        allocator,
+        bytes[iv_end..encrypted_end],
+        iv,
+    );
+    errdefer {
+        std.crypto.secureZero(u8, plaintext);
+        allocator.free(plaintext);
+    }
+    return .{
+        .allocator = allocator,
+        .bytes = plaintext,
+        .header_size = header_size,
+        .physical_size = try checkedAdd(rar5_encryption.iv_len, encrypted_size),
+    };
+}
+
+fn parseRar5HeaderEncryption(
+    bytes: []const u8,
+    raw: Rar5RawBlock,
+) Error!HeaderEncryption {
+    if (raw.header_type != rar5_crypt_header or raw.flags != 0 or raw.data_size != 0)
+        return error.InvalidRarArchive;
+    var cursor = raw.type_specific_start;
+    const version = try readVint(bytes, &cursor, raw.type_specific_end);
+    const flags = try readVint(bytes, &cursor, raw.type_specific_end);
+    if (cursor >= raw.type_specific_end) return error.TruncatedFrame;
+    const kdf_count = bytes[cursor];
+    cursor += 1;
+    const salt_end = try checkedEnd(
+        cursor,
+        rar5_encryption.salt_len,
+        raw.type_specific_end,
+    );
+    const salt = bytes[cursor..salt_end][0..rar5_encryption.salt_len].*;
+    cursor = salt_end;
+    const password_check = if (flags & rar5_encryption.password_check_flag != 0) blk: {
+        const check_end = try checkedEnd(
+            cursor,
+            rar5_encryption.password_check_record_len,
+            raw.type_specific_end,
+        );
+        const value = bytes[cursor..check_end][0..rar5_encryption.password_check_record_len].*;
+        cursor = check_end;
+        break :blk value;
+    } else null;
+    if (cursor != raw.type_specific_end) return error.InvalidRarArchive;
+    const metadata = HeaderEncryption{
+        .version = version,
+        .flags = flags,
+        .kdf_count = kdf_count,
+        .salt = salt,
+        .password_check = password_check,
+    };
+    try rar5_encryption.validateHeaderMetadataStructure(metadata);
+    return metadata;
 }
 
 const ParsedBlock = struct {
@@ -784,6 +1127,14 @@ const Rar5RawBlock = struct {
 };
 
 fn parseRar5RawBlock(bytes: []const u8, offset: usize) Error!Rar5RawBlock {
+    return parseRar5RawBlockInternal(bytes, offset, true);
+}
+
+fn parseRar5RawBlockInternal(
+    bytes: []const u8,
+    offset: usize,
+    require_data: bool,
+) Error!Rar5RawBlock {
     _ = try checkedEnd(offset, 5, bytes.len);
     const expected_crc = readLe32(bytes, offset);
     var cursor = offset + 4;
@@ -815,7 +1166,10 @@ fn parseRar5RawBlock(bytes: []const u8, offset: usize) Error!Rar5RawBlock {
         .extra_end = header_end,
         .data_size = data_size,
         .data_offset = data_offset,
-        .next_offset = try checkedEnd(data_offset, data_size, bytes.len),
+        .next_offset = if (require_data)
+            try checkedEnd(data_offset, data_size, bytes.len)
+        else
+            try checkedAdd(data_offset, data_size),
         .type_specific_start = cursor,
         .type_specific_end = extra_start,
         .header_size = header_end - offset,
@@ -823,7 +1177,19 @@ fn parseRar5RawBlock(bytes: []const u8, offset: usize) Error!Rar5RawBlock {
 }
 
 fn parseRar5Block(bytes: []const u8, offset: usize) Error!ParsedBlock {
-    const raw = try parseRar5RawBlock(bytes, offset);
+    return parseRar5BlockInternal(bytes, offset, true);
+}
+
+fn parseRar5Header(bytes: []const u8) Error!ParsedBlock {
+    return parseRar5BlockInternal(bytes, 0, false);
+}
+
+fn parseRar5BlockInternal(
+    bytes: []const u8,
+    offset: usize,
+    require_data: bool,
+) Error!ParsedBlock {
+    const raw = try parseRar5RawBlockInternal(bytes, offset, require_data);
     if (raw.header_type == rar5_end_header) {
         if (raw.data_size != 0) return error.InvalidRarArchive;
         return .{

@@ -38,6 +38,14 @@ pub const Metadata = struct {
     }
 };
 
+pub const HeaderMetadata = struct {
+    version: u64 = 0,
+    flags: u64,
+    kdf_count: u8,
+    salt: [salt_len]u8,
+    password_check: ?[password_check_record_len]u8,
+};
+
 /// Per-entry encryption inputs. Salt and IV generation remain explicit so the
 /// archive layer never hides global randomness and deterministic fixtures are
 /// possible. Applications must use unique unpredictable values per entry.
@@ -48,6 +56,13 @@ pub const Options = struct {
     kdf_count: u8 = 15,
     include_password_check: bool = true,
     use_tweaked_checksums: bool = true,
+};
+
+pub const HeaderOptions = struct {
+    password: []const u8,
+    salt: [salt_len]u8,
+    kdf_count: u8 = 15,
+    include_password_check: bool = true,
 };
 
 pub const Encrypted = struct {
@@ -83,10 +98,119 @@ pub const Decrypted = struct {
     }
 };
 
+pub const HeaderCipher = struct {
+    keys: crypto.Keys,
+
+    const Self = @This();
+
+    pub fn init(
+        password: []const u8,
+        metadata: HeaderMetadata,
+        max_kdf_count: u8,
+    ) Error!Self {
+        try validateHeaderMetadata(metadata, max_kdf_count);
+        if (!std.unicode.utf8ValidateSlice(password))
+            return error.InvalidRarPasswordEncoding;
+        var keys = try derive(password, metadata.salt, metadata.kdf_count, max_kdf_count);
+        errdefer keys.deinit();
+        if (metadata.password_check) |record|
+            if (!keys.verifyPasswordCheck(record[0..crypto.password_check_len].*))
+                return error.InvalidRarPassword;
+        return .{ .keys = keys };
+    }
+
+    pub fn encryptAlloc(
+        self: *const Self,
+        allocator: std.mem.Allocator,
+        plaintext: []const u8,
+        iv: [iv_len]u8,
+    ) Error![]u8 {
+        const padding = (crypto.block_len - plaintext.len % crypto.block_len) %
+            crypto.block_len;
+        const padded_len = std.math.add(usize, plaintext.len, padding) catch
+            return error.IntegerOverflow;
+        const encrypted = try allocator.alloc(u8, padded_len);
+        errdefer {
+            std.crypto.secureZero(u8, encrypted);
+            allocator.free(encrypted);
+        }
+        @memcpy(encrypted[0..plaintext.len], plaintext);
+        @memset(encrypted[plaintext.len..], 0);
+        var encryptor = crypto.Encryptor.init(self.keys.encryption, iv);
+        defer encryptor.deinit();
+        encryptor.encryptBlocks(encrypted, encrypted) catch
+            return error.InvalidRar5Ciphertext;
+        return encrypted;
+    }
+
+    pub fn decryptAlloc(
+        self: *const Self,
+        allocator: std.mem.Allocator,
+        ciphertext: []const u8,
+        iv: [iv_len]u8,
+    ) Error![]u8 {
+        if (ciphertext.len == 0 or ciphertext.len % crypto.block_len != 0)
+            return error.InvalidRar5Ciphertext;
+        const plaintext = try allocator.alloc(u8, ciphertext.len);
+        errdefer {
+            std.crypto.secureZero(u8, plaintext);
+            allocator.free(plaintext);
+        }
+        try self.decryptBlocks(ciphertext, plaintext, iv);
+        return plaintext;
+    }
+
+    pub fn decryptBlocks(
+        self: *const Self,
+        ciphertext: []const u8,
+        plaintext: []u8,
+        iv: [iv_len]u8,
+    ) Error!void {
+        if (ciphertext.len == 0 or ciphertext.len != plaintext.len or
+            ciphertext.len % crypto.block_len != 0)
+            return error.InvalidRar5Ciphertext;
+        var decryptor = crypto.Decryptor.init(self.keys.encryption, iv);
+        defer decryptor.deinit();
+        decryptor.decryptBlocks(ciphertext, plaintext) catch
+            return error.InvalidRar5Ciphertext;
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.keys.deinit();
+        self.* = undefined;
+    }
+};
+
+pub const PreparedHeaderCipher = struct {
+    metadata: HeaderMetadata,
+    cipher: HeaderCipher,
+
+    pub fn deinit(self: *PreparedHeaderCipher) void {
+        self.cipher.deinit();
+        self.* = undefined;
+    }
+};
+
 pub fn validateMetadata(metadata: Metadata, max_kdf_count: u8) Error!void {
     try validateMetadataStructure(metadata);
     if (metadata.kdf_count > max_kdf_count or metadata.kdf_count > hard_max_kdf_count)
         return error.Rar5KdfLimitExceeded;
+}
+
+pub fn validateHeaderMetadata(metadata: HeaderMetadata, max_kdf_count: u8) Error!void {
+    try validateHeaderMetadataStructure(metadata);
+    if (metadata.kdf_count > max_kdf_count or metadata.kdf_count > hard_max_kdf_count)
+        return error.Rar5KdfLimitExceeded;
+}
+
+pub fn validateHeaderMetadataStructure(metadata: HeaderMetadata) Error!void {
+    if (metadata.version != 0 or metadata.flags & ~password_check_flag != 0)
+        return error.InvalidRar5Encryption;
+    if ((metadata.flags & password_check_flag != 0) != (metadata.password_check != null))
+        return error.InvalidRar5Encryption;
+    if (metadata.password_check) |record|
+        if (!crypto.passwordCheckRecordValid(record))
+            return error.CorruptRar5PasswordCheck;
 }
 
 pub fn validateMetadataStructure(metadata: Metadata) Error!void {
@@ -104,6 +228,36 @@ pub fn validateOptions(options: Options) Error!void {
         return error.InvalidRarPasswordEncoding;
     if (options.kdf_count > hard_max_kdf_count)
         return error.Rar5KdfLimitExceeded;
+}
+
+pub fn validateHeaderOptions(options: HeaderOptions) Error!void {
+    if (!std.unicode.utf8ValidateSlice(options.password))
+        return error.InvalidRarPasswordEncoding;
+    if (options.kdf_count > hard_max_kdf_count)
+        return error.Rar5KdfLimitExceeded;
+}
+
+pub fn prepareHeader(options: HeaderOptions) Error!PreparedHeaderCipher {
+    try validateHeaderOptions(options);
+    var keys = try derive(
+        options.password,
+        options.salt,
+        options.kdf_count,
+        options.kdf_count,
+    );
+    errdefer keys.deinit();
+    return .{
+        .metadata = .{
+            .flags = if (options.include_password_check) password_check_flag else 0,
+            .kdf_count = options.kdf_count,
+            .salt = options.salt,
+            .password_check = if (options.include_password_check)
+                keys.passwordCheckRecord()
+            else
+                null,
+        },
+        .cipher = .{ .keys = keys },
+    };
 }
 
 pub fn encryptAlloc(
@@ -249,5 +403,40 @@ test "RAR5 encryption validates password-check integrity and KDF limits" {
     try std.testing.expectError(
         error.Rar5KdfLimitExceeded,
         decryptAlloc(allocator, encrypted.bytes, options.password, encrypted.metadata, 1),
+    );
+}
+
+test "RAR5 header cipher reinitializes CBC for every IV" {
+    const allocator = std.testing.allocator;
+    const options = HeaderOptions{
+        .password = "header password 密码",
+        .salt = [_]u8{0xa1} ** salt_len,
+        .kdf_count = 2,
+    };
+    var prepared = try prepareHeader(options);
+    defer prepared.deinit();
+    const plaintext = "RAR5 encrypted header bytes";
+    const first_iv = [_]u8{0xb1} ** iv_len;
+    const second_iv = [_]u8{0xb2} ** iv_len;
+    const first = try prepared.cipher.encryptAlloc(allocator, plaintext, first_iv);
+    defer allocator.free(first);
+    const second = try prepared.cipher.encryptAlloc(allocator, plaintext, second_iv);
+    defer allocator.free(second);
+    try std.testing.expect(!std.mem.eql(u8, first, second));
+    var reader = try HeaderCipher.init(
+        options.password,
+        prepared.metadata,
+        options.kdf_count,
+    );
+    defer reader.deinit();
+    const decoded = try reader.decryptAlloc(allocator, first, first_iv);
+    defer {
+        std.crypto.secureZero(u8, decoded);
+        allocator.free(decoded);
+    }
+    try std.testing.expectEqualSlices(u8, plaintext, decoded[0..plaintext.len]);
+    try std.testing.expectError(
+        error.InvalidRarPassword,
+        HeaderCipher.init("wrong", prepared.metadata, options.kdf_count),
     );
 }

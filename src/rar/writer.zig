@@ -13,6 +13,7 @@ pub const Error = archive.Error || rar29_encoder.Error || rar50_encoder.Error ||
     RarHeaderTooLarge,
     UnsupportedRarEncodeOptions,
     InvalidRarVolumeSize,
+    InvalidRarHeaderEncryption,
 };
 
 pub const Kind = enum { regular, directory };
@@ -27,6 +28,24 @@ pub const Filter = union(enum) {
     audio: u8,
 };
 pub const EncryptionOptions = rar5_encryption.Options;
+pub const HeaderEncryptionOptions = struct {
+    password: []const u8,
+    salt: [rar5_encryption.salt_len]u8,
+    kdf_count: u8 = 15,
+    include_password_check: bool = true,
+    /// One unique unpredictable IV for main, every file/directory, and end
+    /// header, in wire order. Its length must equal `entries.len + 2`.
+    ivs: []const [rar5_encryption.iv_len]u8,
+
+    fn cryptoOptions(self: HeaderEncryptionOptions) rar5_encryption.HeaderOptions {
+        return .{
+            .password = self.password,
+            .salt = self.salt,
+            .kdf_count = self.kdf_count,
+            .include_password_check = self.include_password_check,
+        };
+    }
+};
 
 pub const EncodeEntry = struct {
     name: []const u8,
@@ -50,6 +69,7 @@ pub const EncodeOptions = struct {
     solid: bool = false,
     ppmd_order: u8 = 8,
     ppmd_memory_size: usize = 25 * 1024 * 1024,
+    header_encryption: ?HeaderEncryptionOptions = null,
 };
 
 pub fn encodeAlloc(
@@ -113,6 +133,7 @@ pub fn encodeVolumesAlloc(
     max_payload_per_volume: usize,
 ) Error!EncodedVolumes {
     if (options.version != .rar5) return error.UnsupportedRarEncodeOptions;
+    if (options.header_encryption != null) return error.UnsupportedRarEncodeOptions;
     if (max_payload_per_volume == 0) return error.InvalidRarVolumeSize;
     try validateEntries(entries, options);
     for (entries) |entry|
@@ -184,6 +205,7 @@ pub fn encodeVolumesAlloc(
                 fragment_crc,
                 general_flags,
                 "",
+                null,
             );
             payload_in_volume += fragment_len;
             offset += fragment_len;
@@ -240,6 +262,25 @@ fn validateEntries(entries: []const EncodeEntry, options: EncodeOptions) Error!v
             if (options.solid and options.filter != null)
                 return error.UnsupportedRarEncodeOptions;
         },
+    }
+    if (options.header_encryption) |header_encryption| {
+        if (options.version != .rar5) return error.InvalidRarHeaderEncryption;
+        try rar5_encryption.validateHeaderOptions(header_encryption.cryptoOptions());
+        const expected_iv_count = std.math.add(usize, entries.len, 2) catch
+            return error.IntegerOverflow;
+        if (header_encryption.ivs.len != expected_iv_count)
+            return error.InvalidRarHeaderEncryption;
+        for (header_encryption.ivs, 0..) |iv, index|
+            for (header_encryption.ivs[0..index]) |previous|
+                if (std.mem.eql(u8, &iv, &previous))
+                    return error.InvalidRarHeaderEncryption;
+        for (entries) |entry| {
+            if (entry.kind == .directory) continue;
+            const encryption = entry.encryption orelse
+                return error.InvalidRarHeaderEncryption;
+            if (!std.mem.eql(u8, encryption.password, header_encryption.password))
+                return error.InvalidRarHeaderEncryption;
+        }
     }
     for (entries) |entry| {
         if (!archive.isSafePath(entry.name) or std.mem.indexOfScalar(u8, entry.name, 0) != null)
@@ -429,6 +470,43 @@ fn writeRar4HeaderCrc(bytes: []u8, start: usize, end: usize) void {
     std.mem.writeInt(u16, bytes[start..][0..2], crc, .little);
 }
 
+const HeaderWriter = struct {
+    prepared: rar5_encryption.PreparedHeaderCipher,
+    ivs: []const [rar5_encryption.iv_len]u8,
+    index: usize = 0,
+
+    fn init(options: HeaderEncryptionOptions) Error!HeaderWriter {
+        return .{
+            .prepared = try rar5_encryption.prepareHeader(options.cryptoOptions()),
+            .ivs = options.ivs,
+        };
+    }
+
+    fn deinit(self: *HeaderWriter) void {
+        self.prepared.deinit();
+        self.* = undefined;
+    }
+
+    fn append(
+        self: *HeaderWriter,
+        allocator: std.mem.Allocator,
+        output: *std.ArrayList(u8),
+        clear_header: []const u8,
+    ) !void {
+        if (self.index >= self.ivs.len) return error.InvalidRarHeaderEncryption;
+        const iv = self.ivs[self.index];
+        const encrypted = try self.prepared.cipher.encryptAlloc(
+            allocator,
+            clear_header,
+            iv,
+        );
+        defer allocator.free(encrypted);
+        try output.appendSlice(allocator, &iv);
+        try output.appendSlice(allocator, encrypted);
+        self.index += 1;
+    }
+};
+
 fn encodeRar5(
     allocator: std.mem.Allocator,
     output: *std.ArrayList(u8),
@@ -436,6 +514,18 @@ fn encodeRar5(
     options: EncodeOptions,
 ) !void {
     try output.appendSlice(allocator, archive.rar5_signature);
+    var header_writer: ?HeaderWriter = if (options.header_encryption) |encryption|
+        try HeaderWriter.init(encryption)
+    else
+        null;
+    defer if (header_writer) |*value| value.deinit();
+    if (header_writer) |*value|
+        try appendRar5ArchiveEncryptionHeader(
+            allocator,
+            output,
+            value.prepared.metadata,
+        );
+    const header_writer_ptr: ?*HeaderWriter = if (header_writer) |*value| value else null;
     var encoder = rar50_encoder.Encoder.init(allocator, .{
         .dictionary_size = options.dictionary_size,
         .block_size = options.block_size,
@@ -445,18 +535,56 @@ fn encodeRar5(
     var main_specific: std.ArrayList(u8) = .empty;
     defer main_specific.deinit(allocator);
     try appendVint(allocator, &main_specific, if (options.solid) @as(u64, 0x0004) else 0);
-    try appendRar5Block(allocator, output, 1, 0, null, main_specific.items, "", "");
+    try appendRar5BlockInternal(
+        allocator,
+        output,
+        1,
+        0,
+        null,
+        main_specific.items,
+        "",
+        "",
+        header_writer_ptr,
+    );
     for (entries) |entry| try appendRar5File(
         allocator,
         output,
         entry,
         options,
         &encoder,
+        header_writer_ptr,
     );
     var end_specific: std.ArrayList(u8) = .empty;
     defer end_specific.deinit(allocator);
     try appendVint(allocator, &end_specific, 0);
-    try appendRar5Block(allocator, output, 5, 0, null, end_specific.items, "", "");
+    try appendRar5BlockInternal(
+        allocator,
+        output,
+        5,
+        0,
+        null,
+        end_specific.items,
+        "",
+        "",
+        header_writer_ptr,
+    );
+    if (header_writer) |*value|
+        if (value.index != value.ivs.len) return error.InvalidRarHeaderEncryption;
+}
+
+fn appendRar5ArchiveEncryptionHeader(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    metadata: rar5_encryption.HeaderMetadata,
+) !void {
+    var specific: std.ArrayList(u8) = .empty;
+    defer specific.deinit(allocator);
+    try appendVint(allocator, &specific, metadata.version);
+    try appendVint(allocator, &specific, metadata.flags);
+    try specific.append(allocator, metadata.kdf_count);
+    try specific.appendSlice(allocator, &metadata.salt);
+    if (metadata.password_check) |check| try specific.appendSlice(allocator, &check);
+    try appendRar5Block(allocator, output, 4, 0, null, specific.items, "", "");
 }
 
 fn startRar5Volume(
@@ -492,6 +620,7 @@ fn appendRar5File(
     entry: EncodeEntry,
     options: EncodeOptions,
     encoder: *rar50_encoder.Encoder,
+    header_writer: ?*HeaderWriter,
 ) !void {
     var compressed: ?[]u8 = null;
     defer if (compressed) |bytes| allocator.free(bytes);
@@ -524,6 +653,7 @@ fn appendRar5File(
         if (encrypted) |value| value.wire_crc32 else plain_crc,
         0,
         extra.items,
+        header_writer,
     );
 }
 
@@ -536,6 +666,7 @@ fn appendRar5FileFragment(
     data_crc32: u32,
     general_flags: u64,
     extra: []const u8,
+    header_writer: ?*HeaderWriter,
 ) !void {
     var specific: std.ArrayList(u8) = .empty;
     defer specific.deinit(allocator);
@@ -552,7 +683,7 @@ fn appendRar5FileFragment(
     try appendVint(allocator, &specific, 1); // Unix host.
     try appendVint(allocator, &specific, entry.name.len);
     try specific.appendSlice(allocator, entry.name);
-    try appendRar5Block(
+    try appendRar5BlockInternal(
         allocator,
         output,
         2,
@@ -561,6 +692,7 @@ fn appendRar5FileFragment(
         specific.items,
         extra,
         payload,
+        header_writer,
     );
 }
 
@@ -603,6 +735,30 @@ fn appendRar5Block(
     extra: []const u8,
     data: []const u8,
 ) !void {
+    return appendRar5BlockInternal(
+        allocator,
+        output,
+        header_type,
+        flags,
+        data_size,
+        specific,
+        extra,
+        data,
+        null,
+    );
+}
+
+fn appendRar5BlockInternal(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    header_type: u64,
+    flags: u64,
+    data_size: ?usize,
+    specific: []const u8,
+    extra: []const u8,
+    data: []const u8,
+    header_writer: ?*HeaderWriter,
+) !void {
     var body: std.ArrayList(u8) = .empty;
     defer body.deinit(allocator);
     try appendVint(allocator, &body, header_type);
@@ -615,12 +771,17 @@ fn appendRar5Block(
     var size_field: std.ArrayList(u8) = .empty;
     defer size_field.deinit(allocator);
     try appendVint(allocator, &size_field, body.items.len);
-    const crc_start = output.items.len;
-    try output.appendNTimes(allocator, 0, 4);
-    try output.appendSlice(allocator, size_field.items);
-    try output.appendSlice(allocator, body.items);
-    const crc = checksum.crc32(output.items[crc_start + 4 ..]);
-    std.mem.writeInt(u32, output.items[crc_start..][0..4], crc, .little);
+    var header: std.ArrayList(u8) = .empty;
+    defer header.deinit(allocator);
+    try header.appendNTimes(allocator, 0, 4);
+    try header.appendSlice(allocator, size_field.items);
+    try header.appendSlice(allocator, body.items);
+    const crc = checksum.crc32(header.items[4..]);
+    std.mem.writeInt(u32, header.items[0..4], crc, .little);
+    if (header_writer) |writer|
+        try writer.append(allocator, output, header.items)
+    else
+        try output.appendSlice(allocator, header.items);
     try output.appendSlice(allocator, data);
 }
 

@@ -21031,3 +21031,20 @@ reuse, so production keeps the simpler independently owned plans.
   (`writer_encrypted=2`, `writer_encrypted_external=2`,
   `reference_encrypted=2`). RAR4 payload encryption, RAR5 encrypted headers and
   encrypted multi-volume composition remain explicit next encryption stages.
+
+- Added RAR5 encrypted headers in both directions. A new owned-header parse
+  surface borrows packed member data while owning decrypted names and cached
+  entries, preserving the established borrowed parser without temporary-memory
+  lifetimes. It validates the clear type-4 crypt header, derives one Vail key,
+  and decrypts each following main/file/service/end header from its independent
+  IV and block-aligned CBC payload. Entry-count, copied-metadata, KDF, output and
+  codec limits remain separate. The writer accepts exactly one unique explicit
+  IV per main, entry and end header, requires same-password file-data
+  encryption for every regular member, and composes with Stored, RAR50,
+  directories and solid history. Tests cover the fixed RAR 7.30 fixture,
+  password/KDF/metadata limits, name hiding, IV policy, corrupt checksums and
+  ciphertext, truncation, solid replay and exhaustive OOM. The differential
+  adds two Vort-to-7-Zip and two RAR-to-Vort encrypted-header directions
+  (`writer_encrypted_headers=2`, `writer_encrypted_headers_external=2`,
+  `reference_encrypted_headers=2`). RAR4 payload encryption and encrypted
+  multi-volume composition remain the next encryption gaps.
