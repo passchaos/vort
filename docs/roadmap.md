@@ -20744,3 +20744,16 @@ reuse, so production keeps the simpler independently owned plans.
   on the current host (`incremental_compressed_writer_cases=8`,
   `incremental_compressed_writer_external=7`). LZF, lzip, Unix compress and
   legacy LZ4 incremental encoders remain the next writer-side gaps.
+
+- Closed two of those writer-side gaps with block-bounded
+  `LzfIncrementalEncoder` and `Lz4LegacyIncrementalEncoder`. Both delay commits
+  until deterministic block boundaries, so input/output fragmentation does not
+  affect wire bytes; LZF reuses the exact compressed-versus-stored selection
+  rule and optional EOF marker, while legacy LZ4 reuses persistent hash/chain
+  scratch and terminates at physical EOF. Tiny-buffer, exact-size, limits,
+  backpressure and exhaustive OOM tests pass. Their TAR adapters increase the
+  required writer matrix to ten schedule-independent formats, with eight
+  independently decoded by Python/system tools on the current host
+  (`incremental_compressed_writer_cases=10`,
+  `incremental_compressed_writer_external=8`). Lzip and Unix compress remain
+  the last incremental encoder/TAR-writer gaps.

@@ -60,6 +60,15 @@ after first checking for a structurally valid raw TAR.
 `TarLzfIncrementalReader` connects this decoder to the bounded TAR state
 machine without retaining the decompressed archive.
 
+`LzfIncrementalEncoder` is the symmetric block-bounded writer. It retains at
+most one caller-selected 1...65,535-byte plaintext block plus compressed and
+pending scratch, applies the same complete-block compressed-versus-stored rule
+as the one-shot writer, and optionally emits the final zero marker. Block
+scheduling depends only on `block_size`, so arbitrary input/output
+fragmentation is byte-identical to `encodeLzfAlloc`.
+`TarLzfIncrementalWriter` composes it with the raw TAR writer without
+materializing the archive.
+
 CLI validation surfaces:
 
 ```sh

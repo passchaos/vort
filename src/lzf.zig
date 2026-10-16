@@ -1,13 +1,16 @@
 const block = @import("lzf/block.zig");
 const frame = @import("lzf/frame.zig");
 const incremental_decoder = @import("lzf/incremental_decoder.zig");
+const incremental_encoder = @import("lzf/incremental_encoder.zig");
+const incremental_encoder_tests = @import("lzf/incremental_encoder_tests.zig");
 const incremental_tests = @import("lzf/incremental_tests.zig");
 
-pub const Error = block.Error || frame.Error || incremental_decoder.Decoder.Error;
+pub const Error = block.Error || frame.Error || incremental_decoder.Decoder.Error || incremental_encoder.Encoder.Error;
 pub const EncodeOptions = frame.EncodeOptions;
 pub const FileInfo = frame.FileInfo;
 pub const max_block_size = frame.max_block_size;
 pub const IncrementalDecoder = incremental_decoder.Decoder;
+pub const IncrementalEncoder = incremental_encoder.Encoder;
 
 pub const blockEncodedBound = block.encodedBound;
 pub const blockDecodedSize = block.decodedSize;
@@ -34,5 +37,7 @@ test {
     _ = block;
     _ = frame;
     _ = incremental_decoder;
+    _ = incremental_encoder;
+    _ = incremental_encoder_tests;
     _ = incremental_tests;
 }

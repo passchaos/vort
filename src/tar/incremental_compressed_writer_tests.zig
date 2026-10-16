@@ -126,6 +126,35 @@ test "compressed TAR incremental writers compose eight streaming wrappers" {
     }
 }
 
+test "compressed TAR incremental writers compose LZF and legacy LZ4" {
+    const allocator = std.testing.allocator;
+    const data = "LZF and legacy LZ4 TAR payload\n" ** 32;
+    const entries = [_]TestEntry{.{
+        .options = .{ .name = "payload.bin", .size = data.len },
+        .data = data,
+    }};
+    inline for (.{
+        .{ compressed_writer.LzfWriter, compressed.Compression.lzf },
+        .{ compressed_writer.Lz4LegacyWriter, compressed.Compression.lz4 },
+    }) |case| {
+        const one = try encode(case[0], allocator, &entries, 1, 1, 1);
+        defer allocator.free(one);
+        const micro = try encode(case[0], allocator, &entries, 17, 31, 29);
+        defer allocator.free(micro);
+        try std.testing.expectEqualSlices(u8, one, micro);
+        const raw = switch (case[1]) {
+            .lzf => try @import("../lzf.zig").decodeAlloc(allocator, one),
+            .lz4 => try @import("../lz4_legacy.zig").decodeAlloc(allocator, one),
+            else => unreachable,
+        };
+        defer allocator.free(raw);
+        const parsed = try tar.parse(raw);
+        const decoded = try parsed.extractByNameAlloc(allocator, "payload.bin");
+        defer allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, entries[0].data, decoded);
+    }
+}
+
 test "compressed TAR incremental writer enforces backpressure limits and poison" {
     const allocator = std.testing.allocator;
     try std.testing.expectError(

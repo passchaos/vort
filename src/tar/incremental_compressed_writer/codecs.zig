@@ -6,7 +6,9 @@ const br = @import("../../br.zig");
 const bzip2 = @import("../../bzip2.zig");
 const deflate = @import("../../deflate.zig");
 const lz4 = @import("../../lz4.zig");
+const lz4_legacy = @import("../../lz4_legacy.zig");
 const lzma = @import("../../lzma.zig");
+const lzf = @import("../../lzf.zig");
 const lzop = @import("../../lzop.zig");
 const xz = @import("../../xz.zig");
 const zstd = @import("../../zstd.zig");
@@ -84,6 +86,12 @@ pub const Lz4 = struct {
         state.finish();
     }
 };
+
+pub const Lz4Legacy = FallibleInitVoidFinish(
+    lz4_legacy.IncrementalEncoder,
+    lz4_legacy.Error,
+);
+pub const Lzf = FallibleInitVoidFinish(lzf.IncrementalEncoder, lzf.Error);
 
 pub const Zstandard = struct {
     pub const State = zstd.NativeIncrementalFrameEncoder;

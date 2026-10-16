@@ -24,6 +24,13 @@ must call `finish()` at EOF; partial length fields and payloads then fail as
 `TruncatedFrame`. Total-output, compressed-block, decoded-block and optional
 exact-output limits are checked before a block is exposed.
 
+`Lz4LegacyIncrementalEncoder` retains one configurable block up to 8 MiB and
+reuses the native LZ4 block encoder's hash/chain scratch across blocks. It emits
+the magic immediately, commits only complete blocks, and treats physical EOF as
+the stream terminator. One-byte and coalesced schedules are byte-identical to
+`encodeLz4LegacyAlloc`. `TarLz4LegacyIncrementalWriter` is the bounded TAR
+composition surface.
+
 ```sh
 zig build run -- encode-lz4-legacy-file input.bin output.lz4 8388608
 zig build run -- inspect-lz4-legacy-file output.lz4 536870912

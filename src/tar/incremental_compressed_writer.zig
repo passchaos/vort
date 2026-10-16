@@ -253,6 +253,8 @@ pub const BrotliWriter = Writer(codecs.Brotli);
 pub const LzmaWriter = Writer(codecs.Lzma);
 pub const XzWriter = Writer(codecs.Xz);
 pub const Lz4Writer = Writer(codecs.Lz4);
+pub const Lz4LegacyWriter = Writer(codecs.Lz4Legacy);
+pub const LzfWriter = Writer(codecs.Lzf);
 pub const ZstandardWriter = Writer(codecs.Zstandard);
 pub const LzopWriter = Writer(codecs.Lzop);
 

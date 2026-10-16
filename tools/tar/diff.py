@@ -152,6 +152,7 @@ def decode_streaming_tarball(
     archive_path: Path,
     zstd_tool: str | None,
     lz4_tool: str | None,
+    lzf_tool: str | None,
     lzop_tool: str | None,
 ) -> bytes | None:
     encoded = archive_path.read_bytes()
@@ -172,6 +173,23 @@ def decode_streaming_tarball(
             raise AssertionError("lz4 CLI is required for incremental tar.lz4 writer")
         return subprocess.run(
             [lz4_tool, "-q", "-d", "-c", str(archive_path)],
+            check=True,
+            stdout=subprocess.PIPE,
+        ).stdout
+    if compression == "lz4-legacy":
+        if lz4_tool is None:
+            raise AssertionError("lz4 CLI is required for incremental legacy LZ4 writer")
+        return subprocess.run(
+            [lz4_tool, "-q", "-d", "-c", str(archive_path)],
+            check=True,
+            stdout=subprocess.PIPE,
+        ).stdout
+    if compression == "lzf":
+        if lzf_tool is None:
+            return None
+        return subprocess.run(
+            [lzf_tool, "-d"],
+            input=encoded,
             check=True,
             stdout=subprocess.PIPE,
         ).stdout
@@ -493,6 +511,8 @@ def main() -> None:
             "lz4",
             "zstd",
             "lzop",
+            "lzf",
+            "lz4-legacy",
         }
         auto_formats = {
             "none": "raw_tar",
@@ -653,6 +673,7 @@ def main() -> None:
                 first_stream,
                 zstd_tool,
                 lz4_tool,
+                lzf_tool,
                 lzop_tool,
             )
             if raw_stream is not None:

@@ -93,7 +93,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   Vort;
 - pure Zig LZ4 legacy-frame parsing and deterministic writing with independent
   blocks up to 8 MiB, zero-allocation metadata iteration, decoded-size preflight,
-  bounded/caller-owned decode, a one-block-bounded incremental decoder, system
+  bounded/caller-owned decode, one-block-bounded incremental encode/decode, system
   `lz4 -l` interoperability, and automatic TAR/CPIO legacy-magic detection;
 - pure Zig Windows LZNT1 encoding and decoding with 4 KiB chunks, dynamic
   length/displacement token partitions, overlapping-copy matches, stored-block
@@ -350,7 +350,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   and dictionary limits, plus bounded incremental multi-member decoding;
 - pure Zig raw LZF block and standard `ZV` stream encoding/decoding with
   8 KiB match distances, 65,535-byte stored/compressed blocks, optional EOF markers,
-  bounded/caller-owned APIs, a one-block-bounded incremental decoder,
+  bounded/caller-owned APIs, one-block-bounded incremental encode/decode,
   decoded-size preflight, metadata inspection, and
   automatic `.tar.lzf` composition;
 - dependency-free LHA/LZH level-0/1/2/3 and SFX-prefix reading plus deterministic
@@ -408,7 +408,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   gzip/Bzip2/Brotli/Unix-compress/LZMA/XZ/modern+legacy-LZ4/LZF/lzip/
   Zstandard/LZOP-to-TAR reading, bounded 512-byte incremental auto-dispatch
   with streamed shared skippable frames, bounded gzip/Bzip2/Brotli/LZMA/XZ/
-  modern-LZ4/Zstandard/LZOP compressed-TAR writing, and automatic raw/gzip/Bzip2/Brotli/
+  modern+legacy-LZ4/LZF/Zstandard/LZOP compressed-TAR writing, and automatic raw/gzip/Bzip2/Brotli/
   Unix-compress/LZMA-Alone/XZ/
   LZ4/lzip/LZF/Zstandard/LZOP tarball composition;
 - dependency-free CPIO reading and deterministic writing for SVR4 newc/CRC,
