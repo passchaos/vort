@@ -20780,3 +20780,21 @@ reuse, so production keeps the simpler independently owned plans.
   (`incremental_compressed_writer_cases=12`,
   `incremental_compressed_writer_external=9`). The current tarball scope now
   has bounded incremental read and write coverage for every supported wrapper.
+
+- Added `CpioIncrementalWriter` for SVR4 newc/CRC, POSIX ODC, and both endian
+  variants of old binary CPIO. A shared wire module now owns fixed-field
+  serialization, pathname termination and absolute archive alignment, keeping
+  one-shot and streamed output byte-identical. Entry payloads pass directly
+  from caller input to caller output; only the current header/name and final
+  trailer/record padding are retained under an explicit control-byte limit.
+  The state machine exposes entry boundaries and exact progress, supports
+  explicit hard-link inode/link-count metadata, and bounds entry count,
+  per-entry bytes, total input and archive output. Because SVR4 CRC stores its
+  byte sum before data, non-empty entries declare that value and the writer
+  verifies it incrementally, including GNU's zero-checksum symlink convention.
+  One-byte and micro-buffer schedules match the one-shot wire for every format
+  and 0/1/7/512-byte final record policies; CRC mismatch, backpressure, state,
+  limits and exhaustive OOM paths have focused coverage. The required GNU cpio
+  differential adds ten schedule cases across all five formats
+  (`incremental_writer_cases=10`). Bounded raw CPIO reading and composition
+  with the twelve incremental outer codecs remain the next streaming gaps.

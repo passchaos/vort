@@ -91,6 +91,7 @@ def main() -> None:
     writer_external = 0
     reference_writer = 0
     wrapper_cases = 0
+    incremental_writer_cases = 0
 
     with tempfile.TemporaryDirectory(prefix="vort-cpio-diff-") as temp_text:
         temp = Path(temp_text)
@@ -151,6 +152,20 @@ def main() -> None:
             for format_name in formats:
                 archive = temp / f"probe-{format_name}.cpio"
                 run(args.writer, str(archive), format_name)
+                incremental_one = temp / f"probe-{format_name}-incremental-one.cpio"
+                incremental_micro = temp / f"probe-{format_name}-incremental-micro.cpio"
+                run(args.writer, str(incremental_one), format_name, "incremental-one")
+                run(args.writer, str(incremental_micro), format_name, "incremental-micro")
+                expected_wire = archive.read_bytes()
+                if incremental_one.read_bytes() != expected_wire:
+                    raise AssertionError(
+                        f"one-byte incremental CPIO wire mismatch for {format_name}"
+                    )
+                if incremental_micro.read_bytes() != expected_wire:
+                    raise AssertionError(
+                        f"micro incremental CPIO wire mismatch for {format_name}"
+                    )
+                incremental_writer_cases += 2
                 listing = run(args.cli, "list-cpio-file", str(archive)).stdout
                 if "kind=directory" not in listing or "kind=symlink" not in listing:
                     raise AssertionError(f"Vort writer probe metadata mismatch for {format_name}: {listing}")
@@ -223,6 +238,7 @@ def main() -> None:
         f"formats={len(formats)} self_writer_cases={len(formats)} "
         f"cpio={cpio_tool is not None} writer_external={writer_external} "
         f"reference_writer={reference_writer} wrapper_cases={wrapper_cases} "
+        f"incremental_writer_cases={incremental_writer_cases} "
         "corrupt_crc=True truncated=True trailing=True"
     )
 

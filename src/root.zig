@@ -539,6 +539,12 @@ pub const encodeCompressedCpioAlloc = cpio.encodeCompressedAlloc;
 pub const encodeCompressedCpioAppend = cpio.encodeCompressedAppend;
 pub const decodeCompressedCpioAlloc = cpio.decodeCompressedAlloc;
 pub const decodeAutoCpioAlloc = cpio.decodeAutoAlloc;
+pub const CpioIncrementalWriter = cpio.IncrementalWriter;
+pub const CpioIncrementalWriterOptions = cpio.IncrementalWriterOptions;
+pub const CpioIncrementalWriterEntryOptions = cpio.IncrementalWriterEntryOptions;
+pub const CpioIncrementalWriterPhase = cpio.IncrementalWriterPhase;
+pub const CpioIncrementalWriterStatus = cpio.IncrementalWriterStatus;
+pub const CpioIncrementalWriterStepResult = cpio.IncrementalWriterStepResult;
 
 pub const ArError = ar.Error;
 pub const ArEntry = ar.Entry;

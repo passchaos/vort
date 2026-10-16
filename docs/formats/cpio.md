@@ -29,6 +29,22 @@ block/character devices, FIFOs, and sockets. Output is deterministic and by
 default padded to a conventional 512-byte record boundary; callers may select
 a different record size or disable final record padding.
 
+`CpioIncrementalWriter` provides the same five formats without retaining entry
+payloads or already-emitted archive bytes. `beginEntry` copies the header and
+pathname into a bounded control buffer; `step` then copies caller input
+directly to caller output with exact progress accounting. `finishEntry` emits
+format alignment, and `finishArchive` emits `TRAILER!!!` plus the configured
+record padding. The surface reports `entry_done`, applies output backpressure,
+and limits entry count, control bytes, per-entry bytes, total input, and total
+archive output. Explicit inode/link-count fields also allow callers to describe
+hard-link groups.
+
+Every CPIO header carries its data size before the payload, so incremental
+entries require a known `size`. SVR4 CRC additionally carries the byte sum in
+that header: non-empty CRC entries therefore provide `checksum` to
+`beginEntry`, and the writer recomputes and verifies it while streaming. The
+historical zero-checksum GNU symlink convention remains accepted.
+
 The parser requires:
 
 - valid fixed-width hexadecimal, octal, or binary fields;
@@ -81,16 +97,19 @@ compression argument is `none`, `gzip`, `bzip2`, `brotli`, `compress-z`,
 
 ## Differential validation
 
-`tools/cpio/diff.py` verifies all five Vort writers with GNU cpio, reads all
-four formats GNU cpio can create on the host, checks directory and symlink
-metadata, exercises all twelve wrapper choices, and rejects corrupt CRC data,
-truncated headers, and nonzero bytes after the trailer:
+`tools/cpio/diff.py` verifies all five Vort writers with GNU cpio, requires the
+one-byte and micro-buffer incremental schedules to be byte-identical to the
+one-shot writer for every format, reads all four formats GNU cpio can create on
+the host, checks directory and symlink metadata, exercises all twelve wrapper
+choices, and rejects corrupt CRC data, truncated headers, and nonzero bytes
+after the trailer:
 
 ```sh
 python3 tools/cpio/diff.py --cli path/to/vort --cpio /usr/bin/cpio
 zig build run-cpio-diff -- --cpio /usr/bin/cpio
 ```
 
-Future functionality can add hard-link writer controls, concatenated CPIO
-members, HP-UX device-number variants, and afio's extended ODC header without
-changing the current entry or compression APIs.
+Future functionality can add bounded incremental reading and compressed-stream
+composition, one-shot hard-link writer controls, concatenated CPIO members,
+HP-UX device-number variants, and afio's extended ODC header without changing
+the current entry or compression APIs.
