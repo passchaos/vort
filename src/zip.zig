@@ -58,6 +58,10 @@ const end_of_central_len: usize = 22;
 pub const CompressionMethod = writer.CompressionMethod;
 pub const CreatorSystem = types.CreatorSystem;
 pub const DosTimestamp = types.DosTimestamp;
+pub const ExtendedTimestamp = types.ExtendedTimestamp;
+pub const NtfsTimestamp = types.NtfsTimestamp;
+pub const fileTimeFromUnixSeconds = types.fileTimeFromUnixSeconds;
+pub const fileTimeToUnixSeconds = types.fileTimeToUnixSeconds;
 pub const unixExternalAttributes = types.unixExternalAttributes;
 pub const Zip64Mode = writer.Zip64Mode;
 pub const EncodeEntry = writer.EncodeEntry;
@@ -551,6 +555,38 @@ pub fn extractByNameAllocWithOptions(
 
 const ParsedCentralEntry = struct { entry: Entry, next_offset: usize };
 
+const LocalTimestamps = struct {
+    extended: ?ExtendedTimestamp,
+    ntfs: ?NtfsTimestamp,
+};
+
+fn parseLocalTimestamps(archive: Archive, offset: usize) Error!LocalTimestamps {
+    if (try readU32(archive.bytes, offset) != local_file_signature)
+        return error.InvalidZipArchive;
+    const fixed_end = try checkedEnd(
+        offset,
+        wire.local_file_header_len,
+        archive.central_directory_offset,
+    );
+    const name_len: usize = try readU16(archive.bytes, offset + 26);
+    const extra_len: usize = try readU16(archive.bytes, offset + 28);
+    const name_end = try checkedEnd(
+        fixed_end,
+        name_len,
+        archive.central_directory_offset,
+    );
+    const extra_end = try checkedEnd(
+        name_end,
+        extra_len,
+        archive.central_directory_offset,
+    );
+    const extra = archive.bytes[name_end..extra_end];
+    return .{
+        .extended = try records.parseExtendedTimestampExtra(extra, .local),
+        .ntfs = try records.parseNtfsTimestampExtra(extra),
+    };
+}
+
 fn parseCentralEntry(archive: Archive, offset: usize) Error!ParsedCentralEntry {
     const central_end = try checkedEnd(archive.central_directory_offset, archive.central_directory_size, archive.bytes.len);
     if (offset < archive.central_directory_offset or offset >= central_end) return error.InvalidZipArchive;
@@ -589,6 +625,13 @@ fn parseCentralEntry(archive: Archive, offset: usize) Error!ParsedCentralEntry {
         disk_start_u16,
     );
     const parsed_aes = try records.parseWinZipAesExtra(archive.bytes[name_end..extra_end]);
+    const central_extended_timestamp = try records.parseExtendedTimestampExtra(
+        archive.bytes[name_end..extra_end],
+        .central,
+    );
+    const central_ntfs_timestamp = try records.parseNtfsTimestampExtra(
+        archive.bytes[name_end..extra_end],
+    );
     const parsed_strong = try records.parsePkwareStrongEncryptionExtra(
         archive.bytes[name_end..extra_end],
     );
@@ -612,6 +655,18 @@ fn parseCentralEntry(archive: Archive, offset: usize) Error!ParsedCentralEntry {
     if (isZstandardMethod(method) and version_needed < 63)
         return error.InvalidZipArchive;
     if (values.local_header_offset >= archive.central_directory_offset) return error.InvalidZipArchive;
+    const local_timestamps = try parseLocalTimestamps(
+        archive,
+        values.local_header_offset,
+    );
+    const extended_timestamp = try records.mergeExtendedTimestamps(
+        local_timestamps.extended,
+        central_extended_timestamp,
+    );
+    const ntfs_timestamp = try records.mergeNtfsTimestamps(
+        local_timestamps.ntfs,
+        central_ntfs_timestamp,
+    );
 
     return .{
         .entry = .{
@@ -626,6 +681,8 @@ fn parseCentralEntry(archive: Archive, offset: usize) Error!ParsedCentralEntry {
             .central_header_offset = offset,
             .zip64 = values.zip64,
             .modified = modified,
+            .extended_timestamp = extended_timestamp,
+            .ntfs_timestamp = ntfs_timestamp,
             .version_made_by = version_made_by,
             .internal_attributes = internal_attributes,
             .external_attributes = external_attributes,
@@ -668,6 +725,13 @@ fn localPayloadData(
     const local_extra_start = name_end;
     const data_start = try checkedEnd(local_extra_start, extra_len, archive.central_directory_offset);
     const local_aes = try records.parseWinZipAesExtra(archive.bytes[local_extra_start..data_start]);
+    const local_extended_timestamp = try records.parseExtendedTimestampExtra(
+        archive.bytes[local_extra_start..data_start],
+        .local,
+    );
+    const local_ntfs_timestamp = try records.parseNtfsTimestampExtra(
+        archive.bytes[local_extra_start..data_start],
+    );
     const local_strong = try records.parsePkwareStrongEncryptionExtra(
         archive.bytes[local_extra_start..data_start],
     );
@@ -692,6 +756,11 @@ fn localPayloadData(
     if (!std.mem.eql(u8, archive.bytes[name_start..name_end], entry.name) or
         local_dos_time != entry.modified.time or local_dos_date != entry.modified.date)
         return error.InvalidZipArchive;
+    _ = try records.mergeExtendedTimestamps(
+        local_extended_timestamp,
+        entry.extended_timestamp,
+    );
+    _ = try records.mergeNtfsTimestamps(local_ntfs_timestamp, entry.ntfs_timestamp);
     const data_end = try checkedEnd(data_start, entry.compressed_size, archive.central_directory_offset);
     if ((local_compressed == std.math.maxInt(u32) or local_uncompressed == std.math.maxInt(u32)) and
         local_version_needed < 45) return error.InvalidZipArchive;
@@ -733,6 +802,8 @@ fn sameEntry(a: Entry, b: Entry) bool {
         a.central_header_offset == b.central_header_offset and
         a.zip64 == b.zip64 and
         std.meta.eql(a.modified, b.modified) and
+        std.meta.eql(a.extended_timestamp, b.extended_timestamp) and
+        std.meta.eql(a.ntfs_timestamp, b.ntfs_timestamp) and
         a.version_made_by == b.version_made_by and
         a.internal_attributes == b.internal_attributes and
         a.external_attributes == b.external_attributes and
@@ -980,6 +1051,49 @@ test "ZIP writer deterministically round trips multiple stored and deflate entri
 
 test "ZIP entry metadata round trips comments timestamps and Unix attributes" {
     const allocator = std.testing.allocator;
+    try std.testing.expectEqual(@as(u64, 0), try fileTimeFromUnixSeconds(-11_644_473_600));
+    try std.testing.expectEqual(@as(i64, -11_644_473_600), try fileTimeToUnixSeconds(0));
+    try std.testing.expectError(
+        error.InvalidZipTimestamp,
+        fileTimeFromUnixSeconds(-11_644_473_601),
+    );
+    const central_only_extended = [_]u8{
+        0x55, 0x54, 0x05, 0x00, 0x03, 0x01, 0x00, 0x00, 0x00,
+    };
+    const parsed_central_extended = (try records.parseExtendedTimestampExtra(
+        &central_only_extended,
+        .central,
+    )).?;
+    try std.testing.expectEqual(@as(?i64, 1), parsed_central_extended.modified);
+    try std.testing.expectEqual(@as(?i64, null), parsed_central_extended.accessed);
+    try std.testing.expectError(
+        error.InvalidZipArchive,
+        records.parseExtendedTimestampExtra(&central_only_extended, .local),
+    );
+    const invalid_extended_flags = [_]u8{ 0x55, 0x54, 0x01, 0x00, 0x08 };
+    try std.testing.expectError(
+        error.InvalidZipArchive,
+        records.parseExtendedTimestampExtra(&invalid_extended_flags, .central),
+    );
+    const invalid_extended_trailing = [_]u8{
+        0x55, 0x54, 0x06, 0x00, 0x01, 1, 0, 0, 0, 0xff,
+    };
+    try std.testing.expectError(
+        error.InvalidZipArchive,
+        records.parseExtendedTimestampExtra(&invalid_extended_trailing, .local),
+    );
+    const duplicate_extended = central_only_extended ++ central_only_extended;
+    try std.testing.expectError(
+        error.InvalidZipArchive,
+        records.parseExtendedTimestampExtra(&duplicate_extended, .central),
+    );
+    const invalid_ntfs = [_]u8{
+        0x0a, 0x00, 0x08, 0x00, 0, 0, 0, 0, 1, 0, 0, 0,
+    };
+    try std.testing.expectError(
+        error.InvalidZipArchive,
+        records.parseNtfsTimestampExtra(&invalid_ntfs),
+    );
     try std.testing.expectError(
         error.InvalidZipTimestamp,
         DosTimestamp.fromComponents(.{
@@ -999,6 +1113,20 @@ test "ZIP entry metadata round trips comments timestamps and Unix attributes" {
         .minute = 23,
         .second = 45,
     });
+    const extended: ExtendedTimestamp = .{
+        .modified = 1_700_000_001,
+        .accessed = 1_700_000_002,
+        .created = -1,
+    };
+    const ntfs: NtfsTimestamp = .{
+        .modified = try fileTimeFromUnixSeconds(1_700_000_011),
+        .accessed = try fileTimeFromUnixSeconds(1_700_000_002),
+        .created = try fileTimeFromUnixSeconds(-1),
+    };
+    try std.testing.expectEqual(
+        @as(i64, 1_700_000_011),
+        try fileTimeToUnixSeconds(ntfs.modified),
+    );
     const entries = [_]EncodeEntry{
         .{
             .name = "regular.txt",
@@ -1006,6 +1134,8 @@ test "ZIP entry metadata round trips comments timestamps and Unix attributes" {
             .method = .stored,
             .comment = "entry comment",
             .modified = modified,
+            .extended_timestamp = extended,
+            .ntfs_timestamp = ntfs,
             .creator_system = .unix,
             .internal_attributes = 1,
             .external_attributes = unixExternalAttributes(0o100640),
@@ -1016,6 +1146,7 @@ test "ZIP entry metadata round trips comments timestamps and Unix attributes" {
             .method = .stored,
             .comment = "symbolic link",
             .modified = modified,
+            .extended_timestamp = .{ .modified = 1_600_000_001 },
             .creator_system = .unix,
             .external_attributes = unixExternalAttributes(0o120777),
         },
@@ -1024,6 +1155,7 @@ test "ZIP entry metadata round trips comments timestamps and Unix attributes" {
             .data = "",
             .method = .stored,
             .modified = modified,
+            .ntfs_timestamp = ntfs,
             .creator_system = .unix,
             .external_attributes = unixExternalAttributes(0o040755),
         },
@@ -1041,6 +1173,10 @@ test "ZIP entry metadata round trips comments timestamps and Unix attributes" {
                 const entry = try archive.entryAt(index);
                 try std.testing.expectEqualStrings(expected.comment, entry.comment);
                 try std.testing.expectEqual(modified, entry.modified);
+                try std.testing.expectEqual(expected.extended_timestamp, entry.extended_timestamp);
+                try std.testing.expectEqual(expected.ntfs_timestamp, entry.ntfs_timestamp);
+                if (index == 0)
+                    try std.testing.expectEqual(@as(?i64, 1_700_000_011), entry.modifiedUnixSeconds());
                 try std.testing.expectEqual(CreatorSystem.unix, entry.creatorSystem());
                 try std.testing.expectEqual(expected.internal_attributes, entry.internal_attributes);
                 try std.testing.expectEqual(expected.external_attributes.?, entry.external_attributes);
@@ -1050,6 +1186,68 @@ test "ZIP entry metadata round trips comments timestamps and Unix attributes" {
                 );
                 try std.testing.expectEqual(index == 1, entry.isSymbolicLink());
                 try std.testing.expectEqual(index == 2, entry.isDirectory());
+                if (index == 0) {
+                    const local_name_len: usize = try readU16(
+                        bytes,
+                        entry.local_header_offset + 26,
+                    );
+                    const local_extra_len: usize = try readU16(
+                        bytes,
+                        entry.local_header_offset + 28,
+                    );
+                    const local_extra_start = entry.local_header_offset +
+                        wire.local_file_header_len + local_name_len;
+                    const local_extra = bytes[local_extra_start..][0..local_extra_len];
+                    try std.testing.expectEqual(
+                        @as(usize, 13),
+                        (try records.findExtra(
+                            local_extra,
+                            wire.extended_timestamp_extra_id,
+                        )).?.len,
+                    );
+                    try std.testing.expectEqual(
+                        @as(usize, 32),
+                        (try records.findExtra(
+                            local_extra,
+                            wire.ntfs_timestamp_extra_id,
+                        )).?.len,
+                    );
+
+                    const central_name_len: usize = try readU16(
+                        bytes,
+                        entry.central_header_offset + 28,
+                    );
+                    const central_extra_len: usize = try readU16(
+                        bytes,
+                        entry.central_header_offset + 30,
+                    );
+                    const central_extra_start = entry.central_header_offset +
+                        wire.central_file_header_len + central_name_len;
+                    const central_extra = bytes[central_extra_start..][0..central_extra_len];
+                    const central_extended = (try records.findExtra(
+                        central_extra,
+                        wire.extended_timestamp_extra_id,
+                    )).?;
+                    try std.testing.expectEqual(@as(usize, 5), central_extended.len);
+                    try std.testing.expectEqual(@as(u8, 0x07), central_extended[0]);
+                    try std.testing.expectEqual(
+                        @as(usize, 32),
+                        (try records.findExtra(
+                            central_extra,
+                            wire.ntfs_timestamp_extra_id,
+                        )).?.len,
+                    );
+                    var corrupt_timestamp = try allocator.dupe(u8, bytes);
+                    defer allocator.free(corrupt_timestamp);
+                    const timestamp_offset = @intFromPtr(central_extended.ptr) -
+                        @intFromPtr(bytes.ptr);
+                    corrupt_timestamp[timestamp_offset + 1] ^= 1;
+                    const corrupt_timestamp_archive = try parse(corrupt_timestamp);
+                    try std.testing.expectError(
+                        error.InvalidZipArchive,
+                        corrupt_timestamp_archive.entryAt(0),
+                    );
+                }
                 const decoded = try archive.extractAlloc(allocator, entry);
                 defer allocator.free(decoded);
                 try std.testing.expectEqualSlices(u8, expected.data, decoded);
@@ -1078,6 +1276,15 @@ test "ZIP entry metadata round trips comments timestamps and Unix attributes" {
     try std.testing.expectError(
         error.InvalidZipTimestamp,
         encodeAlloc(allocator, &invalid, .{}),
+    );
+    const invalid_extended = [_]EncodeEntry{.{
+        .name = "invalid-extended-time",
+        .data = "",
+        .extended_timestamp = .{},
+    }};
+    try std.testing.expectError(
+        error.InvalidZipTimestamp,
+        encodeAlloc(allocator, &invalid_extended, .{}),
     );
 }
 
@@ -2155,6 +2362,12 @@ test "ZIP split writer plans standard atomic records and round trips" {
             .method = .stored,
             .comment = "split metadata",
             .modified = modified,
+            .extended_timestamp = .{ .modified = 1_590_000_001 },
+            .ntfs_timestamp = .{
+                .modified = try fileTimeFromUnixSeconds(1_590_000_001),
+                .accessed = try fileTimeFromUnixSeconds(1_590_000_002),
+                .created = try fileTimeFromUnixSeconds(1_590_000_003),
+            },
             .creator_system = .unix,
             .external_attributes = unixExternalAttributes(0o100644),
         },
@@ -2213,6 +2426,8 @@ test "ZIP split writer plans standard atomic records and round trips" {
             const streamed_tail = stream_reader.entryAt(1).?;
             try std.testing.expectEqualStrings("split metadata", streamed_tail.comment.?);
             try std.testing.expectEqual(modified, streamed_tail.modified);
+            try std.testing.expectEqual(entries[1].extended_timestamp, streamed_tail.extended_timestamp);
+            try std.testing.expectEqual(entries[1].ntfs_timestamp, streamed_tail.ntfs_timestamp);
             try std.testing.expectEqual(@as(?u16, 0o100644), streamed_tail.unixMode());
         }
     }

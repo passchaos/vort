@@ -850,6 +850,8 @@ pub const Reader = struct {
             .zip64_local = local.zip64,
             .uses_descriptor = local.descriptor_layout != null,
             .modified = local.modified,
+            .extended_timestamp = local.extended_timestamp,
+            .ntfs_timestamp = local.ntfs_timestamp,
             .winzip_aes = local.winzip_aes,
             .pkware_strong_encryption = null,
         });

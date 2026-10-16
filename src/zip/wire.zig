@@ -11,6 +11,8 @@ pub const zip64_end_of_central_signature: u32 = 0x0606_4b50;
 pub const zip64_end_of_central_locator_signature: u32 = 0x0706_4b50;
 pub const central_directory_digital_signature: u32 = 0x0505_4b50;
 pub const zip64_extra_id: u16 = 0x0001;
+pub const ntfs_timestamp_extra_id: u16 = 0x000a;
+pub const extended_timestamp_extra_id: u16 = 0x5455;
 pub const pkware_strong_extra_id: u16 = 0x0017;
 pub const winzip_aes_extra_id: u16 = 0x9901;
 
@@ -51,6 +53,8 @@ pub const EncodedEntry = struct {
     local_header_offset: u64,
     zip64: bool,
     modified: types.DosTimestamp = .deterministic,
+    extended_timestamp: ?types.ExtendedTimestamp = null,
+    ntfs_timestamp: ?types.NtfsTimestamp = null,
     creator_system: types.CreatorSystem = .fat,
     internal_attributes: u16 = 0,
     external_attributes: ?u32 = null,
@@ -86,10 +90,7 @@ pub fn appendLocalHeader(
     try appendU32(allocator, out, if (entry.zip64) std.math.maxInt(u32) else if (descriptor) 0 else @intCast(entry.compressed_size));
     try appendU32(allocator, out, if (entry.zip64) std.math.maxInt(u32) else if (descriptor) 0 else @intCast(entry.uncompressed_size));
     try appendU16(allocator, out, @intCast(entry.name.len));
-    try appendU16(allocator, out, @intCast(
-        (if (entry.zip64) @as(usize, 20) else 0) +
-            (if (entry.winzip_aes != null) @as(usize, 11) else 0),
-    ));
+    try appendU16(allocator, out, @intCast(localExtraLen(entry)));
     try out.appendSlice(allocator, entry.name);
     if (entry.zip64) {
         try appendU16(allocator, out, zip64_extra_id);
@@ -98,6 +99,10 @@ pub fn appendLocalHeader(
         try appendU64(allocator, out, if (options.zip64_size_placeholders) 0 else entry.compressed_size);
     }
     if (entry.winzip_aes) |aes| try appendWinZipAesExtra(allocator, out, aes, entry.method);
+    if (entry.extended_timestamp) |timestamp|
+        try appendExtendedTimestampExtra(allocator, out, timestamp, .local);
+    if (entry.ntfs_timestamp) |timestamp|
+        try appendNtfsTimestampExtra(allocator, out, timestamp);
 }
 
 pub fn appendDataDescriptor(
@@ -141,11 +146,7 @@ pub fn appendCentralHeader(
     try appendU32(allocator, out, if (entry.zip64) std.math.maxInt(u32) else @intCast(entry.compressed_size));
     try appendU32(allocator, out, if (entry.zip64) std.math.maxInt(u32) else @intCast(entry.uncompressed_size));
     try appendU16(allocator, out, @intCast(entry.name.len));
-    try appendU16(allocator, out, @intCast(
-        (if (entry.zip64) @as(usize, 28) else 0) +
-            (if (entry.winzip_aes != null) @as(usize, 11) else 0) +
-            (if (entry.pkware_strong_encryption != null) @as(usize, 12) else 0),
-    ));
+    try appendU16(allocator, out, @intCast(centralExtraLen(entry)));
     try appendU16(allocator, out, @intCast(entry.comment.len));
     try appendU16(allocator, out, 0);
     try appendU16(allocator, out, entry.internal_attributes);
@@ -164,7 +165,106 @@ pub fn appendCentralHeader(
     if (entry.winzip_aes) |aes| try appendWinZipAesExtra(allocator, out, aes, entry.method);
     if (entry.pkware_strong_encryption) |strong|
         try appendPkwareStrongEncryptionExtra(allocator, out, strong);
+    if (entry.extended_timestamp) |timestamp|
+        if (timestamp.modified != null)
+            try appendExtendedTimestampExtra(allocator, out, timestamp, .central);
+    if (entry.ntfs_timestamp) |timestamp|
+        try appendNtfsTimestampExtra(allocator, out, timestamp);
     try out.appendSlice(allocator, entry.comment);
+}
+
+pub fn localExtraLen(entry: EncodedEntry) usize {
+    return (if (entry.zip64) @as(usize, 20) else 0) +
+        (if (entry.winzip_aes != null) @as(usize, 11) else 0) +
+        localTimestampExtraLen(entry.extended_timestamp, entry.ntfs_timestamp);
+}
+
+pub fn centralExtraLen(entry: EncodedEntry) usize {
+    return (if (entry.zip64) @as(usize, 28) else 0) +
+        (if (entry.winzip_aes != null) @as(usize, 11) else 0) +
+        (if (entry.pkware_strong_encryption != null) @as(usize, 12) else 0) +
+        centralTimestampExtraLen(entry.extended_timestamp, entry.ntfs_timestamp);
+}
+
+pub fn localTimestampExtraLen(
+    extended: ?types.ExtendedTimestamp,
+    ntfs: ?types.NtfsTimestamp,
+) usize {
+    return (if (extended) |timestamp|
+        5 + 4 * extendedTimestampFieldCount(timestamp)
+    else
+        0) + (if (ntfs != null) @as(usize, 36) else 0);
+}
+
+pub fn centralTimestampExtraLen(
+    extended: ?types.ExtendedTimestamp,
+    ntfs: ?types.NtfsTimestamp,
+) usize {
+    return (if (extended) |timestamp|
+        if (timestamp.modified != null) @as(usize, 9) else 0
+    else
+        0) + (if (ntfs != null) @as(usize, 36) else 0);
+}
+
+const TimestampLocation = enum { local, central };
+
+fn appendExtendedTimestampExtra(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    timestamp: types.ExtendedTimestamp,
+    location: TimestampLocation,
+) !void {
+    const flags = extendedTimestampFlags(timestamp);
+    const payload_len: u16 = if (location == .central)
+        5
+    else
+        @intCast(1 + 4 * extendedTimestampFieldCount(timestamp));
+    try appendU16(allocator, out, extended_timestamp_extra_id);
+    try appendU16(allocator, out, payload_len);
+    try out.append(allocator, flags);
+    if (location == .central) {
+        try appendExtendedTimestampValue(allocator, out, timestamp.modified.?);
+    } else {
+        inline for (.{ timestamp.modified, timestamp.accessed, timestamp.created }) |value| {
+            if (value) |seconds|
+                try appendExtendedTimestampValue(allocator, out, seconds);
+        }
+    }
+}
+
+fn appendExtendedTimestampValue(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    seconds: i64,
+) !void {
+    try appendU32(allocator, out, @bitCast(@as(i32, @intCast(seconds))));
+}
+
+fn appendNtfsTimestampExtra(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    timestamp: types.NtfsTimestamp,
+) !void {
+    try appendU16(allocator, out, ntfs_timestamp_extra_id);
+    try appendU16(allocator, out, 32);
+    try appendU32(allocator, out, 0);
+    try appendU16(allocator, out, 0x0001);
+    try appendU16(allocator, out, 24);
+    try appendU64(allocator, out, timestamp.modified);
+    try appendU64(allocator, out, timestamp.accessed);
+    try appendU64(allocator, out, timestamp.created);
+}
+
+fn extendedTimestampFlags(timestamp: types.ExtendedTimestamp) u8 {
+    return (if (timestamp.modified != null) @as(u8, 1 << 0) else 0) |
+        (if (timestamp.accessed != null) @as(u8, 1 << 1) else 0) |
+        (if (timestamp.created != null) @as(u8, 1 << 2) else 0);
+}
+
+fn extendedTimestampFieldCount(timestamp: types.ExtendedTimestamp) usize {
+    return @as(usize, @intFromBool(timestamp.modified != null)) +
+        @as(usize, @intFromBool(timestamp.accessed != null)) +
+        @as(usize, @intFromBool(timestamp.created != null));
 }
 
 fn appendPkwareStrongEncryptionExtra(

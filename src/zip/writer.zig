@@ -30,6 +30,8 @@ pub const Error = core.Error || bzip2.Error || dcl_implode.Error || deflate64.Er
 pub const CompressionMethod = types.CompressionMethod;
 pub const CreatorSystem = types.CreatorSystem;
 pub const DosTimestamp = types.DosTimestamp;
+pub const ExtendedTimestamp = types.ExtendedTimestamp;
+pub const NtfsTimestamp = types.NtfsTimestamp;
 
 pub const Zip64Mode = enum {
     auto,
@@ -53,6 +55,8 @@ pub const EncodeEntry = struct {
     comment: []const u8 = "",
     /// Validated MS-DOS modification time; defaults preserve deterministic wire.
     modified: DosTimestamp = .deterministic,
+    extended_timestamp: ?ExtendedTimestamp = null,
+    ntfs_timestamp: ?NtfsTimestamp = null,
     creator_system: CreatorSystem = .fat,
     internal_attributes: u16 = 0,
     /// Null derives only the conventional DOS directory bit from a trailing `/`.
@@ -249,6 +253,8 @@ pub fn encodeAppend(
             .local_header_offset = local_offset,
             .zip64 = entry_zip64,
             .modified = entry.modified,
+            .extended_timestamp = entry.extended_timestamp,
+            .ntfs_timestamp = entry.ntfs_timestamp,
             .creator_system = entry.creator_system,
             .internal_attributes = entry.internal_attributes,
             .external_attributes = entry.external_attributes,
@@ -311,6 +317,8 @@ fn validateInputs(entries: []const EncodeEntry, options: EncodeOptions) Error!vo
     if (options.archive_comment.len > std.math.maxInt(u16)) return error.Zip32LimitExceeded;
     for (entries) |entry| {
         if (!entry.modified.isValid()) return error.InvalidZipTimestamp;
+        if (entry.extended_timestamp) |timestamp|
+            if (!timestamp.isValid()) return error.InvalidZipTimestamp;
         if ((entry.traditional_encryption != null and entry.winzip_aes != null) or
             (entry.traditional_encryption != null and entry.pkware_strong_encryption != null) or
             (entry.winzip_aes != null and entry.pkware_strong_encryption != null))

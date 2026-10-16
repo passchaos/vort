@@ -17,6 +17,8 @@ const TestEntry = struct {
     expected_size: ?u64,
     comment: []const u8 = "",
     modified: zip.DosTimestamp = .deterministic,
+    extended_timestamp: ?zip.ExtendedTimestamp = null,
+    ntfs_timestamp: ?zip.NtfsTimestamp = null,
     creator_system: zip.CreatorSystem = .fat,
     internal_attributes: u16 = 0,
     external_attributes: ?u32 = null,
@@ -44,6 +46,15 @@ test "ZIP incremental writer round trips known and unknown common codec entries"
             .expected_size = 14,
             .comment = "known",
             .modified = modified,
+            .extended_timestamp = .{
+                .modified = 1_700_000_001,
+                .accessed = 1_700_000_002,
+            },
+            .ntfs_timestamp = .{
+                .modified = try zip.fileTimeFromUnixSeconds(1_700_000_001),
+                .accessed = try zip.fileTimeFromUnixSeconds(1_700_000_002),
+                .created = try zip.fileTimeFromUnixSeconds(1_600_000_003),
+            },
             .creator_system = .unix,
             .internal_attributes = 1,
             .external_attributes = zip.unixExternalAttributes(0o100600),
@@ -106,6 +117,8 @@ test "ZIP incremental writer round trips known and unknown common codec entries"
         try std.testing.expectEqualSlices(u8, expected.data, decoded);
         if (index == 0) {
             try std.testing.expectEqual(modified, entry.modified);
+            try std.testing.expectEqual(expected.extended_timestamp, entry.extended_timestamp);
+            try std.testing.expectEqual(expected.ntfs_timestamp, entry.ntfs_timestamp);
             try std.testing.expectEqual(zip.CreatorSystem.unix, entry.creatorSystem());
             try std.testing.expectEqual(@as(?u16, 0o100600), entry.unixMode());
             try std.testing.expectEqual(@as(u16, 1), entry.internal_attributes);
@@ -615,6 +628,14 @@ test "ZIP incremental writer enforces method and metadata limits" {
         }),
     );
     try std.testing.expectEqual(incremental.Phase.ready, unsupported.snapshot().phase);
+    try std.testing.expectError(
+        error.InvalidZipTimestamp,
+        unsupported.beginEntry(.{
+            .name = "bad-extended-time",
+            .extended_timestamp = .{ .modified = std.math.maxInt(i64) },
+        }),
+    );
+    try std.testing.expectEqual(incremental.Phase.ready, unsupported.snapshot().phase);
     try unsupported.beginEntry(.{ .name = "retry", .method = .stored, .expected_size = 0 });
 
     var metadata_limited = try incremental.Writer.initWithOptions(std.testing.allocator, .{
@@ -626,6 +647,26 @@ test "ZIP incremental writer enforces method and metadata limits" {
         metadata_limited.beginEntry(.{ .name = "four" }),
     );
     try std.testing.expectEqual(incremental.Phase.ready, metadata_limited.snapshot().phase);
+
+    var timestamp_metadata_limited = try incremental.Writer.initWithOptions(
+        std.testing.allocator,
+        .{
+            .max_central_directory_size = wire.central_file_header_len +
+                "time".len + 8,
+        },
+    );
+    defer timestamp_metadata_limited.deinit();
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        timestamp_metadata_limited.beginEntry(.{
+            .name = "time",
+            .extended_timestamp = .{ .modified = 1 },
+        }),
+    );
+    try std.testing.expectEqual(
+        incremental.Phase.ready,
+        timestamp_metadata_limited.snapshot().phase,
+    );
 
     var entry_limited = try incremental.Writer.initWithOptions(std.testing.allocator, .{
         .max_entries = 0,
@@ -1346,6 +1387,8 @@ fn encodeEntries(
             .method = entry.method,
             .expected_size = entry.expected_size,
             .modified = entry.modified,
+            .extended_timestamp = entry.extended_timestamp,
+            .ntfs_timestamp = entry.ntfs_timestamp,
             .creator_system = entry.creator_system,
             .internal_attributes = entry.internal_attributes,
             .external_attributes = entry.external_attributes,

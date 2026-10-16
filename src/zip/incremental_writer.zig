@@ -13,6 +13,8 @@ const zip_writer = @import("writer.zig");
 pub const CompressionMethod = types.CompressionMethod;
 pub const CreatorSystem = types.CreatorSystem;
 pub const DosTimestamp = types.DosTimestamp;
+pub const ExtendedTimestamp = types.ExtendedTimestamp;
+pub const NtfsTimestamp = types.NtfsTimestamp;
 pub const Zip64Mode = zip_writer.Zip64Mode;
 
 pub const Error = codecs.Error || writer_encryption.Error || std.mem.Allocator.Error || error{
@@ -86,6 +88,8 @@ pub const EntryOptions = struct {
     expected_size: ?u64 = null,
     /// Validated MS-DOS modification time; defaults preserve deterministic wire.
     modified: DosTimestamp = .deterministic,
+    extended_timestamp: ?ExtendedTimestamp = null,
+    ntfs_timestamp: ?NtfsTimestamp = null,
     creator_system: CreatorSystem = .fat,
     internal_attributes: u16 = 0,
     /// Null derives only the conventional DOS directory bit from a trailing `/`.
@@ -145,6 +149,8 @@ pub const Writer = struct {
         local_header_offset: u64,
         zip64: bool,
         modified: DosTimestamp,
+        extended_timestamp: ?ExtendedTimestamp,
+        ntfs_timestamp: ?NtfsTimestamp,
         creator_system: CreatorSystem,
         internal_attributes: u16,
         external_attributes: ?u32,
@@ -193,6 +199,8 @@ pub const Writer = struct {
                 .local_header_offset = local_header_offset,
                 .zip64 = zip64,
                 .modified = entry_options.modified,
+                .extended_timestamp = entry_options.extended_timestamp,
+                .ntfs_timestamp = entry_options.ntfs_timestamp,
                 .creator_system = entry_options.creator_system,
                 .internal_attributes = entry_options.internal_attributes,
                 .external_attributes = entry_options.external_attributes,
@@ -337,7 +345,11 @@ pub const Writer = struct {
                 try checkedAdd(wire.local_file_header_len, entry_options.name.len),
                 if (entry_zip64) 20 else 0,
             ),
-            if (entry_options.winzip_aes != null) 11 else 0,
+            (if (entry_options.winzip_aes != null) @as(usize, 11) else 0) +
+                wire.localTimestampExtraLen(
+                    entry_options.extended_timestamp,
+                    entry_options.ntfs_timestamp,
+                ),
         );
         const encryption_header_len = if (entry_options.traditional_encryption != null)
             traditional_encryption.header_len
@@ -363,7 +375,11 @@ pub const Writer = struct {
             ),
             (if (entry_zip64) @as(usize, 28) else 0) +
                 (if (entry_options.winzip_aes != null) @as(usize, 11) else 0) +
-                (if (entry_options.pkware_strong_encryption != null) @as(usize, 12) else 0),
+                (if (entry_options.pkware_strong_encryption != null) @as(usize, 12) else 0) +
+                wire.centralTimestampExtraLen(
+                    entry_options.extended_timestamp,
+                    entry_options.ntfs_timestamp,
+                ),
         );
         if (central_header_len > self.options.max_central_directory_size or
             self.central.items.len > self.options.max_central_directory_size - central_header_len)
@@ -406,6 +422,8 @@ pub const Writer = struct {
             .local_header_offset = local_offset,
             .zip64 = entry_zip64,
             .modified = current.modified,
+            .extended_timestamp = current.extended_timestamp,
+            .ntfs_timestamp = current.ntfs_timestamp,
             .creator_system = current.creator_system,
             .internal_attributes = current.internal_attributes,
             .external_attributes = current.external_attributes,
@@ -752,6 +770,8 @@ pub const Writer = struct {
     fn validateEntry(self: *const Self, entry: EntryOptions) Error!void {
         if (entry.name.len == 0) return error.InvalidZipEntryName;
         if (!entry.modified.isValid()) return error.InvalidZipTimestamp;
+        if (entry.extended_timestamp) |timestamp|
+            if (!timestamp.isValid()) return error.InvalidZipTimestamp;
         if ((entry.traditional_encryption != null and entry.winzip_aes != null) or
             (entry.traditional_encryption != null and entry.pkware_strong_encryption != null) or
             (entry.winzip_aes != null and entry.pkware_strong_encryption != null))
@@ -919,6 +939,8 @@ pub const Writer = struct {
             .local_header_offset = entry.local_header_offset,
             .zip64 = entry.zip64,
             .modified = entry.modified,
+            .extended_timestamp = entry.extended_timestamp,
+            .ntfs_timestamp = entry.ntfs_timestamp,
             .creator_system = entry.creator_system,
             .internal_attributes = entry.internal_attributes,
             .external_attributes = entry.external_attributes,

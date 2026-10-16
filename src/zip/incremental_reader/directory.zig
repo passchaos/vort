@@ -1,6 +1,7 @@
 const std = @import("std");
 const api = @import("api.zig");
 const archive_records = @import("archive_records.zig");
+const records = @import("../records.zig");
 
 pub const Record = struct {
     name: []u8,
@@ -14,6 +15,8 @@ pub const Record = struct {
     zip64_local: bool,
     uses_descriptor: bool,
     modified: api.DosTimestamp,
+    extended_timestamp: ?api.ExtendedTimestamp = null,
+    ntfs_timestamp: ?api.NtfsTimestamp = null,
     version_made_by: u16 = 0,
     internal_attributes: u16 = 0,
     external_attributes: u32 = 0,
@@ -32,6 +35,8 @@ pub const Record = struct {
             .uses_descriptor = self.uses_descriptor,
             .zip64_local = self.zip64_local,
             .modified = self.modified,
+            .extended_timestamp = self.extended_timestamp,
+            .ntfs_timestamp = self.ntfs_timestamp,
             .version_made_by = if (self.central_seen) self.version_made_by else null,
             .internal_attributes = if (self.central_seen) self.internal_attributes else null,
             .external_attributes = if (self.central_seen) self.external_attributes else null,
@@ -103,6 +108,14 @@ pub const State = struct {
             }
         }
         const local = matched orelse return error.InvalidZipArchive;
+        const extended_timestamp = try records.mergeExtendedTimestamps(
+            local.extended_timestamp,
+            central.extended_timestamp,
+        );
+        const ntfs_timestamp = try records.mergeNtfsTimestamps(
+            local.ntfs_timestamp,
+            central.ntfs_timestamp,
+        );
         if (!local.complete or
             !std.mem.eql(u8, local.name, central.name) or
             local.method != central.method or
@@ -129,6 +142,8 @@ pub const State = struct {
         if (central.comment.len != 0)
             comment = try allocator.dupe(u8, central.comment);
         local.comment = comment;
+        local.extended_timestamp = extended_timestamp;
+        local.ntfs_timestamp = ntfs_timestamp;
         local.version_made_by = central.version_made_by;
         local.internal_attributes = central.internal_attributes;
         local.external_attributes = central.external_attributes;

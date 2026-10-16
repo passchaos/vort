@@ -5,6 +5,8 @@ const types = @import("../types.zig");
 pub const CompressionMethod = types.CompressionMethod;
 pub const CreatorSystem = types.CreatorSystem;
 pub const DosTimestamp = types.DosTimestamp;
+pub const ExtendedTimestamp = types.ExtendedTimestamp;
+pub const NtfsTimestamp = types.NtfsTimestamp;
 pub const WinZipAesInfo = types.WinZipAesInfo;
 pub const PkwareStrongEncryptionInfo = types.PkwareStrongEncryptionInfo;
 
@@ -82,6 +84,8 @@ pub const EntryInfo = struct {
     uses_descriptor: bool,
     zip64_local: bool,
     modified: DosTimestamp,
+    extended_timestamp: ?ExtendedTimestamp = null,
+    ntfs_timestamp: ?NtfsTimestamp = null,
     version_made_by: ?u16 = null,
     internal_attributes: ?u16 = null,
     external_attributes: ?u32 = null,
@@ -110,5 +114,11 @@ pub const EntryInfo = struct {
     pub fn isDirectory(self: EntryInfo) bool {
         if (self.name.len != 0 and self.name[self.name.len - 1] == '/') return true;
         return if (self.unixMode()) |mode| mode & 0o170000 == 0o040000 else false;
+    }
+
+    pub fn modifiedUnixSeconds(self: EntryInfo) ?i64 {
+        if (self.ntfs_timestamp) |timestamp|
+            return types.fileTimeToUnixSeconds(timestamp.modified) catch null;
+        return if (self.extended_timestamp) |timestamp| timestamp.modified else null;
     }
 };

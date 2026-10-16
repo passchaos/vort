@@ -1,3 +1,4 @@
+const std = @import("std");
 const winzip_aes = @import("vail_archive_crypto").winzip_aes;
 const pkware_strong = @import("vail_archive_crypto").pkware_strong;
 
@@ -20,6 +21,49 @@ pub const PkwareStrongEncryptionInfo = struct {
 };
 
 pub const TimestampError = error{InvalidZipTimestamp};
+
+pub const ExtendedTimestamp = struct {
+    modified: ?i64 = null,
+    accessed: ?i64 = null,
+    created: ?i64 = null,
+
+    pub fn isValid(self: ExtendedTimestamp) bool {
+        if (self.modified == null and self.accessed == null and self.created == null)
+            return false;
+        inline for (.{ self.modified, self.accessed, self.created }) |value| {
+            if (value) |seconds|
+                _ = std.math.cast(i32, seconds) orelse return false;
+        }
+        return true;
+    }
+};
+
+pub const NtfsTimestamp = struct {
+    modified: u64,
+    accessed: u64,
+    created: u64,
+};
+
+const windows_epoch_unix_seconds: i128 = 11_644_473_600;
+const windows_ticks_per_second: i128 = 10_000_000;
+
+pub fn fileTimeFromUnixSeconds(seconds: i64) TimestampError!u64 {
+    const shifted = std.math.add(
+        i128,
+        @as(i128, seconds),
+        windows_epoch_unix_seconds,
+    ) catch return error.InvalidZipTimestamp;
+    if (shifted < 0) return error.InvalidZipTimestamp;
+    const ticks = std.math.mul(i128, shifted, windows_ticks_per_second) catch
+        return error.InvalidZipTimestamp;
+    return std.math.cast(u64, ticks) orelse error.InvalidZipTimestamp;
+}
+
+pub fn fileTimeToUnixSeconds(file_time: u64) TimestampError!i64 {
+    const seconds = @divFloor(@as(i128, file_time), windows_ticks_per_second) -
+        windows_epoch_unix_seconds;
+    return std.math.cast(i64, seconds) orelse error.InvalidZipTimestamp;
+}
 
 /// ZIP "version made by" host-system identifiers from APPNOTE.
 pub const CreatorSystem = enum(u8) {
@@ -161,6 +205,8 @@ pub const Entry = struct {
     central_header_offset: usize,
     zip64: bool,
     modified: DosTimestamp = .deterministic,
+    extended_timestamp: ?ExtendedTimestamp = null,
+    ntfs_timestamp: ?NtfsTimestamp = null,
     version_made_by: u16 = 0,
     internal_attributes: u16 = 0,
     external_attributes: u32 = 0,
@@ -183,6 +229,14 @@ pub const Entry = struct {
 
     pub fn isSymbolicLink(self: Entry) bool {
         return if (self.unixMode()) |mode| mode & 0o170000 == 0o120000 else false;
+    }
+
+    /// Returns UTC modification seconds, preferring higher-precision NTFS
+    /// FILETIME over the Info-ZIP extended timestamp when both are present.
+    pub fn modifiedUnixSeconds(self: Entry) ?i64 {
+        if (self.ntfs_timestamp) |timestamp|
+            return fileTimeToUnixSeconds(timestamp.modified) catch null;
+        return if (self.extended_timestamp) |timestamp| timestamp.modified else null;
     }
 
     pub fn isEncrypted(self: Entry) bool {

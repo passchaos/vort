@@ -86,6 +86,16 @@ test "ZIP incremental reader retains entry comments timestamps and Unix attribut
         .minute = 34,
         .second = 57,
     });
+    const extended: zip.ExtendedTimestamp = .{
+        .modified = 1_700_000_001,
+        .accessed = 1_700_000_002,
+        .created = 1_700_000_003,
+    };
+    const ntfs: zip.NtfsTimestamp = .{
+        .modified = try zip.fileTimeFromUnixSeconds(1_700_000_001),
+        .accessed = try zip.fileTimeFromUnixSeconds(1_700_000_002),
+        .created = try zip.fileTimeFromUnixSeconds(1_700_000_003),
+    };
     const entries = [_]zip.EncodeEntry{
         .{
             .name = "metadata.txt",
@@ -93,6 +103,8 @@ test "ZIP incremental reader retains entry comments timestamps and Unix attribut
             .method = .deflate,
             .comment = "central comment",
             .modified = modified,
+            .extended_timestamp = extended,
+            .ntfs_timestamp = ntfs,
             .creator_system = .unix,
             .internal_attributes = 1,
             .external_attributes = zip.unixExternalAttributes(0o100640),
@@ -103,6 +115,7 @@ test "ZIP incremental reader retains entry comments timestamps and Unix attribut
             .method = .stored,
             .comment = "link comment",
             .modified = modified,
+            .extended_timestamp = .{ .modified = 1_600_000_001 },
             .creator_system = .unix,
             .external_attributes = zip.unixExternalAttributes(0o120777),
         },
@@ -136,6 +149,14 @@ test "ZIP incremental reader retains entry comments timestamps and Unix attribut
                     const info = reader.currentEntry().?;
                     try std.testing.expect(info.comment == null);
                     try std.testing.expectEqual(expected_modified, info.modified);
+                    try std.testing.expectEqual(
+                        expected_entries[header_index].extended_timestamp,
+                        info.extended_timestamp,
+                    );
+                    try std.testing.expectEqual(
+                        expected_entries[header_index].ntfs_timestamp,
+                        info.ntfs_timestamp,
+                    );
                     header_index += 1;
                 }
                 if (stepped.status == .done) break;
@@ -146,6 +167,8 @@ test "ZIP incremental reader retains entry comments timestamps and Unix attribut
                 const info = reader.entryAt(index).?;
                 try std.testing.expectEqualStrings(expected.comment, info.comment.?);
                 try std.testing.expectEqual(expected_modified, info.modified);
+                try std.testing.expectEqual(expected.extended_timestamp, info.extended_timestamp);
+                try std.testing.expectEqual(expected.ntfs_timestamp, info.ntfs_timestamp);
                 try std.testing.expectEqual(zip.CreatorSystem.unix, info.creatorSystem().?);
                 try std.testing.expectEqual(expected.internal_attributes, info.internal_attributes.?);
                 try std.testing.expectEqual(

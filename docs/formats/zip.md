@@ -93,11 +93,24 @@ defer allocator.free(zip_bytes);
 
 `ZipEncodeEntry` and `ZipIncrementalEntryOptions` accept the same metadata:
 `comment`, `modified`, `creator_system`, `internal_attributes`, and optional
-raw `external_attributes`. `ZipDosTimestamp.fromComponents` validates years
+raw `external_attributes`, plus optional `extended_timestamp` and
+`ntfs_timestamp`. `ZipDosTimestamp.fromComponents` validates years
 1980...2107 and real calendar dates; ZIP stores two-second resolution, so an
 odd input second is rounded down. The raw `time`/`date` fields remain visible
 for exact wire interoperation. Invalid writer timestamps fail before a local
 header is published.
+
+Info-ZIP Extended Timestamp `0x5455` stores signed 32-bit UTC Unix seconds.
+Local headers may carry modification/access/creation times in flag order;
+central headers retain the same flags but canonically carry only modification
+time, matching Info-ZIP output. The reader merges both copies, rejects unknown
+flag bits, truncation, duplicate fields, trailing bytes, and contradictory
+overlapping values. NTFS `0x000a` stores reserved bytes followed by tag
+`0x0001` and three 64-bit 100 ns FILETIME values; local and central copies are
+cross-checked exactly while unknown NTFS attributes remain skippable.
+`zipFileTimeFromUnixSeconds` and `zipFileTimeToUnixSeconds` provide checked
+epoch conversion. `modifiedUnixSeconds()` prefers the higher-precision NTFS
+value over `0x5455`; both raw representations remain separately available.
 
 The central `version made by` value combines the selected creator system with
 the automatically derived version-needed value. `zipUnixExternalAttributes`
@@ -600,14 +613,16 @@ Input uses repeating
 byte-identical to a 2/3/5/7-byte micro-output run; a zero-output local-header
 probe must return `need_output` with zero progress.
 
-`zig build run-zip-diff` passes for a 30,453-byte ZIP32 `.never` archive and a
-33,049-byte ZIP64 `.always` archive. Python raw parsing checks bit 3/bit 11,
+`zig build run-zip-diff` passes for a 30,551-byte ZIP32 `.never` archive and a
+33,147-byte ZIP64 `.always` archive. Python raw parsing checks bit 3/bit 11,
 local placeholders, signed 16-/24-byte descriptors, central CRC/size/offset and
 ZIP64 extras/end records, Bzip2's version-needed 4.6, and LZMA/Zstandard's
 version-needed 6.3. Both one-shot and incremental archives carry a non-default
 DOS timestamp, entry comment, Unix creator/mode, and internal attribute that
-Python `zipfile` must reproduce exactly; `zipfile` tests and reads every method
-it supports. System
+Python `zipfile` must reproduce exactly. Python raw parsing additionally checks
+local 13-byte versus central 5-byte `0x5455` payloads, flags and signed values,
+plus both 32-byte NTFS payloads and all three FILETIMEs; `zipfile` tests and
+reads every method it supports. System
 Info-ZIP validates the ordered member prefix before the first unsupported
 Zstandard entry, system `zstd` independently decodes methods 20/93, and Python
 `zipfile` independently extracts method-14 entries and checks bit 1. Python
@@ -714,8 +729,8 @@ Python `zipfile` has no PPMd codec and this host has no 7z/7zz. The full
 repository graph passes 2719/2719 and `zig build check` passes 113/113.
 Repeated one-shot probe runs remain byte-identical after deliberately adding
 custom metadata to one Stored entry. Default and forced-ZIP64 SHA-256 values
-are `7284e3071e0715ab5f3573dc13863dafdce4a8e694a87b87b888eec7f6b65f91`
-and `8332d4dde7c6e459bae630424d822cfc2ad177f1a6cb624d13b37e8534ed6041`.
+are `595584be47a5770b342cd5952955db483ddddf6c491e895fac94f7749c795d34`
+and `f7152d47f786704907daa231395c8a30dc615aab0454553398d7790ff3c5d25f`.
 Python syntax validation passes. No physical 4 GiB or 65,535-entry archive was
 generated; sentinel/overflow paths use focused tests, small forced-ZIP64
 layouts, and code review instead.

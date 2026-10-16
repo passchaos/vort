@@ -284,6 +284,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   signed data descriptors, known or unknown size pledges, ZIP32/ZIP64 policy,
   SFX offsets, and payload-bounded memory;
   archive/entry comments, configurable validated DOS modification timestamps,
+  Info-ZIP `0x5455` Unix times, NTFS `0x000a` 100 ns FILETIME values,
   creator-system/internal/external attributes, Unix mode/symlink helpers,
   CRC-32/size validation, UTF-8 flags, per-entry
   Traditional ZipCrypto one-shot writing/reading plus known-size and descriptor-
@@ -1850,7 +1851,8 @@ ZIP64 archives are 29,787 and 32,215 bytes.
 Known, unknown-size, and empty default 8 KiB/tree Implode members pass both
 Vort's sequential reader and system Info-ZIP; Python pins flags, fixed tree
 headers and outer metadata. The final ZIP32 and ZIP64 archives are 30,453 and
-33,049 bytes.
+33,049 bytes before the entry-time compatibility fields; the current
+`0x5455`/`0x000a` matrix is 30,551 and 33,147 bytes.
 The aggregate reports 13/13 ZIP differential steps. The same gate incrementally decodes five
 Python-generated Stored/Deflate entries, including non-seekable descriptors
 and a forced-ZIP64 local header, with 3-byte input and 5-byte output. A separate

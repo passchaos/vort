@@ -158,6 +158,16 @@ pub fn main(init: std.process.Init) !void {
         .minute = 23,
         .second = 45,
     });
+    const extended_timestamp: vort.ZipExtendedTimestamp = .{
+        .modified = 1_700_000_001,
+        .accessed = 1_700_000_002,
+        .created = -1,
+    };
+    const ntfs_timestamp: vort.ZipNtfsTimestamp = .{
+        .modified = try vort.zipFileTimeFromUnixSeconds(1_700_000_001),
+        .accessed = try vort.zipFileTimeFromUnixSeconds(1_700_000_002),
+        .created = try vort.zipFileTimeFromUnixSeconds(1_700_000_003),
+    };
     const entries = [_]vort.ZipEncodeEntry{
         .{
             .name = "stored.bin",
@@ -165,6 +175,8 @@ pub fn main(init: std.process.Init) !void {
             .method = .stored,
             .comment = "stored entry",
             .modified = metadata_time,
+            .extended_timestamp = extended_timestamp,
+            .ntfs_timestamp = ntfs_timestamp,
             .creator_system = .unix,
             .internal_attributes = 1,
             .external_attributes = vort.zipUnixExternalAttributes(0o100640),

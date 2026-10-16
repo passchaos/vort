@@ -1,5 +1,6 @@
 const std = @import("std");
 const types = @import("types.zig");
+const wire = @import("wire.zig");
 
 pub const Error = error{
     InvalidZipArchive,
@@ -65,6 +66,111 @@ pub fn parsePkwareStrongEncryptionExtra(
     const flags = std.mem.readInt(u16, payload[6..8], .little);
     if (flags != 0x0001) return error.UnsupportedZipFeature;
     return .{ .strength = strength };
+}
+
+pub const ExtraLocation = enum { local, central };
+
+pub fn parseExtendedTimestampExtra(
+    extra: []const u8,
+    location: ExtraLocation,
+) Error!?types.ExtendedTimestamp {
+    const payload = (try findExtra(extra, wire.extended_timestamp_extra_id)) orelse
+        return null;
+    if (payload.len == 0) return error.InvalidZipArchive;
+    const flags = payload[0];
+    if (flags & 0xf8 != 0 or flags & 0x07 == 0)
+        return error.InvalidZipArchive;
+    if (location == .central and flags & (1 << 0) == 0)
+        return error.InvalidZipArchive;
+    var cursor: usize = 1;
+    const result: types.ExtendedTimestamp = .{
+        .modified = try readExtendedTimestampValue(
+            payload,
+            &cursor,
+            flags & (1 << 0) != 0,
+            location,
+        ),
+        .accessed = try readExtendedTimestampValue(
+            payload,
+            &cursor,
+            flags & (1 << 1) != 0,
+            location,
+        ),
+        .created = try readExtendedTimestampValue(
+            payload,
+            &cursor,
+            flags & (1 << 2) != 0,
+            location,
+        ),
+    };
+    if (cursor != payload.len) return error.InvalidZipArchive;
+    return result;
+}
+
+fn readExtendedTimestampValue(
+    payload: []const u8,
+    cursor: *usize,
+    present: bool,
+    location: ExtraLocation,
+) Error!?i64 {
+    if (!present) return null;
+    if (payload.len - cursor.* < 4) {
+        if (location == .central) return null;
+        return error.InvalidZipArchive;
+    }
+    const raw = std.mem.readInt(u32, payload[cursor.*..][0..4], .little);
+    cursor.* += 4;
+    return @as(i32, @bitCast(raw));
+}
+
+pub fn parseNtfsTimestampExtra(extra: []const u8) Error!?types.NtfsTimestamp {
+    const payload = (try findExtra(extra, wire.ntfs_timestamp_extra_id)) orelse
+        return null;
+    if (payload.len < 4) return error.InvalidZipArchive;
+    var cursor: usize = 4;
+    var result: ?types.NtfsTimestamp = null;
+    while (cursor < payload.len) {
+        const header_end = try checkedEnd(cursor, 4, payload.len);
+        const tag = std.mem.readInt(u16, payload[cursor..][0..2], .little);
+        const size: usize = std.mem.readInt(u16, payload[cursor + 2 ..][0..2], .little);
+        const attribute_end = try checkedEnd(header_end, size, payload.len);
+        if (tag == 0x0001) {
+            if (result != null or size != 24) return error.InvalidZipArchive;
+            result = .{
+                .modified = std.mem.readInt(u64, payload[header_end..][0..8], .little),
+                .accessed = std.mem.readInt(u64, payload[header_end + 8 ..][0..8], .little),
+                .created = std.mem.readInt(u64, payload[header_end + 16 ..][0..8], .little),
+            };
+        }
+        cursor = attribute_end;
+    }
+    return result;
+}
+
+pub fn mergeExtendedTimestamps(
+    local: ?types.ExtendedTimestamp,
+    central: ?types.ExtendedTimestamp,
+) error{InvalidZipArchive}!?types.ExtendedTimestamp {
+    if (local == null) return central;
+    if (central == null) return local;
+    const local_value = local.?;
+    const central_value = central.?;
+    inline for (.{ "modified", "accessed", "created" }) |field_name| {
+        const central_field = @field(central_value, field_name);
+        if (central_field != null and @field(local_value, field_name) != central_field)
+            return error.InvalidZipArchive;
+    }
+    return local_value;
+}
+
+pub fn mergeNtfsTimestamps(
+    local: ?types.NtfsTimestamp,
+    central: ?types.NtfsTimestamp,
+) error{InvalidZipArchive}!?types.NtfsTimestamp {
+    if (local == null) return central;
+    if (central == null) return local;
+    if (!std.meta.eql(local.?, central.?)) return error.InvalidZipArchive;
+    return local;
 }
 
 pub const Directory = struct {

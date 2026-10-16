@@ -13,6 +13,8 @@ pub const LocalHeader = struct {
     method: CompressionMethod,
     dos_time: u16,
     modified: types.DosTimestamp,
+    extended_timestamp: ?types.ExtendedTimestamp,
+    ntfs_timestamp: ?types.NtfsTimestamp,
     name: []const u8,
     extra: []const u8,
     descriptor_layout: ?descriptor.Layout,
@@ -53,6 +55,8 @@ pub fn parseLocal(bytes: []const u8) Error!LocalHeader {
     const extra_end = name_end + extra_len;
     const extra = bytes[name_end..extra_end];
     const parsed_aes = try records.parseWinZipAesExtra(extra);
+    const extended_timestamp = try records.parseExtendedTimestampExtra(extra, .local);
+    const ntfs_timestamp = try records.parseNtfsTimestampExtra(extra);
     if (try records.parsePkwareStrongEncryptionExtra(extra) != null)
         return error.InvalidZipArchive;
     if ((wire_method == .aes) != (parsed_aes != null)) return error.InvalidZipArchive;
@@ -84,6 +88,8 @@ pub fn parseLocal(bytes: []const u8) Error!LocalHeader {
                 .time = dos_time,
                 .date = std.mem.readInt(u16, bytes[12..14], .little),
             },
+            .extended_timestamp = extended_timestamp,
+            .ntfs_timestamp = ntfs_timestamp,
             .name = bytes[wire.local_file_header_len..name_end],
             .extra = extra,
             .descriptor_layout = if (zip64) .zip64 else .zip32,
@@ -106,6 +112,8 @@ pub fn parseLocal(bytes: []const u8) Error!LocalHeader {
             .time = dos_time,
             .date = std.mem.readInt(u16, bytes[12..14], .little),
         },
+        .extended_timestamp = extended_timestamp,
+        .ntfs_timestamp = ntfs_timestamp,
         .name = bytes[wire.local_file_header_len..name_end],
         .extra = extra,
         .descriptor_layout = null,
@@ -126,6 +134,8 @@ pub const CentralHeader = struct {
     name: []const u8,
     comment: []const u8,
     modified: types.DosTimestamp,
+    extended_timestamp: ?types.ExtendedTimestamp,
+    ntfs_timestamp: ?types.NtfsTimestamp,
     internal_attributes: u16,
     external_attributes: u32,
     crc32: u32,
@@ -179,6 +189,13 @@ pub fn parseCentral(bytes: []const u8) Error!CentralHeader {
         disk_start,
     );
     const parsed_aes = try records.parseWinZipAesExtra(bytes[name_end..extra_end]);
+    const extended_timestamp = try records.parseExtendedTimestampExtra(
+        bytes[name_end..extra_end],
+        .central,
+    );
+    const ntfs_timestamp = try records.parseNtfsTimestampExtra(
+        bytes[name_end..extra_end],
+    );
     const parsed_strong = try records.parsePkwareStrongEncryptionExtra(
         bytes[name_end..extra_end],
     );
@@ -223,6 +240,8 @@ pub fn parseCentral(bytes: []const u8) Error!CentralHeader {
             .time = std.mem.readInt(u16, bytes[12..14], .little),
             .date = std.mem.readInt(u16, bytes[14..16], .little),
         },
+        .extended_timestamp = extended_timestamp,
+        .ntfs_timestamp = ntfs_timestamp,
         .internal_attributes = std.mem.readInt(u16, bytes[36..38], .little),
         .external_attributes = std.mem.readInt(u32, bytes[38..42], .little),
         .crc32 = crc32,

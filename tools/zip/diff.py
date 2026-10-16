@@ -534,6 +534,16 @@ def validate_vort_archive_with_python(
                     raise AssertionError("ZIP creator/internal attributes did not round trip")
                 if info.external_attr != 0o100640 << 16:
                     raise AssertionError("ZIP Unix external attributes did not round trip")
+                validate_timestamp_extras(
+                    info.extra,
+                    "one-shot central stored.bin",
+                    False,
+                )
+                validate_timestamp_extras(
+                    raw[info.header_offset + 30 + name_len : data_offset],
+                    "one-shot local stored.bin",
+                    True,
+                )
             elif info.date_time != (1980, 1, 1, 0, 0, 0):
                 raise AssertionError(f"non-deterministic timestamp for {name!r}")
             if not info.flag_bits & 0x0008:
@@ -1431,6 +1441,40 @@ def parse_extra_fields(extra: bytes, context: str) -> dict[int, bytes]:
     return fields
 
 
+EXTENDED_TIMESTAMP_SECONDS = (1_700_000_001, 1_700_000_002, -1)
+NTFS_TIMESTAMP_SECONDS = (1_700_000_001, 1_700_000_002, 1_700_000_003)
+
+
+def windows_filetime(seconds: int) -> int:
+    return (seconds + 11_644_473_600) * 10_000_000
+
+
+def validate_timestamp_extras(extra: bytes, context: str, local: bool) -> None:
+    fields = parse_extra_fields(extra, context)
+    extended = fields.get(0x5455)
+    expected_extended_len = 13 if local else 5
+    if extended is None or len(extended) != expected_extended_len:
+        raise AssertionError(f"{context} extended timestamp width mismatch")
+    if extended[0] != 0x07:
+        raise AssertionError(f"{context} extended timestamp flags mismatch")
+    values = struct.unpack_from("<" + "i" * (3 if local else 1), extended, 1)
+    if values != EXTENDED_TIMESTAMP_SECONDS[: len(values)]:
+        raise AssertionError(f"{context} extended timestamp values mismatch")
+
+    ntfs = fields.get(0x000A)
+    if ntfs is None or len(ntfs) != 32:
+        raise AssertionError(f"{context} NTFS timestamp width mismatch")
+    reserved, tag, size, modified, accessed, created = struct.unpack(
+        "<IHHQQQ", ntfs
+    )
+    if reserved != 0 or tag != 1 or size != 24:
+        raise AssertionError(f"{context} NTFS timestamp header mismatch")
+    if (modified, accessed, created) != tuple(
+        windows_filetime(value) for value in NTFS_TIMESTAMP_SECONDS
+    ):
+        raise AssertionError(f"{context} NTFS timestamp values mismatch")
+
+
 def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
     eocd_offset = raw.rfind(b"PK\x05\x06")
     if eocd_offset < 0 or eocd_offset + 22 > len(raw):
@@ -1567,6 +1611,12 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
                 raise AssertionError("incremental ZIP entry metadata mismatch")
 
         fields = parse_extra_fields(extra, f"central entry {name!r}")
+        if name == "known-stored.bin":
+            validate_timestamp_extras(
+                extra,
+                "incremental central known-stored.bin",
+                False,
+            )
         expected_needed = (
             63
             if method in (14, 20, 93, 95, 98)
@@ -1651,6 +1701,12 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
         if flags & 0x0006 != expected_codec_flags:
             raise AssertionError(f"incremental local codec flags mismatch for {name!r}")
         fields = parse_extra_fields(extra, f"local entry {name!r}")
+        if name == "known-stored.bin":
+            validate_timestamp_extras(
+                extra,
+                "incremental local known-stored.bin",
+                True,
+            )
         expected_needed = (
             63
             if method in (14, 20, 93, 95, 98)

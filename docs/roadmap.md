@@ -20967,3 +20967,19 @@ reuse, so production keeps the simpler independently owned plans.
   and exhaustive comment-allocation failure. Python independently validates
   custom one-shot and incremental timestamps, comments, creator IDs, internal
   attributes, and Unix external modes.
+
+- Added ZIP extended-time interoperability across the same one-shot,
+  incremental, owned-split, and sparse-split surfaces. Writers can emit
+  Info-ZIP `0x5455` signed Unix modification/access/creation seconds and NTFS
+  `0x000a` tag-1 triples with 100 ns FILETIME values. Local `0x5455` records
+  carry every selected time while central records retain the flags and only
+  mtime, matching actual Info-ZIP wire; NTFS records are byte-identical in both
+  headers. Readers merge complementary local/central fields, preserve both raw
+  formats, prefer NTFS in the convenience Unix-seconds view, and reject high
+  flag bits, truncation, duplicate/trailing fields, invalid tag widths, and
+  contradictory copies. Checked Unix/FILETIME conversion helpers cover the
+  1601 epoch boundary. ZIP32/ZIP64, descriptor/no-descriptor, tiny fragmented
+  sequential input, split round trips, central-size preflight, and malformed
+  records are covered. Python independently parses exact local/central field
+  widths, flags, signed seconds, NTFS tags, and three FILETIMEs; real Info-ZIP
+  archives with its canonical flags-plus-mtime central form pass Vort readers.
