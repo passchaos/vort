@@ -50,6 +50,8 @@ pub const Phase = enum {
     central_fixed,
     central_variable,
     central_emit,
+    archive_extra_variable,
+    archive_extra_emit,
     ending_collect,
     ending_emit,
     done,
@@ -83,6 +85,7 @@ pub const Writer = struct {
     central_disk: usize = 0,
     central_offset_on_disk: u64 = 0,
     central_entries_in_part: usize = 0,
+    archive_extra_seen: bool = false,
     ending_patched: bool = false,
     virtual_offset: u64 = 0,
     part_index: usize = 0,
@@ -202,11 +205,12 @@ pub const Writer = struct {
         self.central_size = 0;
         self.central_start = null;
         self.central_entries_in_part = 0;
+        self.archive_extra_seen = false;
         if (self.phase == .marker_emit) {
             self.marker_next = .central;
         } else {
             self.clearAtomic();
-            self.atomic_target = wire.central_file_header_len;
+            self.atomic_target = wire.archive_extra_data_header_len;
             self.phase = .central_fixed;
         }
     }
@@ -247,7 +251,7 @@ pub const Writer = struct {
                     .ready => self.phase = .ready,
                     .header => self.phase = .header_collect,
                     .central => {
-                        self.atomic_target = wire.central_file_header_len;
+                        self.atomic_target = wire.archive_extra_data_header_len;
                         self.phase = .central_fixed;
                     },
                 }
@@ -367,6 +371,30 @@ pub const Writer = struct {
                     self.phase = .ending_collect;
                     continue;
                 }
+                const signature = std.mem.readInt(u32, self.atomic.items[0..4], .little);
+                if (signature == wire.archive_extra_data_signature) {
+                    if (self.archive_extra_seen or self.central_index != 0)
+                        return error.InvalidZipArchive;
+                    const payload_len: usize = std.mem.readInt(
+                        u32,
+                        self.atomic.items[4..8],
+                        .little,
+                    );
+                    self.atomic_target = try checkedAdd(
+                        wire.archive_extra_data_header_len,
+                        payload_len,
+                    );
+                    if (self.atomic_target > self.options.max_part_size)
+                        return error.InvalidZipSplitSize;
+                    self.phase = .archive_extra_variable;
+                    continue;
+                }
+                if (signature != wire.central_file_signature)
+                    return error.InvalidZipArchive;
+                if (self.atomic_target != wire.central_file_header_len) {
+                    self.atomic_target = wire.central_file_header_len;
+                    continue;
+                }
                 const fixed: *const [wire.central_file_header_len]u8 =
                     self.atomic.items[0..wire.central_file_header_len];
                 const name_len: usize = std.mem.readInt(u16, fixed[28..30], .little);
@@ -402,7 +430,32 @@ pub const Writer = struct {
                 self.central_entries_in_part += 1;
                 self.central_index += 1;
                 self.clearAtomic();
-                self.atomic_target = wire.central_file_header_len;
+                self.atomic_target = wire.archive_extra_data_header_len;
+                self.phase = .central_fixed;
+                if (self.part_output == self.options.max_part_size)
+                    return self.partDone(input_read, output_written);
+                if (output_written == output.len)
+                    return result(input_read, output_written, .need_output);
+            },
+            .archive_extra_variable => {
+                if (!try self.collectCentralTarget()) return error.InvalidZipArchive;
+                self.phase = .archive_extra_emit;
+            },
+            .archive_extra_emit => {
+                if (!try self.prepareAtomicPart())
+                    return self.partDone(input_read, output_written);
+                if (self.central_start == null) {
+                    self.central_start = self.virtual_offset;
+                    self.central_disk = self.part_index;
+                    self.central_offset_on_disk = self.virtual_offset - self.part_base;
+                }
+                try self.emitAtomic(output, &output_written);
+                if (!self.atomicComplete())
+                    return result(input_read, output_written, .need_output);
+                self.central_size = try checkedAdd(self.central_size, self.atomic.items.len);
+                self.archive_extra_seen = true;
+                self.clearAtomic();
+                self.atomic_target = wire.archive_extra_data_header_len;
                 self.phase = .central_fixed;
                 if (self.part_output == self.options.max_part_size)
                     return self.partDone(input_read, output_written);

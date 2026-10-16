@@ -121,6 +121,7 @@ fn decodeAll(
     allocator: std.mem.Allocator,
     parts: []const []const u8,
     password: ?[]const u8,
+    expected_archive_extra_data: []const u8,
 ) ![]u8 {
     var reader = try split_reader.Reader.initAlloc(allocator, parts, .{
         .reader_options = .{ .password = password },
@@ -136,6 +137,11 @@ fn decodeAll(
         if (result.status == .done) break;
         if (result.status == .need_input) return error.TestUnexpectedResult;
     }
+    try std.testing.expectEqualSlices(
+        u8,
+        expected_archive_extra_data,
+        reader.archiveExtraData(),
+    );
     try reader.finish();
     return decoded.toOwnedSlice(allocator);
 }
@@ -213,6 +219,7 @@ test "split incremental writer is deterministic across backpressure" {
         const options: split_writer.Options = .{
             .writer_options = .{
                 .archive_comment = "incremental split archive",
+                .archive_extra_data = "incremental split archive extra data",
                 .zip64 = zip64_mode,
             },
             .max_part_size = 512,
@@ -232,7 +239,12 @@ test "split incremental writer is deterministic across backpressure" {
             @as(u32, wire.data_descriptor_signature),
             std.mem.readInt(u32, tiny.parts[0][0..4], .little),
         );
-        const decoded = try decodeAll(allocator, tiny.parts, password);
+        const decoded = try decodeAll(
+            allocator,
+            tiny.parts,
+            password,
+            "incremental split archive extra data",
+        );
         defer allocator.free(decoded);
         try std.testing.expectEqual(stored.len + deflated.len + aes.len + strong.len, decoded.len);
         try std.testing.expectEqualSlices(u8, stored, decoded[0..stored.len]);
@@ -263,7 +275,7 @@ test "split incremental writer covers empty archives and limits" {
         }, 1, 1);
         defer empty.deinit();
         try std.testing.expectEqual(@as(usize, 2), empty.parts.len);
-        const decoded = try decodeAll(allocator, empty.parts, null);
+        const decoded = try decodeAll(allocator, empty.parts, null, "");
         defer allocator.free(decoded);
         try std.testing.expectEqual(@as(usize, 0), decoded.len);
     }

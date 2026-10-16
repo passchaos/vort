@@ -195,14 +195,16 @@ pub const Archive = struct {
     bytes: []const u8,
     entry_count: usize,
     central_directory_offset: usize,
+    central_entries_offset: usize,
     central_directory_size: usize,
+    archive_extra_data: []const u8,
     comment: []const u8,
     zip64: bool,
 
     pub fn iterator(self: Archive) Iterator {
         return .{
             .archive = self,
-            .offset = self.central_directory_offset,
+            .offset = self.central_entries_offset,
             .remaining = self.entry_count,
         };
     }
@@ -491,7 +493,9 @@ pub fn parse(bytes: []const u8) Error!Archive {
         .bytes = bytes,
         .entry_count = directory.entry_count,
         .central_directory_offset = directory.central_directory_offset,
+        .central_entries_offset = directory.central_entries_offset,
         .central_directory_size = directory.central_directory_size,
+        .archive_extra_data = directory.archive_extra_data,
         .comment = directory.comment,
         .zip64 = directory.zip64,
     };
@@ -599,7 +603,7 @@ fn parseLocalMetadata(archive: Archive, offset: usize) Error!LocalMetadata {
 
 fn parseCentralEntry(archive: Archive, offset: usize) Error!ParsedCentralEntry {
     const central_end = try checkedEnd(archive.central_directory_offset, archive.central_directory_size, archive.bytes.len);
-    if (offset < archive.central_directory_offset or offset >= central_end) return error.InvalidZipArchive;
+    if (offset < archive.central_entries_offset or offset >= central_end) return error.InvalidZipArchive;
     if (try readU32(archive.bytes, offset) != central_file_signature) return error.InvalidZipArchive;
     _ = try checkedEnd(offset, 46, central_end);
 
@@ -1477,6 +1481,104 @@ test "ZIP entry metadata round trips comments timestamps and Unix attributes" {
     try std.testing.expectError(
         error.InvalidZipTextEncoding,
         encodeAlloc(allocator, &invalid_unicode, .{ .utf8 = false }),
+    );
+}
+
+test "ZIP archive extra data record round trips ZIP32 ZIP64 and empty archives" {
+    const allocator = std.testing.allocator;
+    const archive_extra_data = "archive-extra\x00binary\xffpayload";
+    const entries = [_]EncodeEntry{.{
+        .name = "payload.bin",
+        .data = "archive extra data payload",
+        .method = .deflate,
+    }};
+    inline for (.{ Zip64Mode.never, .always }) |zip64_mode| {
+        inline for (.{ false, true }) |descriptor_mode| {
+            const bytes = try encodeAlloc(allocator, &entries, .{
+                .archive_extra_data = archive_extra_data,
+                .zip64 = zip64_mode,
+                .data_descriptor = descriptor_mode,
+            });
+            defer allocator.free(bytes);
+            const archive = try parse(bytes);
+            try std.testing.expectEqualSlices(
+                u8,
+                archive_extra_data,
+                archive.archive_extra_data,
+            );
+            try std.testing.expectEqual(
+                archive.central_directory_offset +
+                    wire.archive_extra_data_header_len + archive_extra_data.len,
+                archive.central_entries_offset,
+            );
+            try std.testing.expectEqual(
+                wire.archive_extra_data_signature,
+                try readU32(bytes, archive.central_directory_offset),
+            );
+            try std.testing.expectEqual(
+                @as(u32, archive_extra_data.len),
+                try readU32(bytes, archive.central_directory_offset + 4),
+            );
+            const entry = try archive.entryAt(0);
+            const decoded = try archive.extractAlloc(allocator, entry);
+            defer allocator.free(decoded);
+            try std.testing.expectEqualSlices(u8, entries[0].data, decoded);
+
+            var corrupt = try allocator.dupe(u8, bytes);
+            defer allocator.free(corrupt);
+            std.mem.writeInt(
+                u32,
+                corrupt[archive.central_directory_offset + 4 ..][0..4],
+                std.math.maxInt(u32),
+                .little,
+            );
+            try std.testing.expectError(error.InvalidZipArchive, parse(corrupt));
+        }
+
+        const empty = try encodeAlloc(allocator, &.{}, .{
+            .archive_extra_data = archive_extra_data,
+            .zip64 = zip64_mode,
+        });
+        defer allocator.free(empty);
+        const empty_archive = try parse(empty);
+        try std.testing.expectEqual(@as(usize, 0), empty_archive.entry_count);
+        try std.testing.expectEqualSlices(
+            u8,
+            archive_extra_data,
+            empty_archive.archive_extra_data,
+        );
+        try std.testing.expectEqual(
+            empty_archive.central_entries_offset,
+            empty_archive.central_directory_offset + empty_archive.central_directory_size,
+        );
+    }
+
+    var zero_record: [wire.archive_extra_data_header_len + wire.end_of_central_len]u8 =
+        @splat(0);
+    std.mem.writeInt(
+        u32,
+        zero_record[0..4],
+        wire.archive_extra_data_signature,
+        .little,
+    );
+    const zero_end = wire.archive_extra_data_header_len;
+    std.mem.writeInt(
+        u32,
+        zero_record[zero_end..][0..4],
+        wire.end_of_central_signature,
+        .little,
+    );
+    std.mem.writeInt(
+        u32,
+        zero_record[zero_end + 12 ..][0..4],
+        wire.archive_extra_data_header_len,
+        .little,
+    );
+    const zero_archive = try parse(&zero_record);
+    try std.testing.expectEqual(@as(usize, 0), zero_archive.archive_extra_data.len);
+    try std.testing.expectEqual(
+        @as(usize, wire.archive_extra_data_header_len),
+        zero_archive.central_entries_offset,
     );
 }
 
@@ -2571,6 +2673,7 @@ test "ZIP split writer plans standard atomic records and round trips" {
             const options: SplitEncodeOptions = .{
                 .zip_options = .{
                     .archive_comment = "split writer comment",
+                    .archive_extra_data = "split writer archive extra data",
                     .data_descriptor = descriptor,
                     .zip64 = zip64_mode,
                     .utf8 = false,
@@ -2601,6 +2704,11 @@ test "ZIP split writer plans standard atomic records and round trips" {
                 "split writer comment",
                 archive.archive.comment,
             );
+            try std.testing.expectEqualSlices(
+                u8,
+                "split writer archive extra data",
+                archive.archive.archive_extra_data,
+            );
             for (entries, 0..) |expected, index| {
                 const entry = try archive.archive.entryAt(index);
                 const decoded = try archive.archive.extractAlloc(
@@ -2620,6 +2728,11 @@ test "ZIP split writer plans standard atomic records and round trips" {
             );
             defer stream_reader.deinit();
             try drainSplitIncrementalReader(&stream_reader);
+            try std.testing.expectEqualSlices(
+                u8,
+                "split writer archive extra data",
+                stream_reader.archiveExtraData(),
+            );
             const streamed_tail = stream_reader.entryAt(1).?;
             try std.testing.expectEqualStrings("split metadata", streamed_tail.comment.?);
             try std.testing.expectEqualStrings("尾部.bin", streamed_tail.preferredName());
@@ -2658,6 +2771,13 @@ test "ZIP split writer plans standard atomic records and round trips" {
         encodeSplitAlloc(allocator, &entries, .{
             .zip_options = .{ .utf8 = false },
             .max_part_size = 3,
+        }),
+    );
+    try std.testing.expectError(
+        error.InvalidZipSplitSize,
+        encodeSplitAlloc(allocator, &.{}, .{
+            .zip_options = .{ .archive_extra_data = "x" ** 64 },
+            .max_part_size = 32,
         }),
     );
     try std.testing.expectError(

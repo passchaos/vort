@@ -479,6 +479,33 @@ def validate_vort_unicode_archive(
     return len(expected)
 
 
+def validate_vort_archive_extra(
+    cli: Path,
+    writer: Path,
+    temp: Path,
+) -> int:
+    expected_extra = b"Vort archive extra data\x00\xff"
+    expected = {
+        "archive-extra/data.txt": b"Vort archive extra data record payload.\n" * 19,
+        "archive-extra/empty.bin": b"",
+    }
+    cases = 0
+    for force_zip64 in (False, True):
+        suffix = "zip64" if force_zip64 else "zip32"
+        path = temp / f"vort-archive-extra-{suffix}.zip"
+        run(writer, str(path), "archive-extra-zip64" if force_zip64 else "archive-extra")
+        raw = path.read_bytes()
+        validate_archive_extra_record(raw, expected_extra, f"one-shot {suffix}")
+        for index, (name, payload) in enumerate(expected.items()):
+            for command in ("extract-zip-file", "extract-zip-stream-file"):
+                output = temp / f"archive-extra-{suffix}-{index}-{command}.out"
+                run(cli, command, str(path), name, str(output))
+                if output.read_bytes() != payload:
+                    raise AssertionError("Vort archive-extra extraction mismatch")
+            cases += 1
+    return cases
+
+
 def validate_vort_archive_with_python(
     cli: Path,
     writer: Path,
@@ -1563,6 +1590,44 @@ def validate_unicode_extra(
         raise AssertionError(f"{context} Unicode extra text mismatch")
 
 
+def central_directory_bounds(raw: bytes) -> tuple[int, int]:
+    eocd_offset = raw.rfind(b"PK\x05\x06")
+    if eocd_offset < 0 or eocd_offset + 22 > len(raw):
+        raise AssertionError("missing EOCD")
+    central_size, central_offset = struct.unpack_from("<II", raw, eocd_offset + 12)
+    if central_size != 0xFFFFFFFF and central_offset != 0xFFFFFFFF:
+        return central_offset, central_size
+    locator_offset = eocd_offset - 20
+    if locator_offset < 0 or raw[locator_offset : locator_offset + 4] != b"PK\x06\x07":
+        raise AssertionError("missing ZIP64 locator")
+    zip64_offset = struct.unpack_from("<Q", raw, locator_offset + 8)[0]
+    if raw[zip64_offset : zip64_offset + 4] != b"PK\x06\x06":
+        raise AssertionError("missing ZIP64 EOCD")
+    central_size = struct.unpack_from("<Q", raw, zip64_offset + 40)[0]
+    central_offset = struct.unpack_from("<Q", raw, zip64_offset + 48)[0]
+    return central_offset, central_size
+
+
+def validate_archive_extra_record(
+    raw: bytes,
+    expected_data: bytes,
+    context: str,
+) -> None:
+    central_offset, central_size = central_directory_bounds(raw)
+    if raw[central_offset : central_offset + 4] != b"PK\x06\x08":
+        raise AssertionError(f"{context} archive extra signature mismatch")
+    payload_len = struct.unpack_from("<I", raw, central_offset + 4)[0]
+    record_end = central_offset + 8 + payload_len
+    if payload_len != len(expected_data) or raw[central_offset + 8 : record_end] != expected_data:
+        raise AssertionError(f"{context} archive extra payload mismatch")
+    if central_size < 8 + payload_len or raw[record_end : record_end + 4] not in (
+        b"PK\x01\x02",
+        b"PK\x06\x06",
+        b"PK\x05\x06",
+    ):
+        raise AssertionError(f"{context} archive extra central bounds mismatch")
+
+
 def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
     eocd_offset = raw.rfind(b"PK\x05\x06")
     if eocd_offset < 0 or eocd_offset + 22 > len(raw):
@@ -1934,6 +1999,36 @@ def validate_incremental_unicode_archive(
             if output.read_bytes() != payload:
                 raise AssertionError("Vort incremental Unicode extraction mismatch")
             cases += 1
+    return len(raw), cases
+
+
+def validate_incremental_archive_extra(
+    cli: Path,
+    writer: Path,
+    temp: Path,
+    force_zip64: bool,
+) -> tuple[int, int]:
+    suffix = "zip64" if force_zip64 else "zip32"
+    one = temp / f"incremental-archive-extra-{suffix}-one.zip"
+    micro = temp / f"incremental-archive-extra-{suffix}-micro.zip"
+    run(writer, str(one), suffix, "one", "archive-extra")
+    run(writer, str(micro), suffix, "micro", "archive-extra")
+    raw = one.read_bytes()
+    if raw != micro.read_bytes():
+        raise AssertionError("incremental archive-extra output depends on schedule")
+    expected_extra = b"incremental archive extra data\x00\xff"
+    validate_archive_extra_record(raw, expected_extra, f"incremental {suffix}")
+    expected = {
+        "archive-extra/stream.txt": b"incremental archive extra data payload\n" * 29,
+        "archive-extra/empty.bin": b"",
+    }
+    cases = 0
+    for index, (name, payload) in enumerate(expected.items()):
+        output = temp / f"incremental-archive-extra-{suffix}-{index}.out"
+        run(cli, "extract-zip-stream-file", str(one), name, str(output))
+        if output.read_bytes() != payload:
+            raise AssertionError("incremental archive-extra Vort mismatch")
+        cases += 1
     return len(raw), cases
 
 
@@ -3025,6 +3120,11 @@ def main() -> None:
             temp,
             unzip_tool,
         )
+        vort_archive_extra_cases = validate_vort_archive_extra(
+            args.cli,
+            args.writer,
+            temp,
+        )
         vort_zipcrypto_cases, vort_incremental_reader_zipcrypto_cases = (
             validate_vort_zipcrypto(args.cli, args.writer, unzip_tool, temp)
         )
@@ -3060,6 +3160,22 @@ def main() -> None:
         )
         incremental_unicode_zip64_bytes, incremental_unicode_zip64_cases = (
             validate_incremental_unicode_archive(
+                args.cli,
+                args.incremental_writer,
+                temp,
+                True,
+            )
+        )
+        incremental_archive_extra_zip32_bytes, incremental_archive_extra_zip32_cases = (
+            validate_incremental_archive_extra(
+                args.cli,
+                args.incremental_writer,
+                temp,
+                False,
+            )
+        )
+        incremental_archive_extra_zip64_bytes, incremental_archive_extra_zip64_cases = (
+            validate_incremental_archive_extra(
                 args.cli,
                 args.incremental_writer,
                 temp,
@@ -3231,6 +3347,7 @@ def main() -> None:
         f"incremental_archive_implode_fixture_cases={incremental_archive_implode_fixture_cases} "
         f"vort_zip32_bytes={vort_zip32_bytes} vort_zip64_bytes={vort_zip64_bytes} "
         f"vort_unicode_cases={vort_unicode_cases} "
+        f"vort_archive_extra_cases={vort_archive_extra_cases} "
         f"vort_zipcrypto_cases={vort_zipcrypto_cases} "
         f"infozip_zipcrypto_cases={infozip_zipcrypto_cases} "
         f"infozip_incremental_reader_zipcrypto_cases={infozip_incremental_reader_zipcrypto_cases} "
@@ -3246,6 +3363,9 @@ def main() -> None:
         f"incremental_unicode_cases={incremental_unicode_zip32_cases + incremental_unicode_zip64_cases} "
         f"incremental_unicode_zip32_bytes={incremental_unicode_zip32_bytes} "
         f"incremental_unicode_zip64_bytes={incremental_unicode_zip64_bytes} "
+        f"incremental_archive_extra_cases={incremental_archive_extra_zip32_cases + incremental_archive_extra_zip64_cases} "
+        f"incremental_archive_extra_zip32_bytes={incremental_archive_extra_zip32_bytes} "
+        f"incremental_archive_extra_zip64_bytes={incremental_archive_extra_zip64_bytes} "
         f"incremental_zipcrypto_cases={len(INCREMENTAL_ZIPCRYPTO_PAYLOADS) * 2} "
         f"incremental_zipcrypto_zip32_bytes={incremental_zipcrypto_zip32_bytes} "
         f"incremental_zipcrypto_zip64_bytes={incremental_zipcrypto_zip64_bytes} "

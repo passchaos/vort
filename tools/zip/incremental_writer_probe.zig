@@ -524,6 +524,20 @@ pub fn main(init: std.process.Init) !void {
             .expected_size = 0,
         },
     };
+    const archive_extra_entries = [_]Entry{
+        .{
+            .name = "archive-extra/stream.txt",
+            .data = "incremental archive extra data payload\n" ** 29,
+            .method = .deflate,
+            .expected_size = null,
+        },
+        .{
+            .name = "archive-extra/empty.bin",
+            .data = "",
+            .method = .stored,
+            .expected_size = 0,
+        },
+    };
 
     const selected_entries: []const Entry = if (entry_mode) |value|
         if (std.mem.eql(u8, value, "zipcrypto"))
@@ -534,12 +548,21 @@ pub fn main(init: std.process.Init) !void {
             &pkware_strong_entries
         else if (std.mem.eql(u8, value, "unicode"))
             &unicode_entries
+        else if (std.mem.eql(u8, value, "archive-extra"))
+            &archive_extra_entries
         else if (std.mem.eql(u8, value, "split"))
             entries[0..6]
         else
             return error.InvalidEntryMode
     else
         &entries;
+    const archive_extra_data: []const u8 = if (entry_mode) |value|
+        if (std.mem.eql(u8, value, "archive-extra"))
+            "incremental archive extra data\x00\xff"
+        else
+            ""
+    else
+        "";
 
     if (split_mode) {
         var encoded = try encodeSplitArchive(
@@ -547,6 +570,7 @@ pub fn main(init: std.process.Init) !void {
             selected_entries,
             zip64,
             output_pattern,
+            archive_extra_data,
         );
         defer encoded.deinit();
         for (encoded.parts, 0..) |part, index| {
@@ -564,7 +588,13 @@ pub fn main(init: std.process.Init) !void {
             });
         }
     } else {
-        const encoded = try encodeArchive(init.gpa, selected_entries, zip64, output_pattern);
+        const encoded = try encodeArchive(
+            init.gpa,
+            selected_entries,
+            zip64,
+            output_pattern,
+            archive_extra_data,
+        );
         defer init.gpa.free(encoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
     }
@@ -592,10 +622,12 @@ fn encodeSplitArchive(
     entries: []const Entry,
     zip64: vort.Zip64Mode,
     output_pattern: OutputPattern,
+    archive_extra_data: []const u8,
 ) !SplitArchive {
     var writer = try vort.ZipSplitIncrementalWriter.initWithOptions(allocator, .{
         .writer_options = .{
             .archive_comment = "vort incremental split writer interop",
+            .archive_extra_data = archive_extra_data,
             .zip64 = zip64,
             .utf8 = !usesUnicodeExtra(entries),
             .max_deflate_buffer_size = 1024 * 1024,
@@ -710,9 +742,11 @@ fn encodeArchive(
     entries: []const Entry,
     zip64: vort.Zip64Mode,
     output_pattern: OutputPattern,
+    archive_extra_data: []const u8,
 ) ![]u8 {
     var writer = try vort.ZipIncrementalWriter.initWithOptions(allocator, .{
         .archive_comment = "vort incremental writer interop",
+        .archive_extra_data = archive_extra_data,
         .zip64 = zip64,
         .utf8 = !usesUnicodeExtra(entries),
         .bzip2_options = .{ .block_size_100k = 1 },

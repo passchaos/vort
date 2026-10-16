@@ -283,7 +283,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   writing for every listed method, including per-entry Traditional ZipCrypto,
   signed data descriptors, known or unknown size pledges, ZIP32/ZIP64 policy,
   SFX offsets, and payload-bounded memory;
-  archive/entry comments, configurable validated DOS modification timestamps,
+  archive/entry comments, opaque Archive Extra Data Records with correct
+  central-offset/size and atomic split placement, configurable validated DOS modification timestamps,
   Info-ZIP `0x5455` Unix times, NTFS `0x000a` 100 ns FILETIME values,
   Info-ZIP `0x7075` Unicode paths and `0x6375` Unicode comments with CRC-bound
   legacy-name fallback and preferred-name lookup,

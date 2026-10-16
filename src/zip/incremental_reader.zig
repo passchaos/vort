@@ -52,6 +52,8 @@ pub const Reader = struct {
     zip64_end_offset: usize = 0,
     zip64_locator_seen: bool = false,
     digital_signature_seen: bool = false,
+    archive_extra_seen: bool = false,
+    archive_extra_data: []u8 = &.{},
     archive_comment: []u8 = &.{},
     last_error_name: []const u8 = "",
 
@@ -121,6 +123,7 @@ pub const Reader = struct {
         central_entries: usize,
         central_offset: ?usize,
         central_size: ?usize,
+        archive_extra_data_bytes: usize,
         current_entry: ?EntryInfo,
         last_error_name: []const u8,
     };
@@ -170,6 +173,9 @@ pub const Reader = struct {
         self.zip64_end_offset = 0;
         self.zip64_locator_seen = false;
         self.digital_signature_seen = false;
+        self.archive_extra_seen = false;
+        if (self.archive_extra_data.len != 0) self.allocator.free(self.archive_extra_data);
+        self.archive_extra_data = &.{};
         self.archive_comment = &.{};
         self.last_error_name = "";
     }
@@ -180,6 +186,7 @@ pub const Reader = struct {
         self.directory.deinit(self.allocator);
         self.control.deinit(self.allocator);
         self.allocator.free(self.history);
+        if (self.archive_extra_data.len != 0) self.allocator.free(self.archive_extra_data);
         if (self.archive_comment.len != 0) self.allocator.free(self.archive_comment);
         self.* = undefined;
     }
@@ -221,6 +228,7 @@ pub const Reader = struct {
             .central_entries = self.directory.central_entries,
             .central_offset = if (self.directory.central_started) self.directory.central_offset else null,
             .central_size = if (self.directory.central_started and self.phase != .central_fixed and self.phase != .central_variable) self.directory.central_size else null,
+            .archive_extra_data_bytes = self.archive_extra_data.len,
             .current_entry = self.currentEntry(),
             .last_error_name = self.last_error_name,
         };
@@ -241,6 +249,10 @@ pub const Reader = struct {
 
     pub fn archiveComment(self: *const Self) []const u8 {
         return self.archive_comment;
+    }
+
+    pub fn archiveExtraData(self: *const Self) []const u8 {
+        return self.archive_extra_data;
     }
 
     pub fn diagnostics(self: *const Self) core.StreamingDiagnostics {
@@ -299,11 +311,20 @@ pub const Reader = struct {
                     wire.central_file_signature => {
                         if (self.zip64_end != null) return error.InvalidZipArchive;
                         if (!self.directory.central_started) {
-                            self.directory.central_started = true;
-                            self.directory.central_offset = self.record_offset;
+                            try self.directory.beginCentral(self.record_offset);
                         }
                         self.phase = .central_fixed;
                         try self.setControlTarget(wire.central_file_header_len);
+                    },
+                    wire.archive_extra_data_signature => {
+                        if (self.archive_extra_seen or self.directory.central_started or
+                            self.zip64_end != null or self.zip64_locator_seen)
+                        {
+                            return error.InvalidZipArchive;
+                        }
+                        try self.directory.beginCentral(self.record_offset);
+                        self.phase = .archive_extra_fixed;
+                        try self.setControlTarget(wire.archive_extra_data_header_len);
                     },
                     wire.zip64_end_of_central_signature => {
                         if (self.zip64_end != null or self.zip64_locator_seen)
@@ -428,6 +449,34 @@ pub const Reader = struct {
                     self.options.max_central_directory_size,
                     self.options.max_metadata_size,
                 );
+                self.clearControl();
+                self.phase = .record_signature;
+            },
+            .archive_extra_fixed => {
+                try self.fillControl(input, &input_read);
+                if (self.control.items.len != wire.archive_extra_data_header_len)
+                    return result(input_read, output_written, .need_input);
+                const payload_len: usize = std.mem.readInt(
+                    u32,
+                    self.control.items[4..8],
+                    .little,
+                );
+                if (payload_len > self.options.max_archive_extra_data_size)
+                    return error.OutputLimitExceeded;
+                self.phase = .archive_extra;
+                try self.setControlTarget(try checkedAdd(
+                    wire.archive_extra_data_header_len,
+                    payload_len,
+                ));
+            },
+            .archive_extra => {
+                try self.fillControl(input, &input_read);
+                if (self.control.items.len != self.control_target)
+                    return result(input_read, output_written, .need_input);
+                const payload = self.control.items[wire.archive_extra_data_header_len..];
+                if (payload.len != 0)
+                    self.archive_extra_data = try self.allocator.dupe(u8, payload);
+                self.archive_extra_seen = true;
                 self.clearControl();
                 self.phase = .record_signature;
             },

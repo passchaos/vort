@@ -70,6 +70,7 @@ pub const EncodeEntry = struct {
 
 pub const EncodeOptions = struct {
     archive_comment: []const u8 = "",
+    archive_extra_data: []const u8 = "",
     data_descriptor: bool = false,
     utf8: bool = true,
     zip64: Zip64Mode = .auto,
@@ -282,6 +283,7 @@ pub fn encodeAppend(
 
     const central_offset = try wire.absoluteOffset(archive_base, archive.items.len);
     const central_start = archive.items.len;
+    try wire.appendArchiveExtraData(allocator, &archive, options.archive_extra_data);
     for (encoded_entries) |entry| try wire.appendCentralHeader(allocator, &archive, entry);
     const central_size = try wire.usizeToU64(archive.items.len - central_start);
     const entry_count = try wire.usizeToU64(entries.len);
@@ -324,6 +326,8 @@ fn validateInputs(entries: []const EncodeEntry, options: EncodeOptions) Error!vo
     if (options.zip64 == .never and entries.len >= std.math.maxInt(u16))
         return error.Zip32LimitExceeded;
     if (options.archive_comment.len > std.math.maxInt(u16)) return error.Zip32LimitExceeded;
+    if (options.archive_extra_data.len > std.math.maxInt(u32))
+        return error.Zip32LimitExceeded;
     for (entries) |entry| {
         if (!entry.modified.isValid()) return error.InvalidZipTimestamp;
         if (entry.extended_timestamp) |timestamp|

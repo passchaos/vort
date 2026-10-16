@@ -125,6 +125,7 @@ test "ZIP incremental reader retains entry comments timestamps and Unix attribut
         },
     };
     const bytes = try zip.encodeAlloc(allocator, &entries, .{
+        .archive_extra_data = "incremental reader archive extra data",
         .data_descriptor = true,
         .zip64 = .always,
         .utf8 = false,
@@ -176,6 +177,12 @@ test "ZIP incremental reader retains entry comments timestamps and Unix attribut
             }
             try std.testing.expectEqual(archive_bytes.len, input_offset);
             try std.testing.expectEqual(expected_entries.len, header_index);
+            const parsed = try zip.parse(archive_bytes);
+            try std.testing.expectEqualSlices(
+                u8,
+                parsed.archive_extra_data,
+                reader.archiveExtraData(),
+            );
             for (expected_entries, 0..) |expected, index| {
                 const info = reader.entryAt(index).?;
                 try std.testing.expectEqualStrings(expected.comment, info.comment.?);
@@ -219,6 +226,20 @@ test "ZIP incremental reader retains entry comments timestamps and Unix attribut
     var output: [64]u8 = undefined;
     while (true) {
         const stepped = limited.step(bytes[input_offset..], &output) catch |err| {
+            try std.testing.expectEqual(error.OutputLimitExceeded, err);
+            break;
+        };
+        input_offset += stepped.progress.input_read;
+    }
+    try std.testing.expect(input_offset >= parsed.central_directory_offset);
+
+    var archive_extra_limited = try incremental.Reader.initWithOptions(allocator, .{
+        .max_archive_extra_data_size = 1,
+    });
+    defer archive_extra_limited.deinit();
+    input_offset = 0;
+    while (true) {
+        const stepped = archive_extra_limited.step(bytes[input_offset..], &output) catch |err| {
             try std.testing.expectEqual(error.OutputLimitExceeded, err);
             break;
         };

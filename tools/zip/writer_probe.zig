@@ -38,6 +38,7 @@ pub fn main(init: std.process.Init) !void {
     var pkware_strong_descriptor_mode = false;
     var split_mode = false;
     var unicode_mode = false;
+    var archive_extra_mode = false;
     if (mode) |value| {
         if (std.mem.eql(u8, value, "zip64")) {
             zip64 = .always;
@@ -86,6 +87,11 @@ pub fn main(init: std.process.Init) !void {
             pkware_strong_descriptor_mode = true;
         } else if (std.mem.eql(u8, value, "unicode")) {
             unicode_mode = true;
+        } else if (std.mem.eql(u8, value, "archive-extra") or
+            std.mem.eql(u8, value, "archive-extra-zip64"))
+        {
+            archive_extra_mode = true;
+            if (std.mem.endsWith(u8, value, "-zip64")) zip64 = .always;
         } else if (std.mem.startsWith(u8, value, "dcl-")) {
             dcl_mode = true;
             const specification = value["dcl-".len..];
@@ -337,6 +343,18 @@ pub fn main(init: std.process.Init) !void {
             .method = .stored,
         },
     };
+    const archive_extra_entries = [_]vort.ZipEncodeEntry{
+        .{
+            .name = "archive-extra/data.txt",
+            .data = "Vort archive extra data record payload.\n" ** 19,
+            .method = .deflate,
+        },
+        .{
+            .name = "archive-extra/empty.bin",
+            .data = "",
+            .method = .stored,
+        },
+    };
 
     var bytes: std.ArrayList(u8) = .empty;
     defer bytes.deinit(init.gpa);
@@ -345,6 +363,8 @@ pub fn main(init: std.process.Init) !void {
         &split_entries
     else if (unicode_mode)
         &unicode_entries
+    else if (archive_extra_mode)
+        &archive_extra_entries
     else if (winzip_aes_mode)
         &winzip_aes_entries
     else if (pkware_strong_mode)
@@ -359,6 +379,10 @@ pub fn main(init: std.process.Init) !void {
         &entries;
     const encode_options: vort.ZipEncodeOptions = .{
         .archive_comment = "vort zip writer differential",
+        .archive_extra_data = if (archive_extra_mode)
+            "Vort archive extra data\x00\xff"
+        else
+            "",
         .utf8 = !unicode_mode,
         .data_descriptor = split_mode or implode_descriptor_mode or reduce_descriptor_mode or
             zipcrypto_descriptor_mode or winzip_aes_descriptor_mode or pkware_strong_descriptor_mode or

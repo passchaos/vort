@@ -150,6 +150,10 @@ pub const Reader = struct {
         return self.inner.archiveComment();
     }
 
+    pub fn archiveExtraData(self: *const Self) []const u8 {
+        return self.inner.archiveExtraData();
+    }
+
     pub fn snapshot(self: *const Self) incremental_reader.Reader.Snapshot {
         return self.inner.snapshot();
     }

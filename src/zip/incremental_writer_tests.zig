@@ -103,6 +103,7 @@ test "ZIP incremental writer round trips known and unknown common codec entries"
     };
     const bytes = try encodeEntries(allocator, &entries, .{
         .archive_comment = "streamed",
+        .archive_extra_data = "incremental writer archive extra data",
         .utf8 = false,
         .ppmd_options = .{ .properties = .{ .memory_size = 1024 * 1024 } },
     }, 7, 5);
@@ -111,6 +112,11 @@ test "ZIP incremental writer round trips known and unknown common codec entries"
     const archive = try zip.parse(bytes);
     try std.testing.expectEqual(@as(usize, entries.len), archive.entry_count);
     try std.testing.expectEqualStrings("streamed", archive.comment);
+    try std.testing.expectEqualSlices(
+        u8,
+        "incremental writer archive extra data",
+        archive.archive_extra_data,
+    );
     for (entries, 0..) |expected, index| {
         const entry = try archive.entryAt(index);
         try std.testing.expectEqualStrings(expected.name, entry.name);
@@ -624,6 +630,13 @@ test "ZIP incremental writer validates state and recovers from a short finish re
 }
 
 test "ZIP incremental writer enforces method and metadata limits" {
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        incremental.Writer.initWithOptions(std.testing.allocator, .{
+            .archive_extra_data = "archive-extra",
+            .max_central_directory_size = 8,
+        }),
+    );
     var unsupported = try incremental.Writer.init(std.testing.allocator);
     defer unsupported.deinit();
     try std.testing.expectError(
@@ -716,6 +729,18 @@ test "ZIP incremental writer enforces method and metadata limits" {
         error.OutputLimitExceeded,
         entry_limited.beginEntry(.{ .name = "entry" }),
     );
+}
+
+test "ZIP incremental writer archive extra initialization releases allocation failures" {
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            var writer = try incremental.Writer.initWithOptions(allocator, .{
+                .archive_extra_data = "allocation-safe archive extra data",
+            });
+            defer writer.deinit();
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{});
 }
 
 test "ZIP incremental writer preflights codec configuration before headers" {

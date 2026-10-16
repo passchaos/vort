@@ -237,6 +237,21 @@ fn buildPlan(
     const central_end = try checkedEnd(central_offset, directory.size, end.offset);
     var central_cursor = central_offset;
     var first_record_offset = central_offset;
+    if (directory.size >= 4 and
+        try source.readInt(u32, central_offset) == wire.archive_extra_data_signature)
+    {
+        _ = try checkedEnd(
+            central_offset,
+            wire.archive_extra_data_header_len,
+            central_end,
+        );
+        const payload_len: usize = try source.readInt(u32, central_offset + 4);
+        central_cursor = try checkedEnd(
+            central_offset,
+            try checkedAdd(wire.archive_extra_data_header_len, payload_len),
+            central_end,
+        );
+    }
     for (0..directory.entry_count) |index| {
         const normalized = try normalizeCentralEntryPlan(
             allocator,

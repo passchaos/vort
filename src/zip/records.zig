@@ -231,10 +231,31 @@ pub fn mergeNtfsTimestamps(
 pub const Directory = struct {
     entry_count: usize,
     central_directory_offset: usize,
+    central_entries_offset: usize,
     central_directory_size: usize,
+    archive_extra_data: []const u8,
     comment: []const u8,
     zip64: bool,
 };
+
+pub fn archiveExtraDataEncodedLen(prefix: *const [wire.archive_extra_data_header_len]u8) Error!usize {
+    if (std.mem.readInt(u32, prefix[0..4], .little) != wire.archive_extra_data_signature)
+        return error.InvalidZipArchive;
+    return checkedAdd(
+        wire.archive_extra_data_header_len,
+        std.mem.readInt(u32, prefix[4..8], .little),
+    );
+}
+
+pub fn parseArchiveExtraData(bytes: []const u8) Error![]const u8 {
+    if (bytes.len < wire.archive_extra_data_header_len)
+        return error.InvalidZipArchive;
+    const prefix: *const [wire.archive_extra_data_header_len]u8 =
+        bytes[0..wire.archive_extra_data_header_len];
+    if (try archiveExtraDataEncodedLen(prefix) != bytes.len)
+        return error.InvalidZipArchive;
+    return bytes[wire.archive_extra_data_header_len..];
+}
 
 pub fn parseDirectory(bytes: []const u8) Error!Directory {
     const eocd_offset = findEndOfCentralDirectory(bytes) orelse return error.InvalidZipArchive;
@@ -328,10 +349,35 @@ fn finishDirectory(
 ) Error!Directory {
     const central_end = try checkedEnd(central_offset, central_size, bytes.len);
     if (central_end > directory_limit) return error.InvalidZipArchive;
+    var central_entries_offset = central_offset;
+    var archive_extra_data: []const u8 = &.{};
+    if (central_size >= 4 and
+        std.mem.readInt(u32, bytes[central_offset..][0..4], .little) ==
+            wire.archive_extra_data_signature)
+    {
+        _ = try checkedEnd(
+            central_offset,
+            wire.archive_extra_data_header_len,
+            central_end,
+        );
+        const prefix: *const [wire.archive_extra_data_header_len]u8 =
+            bytes[central_offset..][0..wire.archive_extra_data_header_len];
+        const record_len = try archiveExtraDataEncodedLen(prefix);
+        central_entries_offset = try checkedEnd(
+            central_offset,
+            record_len,
+            central_end,
+        );
+        archive_extra_data = try parseArchiveExtraData(
+            bytes[central_offset..central_entries_offset],
+        );
+    }
     return .{
         .entry_count = entry_count,
         .central_directory_offset = central_offset,
+        .central_entries_offset = central_entries_offset,
         .central_directory_size = central_size,
+        .archive_extra_data = archive_extra_data,
         .comment = comment,
         .zip64 = zip64,
     };

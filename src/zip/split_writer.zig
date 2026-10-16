@@ -141,6 +141,11 @@ pub fn encodeAlloc(
         if (layout.record_end != layout.payload_end)
             try planner.placeAtomic(layout.payload_end, layout.record_end);
     }
+    if (directory.central_entries_offset != directory.central_directory_offset)
+        try planner.placeAtomic(
+            directory.central_directory_offset,
+            directory.central_entries_offset,
+        );
     for (layouts) |layout|
         try planner.placeAtomic(layout.central_offset, layout.central_end);
     const central_end = try checkedEnd(
@@ -187,7 +192,7 @@ fn parseLayouts(
         directory.central_directory_size,
         bytes.len,
     );
-    var central_offset = directory.central_directory_offset;
+    var central_offset = directory.central_entries_offset;
     var expected_local: usize = 4;
     for (layouts) |*layout| {
         _ = try checkedEnd(

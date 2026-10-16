@@ -21000,3 +21000,19 @@ reuse, so production keeps the simpler independently owned plans.
   tests pass. Python raw-parses both extras but on this host deliberately keeps
   CP437 names; Info-ZIP independently selects and extracts Vort's Unicode path,
   and Vort extracts both one-shot and incremental probes by that preferred name.
+
+- Added opaque ZIP Archive Extra Data Record `0x08064b50` support across
+  one-shot, sequential, owned/sparse split, and both writer families. Writers
+  place the record at the central-directory origin and include its header and
+  payload in ZIP32/ZIP64 central sizes. Borrowed readers expose the payload;
+  sequential readers retain it behind independent archive-extra and control
+  record limits. Central iterators and sparse normalization skip the record
+  before file entries, while owned and incremental split writers place it as
+  one atomic non-crossing control record and patch EOCD disk coordinates to
+  its actual part. ZIP32/ZIP64, empty/nonempty, descriptor/no-descriptor,
+  one-byte fragmentation, malformed lengths, limits, OOM, and oversized split
+  records are covered. Raw Python checks pin offset/size/payload wire and Vort
+  supplies eight one-shot/incremental extraction cases. Python 3.10 and
+  Info-ZIP 6.00 both reject the APPNOTE-defined layout by assuming central
+  offset points directly to a file header, so no third-party read support is
+  claimed.

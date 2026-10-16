@@ -141,6 +141,34 @@ with names and the archive comment. The sparse and owned split readers preserve
 Unicode names/comments under the same limit, and the split sequential adapter
 forwards `entryAt` without joining physical parts.
 
+## Archive extra data record
+
+`ZipEncodeOptions.archive_extra_data` and
+`ZipIncrementalWriterOptions.archive_extra_data` emit the opaque APPNOTE
+Archive Extra Data Record `0x08064b50` immediately before the first central
+file header. The EOCD/ZIP64 central offset points to the record signature and
+the central size includes its 8-byte header plus payload. An empty option omits
+the record; readers also accept a present zero-length record.
+
+Borrowed archives expose `archive_extra_data`; sequential readers retain it
+through `archiveExtraData()` under `max_archive_extra_data_size` and
+`max_control_record_size`. Owned and sparse split normalization skip the record
+when indexing central entries while preserving its bytes. Both split writers
+treat the complete record as one atomic control record that cannot cross a
+physical volume, and use its disk-local location as the central-directory
+origin. Payload interpretation, including any central-directory encryption
+policy layered above it, remains caller-owned.
+
+Focused gates cover nonempty and empty ZIP32/ZIP64 archives,
+descriptor/no-descriptor entries, corrupt declared lengths, one-byte input,
+allocation failure, reader/central limits, owned/sparse split round trips, and
+an archive-extra record larger than a split part. Python 3.10 `zipfile` and
+Info-ZIP 6.00 both reject this otherwise APPNOTE-defined layout because they
+assume the central offset directly names a file header; external validation is
+therefore limited to raw offset/size parsing while Vort supplies required
+one-shot, streaming, and split extraction (`vort_archive_extra_cases=4`,
+`incremental_archive_extra_cases=4`).
+
 ## Traditional ZipCrypto
 
 The reusable cipher state and one-shot header helpers come from Vail's
@@ -405,8 +433,7 @@ by ZIP.
 `max_ppmd_compressed_buffer_len` bounds retained range-coded input.
 Any `step` error makes the state terminal until `reset`, because payload may
 already have reached an external sink. `finish()` distinguishes a truncated
-source. Archive-extra-data records remain unsupported. This sequential state
-machine does not directly consume separate
+source. This sequential state machine does not directly consume separate
 split/multi-disk slices; `ZipSplitIncrementalReader` supplies their sparse
 normalized view without changing the codec state machine.
 Shrink uses one fixed approximately 40 KiB workspace while
@@ -722,7 +749,7 @@ is not claimed as validation. Info-ZIP coverage uses `unzip -p` for
 contents, not pathname rendering; its 6.00 ZIP32 UTF-8 filename rendering issue
 also affects the pre-existing one-shot output and is not claimed as fixed here.
 
-The current ReleaseFast ZIP module gates pass 36/36 for the incremental-writer
+The current ReleaseFast ZIP module gates pass 37/37 for the incremental-writer
 filter and 34/34 for the incremental-reader filter;
 `zig test src/zip.zig --test-filter 'DCL Implode incremental encoder'` passes
 4/4;
@@ -734,7 +761,7 @@ passes 4/4;
 4/4; `zig test src/zip.zig --test-filter 'Shrink incremental'` passes 4/4;
 `zig test src/zip.zig --test-filter 'Reduce incremental'` passes 4/4;
 `zig test src/zip.zig --test-filter 'Legacy Implode incremental'` passes 4/4;
-the complete ZIP module passes 1,294/1,294.
+the complete ZIP module passes 1,296/1,296.
 Shrink covers known/signed/unsigned-descriptor, empty, ZIP32/ZIP64 and output-
 limit paths. Reduce covers every factor, signed/unsigned descriptors,
 ZIP32/ZIP64, empty members, DLE/matches, invalid followers and follower-coded

@@ -98,6 +98,17 @@ pub const State = struct {
             return error.IntegerOverflow;
     }
 
+    pub fn beginCentral(self: *Self, record_offset: usize) error{InvalidZipArchive}!void {
+        if (self.central_started or self.central_ended or
+            self.completed_entries != self.records.items.len)
+        {
+            return error.InvalidZipArchive;
+        }
+        self.central_started = true;
+        self.central_offset = record_offset;
+        self.central_size = 0;
+    }
+
     pub fn validateCentral(
         self: *Self,
         allocator: std.mem.Allocator,

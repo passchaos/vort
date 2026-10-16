@@ -35,6 +35,7 @@ pub const Error = codecs.Error || writer_encryption.Error || std.mem.Allocator.E
 /// of bytes preceding this archive (for example, a self-extracting prefix).
 pub const Options = struct {
     archive_comment: []const u8 = "",
+    archive_extra_data: []const u8 = "",
     initial_offset: u64 = 0,
     utf8: bool = true,
     zip64: Zip64Mode = .auto,
@@ -298,6 +299,8 @@ pub const Writer = struct {
 
     pub fn initWithOptions(allocator: std.mem.Allocator, options: Options) Error!Self {
         if (options.archive_comment.len > std.math.maxInt(u16)) return error.Zip32LimitExceeded;
+        if (options.archive_extra_data.len > std.math.maxInt(u32))
+            return error.Zip32LimitExceeded;
         if (options.zip64 == .never and options.initial_offset >= std.math.maxInt(u32))
             return error.Zip32LimitExceeded;
         const comment = try allocator.dupe(u8, options.archive_comment);
@@ -311,8 +314,18 @@ pub const Writer = struct {
         var pending: std.ArrayList(u8) = .empty;
         errdefer pending.deinit(allocator);
         try pending.ensureTotalCapacity(allocator, max_end_len);
+        var central: std.ArrayList(u8) = .empty;
+        errdefer central.deinit(allocator);
+        try wire.appendArchiveExtraData(
+            allocator,
+            &central,
+            options.archive_extra_data,
+        );
+        if (central.items.len > options.max_central_directory_size)
+            return error.OutputLimitExceeded;
         var owned_options = options;
         owned_options.archive_comment = "";
+        owned_options.archive_extra_data = "";
         owned_options.xz_options.filters = xz_filters;
         return .{
             .allocator = allocator,
@@ -320,6 +333,7 @@ pub const Writer = struct {
             .archive_comment = comment,
             .xz_filters = xz_filters,
             .pending = pending,
+            .central = central,
         };
     }
 

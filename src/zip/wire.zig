@@ -7,6 +7,7 @@ pub const CompressionMethod = types.CompressionMethod;
 pub const local_file_signature: u32 = 0x0403_4b50;
 pub const central_file_signature: u32 = 0x0201_4b50;
 pub const data_descriptor_signature: u32 = 0x0807_4b50;
+pub const archive_extra_data_signature: u32 = 0x0806_4b50;
 pub const end_of_central_signature: u32 = 0x0605_4b50;
 pub const zip64_end_of_central_signature: u32 = 0x0606_4b50;
 pub const zip64_end_of_central_locator_signature: u32 = 0x0706_4b50;
@@ -27,6 +28,7 @@ pub const end_of_central_len: usize = 22;
 pub const zip64_end_of_central_len: usize = 56;
 pub const zip64_end_of_central_locator_len: usize = 20;
 pub const central_directory_digital_signature_len: usize = 6;
+pub const archive_extra_data_header_len: usize = 8;
 
 pub const version_10: u16 = 10;
 pub const version_20: u16 = 20;
@@ -132,6 +134,17 @@ pub fn appendDataDescriptor(
         try appendU32(allocator, out, @intCast(entry.compressed_size));
         try appendU32(allocator, out, @intCast(entry.uncompressed_size));
     }
+}
+
+pub fn appendArchiveExtraData(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    data: []const u8,
+) !void {
+    if (data.len == 0) return;
+    try appendU32(allocator, out, archive_extra_data_signature);
+    try appendU32(allocator, out, @intCast(data.len));
+    try out.appendSlice(allocator, data);
 }
 
 pub fn appendCentralHeader(

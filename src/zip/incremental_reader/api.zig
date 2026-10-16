@@ -19,6 +19,7 @@ pub const Options = struct {
     max_metadata_size: usize = 64 * 1024 * 1024,
     /// Encoded central-directory bytes processed before the archive ending.
     max_central_directory_size: usize = std.math.maxInt(usize),
+    max_archive_extra_data_size: usize = 64 * 1024 * 1024,
     max_control_record_size: usize = 256 * 1024,
     max_entry_output_len: usize = std.math.maxInt(usize),
     max_total_output_len: usize = std.math.maxInt(usize),
@@ -47,6 +48,8 @@ pub const Phase = enum {
     entry_descriptor,
     central_fixed,
     central_variable,
+    archive_extra_fixed,
+    archive_extra,
     zip64_end_prefix,
     zip64_end,
     zip64_locator,
