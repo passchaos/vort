@@ -20632,3 +20632,17 @@ reuse, so production keeps the simpler independently owned plans.
   writer surfaces (`incremental_reader_pkware_strong_cases=12`); fixed 7-Zip
   independently retains 12/12 writer evidence. Certificate recipients, non-AES
   algorithms and encrypted central directories remain the next Strong gaps.
+
+- Added GNU PAX sparse TAR support. The borrowed reader accepts sparse formats
+  0.0 (repeated offset/numbytes records), 0.1 (comma map), and 1.0 (payload map
+  padded to 512 bytes), validates declared counts, ordering, overlap, logical
+  bounds, zero map padding and exact physical-byte consumption, and exposes an
+  extent iterator without allocation. Extraction enforces the logical output
+  limit, zero-fills holes and overlays stored ranges. The deterministic writer
+  accepts explicit caller-owned logical extents, emits PAX sparse 1.0 with a
+  terminal zero extent, and normalizes/merges physical ranges to TAR blocks for
+  GNU tar compatibility. The same archive composes through every raw/gzip/
+  Bzip2/Brotli/compress/LZMA/XZ/LZ4/lzip/LZF/Zstd/LZOP wrapper. GNU tar 1.34
+  independently supplies three reader fixtures and, together with Python
+  `tarfile`, extracts Vort writer output; malformed maps, overlaps, out-of-range
+  extents, logical limits and OOM have focused coverage.

@@ -130,6 +130,69 @@ def validate_with_vort(cli: Path, archive_path: Path, payloads: dict[str, bytes]
             raise AssertionError(f"Vort TAR extraction mismatch for {name!r}")
 
 
+def sparse_payload() -> bytes:
+    payload = bytearray(1024 * 1024)
+    payload[0:4] = b"HEAD"
+    payload[524288:524294] = b"MIDDLE"
+    payload[-4:] = b"TAIL"
+    return bytes(payload)
+
+
+def validate_gnu_sparse_with_vort(cli: Path, tar_tool: str, temp: Path) -> int:
+    source = temp / "gnu-sparse.bin"
+    with source.open("wb") as stream:
+        stream.truncate(1024 * 1024)
+        stream.seek(0)
+        stream.write(b"HEAD")
+        stream.seek(524288)
+        stream.write(b"MIDDLE")
+        stream.seek(1048572)
+        stream.write(b"TAIL")
+    expected = sparse_payload()
+    cases = 0
+    for version in ("0.0", "0.1", "1.0"):
+        archive_path = temp / f"gnu-sparse-{version}.tar"
+        output = temp / f"gnu-sparse-{version}.out"
+        subprocess.run(
+            [
+                tar_tool,
+                "--format=pax",
+                "--sparse",
+                f"--sparse-version={version}",
+                "-C",
+                str(temp),
+                "-cf",
+                str(archive_path),
+                source.name,
+            ],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        listing = run(cli, "list-tar-file", str(archive_path)).stdout
+        expected_format = version.replace(".", "_")
+        if (
+            "size=1048576" not in listing
+            or f"sparse=pax_{expected_format}" not in listing
+            or "extents=4" not in listing
+        ):
+            raise AssertionError(
+                f"Vort sparse {version} metadata mismatch: {listing}"
+            )
+        run(
+            cli,
+            "extract-tar-file",
+            str(archive_path),
+            source.name,
+            str(output),
+            str(2 * 1024 * 1024),
+        )
+        if output.read_bytes() != expected:
+            raise AssertionError(f"Vort could not extract GNU sparse {version}")
+        cases += 1
+    return cases
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
@@ -138,6 +201,9 @@ def main() -> None:
     parser.add_argument("--lzf", type=Path)
     parser.add_argument("--lzop", type=Path)
     args = parser.parse_args()
+    tar_tool = shutil.which("tar")
+    if tar_tool is None:
+        raise AssertionError("GNU tar is required for sparse TAR differential")
     compressions = (
         "none",
         "gzip",
@@ -160,6 +226,9 @@ def main() -> None:
             path = temp / f"python-{format_name}.tar"
             path.write_bytes(raw)
             validate_with_vort(args.cli, path, payloads)
+        gnu_sparse_reader_cases = validate_gnu_sparse_with_vort(
+            args.cli, tar_tool, temp
+        )
 
         first = temp / "vort-first.tar"
         second = temp / "vort-second.tar"
@@ -169,12 +238,23 @@ def main() -> None:
             raise AssertionError("Vort TAR output is not deterministic")
         with tarfile.open(first, mode="r:") as archive:
             names = archive.getnames()
-            if len(names) != 5:
+            if len(names) != 6:
                 raise AssertionError(f"unexpected Vort TAR entries: {names!r}")
             if archive.extractfile("plain.txt").read() != b"Vort TAR payload\n":
                 raise AssertionError("Python could not extract Vort TAR payload")
             if archive.getmember("link").linkname != "nested/" + "long-component-" * 12 + "file.txt":
                 raise AssertionError("Vort TAR long link mismatch")
+            sparse = archive.getmember("images/sparse.bin")
+            if sparse.sparse is None or archive.extractfile(sparse).read() != sparse_payload():
+                raise AssertionError("Python could not extract Vort sparse TAR payload")
+        gnu_sparse = subprocess.run(
+            [tar_tool, "-xOf", str(first), "images/sparse.bin"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        ).stdout
+        if gnu_sparse != sparse_payload():
+            raise AssertionError("GNU tar could not extract Vort sparse TAR payload")
 
         payload = (b"tarball compression matrix\n" * 2048) + bytes(range(256))
         source = temp / "payload.bin"
@@ -308,7 +388,9 @@ def main() -> None:
 
     print(
         f"tar_diff=ok raw_formats=2 compressions={len(compressions)} "
-        f"brotli_directions=2 lzf_directions={2 if lzf_tool is not None else 0} entries=5"
+        f"brotli_directions=2 lzf_directions={2 if lzf_tool is not None else 0} "
+        f"entries=6 gnu_sparse_reader_cases={gnu_sparse_reader_cases} "
+        "sparse_writer_readers=2"
     )
 
 

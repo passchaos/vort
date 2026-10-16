@@ -783,6 +783,14 @@ pub fn main(init: std.process.Init) !void {
                 name,
             });
             if (entry.link_name.len != 0) try stdout.print(" link={s}", .{entry.link_name});
+            if (entry.sparse) |sparse_info| try stdout.print(
+                " sparse={s} extents={d} stored_size={d}",
+                .{
+                    @tagName(sparse_info.format),
+                    sparse_info.extent_count,
+                    sparse_info.data.len,
+                },
+            );
             try stdout.writeByte('\n');
         }
     } else if (std.mem.eql(u8, command, "extract-tar-file")) {

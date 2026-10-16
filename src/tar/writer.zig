@@ -8,6 +8,16 @@ pub const Error = archive.Error || error{
 
 pub const Kind = archive.Kind;
 
+pub const SparseDataExtent = struct {
+    offset: usize,
+    data: []const u8,
+};
+
+pub const SparseOptions = struct {
+    logical_size: usize,
+    extents: []const SparseDataExtent,
+};
+
 pub const EncodeEntry = struct {
     name: []const u8,
     data: []const u8 = "",
@@ -15,6 +25,7 @@ pub const EncodeEntry = struct {
     kind: Kind = .file,
     mode: u32 = 0,
     mtime: u64 = 0,
+    sparse: ?SparseOptions = null,
 };
 
 pub fn encodeAlloc(allocator: std.mem.Allocator, entries: []const EncodeEntry) ![]u8 {
@@ -33,7 +44,20 @@ pub fn encodeAppend(allocator: std.mem.Allocator, output: *std.ArrayList(u8), en
     for (entries) |entry| {
         var pax: std.ArrayList(u8) = .empty;
         defer pax.deinit(allocator);
-        if (entry.name.len > 100) try appendPaxRecord(allocator, &pax, "path", entry.name);
+        if (entry.sparse) |sparse_options| {
+            try appendPaxRecord(allocator, &pax, "GNU.sparse.major", "1");
+            try appendPaxRecord(allocator, &pax, "GNU.sparse.minor", "0");
+            try appendPaxRecord(allocator, &pax, "GNU.sparse.name", entry.name);
+            var size_buffer: [32]u8 = undefined;
+            const logical_size = try std.fmt.bufPrint(
+                &size_buffer,
+                "{d}",
+                .{sparse_options.logical_size},
+            );
+            try appendPaxRecord(allocator, &pax, "GNU.sparse.realsize", logical_size);
+        } else if (entry.name.len > 100) {
+            try appendPaxRecord(allocator, &pax, "path", entry.name);
+        }
         if (entry.link_name.len > 100) try appendPaxRecord(allocator, &pax, "linkpath", entry.link_name);
         if (pax.items.len != 0) {
             try appendHeader(allocator, &archive_bytes, .{
@@ -43,7 +67,20 @@ pub fn encodeAppend(allocator: std.mem.Allocator, output: *std.ArrayList(u8), en
                 .mode = 0o644,
             }, 'x');
         }
-        try appendHeader(allocator, &archive_bytes, entry, typeFlag(entry.kind));
+        if (entry.sparse) |sparse_options| {
+            var payload: std.ArrayList(u8) = .empty;
+            defer payload.deinit(allocator);
+            try appendSparsePayload(allocator, &payload, sparse_options);
+            try appendHeader(allocator, &archive_bytes, .{
+                .name = "./GNUSparseFile.vort/entry",
+                .data = payload.items,
+                .kind = .file,
+                .mode = entry.mode,
+                .mtime = entry.mtime,
+            }, '0');
+        } else {
+            try appendHeader(allocator, &archive_bytes, entry, typeFlag(entry.kind));
+        }
     }
     try archive_bytes.appendNTimes(allocator, 0, 1024);
 
@@ -57,6 +94,20 @@ fn validateEntries(entries: []const EncodeEntry) Error!void {
         if (entry.name.len == 0 or std.mem.indexOfScalar(u8, entry.name, 0) != null)
             return error.InvalidTarEntryName;
         if (std.mem.indexOfScalar(u8, entry.link_name, 0) != null) return error.InvalidTarEntryName;
+        if (entry.sparse) |sparse_options| {
+            if (entry.kind != .file or entry.data.len != 0 or entry.link_name.len != 0)
+                return error.InvalidTarHeader;
+            var previous_end: usize = 0;
+            for (sparse_options.extents) |extent| {
+                if (extent.data.len == 0) return error.InvalidTarHeader;
+                const end = std.math.add(usize, extent.offset, extent.data.len) catch
+                    return error.TarNumericOverflow;
+                if (extent.offset < previous_end or end > sparse_options.logical_size)
+                    return error.InvalidTarHeader;
+                previous_end = end;
+            }
+            continue;
+        }
         switch (entry.kind) {
             .file => if (entry.link_name.len != 0) return error.InvalidTarHeader,
             .directory => if (entry.data.len != 0 or entry.link_name.len != 0) return error.InvalidTarHeader,
@@ -116,6 +167,79 @@ fn appendPaxRecord(
             return;
         }
         digits = actual_digits;
+    }
+}
+
+fn appendDecimalLine(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    value: usize,
+) !void {
+    var buffer: [32]u8 = undefined;
+    const encoded = try std.fmt.bufPrint(&buffer, "{d}\n", .{value});
+    try output.appendSlice(allocator, encoded);
+}
+
+const NormalizedSparseExtent = struct {
+    offset: usize,
+    len: usize,
+};
+
+fn appendSparsePayload(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    options: SparseOptions,
+) !void {
+    var normalized: std.ArrayList(NormalizedSparseExtent) = .empty;
+    defer normalized.deinit(allocator);
+    for (options.extents) |extent| {
+        const start = extent.offset / 512 * 512;
+        const unaligned_end = std.math.add(usize, extent.offset, extent.data.len) catch
+            return error.TarNumericOverflow;
+        const rounded_end = std.math.add(usize, unaligned_end, 511) catch
+            return error.TarNumericOverflow;
+        const end = @min(options.logical_size, rounded_end / 512 * 512);
+        if (normalized.items.len != 0) {
+            const previous = &normalized.items[normalized.items.len - 1];
+            const previous_end = previous.offset + previous.len;
+            if (start <= previous_end) {
+                previous.len = @max(previous_end, end) - previous.offset;
+                continue;
+            }
+        }
+        try normalized.append(allocator, .{ .offset = start, .len = end - start });
+    }
+
+    const map_entry_count = std.math.add(usize, normalized.items.len, 1) catch
+        return error.TarNumericOverflow;
+    try appendDecimalLine(allocator, output, map_entry_count);
+    for (normalized.items) |extent| {
+        try appendDecimalLine(allocator, output, extent.offset);
+        try appendDecimalLine(allocator, output, extent.len);
+    }
+    try appendDecimalLine(allocator, output, options.logical_size);
+    try appendDecimalLine(allocator, output, 0);
+    const map_remainder = output.items.len % 512;
+    if (map_remainder != 0)
+        try output.appendNTimes(allocator, 0, 512 - map_remainder);
+
+    var source_index: usize = 0;
+    for (normalized.items) |normalized_extent| {
+        const destination = output.items.len;
+        try output.appendNTimes(allocator, 0, normalized_extent.len);
+        const normalized_end = normalized_extent.offset + normalized_extent.len;
+        while (source_index < options.extents.len) {
+            const source = options.extents[source_index];
+            const source_end = source.offset + source.data.len;
+            if (source.offset >= normalized_end) break;
+            if (source_end > normalized_extent.offset) {
+                @memcpy(
+                    output.items[destination + source.offset - normalized_extent.offset ..][0..source.data.len],
+                    source.data,
+                );
+            }
+            source_index += 1;
+        }
     }
 }
 
@@ -215,4 +339,103 @@ test "TAR writer emits deterministic PAX long paths" {
     defer allocator.free(corrupt);
     corrupt[0] ^= 1;
     try std.testing.expectError(error.InvalidTarChecksum, archive.parse(corrupt));
+}
+
+test "TAR writer emits deterministic GNU PAX sparse 1.0 files" {
+    const allocator = std.testing.allocator;
+    const extents = [_]SparseDataExtent{
+        .{ .offset = 0, .data = "HEAD" },
+        .{ .offset = 4096, .data = "MIDDLE" },
+        .{ .offset = 8188, .data = "TAIL" },
+    };
+    const entries = [_]EncodeEntry{.{
+        .name = "images/sparse.bin",
+        .sparse = .{ .logical_size = 8192, .extents = &extents },
+        .mode = 0o640,
+    }};
+    const first = try encodeAlloc(allocator, &entries);
+    defer allocator.free(first);
+    const second = try encodeAlloc(allocator, &entries);
+    defer allocator.free(second);
+    try std.testing.expectEqualSlices(u8, first, second);
+
+    const decoded = try archive.parse(first);
+    const entry = (try decoded.find(entries[0].name)).?;
+    try std.testing.expectEqual(@as(usize, 8192), entry.size);
+    try std.testing.expectEqual(@as(u32, 0o640), entry.mode);
+    try std.testing.expectEqual(archive.SparseFormat.pax_1_0, entry.sparse.?.format);
+    try std.testing.expectEqual(extents.len + 1, entry.sparse.?.extent_count);
+    try std.testing.expectEqual(@as(usize, 1536), entry.data.len);
+    const output = try decoded.extractAlloc(allocator, entry);
+    defer allocator.free(output);
+    try std.testing.expectEqualSlices(u8, "HEAD", output[0..4]);
+    try std.testing.expectEqualSlices(u8, &([_]u8{0} ** 16), output[4..20]);
+    try std.testing.expectEqualSlices(u8, "MIDDLE", output[4096..4102]);
+    try std.testing.expectEqualSlices(u8, "TAIL", output[8188..8192]);
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        decoded.extractAllocLimited(allocator, entry, 8191),
+    );
+}
+
+test "TAR writer rejects invalid sparse layouts" {
+    const allocator = std.testing.allocator;
+    const overlapping = [_]SparseDataExtent{
+        .{ .offset = 0, .data = "1234" },
+        .{ .offset = 3, .data = "56" },
+    };
+    try std.testing.expectError(
+        error.InvalidTarHeader,
+        encodeAlloc(allocator, &.{.{
+            .name = "overlap.bin",
+            .sparse = .{ .logical_size = 16, .extents = &overlapping },
+        }}),
+    );
+    const outside = [_]SparseDataExtent{.{ .offset = 15, .data = "12" }};
+    try std.testing.expectError(
+        error.InvalidTarHeader,
+        encodeAlloc(allocator, &.{.{
+            .name = "outside.bin",
+            .sparse = .{ .logical_size = 16, .extents = &outside },
+        }}),
+    );
+    const zero = [_]SparseDataExtent{.{ .offset = 0, .data = "" }};
+    try std.testing.expectError(
+        error.InvalidTarHeader,
+        encodeAlloc(allocator, &.{.{
+            .name = "zero.bin",
+            .sparse = .{ .logical_size = 16, .extents = &zero },
+        }}),
+    );
+    try std.testing.expectError(
+        error.InvalidTarHeader,
+        encodeAlloc(allocator, &.{.{
+            .name = "conflict.bin",
+            .data = "dense",
+            .sparse = .{ .logical_size = 16, .extents = &.{} },
+        }}),
+    );
+}
+
+test "TAR sparse writer releases every allocation failure" {
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const extents = [_]SparseDataExtent{
+                .{ .offset = 0, .data = "HEAD" },
+                .{ .offset = 4096, .data = "TAIL" },
+            };
+            const bytes = try encodeAlloc(allocator, &.{.{
+                .name = "sparse.bin",
+                .sparse = .{ .logical_size = 8192, .extents = &extents },
+            }});
+            defer allocator.free(bytes);
+            const decoded = try archive.parse(bytes);
+            const output = try decoded.extractByNameAlloc(allocator, "sparse.bin");
+            defer allocator.free(output);
+            try std.testing.expectEqual(@as(usize, 8192), output.len);
+            try std.testing.expectEqualSlices(u8, "HEAD", output[0..4]);
+            try std.testing.expectEqualSlices(u8, "TAIL", output[4096..4100]);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{});
 }

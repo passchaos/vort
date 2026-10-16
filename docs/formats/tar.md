@@ -3,7 +3,8 @@
 Vort provides an in-memory, library-first TAR reader and deterministic writer.
 The reader validates every 512-byte header checksum and supports regular files,
 directories, symbolic links, hard links, USTAR prefixes, POSIX PAX `path`,
-`linkpath`, and `size` records, and GNU long-name/long-link records.
+`linkpath`, and `size` records, GNU long-name/long-link records, and GNU PAX
+sparse formats 0.0, 0.1, and 1.0.
 
 Entries borrow their metadata and payload slices from the archive bytes. A path
 is represented by `TarPath`, which avoids allocating for USTAR prefix/name
@@ -11,6 +12,15 @@ pairs and provides `eql`, `writeInto`, `alloc`, and `isSafeRelative` helpers.
 The safety helper rejects absolute paths, `.`/`..` components, Windows drive
 prefixes, and backslashes. Vort never writes archive entry paths to the
 filesystem automatically.
+
+Sparse entries expose `TarSparseInfo`: format, logical size, wire extent count,
+the borrowed raw map, and the concatenated stored extent bytes. Its iterator
+returns logical offset/length plus the corresponding physical-data offset.
+Normal extraction allocates or accepts the logical size, zero-fills holes, and
+copies each validated extent. Maps must be ordered, non-overlapping, within the
+logical size, agree with `GNU.sparse.numblocks`, and consume exactly the stored
+payload. PAX 1.0 map padding must be zero and 512-byte aligned. Output limits
+apply to logical size rather than the much smaller physical payload.
 
 ```zig
 const entries = [_]vort.TarEncodeEntry{
@@ -31,6 +41,28 @@ const decoded = try owned.archive.extractByNameAllocLimited(
 );
 defer allocator.free(decoded);
 ```
+
+Sparse writing uses explicit caller-owned extents:
+
+```zig
+const extents = [_]vort.TarSparseDataExtent{
+    .{ .offset = 0, .data = "HEAD" },
+    .{ .offset = 1024 * 1024 - 4, .data = "TAIL" },
+};
+const entries = [_]vort.TarEncodeEntry{.{
+    .name = "sparse.img",
+    .sparse = .{
+        .logical_size = 1024 * 1024,
+        .extents = &extents,
+    },
+}};
+```
+
+The writer emits deterministic GNU PAX sparse 1.0. It normalizes stored ranges
+to TAR's 512-byte blocks, merges touching normalized ranges, inserts zeroes only
+inside those physical blocks, and appends the required zero-length terminal
+extent. This preserves logical bytes while remaining compatible with GNU tar;
+the archive still stores only the selected physical ranges.
 
 `TarCompression` supports raw TAR, gzip, Bzip2, Brotli, Unix compress,
 LZMA-Alone, XZ, LZ4 frame, lzip, LZF, Zstandard, and LZOP. This includes `.tar.br`,
@@ -57,8 +89,8 @@ writer uses Vort's compressed-or-stored fast Brotli encoder.
 
 The writer emits reproducible USTAR headers with zero timestamps by default.
 Names and link targets longer than the classic fields are represented with PAX
-extended headers. `encodeTarAppend` and `encodeCompressedTarAppend` are
-transactional.
+extended headers. Sparse entries use `GNU.sparse.major/minor/name/realsize` and
+a payload-prefixed map. `encodeTarAppend` and `encodeCompressedTarAppend` are transactional.
 
 CLI validation surfaces:
 
@@ -72,6 +104,9 @@ zig build run -- extract-tar-file archive.tar.gz payload.bin output.bin 26843545
 zig build run-tar-diff
 ```
 
-Sparse files and device/FIFO extraction are not implemented. Symbolic and hard
-links are exposed as metadata but are not followed or materialized by the
-in-memory extraction helpers.
+`run-tar-diff` requires GNU tar 1.34-compatible sparse handling: GNU tar writes
+0.0/0.1/1.0 fixtures that Vort reconstructs, while Python `tarfile` and GNU tar
+both extract Vort's deterministic 1.0 writer output. Sparse entries also round
+trip through all twelve compressed-tar wrappers. Device/FIFO materialization is
+not implemented. Symbolic and hard links are exposed as metadata but are not
+followed or materialized by the in-memory extraction helpers.

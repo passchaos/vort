@@ -398,7 +398,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   IV material, CRC validation, UTF-16LE names, directories, empty files, and
   bounded extraction;
 - deterministic TAR reading/writing with USTAR, PAX and GNU long-name support,
-  safe-path classification, borrowed entry views, and automatic raw/gzip/
+  GNU PAX sparse 0.0/0.1/1.0 reading and deterministic sparse-1.0 writing,
+  strict extent validation, logical hole reconstruction, safe-path
+  classification, borrowed entry views, and automatic raw/gzip/
   Bzip2/Brotli/Unix-compress/LZMA-Alone/XZ/LZ4/lzip/LZF/Zstandard/LZOP tarball composition;
 - dependency-free CPIO reading and deterministic writing for SVR4 newc/CRC,
   POSIX ODC, and little-/big-endian old binary archives, including regular,
