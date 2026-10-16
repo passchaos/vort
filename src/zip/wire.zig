@@ -50,6 +50,10 @@ pub const EncodedEntry = struct {
     uncompressed_size: u64,
     local_header_offset: u64,
     zip64: bool,
+    modified: types.DosTimestamp = .deterministic,
+    creator_system: types.CreatorSystem = .fat,
+    internal_attributes: u16 = 0,
+    external_attributes: ?u32 = null,
     winzip_aes: ?types.WinZipAesInfo = null,
     pkware_strong_encryption: ?types.PkwareStrongEncryptionInfo = null,
 };
@@ -76,8 +80,8 @@ pub fn appendLocalHeader(
         out,
         @intFromEnum(if (entry.winzip_aes != null) CompressionMethod.aes else entry.method),
     );
-    try appendU16(allocator, out, deterministic_dos_time);
-    try appendU16(allocator, out, deterministic_dos_date);
+    try appendU16(allocator, out, entry.modified.time);
+    try appendU16(allocator, out, entry.modified.date);
     try appendU32(allocator, out, if (descriptor) 0 else entry.crc32);
     try appendU32(allocator, out, if (entry.zip64) std.math.maxInt(u32) else if (descriptor) 0 else @intCast(entry.compressed_size));
     try appendU32(allocator, out, if (entry.zip64) std.math.maxInt(u32) else if (descriptor) 0 else @intCast(entry.uncompressed_size));
@@ -118,7 +122,12 @@ pub fn appendCentralHeader(
     entry: EncodedEntry,
 ) !void {
     try appendU32(allocator, out, central_file_signature);
-    try appendU16(allocator, out, requiredVersionForEntry(entry));
+    try appendU16(
+        allocator,
+        out,
+        (@as(u16, @intFromEnum(entry.creator_system)) << 8) |
+            requiredVersionForEntry(entry),
+    );
     try appendU16(allocator, out, requiredVersionForEntry(entry));
     try appendU16(allocator, out, entry.flags);
     try appendU16(
@@ -126,8 +135,8 @@ pub fn appendCentralHeader(
         out,
         @intFromEnum(if (entry.winzip_aes != null) CompressionMethod.aes else entry.method),
     );
-    try appendU16(allocator, out, deterministic_dos_time);
-    try appendU16(allocator, out, deterministic_dos_date);
+    try appendU16(allocator, out, entry.modified.time);
+    try appendU16(allocator, out, entry.modified.date);
     try appendU32(allocator, out, entry.crc32);
     try appendU32(allocator, out, if (entry.zip64) std.math.maxInt(u32) else @intCast(entry.compressed_size));
     try appendU32(allocator, out, if (entry.zip64) std.math.maxInt(u32) else @intCast(entry.uncompressed_size));
@@ -139,8 +148,9 @@ pub fn appendCentralHeader(
     ));
     try appendU16(allocator, out, @intCast(entry.comment.len));
     try appendU16(allocator, out, 0);
-    try appendU16(allocator, out, 0);
-    const external_attributes: u32 = if (std.mem.endsWith(u8, entry.name, "/")) 0x10 else 0;
+    try appendU16(allocator, out, entry.internal_attributes);
+    const external_attributes = entry.external_attributes orelse
+        if (std.mem.endsWith(u8, entry.name, "/")) @as(u32, 0x10) else 0;
     try appendU32(allocator, out, external_attributes);
     try appendU32(allocator, out, if (entry.zip64) std.math.maxInt(u32) else @intCast(entry.local_header_offset));
     try out.appendSlice(allocator, entry.name);

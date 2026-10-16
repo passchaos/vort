@@ -20950,3 +20950,20 @@ reuse, so production keeps the simpler independently owned plans.
   sequence-limit, replay-limit, and exhaustive OOM cases. The Vort differential
   always includes both physical-EOF formats, and independently encoded
   `compress`/legacy-LZ4 members join when their system tools are available.
+
+- Added portable ZIP entry metadata across one-shot, incremental, owned-split,
+  and sparse-split paths. Writers now accept validated MS-DOS modification
+  timestamps, creator-system IDs, internal attributes, and raw external
+  attributes while retaining the byte-identical 1980/FAT defaults. A public
+  calendar constructor enforces the 1980...2107 range, real leap dates, and
+  documented two-second precision; Unix-mode encoding and symlink/directory
+  inspection have dedicated helpers. Borrowed entries expose central comments
+  and all attributes. The sequential reader publishes the local timestamp at
+  `entry_header`, retains central-only metadata through `entryAt`, charges
+  comments to `max_metadata_size`, cross-checks local/central timestamps, and
+  forwards the same view through split readers. ZIP32/ZIP64 plus descriptor and
+  non-descriptor tests cover timestamp corruption, invalid writer dates,
+  comments, Unix regular/symlink/directory modes, tiny fragmented I/O, limits,
+  and exhaustive comment-allocation failure. Python independently validates
+  custom one-shot and incremental timestamps, comments, creator IDs, internal
+  attributes, and Unix external modes.

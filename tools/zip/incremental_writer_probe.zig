@@ -7,6 +7,10 @@ const Entry = struct {
     method: vort.ZipCompressionMethod,
     expected_size: ?u64,
     comment: []const u8 = "",
+    modified: vort.ZipDosTimestamp = .deterministic,
+    creator_system: vort.ZipCreatorSystem = .fat,
+    internal_attributes: u16 = 0,
+    external_attributes: ?u32 = null,
     traditional_encryption: ?vort.ZipTraditionalEncryptionOptions = null,
     winzip_aes: ?vort.ZipWinZipAesOptions = null,
     pkware_strong_encryption: ?vort.ZipPkwareStrongEncryptionOptions = null,
@@ -77,6 +81,14 @@ pub fn main(init: std.process.Init) !void {
     const unknown_reduce_4 = "unknown Reduce factor 4 incremental ZIP payload.\n" ** 63;
     const known_implode = "known traditional Implode incremental ZIP payload.\n" ** 83;
     const unknown_implode = "unknown traditional Implode incremental ZIP payload.\n" ** 67;
+    const metadata_time = try vort.ZipDosTimestamp.fromComponents(.{
+        .year = 2023,
+        .month = 7,
+        .day = 8,
+        .hour = 9,
+        .minute = 10,
+        .second = 11,
+    });
     const entries = [_]Entry{
         .{
             .name = "known-stored.bin",
@@ -84,6 +96,10 @@ pub fn main(init: std.process.Init) !void {
             .method = .stored,
             .expected_size = known_stored.len,
             .comment = "known size",
+            .modified = metadata_time,
+            .creator_system = .unix,
+            .internal_attributes = 1,
+            .external_attributes = vort.zipUnixExternalAttributes(0o100600),
         },
         .{
             .name = "unknown-stored.bin",
@@ -562,6 +578,10 @@ fn encodeSplitArchive(
             .comment = entry.comment,
             .method = entry.method,
             .expected_size = entry.expected_size,
+            .modified = entry.modified,
+            .creator_system = entry.creator_system,
+            .internal_attributes = entry.internal_attributes,
+            .external_attributes = entry.external_attributes,
             .traditional_encryption = entry.traditional_encryption,
             .winzip_aes = entry.winzip_aes,
             .pkware_strong_encryption = entry.pkware_strong_encryption,
@@ -687,6 +707,10 @@ fn encodeArchive(
             .comment = entry.comment,
             .method = entry.method,
             .expected_size = entry.expected_size,
+            .modified = entry.modified,
+            .creator_system = entry.creator_system,
+            .internal_attributes = entry.internal_attributes,
+            .external_attributes = entry.external_attributes,
             .traditional_encryption = entry.traditional_encryption,
             .winzip_aes = entry.winzip_aes,
             .pkware_strong_encryption = entry.pkware_strong_encryption,

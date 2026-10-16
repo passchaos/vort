@@ -38,7 +38,10 @@ pub const State = union(enum) {
         codec_done: bool = false,
     };
 
-    pub fn initTraditional(options: traditional_encryption.Options) State {
+    pub fn initTraditional(
+        options: traditional_encryption.Options,
+        dos_time: u16,
+    ) State {
         var cipher = traditional_encryption.Cipher.init(options.password);
         var header_bytes: [traditional_encryption.header_len]u8 = undefined;
         cipher.encrypt(
@@ -46,7 +49,7 @@ pub const State = union(enum) {
             header_bytes[0..traditional_encryption.header_random_len],
         );
         header_bytes[traditional_encryption.header_random_len] = cipher.encryptByte(
-            @truncate(wire.deterministic_dos_time >> 8),
+            @truncate(dos_time >> 8),
         );
         return .{ .traditional = .{ .cipher = cipher, .header = header_bytes } };
     }

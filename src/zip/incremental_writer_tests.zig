@@ -16,6 +16,10 @@ const TestEntry = struct {
     method: zip.CompressionMethod,
     expected_size: ?u64,
     comment: []const u8 = "",
+    modified: zip.DosTimestamp = .deterministic,
+    creator_system: zip.CreatorSystem = .fat,
+    internal_attributes: u16 = 0,
+    external_attributes: ?u32 = null,
     traditional_encryption: ?zip.TraditionalEncryptionOptions = null,
     winzip_aes: ?zip.WinZipAesOptions = null,
     pkware_strong_encryption: ?zip.PkwareStrongEncryptionOptions = null,
@@ -24,8 +28,26 @@ const TestEntry = struct {
 test "ZIP incremental writer round trips known and unknown common codec entries" {
     const allocator = std.testing.allocator;
     const repetitive = "incremental raw deflate data\n" ** 96;
+    const modified = try zip.DosTimestamp.fromComponents(.{
+        .year = 2025,
+        .month = 12,
+        .day = 31,
+        .hour = 23,
+        .minute = 59,
+        .second = 59,
+    });
     const entries = [_]TestEntry{
-        .{ .name = "known-stored.bin", .data = "stored payload", .method = .stored, .expected_size = 14, .comment = "known" },
+        .{
+            .name = "known-stored.bin",
+            .data = "stored payload",
+            .method = .stored,
+            .expected_size = 14,
+            .comment = "known",
+            .modified = modified,
+            .creator_system = .unix,
+            .internal_attributes = 1,
+            .external_attributes = zip.unixExternalAttributes(0o100600),
+        },
         .{ .name = "unknown-stored.bin", .data = "unknown stored", .method = .stored, .expected_size = null },
         .{ .name = "known-deflate.txt", .data = repetitive, .method = .deflate, .expected_size = repetitive.len },
         .{ .name = "unknown-deflate.txt", .data = "unknown deflate payload" ** 50, .method = .deflate, .expected_size = null },
@@ -76,11 +98,18 @@ test "ZIP incremental writer round trips known and unknown common codec entries"
     for (entries, 0..) |expected, index| {
         const entry = try archive.entryAt(index);
         try std.testing.expectEqualStrings(expected.name, entry.name);
+        try std.testing.expectEqualStrings(expected.comment, entry.comment);
         try std.testing.expectEqual(expected.method, entry.method);
         try std.testing.expect(entry.flags & wire.descriptor_flag != 0);
         const decoded = try archive.extractAlloc(allocator, entry);
         defer allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, expected.data, decoded);
+        if (index == 0) {
+            try std.testing.expectEqual(modified, entry.modified);
+            try std.testing.expectEqual(zip.CreatorSystem.unix, entry.creatorSystem());
+            try std.testing.expectEqual(@as(?u16, 0o100600), entry.unixMode());
+            try std.testing.expectEqual(@as(u16, 1), entry.internal_attributes);
+        }
     }
 }
 
@@ -124,12 +153,21 @@ test "ZIP incremental writer handles one-byte input and output and is determinis
 test "ZIP incremental writer streams Traditional ZipCrypto entries" {
     const allocator = std.testing.allocator;
     const password = "incremental-zip-password";
+    const modified = try zip.DosTimestamp.fromComponents(.{
+        .year = 2021,
+        .month = 6,
+        .day = 7,
+        .hour = 20,
+        .minute = 30,
+        .second = 40,
+    });
     const entries = [_]TestEntry{
         .{
             .name = "encrypted-known.bin",
             .data = "known encrypted stored payload",
             .method = .stored,
             .expected_size = "known encrypted stored payload".len,
+            .modified = modified,
             .traditional_encryption = .{
                 .password = password,
                 .header_random = .{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 },
@@ -567,6 +605,14 @@ test "ZIP incremental writer enforces method and metadata limits" {
     try std.testing.expectError(
         error.UnsupportedZipCompressionMethod,
         unsupported.beginEntry(.{ .name = "bad", .method = @enumFromInt(7) }),
+    );
+    try std.testing.expectEqual(incremental.Phase.ready, unsupported.snapshot().phase);
+    try std.testing.expectError(
+        error.InvalidZipTimestamp,
+        unsupported.beginEntry(.{
+            .name = "bad-time",
+            .modified = .{ .time = 0xffff, .date = 0 },
+        }),
     );
     try std.testing.expectEqual(incremental.Phase.ready, unsupported.snapshot().phase);
     try unsupported.beginEntry(.{ .name = "retry", .method = .stored, .expected_size = 0 });
@@ -1299,6 +1345,10 @@ fn encodeEntries(
             .comment = entry.comment,
             .method = entry.method,
             .expected_size = entry.expected_size,
+            .modified = entry.modified,
+            .creator_system = entry.creator_system,
+            .internal_attributes = entry.internal_attributes,
+            .external_attributes = entry.external_attributes,
             .traditional_encryption = entry.traditional_encryption,
             .winzip_aes = entry.winzip_aes,
             .pkware_strong_encryption = entry.pkware_strong_encryption,

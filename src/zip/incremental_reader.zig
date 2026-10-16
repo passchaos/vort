@@ -231,6 +231,14 @@ pub const Reader = struct {
         return self.directory.records.items[index].info();
     }
 
+    /// Returns retained metadata for an entry already encountered in local
+    /// order. Central-only fields become available after its central record is
+    /// validated and remain valid until `reset` or `deinit`.
+    pub fn entryAt(self: *const Self, index: usize) ?EntryInfo {
+        if (index >= self.directory.records.items.len) return null;
+        return self.directory.records.items[index].info();
+    }
+
     pub fn archiveComment(self: *const Self) []const u8 {
         return self.archive_comment;
     }
@@ -414,9 +422,11 @@ pub const Reader = struct {
                 if (self.control.items.len != self.control_target)
                     return result(input_read, output_written, .need_input);
                 try self.directory.validateCentral(
+                    self.allocator,
                     try archive_records.parseCentral(self.control.items),
                     try self.absoluteOffset(),
                     self.options.max_central_directory_size,
+                    self.options.max_metadata_size,
                 );
                 self.clearControl();
                 self.phase = .record_signature;
@@ -839,6 +849,7 @@ pub const Reader = struct {
             .local_header_offset = self.record_offset,
             .zip64_local = local.zip64,
             .uses_descriptor = local.descriptor_layout != null,
+            .modified = local.modified,
             .winzip_aes = local.winzip_aes,
             .pkware_strong_encryption = null,
         });

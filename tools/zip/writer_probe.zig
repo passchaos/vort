@@ -150,8 +150,25 @@ pub fn main(init: std.process.Init) !void {
             split_payload[block * 128 + 64 + index] = value;
         }
     }
+    const metadata_time = try vort.ZipDosTimestamp.fromComponents(.{
+        .year = 2026,
+        .month = 10,
+        .day = 17,
+        .hour = 1,
+        .minute = 23,
+        .second = 45,
+    });
     const entries = [_]vort.ZipEncodeEntry{
-        .{ .name = "stored.bin", .data = &stored, .method = .stored, .comment = "stored entry" },
+        .{
+            .name = "stored.bin",
+            .data = &stored,
+            .method = .stored,
+            .comment = "stored entry",
+            .modified = metadata_time,
+            .creator_system = .unix,
+            .internal_attributes = 1,
+            .external_attributes = vort.zipUnixExternalAttributes(0o100640),
+        },
         .{ .name = "folder/shrink.txt", .data = shrink_payload, .method = .shrink, .comment = "shrink entry" },
         .{ .name = "folder/implode.txt", .data = implode_payload, .method = .implode, .comment = "implode entry" },
         .{ .name = "folder/reduce1.txt", .data = reduce1_payload, .method = .reduce_1, .comment = "reduce1 entry" },

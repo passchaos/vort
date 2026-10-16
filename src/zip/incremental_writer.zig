@@ -11,11 +11,14 @@ const wire = @import("wire.zig");
 const zip_writer = @import("writer.zig");
 
 pub const CompressionMethod = types.CompressionMethod;
+pub const CreatorSystem = types.CreatorSystem;
+pub const DosTimestamp = types.DosTimestamp;
 pub const Zip64Mode = zip_writer.Zip64Mode;
 
 pub const Error = codecs.Error || writer_encryption.Error || std.mem.Allocator.Error || error{
     InvalidZipEntryName,
     InvalidZipTextEncoding,
+    InvalidZipTimestamp,
     UnsupportedZipCompressionMethod,
     Zip32LimitExceeded,
     InvalidZipWriterState,
@@ -71,7 +74,7 @@ pub const Options = struct {
     stop_at_record_boundaries: bool = false,
 };
 
-/// Metadata for one streaming entry. Stored, raw Deflate, and Bzip2 are accepted.
+/// Metadata for one streaming entry. Every incremental writer method is accepted.
 ///
 /// `name` and `comment` are copied by `beginEntry` and need not remain alive
 /// afterward. A non-null `expected_size` is checked when input is accepted and
@@ -81,6 +84,12 @@ pub const EntryOptions = struct {
     comment: []const u8 = "",
     method: CompressionMethod = .deflate,
     expected_size: ?u64 = null,
+    /// Validated MS-DOS modification time; defaults preserve deterministic wire.
+    modified: DosTimestamp = .deterministic,
+    creator_system: CreatorSystem = .fat,
+    internal_attributes: u16 = 0,
+    /// Null derives only the conventional DOS directory bit from a trailing `/`.
+    external_attributes: ?u32 = null,
     traditional_encryption: ?traditional_encryption.Options = null,
     winzip_aes: ?zip_writer.WinZipAesOptions = null,
     pkware_strong_encryption: ?zip_writer.PkwareStrongEncryptionOptions = null,
@@ -135,6 +144,10 @@ pub const Writer = struct {
         expected_size: ?u64,
         local_header_offset: u64,
         zip64: bool,
+        modified: DosTimestamp,
+        creator_system: CreatorSystem,
+        internal_attributes: u16,
+        external_attributes: ?u32,
         crc: checksum.Crc32Best = checksum.Crc32Best.init(),
         uncompressed_size: u64 = 0,
         compressed_size: u64 = 0,
@@ -165,7 +178,7 @@ pub const Writer = struct {
             @memcpy(metadata[0..entry_options.name.len], entry_options.name);
             @memcpy(metadata[entry_options.name.len..], entry_options.comment);
             const encryption = if (entry_options.traditional_encryption) |options|
-                writer_encryption.State.initTraditional(options)
+                writer_encryption.State.initTraditional(options, entry_options.modified.time)
             else if (entry_options.winzip_aes) |options|
                 try writer_encryption.State.initWinZipAes(options)
             else if (entry_options.pkware_strong_encryption) |options|
@@ -179,6 +192,10 @@ pub const Writer = struct {
                 .expected_size = entry_options.expected_size,
                 .local_header_offset = local_header_offset,
                 .zip64 = zip64,
+                .modified = entry_options.modified,
+                .creator_system = entry_options.creator_system,
+                .internal_attributes = entry_options.internal_attributes,
+                .external_attributes = entry_options.external_attributes,
                 .codec = codec,
                 .compressed_size = if (encryption) |*state| state.header().len else 0,
                 .encryption = encryption,
@@ -388,6 +405,10 @@ pub const Writer = struct {
             .uncompressed_size = 0,
             .local_header_offset = local_offset,
             .zip64 = entry_zip64,
+            .modified = current.modified,
+            .creator_system = current.creator_system,
+            .internal_attributes = current.internal_attributes,
+            .external_attributes = current.external_attributes,
             .winzip_aes = if (current.encryption) |*encryption|
                 encryption.aesInfo()
             else
@@ -730,6 +751,7 @@ pub const Writer = struct {
 
     fn validateEntry(self: *const Self, entry: EntryOptions) Error!void {
         if (entry.name.len == 0) return error.InvalidZipEntryName;
+        if (!entry.modified.isValid()) return error.InvalidZipTimestamp;
         if ((entry.traditional_encryption != null and entry.winzip_aes != null) or
             (entry.traditional_encryption != null and entry.pkware_strong_encryption != null) or
             (entry.winzip_aes != null and entry.pkware_strong_encryption != null))
@@ -896,6 +918,10 @@ pub const Writer = struct {
             .uncompressed_size = entry.uncompressed_size,
             .local_header_offset = entry.local_header_offset,
             .zip64 = entry.zip64,
+            .modified = entry.modified,
+            .creator_system = entry.creator_system,
+            .internal_attributes = entry.internal_attributes,
+            .external_attributes = entry.external_attributes,
             .winzip_aes = if (entry.encryption) |*encryption|
                 encryption.aesInfo()
             else

@@ -4,6 +4,7 @@ const archive_records = @import("archive_records.zig");
 
 pub const Record = struct {
     name: []u8,
+    comment: []u8 = &.{},
     method: api.CompressionMethod,
     flags: u16,
     crc32: u32 = 0,
@@ -12,6 +13,10 @@ pub const Record = struct {
     local_header_offset: usize,
     zip64_local: bool,
     uses_descriptor: bool,
+    modified: api.DosTimestamp,
+    version_made_by: u16 = 0,
+    internal_attributes: u16 = 0,
+    external_attributes: u32 = 0,
     winzip_aes: ?api.WinZipAesInfo = null,
     pkware_strong_encryption: ?api.PkwareStrongEncryptionInfo = null,
     complete: bool = false,
@@ -20,11 +25,16 @@ pub const Record = struct {
     pub fn info(self: *const Record) api.EntryInfo {
         return .{
             .name = self.name,
+            .comment = if (self.central_seen) self.comment else null,
             .method = self.method,
             .flags = self.flags,
             .local_header_offset = self.local_header_offset,
             .uses_descriptor = self.uses_descriptor,
             .zip64_local = self.zip64_local,
+            .modified = self.modified,
+            .version_made_by = if (self.central_seen) self.version_made_by else null,
+            .internal_attributes = if (self.central_seen) self.internal_attributes else null,
+            .external_attributes = if (self.central_seen) self.external_attributes else null,
             .winzip_aes = self.winzip_aes,
             .pkware_strong_encryption = self.pkware_strong_encryption,
             .crc32 = if (self.complete or !self.uses_descriptor) self.crc32 else null,
@@ -55,7 +65,10 @@ pub const State = struct {
     }
 
     pub fn reset(self: *Self, allocator: std.mem.Allocator) void {
-        for (self.records.items) |entry| allocator.free(entry.name);
+        for (self.records.items) |entry| {
+            allocator.free(entry.name);
+            if (entry.comment.len != 0) allocator.free(entry.comment);
+        }
         self.records.clearRetainingCapacity();
         self.retained_metadata_size = 0;
         self.completed_entries = 0;
@@ -76,10 +89,12 @@ pub const State = struct {
 
     pub fn validateCentral(
         self: *Self,
+        allocator: std.mem.Allocator,
         central: archive_records.CentralHeader,
         absolute_end: usize,
         max_central_size: usize,
-    ) error{ InvalidZipArchive, OutputLimitExceeded, IntegerOverflow }!void {
+        max_metadata_size: usize,
+    ) (std.mem.Allocator.Error || error{ InvalidZipArchive, OutputLimitExceeded, IntegerOverflow })!void {
         var matched: ?*Record = null;
         for (self.records.items) |*local| {
             if (!local.central_seen and local.local_header_offset == central.local_header_offset) {
@@ -95,14 +110,32 @@ pub const State = struct {
             local.crc32 != central.crc32 or
             local.compressed_size != central.compressed_size or
             local.uncompressed_size != central.uncompressed_size or
+            !std.meta.eql(local.modified, central.modified) or
             !std.meta.eql(local.winzip_aes, central.winzip_aes) or
             !std.meta.eql(local.pkware_strong_encryption, central.pkware_strong_encryption))
             return error.InvalidZipArchive;
-        local.central_seen = true;
-        self.central_entries = std.math.add(usize, self.central_entries, 1) catch
+        const central_entries = std.math.add(usize, self.central_entries, 1) catch
             return error.IntegerOverflow;
-        self.central_size = absolute_end - self.central_offset;
-        if (self.central_size > max_central_size) return error.OutputLimitExceeded;
+        const central_size = absolute_end - self.central_offset;
+        if (central_size > max_central_size) return error.OutputLimitExceeded;
+        const retained_metadata_size = std.math.add(
+            usize,
+            self.retained_metadata_size,
+            central.comment.len,
+        ) catch return error.IntegerOverflow;
+        if (retained_metadata_size > max_metadata_size)
+            return error.OutputLimitExceeded;
+        var comment: []u8 = &.{};
+        if (central.comment.len != 0)
+            comment = try allocator.dupe(u8, central.comment);
+        local.comment = comment;
+        local.version_made_by = central.version_made_by;
+        local.internal_attributes = central.internal_attributes;
+        local.external_attributes = central.external_attributes;
+        local.central_seen = true;
+        self.central_entries = central_entries;
+        self.central_size = central_size;
+        self.retained_metadata_size = retained_metadata_size;
     }
 
     pub fn beginEnding(

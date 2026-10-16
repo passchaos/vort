@@ -56,6 +56,9 @@ const end_of_central_signature: u32 = 0x0605_4b50;
 const end_of_central_len: usize = 22;
 
 pub const CompressionMethod = writer.CompressionMethod;
+pub const CreatorSystem = types.CreatorSystem;
+pub const DosTimestamp = types.DosTimestamp;
+pub const unixExternalAttributes = types.unixExternalAttributes;
 pub const Zip64Mode = writer.Zip64Mode;
 pub const EncodeEntry = writer.EncodeEntry;
 pub const EncodeOptions = writer.EncodeOptions;
@@ -554,10 +557,15 @@ fn parseCentralEntry(archive: Archive, offset: usize) Error!ParsedCentralEntry {
     if (try readU32(archive.bytes, offset) != central_file_signature) return error.InvalidZipArchive;
     _ = try checkedEnd(offset, 46, central_end);
 
+    const version_made_by = try readU16(archive.bytes, offset + 4);
     const flags = try readU16(archive.bytes, offset + 8);
     const version_needed = try readU16(archive.bytes, offset + 6);
     const method_raw = try readU16(archive.bytes, offset + 10);
     const wire_method: CompressionMethod = @enumFromInt(method_raw);
+    const modified: DosTimestamp = .{
+        .time = try readU16(archive.bytes, offset + 12),
+        .date = try readU16(archive.bytes, offset + 14),
+    };
     const crc = try readU32(archive.bytes, offset + 16);
     const compressed_u32 = try readU32(archive.bytes, offset + 20);
     const uncompressed_u32 = try readU32(archive.bytes, offset + 24);
@@ -565,6 +573,8 @@ fn parseCentralEntry(archive: Archive, offset: usize) Error!ParsedCentralEntry {
     const extra_len: usize = try readU16(archive.bytes, offset + 30);
     const comment_len: usize = try readU16(archive.bytes, offset + 32);
     const disk_start_u16 = try readU16(archive.bytes, offset + 34);
+    const internal_attributes = try readU16(archive.bytes, offset + 36);
+    const external_attributes = try readU32(archive.bytes, offset + 38);
     const local_offset_u32 = try readU32(archive.bytes, offset + 42);
 
     const name_start = offset + 46;
@@ -606,6 +616,7 @@ fn parseCentralEntry(archive: Archive, offset: usize) Error!ParsedCentralEntry {
     return .{
         .entry = .{
             .name = archive.bytes[name_start..name_end],
+            .comment = archive.bytes[extra_end..next_offset],
             .method = method,
             .flags = flags,
             .crc32 = crc,
@@ -614,6 +625,10 @@ fn parseCentralEntry(archive: Archive, offset: usize) Error!ParsedCentralEntry {
             .local_header_offset = values.local_header_offset,
             .central_header_offset = offset,
             .zip64 = values.zip64,
+            .modified = modified,
+            .version_made_by = version_made_by,
+            .internal_attributes = internal_attributes,
+            .external_attributes = external_attributes,
             .winzip_aes = if (parsed_aes) |aes| aes.info else null,
             .pkware_strong_encryption = parsed_strong,
         },
@@ -642,6 +657,7 @@ fn localPayloadData(
     const local_version_needed = try readU16(archive.bytes, offset + 4);
     const local_method: CompressionMethod = @enumFromInt(try readU16(archive.bytes, offset + 8));
     const local_dos_time = try readU16(archive.bytes, offset + 10);
+    const local_dos_date = try readU16(archive.bytes, offset + 12);
     const local_crc = try readU32(archive.bytes, offset + 14);
     const local_compressed = try readU32(archive.bytes, offset + 18);
     const local_uncompressed = try readU32(archive.bytes, offset + 22);
@@ -673,7 +689,9 @@ fn localPayloadData(
     if (local_flags & wire.encrypted_flag != 0 and !allow_encrypted)
         return error.EncryptedZipEntry;
 
-    if (!std.mem.eql(u8, archive.bytes[name_start..name_end], entry.name)) return error.InvalidZipArchive;
+    if (!std.mem.eql(u8, archive.bytes[name_start..name_end], entry.name) or
+        local_dos_time != entry.modified.time or local_dos_date != entry.modified.date)
+        return error.InvalidZipArchive;
     const data_end = try checkedEnd(data_start, entry.compressed_size, archive.central_directory_offset);
     if ((local_compressed == std.math.maxInt(u32) or local_uncompressed == std.math.maxInt(u32)) and
         local_version_needed < 45) return error.InvalidZipArchive;
@@ -705,6 +723,7 @@ fn localPayloadData(
 
 fn sameEntry(a: Entry, b: Entry) bool {
     return std.mem.eql(u8, a.name, b.name) and
+        std.mem.eql(u8, a.comment, b.comment) and
         a.method == b.method and
         a.flags == b.flags and
         a.crc32 == b.crc32 and
@@ -713,6 +732,10 @@ fn sameEntry(a: Entry, b: Entry) bool {
         a.local_header_offset == b.local_header_offset and
         a.central_header_offset == b.central_header_offset and
         a.zip64 == b.zip64 and
+        std.meta.eql(a.modified, b.modified) and
+        a.version_made_by == b.version_made_by and
+        a.internal_attributes == b.internal_attributes and
+        a.external_attributes == b.external_attributes and
         std.meta.eql(a.winzip_aes, b.winzip_aes) and
         std.meta.eql(a.pkware_strong_encryption, b.pkware_strong_encryption);
 }
@@ -938,6 +961,7 @@ test "ZIP writer deterministically round trips multiple stored and deflate entri
     var index: usize = 0;
     while (try it.next()) |entry| : (index += 1) {
         try std.testing.expectEqualStrings(entries[index].name, entry.name);
+        try std.testing.expectEqualStrings(entries[index].comment, entry.comment);
         try std.testing.expectEqual(entries[index].method, entry.method);
         try std.testing.expect(entry.flags & 0x0008 != 0);
         try std.testing.expect(entry.flags & 0x0800 != 0);
@@ -954,9 +978,120 @@ test "ZIP writer deterministically round trips multiple stored and deflate entri
     try std.testing.expectEqual(entries.len, index);
 }
 
+test "ZIP entry metadata round trips comments timestamps and Unix attributes" {
+    const allocator = std.testing.allocator;
+    try std.testing.expectError(
+        error.InvalidZipTimestamp,
+        DosTimestamp.fromComponents(.{
+            .year = 2023,
+            .month = 2,
+            .day = 29,
+            .hour = 0,
+            .minute = 0,
+            .second = 0,
+        }),
+    );
+    const modified = try DosTimestamp.fromComponents(.{
+        .year = 2026,
+        .month = 10,
+        .day = 17,
+        .hour = 1,
+        .minute = 23,
+        .second = 45,
+    });
+    const entries = [_]EncodeEntry{
+        .{
+            .name = "regular.txt",
+            .data = "metadata payload",
+            .method = .stored,
+            .comment = "entry comment",
+            .modified = modified,
+            .creator_system = .unix,
+            .internal_attributes = 1,
+            .external_attributes = unixExternalAttributes(0o100640),
+        },
+        .{
+            .name = "link",
+            .data = "regular.txt",
+            .method = .stored,
+            .comment = "symbolic link",
+            .modified = modified,
+            .creator_system = .unix,
+            .external_attributes = unixExternalAttributes(0o120777),
+        },
+        .{
+            .name = "directory/",
+            .data = "",
+            .method = .stored,
+            .modified = modified,
+            .creator_system = .unix,
+            .external_attributes = unixExternalAttributes(0o040755),
+        },
+    };
+
+    inline for (.{ Zip64Mode.never, .always }) |zip64_mode| {
+        inline for (.{ false, true }) |descriptor_mode| {
+            const bytes = try encodeAlloc(allocator, &entries, .{
+                .zip64 = zip64_mode,
+                .data_descriptor = descriptor_mode,
+            });
+            defer allocator.free(bytes);
+            const archive = try parse(bytes);
+            for (entries, 0..) |expected, index| {
+                const entry = try archive.entryAt(index);
+                try std.testing.expectEqualStrings(expected.comment, entry.comment);
+                try std.testing.expectEqual(modified, entry.modified);
+                try std.testing.expectEqual(CreatorSystem.unix, entry.creatorSystem());
+                try std.testing.expectEqual(expected.internal_attributes, entry.internal_attributes);
+                try std.testing.expectEqual(expected.external_attributes.?, entry.external_attributes);
+                try std.testing.expectEqual(
+                    @as(?u16, @truncate(expected.external_attributes.? >> 16)),
+                    entry.unixMode(),
+                );
+                try std.testing.expectEqual(index == 1, entry.isSymbolicLink());
+                try std.testing.expectEqual(index == 2, entry.isDirectory());
+                const decoded = try archive.extractAlloc(allocator, entry);
+                defer allocator.free(decoded);
+                try std.testing.expectEqualSlices(u8, expected.data, decoded);
+            }
+            const components = try (try archive.entryAt(0)).modified.components();
+            try std.testing.expectEqual(@as(u8, 44), components.second);
+
+            var corrupt = try allocator.dupe(u8, bytes);
+            defer allocator.free(corrupt);
+            const first = try archive.entryAt(0);
+            corrupt[first.local_header_offset + 10] ^= 1;
+            const corrupt_archive = try parse(corrupt);
+            const corrupt_entry = try corrupt_archive.entryAt(0);
+            try std.testing.expectError(
+                error.InvalidZipArchive,
+                corrupt_archive.compressedData(corrupt_entry),
+            );
+        }
+    }
+
+    const invalid = [_]EncodeEntry{.{
+        .name = "invalid-time",
+        .data = "",
+        .modified = .{ .time = 0xffff, .date = 0 },
+    }};
+    try std.testing.expectError(
+        error.InvalidZipTimestamp,
+        encodeAlloc(allocator, &invalid, .{}),
+    );
+}
+
 test "ZIP writer and reader round trip Traditional ZipCrypto entries" {
     const allocator = std.testing.allocator;
     const password = "zip-password-密码";
+    const modified = try DosTimestamp.fromComponents(.{
+        .year = 2022,
+        .month = 11,
+        .day = 12,
+        .hour = 21,
+        .minute = 34,
+        .second = 56,
+    });
     const stored_payload = "encrypted stored payload";
     const deflated_payload = "encrypted Deflate payload\n" ** 97;
     const entries = [_]EncodeEntry{
@@ -964,6 +1099,7 @@ test "ZIP writer and reader round trip Traditional ZipCrypto entries" {
             .name = "encrypted-stored.bin",
             .data = stored_payload,
             .method = .stored,
+            .modified = modified,
             .traditional_encryption = .{
                 .password = password,
                 .header_random = .{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 },
@@ -2003,9 +2139,25 @@ test "ZIP split writer plans standard atomic records and round trips" {
             payload[block * 128 + 64 + index] = value;
         }
     }
+    const modified = try DosTimestamp.fromComponents(.{
+        .year = 2020,
+        .month = 5,
+        .day = 6,
+        .hour = 7,
+        .minute = 8,
+        .second = 9,
+    });
     const entries = [_]EncodeEntry{
         .{ .name = "crossing.bin", .data = payload, .method = .deflate },
-        .{ .name = "tail.bin", .data = "split writer stored tail" ** 97, .method = .stored },
+        .{
+            .name = "tail.bin",
+            .data = "split writer stored tail" ** 97,
+            .method = .stored,
+            .comment = "split metadata",
+            .modified = modified,
+            .creator_system = .unix,
+            .external_attributes = unixExternalAttributes(0o100644),
+        },
     };
     inline for (.{ false, true }) |descriptor| {
         inline for (.{ Zip64Mode.never, .always }) |zip64_mode| {
@@ -2042,12 +2194,14 @@ test "ZIP split writer plans standard atomic records and round trips" {
                 archive.archive.comment,
             );
             for (entries, 0..) |expected, index| {
+                const entry = try archive.archive.entryAt(index);
                 const decoded = try archive.archive.extractAlloc(
                     allocator,
-                    try archive.archive.entryAt(index),
+                    entry,
                 );
                 defer allocator.free(decoded);
                 try std.testing.expectEqualSlices(u8, expected.data, decoded);
+                try std.testing.expectEqualStrings(expected.comment, entry.comment);
             }
             var stream_reader = try SplitIncrementalReader.initAlloc(
                 allocator,
@@ -2056,6 +2210,10 @@ test "ZIP split writer plans standard atomic records and round trips" {
             );
             defer stream_reader.deinit();
             try drainSplitIncrementalReader(&stream_reader);
+            const streamed_tail = stream_reader.entryAt(1).?;
+            try std.testing.expectEqualStrings("split metadata", streamed_tail.comment.?);
+            try std.testing.expectEqual(modified, streamed_tail.modified);
+            try std.testing.expectEqual(@as(?u16, 0o100644), streamed_tail.unixMode());
         }
     }
 

@@ -525,7 +525,16 @@ def validate_vort_archive_with_python(
                 actual = archive.read(info)
             if actual != expected:
                 raise AssertionError(f"Python extraction mismatch for {name!r}")
-            if info.date_time != (1980, 1, 1, 0, 0, 0):
+            if name == "stored.bin":
+                if info.date_time != (2026, 10, 17, 1, 23, 44):
+                    raise AssertionError("custom DOS timestamp did not round trip")
+                if info.comment != b"stored entry":
+                    raise AssertionError("entry comment did not round trip")
+                if info.create_system != 3 or info.internal_attr != 1:
+                    raise AssertionError("ZIP creator/internal attributes did not round trip")
+                if info.external_attr != 0o100640 << 16:
+                    raise AssertionError("ZIP Unix external attributes did not round trip")
+            elif info.date_time != (1980, 1, 1, 0, 0, 0):
                 raise AssertionError(f"non-deterministic timestamp for {name!r}")
             if not info.flag_bits & 0x0008:
                 raise AssertionError(f"data-descriptor flag omitted for {name!r}")
@@ -1458,7 +1467,7 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
         (
             zip64_signature,
             zip64_record_size,
-            _made_by,
+            made_by,
             needed,
             zip64_disk,
             zip64_central_disk,
@@ -1500,12 +1509,12 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
             raise AssertionError(f"missing central header for {expected_name!r}")
         (
             _signature,
-            _made_by,
+            made_by,
             needed,
             flags,
             method,
-            _time,
-            _date,
+            dos_time,
+            dos_date,
             crc32,
             legacy_compressed_size,
             legacy_uncompressed_size,
@@ -1513,8 +1522,8 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
             extra_len,
             entry_comment_len,
             disk_start,
-            _internal_attributes,
-            _external_attributes,
+            internal_attributes,
+            external_attributes,
             legacy_local_offset,
         ) = struct.unpack_from("<IHHHHHHIIIHHHHHII", raw, central_cursor)
         variable_offset = central_cursor + 46
@@ -1544,6 +1553,18 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
         expected_crc = binascii.crc32(expected_payload) & 0xFFFFFFFF
         if crc32 != expected_crc:
             raise AssertionError(f"incremental central CRC mismatch for {name!r}")
+        if name == "known-stored.bin":
+            expected_time = (9 << 11) | (10 << 5) | (10 // 2)
+            expected_date = ((2023 - 1980) << 9) | (7 << 5) | 8
+            if (
+                made_by >> 8 != 3
+                or dos_time != expected_time
+                or dos_date != expected_date
+                or internal_attributes != 1
+                or external_attributes != 0o100600 << 16
+                or entry_comment != b"known size"
+            ):
+                raise AssertionError("incremental ZIP entry metadata mismatch")
 
         fields = parse_extra_fields(extra, f"central entry {name!r}")
         expected_needed = (
@@ -1741,6 +1762,16 @@ def validate_incremental_writer_archive(
             raise AssertionError(f"Python incremental {suffix} entry order mismatch")
         for name, expected in INCREMENTAL_PAYLOADS.items():
             info = archive.getinfo(name)
+            if name == "known-stored.bin":
+                if info.date_time != (2023, 7, 8, 9, 10, 10):
+                    raise AssertionError("incremental DOS timestamp did not round trip")
+                if (
+                    info.comment != b"known size"
+                    or info.create_system != 3
+                    or info.internal_attr != 1
+                    or info.external_attr != 0o100600 << 16
+                ):
+                    raise AssertionError("incremental ZIP attributes did not round trip")
             if info.compress_type != INCREMENTAL_METHODS[name]:
                 raise AssertionError(f"Python incremental method mismatch for {name!r}")
             if info.compress_type in (20, 93):

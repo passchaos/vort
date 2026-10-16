@@ -21,12 +21,15 @@ const zstd = @import("../zstd.zig");
 pub const Error = core.Error || bzip2.Error || dcl_implode.Error || deflate64.Error || implode.Error || lzma_writer.Error || ppmd8.Error || pkware_strong.Error || reduce.Error || shrink.Error || traditional_encryption.Error || winzip_aes.Error || xz.Error || zstd.Error || error{
     InvalidZipEntryName,
     InvalidZipTextEncoding,
+    InvalidZipTimestamp,
     UnsupportedZipCompressionMethod,
     Zip32LimitExceeded,
     ConflictingZipEncryption,
 };
 
 pub const CompressionMethod = types.CompressionMethod;
+pub const CreatorSystem = types.CreatorSystem;
+pub const DosTimestamp = types.DosTimestamp;
 
 pub const Zip64Mode = enum {
     auto,
@@ -48,6 +51,12 @@ pub const EncodeEntry = struct {
     data: []const u8,
     method: CompressionMethod = .deflate,
     comment: []const u8 = "",
+    /// Validated MS-DOS modification time; defaults preserve deterministic wire.
+    modified: DosTimestamp = .deterministic,
+    creator_system: CreatorSystem = .fat,
+    internal_attributes: u16 = 0,
+    /// Null derives only the conventional DOS directory bit from a trailing `/`.
+    external_attributes: ?u32 = null,
     traditional_encryption: ?traditional_encryption.Options = null,
     winzip_aes: ?WinZipAesOptions = null,
     pkware_strong_encryption: ?PkwareStrongEncryptionOptions = null,
@@ -193,7 +202,7 @@ pub fn encodeAppend(
         };
         const compressed = if (entry.traditional_encryption) |encryption| encrypted: {
             const check_byte: u8 = if (options.data_descriptor)
-                @truncate(wire.deterministic_dos_time >> 8)
+                @truncate(entry.modified.time >> 8)
             else
                 @truncate(crc >> 24);
             const bytes = try traditional_encryption.encryptAlloc(
@@ -239,6 +248,10 @@ pub fn encodeAppend(
             .uncompressed_size = uncompressed_size,
             .local_header_offset = local_offset,
             .zip64 = entry_zip64,
+            .modified = entry.modified,
+            .creator_system = entry.creator_system,
+            .internal_attributes = entry.internal_attributes,
+            .external_attributes = entry.external_attributes,
             .winzip_aes = if (entry.winzip_aes) |aes| .{
                 .version = aes.version,
                 .strength = aes.strength,
@@ -297,6 +310,7 @@ fn validateInputs(entries: []const EncodeEntry, options: EncodeOptions) Error!vo
         return error.Zip32LimitExceeded;
     if (options.archive_comment.len > std.math.maxInt(u16)) return error.Zip32LimitExceeded;
     for (entries) |entry| {
+        if (!entry.modified.isValid()) return error.InvalidZipTimestamp;
         if ((entry.traditional_encryption != null and entry.winzip_aes != null) or
             (entry.traditional_encryption != null and entry.pkware_strong_encryption != null) or
             (entry.winzip_aes != null and entry.pkware_strong_encryption != null))

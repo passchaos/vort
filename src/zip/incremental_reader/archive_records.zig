@@ -12,6 +12,7 @@ pub const LocalHeader = struct {
     flags: u16,
     method: CompressionMethod,
     dos_time: u16,
+    modified: types.DosTimestamp,
     name: []const u8,
     extra: []const u8,
     descriptor_layout: ?descriptor.Layout,
@@ -79,6 +80,10 @@ pub fn parseLocal(bytes: []const u8) Error!LocalHeader {
             .flags = flags,
             .method = method,
             .dos_time = dos_time,
+            .modified = .{
+                .time = dos_time,
+                .date = std.mem.readInt(u16, bytes[12..14], .little),
+            },
             .name = bytes[wire.local_file_header_len..name_end],
             .extra = extra,
             .descriptor_layout = if (zip64) .zip64 else .zip32,
@@ -97,6 +102,10 @@ pub fn parseLocal(bytes: []const u8) Error!LocalHeader {
         .flags = flags,
         .method = method,
         .dos_time = dos_time,
+        .modified = .{
+            .time = dos_time,
+            .date = std.mem.readInt(u16, bytes[12..14], .little),
+        },
         .name = bytes[wire.local_file_header_len..name_end],
         .extra = extra,
         .descriptor_layout = null,
@@ -110,10 +119,15 @@ pub fn parseLocal(bytes: []const u8) Error!LocalHeader {
 }
 
 pub const CentralHeader = struct {
+    version_made_by: u16,
     version_needed: u16,
     flags: u16,
     method: CompressionMethod,
     name: []const u8,
+    comment: []const u8,
+    modified: types.DosTimestamp,
+    internal_attributes: u16,
+    external_attributes: u32,
     crc32: u32,
     compressed_size: usize,
     uncompressed_size: usize,
@@ -143,6 +157,7 @@ pub fn parseCentral(bytes: []const u8) Error!CentralHeader {
     const fixed: *const [wire.central_file_header_len]u8 = bytes[0..wire.central_file_header_len];
     if (try centralEncodedLen(fixed) != bytes.len) return error.InvalidZipArchive;
     const version_needed = std.mem.readInt(u16, bytes[6..8], .little);
+    const version_made_by = std.mem.readInt(u16, bytes[4..6], .little);
     const flags = std.mem.readInt(u16, bytes[8..10], .little);
     const wire_method: CompressionMethod = @enumFromInt(std.mem.readInt(u16, bytes[10..12], .little));
     const crc32 = std.mem.readInt(u32, bytes[16..20], .little);
@@ -150,10 +165,12 @@ pub fn parseCentral(bytes: []const u8) Error!CentralHeader {
     const uncompressed_u32 = std.mem.readInt(u32, bytes[24..28], .little);
     const name_len: usize = std.mem.readInt(u16, bytes[28..30], .little);
     const extra_len: usize = std.mem.readInt(u16, bytes[30..32], .little);
+    const comment_len: usize = std.mem.readInt(u16, bytes[32..34], .little);
     const disk_start = std.mem.readInt(u16, bytes[34..36], .little);
     const local_offset_u32 = std.mem.readInt(u32, bytes[42..46], .little);
     const name_end = wire.central_file_header_len + name_len;
     const extra_end = name_end + extra_len;
+    const comment_end = extra_end + comment_len;
     const values = try records.resolveCentralEntry(
         bytes[name_end..extra_end],
         compressed_u32,
@@ -196,10 +213,18 @@ pub fn parseCentral(bytes: []const u8) Error!CentralHeader {
         version_needed < wire.version_63)
         return error.InvalidZipArchive;
     return .{
+        .version_made_by = version_made_by,
         .version_needed = version_needed,
         .flags = flags,
         .method = method,
         .name = bytes[wire.central_file_header_len..name_end],
+        .comment = bytes[extra_end..comment_end],
+        .modified = .{
+            .time = std.mem.readInt(u16, bytes[12..14], .little),
+            .date = std.mem.readInt(u16, bytes[14..16], .little),
+        },
+        .internal_attributes = std.mem.readInt(u16, bytes[36..38], .little),
+        .external_attributes = std.mem.readInt(u32, bytes[38..42], .little),
         .crc32 = crc32,
         .compressed_size = values.compressed_size,
         .uncompressed_size = values.uncompressed_size,

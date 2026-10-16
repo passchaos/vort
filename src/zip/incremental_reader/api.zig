@@ -3,6 +3,8 @@ const core = @import("../../core.zig");
 const types = @import("../types.zig");
 
 pub const CompressionMethod = types.CompressionMethod;
+pub const CreatorSystem = types.CreatorSystem;
+pub const DosTimestamp = types.DosTimestamp;
 pub const WinZipAesInfo = types.WinZipAesInfo;
 pub const PkwareStrongEncryptionInfo = types.PkwareStrongEncryptionInfo;
 
@@ -11,7 +13,7 @@ pub const Options = struct {
     /// Use this when the caller has already skipped an SFX prefix.
     initial_offset: usize = 0,
     max_entries: usize = std.math.maxInt(usize),
-    /// Retained local names plus the final archive comment.
+    /// Retained local names, central entry comments, and archive comment.
     max_metadata_size: usize = 64 * 1024 * 1024,
     /// Encoded central-directory bytes processed before the archive ending.
     max_central_directory_size: usize = std.math.maxInt(usize),
@@ -71,14 +73,42 @@ pub const StepResult = struct {
 /// `deinit`. Descriptor-derived values become non-null at `.entry_done`.
 pub const EntryInfo = struct {
     name: []const u8,
+    /// Central-directory comment; null until its matching central record has
+    /// been validated.
+    comment: ?[]const u8 = null,
     method: CompressionMethod,
     flags: u16,
     local_header_offset: usize,
     uses_descriptor: bool,
     zip64_local: bool,
+    modified: DosTimestamp,
+    version_made_by: ?u16 = null,
+    internal_attributes: ?u16 = null,
+    external_attributes: ?u32 = null,
     winzip_aes: ?types.WinZipAesInfo = null,
     pkware_strong_encryption: ?types.PkwareStrongEncryptionInfo = null,
     crc32: ?u32,
     compressed_size: ?usize,
     uncompressed_size: ?usize,
+
+    pub fn creatorSystem(self: EntryInfo) ?CreatorSystem {
+        const made_by = self.version_made_by orelse return null;
+        return @enumFromInt(@as(u8, @truncate(made_by >> 8)));
+    }
+
+    pub fn unixMode(self: EntryInfo) ?u16 {
+        const creator = self.creatorSystem() orelse return null;
+        if (creator != .unix) return null;
+        const attributes = self.external_attributes orelse return null;
+        return @truncate(attributes >> 16);
+    }
+
+    pub fn isSymbolicLink(self: EntryInfo) bool {
+        return if (self.unixMode()) |mode| mode & 0o170000 == 0o120000 else false;
+    }
+
+    pub fn isDirectory(self: EntryInfo) bool {
+        if (self.name.len != 0 and self.name[self.name.len - 1] == '/') return true;
+        return if (self.unixMode()) |mode| mode & 0o170000 == 0o040000 else false;
+    }
 };

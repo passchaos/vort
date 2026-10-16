@@ -54,10 +54,11 @@ fixed-Huffman-or-stored baseline with extended 64 KiB distances and records
 version-needed 2.1. LZMA entries carry the standard four-byte
 ZIP properties prefix, a five-byte LZMA property record, an end marker, general
 purpose flag bit 1, and version-needed 6.3. It records CRC-32, sizes, entry
-comments, an archive comment, and the UTF-8 general-purpose flag. Its fixed DOS
-timestamp is `1980-01-01 00:00:00`, so identical inputs and options produce
-identical bytes. Data descriptors are optional and include the standard
-descriptor signature when enabled.
+comments, an archive comment, DOS modification timestamps, creator system,
+internal/external attributes, and the UTF-8 general-purpose flag. The default
+timestamp remains `1980-01-01 00:00:00`, so identical inputs and options
+produce identical bytes. Data descriptors are optional and include the
+standard descriptor signature when enabled.
 `EncodeOptions.zip64` controls archive selection:
 
 - `.auto` emits ZIP32 until an entry count, size, or offset needs ZIP64;
@@ -87,6 +88,31 @@ const zip_bytes = try vort.zipEncodeAlloc(allocator, &entries, .{
 });
 defer allocator.free(zip_bytes);
 ```
+
+## Entry metadata
+
+`ZipEncodeEntry` and `ZipIncrementalEntryOptions` accept the same metadata:
+`comment`, `modified`, `creator_system`, `internal_attributes`, and optional
+raw `external_attributes`. `ZipDosTimestamp.fromComponents` validates years
+1980...2107 and real calendar dates; ZIP stores two-second resolution, so an
+odd input second is rounded down. The raw `time`/`date` fields remain visible
+for exact wire interoperation. Invalid writer timestamps fail before a local
+header is published.
+
+The central `version made by` value combines the selected creator system with
+the automatically derived version-needed value. `zipUnixExternalAttributes`
+places a Unix mode in the upper 16 bits and mirrors the DOS directory bit.
+Borrowed `ZipEntry` values expose comments and all metadata, with
+`creatorSystem()`, `unixMode()`, `isDirectory()`, and `isSymbolicLink()`
+helpers. Local and central timestamps must agree before payload extraction.
+
+The sequential reader exposes the local timestamp at `entry_header`; comments
+and central-only attributes become available after central validation.
+`entryAt(index)` retains them until reset/deinit, while `currentEntry()` keeps
+its existing event-oriented view. Entry comments share `max_metadata_size`
+with names and the archive comment. The sparse and owned split readers preserve
+the same metadata, and the split sequential adapter forwards `entryAt` without
+joining physical parts.
 
 ## Traditional ZipCrypto
 
@@ -335,8 +361,8 @@ while (true) {
 
 `initial_offset` lets a caller start at the first local header of an SFX archive
 while preserving absolute central-directory offsets. `allow_trailing_data` is
-false by default. `max_metadata_size` bounds retained names plus the archive
-comment; `max_central_directory_size` bounds encoded central records;
+false by default. `max_metadata_size` bounds retained names, entry comments,
+and the archive comment; `max_central_directory_size` bounds encoded central records;
 `max_control_record_size` bounds any one variable header/end/signature record.
 `max_bzip2_compressed_block_len` and `max_bzip2_decoded_block_len` bound one
 Bzip2 block's working storage; `max_zstd_compressed_buffer_len` selects whole-
@@ -578,7 +604,10 @@ probe must return `need_output` with zero progress.
 33,049-byte ZIP64 `.always` archive. Python raw parsing checks bit 3/bit 11,
 local placeholders, signed 16-/24-byte descriptors, central CRC/size/offset and
 ZIP64 extras/end records, Bzip2's version-needed 4.6, and LZMA/Zstandard's
-version-needed 6.3; `zipfile` tests and reads every method it supports. System
+version-needed 6.3. Both one-shot and incremental archives carry a non-default
+DOS timestamp, entry comment, Unix creator/mode, and internal attribute that
+Python `zipfile` must reproduce exactly; `zipfile` tests and reads every method
+it supports. System
 Info-ZIP validates the ordered member prefix before the first unsupported
 Zstandard entry, system `zstd` independently decodes methods 20/93, and Python
 `zipfile` independently extracts method-14 entries and checks bit 1. Python
@@ -659,7 +688,8 @@ is not claimed as validation. Info-ZIP coverage uses `unzip -p` for
 contents, not pathname rendering; its 6.00 ZIP32 UTF-8 filename rendering issue
 also affects the pre-existing one-shot output and is not claimed as fixed here.
 
-`zig test src/root.zig --test-filter 'ZIP incremental writer'` passes 73/73;
+The current ReleaseFast ZIP module gates pass 36/36 for the incremental-writer
+filter and 34/34 for the incremental-reader filter;
 `zig test src/zip.zig --test-filter 'DCL Implode incremental encoder'` passes
 4/4;
 `zig test src/zip.zig --test-filter 'Reduce incremental encoder'` passes 4/4;
@@ -670,7 +700,7 @@ passes 4/4;
 4/4; `zig test src/zip.zig --test-filter 'Shrink incremental'` passes 4/4;
 `zig test src/zip.zig --test-filter 'Reduce incremental'` passes 4/4;
 `zig test src/zip.zig --test-filter 'Legacy Implode incremental'` passes 4/4;
-`zig test src/zip.zig --test-filter 'ZIP incremental reader'` passes 28/28.
+the complete ZIP module passes 1,294/1,294.
 Shrink covers known/signed/unsigned-descriptor, empty, ZIP32/ZIP64 and output-
 limit paths. Reduce covers every factor, signed/unsigned descriptors,
 ZIP32/ZIP64, empty members, DLE/matches, invalid followers and follower-coded
@@ -682,11 +712,10 @@ restart/cut-off, descriptor and ZIP64 combinations are required
 Vort coverage. Third-party method-98 evidence remains explicitly unavailable:
 Python `zipfile` has no PPMd codec and this host has no 7z/7zz. The full
 repository graph passes 2719/2719 and `zig build check` passes 113/113.
-The wire refactor also leaves 14 one-shot probe modes byte-identical to HEAD,
-including every existing method and ZIP32/ZIP64 descriptor choice. Default and
-forced-ZIP64 SHA-256 values remain
-`72541262b3867def603dd184e49fea086f585096ac0763c7d4a457bb01dd1381` and
-`e54cf36083080e69c82eeba49cd405bf3d21c00146c54a905e11d348fb057b17`.
+Repeated one-shot probe runs remain byte-identical after deliberately adding
+custom metadata to one Stored entry. Default and forced-ZIP64 SHA-256 values
+are `7284e3071e0715ab5f3573dc13863dafdce4a8e694a87b87b888eec7f6b65f91`
+and `8332d4dde7c6e459bae630424d822cfc2ad177f1a6cb624d13b37e8534ed6041`.
 Python syntax validation passes. No physical 4 GiB or 65,535-entry archive was
 generated; sentinel/overflow paths use focused tests, small forced-ZIP64
 layouts, and code review instead.
@@ -963,8 +992,9 @@ zig build run -- extract-zip-stream-file archive.zip folder/data.txt output.txt 
 zig build run-zip-diff
 ```
 
-The writer rejects empty names, invalid UTF-8 names/comments when UTF-8 mode is
-enabled, fields longer than ZIP's 16-bit name/comment limit, and methods other
+The writer rejects empty names, invalid DOS calendar timestamps, invalid UTF-8
+names/comments when UTF-8 mode is enabled, fields longer than ZIP's 16-bit
+name/comment limit, and methods other
 than stored/Shrink/Reduce1-4/Implode/Deflate/Deflate64/DCL-Implode/Bzip2/LZMA/Zstandard-20/Zstandard-93/XZ/PPMd. The
 one-shot reader accepts Traditional ZipCrypto, WinZip AES, and password-based
 PKWARE Strong AES when `ZipDecodeOptions.password` is provided. It deliberately

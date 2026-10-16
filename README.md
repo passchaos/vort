@@ -283,7 +283,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   writing for every listed method, including per-entry Traditional ZipCrypto,
   signed data descriptors, known or unknown size pledges, ZIP32/ZIP64 policy,
   SFX offsets, and payload-bounded memory;
-  archive/entry comments, CRC-32/size validation, UTF-8 flags, per-entry
+  archive/entry comments, configurable validated DOS modification timestamps,
+  creator-system/internal/external attributes, Unix mode/symlink helpers,
+  CRC-32/size validation, UTF-8 flags, per-entry
   Traditional ZipCrypto one-shot writing/reading plus known-size and descriptor-
   backed sequential reading backed by Vail's dedicated archive-crypto package
   with explicit caller-supplied header entropy and passwords; WinZip AE-1/AE-2

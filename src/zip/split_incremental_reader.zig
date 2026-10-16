@@ -142,6 +142,10 @@ pub const Reader = struct {
         return self.inner.currentEntry();
     }
 
+    pub fn entryAt(self: *const Self, index: usize) ?EntryInfo {
+        return self.inner.entryAt(index);
+    }
+
     pub fn archiveComment(self: *const Self) []const u8 {
         return self.inner.archiveComment();
     }

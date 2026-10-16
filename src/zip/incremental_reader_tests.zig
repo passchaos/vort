@@ -76,6 +76,111 @@ fn decodeArchiveFragmented(
     }
 }
 
+test "ZIP incremental reader retains entry comments timestamps and Unix attributes" {
+    const allocator = std.testing.allocator;
+    const modified = try zip.DosTimestamp.fromComponents(.{
+        .year = 2024,
+        .month = 2,
+        .day = 29,
+        .hour = 12,
+        .minute = 34,
+        .second = 57,
+    });
+    const entries = [_]zip.EncodeEntry{
+        .{
+            .name = "metadata.txt",
+            .data = "incremental metadata payload",
+            .method = .deflate,
+            .comment = "central comment",
+            .modified = modified,
+            .creator_system = .unix,
+            .internal_attributes = 1,
+            .external_attributes = zip.unixExternalAttributes(0o100640),
+        },
+        .{
+            .name = "link",
+            .data = "metadata.txt",
+            .method = .stored,
+            .comment = "link comment",
+            .modified = modified,
+            .creator_system = .unix,
+            .external_attributes = zip.unixExternalAttributes(0o120777),
+        },
+    };
+    const bytes = try zip.encodeAlloc(allocator, &entries, .{
+        .data_descriptor = true,
+        .zip64 = .always,
+    });
+    defer allocator.free(bytes);
+
+    const Test = struct {
+        fn run(
+            reader_allocator: std.mem.Allocator,
+            archive_bytes: []const u8,
+            expected_entries: []const zip.EncodeEntry,
+            expected_modified: zip.DosTimestamp,
+        ) !void {
+            var reader = try incremental.Reader.init(reader_allocator);
+            defer reader.deinit();
+            var input_offset: usize = 0;
+            var output: [3]u8 = undefined;
+            var header_index: usize = 0;
+            while (true) {
+                const input_end = @min(archive_bytes.len, input_offset + 1);
+                const stepped = try reader.step(
+                    archive_bytes[input_offset..input_end],
+                    &output,
+                );
+                input_offset += stepped.progress.input_read;
+                if (stepped.status == .entry_header) {
+                    const info = reader.currentEntry().?;
+                    try std.testing.expect(info.comment == null);
+                    try std.testing.expectEqual(expected_modified, info.modified);
+                    header_index += 1;
+                }
+                if (stepped.status == .done) break;
+            }
+            try std.testing.expectEqual(archive_bytes.len, input_offset);
+            try std.testing.expectEqual(expected_entries.len, header_index);
+            for (expected_entries, 0..) |expected, index| {
+                const info = reader.entryAt(index).?;
+                try std.testing.expectEqualStrings(expected.comment, info.comment.?);
+                try std.testing.expectEqual(expected_modified, info.modified);
+                try std.testing.expectEqual(zip.CreatorSystem.unix, info.creatorSystem().?);
+                try std.testing.expectEqual(expected.internal_attributes, info.internal_attributes.?);
+                try std.testing.expectEqual(
+                    @as(u16, @truncate(expected.external_attributes.? >> 16)),
+                    info.unixMode().?,
+                );
+                try std.testing.expectEqual(index == 1, info.isSymbolicLink());
+            }
+            try std.testing.expect(reader.entryAt(expected_entries.len) == null);
+        }
+    };
+    try Test.run(allocator, bytes, &entries, modified);
+    try std.testing.checkAllAllocationFailures(
+        allocator,
+        Test.run,
+        .{ bytes, &entries, modified },
+    );
+
+    const parsed = try zip.parse(bytes);
+    var limited = try incremental.Reader.initWithOptions(allocator, .{
+        .max_metadata_size = entries[0].name.len + entries[1].name.len,
+    });
+    defer limited.deinit();
+    var input_offset: usize = 0;
+    var output: [64]u8 = undefined;
+    while (true) {
+        const stepped = limited.step(bytes[input_offset..], &output) catch |err| {
+            try std.testing.expectEqual(error.OutputLimitExceeded, err);
+            break;
+        };
+        input_offset += stepped.progress.input_read;
+    }
+    try std.testing.expect(input_offset >= parsed.central_directory_offset);
+}
+
 fn withoutDescriptorSignature(
     allocator: std.mem.Allocator,
     signed_archive: []const u8,
