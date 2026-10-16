@@ -423,8 +423,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   14-byte bounded incremental auto-dispatch with structural LZMA probing,
   Brotli fallback and streamed LZ4/Zstd skippable-frame handling, and
   bounded concatenated raw-CPIO sequences with explicit archive boundaries,
-  mixed header families and initramfs zero padding, mixed raw/gzip/Bzip2/LZMA/
-  XZ/LZ4/Zstd/EOF-marked-LZF/lzip/LZOP sequence dispatch with bounded suffix replay,
+  mixed header families and initramfs zero padding, mixed raw/gzip/Bzip2/Brotli/
+  LZMA/XZ/LZ4/Zstd/EOF-marked-LZF/lzip/LZOP sequence dispatch with bounded suffix replay,
   plus automatic one-shot composition with the corresponding raw/wrapped modes;
 - dependency-free RAR4/RAR5 container parsing plus deterministic stored-file
   and directory writing, non-solid RAR15 and RAR20/26 decompression including

@@ -416,6 +416,7 @@ def main() -> None:
                 ("raw_cpio", raw_reference_path),
                 ("gzip", temp / "wrapper-gzip.cpio"),
                 ("bzip2", temp / "wrapper-bzip2.cpio"),
+                ("brotli", temp / "wrapper-brotli.cpio"),
                 ("lzma", temp / "wrapper-lzma.cpio"),
                 ("xz", temp / "wrapper-xz.cpio"),
                 ("lz4", temp / "wrapper-lz4.cpio"),
@@ -546,7 +547,7 @@ def main() -> None:
                     )
                 incremental_auto_reader_external += 1
         if args.incremental_mixed_reader is not None:
-            external_order = ("gzip", "bzip2", "lzma", "xz", "lz4", "zstd", "lzip", "lzop")
+            external_order = ("gzip", "bzip2", "brotli", "lzma", "xz", "lz4", "zstd", "lzip", "lzop")
             mixed_names = [("raw_cpio", raw_reference)]
             mixed_names.extend(
                 (

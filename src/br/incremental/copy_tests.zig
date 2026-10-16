@@ -354,6 +354,31 @@ test "byte-progressive compressed copy decoder enforces history and framing" {
     trailing_bytes[encoded.len] = 0xff;
     var trailing = br.IncrementalCopyStreamDecoder.init(&history);
     try std.testing.expectError(error.TrailingData, trailing.step(trailing_bytes[0 .. encoded.len + 1], &output));
+
+    const suffix = "NEXT-BROTLI-MEMBER";
+    const joined = try std.mem.concat(std.testing.allocator, u8, &.{ encoded, suffix });
+    defer std.testing.allocator.free(joined);
+    var recoverable = br.IncrementalCopyStreamDecoder.initWithOptions(&history, .{
+        .expected_output_len = output.len,
+        .allow_trailing_data = true,
+    });
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (true) {
+        const output_end = @min(output.len, output_offset + 5);
+        const stepped = try recoverable.step(
+            joined[input_offset..],
+            output[output_offset..output_end],
+        );
+        input_offset += stepped.progress.input_read;
+        output_offset += stepped.progress.output_written;
+        if (stepped.status == .done) break;
+    }
+    const recovered = recoverable.trailingInput();
+    try std.testing.expectEqual(encoded.len, input_offset - recovered.len);
+    try std.testing.expectEqualSlices(u8, suffix[0..recovered.len], recovered);
+    try std.testing.expectEqualSlices(u8, suffix[recovered.len..], joined[input_offset..]);
+    try std.testing.expectEqual(recovered.len, recoverable.snapshot().trailing_input_bytes);
 }
 
 test "byte-progressive compressed copy decoder emits transformed dictionary words" {

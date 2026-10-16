@@ -424,7 +424,7 @@ pub const Reader = struct {
             ) },
             .brotli => .{ .brotli = try self.createCompressed(
                 compressed_reader.BrotliReader,
-                self.options.brotli,
+                self.brotliOptions(),
             ) },
             .compress_z => .{ .compress_z = try self.createCompressed(
                 compressed_reader.CompressZReader,
@@ -514,6 +514,12 @@ pub const Reader = struct {
         return options;
     }
 
+    fn brotliOptions(self: *const Self) codecs.Brotli.Options {
+        var options = self.options.brotli;
+        if (self.options.member_mode) options.allow_trailing_data = true;
+        return options;
+    }
+
     fn lzmaOptions(self: *const Self) codecs.Lzma.Options {
         var options = self.options.lzma;
         if (self.options.member_mode) {
@@ -580,6 +586,7 @@ fn memberFormatSupported(format: Format) bool {
         .raw_cpio,
         .gzip,
         .bzip2,
+        .brotli,
         .lzma,
         .xz,
         .lz4,
@@ -588,7 +595,7 @@ fn memberFormatSupported(format: Format) bool {
         .zstandard,
         .lzop,
         => true,
-        .brotli, .compress_z, .lz4_legacy => false,
+        .compress_z, .lz4_legacy => false,
     };
 }
 

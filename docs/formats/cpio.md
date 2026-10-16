@@ -49,15 +49,15 @@ total input, total output, and each underlying archive remain independently
 bounded. Adjacent archives may use different newc/CRC/ODC/binary formats.
 
 `CpioIncrementalMixedReader` extends those boundaries across raw CPIO plus
-gzip, Bzip2, LZMA-Alone, XZ, modern LZ4, Zstandard, EOF-marked LZF, lzip, and
-LZOP. It
+gzip, Bzip2, Brotli, LZMA-Alone, XZ, modern LZ4, Zstandard, EOF-marked LZF,
+lzip, and LZOP. It
 tracks physical caller input separately from logical member consumption,
 copies bounded decoder lookahead into a replay queue at `archive_done`, and
 feeds that suffix into the next 14-byte format probe before requesting new
 caller bytes. Per-member format, global offset, encoded size, entry/output
-counts, and recovered-suffix size are exposed. Brotli does not yet offer the
-required progressive first-stream boundary; legacy LZ4 and Unix compress are
-physical-EOF formats. Mixed mode rejects all three explicitly.
+counts, and recovered-suffix size are exposed. Legacy LZ4 and Unix compress
+are physical-EOF formats, so mixed mode rejects both unless a future API
+supplies their external compressed lengths.
 
 `encodeCpioAlloc`, `encodeCpioAppend`, and `encodeCpioInto` write any of the
 five exposed variants (`newc`, `crc`, `odc`, `binary_little`, or
@@ -201,8 +201,8 @@ GNU-produced formats with varying zero padding under one-byte and micro
 schedules (`incremental_sequence_reader_cases=2`,
 `incremental_sequence_reader_external=1`).
 
-Mixed-member validation concatenates Vort raw/gzip/Bzip2/LZMA/XZ/LZ4/Zstd/lzip/
-LZOP output and an independently encoded available subset, again under both
+Mixed-member validation concatenates Vort raw/gzip/Bzip2/Brotli/LZMA/XZ/LZ4/
+Zstd/lzip/LZOP output and an independently encoded available subset under both
 schedules (`incremental_mixed_reader_cases=2`,
 `incremental_mixed_reader_external=1`).
 
@@ -211,7 +211,6 @@ python3 tools/cpio/diff.py --cli path/to/vort --cpio /usr/bin/cpio
 zig build run-cpio-diff -- --cpio /usr/bin/cpio
 ```
 
-Future functionality can add a progressive first-stream stop for Brotli,
-externally sized physical-EOF members, one-shot hard-link writer
-controls, HP-UX device-number variants, and afio's extended ODC header without
-changing the current entry or compression APIs.
+Future functionality can add externally sized physical-EOF members, one-shot
+hard-link writer controls, HP-UX device-number variants, and afio's extended
+ODC header without changing the current entry or compression APIs.

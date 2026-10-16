@@ -10,6 +10,7 @@ const formats = [_]auto.Format{
     .raw_cpio,
     .gzip,
     .bzip2,
+    .brotli,
     .lzma,
     .xz,
     .lz4,
@@ -35,6 +36,7 @@ fn compressionFor(format: auto.Format) ?compressed.Compression {
         .raw_cpio => null,
         .gzip => .gzip,
         .bzip2 => .bzip2,
+        .brotli => .brotli,
         .lzma => .lzma,
         .xz => .xz,
         .lz4 => .lz4,
@@ -160,7 +162,7 @@ fn exercise(
     if (input_chunk > 1) try std.testing.expect(recovered_any);
 }
 
-test "CPIO mixed reader streams raw and nine compressed member formats" {
+test "CPIO mixed reader streams raw and ten compressed member formats" {
     const allocator = std.testing.allocator;
     const fixture = try makeFixture(allocator);
     defer fixture.deinit(allocator);
@@ -172,7 +174,6 @@ test "CPIO mixed reader rejects formats without exact member boundaries" {
     const allocator = std.testing.allocator;
     const entries = [_]writer.EncodeEntry{.{ .name = "payload", .data = "abc" }};
     inline for (.{
-        compressed.Compression.brotli,
         compressed.Compression.compress_z,
     }) |compression| {
         const encoded = try compressed.encodeAlloc(allocator, &entries, .{

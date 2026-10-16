@@ -431,6 +431,11 @@ test "compressed CPIO readers expose recoverable first-stream suffixes" {
         },
     );
     try expectRecoverableSuffix(
+        compressed_reader.BrotliReader,
+        .brotli,
+        compressed_reader.codecs.Brotli.Options{ .allow_trailing_data = true },
+    );
+    try expectRecoverableSuffix(
         compressed_reader.LzmaReader,
         .lzma,
         compressed_reader.codecs.Lzma.Options{

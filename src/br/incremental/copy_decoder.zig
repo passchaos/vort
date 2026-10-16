@@ -21,6 +21,8 @@ pub fn Decoder(comptime Codec: type) type {
         header: Codec.Header = undefined,
         staged_bits: u128 = 0,
         staged_bit_count: u8 = 0,
+        trailing_bytes: [16]u8 = undefined,
+        trailing_len: u5 = 0,
         stream_bits: usize = 0,
         decoded_len: usize = 0,
         final_meta_block: bool = true,
@@ -68,6 +70,9 @@ pub fn Decoder(comptime Codec: type) type {
             compressed_header_scratch: []u8 = &.{},
             metadata_output: []u8 = &.{},
             metadata_block_lengths: []usize = &.{},
+            /// Complete one Brotli stream and retain whole-byte lookahead for
+            /// an outer member dispatcher instead of rejecting trailing data.
+            allow_trailing_data: bool = false,
         };
         pub const Phase = enum { window, compressed_header, command, literals, distance, copy, dictionary, trailer, stored, metadata, padding, done };
         const WindowState = enum { first, low3, tail, large_marker, large_bits };
@@ -91,6 +96,7 @@ pub fn Decoder(comptime Codec: type) type {
             metadata_block_count: usize,
             metadata_blocks_captured: usize,
             metadata_blocks_truncated: bool,
+            trailing_input_bytes: usize,
             last_error_name: []const u8,
             last_error_phase: Phase,
         };
@@ -135,6 +141,7 @@ pub fn Decoder(comptime Codec: type) type {
                 .metadata_block_count = self.metadata_block_count,
                 .metadata_blocks_captured = @min(self.metadata_block_count, self.metadata_block_lengths.len),
                 .metadata_blocks_truncated = self.metadata_block_count > self.metadata_block_lengths.len,
+                .trailing_input_bytes = self.trailing_len,
                 .last_error_name = self.last_error_name,
                 .last_error_phase = self.last_error_phase,
             };
@@ -157,9 +164,16 @@ pub fn Decoder(comptime Codec: type) type {
             self.finished = true;
         }
 
+        pub fn trailingInput(self: *const Self) []const u8 {
+            if (self.phase != .done or !self.options.allow_trailing_data)
+                return &.{};
+            return self.trailing_bytes[0..self.trailing_len];
+        }
+
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
             if (self.finished) {
-                if (input.len != 0) return self.fail(.done, error.TrailingData);
+                if (input.len != 0 and !self.options.allow_trailing_data)
+                    return self.fail(.done, error.TrailingData);
                 return result(0, 0, .done);
             }
             var input_read: usize = 0;
@@ -522,11 +536,26 @@ pub fn Decoder(comptime Codec: type) type {
                         self.staged_bits >>= @intCast(padding_bits);
                         self.staged_bit_count -= padding_bits;
                     }
-                    if (self.staged_bit_count != 0 or input_read != input.len) return self.fail(.padding, error.TrailingData);
+                    if (self.staged_bit_count % 8 != 0)
+                        return self.fail(.padding, error.CorruptFrame);
+                    const trailing_len: u5 = @intCast(self.staged_bit_count / 8);
+                    if ((trailing_len != 0 or input_read != input.len) and
+                        !self.options.allow_trailing_data)
+                    {
+                        return self.fail(.padding, error.TrailingData);
+                    }
+                    for (0..trailing_len) |index|
+                        self.trailing_bytes[index] = @truncate(
+                            self.staged_bits >> @intCast(index * 8),
+                        );
+                    self.trailing_len = trailing_len;
+                    self.staged_bits = 0;
+                    self.staged_bit_count = 0;
                     self.phase = .done;
                 },
                 .done => {
-                    if (input_read != input.len) return self.fail(.done, error.TrailingData);
+                    if (input_read != input.len and !self.options.allow_trailing_data)
+                        return self.fail(.done, error.TrailingData);
                     return result(input_read, output_written, .done);
                 },
             };

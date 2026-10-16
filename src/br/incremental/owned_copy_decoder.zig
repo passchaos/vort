@@ -40,6 +40,7 @@ pub fn Decoder(comptime Codec: type) type {
             compressed_header_scratch: []u8 = &.{},
             metadata_output: []u8 = &.{},
             metadata_block_lengths: []usize = &.{},
+            allow_trailing_data: bool = false,
         };
         pub const Phase = enum { input, output, done };
         pub const Snapshot = struct {
@@ -58,6 +59,7 @@ pub fn Decoder(comptime Codec: type) type {
             frame_index: usize,
             last_error_name: []const u8,
             last_error_phase: Phase,
+            trailing_input_bytes: usize,
         };
 
         pub fn init(allocator: std.mem.Allocator) Self {
@@ -132,6 +134,7 @@ pub fn Decoder(comptime Codec: type) type {
                 .frame_index = if (self.phase == .done and self.frame_count != 0) self.frame_count - 1 else self.frame_count,
                 .last_error_name = self.last_error_name,
                 .last_error_phase = self.last_error_phase,
+                .trailing_input_bytes = self.trailingInput().len,
             };
         }
 
@@ -151,7 +154,8 @@ pub fn Decoder(comptime Codec: type) type {
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
             if (self.phase == .done) {
-                if (input.len != 0) return self.fail(.done, error.TrailingData);
+                if (input.len != 0 and !self.options.allow_trailing_data)
+                    return self.fail(.done, error.TrailingData);
                 return result(0, 0, .done);
             }
             if (!self.decode_options_validated) {
@@ -251,6 +255,10 @@ pub fn Decoder(comptime Codec: type) type {
             }
         }
 
+        pub fn trailingInput(self: *const Self) []const u8 {
+            return if (self.progressive) |*decoder| decoder.trailingInput() else &.{};
+        }
+
         fn prepareProgressive(self: *Self) Error!bool {
             if (self.progressive != null) return true;
             const output_bound = self.options.expected_output_len orelse self.options.max_output_len;
@@ -269,6 +277,7 @@ pub fn Decoder(comptime Codec: type) type {
                 .compressed_header_scratch = self.options.compressed_header_scratch,
                 .metadata_output = self.options.metadata_output,
                 .metadata_block_lengths = self.options.metadata_block_lengths,
+                .allow_trailing_data = self.options.allow_trailing_data,
             });
             return true;
         }

@@ -20902,19 +20902,19 @@ reuse, so production keeps the simpler independently owned plans.
 
 - Added `CpioIncrementalMixedReader` for bounded mixed initramfs sequences.
   One state machine automatically switches among raw CPIO, gzip, Bzip2,
-  LZMA-Alone, XZ, modern LZ4, Zstandard, EOF-marked LZF, lzip and LZOP
+  Brotli, LZMA-Alone, XZ, modern LZ4, Zstandard, EOF-marked LZF, lzip and LZOP
   members. It separates physical accepted input from logical member offsets,
   copies bounded borrowed lookahead into a replay queue, and probes replay
   before accepting more caller bytes. `archive_done` reports global offset,
   exact encoded size, format,
   entry/output counts and recovered-suffix size. One-byte and 64 KiB input
-  schedules cover all ten formats in one stream; the latter requires at least
-  one real suffix recovery. Unsupported Brotli first-stream and physical-EOF
-  `.Z`/legacy-LZ4 members fail explicitly. Archive, padding,
+  schedules cover all eleven formats in one stream; the latter requires at
+  least one real suffix recovery. Physical-EOF `.Z`/legacy-LZ4 members fail
+  explicitly. Archive, padding,
   physical input, logical output, decoder input chunk and replay limits plus
-  exhaustive OOM are covered. The differential concatenates nine Vort member
-  types and the independently available raw/gzip/Bzip2/LZMA/XZ/LZ4/Zstd/
-  lzip/LZOP subset (`incremental_mixed_reader_cases=2`,
+  exhaustive OOM are covered. The differential concatenates ten Vort member
+  types and the independently available raw/gzip/Bzip2/Brotli/LZMA/XZ/LZ4/
+  Zstd/lzip/LZOP subset (`incremental_mixed_reader_cases=2`,
   `incremental_mixed_reader_external=1`).
 
 - Added modern LZ4 `stop_after_first_frame` with borrowed `trailingInput()`
@@ -20924,3 +20924,15 @@ reuse, so production keeps the simpler independently owned plans.
   a synthetic next member; both must recover the exact encoded boundary and
   validate `finish()` after terminal inspection. The shared CPIO suffix matrix
   and mixed initramfs dispatcher now include modern LZ4.
+
+- Added progressive Brotli first-stream boundaries without buffering the
+  compressed member. The byte-progressive copy decoder now separates RFC
+  padding bits from up to sixteen whole lookahead bytes in its bit reservoir,
+  preserves those bytes in wire order, and exposes borrowed `trailingInput()`
+  under strict-by-default `allow_trailing_data`. The allocator-owned facade
+  forwards the option and trailing diagnostics. Direct codec tests cover tiny
+  output backpressure and exact suffix reconstruction; Vort-planned and
+  independently encoded libbrotli CPIO members pass the shared suffix and
+  mixed-sequence gates. The CPIO suffix matrix now covers ten codecs and the
+  mixed dispatcher covers raw plus ten compressed formats. Only physical-EOF
+  `.Z` and legacy-LZ4 members still require caller-supplied compressed lengths.
