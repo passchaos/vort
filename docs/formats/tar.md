@@ -224,10 +224,12 @@ one-shot writer before Python and GNU tar interoperability checks run.
 
 ### Compressed incremental writers
 
-Eight mature streaming encoders compose directly after the raw writer:
+All twelve supported streaming encoders compose directly after the raw writer:
 `TarGzipIncrementalWriter`, `TarBzip2IncrementalWriter`,
-`TarBrotliIncrementalWriter`, `TarLzmaIncrementalWriter`,
-`TarXzIncrementalWriter`, `TarLz4IncrementalWriter`,
+`TarBrotliIncrementalWriter`, `TarCompressZIncrementalWriter`,
+`TarLzmaIncrementalWriter`, `TarXzIncrementalWriter`,
+`TarLz4IncrementalWriter`, `TarLz4LegacyIncrementalWriter`,
+`TarLzfIncrementalWriter`, `TarLzipIncrementalWriter`,
 `TarZstandardIncrementalWriter`, and `TarLzopIncrementalWriter`.
 `TarIncrementalCompressedWriter(Codec)` is the generic composition surface.
 

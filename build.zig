@@ -139,6 +139,17 @@ pub fn build(b: *std.Build) void {
         .root_module = tests_mod,
     });
     const run_tests = b.addRunArtifact(tests);
+    const tar_incremental_writer_tests = b.addTest(.{
+        .name = "vort-tar-incremental-writer-tests",
+        .root_module = tests_mod,
+        .filters = &.{"compressed TAR incremental writer"},
+    });
+    const run_tar_incremental_writer_tests = b.addRunArtifact(tar_incremental_writer_tests);
+    const tar_incremental_writer_test_step = b.step(
+        "test-tar-incremental-writer",
+        "Run focused compressed TAR incremental writer tests",
+    );
+    tar_incremental_writer_test_step.dependOn(&run_tar_incremental_writer_tests.step);
     const br_tests_mod = b.createModule(.{
         .root_source_file = b.path("src/br.zig"),
         .target = target,
@@ -1975,7 +1986,7 @@ pub fn build(b: *std.Build) void {
     tar_diff.addArg("--incremental-compressed-writer");
     tar_diff.addArtifactArg(tar_incremental_compressed_writer_probe_exe);
     if (b.args) |args| tar_diff.addArgs(args);
-    const tar_diff_step = b.step("run-tar-diff", "Validate TAR and common compressed tarballs against Python tarfile, Brotli, lzma, and optional LZF");
+    const tar_diff_step = b.step("run-tar-diff", "Validate TAR and compressed tarballs against Python and installed compression tools");
     tar_diff_step.dependOn(&tar_diff.step);
 
     const cab_diff = b.addSystemCommand(&.{ "python3", "tools/cab/diff.py", "--cli" });
