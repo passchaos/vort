@@ -320,6 +320,7 @@ pub const TarArchive = tar.Archive;
 pub const TarIterator = tar.Iterator;
 pub const TarEncodeEntry = tar.EncodeEntry;
 pub const TarSparseDataExtent = tar.SparseDataExtent;
+pub const TarSparseWriteFormat = tar.SparseWriteFormat;
 pub const TarSparseEncodeOptions = tar.SparseEncodeOptions;
 pub const TarCompression = tar.Compression;
 pub const TarCompressedEncodeOptions = tar.CompressedEncodeOptions;

@@ -11,6 +11,7 @@ pub const Error = error{
 };
 
 pub const Format = enum {
+    gnu_old,
     pax_0_0,
     pax_0_1,
     pax_1_0,
@@ -71,6 +72,8 @@ pub const Iterator = struct {
         if (self.remaining == 0) return null;
         if (self.info.format == .pax_0_0)
             return @as(?Extent, try self.nextPax00());
+        if (self.info.format == .gnu_old)
+            return @as(?Extent, try self.nextOldGnu());
         const delimiter: u8 = if (self.info.format == .pax_1_0) '\n' else ',';
         const offset = try parseDelimited(self.info.map, &self.cursor, delimiter);
         const len = if (self.info.format == .pax_0_1 and self.remaining == 1)
@@ -109,7 +112,69 @@ pub const Iterator = struct {
         }
         return error.InvalidTarHeader;
     }
+
+    fn nextOldGnu(self: *Iterator) Error!Extent {
+        const index = self.info.extent_count - self.remaining;
+        const slot = try oldGnuSlot(self.info.map, index);
+        const offset = try parseOldGnuNumber(slot[0..12]);
+        const len = try parseOldGnuNumber(slot[12..24]);
+        const extent = Extent{
+            .offset = offset,
+            .len = len,
+            .data_offset = self.data_offset,
+        };
+        self.data_offset = try checkedAdd(self.data_offset, len);
+        self.remaining -= 1;
+        return extent;
+    }
 };
+
+/// `map` starts at byte 386 of the old GNU main header and includes the
+/// remaining 126 main-header bytes followed by every 512-byte sparse extension.
+pub fn parseOldGnu(
+    map: []const u8,
+    logical_size: usize,
+    data: []const u8,
+) Error!Info {
+    if (map.len < 126 or (map.len - 126) % block_size != 0)
+        return error.InvalidTarHeader;
+    const extension_count = (map.len - 126) / block_size;
+    if ((map[96] != 0) != (extension_count != 0)) return error.InvalidTarHeader;
+    for (map[109..126]) |byte| if (byte != 0) return error.InvalidTarHeader;
+    for (0..extension_count) |block| {
+        const base = 126 + block * block_size;
+        const expected_extended = block + 1 < extension_count;
+        if ((map[base + 504] != 0) != expected_extended)
+            return error.InvalidTarHeader;
+        for (map[base + 505 .. base + block_size]) |byte|
+            if (byte != 0) return error.InvalidTarHeader;
+    }
+
+    const slot_count = 4 + extension_count * 21;
+    var count: usize = 0;
+    var absent_seen = false;
+    for (0..slot_count) |index| {
+        const slot = try oldGnuSlot(map, index);
+        const present = fieldPresent(slot[0..12]) or fieldPresent(slot[12..24]);
+        if (!present) {
+            absent_seen = true;
+            continue;
+        }
+        if (absent_seen) return error.InvalidTarHeader;
+        _ = try parseOldGnuNumber(slot[0..12]);
+        _ = try parseOldGnuNumber(slot[12..24]);
+        count = try checkedAdd(count, 1);
+    }
+    const info = Info{
+        .format = .gnu_old,
+        .logical_size = logical_size,
+        .extent_count = count,
+        .map = map,
+        .data = data,
+    };
+    try validate(info);
+    return info;
+}
 
 pub fn parsePax00(
     pax_payload: []const u8,
@@ -253,6 +318,31 @@ fn nextPaxRecord(payload: []const u8, cursor: *usize) Error!PaxRecord {
         return error.InvalidTarHeader;
     cursor.* = end;
     return .{ .key = record[0..equals], .value = record[equals + 1 ..] };
+}
+
+fn oldGnuSlot(map: []const u8, index: usize) Error!*const [24]u8 {
+    const offset = if (index < 4)
+        index * 24
+    else blk: {
+        const extension_index = index - 4;
+        break :blk 126 + extension_index / 21 * block_size +
+            extension_index % 21 * 24;
+    };
+    if (offset > map.len or map.len - offset < 24) return error.InvalidTarHeader;
+    return map[offset..][0..24];
+}
+
+fn fieldPresent(field: []const u8) bool {
+    for (field) |byte| if (byte != 0) return true;
+    return false;
+}
+
+fn parseOldGnuNumber(field: []const u8) Error!usize {
+    const trimmed = std.mem.trim(u8, field, " \x00");
+    if (trimmed.len == 0) return 0;
+    for (trimmed) |byte|
+        if (byte < '0' or byte > '7') return error.InvalidTarHeader;
+    return std.fmt.parseInt(usize, trimmed, 8) catch error.InvalidTarHeader;
 }
 
 fn roundUpBlock(value: usize) Error!usize {

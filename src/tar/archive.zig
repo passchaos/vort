@@ -228,11 +228,26 @@ pub const Iterator = struct {
             try validateChecksum(header);
 
             const header_size = try parseNumber(header[124..136]);
-            const data_start = header_end;
+            const type_flag = header[156];
+            var data_start = header_end;
+            if (type_flag == 'S') {
+                if (hasSparse(self.pending)) return error.InvalidTarHeader;
+                var extended = header[482];
+                if (extended > 1) return error.InvalidTarHeader;
+                while (extended != 0) {
+                    const extension_end = try checkedEnd(
+                        data_start,
+                        block_size,
+                        self.archive.bytes.len,
+                    );
+                    extended = self.archive.bytes[data_start + 504];
+                    if (extended > 1) return error.InvalidTarHeader;
+                    data_start = extension_end;
+                }
+            }
             const header_data_size = try u64ToUsize(header_size);
             const header_data_end = try checkedEnd(data_start, header_data_size, self.archive.bytes.len);
             const next_offset = try paddedEnd(header_data_end, self.archive.bytes.len);
-            const type_flag = header[156];
             switch (type_flag) {
                 'x' => {
                     try parsePax(self.archive.bytes[data_start..header_data_end], &self.pending);
@@ -255,12 +270,18 @@ pub const Iterator = struct {
                     self.offset = next_offset;
                     continue;
                 },
-                'S' => return error.UnsupportedTarEntryType,
                 else => {},
             }
 
             const stored_payload = self.archive.bytes[data_start..header_data_end];
-            const sparse_info = try parseSparseInfo(self.pending, stored_payload);
+            const sparse_info = if (type_flag == 'S') old: {
+                const logical_size = try u64ToUsize(try parseNumber(header[483..495]));
+                break :old try sparse.parseOldGnu(
+                    self.archive.bytes[self.offset + 386 .. data_start],
+                    logical_size,
+                    stored_payload,
+                );
+            } else try parseSparseInfo(self.pending, stored_payload);
             const actual_size_u64 = if (sparse_info) |info|
                 info.logical_size
             else
@@ -344,7 +365,7 @@ fn pathFromHeader(header: []const u8) Path {
 
 fn kindFromType(type_flag: u8) Kind {
     return switch (type_flag) {
-        0, '0', '7' => .file,
+        0, '0', '7', 'S' => .file,
         '1' => .hard_link,
         '2' => .symbolic_link,
         '5' => .directory,

@@ -27,6 +27,15 @@ pub fn main(init: std.process.Init) !void {
                 .extents = &sparse_extents,
             },
         },
+        .{
+            .name = "images/sparse-oldgnu.bin",
+            .mode = 0o640,
+            .sparse = .{
+                .logical_size = 1024 * 1024,
+                .extents = &sparse_extents,
+                .format = .gnu_old,
+            },
+        },
     };
     const bytes = try vort.encodeTarAlloc(init.gpa, &entries);
     defer init.gpa.free(bytes);

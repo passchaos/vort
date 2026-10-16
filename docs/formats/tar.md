@@ -3,8 +3,9 @@
 Vort provides an in-memory, library-first TAR reader and deterministic writer.
 The reader validates every 512-byte header checksum and supports regular files,
 directories, symbolic links, hard links, USTAR prefixes, POSIX PAX `path`,
-`linkpath`, and `size` records, GNU long-name/long-link records, and GNU PAX
-sparse formats 0.0, 0.1, and 1.0.
+`linkpath`, and `size` records, GNU long-name/long-link records, old GNU
+`typeflag='S'` sparse maps with chained extension headers, and GNU PAX sparse
+formats 0.0, 0.1, and 1.0.
 
 Entries borrow their metadata and payload slices from the archive bytes. A path
 is represented by `TarPath`, which avoids allocating for USTAR prefix/name
@@ -13,7 +14,8 @@ The safety helper rejects absolute paths, `.`/`..` components, Windows drive
 prefixes, and backslashes. Vort never writes archive entry paths to the
 filesystem automatically.
 
-Sparse entries expose `TarSparseInfo`: format, logical size, wire extent count,
+Sparse entries expose `TarSparseInfo`: format (`gnu_old`, `pax_0_0`,
+`pax_0_1`, or `pax_1_0`), logical size, wire extent count,
 the borrowed raw map, and the concatenated stored extent bytes. Its iterator
 returns logical offset/length plus the corresponding physical-data offset.
 Normal extraction allocates or accepts the logical size, zero-fills holes, and
@@ -54,15 +56,18 @@ const entries = [_]vort.TarEncodeEntry{.{
     .sparse = .{
         .logical_size = 1024 * 1024,
         .extents = &extents,
+        // Optional: .format = .gnu_old,
     },
 }};
 ```
 
-The writer emits deterministic GNU PAX sparse 1.0. It normalizes stored ranges
-to TAR's 512-byte blocks, merges touching normalized ranges, inserts zeroes only
-inside those physical blocks, and appends the required zero-length terminal
-extent. This preserves logical bytes while remaining compatible with GNU tar;
-the archive still stores only the selected physical ranges.
+The writer defaults to deterministic GNU PAX sparse 1.0; `.format = .gnu_old`
+emits the legacy GNU header and as many chained 21-entry extension blocks as
+required. Both normalize stored ranges to TAR's 512-byte blocks, merge touching
+normalized ranges, insert zeroes only inside those physical blocks, and append
+the required zero-length terminal extent. This preserves logical bytes while
+remaining compatible with GNU tar; the archive still stores only the selected
+physical ranges. Old-GNU names are limited to its 100-byte header field.
 
 `TarCompression` supports raw TAR, gzip, Bzip2, Brotli, Unix compress,
 LZMA-Alone, XZ, LZ4 frame, lzip, LZF, Zstandard, and LZOP. This includes `.tar.br`,
@@ -105,8 +110,10 @@ zig build run-tar-diff
 ```
 
 `run-tar-diff` requires GNU tar 1.34-compatible sparse handling: GNU tar writes
-0.0/0.1/1.0 fixtures that Vort reconstructs, while Python `tarfile` and GNU tar
-both extract Vort's deterministic 1.0 writer output. Sparse entries also round
-trip through all twelve compressed-tar wrappers. Device/FIFO materialization is
+old-GNU (including a multi-extension fixture) plus PAX 0.0/0.1/1.0 archives
+that Vort reconstructs, while Python `tarfile` and GNU tar both extract Vort's
+deterministic PAX-1.0 and old-GNU writer output
+(`gnu_sparse_reader_cases=5`, `sparse_writer_readers=4`). Sparse entries also
+round trip through all twelve compressed-tar wrappers. Device/FIFO materialization is
 not implemented. Symbolic and hard links are exposed as metadata but are not
 followed or materialized by the in-memory extraction helpers.

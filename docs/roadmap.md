@@ -20646,3 +20646,15 @@ reuse, so production keeps the simpler independently owned plans.
   independently supplies three reader fixtures and, together with Python
   `tarfile`, extracts Vort writer output; malformed maps, overlaps, out-of-range
   extents, logical limits and OOM have focused coverage.
+
+- Closed the legacy sparse gap with old GNU `typeflag='S'` reading and optional
+  deterministic writing. The reader consumes four main-header map slots plus
+  chained 21-slot extension blocks, validates every extension flag/pad byte,
+  parses the legacy octal real size, and keeps the borrowed extent iterator and
+  logical extraction contract shared with PAX sparse. The writer exposes
+  `.format = .gnu_old`, emits extension chains and a terminal zero extent, and
+  reuses the same 512-byte normalization/merge data plane. Focused tests cover
+  multiple extension blocks, corrupt extension padding, overlap and long-name
+  rejection. GNU tar independently supplies both single-header and chained
+  reader fixtures; Python `tarfile` and GNU tar extract both Vort PAX-1.0 and
+  old-GNU outputs (`gnu_sparse_reader_cases=5`, `sparse_writer_readers=4`).

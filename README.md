@@ -398,7 +398,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   IV material, CRC validation, UTF-16LE names, directories, empty files, and
   bounded extraction;
 - deterministic TAR reading/writing with USTAR, PAX and GNU long-name support,
-  GNU PAX sparse 0.0/0.1/1.0 reading and deterministic sparse-1.0 writing,
+  old GNU plus PAX sparse 0.0/0.1/1.0 reading, deterministic PAX-1.0 and
+  old-GNU writing with chained sparse extension headers,
   strict extent validation, logical hole reconstruction, safe-path
   classification, borrowed entry views, and automatic raw/gzip/
   Bzip2/Brotli/Unix-compress/LZMA-Alone/XZ/LZ4/lzip/LZF/Zstandard/LZOP tarball composition;

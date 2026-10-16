@@ -190,6 +190,77 @@ def validate_gnu_sparse_with_vort(cli: Path, tar_tool: str, temp: Path) -> int:
         if output.read_bytes() != expected:
             raise AssertionError(f"Vort could not extract GNU sparse {version}")
         cases += 1
+
+    oldgnu_archive = temp / "gnu-sparse-oldgnu.tar"
+    oldgnu_output = temp / "gnu-sparse-oldgnu.out"
+    subprocess.run(
+        [
+            tar_tool,
+            "--format=gnu",
+            "--sparse",
+            "-C",
+            str(temp),
+            "-cf",
+            str(oldgnu_archive),
+            source.name,
+        ],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    listing = run(cli, "list-tar-file", str(oldgnu_archive)).stdout
+    if "sparse=gnu_old" not in listing or "size=1048576" not in listing:
+        raise AssertionError(f"Vort old GNU sparse metadata mismatch: {listing}")
+    run(
+        cli,
+        "extract-tar-file",
+        str(oldgnu_archive),
+        source.name,
+        str(oldgnu_output),
+        str(2 * 1024 * 1024),
+    )
+    if oldgnu_output.read_bytes() != expected:
+        raise AssertionError("Vort could not extract old GNU sparse archive")
+    cases += 1
+
+    many_source = temp / "gnu-many-sparse.bin"
+    many_expected = bytearray(2 * 1024 * 1024)
+    with many_source.open("wb") as stream:
+        stream.truncate(len(many_expected))
+        for index in range(25):
+            offset = index * 65536
+            value = bytes([65 + index % 26])
+            stream.seek(offset)
+            stream.write(value)
+            many_expected[offset] = value[0]
+    many_archive = temp / "gnu-many-sparse-oldgnu.tar"
+    many_output = temp / "gnu-many-sparse-oldgnu.out"
+    subprocess.run(
+        [
+            tar_tool,
+            "--format=gnu",
+            "--sparse",
+            "-C",
+            str(temp),
+            "-cf",
+            str(many_archive),
+            many_source.name,
+        ],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    run(
+        cli,
+        "extract-tar-file",
+        str(many_archive),
+        many_source.name,
+        str(many_output),
+        str(3 * 1024 * 1024),
+    )
+    if many_output.read_bytes() != bytes(many_expected):
+        raise AssertionError("Vort could not extract chained old GNU sparse headers")
+    cases += 1
     return cases
 
 
@@ -238,23 +309,29 @@ def main() -> None:
             raise AssertionError("Vort TAR output is not deterministic")
         with tarfile.open(first, mode="r:") as archive:
             names = archive.getnames()
-            if len(names) != 6:
+            if len(names) != 7:
                 raise AssertionError(f"unexpected Vort TAR entries: {names!r}")
             if archive.extractfile("plain.txt").read() != b"Vort TAR payload\n":
                 raise AssertionError("Python could not extract Vort TAR payload")
             if archive.getmember("link").linkname != "nested/" + "long-component-" * 12 + "file.txt":
                 raise AssertionError("Vort TAR long link mismatch")
-            sparse = archive.getmember("images/sparse.bin")
-            if sparse.sparse is None or archive.extractfile(sparse).read() != sparse_payload():
-                raise AssertionError("Python could not extract Vort sparse TAR payload")
-        gnu_sparse = subprocess.run(
-            [tar_tool, "-xOf", str(first), "images/sparse.bin"],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        ).stdout
-        if gnu_sparse != sparse_payload():
-            raise AssertionError("GNU tar could not extract Vort sparse TAR payload")
+            for sparse_name in ("images/sparse.bin", "images/sparse-oldgnu.bin"):
+                sparse = archive.getmember(sparse_name)
+                if sparse.sparse is None or archive.extractfile(sparse).read() != sparse_payload():
+                    raise AssertionError(
+                        f"Python could not extract Vort sparse TAR payload {sparse_name!r}"
+                    )
+        for sparse_name in ("images/sparse.bin", "images/sparse-oldgnu.bin"):
+            gnu_sparse = subprocess.run(
+                [tar_tool, "-xOf", str(first), sparse_name],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            ).stdout
+            if gnu_sparse != sparse_payload():
+                raise AssertionError(
+                    f"GNU tar could not extract Vort sparse TAR payload {sparse_name!r}"
+                )
 
         payload = (b"tarball compression matrix\n" * 2048) + bytes(range(256))
         source = temp / "payload.bin"
@@ -389,8 +466,8 @@ def main() -> None:
     print(
         f"tar_diff=ok raw_formats=2 compressions={len(compressions)} "
         f"brotli_directions=2 lzf_directions={2 if lzf_tool is not None else 0} "
-        f"entries=6 gnu_sparse_reader_cases={gnu_sparse_reader_cases} "
-        "sparse_writer_readers=2"
+        f"entries=7 gnu_sparse_reader_cases={gnu_sparse_reader_cases} "
+        "sparse_writer_readers=4"
     )
 
 

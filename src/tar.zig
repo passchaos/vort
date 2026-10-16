@@ -18,6 +18,7 @@ pub const extractByNameAlloc = archive.extractByNameAlloc;
 pub const extractByNameAllocLimited = archive.extractByNameAllocLimited;
 pub const EncodeEntry = writer.EncodeEntry;
 pub const SparseDataExtent = writer.SparseDataExtent;
+pub const SparseWriteFormat = writer.SparseWriteFormat;
 pub const SparseEncodeOptions = writer.SparseOptions;
 pub const encodeAlloc = writer.encodeAlloc;
 pub const encodeAppend = writer.encodeAppend;
