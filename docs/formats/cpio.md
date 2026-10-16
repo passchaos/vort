@@ -99,6 +99,23 @@ returns the owned decompressed bytes, and parses them with the ordinary CPIO
 reader. This keeps container semantics in the CPIO modules and compression in
 the existing public codec implementations.
 
+Bounded streaming composition is also available in both directions for gzip,
+Bzip2, Brotli, Unix `compress`, LZMA-Alone, XZ, modern and legacy LZ4, lzip,
+LZF `ZV`, Zstandard, and LZOP. The named
+`Cpio*IncrementalReader` types connect each incremental decoder to the raw CPIO
+reader through one caller-sized decoded bridge. They retain the raw entry
+events and metadata, require compressed EOF through `finish()`, and enforce
+separate decoded-stream and CPIO limits. `Cpio*IncrementalWriter` types connect
+the raw writer to the corresponding encoder through a caller-sized raw bridge,
+delay `entry_done` until the encoder has consumed the whole CPIO member, and
+bound total compressed output.
+
+All codec lifecycle adapters live in the shared `archive_stream` layer used by
+both TAR and CPIO; container state and wire policy remain in their respective
+modules. The CPIO raw-format option therefore composes independently with all
+twelve outer codecs. CRC entries still declare their byte sum before
+`beginEntry`, exactly as on the raw incremental writer.
+
 ## CLI
 
 ```sh
@@ -122,12 +139,19 @@ create on the host. It also checks directory and symlink metadata, exercises
 all twelve wrapper choices, and rejects corrupt CRC data, truncated headers,
 and nonzero bytes after the trailer:
 
+The same gate runs one-byte and micro-buffer incremental compressed readers and
+writers for all twelve outer codecs, including legacy LZ4. Independent Python/
+system encoders currently provide eight reader directions, while independent
+decoders validate nine writer directions on the development host; unavailable
+`compress`, lzip, LZF, or LZOP tools are reported through the counters rather
+than silently claimed.
+
 ```sh
 python3 tools/cpio/diff.py --cli path/to/vort --cpio /usr/bin/cpio
 zig build run-cpio-diff -- --cpio /usr/bin/cpio
 ```
 
-Future functionality can add incremental compressed-stream composition,
-one-shot hard-link writer controls, concatenated CPIO members, HP-UX
-device-number variants, and afio's extended ODC header without changing the
-current entry or compression APIs.
+Future functionality can add bounded compressed auto-detection, one-shot
+hard-link writer controls, concatenated CPIO members, HP-UX device-number
+variants, and afio's extended ODC header without changing the current entry or
+compression APIs.

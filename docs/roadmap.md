@@ -20815,3 +20815,23 @@ reuse, so production keeps the simpler independently owned plans.
   under both schedules (`incremental_reader_cases=18`). Raw CPIO now has
   bounded incremental read/write parity; composition with the twelve
   incremental compression wrappers remains the next CPIO streaming gap.
+
+- Composed the bounded CPIO reader and writer with all twelve existing
+  incremental outer codecs: gzip, Bzip2, Brotli, Unix compress, LZMA-Alone,
+  XZ, modern/legacy LZ4, LZF, lzip, Zstandard and LZOP. One caller-sized bridge
+  separates container and codec backpressure; readers preserve exact CPIO
+  entry events through decompression and require validated compressed EOF,
+  while writers delay entry completion until all raw bytes have reached the
+  encoder and separately cap compressed output. Five raw header families,
+  one-byte/micro schedules, corruption, truncation, zero-output pressure,
+  decoded/compressed limits and exhaustive OOM paths have direct coverage.
+  Codec lifecycle adapters moved out of the TAR tree into a shared
+  `archive_stream` layer so both archive families use one implementation.
+  The required differential reports twelve reader and twelve writer codec
+  cases; independent encoders cover eight reader directions and independent
+  decoders cover nine writer directions on the current host
+  (`incremental_compressed_reader_cases=12`,
+  `incremental_compressed_reader_external=8`,
+  `incremental_compressed_writer_cases=12`,
+  `incremental_compressed_writer_external=9`). Bounded compressed CPIO
+  auto-detection remains the next CPIO streaming gap.

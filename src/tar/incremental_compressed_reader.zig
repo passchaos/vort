@@ -2,7 +2,7 @@
 
 const std = @import("std");
 const tar_reader = @import("incremental_reader.zig");
-pub const codecs = @import("incremental_compressed_reader/codecs.zig");
+pub const codecs = @import("../archive_stream/incremental_decoder_codecs.zig");
 
 pub fn Reader(comptime Codec: type) type {
     return struct {

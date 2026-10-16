@@ -1,19 +1,19 @@
-//! Adapters that normalize existing incremental compressor lifecycles.
+//! Shared adapters that normalize incremental compressor lifecycles.
 
 const std = @import("std");
-const core = @import("../../core.zig");
-const br = @import("../../br.zig");
-const bzip2 = @import("../../bzip2.zig");
-const compress_z = @import("../../compress_z.zig");
-const deflate = @import("../../deflate.zig");
-const lz4 = @import("../../lz4.zig");
-const lz4_legacy = @import("../../lz4_legacy.zig");
-const lzma = @import("../../lzma.zig");
-const lzf = @import("../../lzf.zig");
-const lzip = @import("../../lzip.zig");
-const lzop = @import("../../lzop.zig");
-const xz = @import("../../xz.zig");
-const zstd = @import("../../zstd.zig");
+const core = @import("../core.zig");
+const br = @import("../br.zig");
+const bzip2 = @import("../bzip2.zig");
+const compress_z = @import("../compress_z.zig");
+const deflate = @import("../deflate.zig");
+const lz4 = @import("../lz4.zig");
+const lz4_legacy = @import("../lz4_legacy.zig");
+const lzma = @import("../lzma.zig");
+const lzf = @import("../lzf.zig");
+const lzip = @import("../lzip.zig");
+const lzop = @import("../lzop.zig");
+const xz = @import("../xz.zig");
+const zstd = @import("../zstd.zig");
 
 pub const Gzip = struct {
     pub const State = deflate.GzipIncrementalBestEncoder;

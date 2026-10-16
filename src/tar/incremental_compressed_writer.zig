@@ -2,7 +2,7 @@
 
 const std = @import("std");
 const tar_writer = @import("incremental_writer.zig");
-pub const codecs = @import("incremental_compressed_writer/codecs.zig");
+pub const codecs = @import("../archive_stream/incremental_encoder_codecs.zig");
 
 pub fn Writer(comptime Codec: type) type {
     return struct {

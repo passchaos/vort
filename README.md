@@ -418,8 +418,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   bounded extraction, bounded caller-output incremental reading and writing
   for all five formats, streamed CRC/alignment/trailer verification, exact
   entry events and progress, safe-path classification, GNU cpio bidirectional
-  interoperability, and automatic composition with the same twelve raw/gzip/
-  Bzip2/Brotli/compress/LZMA/XZ/LZ4/lzip/LZF/Zstd/LZOP modes;
+  interoperability, bounded incremental composition with twelve gzip/Bzip2/
+  Brotli/compress/LZMA/XZ/modern+legacy-LZ4/lzip/LZF/Zstd/LZOP wrappers, and
+  automatic one-shot composition with the corresponding raw/wrapped modes;
 - dependency-free RAR4/RAR5 container parsing plus deterministic stored-file
   and directory writing, non-solid RAR15 and RAR20/26 decompression including
   adaptive/ST-mode, dynamic Huffman, multiblock, table reuse, long-history and
