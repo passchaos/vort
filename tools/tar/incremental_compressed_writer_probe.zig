@@ -45,6 +45,8 @@ pub fn main(init: std.process.Init) !void {
         try encode(vort.TarLz4LegacyIncrementalWriter, init.gpa, payload, pattern)
     else if (std.mem.eql(u8, compression, "lzf"))
         try encode(vort.TarLzfIncrementalWriter, init.gpa, payload, pattern)
+    else if (std.mem.eql(u8, compression, "lzip"))
+        try encode(vort.TarLzipIncrementalWriter, init.gpa, payload, pattern)
     else if (std.mem.eql(u8, compression, "zstd"))
         try encode(vort.TarZstandardIncrementalWriter, init.gpa, payload, pattern)
     else if (std.mem.eql(u8, compression, "lzop"))

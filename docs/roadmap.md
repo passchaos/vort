@@ -20757,3 +20757,14 @@ reuse, so production keeps the simpler independently owned plans.
   (`incremental_compressed_writer_cases=10`,
   `incremental_compressed_writer_external=8`). Lzip and Unix compress remain
   the last incremental encoder/TAR-writer gaps.
+
+- Added `LzipIncrementalEncoder` by filtering the 13-byte LZMA-Alone header
+  from the established symbol-progressive core, emitting the canonical lzip
+  header, and appending CRC/data/member-size trailer fields after EOS. This
+  preserves one-shot dictionary rounding and payload wire while adding
+  single/concatenated-member backpressure, limits and OOM-safe state. The
+  `TarLzipIncrementalWriter` adapter raises the required writer matrix to eleven
+  schedule-independent formats (`incremental_compressed_writer_cases=11`);
+  external validation remains eight on the current host because system lzip,
+  lzf and lzop are unavailable. Unix compress is the final incremental
+  encoder/TAR-writer gap.

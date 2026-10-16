@@ -153,6 +153,7 @@ def decode_streaming_tarball(
     zstd_tool: str | None,
     lz4_tool: str | None,
     lzf_tool: str | None,
+    lzip_tool: str | None,
     lzop_tool: str | None,
 ) -> bytes | None:
     encoded = archive_path.read_bytes()
@@ -190,6 +191,14 @@ def decode_streaming_tarball(
         return subprocess.run(
             [lzf_tool, "-d"],
             input=encoded,
+            check=True,
+            stdout=subprocess.PIPE,
+        ).stdout
+    if compression == "lzip":
+        if lzip_tool is None:
+            return None
+        return subprocess.run(
+            [lzip_tool, "-dc", str(archive_path)],
             check=True,
             stdout=subprocess.PIPE,
         ).stdout
@@ -513,6 +522,7 @@ def main() -> None:
             "lzop",
             "lzf",
             "lz4-legacy",
+            "lzip",
         }
         auto_formats = {
             "none": "raw_tar",
@@ -674,6 +684,7 @@ def main() -> None:
                 zstd_tool,
                 lz4_tool,
                 lzf_tool,
+                lzip_tool,
                 lzop_tool,
             )
             if raw_stream is not None:

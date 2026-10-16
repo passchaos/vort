@@ -48,6 +48,7 @@ pub const XzIncrementalWriter = incremental_compressed_writer.XzWriter;
 pub const Lz4IncrementalWriter = incremental_compressed_writer.Lz4Writer;
 pub const Lz4LegacyIncrementalWriter = incremental_compressed_writer.Lz4LegacyWriter;
 pub const LzfIncrementalWriter = incremental_compressed_writer.LzfWriter;
+pub const LzipIncrementalWriter = incremental_compressed_writer.LzipWriter;
 pub const ZstandardIncrementalWriter = incremental_compressed_writer.ZstandardWriter;
 pub const LzopIncrementalWriter = incremental_compressed_writer.LzopWriter;
 pub const GzipIncrementalReader = incremental_compressed_reader.GzipReader;

@@ -155,6 +155,40 @@ test "compressed TAR incremental writers compose LZF and legacy LZ4" {
     }
 }
 
+test "compressed TAR incremental writer composes lzip" {
+    const allocator = std.testing.allocator;
+    const data = "lzip incremental TAR writer payload\n" ** 64;
+    const entries = [_]TestEntry{.{
+        .options = .{ .name = "payload.bin", .size = data.len },
+        .data = data,
+    }};
+    const one = try encode(
+        compressed_writer.LzipWriter,
+        allocator,
+        &entries,
+        1,
+        1,
+        1,
+    );
+    defer allocator.free(one);
+    const micro = try encode(
+        compressed_writer.LzipWriter,
+        allocator,
+        &entries,
+        17,
+        31,
+        29,
+    );
+    defer allocator.free(micro);
+    try std.testing.expectEqualSlices(u8, one, micro);
+    const raw = try @import("../lzip.zig").decodeAlloc(allocator, one);
+    defer allocator.free(raw);
+    const parsed = try tar.parse(raw);
+    const decoded = try parsed.extractByNameAlloc(allocator, "payload.bin");
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, data, decoded);
+}
+
 test "compressed TAR incremental writer enforces backpressure limits and poison" {
     const allocator = std.testing.allocator;
     try std.testing.expectError(

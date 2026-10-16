@@ -49,6 +49,16 @@ arbitrary input/output splits and explicit EOF through `finish()`.
 `TarLzipIncrementalReader` connects this decoder to the bounded TAR reader, so
 `.tar.lz` archives no longer require a fully materialized decompressed TAR.
 
+`LzipIncrementalEncoder` performs the inverse composition without duplicating
+the LZMA algorithm. It filters the 13-byte LZMA-Alone header from the existing
+symbol-progressive encoder, emits the six-byte lzip header, and appends CRC-32,
+data-size and member-size trailer fields after the mandatory EOS marker.
+Different requested dictionary sizes use the same canonical rounding and
+65,535-byte current match-search ceiling as the one-shot writer. Single and
+concatenated members, arbitrary caller splits, output backpressure, limits and
+allocation failures are supported. `TarLzipIncrementalWriter` composes this
+state directly after the raw TAR writer.
+
 CLI validation surfaces:
 
 ```sh
