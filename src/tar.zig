@@ -40,6 +40,7 @@ pub const XzIncrementalReader = incremental_compressed_reader.XzReader;
 pub const Lz4IncrementalReader = incremental_compressed_reader.Lz4Reader;
 pub const Lz4LegacyIncrementalReader = incremental_compressed_reader.Lz4LegacyReader;
 pub const LzfIncrementalReader = incremental_compressed_reader.LzfReader;
+pub const LzipIncrementalReader = incremental_compressed_reader.LzipReader;
 pub const ZstandardIncrementalReader = incremental_compressed_reader.ZstandardReader;
 pub const LzopIncrementalReader = incremental_compressed_reader.LzopReader;
 pub const IncrementalWriter = incremental_writer.Writer;

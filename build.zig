@@ -1704,8 +1704,19 @@ pub fn build(b: *std.Build) void {
     const compress_z_diff_step = b.step("run-compress-z-diff", "Validate Unix compress (.Z) encode/decode interoperability");
     compress_z_diff_step.dependOn(&compress_z_diff.step);
 
+    const lzip_incremental_probe_exe = b.addExecutable(.{
+        .name = "vort-lzip-incremental-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/lzip/incremental_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
     const lzip_diff = b.addSystemCommand(&.{ "python3", "tools/lzip/diff.py", "--cli" });
     lzip_diff.addArtifactArg(cli_exe);
+    lzip_diff.addArg("--incremental");
+    lzip_diff.addArtifactArg(lzip_incremental_probe_exe);
     const lzip_diff_step = b.step("run-lzip-diff", "Validate lzip encoding and decoding against Python lzma and the optional lzip CLI");
     lzip_diff_step.dependOn(&lzip_diff.step);
 
@@ -5520,6 +5531,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zip_incremental_writer_probe_exe.step);
     check_step.dependOn(&tar_incremental_reader_probe_exe.step);
     check_step.dependOn(&tar_incremental_compressed_reader_probe_exe.step);
+    check_step.dependOn(&lzip_incremental_probe_exe.step);
     check_step.dependOn(&br_rle_probe_exe.step);
     check_step.dependOn(&br_planned_corpus_exe.step);
     check_step.dependOn(&br_planned_probe_exe.step);

@@ -151,12 +151,13 @@ and micro schedules (`incremental_reader_cases=14`).
 
 ### Compressed incremental readers
 
-Ten outer formats compose directly with the same raw reader without retaining
+Eleven outer formats compose directly with the same raw reader without retaining
 the decompressed TAR: `TarGzipIncrementalReader`,
 `TarBzip2IncrementalReader`, `TarBrotliIncrementalReader`,
 `TarLzmaIncrementalReader`, `TarXzIncrementalReader`,
 `TarLz4IncrementalReader`, `TarLz4LegacyIncrementalReader`,
-`TarLzfIncrementalReader`, `TarZstandardIncrementalReader`, and
+`TarLzfIncrementalReader`, `TarLzipIncrementalReader`,
+`TarZstandardIncrementalReader`, and
 `TarLzopIncrementalReader`. The first LZ4 type targets modern frames; the
 legacy type handles the original EOF-terminated stream.
 `TarIncrementalCompressedReader(Codec)` is the generic composition surface
@@ -170,17 +171,17 @@ blocks must be zero. `max_decoded_size` bounds all decoded TAR/padding bytes,
 while `Options.decoder` exposes that wrapper's block, dictionary, history and
 compressed-buffer limits. Gzip accepts concatenated members by default.
 
-One-byte and micro-schedule tests cover all ten Vort writers, and the required
+One-byte and micro-schedule tests cover all eleven Vort writers, and the required
 external differential adds independently produced gzip, Bzip2, Brotli,
 LZMA-Alone, XZ, modern LZ4, legacy LZ4 and Zstandard inputs. The current
-required report is `incremental_compressed_reader_cases=18`; installed external
+required report is `incremental_compressed_reader_cases=19`; installed external
 `lzf` and `lzop` tools add one direction each. Zero-output backpressure,
 decoded limits, nonzero TAR trailers, truncation and full-decode allocation
 failures have focused coverage.
 
-Unix compress and lzip remain one-shot tarball readers because their underlying
-codecs do not yet expose full incremental decoders. They are the remaining
-composition gap; the API does not claim they stream by buffering an entire
+Unix compress remains a one-shot tarball reader because its underlying codec
+does not yet expose a bit-progressive LZW decoder. It is the remaining
+composition gap; the API does not claim it streams by buffering an entire
 decoded TAR internally.
 
 ## Incremental writer

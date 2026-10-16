@@ -3,6 +3,7 @@ const compressed_reader = @import("incremental_compressed_reader.zig");
 const compressed = @import("compressed.zig");
 const deflate = @import("../deflate.zig");
 const lz4_legacy = @import("../lz4_legacy.zig");
+const lzip = @import("../lzip.zig");
 const tar = @import("../tar.zig");
 
 const regular_payload = "compressed TAR streaming payload\n" ** 37;
@@ -168,6 +169,11 @@ test "compressed TAR incremental readers compose LZF and legacy LZ4" {
     }
 }
 
+test "compressed TAR incremental reader composes lzip" {
+    try exercise(compressed_reader.LzipReader, .lzip, 1, 1);
+    try exercise(compressed_reader.LzipReader, .lzip, 13, 17);
+}
+
 test "compressed TAR incremental reader validates decoded limit and TAR trailer" {
     const allocator = std.testing.allocator;
     const entries = [_]tar.EncodeEntry{.{ .name = "payload", .data = "bounded" }};
@@ -331,6 +337,45 @@ test "gzip TAR incremental reader accepts concatenated members" {
         if (stepped.status == .entry_done) {
             try std.testing.expectEqualSlices(u8, regular_payload, actual.items);
         }
+        if (stepped.status == .done) break;
+        if (!finish_sent and input_offset == encoded.len) {
+            try reader.finish();
+            finish_sent = true;
+        }
+    }
+    try std.testing.expectEqual(encoded.len, input_offset);
+}
+
+test "lzip TAR incremental reader accepts concatenated members" {
+    const allocator = std.testing.allocator;
+    const entries = [_]tar.EncodeEntry{.{ .name = "payload", .data = regular_payload }};
+    const raw = try tar.encodeAlloc(allocator, &entries);
+    defer allocator.free(raw);
+    const split = raw.len / 3;
+    const encoded = try lzip.encodeMembersAlloc(allocator, &.{
+        .{ .data = raw[0..split], .options = .{ .dictionary_size = 4096 } },
+        .{ .data = raw[split..], .options = .{ .dictionary_size = 64 * 1024 } },
+    });
+    defer allocator.free(encoded);
+
+    var reader = try compressed_reader.LzipReader.initWithOptions(allocator, .{
+        .decoded_bridge_size = 19,
+        .max_decoded_size = raw.len,
+    });
+    defer reader.deinit();
+    var actual: std.ArrayList(u8) = .empty;
+    defer actual.deinit(allocator);
+    var output: [23]u8 = undefined;
+    var input_offset: usize = 0;
+    var finish_sent = false;
+    while (true) {
+        const input_end = @min(encoded.len, input_offset + 7);
+        const stepped = try reader.step(encoded[input_offset..input_end], &output);
+        input_offset += stepped.input_read;
+        try actual.appendSlice(allocator, output[0..stepped.output_written]);
+        if (stepped.status == .entry_header) actual.clearRetainingCapacity();
+        if (stepped.status == .entry_done)
+            try std.testing.expectEqualSlices(u8, regular_payload, actual.items);
         if (stepped.status == .done) break;
         if (!finish_sent and input_offset == encoded.len) {
             try reader.finish();

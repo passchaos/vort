@@ -37,6 +37,18 @@ multi-member encode helpers. Dictionary and output limits are checked before a
 member's LZMA decoder is initialized. Writer dictionary requests are rounded up
 to the smallest standard lzip dictionary representation.
 
+`LzipIncrementalDecoder` synthesizes the fixed LZMA properties around each
+member and reuses the symbol-progressive LZMA core. Decoded bytes flow directly
+through caller output while a 20-byte lookahead captures the trailer after the
+mandatory EOS marker. CRC-32, uncompressed size, complete member size and
+trailer consistency are verified before advancing to the next member. The
+state supports concatenated members, independent total/member output,
+dictionary, compressed-staging and member-count limits, exact-output pledges,
+arbitrary input/output splits and explicit EOF through `finish()`.
+
+`TarLzipIncrementalReader` connects this decoder to the bounded TAR reader, so
+`.tar.lz` archives no longer require a fully materialized decompressed TAR.
+
 CLI validation surfaces:
 
 ```sh
@@ -52,3 +64,6 @@ end marker and records CRC-32, uncompressed size, and complete member size in
 the trailer. The current shared token representation limits match search to
 65,535 bytes even when a larger compatible dictionary is declared; this only
 affects compression ratio, not wire compatibility or decoder memory limits.
+The required differential exercises six Python-generated members, six Vort
+members and both concatenated forms through one-byte and micro schedules
+(`incremental_cases=14`), in addition to optional system-lzip interoperability.

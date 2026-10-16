@@ -20702,5 +20702,11 @@ reuse, so production keeps the simpler independently owned plans.
   and compose as `TarLzfIncrementalReader` and
   `TarLz4LegacyIncrementalReader`. Their one-byte/micro schedules plus system
   `lz4 -l` input raise the required result to 18
-  (`incremental_compressed_reader_cases=18`). Unix compress and lzip are the
-  remaining one-shot tarball gaps.
+  (`incremental_compressed_reader_cases=18`). The lzip path now layers member
+  header/trailer state around the existing symbol-progressive LZMA core,
+  validates per-member CRC/data/member sizes with a bounded 20-byte lookahead,
+  supports concatenation, and composes as `TarLzipIncrementalReader`.
+  Python/Vort single and multi-member schedules pass 14 focused differential
+  cases; TAR coverage rises to 19
+  (`incremental_compressed_reader_cases=19`). Unix compress is the final
+  one-shot tarball gap.

@@ -416,6 +416,7 @@ def main() -> None:
             "xz",
             "lz4",
             "lzf",
+            "lzip",
             "zstd",
             "lzop",
         }

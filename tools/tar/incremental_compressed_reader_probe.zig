@@ -53,6 +53,8 @@ pub fn main(init: std.process.Init) !void {
         return runReader(vort.TarLz4LegacyIncrementalReader, init.gpa, archive, entry_name, expected, pattern);
     if (std.mem.eql(u8, compression, "lzf"))
         return runReader(vort.TarLzfIncrementalReader, init.gpa, archive, entry_name, expected, pattern);
+    if (std.mem.eql(u8, compression, "lzip"))
+        return runReader(vort.TarLzipIncrementalReader, init.gpa, archive, entry_name, expected, pattern);
     if (std.mem.eql(u8, compression, "zstd"))
         return runReader(vort.TarZstandardIncrementalReader, init.gpa, archive, entry_name, expected, pattern);
     if (std.mem.eql(u8, compression, "lzop"))

@@ -87,6 +87,7 @@ def lzip_encode(tool: str, source: Path, dictionary_size: int) -> bytes:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
+    parser.add_argument("--incremental", required=True, type=Path)
     parser.add_argument("--lzip", type=Path)
     args = parser.parse_args()
 
@@ -109,6 +110,7 @@ def main() -> None:
         writer_cases = 0
         generated: dict[str, bytes] = {}
         vort_generated: dict[str, bytes] = {}
+        incremental_cases = 0
         for name, payload, dictionary_size in cases:
             member = make_member(payload, dictionary_size)
             generated[name] = member
@@ -116,13 +118,18 @@ def main() -> None:
             decoded_total += len(payload)
             archive_path = temp / f"{name}.lz"
             output_path = temp / f"{name}.out"
+            source_path = temp / f"{name}.source"
             archive_path.write_bytes(member)
+            source_path.write_bytes(payload)
 
             if lzip_tool is not None and lzip_decode(lzip_tool, archive_path) != payload:
                 raise AssertionError(f"lzip could not decode generated member {name}")
             run(args.cli, "decode-lzip-file", str(archive_path), str(output_path), str(len(payload)))
             if output_path.read_bytes() != payload:
                 raise AssertionError(f"Vort lzip decode mismatch for {name}")
+            for pattern in ("one", "micro"):
+                run(args.incremental, str(archive_path), str(source_path), pattern)
+            incremental_cases += 1
             size_output = run(args.cli, "size-lzip-file", str(archive_path), str(len(payload))).stdout
             if f"decoded_bytes={len(payload)}" not in size_output:
                 raise AssertionError(f"Vort lzip size mismatch for {name}: {size_output}")
@@ -130,8 +137,6 @@ def main() -> None:
             if "lzip_members=1" not in inspect_output or f"decoded_bytes={len(payload)}" not in inspect_output:
                 raise AssertionError(f"Vort lzip inspection mismatch for {name}: {inspect_output}")
 
-            source_path = temp / f"{name}.source"
-            source_path.write_bytes(payload)
             vort_path = temp / f"{name}.vort.lz"
             run(
                 args.cli,
@@ -167,6 +172,9 @@ def main() -> None:
                 raise AssertionError(f"Python could not decode Vort lzip output for {name}")
             if lzip_tool is not None and lzip_decode(lzip_tool, vort_path) != payload:
                 raise AssertionError(f"lzip could not decode Vort output for {name}")
+            for pattern in ("one", "micro"):
+                run(args.incremental, str(vort_path), str(source_path), pattern)
+            incremental_cases += 1
             if name == "text":
                 repeated_path = temp / "text-repeat.vort.lz"
                 run(
@@ -188,6 +196,9 @@ def main() -> None:
                 run(args.cli, "decode-lzip-file", str(reference_path), str(output_path), str(len(payload)))
                 if output_path.read_bytes() != payload:
                     raise AssertionError(f"Vort could not decode lzip output for {name}")
+                for pattern in ("one", "micro"):
+                    run(args.incremental, str(reference_path), str(source_path), pattern)
+                incremental_cases += 1
                 external_cases += 1
 
         concatenated = generated["tiny"] + generated["text"] + generated["random"]
@@ -198,6 +209,11 @@ def main() -> None:
         run(args.cli, "decode-lzip-file", str(concat_path), str(concat_output), str(len(expected_concat)))
         if concat_output.read_bytes() != expected_concat:
             raise AssertionError("Vort multimember lzip decode mismatch")
+        concat_expected_path = temp / "concatenated.expected"
+        concat_expected_path.write_bytes(expected_concat)
+        for pattern in ("one", "micro"):
+            run(args.incremental, str(concat_path), str(concat_expected_path), pattern)
+        incremental_cases += 1
         concat_info = run(args.cli, "inspect-lzip-file", str(concat_path)).stdout
         if "lzip_members=3" not in concat_info:
             raise AssertionError(f"Vort multimember inspection mismatch: {concat_info}")
@@ -220,6 +236,14 @@ def main() -> None:
         )
         if concat_output.read_bytes() != expected_concat:
             raise AssertionError("Vort could not decode its concatenated lzip output")
+        for pattern in ("one", "micro"):
+            run(
+                args.incremental,
+                str(vort_concat_path),
+                str(concat_expected_path),
+                pattern,
+            )
+        incremental_cases += 1
         if lzip_tool is not None and lzip_decode(lzip_tool, vort_concat_path) != expected_concat:
             raise AssertionError("lzip could not decode Vort concatenated output")
 
@@ -289,7 +313,8 @@ def main() -> None:
     print(
         f"lzip_diff=ok cases={len(cases)} members={len(cases) + 3} compressed_bytes={compressed_total} "
         f"decoded_bytes={decoded_total} system_lzip={lzip_tool is not None} "
-        f"lzip_encoded_cases={external_cases} vort_writer_cases={writer_cases}"
+        f"lzip_encoded_cases={external_cases} vort_writer_cases={writer_cases} "
+        f"incremental_cases={incremental_cases}"
     )
 
 

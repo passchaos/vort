@@ -346,7 +346,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - pure Zig lzip v1 encoding and decoding with LZMA-302eos payloads, coded
   dictionary sizes, per-member CRC/data/member-size validation, deterministic
   concatenated writing, strict multimember handling, and caller-selected output
-  and dictionary limits;
+  and dictionary limits, plus bounded incremental multi-member decoding;
 - pure Zig raw LZF block and standard `ZV` stream encoding/decoding with
   8 KiB match distances, 65,535-byte stored/compressed blocks, optional EOF markers,
   bounded/caller-owned APIs, a one-block-bounded incremental decoder,
@@ -404,7 +404,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   strict extent validation, logical hole reconstruction, safe-path
   classification, borrowed entry views, bounded caller-output incremental
   raw reading and writing for regular/link/PAX/sparse entries, direct incremental
-  gzip/Bzip2/Brotli/LZMA/XZ/modern+legacy-LZ4/LZF/Zstandard/LZOP-to-TAR
+  gzip/Bzip2/Brotli/LZMA/XZ/modern+legacy-LZ4/LZF/lzip/Zstandard/LZOP-to-TAR
   reading, and automatic raw/gzip/Bzip2/Brotli/Unix-compress/LZMA-Alone/XZ/
   LZ4/lzip/LZF/Zstandard/LZOP tarball composition;
 - dependency-free CPIO reading and deterministic writing for SVR4 newc/CRC,
