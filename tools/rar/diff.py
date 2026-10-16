@@ -146,6 +146,9 @@ def main() -> None:
     writer_encrypted_headers = 0
     writer_encrypted_headers_external = 0
     reference_encrypted_headers = 0
+    writer_encrypted_volumes = 0
+    writer_encrypted_volumes_external = 0
+    reference_encrypted_volumes = 0
     reference_stored = 0
     reference_compressed = 0
     reference_compressed_decoded = 0
@@ -445,6 +448,46 @@ def main() -> None:
                     )
                 reference_encrypted_headers += 1
 
+                volume_base = temp / f"reference-rar5-{compression}-encrypted-volumes.rar"
+                volume_output = temp / f"reference-rar5-{compression}-encrypted-volumes.out"
+                run(
+                    rar_tool,
+                    "a",
+                    "-idq",
+                    "-ma5",
+                    f"-m{method}",
+                    "-ep",
+                    f"-hp{encryption_password}",
+                    "-v3000b",
+                    str(volume_base),
+                    str(reference_source),
+                )
+                reference_volumes = tuple(
+                    sorted(
+                        temp.glob(
+                            f"reference-rar5-{compression}-encrypted-volumes.part*.rar"
+                        )
+                    )
+                )
+                if len(reference_volumes) < 2:
+                    raise AssertionError(
+                        f"RAR encrypted {compression} reference did not split"
+                    )
+                run(
+                    args.cli,
+                    "extract-rar-volumes",
+                    "payload.bin",
+                    str(volume_output),
+                    str(len(payload)),
+                    f"--password={encryption_password}",
+                    *(str(volume) for volume in reference_volumes),
+                )
+                if volume_output.read_bytes() != payload:
+                    raise AssertionError(
+                        f"Vort rejected RAR encrypted {compression} volumes"
+                    )
+                reference_encrypted_volumes += 1
+
         ppmd_first = temp / "vort-rar29-ppmd-first.rar"
         ppmd_second = temp / "vort-rar29-ppmd-second.rar"
         ppmd_output = temp / "vort-rar29-ppmd.out"
@@ -649,6 +692,66 @@ def main() -> None:
                 if (volume_reference / "second.txt").read_bytes() != expected_solid:
                     raise AssertionError("7-Zip rejected Vort solid volume output")
                 writer_volumes_external += 1
+
+            encrypted_volume_bytes = bytearray()
+            encrypted_volume_state = 0x7261_725F_766F_6C73
+            word_mask = (1 << 64) - 1
+            for _ in range(4096):
+                encrypted_volume_state = (
+                    encrypted_volume_state ^ (encrypted_volume_state << 13)
+                ) & word_mask
+                encrypted_volume_state ^= encrypted_volume_state >> 7
+                encrypted_volume_state = (
+                    encrypted_volume_state ^ (encrypted_volume_state << 17)
+                ) & word_mask
+                encrypted_volume_bytes.append(encrypted_volume_state & 0xFF)
+            encrypted_volume_payload = bytes(encrypted_volume_bytes)
+            for compression in ("stored", "rar50"):
+                encrypted_prefix = temp / f"vort-rar5-{compression}-encrypted-volume"
+                encrypted_output = temp / f"vort-rar5-{compression}-encrypted-volume.out"
+                run(
+                    args.writer,
+                    str(encrypted_prefix),
+                    "rar5",
+                    f"encrypted-volumes-{compression}",
+                )
+                encrypted_volumes = tuple(
+                    sorted(temp.glob(f"vort-rar5-{compression}-encrypted-volume.part*.rar"))
+                )
+                if len(encrypted_volumes) < 2:
+                    raise AssertionError(
+                        f"Vort encrypted {compression} volume writer did not split"
+                    )
+                run(
+                    args.cli,
+                    "extract-rar-volumes",
+                    "payload.bin",
+                    str(encrypted_output),
+                    "8192",
+                    "--password=rar-volume-password",
+                    *(str(volume) for volume in encrypted_volumes),
+                )
+                if encrypted_output.read_bytes() != encrypted_volume_payload:
+                    raise AssertionError(
+                        f"Vort failed encrypted {compression} volume self extraction"
+                    )
+                writer_encrypted_volumes += 1
+                if seven_zip is not None:
+                    reference = temp / f"vort-rar5-{compression}-encrypted-volume-reference"
+                    reference.mkdir()
+                    run(
+                        seven_zip,
+                        "x",
+                        "-y",
+                        "-prar-volume-password",
+                        f"-o{reference}",
+                        str(encrypted_volumes[0]),
+                    )
+                    if (reference / "payload.bin").read_bytes() != encrypted_volume_payload:
+                        raise AssertionError(
+                            f"7-Zip rejected Vort encrypted {compression} volumes"
+                        )
+                    writer_encrypted_volumes_external += 1
 
         if args.rars is not None:
             for version in versions:
@@ -1097,6 +1200,9 @@ def main() -> None:
         f"writer_encrypted_headers={writer_encrypted_headers} "
         f"writer_encrypted_headers_external={writer_encrypted_headers_external} "
         f"reference_encrypted_headers={reference_encrypted_headers} "
+        f"writer_encrypted_volumes={writer_encrypted_volumes} "
+        f"writer_encrypted_volumes_external={writer_encrypted_volumes_external} "
+        f"reference_encrypted_volumes={reference_encrypted_volumes} "
         f"reference_stored={reference_stored} reference_compressed={reference_compressed} "
         f"reference_compressed_decoded={reference_compressed_decoded} "
         f"fixture_cases={fixture_cases} rar15_entries={rar15_entries} "

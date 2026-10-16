@@ -64,6 +64,7 @@ pub const VolumeIterator = volume_set.Iterator;
 pub const VolumeExtractSession = volume_set.ExtractSession;
 pub const VolumeDecodedEntry = volume_set.DecodedEntry;
 pub const parseVolumeSetAlloc = volume_set.VolumeSet.parseAlloc;
+pub const parseVolumeSetAllocWithOptions = volume_set.VolumeSet.parseAllocWithOptions;
 
 test {
     _ = archive;

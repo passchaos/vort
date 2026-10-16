@@ -89,7 +89,7 @@ pub fn encodeAppend(
     entries: []const EncodeEntry,
     options: EncodeOptions,
 ) !usize {
-    try validateEntries(entries, options);
+    try validateEntries(entries, options, false);
     const start = output.items.len;
     errdefer output.items.len = start;
     var encoded: std.ArrayList(u8) = .empty;
@@ -133,11 +133,8 @@ pub fn encodeVolumesAlloc(
     max_payload_per_volume: usize,
 ) Error!EncodedVolumes {
     if (options.version != .rar5) return error.UnsupportedRarEncodeOptions;
-    if (options.header_encryption != null) return error.UnsupportedRarEncodeOptions;
     if (max_payload_per_volume == 0) return error.InvalidRarVolumeSize;
-    try validateEntries(entries, options);
-    for (entries) |entry|
-        if (entry.encryption != null) return error.UnsupportedRarEncodeOptions;
+    try validateEntries(entries, options, true);
 
     var volumes: std.ArrayList([]u8) = .empty;
     errdefer {
@@ -148,7 +145,19 @@ pub fn encodeVolumesAlloc(
     defer current.deinit(allocator);
     var volume_index: usize = 0;
     var payload_in_volume: usize = 0;
-    try startRar5Volume(allocator, &current, volume_index, options.solid);
+    var header_writer: ?HeaderWriter = if (options.header_encryption) |encryption|
+        try HeaderWriter.init(encryption)
+    else
+        null;
+    defer if (header_writer) |*value| value.deinit();
+    const header_writer_ptr: ?*HeaderWriter = if (header_writer) |*value| value else null;
+    try startRar5Volume(
+        allocator,
+        &current,
+        volume_index,
+        options.solid,
+        header_writer_ptr,
+    );
     var encoder = rar50_encoder.Encoder.init(allocator, .{
         .dictionary_size = options.dictionary_size,
         .block_size = options.block_size,
@@ -164,17 +173,34 @@ pub fn encodeVolumesAlloc(
         const solid_continuation = options.solid and encoder.canContinue();
         if (use_compression)
             compressed = try encoder.encodeMemberAlloc(entry.data, solid_continuation);
-        const payload = compressed orelse entry.data;
+        const plain_payload = compressed orelse entry.data;
         const compression_info: u64 = if (use_compression)
             try rar50CompressionInfo(options.dictionary_size, solid_continuation)
         else
             0;
+        const plain_crc = checksum.crc32(entry.data);
+        var encrypted: ?rar5_encryption.Encrypted = if (entry.encryption) |encryption|
+            try rar5_encryption.encryptAlloc(
+                allocator,
+                plain_payload,
+                plain_crc,
+                encryption,
+            )
+        else
+            null;
+        defer if (encrypted) |*value| value.deinit();
+        const payload = if (encrypted) |value| value.bytes else plain_payload;
+        const final_crc = if (encrypted) |value| value.wire_crc32 else plain_crc;
+        var extra: std.ArrayList(u8) = .empty;
+        defer extra.deinit(allocator);
+        if (encrypted) |value|
+            try appendRar5EncryptionRecord(allocator, &extra, value.metadata);
 
         var offset: usize = 0;
         var split_before = false;
         while (offset < payload.len or (!split_before and payload.len == 0)) {
             if (payload_in_volume == max_payload_per_volume) {
-                try finishRar5Volume(allocator, &current, true);
+                try finishRar5Volume(allocator, &current, true, header_writer_ptr);
                 const owned_volume = try current.toOwnedSlice(allocator);
                 volumes.append(allocator, owned_volume) catch |err| {
                     allocator.free(owned_volume);
@@ -183,7 +209,13 @@ pub fn encodeVolumesAlloc(
                 volume_index = std.math.add(usize, volume_index, 1) catch
                     return error.IntegerOverflow;
                 payload_in_volume = 0;
-                try startRar5Volume(allocator, &current, volume_index, options.solid);
+                try startRar5Volume(
+                    allocator,
+                    &current,
+                    volume_index,
+                    options.solid,
+                    header_writer_ptr,
+                );
             }
             const room = max_payload_per_volume - payload_in_volume;
             const fragment_len = @min(room, payload.len - offset);
@@ -192,7 +224,7 @@ pub fn encodeVolumesAlloc(
             const fragment_crc = if (split_after)
                 checksum.crc32(fragment)
             else
-                checksum.crc32(entry.data);
+                final_crc;
             var general_flags: u64 = 0;
             if (split_before) general_flags |= 0x0008;
             if (split_after) general_flags |= 0x0010;
@@ -204,8 +236,8 @@ pub fn encodeVolumesAlloc(
                 compression_info,
                 fragment_crc,
                 general_flags,
-                "",
-                null,
+                extra.items,
+                header_writer_ptr,
             );
             payload_in_volume += fragment_len;
             offset += fragment_len;
@@ -214,7 +246,9 @@ pub fn encodeVolumesAlloc(
         }
     }
 
-    try finishRar5Volume(allocator, &current, false);
+    try finishRar5Volume(allocator, &current, false, header_writer_ptr);
+    if (header_writer) |*value|
+        if (value.index != value.ivs.len) return error.InvalidRarHeaderEncryption;
     const owned_volume = try current.toOwnedSlice(allocator);
     volumes.append(allocator, owned_volume) catch |err| {
         allocator.free(owned_volume);
@@ -226,7 +260,11 @@ pub fn encodeVolumesAlloc(
     };
 }
 
-fn validateEntries(entries: []const EncodeEntry, options: EncodeOptions) Error!void {
+fn validateEntries(
+    entries: []const EncodeEntry,
+    options: EncodeOptions,
+    volume_mode: bool,
+) Error!void {
     switch (options.compression) {
         .stored => if (options.filter != null or options.solid)
             return error.UnsupportedRarEncodeOptions,
@@ -266,10 +304,12 @@ fn validateEntries(entries: []const EncodeEntry, options: EncodeOptions) Error!v
     if (options.header_encryption) |header_encryption| {
         if (options.version != .rar5) return error.InvalidRarHeaderEncryption;
         try rar5_encryption.validateHeaderOptions(header_encryption.cryptoOptions());
-        const expected_iv_count = std.math.add(usize, entries.len, 2) catch
-            return error.IntegerOverflow;
-        if (header_encryption.ivs.len != expected_iv_count)
-            return error.InvalidRarHeaderEncryption;
+        if (!volume_mode) {
+            const expected_iv_count = std.math.add(usize, entries.len, 2) catch
+                return error.IntegerOverflow;
+            if (header_encryption.ivs.len != expected_iv_count)
+                return error.InvalidRarHeaderEncryption;
+        }
         for (header_encryption.ivs, 0..) |iv, index|
             for (header_encryption.ivs[0..index]) |previous|
                 if (std.mem.eql(u8, &iv, &previous))
@@ -592,26 +632,54 @@ fn startRar5Volume(
     output: *std.ArrayList(u8),
     volume_index: usize,
     solid: bool,
+    header_writer: ?*HeaderWriter,
 ) !void {
     try output.appendSlice(allocator, archive.rar5_signature);
+    if (header_writer) |value|
+        try appendRar5ArchiveEncryptionHeader(
+            allocator,
+            output,
+            value.prepared.metadata,
+        );
     var specific: std.ArrayList(u8) = .empty;
     defer specific.deinit(allocator);
     var archive_flags: u64 = 0x0001 | 0x0002;
     if (solid) archive_flags |= 0x0004;
     try appendVint(allocator, &specific, archive_flags);
     try appendVint(allocator, &specific, volume_index);
-    try appendRar5Block(allocator, output, 1, 0, null, specific.items, "", "");
+    try appendRar5BlockInternal(
+        allocator,
+        output,
+        1,
+        0,
+        null,
+        specific.items,
+        "",
+        "",
+        header_writer,
+    );
 }
 
 fn finishRar5Volume(
     allocator: std.mem.Allocator,
     output: *std.ArrayList(u8),
     has_next_volume: bool,
+    header_writer: ?*HeaderWriter,
 ) !void {
     var specific: std.ArrayList(u8) = .empty;
     defer specific.deinit(allocator);
     try appendVint(allocator, &specific, @intFromBool(has_next_volume));
-    try appendRar5Block(allocator, output, 5, 0, null, specific.items, "", "");
+    try appendRar5BlockInternal(
+        allocator,
+        output,
+        5,
+        0,
+        null,
+        specific.items,
+        "",
+        "",
+        header_writer,
+    );
 }
 
 fn appendRar5File(
@@ -1532,7 +1600,8 @@ test "RAR5 encryption without password check relies on keyed content CRC" {
     try std.testing.expectEqualSlices(u8, entries[0].data, decoded);
 }
 
-test "RAR5 encryption rejects unsupported volumes and releases allocation failures" {
+test "RAR5 encryption composes with volumes and releases allocation failures" {
+    const volume_set = @import("volume_set.zig");
     const entries = [_]EncodeEntry{.{
         .name = "secret.bin",
         .data = "allocation safe secret",
@@ -1543,9 +1612,36 @@ test "RAR5 encryption rejects unsupported volumes and releases allocation failur
             .kdf_count = 0,
         },
     }};
+    var volumes = try encodeVolumesAlloc(std.testing.allocator, &entries, .{}, 8);
+    defer volumes.deinit();
+    try std.testing.expect(volumes.volumes.len > 1);
+    var set = try volume_set.VolumeSet.parseAlloc(
+        std.testing.allocator,
+        volumes.volumes,
+    );
+    defer set.deinit();
+    const volume_decoded = try set.extractByNameAllocWithOptions(
+        std.testing.allocator,
+        entries[0].name,
+        .{ .password = "password", .max_rar5_kdf_count = 0 },
+    );
+    defer std.testing.allocator.free(volume_decoded);
+    try std.testing.expectEqualSlices(u8, entries[0].data, volume_decoded);
+    const first_archive = try archive.parse(volumes.volumes[0]);
+    const first_fragment = try first_archive.entryAt(0);
+    volumes.volumes[0][first_fragment.data_offset] ^= 1;
+    var corrupt_set = try volume_set.VolumeSet.parseAlloc(
+        std.testing.allocator,
+        volumes.volumes,
+    );
+    defer corrupt_set.deinit();
     try std.testing.expectError(
-        error.UnsupportedRarEncodeOptions,
-        encodeVolumesAlloc(std.testing.allocator, &entries, .{}, 1024),
+        error.ChecksumMismatch,
+        corrupt_set.extractByNameAllocWithOptions(
+            std.testing.allocator,
+            entries[0].name,
+            .{ .password = "password", .max_rar5_kdf_count = 0 },
+        ),
     );
     const Test = struct {
         fn run(allocator: std.mem.Allocator) !void {

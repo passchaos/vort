@@ -216,19 +216,31 @@ pub fn extractVolumes(
         volume_bytes.deinit(init.gpa);
     }
     var archive_bytes: usize = 0;
+    var password: ?[]const u8 = null;
     while (args.next()) |path| {
+        const password_prefix = "--password=";
+        if (std.mem.startsWith(u8, path, password_prefix)) {
+            if (password != null or path.len == password_prefix.len)
+                return error.InvalidRarPasswordArgument;
+            password = path[password_prefix.len..];
+            continue;
+        }
         const bytes = try readFile(init, path);
         archive_bytes = std.math.add(usize, archive_bytes, bytes.len) catch
             return error.IntegerOverflow;
         try volume_bytes.append(init.gpa, bytes);
     }
     if (volume_bytes.items.len == 0) return error.MissingCorpusPath;
-    var set = try vort.parseRarVolumeSetAlloc(init.gpa, volume_bytes.items);
+    var set = try vort.parseRarVolumeSetAllocWithOptions(
+        init.gpa,
+        volume_bytes.items,
+        .{ .password = password },
+    );
     defer set.deinit();
-    const decoded = try set.extractByNameAllocLimited(
+    const decoded = try set.extractByNameAllocWithOptions(
         init.gpa,
         entry_name,
-        max_output_len,
+        .{ .max_output_len = max_output_len, .password = password },
     );
     defer init.gpa.free(decoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });

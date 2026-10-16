@@ -694,6 +694,7 @@ pub const RarVolumeIterator = rar.VolumeIterator;
 pub const RarVolumeExtractSession = rar.VolumeExtractSession;
 pub const RarVolumeDecodedEntry = rar.VolumeDecodedEntry;
 pub const parseRarVolumeSetAlloc = rar.parseVolumeSetAlloc;
+pub const parseRarVolumeSetAllocWithOptions = rar.parseVolumeSetAllocWithOptions;
 
 pub const ZooError = zoo.Error;
 pub const ZooMethod = zoo.Method;

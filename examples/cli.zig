@@ -2880,7 +2880,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              List RAR4/RAR5 entries and methods
         \\  extract-rar-file <rar> <entry> <out> [max_output] [password]
         \\                              Extract a supported RAR entry
-        \\  extract-rar-volumes <entry> <out> <max_output> <vol1> [vol2...]
+        \\  extract-rar-volumes <entry> <out> <max_output> [--password=...] <vol1> [vol2...]
         \\                              Extract across an ordered RAR5 volume set
         \\  encode-lzop-file <in> <out> [block_size] [adler32|crc32] [compressed-checksum]
         \\                              Encode compressed-or-stored LZOP blocks

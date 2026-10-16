@@ -224,7 +224,7 @@ test "RAR5 encrypted header writer validates IV and password policy" {
         } }),
     );
     try std.testing.expectError(
-        error.UnsupportedRarEncodeOptions,
+        error.InvalidRarHeaderEncryption,
         writer.encodeVolumesAlloc(
             allocator,
             &encrypted,
@@ -232,7 +232,7 @@ test "RAR5 encrypted header writer validates IV and password policy" {
                 .password = "password",
                 .salt = [_]u8{6} ** 16,
                 .kdf_count = 1,
-                .ivs = &unique_ivs,
+                .ivs = unique_ivs[0..2],
             } },
             1024,
         ),
@@ -295,6 +295,100 @@ test "RAR5 encrypted headers retain solid RAR50 replay semantics" {
         allocator,
         "second.bin",
         .{ .password = "solid headers", .max_rar5_kdf_count = 1 },
+    );
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
+test "RAR5 encrypted headers compose across solid encrypted volumes" {
+    const volume_set = @import("volume_set.zig");
+    const allocator = std.testing.allocator;
+    var payload: [2048]u8 = undefined;
+    var random = std.Random.DefaultPrng.init(0x766f_6c75_6d65_6870);
+    random.fill(&payload);
+    const entries = [_]writer.EncodeEntry{
+        .{
+            .name = "first.bin",
+            .data = &payload,
+            .encryption = .{
+                .password = "volume headers",
+                .salt = [_]u8{0x31} ** 16,
+                .iv = [_]u8{0x41} ** 16,
+                .kdf_count = 0,
+            },
+        },
+        .{
+            .name = "second.bin",
+            .data = &payload,
+            .encryption = .{
+                .password = "volume headers",
+                .salt = [_]u8{0x32} ** 16,
+                .iv = [_]u8{0x42} ** 16,
+                .kdf_count = 0,
+            },
+        },
+    };
+    const base_options = writer.EncodeOptions{
+        .compression = .rar50,
+        .solid = true,
+    };
+    var baseline = try writer.encodeVolumesAlloc(allocator, &entries, base_options, 512);
+    defer baseline.deinit();
+    var fragment_count: usize = 0;
+    for (baseline.volumes) |volume| {
+        const parsed = try archive_mod.parse(volume);
+        fragment_count += parsed.entry_count;
+    }
+    const iv_count = 2 * baseline.volumes.len + fragment_count;
+    const header_ivs = try allocator.alloc([16]u8, iv_count);
+    defer allocator.free(header_ivs);
+    for (header_ivs, 0..) |*iv, index| {
+        iv.* = @splat(@intCast(index + 1));
+        std.mem.writeInt(u64, iv[0..8], index, .little);
+    }
+    var options = base_options;
+    options.header_encryption = .{
+        .password = "volume headers",
+        .salt = [_]u8{0x51} ** 16,
+        .kdf_count = 0,
+        .ivs = header_ivs,
+    };
+    var encoded = try writer.encodeVolumesAlloc(allocator, &entries, options, 512);
+    defer encoded.deinit();
+    try std.testing.expectEqual(baseline.volumes.len, encoded.volumes.len);
+    for (encoded.volumes) |volume| {
+        try std.testing.expect(std.mem.indexOf(u8, volume, "first.bin") == null);
+        try std.testing.expect(std.mem.indexOf(u8, volume, "second.bin") == null);
+    }
+    try std.testing.expectError(
+        error.RarPasswordRequired,
+        volume_set.VolumeSet.parseAlloc(allocator, encoded.volumes),
+    );
+    try std.testing.expectError(
+        error.InvalidRarPassword,
+        volume_set.VolumeSet.parseAllocWithOptions(allocator, encoded.volumes, .{
+            .password = "wrong",
+            .max_rar5_kdf_count = 0,
+        }),
+    );
+    try std.testing.expectError(
+        error.RarEntryLimitExceeded,
+        volume_set.VolumeSet.parseAllocWithOptions(allocator, encoded.volumes, .{
+            .password = "volume headers",
+            .max_rar5_kdf_count = 0,
+            .max_entries = 0,
+        }),
+    );
+    var set = try volume_set.VolumeSet.parseAllocWithOptions(
+        allocator,
+        encoded.volumes,
+        .{ .password = "volume headers", .max_rar5_kdf_count = 0 },
+    );
+    defer set.deinit();
+    const decoded = try set.extractByNameAllocWithOptions(
+        allocator,
+        "second.bin",
+        .{ .password = "volume headers", .max_rar5_kdf_count = 0 },
     );
     defer allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &payload, decoded);
@@ -413,6 +507,38 @@ test "RAR5 encrypted headers release every allocation failure path" {
             );
             defer allocator.free(decoded);
             try std.testing.expectEqualSlices(u8, entries[0].data, decoded);
+
+            var volume_ivs: [18][16]u8 = undefined;
+            for (&volume_ivs, 0..) |*iv, index| {
+                iv.* = @splat(@intCast(index + 1));
+                std.mem.writeInt(u64, iv[0..8], index, .little);
+            }
+            var volumes = try writer.encodeVolumesAlloc(
+                allocator,
+                &entries,
+                .{ .header_encryption = .{
+                    .password = "password",
+                    .salt = [_]u8{0x97} ** 16,
+                    .kdf_count = 0,
+                    .ivs = &volume_ivs,
+                } },
+                8,
+            );
+            defer volumes.deinit();
+            const volume_set = @import("volume_set.zig");
+            var set = try volume_set.VolumeSet.parseAllocWithOptions(
+                allocator,
+                volumes.volumes,
+                .{ .password = "password", .max_rar5_kdf_count = 0 },
+            );
+            defer set.deinit();
+            const volume_decoded = try set.extractByNameAllocWithOptions(
+                allocator,
+                entries[0].name,
+                .{ .password = "password", .max_rar5_kdf_count = 0 },
+            );
+            defer allocator.free(volume_decoded);
+            try std.testing.expectEqualSlices(u8, entries[0].data, volume_decoded);
         }
     };
     try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{});

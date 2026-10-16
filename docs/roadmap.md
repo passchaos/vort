@@ -21048,3 +21048,19 @@ reuse, so production keeps the simpler independently owned plans.
   (`writer_encrypted_headers=2`, `writer_encrypted_headers_external=2`,
   `reference_encrypted_headers=2`). RAR4 payload encryption and encrypted
   multi-volume composition remain the next encryption gaps.
+
+- Extended RAR5 file-data and header encryption through ordered multi-volume
+  sets. Real RAR 7.30 `-hp -v` archives establish that CBC covers the complete
+  compressed/Stored member before arbitrary fragment cuts, every fragment
+  repeats identical file salt/IV metadata, every volume repeats the archive
+  salt, and each main/file/end header still uses a fresh IV. The volume reader
+  now owns decrypted headers per volume, validates compatible crypto metadata,
+  joins ciphertext before one decode, and preserves RAR50 solid history. The
+  writer performs compression and encryption before splitting, repeats the
+  type-1 record, and consumes one exact flat header-IV sequence in wire order.
+  Missing/wrong passwords, metadata/entry limits, missing/reversed volumes,
+  ciphertext corruption, solid history and exhaustive OOM have direct tests.
+  The differential adds Vort-to-7-Zip Stored/RAR50 volumes and RAR-to-Vort
+  Stored/RAR50 volumes (`writer_encrypted_volumes=2`,
+  `writer_encrypted_volumes_external=2`, `reference_encrypted_volumes=2`).
+  RAR4 payload encryption is now the remaining core RAR encryption gap.

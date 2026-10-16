@@ -89,9 +89,13 @@ split-before/split-after fragments into logical entries, and rejects missing,
 reversed, interrupted, or metadata-changing fragment chains. Its extraction
 session concatenates packed fragments before decoding and carries RAR50 solid
 state across logical entries and volume boundaries.
+`parseRarVolumeSetAllocWithOptions` applies the same owned-header/password
+policy independently to every volume. Encrypted member ciphertext is joined
+across arbitrary fragment cuts before one CBC decode, matching RAR's reuse of
+the same file salt/IV record in every fragment.
 Directories, unsupported compressed data, RAR4 encrypted entries, encrypted
-multi-volume members, RAR5 redirections, unknown-size members, incomplete
-split-volume members, and unsupported RAR20 solid
+RAR5 redirections, unknown-size members, incomplete split-volume members, and
+unsupported RAR20 solid
 continuations return specific errors. This prevents an unsupported or
 incomplete member from being copied as if it were stored data.
 
@@ -147,7 +151,7 @@ remain deterministic.
 `RarEncodeOptions.header_encryption` adds the clear archive-encryption header
 and encrypts main, every file/directory, and end header independently. It takes
 one caller-supplied unique IV per encrypted header (`entries.len + 2` in the
-current writer), rejects duplicates, and requires every regular entry to use
+single-archive writer), rejects duplicates, and requires every regular entry to use
 file-data encryption with the same password. Header and file salts, IVs, and
 KDF counts remain independent. This composes with Stored, RAR50, directories,
 and solid RAR50 history without exposing names in the wire.
@@ -155,7 +159,10 @@ and solid RAR50 history without exposing names in the wire.
 payload-per-volume budget and returns an owned `EncodedVolumes` collection. It
 writes numbered volume main headers, per-fragment split flags and CRCs, and
 next-volume end flags; stored, compressed, and solid compressed members can all
-span volumes. Header bytes are intentionally outside the payload budget.
+span volumes. It also encrypts complete member data before arbitrary fragment
+cuts and can encrypt every per-volume main/fragment/end header; callers provide
+the exact flat IV sequence consumed in volume wire order. Header bytes are
+intentionally outside the payload budget.
 The writers emit standard header/data CRCs, Unix attributes, optional
 generation-native timestamps (DOS date/time for RAR4, Unix seconds for RAR5),
 RAR4 end blocks, and RAR5 end headers.
@@ -165,8 +172,8 @@ separator. RAR5 output accepts validated UTF-8 names. Both writers reject NUL,
 absolute, empty-component, dot, and parent-component paths. RAR29 compression
 rejects unsupported filter/codec combinations instead of relabeling them.
 RAR50 dictionary sizes must be power-of-two
-multiples of 128 KiB. RAR4 encryption, encrypted multi-volume output, recovery
-records, comments, and redirections remain future writer work.
+multiples of 128 KiB. RAR4 encryption, recovery records, comments, and
+redirections remain future writer work.
 
 ## CLI
 
@@ -231,11 +238,10 @@ zig build run-rar-diff -- \
 The CLI validation surface accepts an explicit ordered volume list:
 
 ```sh
-zig build run -- extract-rar-volumes entry.bin output.bin 1048576 \
+zig build run -- extract-rar-volumes entry.bin output.bin 1048576 --password=password \
   archive.part1.rar archive.part2.rar archive.part3.rar
 ```
 
-The next encryption stages are RAR4 payloads and encrypted multi-volume
-composition. The next RAR4 writer stages also include
-PPMd-attached VM filters and multi-volume output. PPMd hybrid match escapes
-remain a later compression-ratio optimization.
+RAR4 payload encryption remains the next encryption stage. The next RAR4
+writer stages also include PPMd-attached VM filters and multi-volume output.
+PPMd hybrid match escapes remain a later compression-ratio optimization.

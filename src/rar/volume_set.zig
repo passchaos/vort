@@ -2,6 +2,7 @@ const std = @import("std");
 const archive_mod = @import("archive.zig");
 const checksum = @import("../checksum.zig");
 const rar50 = @import("rar50.zig");
+const rar5_encryption = @import("rar5_encryption.zig");
 
 pub const Error = archive_mod.Error || error{
     InvalidRarVolumeSet,
@@ -40,7 +41,7 @@ pub const Entry = struct {
 
 pub const VolumeSet = struct {
     allocator: std.mem.Allocator,
-    archives: []archive_mod.Archive,
+    archives: []archive_mod.OwnedHeaderArchive,
     entries: []Entry,
     fragments: []Fragment,
 
@@ -48,11 +49,29 @@ pub const VolumeSet = struct {
         allocator: std.mem.Allocator,
         volume_bytes: []const []const u8,
     ) Error!VolumeSet {
+        return parseAllocWithOptions(allocator, volume_bytes, .{});
+    }
+
+    pub fn parseAllocWithOptions(
+        allocator: std.mem.Allocator,
+        volume_bytes: []const []const u8,
+        options: archive_mod.ParseOptions,
+    ) Error!VolumeSet {
         if (volume_bytes.len == 0) return error.InvalidRarVolumeSet;
-        const archives = try allocator.alloc(archive_mod.Archive, volume_bytes.len);
-        errdefer allocator.free(archives);
-        for (volume_bytes, archives) |bytes, *parsed|
-            parsed.* = try archive_mod.parse(bytes);
+        const archives = try allocator.alloc(archive_mod.OwnedHeaderArchive, volume_bytes.len);
+        var archive_count: usize = 0;
+        errdefer {
+            for (archives[0..archive_count]) |*archive| archive.deinit();
+            allocator.free(archives);
+        }
+        for (volume_bytes, archives) |bytes, *parsed| {
+            parsed.* = try archive_mod.parseOwnedHeadersAllocWithOptions(
+                allocator,
+                bytes,
+                options,
+            );
+            archive_count += 1;
+        }
         try validateVolumes(archives);
 
         var fragments: std.ArrayList(Fragment) = .empty;
@@ -62,7 +81,8 @@ pub const VolumeSet = struct {
         var pending_start: ?usize = null;
         var pending_size: usize = 0;
 
-        for (archives, 0..) |rar_archive, archive_index| {
+        for (archives, 0..) |owned_archive, archive_index| {
+            const rar_archive = owned_archive.archive;
             var volume_iterator = rar_archive.iterator();
             while (try volume_iterator.next()) |fragment_entry| {
                 if (fragment_entry.split_before) {
@@ -130,6 +150,7 @@ pub const VolumeSet = struct {
     }
 
     pub fn deinit(self: *VolumeSet) void {
+        for (self.archives) |*archive| archive.deinit();
         self.allocator.free(self.fragments);
         self.allocator.free(self.entries);
         self.allocator.free(self.archives);
@@ -231,7 +252,8 @@ pub const ExtractSession = struct {
         if (self.index == self.set.entries.len) return null;
         const entry = self.set.entries[self.index];
         self.index += 1;
-        if (entry.encrypted) return self.fail(error.EncryptedRarEntry);
+        if (entry.encrypted and entry.encryption == null)
+            return self.fail(error.EncryptedRarEntry);
         if (entry.redirection or entry.unknown_size)
             return self.fail(error.UnsupportedRarFeature);
         if (entry.directory) {
@@ -253,7 +275,7 @@ pub const ExtractSession = struct {
             return self.fail(err);
         const fragment_end = entry.fragment_index + entry.fragment_count;
         for (self.set.fragments[entry.fragment_index..fragment_end]) |fragment| {
-            const rar_archive = self.set.archives[fragment.archive_index];
+            const rar_archive = self.set.archives[fragment.archive_index].archive;
             const data_end = std.math.add(
                 usize,
                 fragment.entry.data_offset,
@@ -268,16 +290,31 @@ pub const ExtractSession = struct {
         if (packed_data.items.len != entry.compressed_size)
             return self.fail(error.InvalidRarVolumeSet);
 
+        var decrypted: ?rar5_encryption.Decrypted = if (entry.encryption) |metadata| blk: {
+            const password = self.options.password orelse
+                return self.fail(error.RarPasswordRequired);
+            break :blk rar5_encryption.decryptAlloc(
+                self.allocator,
+                packed_data.items,
+                password,
+                metadata,
+                self.options.max_rar5_kdf_count,
+            ) catch |err| return self.fail(err);
+        } else null;
+        defer if (decrypted) |*value| value.deinit();
+        const packed_bytes = if (decrypted) |*value| value.bytes else packed_data.items;
+
         const output = self.allocator.alloc(u8, entry.uncompressed_size) catch |err|
             return self.fail(err);
         errdefer self.allocator.free(output);
         switch (entry.method) {
             .stored => {
-                if (packed_data.items.len != output.len) return self.fail(error.SizeMismatch);
-                @memcpy(output, packed_data.items);
+                if (packed_bytes.len < output.len or packed_bytes.len - output.len >= 16)
+                    return self.fail(error.SizeMismatch);
+                @memcpy(output, packed_bytes[0..output.len]);
             },
             .rar50 => self.rar50_decoder.decodeMemberInto(
-                packed_data.items,
+                packed_bytes,
                 output,
                 entry.compression_version,
                 entry.dictionary_size orelse return self.fail(error.InvalidRarVolumeSet),
@@ -286,9 +323,14 @@ pub const ExtractSession = struct {
             ) catch |err| return self.fail(err),
             else => return self.fail(error.UnsupportedRarCompression),
         }
-        if (entry.crc32) |expected|
-            if (checksum.crc32(output) != expected)
-                return self.fail(error.ChecksumMismatch);
+        if (entry.crc32) |expected| {
+            const actual = checksum.crc32(output);
+            const matches = if (decrypted) |*value|
+                value.crcMatches(actual, expected)
+            else
+                actual == expected;
+            if (!matches) return self.fail(error.ChecksumMismatch);
+        }
         return .{ .entry = entry, .data = output };
     }
 
@@ -298,11 +340,14 @@ pub const ExtractSession = struct {
     }
 };
 
-fn validateVolumes(archives: []const archive_mod.Archive) Error!void {
-    const solid = archives[0].solid;
-    for (archives, 0..) |rar_archive, index| {
+fn validateVolumes(archives: []const archive_mod.OwnedHeaderArchive) Error!void {
+    const solid = archives[0].archive.solid;
+    const header_encryption = archives[0].archive.header_encryption;
+    for (archives, 0..) |owned_archive, index| {
+        const rar_archive = owned_archive.archive;
         if (rar_archive.version != .rar5 or !rar_archive.multi_volume or
-            rar_archive.solid != solid)
+            rar_archive.solid != solid or
+            !std.meta.eql(rar_archive.header_encryption, header_encryption))
             return error.InvalidRarVolumeSet;
         const expected_next = index + 1 < archives.len;
         if (rar_archive.has_next_volume != expected_next)
