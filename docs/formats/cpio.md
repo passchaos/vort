@@ -128,6 +128,8 @@ reported cumulative `input_read` remains physical accepted input, while
 `input_read - trailingInput().len` is the exact logical member boundary. A
 decoder that reaches `.done` while still publishing output now retains that
 terminal state until the CPIO bridge drains, rather than re-entering the codec.
+LZF with an explicit EOF marker, lzip, and LZOP also expose default-off
+first-stream stops that leave following caller bytes unconsumed.
 
 All codec lifecycle adapters live in the shared `archive_stream` layer used by
 both TAR and CPIO; container state and wire policy remain in their respective

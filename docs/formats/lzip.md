@@ -45,6 +45,8 @@ trailer consistency are verified before advancing to the next member. The
 state supports concatenated members, independent total/member output,
 dictionary, compressed-staging and member-count limits, exact-output pledges,
 arbitrary input/output splits and explicit EOF through `finish()`.
+`stop_after_first_member` instead returns `.done` immediately after the first
+validated 20-byte trailer and leaves a following outer member unconsumed.
 
 `TarLzipIncrementalReader` connects this decoder to the bounded TAR reader, so
 `.tar.lz` archives no longer require a fully materialized decompressed TAR.

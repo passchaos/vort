@@ -20889,3 +20889,13 @@ reuse, so production keeps the simpler independently owned plans.
   bytes plus unaccepted caller suffix reconstructing the next member exactly.
   The mixed sequence dispatcher can now build on an explicit, tested ownership
   invariant rather than guessing compressed boundaries.
+
+- Extended exact first-stream stopping to three additional marker-terminated
+  wrappers. LZF can stop at its optional zero EOF marker (marker-less streams
+  remain physical-EOF delimited), lzip can stop after one validated member
+  trailer, and LZOP can stop at its terminal zero block. All options are
+  default-off, preserving concatenated/strict behavior. The shared CPIO suffix
+  matrix now covers eight codecs -- gzip, Bzip2, LZMA-Alone, XZ, Zstandard,
+  LZF, lzip and LZOP -- and requires each accepted/unaccepted suffix split to
+  reconstruct the synthetic next member byte-exactly under tiny output
+  backpressure.

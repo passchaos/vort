@@ -69,6 +69,8 @@ reverses any delta filter and validates decoded-data checksums before exposing
 the first byte of that block. A terminal zero block is mandatory before
 `finish`; partial headers, checksum fields, payloads, and terminators report
 `TruncatedFrame` with streaming diagnostics.
+`stop_after_first_stream` returns `.done` at the first validated terminal zero
+block and preserves following caller input for an outer member dispatcher.
 
 `LzopIncrementalEncoder` provides the matching block-bounded writer. It
 supports the normal per-block compressed-or-stored choice and an explicit

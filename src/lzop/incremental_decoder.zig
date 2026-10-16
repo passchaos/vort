@@ -39,6 +39,9 @@ pub const Decoder = struct {
         max_block_size: usize = 64 * 1024 * 1024,
         max_header_len: usize = 1024 * 1024,
         expected_output_len: ?usize = null,
+        /// Stop after the first validated zero block and leave a following
+        /// outer member unconsumed.
+        stop_after_first_stream: bool = false,
     };
     pub const Phase = enum {
         header,
@@ -251,7 +254,10 @@ pub const Decoder = struct {
             if (uncompressed_u32 == 0) {
                 self.stream_count = std.math.add(usize, self.stream_count, 1) catch
                     return error.IntegerOverflow;
-                self.phase = .between_streams;
+                self.phase = if (self.options.stop_after_first_stream)
+                    .done
+                else
+                    .between_streams;
                 return;
             }
             if (uncompressed_u32 == std.math.maxInt(u32)) return error.UnsupportedLzopFeature;

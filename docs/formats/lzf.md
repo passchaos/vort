@@ -37,6 +37,9 @@ block and its validated decoded block. Independent compressed/decoded block,
 total-output and expected-output limits apply before output becomes visible.
 EOF is valid at a block boundary, while the optional zero marker must still be
 the last encoded byte. Snapshots expose retained capacities and exact progress.
+For an outer member dispatcher, `stop_after_eof_marker` treats that marker as
+the exact stream boundary and leaves following caller input unconsumed; marker-
+less LZF still requires physical EOF and cannot provide this boundary.
 
 ```zig
 const encoded = try vort.encodeLzfAlloc(allocator, input, .{

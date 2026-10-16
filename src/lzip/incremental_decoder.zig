@@ -42,6 +42,9 @@ pub const Decoder = struct {
         max_compressed_buffer_len: usize = 1024 * 1024,
         max_members: usize = 1024 * 1024,
         expected_output_len: ?usize = null,
+        /// Stop after one validated lzip member and leave the next outer
+        /// member unconsumed instead of parsing lzip concatenation.
+        stop_after_first_member: bool = false,
     };
     pub const Phase = enum { header, payload, trailer, done };
     pub const Snapshot = struct {
@@ -255,8 +258,12 @@ pub const Decoder = struct {
                     return result(input_read, output_written, .need_input);
                 }
                 try self.validateTrailer();
-                self.finishMember();
-                self.phase = .header;
+                if (self.options.stop_after_first_member) {
+                    try self.complete();
+                } else {
+                    self.finishMember();
+                    self.phase = .header;
+                }
             },
             .done => return result(input_read, output_written, .done),
         };

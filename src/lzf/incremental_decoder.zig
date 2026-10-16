@@ -37,6 +37,9 @@ pub const Decoder = struct {
         max_compressed_block_len: usize = frame.max_block_size,
         max_decoded_block_len: usize = frame.max_block_size,
         expected_output_len: ?usize = null,
+        /// Stop immediately after the optional zero EOF marker and preserve
+        /// following caller input for an outer container.
+        stop_after_eof_marker: bool = false,
     };
     pub const Phase = enum { header, payload, output, after_eof, done };
     pub const Snapshot = struct {
@@ -158,7 +161,10 @@ pub const Decoder = struct {
                     input_read += 1;
                     try self.recordInput(1);
                     self.saw_eof_marker = true;
-                    self.phase = .after_eof;
+                    self.phase = if (self.options.stop_after_eof_marker)
+                        .done
+                    else
+                        .after_eof;
                     continue;
                 }
                 const take = @min(

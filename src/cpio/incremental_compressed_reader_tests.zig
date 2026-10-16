@@ -380,9 +380,9 @@ fn expectRecoverableSuffix(
 ) !void {
     const allocator = std.testing.allocator;
     const entries = [_]writer.EncodeEntry{.{ .name = "payload", .data = payload }};
-    const encoded = try compressed.encodeAlloc(allocator, &entries, .{
-        .compression = compression,
-    });
+    var encode_options = compressed.EncodeOptions{ .compression = compression };
+    if (compression == .lzf) encode_options.lzf_options.eof_marker = true;
+    const encoded = try compressed.encodeAlloc(allocator, &entries, encode_options);
     defer allocator.free(encoded);
     const suffix = "NEXT-MEMBER";
     const joined = try allocator.alloc(u8, encoded.len + suffix.len);
@@ -450,5 +450,20 @@ test "compressed CPIO readers expose recoverable first-stream suffixes" {
         compressed_reader.ZstandardReader,
         .zstandard,
         compressed_reader.codecs.Zstandard.Options{ .stop_after_first_frame = true },
+    );
+    try expectRecoverableSuffix(
+        compressed_reader.LzfReader,
+        .lzf,
+        compressed_reader.codecs.Lzf.Options{ .stop_after_eof_marker = true },
+    );
+    try expectRecoverableSuffix(
+        compressed_reader.LzipReader,
+        .lzip,
+        compressed_reader.codecs.Lzip.Options{ .stop_after_first_member = true },
+    );
+    try expectRecoverableSuffix(
+        compressed_reader.LzopReader,
+        .lzop,
+        compressed_reader.codecs.Lzop.Options{ .stop_after_first_stream = true },
     );
 }
