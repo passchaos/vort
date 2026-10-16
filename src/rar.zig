@@ -9,6 +9,7 @@ const writer = @import("rar/writer.zig");
 
 pub const Error = archive.Error || writer.Error || volume_set.Error;
 pub const Version = archive.Version;
+pub const Encryption = archive.Encryption;
 pub const DecodeOptions = archive.DecodeOptions;
 pub const Method = archive.Method;
 pub const Name = archive.Name;
@@ -20,6 +21,7 @@ pub const DecodedEntry = archive.DecodedEntry;
 pub const EncodeKind = writer.Kind;
 pub const EncodeCompression = writer.Compression;
 pub const EncodeFilter = writer.Filter;
+pub const EncodeEncryptionOptions = writer.EncryptionOptions;
 pub const EncodeEntry = writer.EncodeEntry;
 pub const EncodeOptions = writer.EncodeOptions;
 pub const EncodedVolumes = writer.EncodedVolumes;

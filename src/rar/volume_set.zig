@@ -26,6 +26,7 @@ pub const Entry = struct {
     solid: bool,
     directory: bool,
     encrypted: bool,
+    encryption: ?archive_mod.Encryption,
     redirection: bool,
     unknown_size: bool,
     safe_path: bool,
@@ -103,6 +104,7 @@ pub const VolumeSet = struct {
                         .solid = first.solid,
                         .directory = first.directory,
                         .encrypted = first.encrypted,
+                        .encryption = first.encryption,
                         .redirection = first.redirection,
                         .unknown_size = first.unknown_size,
                         .safe_path = first.safe_path,
@@ -319,6 +321,7 @@ fn compatibleFragments(first: archive_mod.Entry, next: archive_mod.Entry) bool {
         first.uncompressed_size == next.uncompressed_size and
         first.solid == next.solid and first.directory == next.directory and
         first.encrypted == next.encrypted and first.redirection == next.redirection and
+        std.meta.eql(first.encryption, next.encryption) and
         first.unknown_size == next.unknown_size;
 }
 

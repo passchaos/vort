@@ -15,9 +15,19 @@ pub fn createFile(
     const compression = try parseCompression(args.next());
     const filter = try parseFilter(args.next());
     const solid = try parseSolid(args.next());
+    const encryption = try parseEncryption(
+        args.next(),
+        args.next(),
+        args.next(),
+        args.next(),
+    );
     const input = try readFile(init, input_path);
     defer init.gpa.free(input);
-    const entries = [_]vort.RarEncodeEntry{.{ .name = entry_name, .data = input }};
+    const entries = [_]vort.RarEncodeEntry{.{
+        .name = entry_name,
+        .data = input,
+        .encryption = encryption,
+    }};
     const encoded = try vort.encodeRarAlloc(init.gpa, &entries, .{
         .version = version,
         .compression = compression,
@@ -26,11 +36,12 @@ pub fn createFile(
     });
     defer init.gpa.free(encoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
-    try stdout.print("rar_entries=1 version={s} method={s} filter={s} solid={} input_bytes={d} archive_bytes={d} path={s}\n", .{
+    try stdout.print("rar_entries=1 version={s} method={s} filter={s} solid={} encrypted={} input_bytes={d} archive_bytes={d} path={s}\n", .{
         @tagName(version),
         @tagName(compression),
         if (filter) |value| @tagName(value) else "none",
         solid,
+        encryption != null,
         input.len,
         encoded.len,
         output_path,
@@ -110,7 +121,7 @@ pub fn listFile(
     while (try iterator.next()) |entry| : (index += 1) {
         const name = try entry.name.alloc(init.gpa);
         defer init.gpa.free(name);
-        try stdout.print("index={d} method={s} method_id={d} compression_version={d} dictionary={?d} compressed={d} uncompressed={d} crc32={?d} directory={} encrypted={} solid={} split_before={} split_after={} safe_path={} name={s}\n", .{
+        try stdout.print("index={d} method={s} method_id={d} compression_version={d} dictionary={?d} compressed={d} uncompressed={d} crc32={?d} directory={} encrypted={} kdf_count={?d} solid={} split_before={} split_after={} safe_path={} name={s}\n", .{
             index,
             @tagName(entry.method),
             entry.method_id,
@@ -121,6 +132,7 @@ pub fn listFile(
             entry.crc32,
             entry.directory,
             entry.encrypted,
+            if (entry.encryption) |encryption| encryption.kdf_count else null,
             entry.solid,
             entry.split_before,
             entry.split_after,
@@ -142,13 +154,14 @@ pub fn extractFile(
         try std.fmt.parseInt(usize, text, 10)
     else
         max_file_size;
+    const password = args.next();
     const bytes = try readFile(init, input_path);
     defer init.gpa.free(bytes);
     const archive = try vort.parseRarArchive(bytes);
-    const decoded = try archive.extractByNameAllocLimited(
+    const decoded = try archive.extractByNameAllocWithOptions(
         init.gpa,
         entry_name,
-        max_output_len,
+        .{ .max_output_len = max_output_len, .password = password },
     );
     defer init.gpa.free(decoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
@@ -249,6 +262,35 @@ fn parseSolid(value: ?[]const u8) !bool {
     if (std.mem.eql(u8, name, "solid")) return true;
     if (std.mem.eql(u8, name, "non-solid") or std.mem.eql(u8, name, "nonsolid")) return false;
     return error.UnsupportedRarSolidMode;
+}
+
+fn parseEncryption(
+    password_text: ?[]const u8,
+    salt_text: ?[]const u8,
+    iv_text: ?[]const u8,
+    kdf_text: ?[]const u8,
+) !?vort.RarEncodeEncryptionOptions {
+    const password = password_text orelse return null;
+    if (std.mem.eql(u8, password, "-")) return null;
+    const salt_hex = salt_text orelse return error.MissingRarEncryptionSalt;
+    const iv_hex = iv_text orelse return error.MissingRarEncryptionIv;
+    var salt: [16]u8 = undefined;
+    var iv: [16]u8 = undefined;
+    _ = std.fmt.hexToBytes(&salt, salt_hex) catch
+        return error.InvalidRarEncryptionSalt;
+    _ = std.fmt.hexToBytes(&iv, iv_hex) catch
+        return error.InvalidRarEncryptionIv;
+    if (salt_hex.len != 2 * salt.len) return error.InvalidRarEncryptionSalt;
+    if (iv_hex.len != 2 * iv.len) return error.InvalidRarEncryptionIv;
+    return .{
+        .password = password,
+        .salt = salt,
+        .iv = iv,
+        .kdf_count = if (kdf_text) |text|
+            try std.fmt.parseInt(u8, text, 10)
+        else
+            15,
+    };
 }
 
 fn readFile(init: std.process.Init, path: []const u8) ![]u8 {

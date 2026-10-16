@@ -639,6 +639,7 @@ pub const encodeRpmInto = rpm.encodeInto;
 
 pub const RarError = rar.Error;
 pub const RarVersion = rar.Version;
+pub const RarEncryption = rar.Encryption;
 pub const RarDecodeOptions = rar.DecodeOptions;
 pub const RarMethod = rar.Method;
 pub const RarName = rar.Name;
@@ -650,6 +651,7 @@ pub const RarDecodedEntry = rar.DecodedEntry;
 pub const RarEncodeKind = rar.EncodeKind;
 pub const RarEncodeCompression = rar.EncodeCompression;
 pub const RarEncodeFilter = rar.EncodeFilter;
+pub const RarEncodeEncryptionOptions = rar.EncodeEncryptionOptions;
 pub const RarEncodeEntry = rar.EncodeEntry;
 pub const RarEncodeOptions = rar.EncodeOptions;
 pub const RarEncodedVolumes = rar.EncodedVolumes;

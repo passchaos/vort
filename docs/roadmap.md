@@ -21016,3 +21016,18 @@ reuse, so production keeps the simpler independently owned plans.
   Info-ZIP 6.00 both reject the APPNOTE-defined layout by assuming central
   offset points directly to a file header, so no third-party read support is
   claimed.
+
+- Added RAR5 AES-256-CBC file-data encryption for Stored and RAR50 members,
+  including solid compressed continuations. `../vail/archive_crypto` now owns
+  the extended PBKDF2-HMAC-SHA256 checkpoints, AES-CBC state, 8+4-byte password
+  checks and keyed CRC/hash transforms; Vort owns the type-1 extra record,
+  explicit per-entry salt/IV policy, zero padding, KDF limits, checksum and
+  codec composition. Readers distinguish missing/wrong passwords, corrupt
+  password checks, excessive KDF work, invalid ciphertext and content checksum
+  failures before a successful extraction return. Focused tests cover deterministic wire,
+  Stored/RAR50, wrong passwords, KDF limits, corrupt ciphertext, solid history,
+  OOM and explicit encrypted-volume rejection. The RAR differential adds two
+  Vort-to-7-Zip 26.04 and two RAR 7.30-to-Vort encrypted directions
+  (`writer_encrypted=2`, `writer_encrypted_external=2`,
+  `reference_encrypted=2`). RAR4 payload encryption, RAR5 encrypted headers and
+  encrypted multi-volume composition remain explicit next encryption stages.

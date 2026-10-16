@@ -150,6 +150,14 @@ pub fn build(b: *std.Build) void {
         "Run focused compressed TAR incremental writer tests",
     );
     tar_incremental_writer_test_step.dependOn(&run_tar_incremental_writer_tests.step);
+    const rar_tests = b.addTest(.{
+        .name = "vort-rar-tests",
+        .root_module = tests_mod,
+        .filters = &.{"RAR"},
+    });
+    const run_rar_tests = b.addRunArtifact(rar_tests);
+    const rar_test_step = b.step("test-rar", "Run focused RAR archive and codec tests");
+    rar_test_step.dependOn(&run_rar_tests.step);
     const br_tests_mod = b.createModule(.{
         .root_source_file = b.path("src/br.zig"),
         .target = target,
@@ -1892,7 +1900,7 @@ pub fn build(b: *std.Build) void {
     rar_diff.addArg("--writer");
     rar_diff.addArtifactArg(rar_writer_probe_exe);
     if (b.args) |args| rar_diff.addArgs(args);
-    const rar_diff_step = b.step("run-rar-diff", "Validate RAR29/RAR50 writing plus legacy decoding against optional 7-Zip and rars");
+    const rar_diff_step = b.step("run-rar-diff", "Validate RAR codecs and RAR5 encryption against optional RAR, 7-Zip, and rars");
     rar_diff_step.dependOn(&rar_diff.step);
 
     const lzop_diff = b.addSystemCommand(&.{ "python3", "tools/lzop/diff.py", "--cli" });

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RAR4/RAR5 stored-container interoperability and rejection harness."""
+"""RAR4/RAR5 codec, encryption, and rejection interoperability harness."""
 
 from __future__ import annotations
 
@@ -33,9 +33,23 @@ def make_payload() -> bytes:
     return prefix + b"RAR interoperability payload\n" * 512 + prefix
 
 
-def seven_zip_extract(tool: Path, archive: Path, output_dir: Path) -> bytes:
+def seven_zip_extract(
+    tool: Path,
+    archive: Path,
+    output_dir: Path,
+    password: str | None = None,
+) -> bytes:
     output_dir.mkdir()
-    run(tool, "x", "-y", f"-o{output_dir}", str(archive), "payload.bin")
+    password_arg = (f"-p{password}",) if password is not None else ()
+    run(
+        tool,
+        "x",
+        "-y",
+        *password_arg,
+        f"-o{output_dir}",
+        str(archive),
+        "payload.bin",
+    )
     return (output_dir / "payload.bin").read_bytes()
 
 
@@ -100,6 +114,7 @@ def main() -> None:
     parser.add_argument("--cli", required=True, type=Path)
     parser.add_argument("--writer", type=Path)
     parser.add_argument("--7zz", dest="seven_zip", type=Path)
+    parser.add_argument("--rar", dest="rar_tool", type=Path)
     parser.add_argument("--rars", type=Path)
     parser.add_argument("--fixtures", type=Path)
     parser.add_argument("--legacy-fixtures", type=Path)
@@ -108,6 +123,10 @@ def main() -> None:
     if seven_zip is None:
         found = shutil.which("7zz") or shutil.which("7z")
         seven_zip = Path(found) if found else None
+    rar_tool = args.rar_tool
+    if rar_tool is None:
+        found = shutil.which("rar")
+        rar_tool = Path(found) if found else None
     versions = ("rar4", "rar5")
     payload = make_payload()
     writer_external = 0
@@ -121,6 +140,9 @@ def main() -> None:
     writer_solid_external = 0
     writer_volumes = 0
     writer_volumes_external = 0
+    writer_encrypted = 0
+    writer_encrypted_external = 0
+    reference_encrypted = 0
     reference_stored = 0
     reference_compressed = 0
     reference_compressed_decoded = 0
@@ -217,6 +239,106 @@ def main() -> None:
                         f"7-Zip rejected Vort {compression} compressed output"
                     )
                 writer_compressed_external += 1
+
+        encryption_password = "RAR5-test-password"
+        encryption_vectors = (
+            (
+                "stored",
+                "000102030405060708090a0b0c0d0e0f",
+                "101112131415161718191a1b1c1d1e1f",
+            ),
+            (
+                "rar50",
+                "202122232425262728292a2b2c2d2e2f",
+                "303132333435363738393a3b3c3d3e3f",
+            ),
+        )
+        for compression, salt_hex, iv_hex in encryption_vectors:
+            encrypted_archive = temp / f"vort-rar5-{compression}-encrypted.rar"
+            encrypted_output = temp / f"vort-rar5-{compression}-encrypted.out"
+            run(
+                args.cli,
+                "create-rar-file",
+                str(encrypted_archive),
+                "payload.bin",
+                str(source),
+                "rar5",
+                compression,
+                "none",
+                "non-solid",
+                encryption_password,
+                salt_hex,
+                iv_hex,
+                "3",
+            )
+            listing = run(args.cli, "list-rar-file", str(encrypted_archive)).stdout
+            if "encrypted=true" not in listing or "kdf_count=3" not in listing:
+                raise AssertionError(f"Vort lost RAR5 encryption metadata: {listing}")
+            run(
+                args.cli,
+                "extract-rar-file",
+                str(encrypted_archive),
+                "payload.bin",
+                str(encrypted_output),
+                str(len(payload)),
+                encryption_password,
+            )
+            if encrypted_output.read_bytes() != payload:
+                raise AssertionError(f"Vort failed encrypted {compression} self extraction")
+            wrong_password = run(
+                args.cli,
+                "extract-rar-file",
+                str(encrypted_archive),
+                "payload.bin",
+                str(temp / f"vort-rar5-{compression}-wrong.out"),
+                str(len(payload)),
+                "wrong-password",
+                check=False,
+            )
+            if wrong_password.returncode == 0 or "InvalidRarPassword" not in wrong_password.stderr:
+                raise AssertionError(f"Vort accepted wrong RAR5 {compression} password")
+            writer_encrypted += 1
+            if seven_zip is not None:
+                if seven_zip_extract(
+                    seven_zip,
+                    encrypted_archive,
+                    temp / f"7z-vort-rar5-{compression}-encrypted",
+                    encryption_password,
+                ) != payload:
+                    raise AssertionError(f"7-Zip rejected Vort encrypted {compression}")
+                writer_encrypted_external += 1
+
+        if rar_tool is not None:
+            reference_root = temp / "rar5-encrypted-reference"
+            reference_root.mkdir()
+            reference_source = reference_root / "payload.bin"
+            reference_source.write_bytes(payload)
+            for compression, method in (("stored", "0"), ("rar50", "5")):
+                reference_archive = temp / f"reference-rar5-{compression}-encrypted.rar"
+                reference_output = temp / f"reference-rar5-{compression}-encrypted.out"
+                run(
+                    rar_tool,
+                    "a",
+                    "-idq",
+                    "-ma5",
+                    f"-m{method}",
+                    "-ep",
+                    f"-p{encryption_password}",
+                    str(reference_archive),
+                    str(reference_source),
+                )
+                run(
+                    args.cli,
+                    "extract-rar-file",
+                    str(reference_archive),
+                    "payload.bin",
+                    str(reference_output),
+                    str(len(payload)),
+                    encryption_password,
+                )
+                if reference_output.read_bytes() != payload:
+                    raise AssertionError(f"Vort rejected RAR encrypted {compression}")
+                reference_encrypted += 1
 
         ppmd_first = temp / "vort-rar29-ppmd-first.rar"
         ppmd_second = temp / "vort-rar29-ppmd-second.rar"
@@ -864,6 +986,9 @@ def main() -> None:
         f"writer_solid_external={writer_solid_external} "
         f"writer_volumes={writer_volumes} "
         f"writer_volumes_external={writer_volumes_external} "
+        f"writer_encrypted={writer_encrypted} "
+        f"writer_encrypted_external={writer_encrypted_external} "
+        f"reference_encrypted={reference_encrypted} "
         f"reference_stored={reference_stored} reference_compressed={reference_compressed} "
         f"reference_compressed_decoded={reference_compressed_decoded} "
         f"fixture_cases={fixture_cases} rar15_entries={rar15_entries} "

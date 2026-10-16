@@ -5,8 +5,10 @@ const rar15 = @import("rar15.zig");
 const rar20 = @import("rar20.zig");
 const rar29 = @import("rar29.zig");
 const rar50 = @import("rar50.zig");
+const rar5_encryption = @import("rar5_encryption.zig");
 
-pub const Error = core.Error || rar15.Error || rar20.Error || rar29.Error || rar50.Error || error{
+pub const Error = core.Error || rar15.Error || rar20.Error || rar29.Error || rar50.Error ||
+    rar5_encryption.Error || error{
     InvalidRarArchive,
     UnsupportedRarCompression,
     UnsupportedRarEntry,
@@ -17,15 +19,19 @@ pub const Error = core.Error || rar15.Error || rar20.Error || rar29.Error || rar
     RarEntryNotFound,
     RarEntryRequiresAllocator,
     RarExtractSessionPoisoned,
+    RarPasswordRequired,
 };
 
 pub const Version = enum { rar4, rar5 };
+pub const Encryption = rar5_encryption.Metadata;
 
 pub const DecodeOptions = struct {
     max_output_len: usize = std.math.maxInt(usize),
     max_ppmd_memory: usize = rar29.default_max_ppmd_memory,
     max_vm_instructions: usize = rar29.default_max_vm_instructions,
     max_rar50_dictionary_size: usize = std.math.maxInt(usize),
+    max_rar5_kdf_count: u8 = rar5_encryption.hard_max_kdf_count,
+    password: ?[]const u8 = null,
 };
 
 pub const Method = enum {
@@ -84,6 +90,7 @@ pub const Entry = struct {
     mtime: ?u32,
     directory: bool,
     encrypted: bool,
+    encryption: ?Encryption,
     solid: bool,
     split_before: bool,
     split_after: bool,
@@ -189,10 +196,27 @@ pub const Archive = struct {
             canonical.compressed_size,
             self.bytes.len,
         );
-        const data = self.bytes[canonical.data_offset..data_end];
+        const wire_data = self.bytes[canonical.data_offset..data_end];
+        var decrypted: ?rar5_encryption.Decrypted = if (canonical.encryption) |metadata| blk: {
+            const scratch = allocator orelse return error.RarEntryRequiresAllocator;
+            const password = options.password orelse return error.RarPasswordRequired;
+            break :blk try rar5_encryption.decryptAlloc(
+                scratch,
+                wire_data,
+                password,
+                metadata,
+                options.max_rar5_kdf_count,
+            );
+        } else null;
+        defer if (decrypted) |*value| value.deinit();
+        const data = if (decrypted) |*value| value.bytes else wire_data;
         const target = output[0..canonical.uncompressed_size];
         switch (canonical.method) {
-            .stored => @memcpy(target, data),
+            .stored => {
+                if (data.len < target.len or data.len - target.len >= 16)
+                    return error.SizeMismatch;
+                @memcpy(target, data[0..target.len]);
+            },
             .rar15 => try rar15.decodeInto(data, target),
             .rar20 => try rar20.decodeInto(data, target),
             .rar29 => if (allocator) |scratch|
@@ -234,8 +258,14 @@ pub const Archive = struct {
                 return error.RarEntryRequiresAllocator,
             else => unreachable,
         }
-        if (canonical.crc32) |expected|
-            if (checksum.crc32(target) != expected) return error.ChecksumMismatch;
+        if (canonical.crc32) |expected| {
+            const actual = checksum.crc32(target);
+            const matches = if (decrypted) |*value|
+                value.crcMatches(actual, expected)
+            else
+                actual == expected;
+            if (!matches) return error.ChecksumMismatch;
+        }
         return target.len;
     }
 
@@ -267,6 +297,7 @@ pub const Archive = struct {
         options: DecodeOptions,
     ) ![]u8 {
         const canonical = try self.extractableEntry(entry);
+        try validateEncryptionAccess(canonical, options);
         if (canonical.uncompressed_size > options.max_output_len)
             return error.OutputLimitExceeded;
         if (canonical.method == .rar50) {
@@ -384,6 +415,10 @@ pub const ExtractSession = struct {
             self.poisoned = true;
             return err;
         };
+        validateEncryptionAccess(canonical, self.options) catch |err| {
+            self.poisoned = true;
+            return err;
+        };
         if (canonical.method != .rar29) self.rar29_session.reset();
         if (canonical.directory) {
             return .{ .entry = canonical, .data = try self.allocator.alloc(u8, 0) };
@@ -428,7 +463,8 @@ fn validateExtractable(
     allow_directory: bool,
 ) Error!void {
     if (canonical.directory and !allow_directory) return error.UnsupportedRarEntry;
-    if (canonical.encrypted) return error.EncryptedRarEntry;
+    if (canonical.encrypted and canonical.encryption == null)
+        return error.EncryptedRarEntry;
     if (canonical.split_before or canonical.split_after) return error.SplitRarEntry;
     if (canonical.redirection or canonical.unknown_size) return error.UnsupportedRarFeature;
     if (canonical.solid and canonical.method != .stored and
@@ -438,8 +474,15 @@ fn validateExtractable(
         canonical.method != .rar20 and canonical.method != .rar29 and
         canonical.method != .rar50)
         return error.UnsupportedRarCompression;
-    if (canonical.method == .stored and canonical.compressed_size != canonical.uncompressed_size)
+    if (canonical.method == .stored and !canonical.encrypted and
+        canonical.compressed_size != canonical.uncompressed_size)
         return error.SizeMismatch;
+}
+
+fn validateEncryptionAccess(canonical: Entry, options: DecodeOptions) Error!void {
+    const metadata = canonical.encryption orelse return;
+    if (options.password == null) return error.RarPasswordRequired;
+    try rar5_encryption.validateMetadata(metadata, options.max_rar5_kdf_count);
 }
 
 pub const Iterator = struct {
@@ -705,6 +748,7 @@ fn parseRar4Block(bytes: []const u8, offset: usize) Error!ParsedBlock {
             .mtime = readLe32(bytes, offset + 20),
             .directory = directory,
             .encrypted = raw.flags & rar4_file_password != 0,
+            .encryption = null,
             .solid = raw.flags & rar4_file_solid != 0,
             .split_before = raw.flags & rar4_file_split_before != 0,
             .split_after = raw.flags & rar4_file_split_after != 0,
@@ -821,7 +865,8 @@ fn parseRar5Block(bytes: []const u8, offset: usize) Error!ParsedBlock {
     const compression_version: u8 = @intCast(compression_info & 0x3f);
     const unpacked_size = std.math.cast(usize, unpacked_u64) orelse return error.IntegerOverflow;
     const directory = file_flags & rar5_file_directory != 0;
-    const encrypted = try rar5ExtraHasType(bytes, raw.extra_start, raw.extra_end, 1);
+    const encryption = try rar5EncryptionRecord(bytes, raw.extra_start, raw.extra_end);
+    const encrypted = encryption != null;
     const redirection = try rar5ExtraHasType(bytes, raw.extra_start, raw.extra_end, 5);
     if (directory and (raw.data_size != 0 or unpacked_size != 0)) return error.InvalidRarArchive;
     const method: Method = if (compression_version > 1)
@@ -859,6 +904,7 @@ fn parseRar5Block(bytes: []const u8, offset: usize) Error!ParsedBlock {
             .mtime = mtime,
             .directory = directory,
             .encrypted = encrypted,
+            .encryption = encryption,
             .solid = compression_info & 0x40 != 0,
             .split_before = raw.flags & rar5_header_split_before != 0,
             .split_after = raw.flags & rar5_header_split_after != 0,
@@ -869,6 +915,63 @@ fn parseRar5Block(bytes: []const u8, offset: usize) Error!ParsedBlock {
         .next_offset = raw.next_offset,
         .end_archive = false,
     };
+}
+
+fn rar5EncryptionRecord(
+    bytes: []const u8,
+    start: usize,
+    end: usize,
+) Error!?Encryption {
+    var result: ?Encryption = null;
+    var cursor = start;
+    while (cursor < end) {
+        const record_size_u64 = try readVint(bytes, &cursor, end);
+        const record_size = std.math.cast(usize, record_size_u64) orelse
+            return error.IntegerOverflow;
+        if (record_size == 0) return error.InvalidRarArchive;
+        const record_end = try checkedEnd(cursor, record_size, end);
+        const record_type = try readVint(bytes, &cursor, record_end);
+        if (record_type == 1) {
+            if (result != null) return error.InvalidRarArchive;
+            const version = try readVint(bytes, &cursor, record_end);
+            const flags = try readVint(bytes, &cursor, record_end);
+            if (cursor >= record_end) return error.TruncatedFrame;
+            const kdf_count = bytes[cursor];
+            cursor += 1;
+            const fixed_end = try checkedEnd(
+                cursor,
+                rar5_encryption.salt_len + rar5_encryption.iv_len,
+                record_end,
+            );
+            const salt = bytes[cursor..][0..rar5_encryption.salt_len].*;
+            const iv_start = cursor + rar5_encryption.salt_len;
+            const iv = bytes[iv_start..][0..rar5_encryption.iv_len].*;
+            cursor = fixed_end;
+            const password_check = if (flags & rar5_encryption.password_check_flag != 0) blk: {
+                const check_end = try checkedEnd(
+                    cursor,
+                    rar5_encryption.password_check_record_len,
+                    record_end,
+                );
+                const value = bytes[cursor..][0..rar5_encryption.password_check_record_len].*;
+                cursor = check_end;
+                break :blk value;
+            } else null;
+            if (cursor != record_end) return error.InvalidRarArchive;
+            const metadata = Encryption{
+                .version = version,
+                .flags = flags,
+                .kdf_count = kdf_count,
+                .salt = salt,
+                .iv = iv,
+                .password_check = password_check,
+            };
+            try rar5_encryption.validateMetadataStructure(metadata);
+            result = metadata;
+        }
+        cursor = record_end;
+    }
+    return result;
 }
 
 fn rar5ExtraHasType(
@@ -948,6 +1051,7 @@ fn sameEntry(a: Entry, b: Entry) bool {
         a.data_offset == b.data_offset and a.next_offset == b.next_offset and
         a.host_os == b.host_os and a.attributes == b.attributes and a.mtime == b.mtime and
         a.directory == b.directory and a.encrypted == b.encrypted and a.solid == b.solid and
+        std.meta.eql(a.encryption, b.encryption) and
         a.split_before == b.split_before and a.split_after == b.split_after and
         a.unknown_size == b.unknown_size and a.redirection == b.redirection and
         a.safe_path == b.safe_path and std.mem.eql(u8, a.name.bytes, b.name.bytes);

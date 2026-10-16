@@ -4,9 +4,10 @@ const checksum = @import("../checksum.zig");
 const ppmd_h = @import("ppmd_h.zig");
 const rar29_encoder = @import("rar29_encoder.zig");
 const rar50_encoder = @import("rar50_encoder.zig");
+const rar5_encryption = @import("rar5_encryption.zig");
 
 pub const Error = archive.Error || rar29_encoder.Error || rar50_encoder.Error ||
-    std.mem.Allocator.Error || error{
+    rar5_encryption.Error || std.mem.Allocator.Error || error{
     InvalidRarEntryName,
     RarFileTooLarge,
     RarHeaderTooLarge,
@@ -25,6 +26,7 @@ pub const Filter = union(enum) {
     rgb: struct { width: usize, red_position: u8 = 0 },
     audio: u8,
 };
+pub const EncryptionOptions = rar5_encryption.Options;
 
 pub const EncodeEntry = struct {
     name: []const u8,
@@ -34,6 +36,9 @@ pub const EncodeEntry = struct {
     /// RAR4 stores a DOS date/time word; RAR5 stores Unix seconds.
     /// The value is therefore native to the selected container generation.
     mtime: ?u32 = null,
+    /// RAR5 file-data encryption. Salt and IV must be unique and unpredictable
+    /// for each regular entry; generation remains explicitly caller-owned.
+    encryption: ?EncryptionOptions = null,
 };
 
 pub const EncodeOptions = struct {
@@ -110,6 +115,8 @@ pub fn encodeVolumesAlloc(
     if (options.version != .rar5) return error.UnsupportedRarEncodeOptions;
     if (max_payload_per_volume == 0) return error.InvalidRarVolumeSize;
     try validateEntries(entries, options);
+    for (entries) |entry|
+        if (entry.encryption != null) return error.UnsupportedRarEncodeOptions;
 
     var volumes: std.ArrayList([]u8) = .empty;
     errdefer {
@@ -176,6 +183,7 @@ pub fn encodeVolumesAlloc(
                 compression_info,
                 fragment_crc,
                 general_flags,
+                "",
             );
             payload_in_volume += fragment_len;
             offset += fragment_len;
@@ -242,6 +250,11 @@ fn validateEntries(entries: []const EncodeEntry, options: EncodeOptions) Error!v
                 if (byte >= 0x80) return error.InvalidRarEntryName;
         } else if (!std.unicode.utf8ValidateSlice(entry.name)) {
             return error.InvalidRarEntryName;
+        }
+        if (entry.encryption) |encryption| {
+            if (options.version != .rar5 or entry.kind != .regular)
+                return error.UnsupportedRarEncodeOptions;
+            try rar5_encryption.validateOptions(encryption);
         }
     }
 }
@@ -492,14 +505,25 @@ fn appendRar5File(
         try rar50CompressionInfo(options.dictionary_size, solid_continuation)
     else
         0;
+    const plain_crc = checksum.crc32(entry.data);
+    var encrypted: ?rar5_encryption.Encrypted = if (entry.encryption) |encryption|
+        try rar5_encryption.encryptAlloc(allocator, payload, plain_crc, encryption)
+    else
+        null;
+    defer if (encrypted) |*value| value.deinit();
+    var extra: std.ArrayList(u8) = .empty;
+    defer extra.deinit(allocator);
+    if (encrypted) |value|
+        try appendRar5EncryptionRecord(allocator, &extra, value.metadata);
     try appendRar5FileFragment(
         allocator,
         output,
         entry,
-        payload,
+        if (encrypted) |value| value.bytes else payload,
         compression_info,
-        checksum.crc32(entry.data),
+        if (encrypted) |value| value.wire_crc32 else plain_crc,
         0,
+        extra.items,
     );
 }
 
@@ -511,6 +535,7 @@ fn appendRar5FileFragment(
     compression_info: u64,
     data_crc32: u32,
     general_flags: u64,
+    extra: []const u8,
 ) !void {
     var specific: std.ArrayList(u8) = .empty;
     defer specific.deinit(allocator);
@@ -531,12 +556,30 @@ fn appendRar5FileFragment(
         allocator,
         output,
         2,
-        0x0002 | general_flags,
+        0x0002 | (if (extra.len != 0) @as(u64, 0x0001) else 0) | general_flags,
         payload.len,
         specific.items,
-        "",
+        extra,
         payload,
     );
+}
+
+fn appendRar5EncryptionRecord(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    metadata: rar5_encryption.Metadata,
+) !void {
+    var record: std.ArrayList(u8) = .empty;
+    defer record.deinit(allocator);
+    try appendVint(allocator, &record, 1);
+    try appendVint(allocator, &record, metadata.version);
+    try appendVint(allocator, &record, metadata.flags);
+    try record.append(allocator, metadata.kdf_count);
+    try record.appendSlice(allocator, &metadata.salt);
+    try record.appendSlice(allocator, &metadata.iv);
+    if (metadata.password_check) |check| try record.appendSlice(allocator, &check);
+    try appendVint(allocator, output, record.items.len);
+    try output.appendSlice(allocator, record.items);
 }
 
 fn rar50CompressionInfo(dictionary_size: usize, solid_continuation: bool) Error!u64 {
@@ -1099,6 +1142,265 @@ test "RAR50 solid writer reuses history across members" {
             .solid = true,
         }),
     );
+}
+
+test "RAR5 encrypted Stored and RAR50 entries round trip with bounded KDF" {
+    const allocator = std.testing.allocator;
+    const payload = "RAR5 encrypted archive payload alpha beta gamma\n" ** 97;
+    const encryption = EncryptionOptions{
+        .password = "correct horse 密码",
+        .salt = .{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 },
+        .iv = .{ 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0 },
+        .kdf_count = 3,
+    };
+    const entries = [_]EncodeEntry{.{
+        .name = "secret.bin",
+        .data = payload,
+        .encryption = encryption,
+    }};
+    inline for (.{ Compression.stored, Compression.rar50 }) |compression| {
+        const encoded = try encodeAlloc(allocator, &entries, .{
+            .compression = compression,
+            .block_size = 1024,
+        });
+        defer allocator.free(encoded);
+        const second = try encodeAlloc(allocator, &entries, .{
+            .compression = compression,
+            .block_size = 1024,
+        });
+        defer allocator.free(second);
+        try std.testing.expectEqualSlices(u8, encoded, second);
+        const parsed = try archive.parse(encoded);
+        const entry = try parsed.entryAt(0);
+        try std.testing.expect(entry.encrypted);
+        try std.testing.expect(entry.encryption != null);
+        try std.testing.expectEqual(@as(usize, 0), entry.compressed_size % 16);
+        try std.testing.expect(entry.crc32.? != checksum.crc32(payload));
+        var output: [payload.len]u8 = undefined;
+        try std.testing.expectError(
+            error.RarEntryRequiresAllocator,
+            parsed.extractInto(entry, &output),
+        );
+        try std.testing.expectError(
+            error.RarPasswordRequired,
+            parsed.extractAllocWithOptions(allocator, entry, .{}),
+        );
+        try std.testing.expectError(
+            error.InvalidRarPassword,
+            parsed.extractAllocWithOptions(allocator, entry, .{
+                .password = "wrong password",
+                .max_rar5_kdf_count = 3,
+            }),
+        );
+        try std.testing.expectError(
+            error.Rar5KdfLimitExceeded,
+            parsed.extractAllocWithOptions(allocator, entry, .{
+                .password = encryption.password,
+                .max_rar5_kdf_count = 2,
+            }),
+        );
+        const decoded = try parsed.extractAllocWithOptions(allocator, entry, .{
+            .password = encryption.password,
+            .max_rar5_kdf_count = 3,
+        });
+        defer allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
+
+    const stored = try encodeAlloc(allocator, &entries, .{});
+    defer allocator.free(stored);
+    const parsed = try archive.parse(stored);
+    const entry = try parsed.entryAt(0);
+    stored[entry.data_offset] ^= 1;
+    const corrupt = try archive.parse(stored);
+    try std.testing.expectError(
+        error.ChecksumMismatch,
+        corrupt.extractAllocWithOptions(allocator, try corrupt.entryAt(0), .{
+            .password = encryption.password,
+            .max_rar5_kdf_count = 3,
+        }),
+    );
+}
+
+test "RAR5 encryption composes with solid RAR50 history" {
+    const allocator = std.testing.allocator;
+    var payload: [32 * 1024]u8 = undefined;
+    var random = std.Random.DefaultPrng.init(0x7261_7235_6372_7970);
+    random.fill(&payload);
+    const entries = [_]EncodeEntry{
+        .{
+            .name = "first.bin",
+            .data = &payload,
+            .encryption = .{
+                .password = "solid secret",
+                .salt = [_]u8{0x11} ** 16,
+                .iv = [_]u8{0x21} ** 16,
+                .kdf_count = 2,
+            },
+        },
+        .{
+            .name = "second.bin",
+            .data = &payload,
+            .encryption = .{
+                .password = "solid secret",
+                .salt = [_]u8{0x12} ** 16,
+                .iv = [_]u8{0x22} ** 16,
+                .kdf_count = 2,
+            },
+        },
+    };
+    const encoded = try encodeAlloc(allocator, &entries, .{
+        .compression = .rar50,
+        .solid = true,
+    });
+    defer allocator.free(encoded);
+    const parsed = try archive.parse(encoded);
+    const second = try parsed.entryAt(1);
+    try std.testing.expect(second.encrypted);
+    try std.testing.expect(second.solid);
+    try std.testing.expectError(
+        error.UnsupportedRarFeature,
+        parsed.extractAllocWithOptions(allocator, second, .{ .password = "solid secret" }),
+    );
+    const decoded = try parsed.extractByNameAllocWithOptions(
+        allocator,
+        "second.bin",
+        .{ .password = "solid secret", .max_rar5_kdf_count = 2 },
+    );
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
+test "RAR5 encryption parser validates records before expensive KDF work" {
+    const allocator = std.testing.allocator;
+    const entries = [_]EncodeEntry{.{
+        .name = "secret.bin",
+        .data = "RAR5 hostile encryption metadata",
+        .encryption = .{
+            .password = "password",
+            .salt = [_]u8{0x51} ** 16,
+            .iv = [_]u8{0x61} ** 16,
+            .kdf_count = 2,
+        },
+    }};
+    const encoded = try encodeAlloc(allocator, &entries, .{});
+    defer allocator.free(encoded);
+    const parsed = try archive.parse(encoded);
+    const entry = try parsed.entryAt(0);
+    const kdf_offset = entry.data_offset - (16 + 16 + 12 + 1);
+
+    const excessive = try allocator.dupe(u8, encoded);
+    defer allocator.free(excessive);
+    excessive[kdf_offset] = 25;
+    std.mem.writeInt(
+        u32,
+        excessive[entry.header_offset..][0..4],
+        checksum.crc32(excessive[entry.header_offset + 4 .. entry.data_offset]),
+        .little,
+    );
+    const excessive_archive = try archive.parse(excessive);
+    const excessive_entry = try excessive_archive.entryAt(0);
+    try std.testing.expectEqual(@as(u8, 25), excessive_entry.encryption.?.kdf_count);
+    try std.testing.expectError(
+        error.Rar5KdfLimitExceeded,
+        excessive_archive.extractAllocWithOptions(allocator, excessive_entry, .{
+            .password = "password",
+            .max_rar5_kdf_count = 24,
+        }),
+    );
+
+    const bad_check = try allocator.dupe(u8, encoded);
+    defer allocator.free(bad_check);
+    bad_check[entry.data_offset - 1] ^= 1;
+    std.mem.writeInt(
+        u32,
+        bad_check[entry.header_offset..][0..4],
+        checksum.crc32(bad_check[entry.header_offset + 4 .. entry.data_offset]),
+        .little,
+    );
+    try std.testing.expectError(
+        error.CorruptRar5PasswordCheck,
+        archive.parse(bad_check),
+    );
+
+    const unknown_flags = try allocator.dupe(u8, encoded);
+    defer allocator.free(unknown_flags);
+    unknown_flags[kdf_offset - 1] |= 4;
+    std.mem.writeInt(
+        u32,
+        unknown_flags[entry.header_offset..][0..4],
+        checksum.crc32(unknown_flags[entry.header_offset + 4 .. entry.data_offset]),
+        .little,
+    );
+    try std.testing.expectError(
+        error.InvalidRar5Encryption,
+        archive.parse(unknown_flags),
+    );
+}
+
+test "RAR5 encryption without password check relies on keyed content CRC" {
+    const allocator = std.testing.allocator;
+    const entries = [_]EncodeEntry{.{
+        .name = "secret.bin",
+        .data = "RAR5 checksum-only password validation",
+        .encryption = .{
+            .password = "correct",
+            .salt = [_]u8{0x71} ** 16,
+            .iv = [_]u8{0x81} ** 16,
+            .kdf_count = 1,
+            .include_password_check = false,
+        },
+    }};
+    const encoded = try encodeAlloc(allocator, &entries, .{});
+    defer allocator.free(encoded);
+    const parsed = try archive.parse(encoded);
+    const entry = try parsed.entryAt(0);
+    try std.testing.expect(entry.encryption.?.password_check == null);
+    try std.testing.expectError(
+        error.ChecksumMismatch,
+        parsed.extractAllocWithOptions(allocator, entry, .{
+            .password = "wrong",
+            .max_rar5_kdf_count = 1,
+        }),
+    );
+    const decoded = try parsed.extractAllocWithOptions(allocator, entry, .{
+        .password = "correct",
+        .max_rar5_kdf_count = 1,
+    });
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, entries[0].data, decoded);
+}
+
+test "RAR5 encryption rejects unsupported volumes and releases allocation failures" {
+    const entries = [_]EncodeEntry{.{
+        .name = "secret.bin",
+        .data = "allocation safe secret",
+        .encryption = .{
+            .password = "password",
+            .salt = [_]u8{0x31} ** 16,
+            .iv = [_]u8{0x41} ** 16,
+            .kdf_count = 0,
+        },
+    }};
+    try std.testing.expectError(
+        error.UnsupportedRarEncodeOptions,
+        encodeVolumesAlloc(std.testing.allocator, &entries, .{}, 1024),
+    );
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const encoded = try encodeAlloc(allocator, &entries, .{});
+            defer allocator.free(encoded);
+            const parsed = try archive.parse(encoded);
+            const decoded = try parsed.extractAllocWithOptions(
+                allocator,
+                try parsed.entryAt(0),
+                .{ .password = "password", .max_rar5_kdf_count = 0 },
+            );
+            defer allocator.free(decoded);
+            try std.testing.expectEqualSlices(u8, entries[0].data, decoded);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{});
 }
 
 test "RAR5 volume writer round trips stored compressed and solid entries" {
