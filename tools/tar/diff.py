@@ -302,6 +302,7 @@ def main() -> None:
     parser.add_argument("--writer", required=True, type=Path)
     parser.add_argument("--incremental-writer", required=True, type=Path)
     parser.add_argument("--incremental-reader", required=True, type=Path)
+    parser.add_argument("--incremental-compressed-reader", required=True, type=Path)
     parser.add_argument("--lzip", type=Path)
     parser.add_argument("--lzf", type=Path)
     parser.add_argument("--lzop", type=Path)
@@ -407,6 +408,17 @@ def main() -> None:
         lzop_tool = str(args.lzop) if args.lzop else shutil.which("lzop")
         uncompress_tool = shutil.which("uncompress")
         compress_tool = shutil.which("compress")
+        streaming_compressions = {
+            "gzip",
+            "bzip2",
+            "brotli",
+            "lzma",
+            "xz",
+            "lz4",
+            "zstd",
+            "lzop",
+        }
+        incremental_compressed_reader_cases = 0
         for compression in compressions:
             archive_path = temp / f"vort.tar.{compression}"
             output = temp / f"vort-{compression}.out"
@@ -414,6 +426,17 @@ def main() -> None:
             run(args.cli, "extract-tar-file", str(archive_path), "payload.bin", str(output), "1048576")
             if output.read_bytes() != payload:
                 raise AssertionError(f"Vort tarball round trip mismatch for {compression}")
+            if compression in streaming_compressions:
+                for pattern in ("one", "micro"):
+                    run(
+                        args.incremental_compressed_reader,
+                        str(archive_path),
+                        "payload.bin",
+                        str(source),
+                        compression,
+                        pattern,
+                    )
+                incremental_compressed_reader_cases += 1
             if compression == "brotli":
                 raw = brotli_decompress(archive_path.read_bytes(), 16 * 1024 * 1024)
                 with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as archive:
@@ -526,12 +549,27 @@ def main() -> None:
             path = temp / f"python.tar.{compression}"
             path.write_bytes(data)
             validate_with_vort(args.cli, path, payloads)
+            if compression in streaming_compressions:
+                name, payload = next(iter(payloads.items()))
+                expected_path = temp / f"python-{compression}-incremental-expected.bin"
+                expected_path.write_bytes(payload)
+                for pattern in ("one", "micro"):
+                    run(
+                        args.incremental_compressed_reader,
+                        str(path),
+                        name,
+                        str(expected_path),
+                        compression,
+                        pattern,
+                    )
+                incremental_compressed_reader_cases += 1
 
     print(
         f"tar_diff=ok raw_formats=2 compressions={len(compressions)} "
         f"brotli_directions=2 lzf_directions={2 if lzf_tool is not None else 0} "
         f"entries=7 gnu_sparse_reader_cases={gnu_sparse_reader_cases} "
         f"incremental_reader_cases={incremental_reader_cases} "
+        f"incremental_compressed_reader_cases={incremental_compressed_reader_cases} "
         "sparse_writer_readers=4 incremental_writer_cases=7"
     )
 

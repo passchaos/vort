@@ -20683,3 +20683,20 @@ reuse, so production keeps the simpler independently owned plans.
   schedules rebuild Python PAX/GNU archives, GNU tar sparse 0.0/0.1/1.0,
   single/chained old-GNU fixtures and Vort output byte-exactly
   (`incremental_reader_cases=14`).
+
+- Composed the raw state machine with eight existing incremental decoders as
+  `TarGzipIncrementalReader`, `TarBzip2IncrementalReader`,
+  `TarBrotliIncrementalReader`, `TarLzmaIncrementalReader`,
+  `TarXzIncrementalReader`, `TarLz4IncrementalReader`,
+  `TarZstandardIncrementalReader`, and `TarLzopIncrementalReader`. A bounded
+  decoded bridge preserves exact compressed-input progress and TAR entry events
+  under independent input/output backpressure; wrapper footer/checksum/index
+  validation continues after TAR's end blocks and only zero TAR padding is
+  accepted. The common surface exposes total decoded limits plus every outer
+  decoder's block/dictionary/history limits, defers EOF until pending output is
+  drained, and enables concatenated gzip members by default. One-byte and micro
+  schedules cover all eight Vort writers, while independent gzip/Bzip2/Brotli/
+  LZMA/XZ/LZ4/Zstandard streams bring the required differential to 15 cases
+  (`incremental_compressed_reader_cases=15`). Unix compress, lzip, LZF and
+  legacy LZ4 remain explicit one-shot gaps until their codecs gain incremental
+  decoders.

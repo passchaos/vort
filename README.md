@@ -402,7 +402,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   old-GNU writing with chained sparse extension headers,
   strict extent validation, logical hole reconstruction, safe-path
   classification, borrowed entry views, bounded caller-output incremental
-  reading and writing for regular/link/PAX/sparse entries, and automatic raw/gzip/
+  raw reading and writing for regular/link/PAX/sparse entries, direct incremental
+  gzip/Bzip2/Brotli/LZMA/XZ/LZ4/Zstandard/LZOP-to-TAR reading, and automatic raw/gzip/
   Bzip2/Brotli/Unix-compress/LZMA-Alone/XZ/LZ4/lzip/LZF/Zstandard/LZOP tarball composition;
 - dependency-free CPIO reading and deterministic writing for SVR4 newc/CRC,
   POSIX ODC, and little-/big-endian old binary archives, including regular,
