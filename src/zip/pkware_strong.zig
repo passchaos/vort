@@ -8,6 +8,7 @@
 const std = @import("std");
 const crypto = @import("vail_archive_crypto").pkware_strong;
 const crypto_stream = @import("vail_archive_crypto").pkware_strong_stream;
+const crypto_decrypt_stream = @import("vail_archive_crypto").pkware_strong_decrypt_stream;
 
 pub const Strength = crypto.Strength;
 pub const block_len = crypto.block_len;
@@ -177,19 +178,63 @@ pub fn decryptAlloc(
     crc32: u32,
     uncompressed_size: u64,
 ) Error![]u8 {
+    const parsed = try parseDecryptionHeader(
+        encrypted,
+        expected_strength,
+        crc32,
+        uncompressed_size,
+    );
+    return crypto.decryptAlloc(
+        allocator,
+        parsed.encrypted_random_data,
+        encrypted[parsed.encrypted_payload_offset..],
+        .{
+            .password = password,
+            .strength = parsed.strength,
+            .cbc_iv = parsed.cbc_iv,
+            .iv_material = parsed.ivMaterial(),
+            .validation_size = parsed.encrypted_validation.len,
+        },
+    );
+}
+
+pub const ParsedDecryptionHeader = struct {
+    strength: Strength,
+    header_len: usize,
+    encrypted_payload_offset: usize,
+    encrypted_random_data: []const u8,
+    encrypted_validation: []const u8,
+    cbc_iv: [block_len]u8,
+    iv_material_len: usize,
+
+    const Self = @This();
+
+    pub fn ivMaterial(self: *const Self) []const u8 {
+        return self.cbc_iv[0..self.iv_material_len];
+    }
+};
+
+pub fn parseDecryptionHeader(
+    encrypted: []const u8,
+    expected_strength: ?Strength,
+    crc32: ?u32,
+    uncompressed_size: ?u64,
+) Error!ParsedDecryptionHeader {
     var cursor: usize = 0;
     const iv_size = try readU16(encrypted, &cursor);
     var cbc_iv: [block_len]u8 = @splat(0);
-    const iv_material: []const u8 = switch (iv_size) {
+    const iv_material_len: usize = switch (iv_size) {
         0 => synthesized: {
-            std.mem.writeInt(u32, cbc_iv[0..4], crc32, .little);
-            std.mem.writeInt(u64, cbc_iv[4..12], uncompressed_size, .little);
-            break :synthesized cbc_iv[0..synthesized_iv_material_len];
+            std.mem.writeInt(u32, cbc_iv[0..4], crc32 orelse
+                return error.UnsupportedStrongEncryptionFeature, .little);
+            std.mem.writeInt(u64, cbc_iv[4..12], uncompressed_size orelse
+                return error.UnsupportedStrongEncryptionFeature, .little);
+            break :synthesized synthesized_iv_material_len;
         },
         explicit_iv_len => explicit: {
             const bytes = try readBytes(encrypted, &cursor, explicit_iv_len);
             cbc_iv = bytes[0..block_len].*;
-            break :explicit &cbc_iv;
+            break :explicit explicit_iv_len;
         },
         else => return error.UnsupportedStrongEncryptionFeature,
     };
@@ -203,7 +248,8 @@ pub fn decryptAlloc(
     const algorithm_id = try readU16(encrypted[0..remaining_end], &cursor);
     const bit_length = try readU16(encrypted[0..remaining_end], &cursor);
     const actual_strength = try strengthFromAlgorithm(algorithm_id, bit_length);
-    if (actual_strength != expected_strength) return error.InvalidStrongEncryptionHeader;
+    if (expected_strength) |expected|
+        if (actual_strength != expected) return error.InvalidStrongEncryptionHeader;
     const flags = try readU16(encrypted[0..remaining_end], &cursor);
     if (flags != password_flag) return error.UnsupportedStrongEncryptionFeature;
     const random_size: usize = try readU16(encrypted[0..remaining_end], &cursor);
@@ -216,21 +262,66 @@ pub fn decryptAlloc(
     if (validation_size <= @sizeOf(u32) or validation_size % block_len != 0)
         return error.InvalidStrongEncryptionHeader;
     const validation_start = cursor;
-    _ = try readBytes(encrypted[0..remaining_end], &cursor, validation_size);
-    if (cursor != remaining_end) return error.InvalidStrongEncryptionHeader;
-
-    return crypto.decryptAlloc(
-        allocator,
-        encrypted_random_data,
-        encrypted[validation_start..],
-        .{
-            .password = password,
-            .strength = actual_strength,
-            .cbc_iv = cbc_iv,
-            .iv_material = iv_material,
-            .validation_size = validation_size,
-        },
+    const encrypted_validation = try readBytes(
+        encrypted[0..remaining_end],
+        &cursor,
+        validation_size,
     );
+    if (cursor != remaining_end) return error.InvalidStrongEncryptionHeader;
+    return .{
+        .strength = actual_strength,
+        .header_len = remaining_end,
+        .encrypted_payload_offset = validation_start,
+        .encrypted_random_data = encrypted_random_data,
+        .encrypted_validation = encrypted_validation,
+        .cbc_iv = cbc_iv,
+        .iv_material_len = iv_material_len,
+    };
+}
+
+pub const PreparedStreamDecryptor = struct {
+    strength: Strength,
+    header_len: usize,
+    decryptor: crypto_decrypt_stream.Decryptor,
+
+    const Self = @This();
+
+    pub fn deinit(self: *Self) void {
+        self.decryptor.deinit();
+        self.* = undefined;
+    }
+};
+
+pub fn prepareStreamDecryptAlloc(
+    allocator: std.mem.Allocator,
+    header: []const u8,
+    password: []const u8,
+    expected_strength: ?Strength,
+    crc32: ?u32,
+    uncompressed_size: ?u64,
+) Error!PreparedStreamDecryptor {
+    const parsed = try parseDecryptionHeader(
+        header,
+        expected_strength,
+        crc32,
+        uncompressed_size,
+    );
+    if (parsed.header_len != header.len) return error.InvalidStrongEncryptionHeader;
+    return .{
+        .strength = parsed.strength,
+        .header_len = parsed.header_len,
+        .decryptor = try crypto_decrypt_stream.prepareDecryptAlloc(
+            allocator,
+            parsed.encrypted_random_data,
+            parsed.encrypted_validation,
+            .{
+                .password = password,
+                .strength = parsed.strength,
+                .cbc_iv = parsed.cbc_iv,
+                .iv_material = parsed.ivMaterial(),
+            },
+        ),
+    };
 }
 
 fn checkedAdd(a: usize, b: usize) Error!usize {

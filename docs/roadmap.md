@@ -20615,3 +20615,20 @@ reuse, so production keeps the simpler independently owned plans.
   deterministic ZIP32/ZIP64 cases (2,115/2,359 bytes), all self-extracted by
   Vort and independently decrypted by fixed 7-Zip 26.04 (6/6). Sequential
   Strong decryption remains the next compatibility slice.
+
+- Completed bounded PKWARE Strong AES sequential extraction for known-size and
+  signed/unsigned descriptor entries. Vail validates ErdData/password material,
+  advances CBC through the validator, withholds the last plaintext block until
+  PKCS#7 succeeds, and exposes only compressed bytes. Vort incrementally parses
+  the variable format-3 header, cross-checks its AES strength against central
+  `0x0017`, and uses a maximum 28-byte raw probe at AES block boundaries to
+  separate ciphertext from ZIP32/ZIP64 descriptors without buffering a member.
+  Dynamic compressed/output pledges let all thirteen codecs share the path,
+  including non-self-delimiting Shrink/Reduce/Implode. Tests cover one-byte and
+  257/31-byte schedules, every codec under known and descriptor ZIP32/ZIP64,
+  unsigned legacy descriptors, wrong/missing passwords, validator/padding/
+  descriptor corruption, header limits, OOM, and incremental split composition.
+  The required differential reports twelve sequential Strong cases across both
+  writer surfaces (`incremental_reader_pkware_strong_cases=12`); fixed 7-Zip
+  independently retains 12/12 writer evidence. Certificate recipients, non-AES
+  algorithms and encrypted central directories remain the next Strong gaps.

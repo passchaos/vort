@@ -858,9 +858,10 @@ def validate_vort_pkware_strong(
     writer: Path,
     temp: Path,
     seven_zip_tool: str | None,
-) -> tuple[int, int]:
+) -> tuple[int, int, int]:
     cases = 0
     seven_zip_cases = 0
+    sequential_cases = 0
     expected_algorithms = (0x660E, 0x660F, 0x6610)
     for descriptor in (False, True):
         suffix = "descriptor" if descriptor else "known"
@@ -906,6 +907,21 @@ def validate_vort_pkware_strong(
                     raise AssertionError(
                         f"Vort PKWARE Strong self-extraction mismatch for {name!r}"
                     )
+                stream_output = temp / f"vort-pkware-strong-{suffix}-{index}.stream.out"
+                run(
+                    cli,
+                    "extract-zip-stream-file",
+                    str(archive_path),
+                    name,
+                    str(stream_output),
+                    str(512 * 1024 * 1024),
+                    PKWARE_STRONG_PASSWORD,
+                )
+                if stream_output.read_bytes() != expected:
+                    raise AssertionError(
+                        f"Vort PKWARE Strong sequential mismatch for {name!r}"
+                    )
+                sequential_cases += 1
                 wrong = subprocess.run(
                     [
                         str(cli),
@@ -944,7 +960,7 @@ def validate_vort_pkware_strong(
                             f"7-Zip could not decrypt Vort PKWARE Strong {name!r}"
                         )
                     seven_zip_cases += 1
-    return cases, seven_zip_cases
+    return cases, seven_zip_cases, sequential_cases
 
 
 def validate_infozip_zipcrypto(
@@ -1989,7 +2005,7 @@ def validate_incremental_pkware_strong_writer(
     temp: Path,
     force_zip64: bool,
     seven_zip_tool: str | None,
-) -> tuple[int, int, int]:
+) -> tuple[int, int, int, int]:
     suffix = "zip64" if force_zip64 else "zip32"
     one_path = temp / f"incremental-pkware-strong-{suffix}-one.zip"
     micro_path = temp / f"incremental-pkware-strong-{suffix}-micro.zip"
@@ -2002,6 +2018,7 @@ def validate_incremental_pkware_strong_writer(
         )
     cases = 0
     seven_zip_cases = 0
+    reader_cases = 0
     expected_algorithms = (0x660E, 0x660F, 0x6610)
     with zipfile.ZipFile(one_path) as archive:
         if archive.namelist() != list(INCREMENTAL_PKWARE_STRONG_PAYLOADS):
@@ -2046,6 +2063,21 @@ def validate_incremental_pkware_strong_writer(
                 raise AssertionError(
                     f"incremental PKWARE Strong extraction mismatch for {name!r}"
                 )
+            stream_output = temp / f"incremental-pkware-strong-{suffix}-{index}.stream.out"
+            run(
+                cli,
+                "extract-zip-stream-file",
+                str(one_path),
+                name,
+                str(stream_output),
+                str(512 * 1024 * 1024),
+                PKWARE_STRONG_PASSWORD,
+            )
+            if stream_output.read_bytes() != expected:
+                raise AssertionError(
+                    f"incremental PKWARE Strong sequential mismatch for {name!r}"
+                )
+            reader_cases += 1
             cases += 1
             if seven_zip_tool is not None:
                 extracted = subprocess.run(
@@ -2067,7 +2099,7 @@ def validate_incremental_pkware_strong_writer(
                         f"7-Zip incremental PKWARE Strong mismatch for {name!r}"
                     )
                 seven_zip_cases += 1
-    return len(raw), cases, seven_zip_cases
+    return len(raw), cases, seven_zip_cases, reader_cases
 
 
 def ordered_split_parts(archive: Path) -> list[Path]:
@@ -2758,9 +2790,11 @@ def main() -> None:
         winzip_aes_cases, incremental_reader_winzip_aes_cases = validate_vort_winzip_aes(
             args.cli, args.writer, temp, openssl_tool
         )
-        pkware_strong_cases, pkware_strong_7zip_cases = validate_vort_pkware_strong(
-            args.cli, args.writer, temp, seven_zip_tool
-        )
+        (
+            pkware_strong_cases,
+            pkware_strong_7zip_cases,
+            vort_incremental_reader_pkware_strong_cases,
+        ) = validate_vort_pkware_strong(args.cli, args.writer, temp, seven_zip_tool)
         incremental_zip32_bytes, incremental_zip32_unzip, incremental_zip32_7zip = (
             validate_incremental_writer_archive(
                 args.cli, args.incremental_writer, temp, False, unzip_tool, seven_zip_tool
@@ -2821,6 +2855,7 @@ def main() -> None:
             incremental_pkware_strong_zip32_bytes,
             incremental_pkware_strong_zip32_cases,
             incremental_pkware_strong_zip32_7zip,
+            incremental_pkware_strong_zip32_reader,
         ) = validate_incremental_pkware_strong_writer(
             args.cli,
             args.incremental_writer,
@@ -2832,6 +2867,7 @@ def main() -> None:
             incremental_pkware_strong_zip64_bytes,
             incremental_pkware_strong_zip64_cases,
             incremental_pkware_strong_zip64_7zip,
+            incremental_pkware_strong_zip64_reader,
         ) = validate_incremental_pkware_strong_writer(
             args.cli,
             args.incremental_writer,
@@ -2847,6 +2883,11 @@ def main() -> None:
         )
         incremental_reader_winzip_aes_cases += (
             incremental_winzip_aes_zip32_reader + incremental_winzip_aes_zip64_reader
+        )
+        incremental_reader_pkware_strong_cases = (
+            vort_incremental_reader_pkware_strong_cases
+            + incremental_pkware_strong_zip32_reader
+            + incremental_pkware_strong_zip64_reader
         )
         (
             split_zip_parts,
@@ -2936,6 +2977,7 @@ def main() -> None:
         f"incremental_reader_winzip_aes_cases={incremental_reader_winzip_aes_cases} "
         f"pkware_strong_cases={pkware_strong_cases} "
         f"pkware_strong_7zip_cases={pkware_strong_7zip_cases} "
+        f"incremental_reader_pkware_strong_cases={incremental_reader_pkware_strong_cases} "
         f"incremental_entries={len(INCREMENTAL_PAYLOADS)} "
         f"incremental_zip32_bytes={incremental_zip32_bytes} "
         f"incremental_zip64_bytes={incremental_zip64_bytes} "

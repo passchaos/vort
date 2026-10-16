@@ -91,7 +91,7 @@ fn inputOffer(
 ) Error!usize {
     if (layout) |descriptor_layout|
         return @min(available_input, descriptor_layout.unsignedLen());
-    const expected = expected_compressed_size orelse return error.InvalidZipArchive;
+    const expected = expected_compressed_size orelse return available_input;
     if (accepted_input > expected) return error.SizeMismatch;
     return @min(available_input, expected - accepted_input);
 }

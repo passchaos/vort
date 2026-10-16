@@ -20,6 +20,7 @@ pub const LocalHeader = struct {
     uncompressed_size: ?usize,
     zip64: bool,
     winzip_aes: ?types.WinZipAesInfo,
+    pkware_strong: bool,
 };
 
 pub fn localEncodedLen(fixed: *const [wire.local_file_header_len]u8) Error!usize {
@@ -51,11 +52,17 @@ pub fn parseLocal(bytes: []const u8) Error!LocalHeader {
     const extra_end = name_end + extra_len;
     const extra = bytes[name_end..extra_end];
     const parsed_aes = try records.parseWinZipAesExtra(extra);
+    if (try records.parsePkwareStrongEncryptionExtra(extra) != null)
+        return error.InvalidZipArchive;
     if ((wire_method == .aes) != (parsed_aes != null)) return error.InvalidZipArchive;
     if (parsed_aes != null and
         (flags & wire.encrypted_flag == 0 or version_needed < wire.version_51))
         return error.InvalidZipArchive;
     const method = if (parsed_aes) |aes| aes.actual_method else wire_method;
+    const pkware_strong = flags & wire.strong_encryption_flag != 0;
+    if (pkware_strong and
+        (flags & wire.encrypted_flag == 0 or parsed_aes != null))
+        return error.InvalidZipArchive;
     const uses_descriptor = flags & wire.descriptor_flag != 0;
     const has_zip64_extra = try hasZip64Extra(extra);
     const has_zip64_sentinel = compressed_u32 == std.math.maxInt(u32) or
@@ -80,6 +87,7 @@ pub fn parseLocal(bytes: []const u8) Error!LocalHeader {
             .uncompressed_size = null,
             .zip64 = zip64,
             .winzip_aes = if (parsed_aes) |aes| aes.info else null,
+            .pkware_strong = pkware_strong,
         };
     }
 
@@ -97,6 +105,7 @@ pub fn parseLocal(bytes: []const u8) Error!LocalHeader {
         .uncompressed_size = sizes.uncompressed_size,
         .zip64 = zip64,
         .winzip_aes = if (parsed_aes) |aes| aes.info else null,
+        .pkware_strong = pkware_strong,
     };
 }
 
@@ -111,6 +120,7 @@ pub const CentralHeader = struct {
     local_header_offset: usize,
     zip64: bool,
     winzip_aes: ?types.WinZipAesInfo,
+    pkware_strong_encryption: ?types.PkwareStrongEncryptionInfo,
 };
 
 pub fn centralEncodedLen(fixed: *const [wire.central_file_header_len]u8) Error!usize {
@@ -152,9 +162,18 @@ pub fn parseCentral(bytes: []const u8) Error!CentralHeader {
         disk_start,
     );
     const parsed_aes = try records.parseWinZipAesExtra(bytes[name_end..extra_end]);
+    const parsed_strong = try records.parsePkwareStrongEncryptionExtra(
+        bytes[name_end..extra_end],
+    );
     if ((wire_method == .aes) != (parsed_aes != null)) return error.InvalidZipArchive;
     if (parsed_aes != null and
         (flags & wire.encrypted_flag == 0 or version_needed < wire.version_51))
+        return error.InvalidZipArchive;
+    if (parsed_aes != null and parsed_strong != null) return error.InvalidZipArchive;
+    const strong_flag = flags & wire.strong_encryption_flag != 0;
+    if (strong_flag != (parsed_strong != null) or
+        (strong_flag and flags & wire.encrypted_flag == 0) or
+        (parsed_strong != null and version_needed < wire.version_51))
         return error.InvalidZipArchive;
     const method = if (parsed_aes) |aes| aes.actual_method else wire_method;
     if (values.zip64 and version_needed < wire.version_45) return error.InvalidZipArchive;
@@ -187,6 +206,7 @@ pub fn parseCentral(bytes: []const u8) Error!CentralHeader {
         .local_header_offset = values.local_header_offset,
         .zip64 = values.zip64,
         .winzip_aes = if (parsed_aes) |aes| aes.info else null,
+        .pkware_strong_encryption = parsed_strong,
     };
 }
 

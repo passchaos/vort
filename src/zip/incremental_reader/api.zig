@@ -4,6 +4,7 @@ const types = @import("../types.zig");
 
 pub const CompressionMethod = types.CompressionMethod;
 pub const WinZipAesInfo = types.WinZipAesInfo;
+pub const PkwareStrongEncryptionInfo = types.PkwareStrongEncryptionInfo;
 
 pub const Options = struct {
     /// Absolute file offset represented by the first byte passed to `step`.
@@ -76,6 +77,7 @@ pub const EntryInfo = struct {
     uses_descriptor: bool,
     zip64_local: bool,
     winzip_aes: ?types.WinZipAesInfo = null,
+    pkware_strong_encryption: ?types.PkwareStrongEncryptionInfo = null,
     crc32: ?u32,
     compressed_size: ?usize,
     uncompressed_size: ?usize,

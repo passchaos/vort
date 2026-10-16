@@ -293,7 +293,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   one-shot reading plus one-shot/bounded incremental writing with caller-owned
   IV/random/validation entropy,
   strict `0x0017`/bit-6/decryption-header validation, and Vail-backed SHA-1
-  key derivation/AES-CBC/PKCS#7; ordered split/multi-disk ZIP32/ZIP64 normalization with
+  key derivation/AES-CBC/PKCS#7, plus known-size and signed/unsigned descriptor
+  sequential reading; ordered split/multi-disk ZIP32/ZIP64 normalization with
   strict disk-coordinate and allocation limits, cross-volume payload/descriptor
   extraction through the ordinary archive codecs, plus an O(parts + entries)
   sparse metadata-patch stream and bounded sequential reader that avoid a
@@ -1767,7 +1768,9 @@ The incremental writer and one-shot surface support per-entry Traditional
 ZipCrypto. The sequential reader supports both known-size and descriptor-
 backed forms. WinZip AES supports one-shot reading/writing, descriptor-backed
 incremental writing, and both known-size and descriptor-backed sequential
-reading. `parseSplitZipArchiveAlloc` accepts explicitly ordered `.z01` ...
+reading. PKWARE Strong AES now has the same one-shot/bounded incremental writer
+and known-size/descriptor sequential reader coverage. `parseSplitZipArchiveAlloc`
+accepts explicitly ordered `.z01` ...
 `.zip` disk slices, validates ZIP32/ZIP64 disk-local offsets, the leading split
 marker, metadata-inconsistent missing/reordered layouts, part count and total
 size, then exposes an owned normalized `ZipArchive`; compressed data and
@@ -1775,7 +1778,7 @@ descriptors are not rewritten. This compatibility surface allocates the
 complete joined archive. `ZipSplitNormalizedStream` instead retains borrowed
 part payloads plus O(parts + entries) disk bases/metadata patches, and
 `ZipSplitIncrementalReader` feeds that view through the existing all-codec,
-descriptor, ZipCrypto, and WinZip AES sequential state machine with a bounded
+descriptor, ZipCrypto, WinZip AES, and PKWARE Strong sequential state machine with a bounded
 32 KiB bridge buffer. All part payload slices must remain alive, but no second
 joined archive is allocated. For non-resident media, `ZipSplitPartSource` plus
 `ZipSplitIncrementalReader.initSourceAlloc` copies only part lengths and uses a
@@ -1787,9 +1790,7 @@ records/endings within one part, and exposes borrowed part slices over one
 owned backing allocation. `ZipSplitIncrementalWriter` reuses every incremental
 codec/encryption path, retains only the established codec state, central
 metadata, one atomic control record and caller-selected current-part storage,
-and reports `part_done` before output switches volumes. PKWARE Strong
-Encryption supports bounded incremental writing; its sequential reader path
-remains unsupported. See
+and reports `part_done` before output switches volumes. See
 [the ZIP format status](docs/formats/zip.md) for the full state and wire
 contract. Writer-specific additive errors are exposed separately as
 `ZipIncrementalWriterError`; the established `ZipError` set is unchanged.
@@ -1862,9 +1863,11 @@ includes APPNOTE's synthesized zero-length-IV form, wrong passwords, corrupt
 validation/padding, malformed flags/algorithm metadata, and allocation failure.
 The incremental writer adds six deterministic ZIP32/ZIP64 known/unknown/empty
 cases (2,115/2,359 bytes) and uses a bounded 256-byte codec bridge plus two AES
-blocks; fixed 7-Zip independently decrypts another 6/6. Certificate recipients,
-non-AES algorithms, central-directory encryption and sequential Strong
-Encryption remain explicit gaps.
+blocks; fixed 7-Zip independently decrypts another 6/6. The bounded reader adds
+twelve required one-shot/incremental-writer CLI cases plus all-codec
+known/descriptor and signed/unsigned ZIP32/ZIP64 coverage. Certificate
+recipients, non-AES algorithms and central-directory encryption remain explicit
+gaps.
 The incremental writer adds six known/unknown/empty ZIP32/ZIP64 cases in
 separate deterministic archives (1,695/1,939 bytes), decoded independently by
 Python, Vort's one-shot reader, and Info-ZIP.

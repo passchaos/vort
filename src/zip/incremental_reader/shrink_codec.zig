@@ -52,7 +52,7 @@ pub const State = struct {
         authentication_code_len: usize,
         verify_crc32: bool,
     ) Error!Self {
-        if ((expected_compressed_size == null) != (descriptor_layout != null))
+        if (expected_compressed_size != null and descriptor_layout != null)
             return error.InvalidZipArchive;
         const workspace = try allocator.create(shrink.IncrementalWorkspace);
         errdefer allocator.destroy(workspace);
@@ -121,6 +121,10 @@ pub const State = struct {
         return self.crc.digest();
     }
 
+    pub fn setExpectedOutputLen(self: *Self, expected: usize) Error!void {
+        try self.decoder.setExpectedOutputLen(expected);
+    }
+
     fn stepKnown(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
         var progress: core.Progress = .{};
         while (true) {
@@ -129,7 +133,20 @@ pub const State = struct {
             if (drained.status == .done or drained.status == .need_output)
                 return .{ .progress = progress, .status = drained.status };
 
-            const expected = self.expected_compressed_size orelse return error.InvalidZipArchive;
+            const expected = self.expected_compressed_size orelse {
+                const offer_len = input.len - progress.input_read;
+                if (offer_len == 0)
+                    return .{ .progress = progress, .status = .need_input };
+                const output_offset = progress.output_written;
+                const supplied = try self.decoder.step(
+                    input[progress.input_read..][0..offer_len],
+                    output[output_offset..],
+                );
+                try self.accountKnown(supplied.progress, output[output_offset..], &progress);
+                if (supplied.status == .done or supplied.status == .need_output)
+                    return .{ .progress = progress, .status = supplied.status };
+                continue;
+            };
             if (self.compressed_size == expected) {
                 if (!self.finish_requested) {
                     self.decoder.finish();

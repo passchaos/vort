@@ -197,10 +197,16 @@ required. The incremental writer uses the same wire with a bounded 256-byte
 codec bridge and Vail stream state retaining at most one plaintext and one
 ciphertext AES block; it never buffers a complete member. Certificate
 recipients, DES/3DES/RC2/RC4/Blowfish/Twofish, encrypted central directories,
-and sequential/split-stream reading are not yet supported. A fixed 7-Zip 26.04 source build at commit
+are not yet supported. The sequential reader handles known sizes plus signed or
+unsigned ZIP32/ZIP64 descriptors for every codec. It incrementally parses the
+variable decryption header, validates the password before codec output, retains
+the final CBC block until PKCS#7 succeeds, and uses at most a 28-byte raw probe
+to distinguish block-aligned ciphertext from the following descriptor. The
+same state composes through sparse/source split readers. A fixed 7-Zip 26.04 source build at commit
 `9128b80e3a471108678e2b3ec3c985861c8d7b0f` independently extracts six
 Vort-produced AES strength × known/descriptor Stored/Deflate/Bzip2 one-shot
-cases plus six ZIP32/ZIP64 incremental-writer entries.
+cases plus six ZIP32/ZIP64 incremental-writer entries. Twelve corresponding
+archives are required through the sequential CLI.
 
 ## Incremental entry decoder
 
@@ -346,8 +352,8 @@ by ZIP.
 `max_ppmd_compressed_buffer_len` bounds retained range-coded input.
 Any `step` error makes the state terminal until `reset`, because payload may
 already have reached an external sink. `finish()` distinguishes a truncated
-source. PKWARE Strong Encryption and archive-extra-data records remain
-unsupported by this sequential state machine. It does not directly consume separate
+source. Archive-extra-data records remain unsupported. This sequential state
+machine does not directly consume separate
 split/multi-disk slices; `ZipSplitIncrementalReader` supplies their sparse
 normalized view without changing the codec state machine.
 Shrink uses one fixed approximately 40 KiB workspace while
@@ -545,8 +551,8 @@ accepted by the sequential reader alongside descriptor-backed AES. The writers
 remain single-disk, and the sequential reader does not directly coordinate
 separate split/multi-disk sources. The split adapter described below validates
 and supplies them as one logical stream without allocating joined archive
-bytes. PKWARE Strong Encryption has a bounded incremental writer, while its
-sequential reader remains a follow-up.
+bytes. PKWARE Strong Encryption has both a bounded incremental writer and the
+known-size/descriptor sequential reader described above.
 
 The incremental differential uses forty-five entries: known Stored data containing a
 descriptor-signature byte sequence, unknown Stored data containing two such
@@ -616,6 +622,13 @@ derives PBKDF2/HMAC values and OpenSSL supplies AES-ECB counter blocks
 `incremental_reader_winzip_aes_cases=12`). Rust `zip 8.6.0` independently
 writes the committed three-strength fixture and extracts both Vort writer
 surfaces.
+PKWARE Strong AES adds six one-shot and six ZIP32/ZIP64 incremental-writer
+cases, all required through Vort one-shot and sequential extraction
+(`pkware_strong_cases=6`, `incremental_pkware_strong_cases=6`,
+`incremental_reader_pkware_strong_cases=12`). Focused coverage additionally
+crosses every codec under known and signed descriptor ZIP32/ZIP64 layouts,
+plus unsigned Stored/Shrink/Reduce/Implode/Deflate/Bzip2 descriptors. A fixed
+7-Zip 26.04 build independently decrypts 12 writer cases.
 The aggregate reports 13/13 ZIP differential steps. The Python-to-Vort half
 also decodes five
 Stored/Deflate members through `ZipOwnedIncrementalEntryDecoder` with 3-byte
@@ -965,7 +978,8 @@ multi-disk metadata because it has only one borrowed slice; callers must use
 the owned or sparse split APIs for ordered disk sets. The sequential reader
 accepts known-size and descriptor-backed Traditional ZipCrypto through
 `ZipIncrementalReaderOptions.password`; known-size and descriptor-backed
-WinZip AES use the same option, including through `ZipSplitIncrementalReader`.
+WinZip AES and password-based PKWARE Strong AES use the same option, including
+through `ZipSplitIncrementalReader`.
 A disk-count extension beyond the existing u16 central field remains a future
 compatibility increment.
 

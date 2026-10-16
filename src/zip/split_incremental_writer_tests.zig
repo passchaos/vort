@@ -144,9 +144,13 @@ test "split incremental writer is deterministic across backpressure" {
     const allocator = std.testing.allocator;
     const password = "incremental split password";
     const salt = [_]u8{0x3c} ** 16;
+    const strong_iv = [_]u8{0x4c} ** 16;
+    const strong_random = [_]u8{0x4d} ** 16;
+    const strong_validation = [_]u8{0x4e} ** 12;
     const stored = "incremental split stored crossing payload\n" ** 173;
     const deflated = "incremental split Deflate crossing payload\n" ** 997;
     const aes = "incremental split WinZip AES payload\n" ** 113;
+    const strong = "incremental split PKWARE Strong payload\n" ** 109;
     const entries = [_]TestEntry{
         .{
             .options = .{
@@ -184,6 +188,20 @@ test "split incremental writer is deterministic across backpressure" {
         },
         .{
             .options = .{
+                .name = "strong.txt",
+                .method = .deflate,
+                .expected_size = strong.len,
+                .pkware_strong_encryption = .{
+                    .password = password,
+                    .iv = strong_iv,
+                    .random_data = &strong_random,
+                    .validation_data = &strong_validation,
+                },
+            },
+            .data = strong,
+        },
+        .{
+            .options = .{
                 .name = "empty.bin",
                 .method = .stored,
                 .expected_size = 0,
@@ -216,14 +234,23 @@ test "split incremental writer is deterministic across backpressure" {
         );
         const decoded = try decodeAll(allocator, tiny.parts, password);
         defer allocator.free(decoded);
-        try std.testing.expectEqual(stored.len + deflated.len + aes.len, decoded.len);
+        try std.testing.expectEqual(stored.len + deflated.len + aes.len + strong.len, decoded.len);
         try std.testing.expectEqualSlices(u8, stored, decoded[0..stored.len]);
         try std.testing.expectEqualSlices(
             u8,
             deflated,
             decoded[stored.len..][0..deflated.len],
         );
-        try std.testing.expectEqualSlices(u8, aes, decoded[stored.len + deflated.len ..]);
+        try std.testing.expectEqualSlices(
+            u8,
+            aes,
+            decoded[stored.len + deflated.len ..][0..aes.len],
+        );
+        try std.testing.expectEqualSlices(
+            u8,
+            strong,
+            decoded[stored.len + deflated.len + aes.len ..],
+        );
     }
 }
 

@@ -1172,6 +1172,352 @@ test "ZIP incremental reader streams known-size WinZip AES entries" {
     );
 }
 
+test "ZIP incremental reader streams known-size PKWARE Strong AES entries" {
+    const allocator = std.testing.allocator;
+    const password = "sequential PKWARE Strong password";
+    const stored = "known PKWARE Strong stored payload" ** 31;
+    const deflated = "known PKWARE Strong Deflate payload\n" ** 79;
+    const bzip2_data = "known PKWARE Strong Bzip2 payload\n" ** 67;
+    const iv128 = [_]u8{0x61} ** 16;
+    const iv192 = [_]u8{0x62} ** 16;
+    const iv256 = [_]u8{0x63} ** 16;
+    const random128 = [_]u8{0x71} ** 16;
+    const random192 = [_]u8{0x72} ** 16;
+    const random256 = [_]u8{0x73} ** 32;
+    const validation128 = [_]u8{0x81} ** 12;
+    const validation192 = [_]u8{0x82} ** 12;
+    const validation256 = [_]u8{0x83} ** 12;
+    const entries = [_]zip.EncodeEntry{
+        .{
+            .name = "strong/stored.bin",
+            .data = stored,
+            .method = .stored,
+            .pkware_strong_encryption = .{
+                .password = password,
+                .strength = .aes128,
+                .iv = iv128,
+                .random_data = &random128,
+                .validation_data = &validation128,
+            },
+        },
+        .{
+            .name = "strong/deflate.txt",
+            .data = deflated,
+            .method = .deflate,
+            .pkware_strong_encryption = .{
+                .password = password,
+                .strength = .aes192,
+                .iv = iv192,
+                .random_data = &random192,
+                .validation_data = &validation192,
+            },
+        },
+        .{
+            .name = "strong/bzip2.txt",
+            .data = bzip2_data,
+            .method = .bzip2,
+            .pkware_strong_encryption = .{
+                .password = password,
+                .strength = .aes256,
+                .iv = iv256,
+                .random_data = &random256,
+                .validation_data = &validation256,
+            },
+        },
+    };
+    const expected = [_]ExpectedEntry{
+        .{ .name = entries[0].name, .data = stored },
+        .{ .name = entries[1].name, .data = deflated },
+        .{ .name = entries[2].name, .data = bzip2_data },
+    };
+    const bytes = try zip.encodeAlloc(allocator, &entries, .{});
+    defer allocator.free(bytes);
+    try decodeArchiveFragmented(allocator, bytes, &expected, .{ .password = password }, 1, 1);
+    try decodeArchiveFragmented(allocator, bytes, &expected, .{ .password = password }, 257, 31);
+    try std.testing.expectError(
+        error.PasswordRequired,
+        decodeArchiveFragmented(allocator, bytes, &expected, .{}, 3, 5),
+    );
+    try std.testing.expectError(
+        error.InvalidPasswordValidation,
+        decodeArchiveFragmented(allocator, bytes, &expected, .{ .password = "wrong" }, 3, 5),
+    );
+
+    const archive = try zip.parse(bytes);
+    const first = try archive.entryAt(0);
+    const name_len: usize = std.mem.readInt(
+        u16,
+        bytes[first.local_header_offset + 26 ..][0..2],
+        .little,
+    );
+    const extra_len: usize = std.mem.readInt(
+        u16,
+        bytes[first.local_header_offset + 28 ..][0..2],
+        .little,
+    );
+    const data_offset = first.local_header_offset + wire.local_file_header_len + name_len + extra_len;
+    const random_size: usize = std.mem.readInt(u16, bytes[data_offset + 30 ..][0..2], .little);
+    const validation_offset = data_offset + 32 + random_size + 4 + 2;
+    const bad_validation = try allocator.dupe(u8, bytes);
+    defer allocator.free(bad_validation);
+    bad_validation[validation_offset] ^= 1;
+    try expectReaderError(
+        allocator,
+        bad_validation,
+        .{ .password = password },
+        error.InvalidPasswordValidation,
+    );
+    const bad_padding = try allocator.dupe(u8, bytes);
+    defer allocator.free(bad_padding);
+    bad_padding[data_offset + first.compressed_size - 1] ^= 1;
+    try expectReaderError(
+        allocator,
+        bad_padding,
+        .{ .password = password },
+        error.InvalidPadding,
+    );
+    try expectReaderError(
+        allocator,
+        bytes,
+        .{ .password = password, .max_control_record_size = 64 },
+        error.OutputLimitExceeded,
+    );
+
+    const descriptor_bytes = try zip.encodeAlloc(allocator, entries[0..1], .{
+        .data_descriptor = true,
+    });
+    defer allocator.free(descriptor_bytes);
+    try decodeArchiveFragmented(
+        allocator,
+        descriptor_bytes,
+        expected[0..1],
+        .{ .password = password },
+        1,
+        1,
+    );
+    try std.testing.expectError(
+        error.InvalidPasswordValidation,
+        decodeArchiveFragmented(
+            allocator,
+            descriptor_bytes,
+            expected[0..1],
+            .{ .password = "wrong" },
+            3,
+            5,
+        ),
+    );
+    const descriptor_archive = try zip.parse(descriptor_bytes);
+    const descriptor_entry = try descriptor_archive.entryAt(0);
+    const descriptor_name_len: usize = std.mem.readInt(
+        u16,
+        descriptor_bytes[descriptor_entry.local_header_offset + 26 ..][0..2],
+        .little,
+    );
+    const descriptor_extra_len: usize = std.mem.readInt(
+        u16,
+        descriptor_bytes[descriptor_entry.local_header_offset + 28 ..][0..2],
+        .little,
+    );
+    const descriptor_data_offset = descriptor_entry.local_header_offset +
+        wire.local_file_header_len + descriptor_name_len + descriptor_extra_len;
+    const descriptor_offset = descriptor_data_offset + descriptor_entry.compressed_size;
+    const bad_descriptor = try allocator.dupe(u8, descriptor_bytes);
+    defer allocator.free(bad_descriptor);
+    bad_descriptor[descriptor_offset + 4] ^= 1;
+    try expectReaderError(
+        allocator,
+        bad_descriptor,
+        .{ .password = password },
+        error.InvalidZipArchive,
+    );
+}
+
+test "ZIP incremental reader PKWARE Strong path releases allocation failures" {
+    const allocator = std.testing.allocator;
+    const payload = "allocation-safe sequential strong payload";
+    const iv = [_]u8{0xb1} ** 16;
+    const random_data = [_]u8{0xb2} ** 16;
+    const validation_data = [_]u8{0xb3} ** 12;
+    const entries = [_]zip.EncodeEntry{.{
+        .name = "strong/oom.bin",
+        .data = payload,
+        .method = .stored,
+        .pkware_strong_encryption = .{
+            .password = "password",
+            .iv = iv,
+            .random_data = &random_data,
+            .validation_data = &validation_data,
+        },
+    }};
+    const bytes = try zip.encodeAlloc(allocator, &entries, .{ .data_descriptor = true });
+    defer allocator.free(bytes);
+    const Test = struct {
+        fn run(
+            failing_allocator: std.mem.Allocator,
+            archive: []const u8,
+            plain: []const u8,
+        ) !void {
+            const expected = [_]ExpectedEntry{.{
+                .name = "strong/oom.bin",
+                .data = plain,
+            }};
+            try decodeArchiveFragmented(
+                failing_allocator,
+                archive,
+                &expected,
+                .{ .password = "password" },
+                3,
+                5,
+            );
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{ bytes, payload },
+    );
+}
+
+test "ZIP incremental reader streams known-size PKWARE Strong across every codec" {
+    const allocator = std.testing.allocator;
+    const password = "all-codec PKWARE Strong password";
+    const payload = "known PKWARE Strong payload spanning every ZIP codec\n" ** 37;
+    const iv = [_]u8{0x91} ** 16;
+    const random_data = [_]u8{0x92} ** 32;
+    const validation_data = [_]u8{0x93} ** 12;
+    const methods = [_]zip.CompressionMethod{
+        .stored,
+        .shrink,
+        .reduce_1,
+        .implode,
+        .deflate,
+        .deflate64,
+        .dcl_implode,
+        .bzip2,
+        .lzma,
+        .zstandard_legacy,
+        .zstandard,
+        .xz,
+        .ppmd,
+    };
+    var entries: [methods.len]zip.EncodeEntry = undefined;
+    var expected: [methods.len]ExpectedEntry = undefined;
+    var names: [methods.len][32]u8 = undefined;
+    var name_lengths: [methods.len]usize = undefined;
+    for (methods, 0..) |method, index| {
+        const name = try std.fmt.bufPrint(&names[index], "strong/codec-{d}.bin", .{index});
+        name_lengths[index] = name.len;
+        entries[index] = .{
+            .name = names[index][0..name_lengths[index]],
+            .data = payload,
+            .method = method,
+            .pkware_strong_encryption = .{
+                .password = password,
+                .strength = .aes256,
+                .iv = iv,
+                .random_data = &random_data,
+                .validation_data = &validation_data,
+            },
+        };
+        expected[index] = .{ .name = entries[index].name, .data = payload };
+    }
+    inline for (.{ zip.Zip64Mode.never, .always }) |zip64_mode| {
+        const bytes = try zip.encodeAlloc(allocator, &entries, .{
+            .zip64 = zip64_mode,
+            .ppmd_options = .{ .memory_size = 1024 * 1024 },
+        });
+        defer allocator.free(bytes);
+        try decodeArchiveFragmented(
+            allocator,
+            bytes,
+            &expected,
+            .{ .password = password },
+            1,
+            1,
+        );
+        try decodeArchiveFragmented(
+            allocator,
+            bytes,
+            &expected,
+            .{ .password = password },
+            257,
+            31,
+        );
+        const descriptor_bytes = try zip.encodeAlloc(allocator, &entries, .{
+            .data_descriptor = true,
+            .zip64 = zip64_mode,
+            .ppmd_options = .{ .memory_size = 1024 * 1024 },
+        });
+        defer allocator.free(descriptor_bytes);
+        try decodeArchiveFragmented(
+            allocator,
+            descriptor_bytes,
+            &expected,
+            .{ .password = password },
+            1,
+            1,
+        );
+        try decodeArchiveFragmented(
+            allocator,
+            descriptor_bytes,
+            &expected,
+            .{ .password = password },
+            257,
+            31,
+        );
+    }
+}
+
+test "ZIP incremental reader accepts unsigned PKWARE Strong descriptors" {
+    const allocator = std.testing.allocator;
+    const password = "unsigned PKWARE Strong password";
+    const payload = "unsigned PKWARE Strong descriptor payload\n" ** 41;
+    const iv = [_]u8{0xa1} ** 16;
+    const random_data = [_]u8{0xa2} ** 16;
+    const validation_data = [_]u8{0xa3} ** 12;
+    inline for (.{ zip.Zip64Mode.never, .always }) |zip64_mode| {
+        inline for (.{
+            zip.CompressionMethod.stored,
+            zip.CompressionMethod.shrink,
+            zip.CompressionMethod.reduce_1,
+            zip.CompressionMethod.implode,
+            zip.CompressionMethod.deflate,
+            zip.CompressionMethod.bzip2,
+        }) |method| {
+            const entries = [_]zip.EncodeEntry{.{
+                .name = "strong/unsigned.bin",
+                .data = payload,
+                .method = method,
+                .pkware_strong_encryption = .{
+                    .password = password,
+                    .iv = iv,
+                    .random_data = &random_data,
+                    .validation_data = &validation_data,
+                },
+            }};
+            const expected = [_]ExpectedEntry{.{
+                .name = entries[0].name,
+                .data = payload,
+            }};
+            const signed = try zip.encodeAlloc(allocator, &entries, .{
+                .data_descriptor = true,
+                .zip64 = zip64_mode,
+            });
+            defer allocator.free(signed);
+            const unsigned = try withoutDescriptorSignature(allocator, signed);
+            defer allocator.free(unsigned);
+            try decodeArchiveFragmented(
+                allocator,
+                unsigned,
+                &expected,
+                .{ .password = password },
+                1,
+                1,
+            );
+        }
+    }
+}
+
 test "ZIP incremental reader streams descriptor WinZip AES across every codec" {
     const allocator = std.testing.allocator;
     const password = "descriptor WinZip AES password";

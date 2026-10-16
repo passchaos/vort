@@ -269,7 +269,7 @@ pub const LzmaZipState = struct {
 
 pub const DeflateState = struct {
     decoder: deflate.RawDeflateIncrementalFixedLiteralDecoder,
-    descriptor_layout: descriptor.Layout,
+    descriptor_layout: ?descriptor.Layout,
     crc: checksum.Crc32Best = checksum.Crc32Best.init(),
     compressed_size: usize = 0,
     uncompressed_size: usize = 0,
@@ -279,7 +279,7 @@ pub const DeflateState = struct {
     pub fn init(
         entry_limit: usize,
         history: []u8,
-        descriptor_layout: descriptor.Layout,
+        descriptor_layout: ?descriptor.Layout,
     ) Error!Self {
         return .{
             .decoder = try deflate.RawDeflateIncrementalFixedLiteralDecoder.initWithHistory(.{
@@ -649,7 +649,7 @@ fn inputOffer(
 ) Error!usize {
     if (layout) |descriptor_layout|
         return @min(available_input, descriptor_layout.unsignedLen());
-    const expected = expected_compressed_size orelse return error.InvalidZipArchive;
+    const expected = expected_compressed_size orelse return available_input;
     if (accepted_input > expected) return error.SizeMismatch;
     return @min(available_input, expected - accepted_input);
 }

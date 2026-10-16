@@ -13,6 +13,7 @@ pub const Record = struct {
     zip64_local: bool,
     uses_descriptor: bool,
     winzip_aes: ?api.WinZipAesInfo = null,
+    pkware_strong_encryption: ?api.PkwareStrongEncryptionInfo = null,
     complete: bool = false,
     central_seen: bool = false,
 
@@ -25,6 +26,7 @@ pub const Record = struct {
             .uses_descriptor = self.uses_descriptor,
             .zip64_local = self.zip64_local,
             .winzip_aes = self.winzip_aes,
+            .pkware_strong_encryption = self.pkware_strong_encryption,
             .crc32 = if (self.complete or !self.uses_descriptor) self.crc32 else null,
             .compressed_size = if (self.complete or !self.uses_descriptor) self.compressed_size else null,
             .uncompressed_size = if (self.complete or !self.uses_descriptor) self.uncompressed_size else null,
@@ -93,7 +95,8 @@ pub const State = struct {
             local.crc32 != central.crc32 or
             local.compressed_size != central.compressed_size or
             local.uncompressed_size != central.uncompressed_size or
-            !std.meta.eql(local.winzip_aes, central.winzip_aes))
+            !std.meta.eql(local.winzip_aes, central.winzip_aes) or
+            !std.meta.eql(local.pkware_strong_encryption, central.pkware_strong_encryption))
             return error.InvalidZipArchive;
         local.central_seen = true;
         self.central_entries = std.math.add(usize, self.central_entries, 1) catch

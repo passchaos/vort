@@ -148,6 +148,14 @@ pub const IncrementalDecoder = struct {
         self.input_finished = true;
     }
 
+    pub fn setExpectedOutputLen(self: *Self, expected: usize) Error!void {
+        if (expected < self.total_output or expected > self.options.max_output_len)
+            return error.ShrinkSizeMismatch;
+        if (self.options.expected_output_len) |current|
+            if (current != expected) return error.ShrinkSizeMismatch;
+        self.options.expected_output_len = expected;
+    }
+
     /// True only at a legal compressed boundary with zero-valued pad bits.
     /// Container adapters use this before committing a descriptor candidate.
     pub fn canFinish(self: *const Self) bool {
