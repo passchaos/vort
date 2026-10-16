@@ -1811,6 +1811,15 @@ pub fn build(b: *std.Build) void {
             .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
         }),
     });
+    const cpio_incremental_auto_reader_probe_exe = b.addExecutable(.{
+        .name = "vort-cpio-incremental-auto-reader-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/cpio/incremental_auto_reader_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
     const cpio_incremental_compressed_writer_probe_exe = b.addExecutable(.{
         .name = "vort-cpio-incremental-compressed-writer-probe",
         .root_module = b.createModule(.{
@@ -1828,6 +1837,8 @@ pub fn build(b: *std.Build) void {
     cpio_diff.addArtifactArg(cpio_incremental_reader_probe_exe);
     cpio_diff.addArg("--incremental-compressed-reader");
     cpio_diff.addArtifactArg(cpio_incremental_compressed_reader_probe_exe);
+    cpio_diff.addArg("--incremental-auto-reader");
+    cpio_diff.addArtifactArg(cpio_incremental_auto_reader_probe_exe);
     cpio_diff.addArg("--incremental-compressed-writer");
     cpio_diff.addArtifactArg(cpio_incremental_compressed_writer_probe_exe);
     if (b.args) |args| cpio_diff.addArgs(args);

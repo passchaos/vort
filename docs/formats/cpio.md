@@ -116,6 +116,19 @@ modules. The CPIO raw-format option therefore composes independently with all
 twelve outer codecs. CRC entries still declare their byte sum before
 `beginEntry`, exactly as on the raw incremental writer.
 
+`CpioIncrementalAutoReader` adds bounded dispatch over those explicit reader
+types. Old-binary and ASCII CPIO magics activate raw parsing after only two or
+six bytes; signed wrappers activate as soon as their complete magic is
+available. A fixed 14-byte maximum probe validates the LZMA-Alone property,
+supported dictionary range, optional content size, and the range coder's
+required zero initialization byte. Remaining no-magic input defaults to
+Brotli, while `ambiguous_fallback` can reject it or route it to raw CPIO for
+applications with different framing knowledge. LZ4/Zstandard
+skippable frames are discarded incrementally under frame-count and total-input
+limits before probing the following data frame. The detected format, skipped
+frame accounting, active entry metadata, exact progress, decoded limit and all
+underlying codec/container limits remain observable.
+
 ## CLI
 
 ```sh
@@ -146,12 +159,16 @@ decoders validate nine writer directions on the development host; unavailable
 `compress`, lzip, LZF, or LZOP tools are reported through the counters rather
 than silently claimed.
 
+Automatic incremental dispatch covers five raw header archives, all twelve
+one-shot raw/wrapper choices plus legacy LZ4, and the same eight independently
+encoded wrapper directions (`incremental_auto_reader_cases=18`,
+`incremental_auto_reader_external=8`).
+
 ```sh
 python3 tools/cpio/diff.py --cli path/to/vort --cpio /usr/bin/cpio
 zig build run-cpio-diff -- --cpio /usr/bin/cpio
 ```
 
-Future functionality can add bounded compressed auto-detection, one-shot
-hard-link writer controls, concatenated CPIO members, HP-UX device-number
-variants, and afio's extended ODC header without changing the current entry or
-compression APIs.
+Future functionality can add one-shot hard-link writer controls, concatenated
+CPIO members, HP-UX device-number variants, and afio's extended ODC header
+without changing the current entry or compression APIs.

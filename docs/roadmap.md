@@ -20835,3 +20835,24 @@ reuse, so production keeps the simpler independently owned plans.
   `incremental_compressed_writer_cases=12`,
   `incremental_compressed_writer_external=9`). Bounded compressed CPIO
   auto-detection remains the next CPIO streaming gap.
+
+- Added `CpioIncrementalAutoReader` across five raw header families and all
+  twelve explicit compressed readers. Raw binary/ASCII formats commit after
+  two/six magic bytes, signed wrappers commit as soon as their signature is
+  complete, and a fixed 14-byte ceiling structurally validates LZMA-Alone
+  before the configurable Brotli/reject/raw fallback. The LZMA detector now
+  checks the dictionary range actually supported by the codec plus the range
+  coder's mandatory zero initialization byte after an independently generated
+  Brotli prefix exposed a false structural match.
+  Shared LZ4/Zstandard skippable frames are consumed without buffering their
+  payload and are bounded by input and frame-count limits. Tests cover every
+  raw/wrapper type under one-byte and micro schedules, both LZ4 generations,
+  concatenated gzip, multiple and truncated skippable frames, all fallback
+  policies, malformed raw prefixes, input/decoded limits and exhaustive OOM.
+  The required differential adds eighteen repository auto-dispatch archives
+  and eight independently encoded directions
+  (`incremental_auto_reader_cases=18`,
+  `incremental_auto_reader_external=8`). CPIO's current raw and compressed
+  scope now has explicit and automatic bounded input plus bounded output for
+  every supported wrapper; concatenated CPIO archives and extended legacy
+  header dialects remain future compatibility work.

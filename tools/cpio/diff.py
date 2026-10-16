@@ -203,6 +203,7 @@ def main() -> None:
     parser.add_argument("--writer", type=Path)
     parser.add_argument("--incremental-reader", type=Path)
     parser.add_argument("--incremental-compressed-reader", type=Path)
+    parser.add_argument("--incremental-auto-reader", type=Path)
     parser.add_argument("--incremental-compressed-writer", type=Path)
     parser.add_argument("--cpio", type=Path)
     args = parser.parse_args()
@@ -237,6 +238,8 @@ def main() -> None:
     incremental_reader_cases = 0
     incremental_compressed_reader_cases = 0
     incremental_compressed_reader_external = 0
+    incremental_auto_reader_cases = 0
+    incremental_auto_reader_external = 0
     incremental_compressed_writer_cases = 0
     incremental_compressed_writer_external = 0
 
@@ -269,6 +272,17 @@ def main() -> None:
                         pattern,
                     )
                     incremental_reader_cases += 1
+            if args.incremental_auto_reader is not None:
+                for pattern in ("one", "micro"):
+                    run(
+                        args.incremental_auto_reader,
+                        str(first),
+                        "payload.bin",
+                        str(source),
+                        "raw_cpio",
+                        pattern,
+                    )
+                incremental_auto_reader_cases += 1
             if cpio_tool is not None:
                 listed = run(cpio_tool, "-it", "--quiet", "-F", str(first)).stdout.splitlines()
                 if listed != ["payload.bin"]:
@@ -313,6 +327,22 @@ def main() -> None:
                         pattern,
                     )
                 incremental_compressed_reader_cases += 1
+            if args.incremental_auto_reader is not None:
+                auto_format = {
+                    "none": "raw_cpio",
+                    "compress-z": "compress_z",
+                    "zstd": "zstandard",
+                }.get(compression, compression)
+                for pattern in ("one", "micro"):
+                    run(
+                        args.incremental_auto_reader,
+                        str(archive),
+                        "payload.bin",
+                        str(source),
+                        auto_format,
+                        pattern,
+                    )
+                incremental_auto_reader_cases += 1
             wrapper_cases += 1
 
         raw_reference_path = temp / "vort-newc-first.cpio"
@@ -344,6 +374,17 @@ def main() -> None:
                     pattern,
                 )
             incremental_compressed_reader_cases += 1
+        if args.incremental_auto_reader is not None:
+            for pattern in ("one", "micro"):
+                run(
+                    args.incremental_auto_reader,
+                    str(legacy_path),
+                    "payload.bin",
+                    str(source),
+                    "lz4_legacy",
+                    pattern,
+                )
+            incremental_auto_reader_cases += 1
 
         external_inputs = {
             "gzip": __import__("gzip").compress(raw_reference, mtime=0),
@@ -406,6 +447,19 @@ def main() -> None:
             for compression, data in external_inputs.items():
                 path = temp / f"external-{compression}.cpio"
                 path.write_bytes(data)
+                output = temp / f"external-{compression}.out"
+                run(
+                    args.cli,
+                    "extract-cpio-file",
+                    str(path),
+                    "payload.bin",
+                    str(output),
+                    str(len(payload)),
+                )
+                if output.read_bytes() != payload:
+                    raise AssertionError(
+                        f"Vort auto decode failed external CPIO wrapper: {compression}"
+                    )
                 for pattern in ("one", "micro"):
                     run(
                         args.incremental_compressed_reader,
@@ -416,6 +470,25 @@ def main() -> None:
                         pattern,
                     )
                 incremental_compressed_reader_external += 1
+        if args.incremental_auto_reader is not None:
+            for compression, data in external_inputs.items():
+                path = temp / f"external-{compression}.cpio"
+                path.write_bytes(data)
+                auto_format = {
+                    "compress-z": "compress_z",
+                    "zstd": "zstandard",
+                    "lz4-legacy": "lz4_legacy",
+                }.get(compression, compression)
+                for pattern in ("one", "micro"):
+                    run(
+                        args.incremental_auto_reader,
+                        str(path),
+                        "payload.bin",
+                        str(source),
+                        auto_format,
+                        pattern,
+                    )
+                incremental_auto_reader_external += 1
 
         if args.incremental_compressed_writer is not None:
             for compression in (
@@ -588,6 +661,8 @@ def main() -> None:
         f"incremental_reader_cases={incremental_reader_cases} "
         f"incremental_compressed_reader_cases={incremental_compressed_reader_cases} "
         f"incremental_compressed_reader_external={incremental_compressed_reader_external} "
+        f"incremental_auto_reader_cases={incremental_auto_reader_cases} "
+        f"incremental_auto_reader_external={incremental_auto_reader_external} "
         f"incremental_compressed_writer_cases={incremental_compressed_writer_cases} "
         f"incremental_compressed_writer_external={incremental_compressed_writer_external} "
         "corrupt_crc=True truncated=True trailing=True"
