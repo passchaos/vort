@@ -71,6 +71,7 @@ pub const Error = cpio_reader.Error ||
     compressed_reader.LzopReader.Error ||
     std.mem.Allocator.Error || error{
     UnknownCpioCompression,
+    CpioMemberInputSizeMismatch,
     InvalidCpioAutoReaderState,
     TooManySkippableFrames,
     UnsupportedCpioSequenceCompression,
@@ -154,6 +155,7 @@ pub const Reader = struct {
     active_finish_called: bool = false,
     total_input: u64 = 0,
     total_output: u64 = 0,
+    member_input_size: ?u64 = null,
 
     const Self = @This();
 
@@ -166,6 +168,8 @@ pub const Reader = struct {
         skipped_frames: usize,
         skipped_bytes: u64,
         skippable_bytes_remaining: usize,
+        member_input_size: ?u64,
+        member_input_remaining: ?u64,
         finish_requested: bool,
     };
 
@@ -199,8 +203,23 @@ pub const Reader = struct {
             .skipped_frames = self.skipped_frames,
             .skipped_bytes = self.skipped_bytes,
             .skippable_bytes_remaining = self.skip_remaining,
+            .member_input_size = self.member_input_size,
+            .member_input_remaining = self.memberInputRemaining(),
             .finish_requested = self.finish_requested,
         };
+    }
+
+    /// Sets an exact physical input size for the current pristine member.
+    /// Input beyond this boundary remains unconsumed, and reaching it acts as
+    /// physical EOF for formats such as Unix compress and legacy LZ4.
+    pub fn setMemberInputSize(self: *Self, input_size: ?u64) Error!void {
+        if (self.phase != .prefix or self.prefix_len != 0 or self.total_input != 0 or
+            self.active != null or self.skipped_frames != 0)
+        {
+            return error.InvalidCpioAutoReaderState;
+        }
+        if (input_size == 0) return error.InvalidCpioAutoReaderState;
+        self.member_input_size = input_size;
     }
 
     pub fn detectedFormat(self: *const Self) ?Format {
@@ -228,7 +247,11 @@ pub const Reader = struct {
     pub fn step(self: *Self, input: []const u8, output: []u8) Error!cpio_reader.StepResult {
         if (self.phase == .poisoned) return error.CpioAutoReaderPoisoned;
         if (self.finish_requested and input.len != 0) return error.TrailingData;
-        return self.stepInner(input, output) catch |err| {
+        const bounded_input = self.boundMemberInput(input) catch |err| {
+            self.phase = .poisoned;
+            return err;
+        };
+        return self.stepInner(bounded_input, output) catch |err| {
             self.phase = .poisoned;
             return err;
         };
@@ -251,7 +274,7 @@ pub const Reader = struct {
                 self.prefix_len += take;
                 input_read += take;
                 try self.recordInput(take);
-                const force = self.finish_requested and input_read == input.len;
+                const force = self.inputFinished() and input_read == input.len;
                 if (try self.probePrefix(force)) continue;
                 return result(input_read, output_written, .need_input);
             },
@@ -263,7 +286,7 @@ pub const Reader = struct {
                 self.skipped_bytes = std.math.add(u64, self.skipped_bytes, take) catch
                     return error.IntegerOverflow;
                 if (self.skip_remaining != 0) {
-                    if (self.finish_requested) return error.TruncatedFrame;
+                    if (self.inputFinished()) return error.TruncatedFrame;
                     return result(input_read, output_written, .need_input);
                 }
                 self.phase = .prefix;
@@ -287,7 +310,7 @@ pub const Reader = struct {
                         .entry_header => return result(input_read, output_written, .entry_header),
                         .entry_done => return result(input_read, output_written, .entry_done),
                         .done => {
-                            self.phase = .done;
+                            try self.completeMember();
                             return result(input_read, output_written, .done);
                         },
                         .need_output => return result(input_read, output_written, .need_output),
@@ -311,7 +334,7 @@ pub const Reader = struct {
                     .entry_header => return result(input_read, output_written, .entry_header),
                     .entry_done => return result(input_read, output_written, .entry_done),
                     .done => {
-                        self.phase = .done;
+                        try self.completeMember();
                         return result(input_read, output_written, .done);
                     },
                     .need_output => return result(input_read, output_written, .need_output),
@@ -321,7 +344,7 @@ pub const Reader = struct {
                                 return error.InvalidCpioAutoReaderState;
                             continue;
                         }
-                        if (!self.finish_requested)
+                        if (!self.inputFinished())
                             return result(input_read, output_written, .need_input);
                         if (!self.active_finish_called) {
                             try self.active.?.finish();
@@ -410,8 +433,11 @@ pub const Reader = struct {
 
     fn activate(self: *Self, format: Format) Error!void {
         if (self.active != null) return error.InvalidCpioAutoReaderState;
-        if (self.options.member_mode and !memberFormatSupported(format))
+        if (self.options.member_mode and !hasIntrinsicMemberBoundary(format) and
+            self.member_input_size == null)
+        {
             return error.UnsupportedCpioSequenceCompression;
+        }
         const prepared: Active = switch (format) {
             .raw_cpio => .{ .raw_cpio = try self.createRaw() },
             .gzip => .{ .gzip = try self.createCompressed(
@@ -579,9 +605,38 @@ pub const Reader = struct {
         self.total_output = std.math.add(u64, self.total_output, count) catch
             return error.IntegerOverflow;
     }
+
+    fn boundMemberInput(self: *const Self, input: []const u8) Error![]const u8 {
+        const input_size = self.member_input_size orelse return input;
+        if (self.total_input > input_size)
+            return error.InvalidCpioAutoReaderState;
+        const remaining = input_size - self.total_input;
+        const remaining_usize = std.math.cast(usize, remaining) orelse input.len;
+        return input[0..@min(input.len, remaining_usize)];
+    }
+
+    fn memberInputRemaining(self: *const Self) ?u64 {
+        const input_size = self.member_input_size orelse return null;
+        if (self.total_input > input_size) return 0;
+        return input_size - self.total_input;
+    }
+
+    fn inputFinished(self: *const Self) bool {
+        if (self.finish_requested) return true;
+        return if (self.memberInputRemaining()) |remaining| remaining == 0 else false;
+    }
+
+    fn completeMember(self: *Self) Error!void {
+        if (self.member_input_size) |expected| {
+            const trailing: u64 = @intCast(self.trailingInput().len);
+            if (trailing > self.total_input or self.total_input - trailing != expected)
+                return error.CpioMemberInputSizeMismatch;
+        }
+        self.phase = .done;
+    }
 };
 
-fn memberFormatSupported(format: Format) bool {
+fn hasIntrinsicMemberBoundary(format: Format) bool {
     return switch (format) {
         .raw_cpio,
         .gzip,

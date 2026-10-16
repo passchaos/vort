@@ -13,6 +13,7 @@ pub fn main(init: std.process.Init) !void {
     const entry_name = args.next() orelse return error.MissingEntryName;
     const expected_path = args.next() orelse return error.MissingExpectedPath;
     const format_list = args.next() orelse return error.MissingFormats;
+    const member_size_list = args.next() orelse return error.MissingMemberSizes;
     const pattern_name = args.next() orelse return error.MissingInputPattern;
     if (args.next() != null) return error.UnexpectedArgument;
     const pattern: Pattern = if (std.mem.eql(u8, pattern_name, "one"))
@@ -38,6 +39,12 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(expected);
     const expected_formats = try parseFormats(init.gpa, format_list);
     defer init.gpa.free(expected_formats);
+    const member_input_sizes = try parseMemberInputSizes(
+        init.gpa,
+        member_size_list,
+        expected_formats.len,
+    );
+    defer init.gpa.free(member_input_sizes);
 
     var reader = try vort.CpioIncrementalMixedReader.initWithOptions(init.gpa, .{
         .max_members = expected_formats.len,
@@ -69,6 +76,7 @@ pub fn main(init: std.process.Init) !void {
     var found_in_member = false;
     var member_count: usize = 0;
     var finish_sent = false;
+    try declareMemberBoundary(&reader, member_input_sizes, member_count);
 
     while (true) {
         const input_end = @min(
@@ -103,8 +111,11 @@ pub fn main(init: std.process.Init) !void {
                 const info = reader.lastArchive() orelse return error.MissingArchiveInfo;
                 if (info.index != member_count or info.format != expected_formats[member_count])
                     return error.FormatMismatch;
+                if (info.declared_input_size != member_input_sizes[member_count])
+                    return error.MemberInputSizeMismatch;
                 member_count += 1;
                 found_in_member = false;
+                try declareMemberBoundary(&reader, member_input_sizes, member_count);
             },
             .need_input => if (input_offset == archive.len and !finish_sent) {
                 try reader.finish();
@@ -123,6 +134,40 @@ pub fn main(init: std.process.Init) !void {
     }
     if (input_offset != archive.len) return error.TrailingData;
     if (member_count != expected_formats.len) return error.ArchiveCountMismatch;
+}
+
+fn parseMemberInputSizes(
+    allocator: std.mem.Allocator,
+    text: []const u8,
+    expected_count: usize,
+) ![]?u64 {
+    const sizes = try allocator.alloc(?u64, expected_count);
+    errdefer allocator.free(sizes);
+    var iterator = std.mem.splitScalar(u8, text, ',');
+    var index: usize = 0;
+    while (iterator.next()) |encoded| : (index += 1) {
+        if (index == sizes.len) return error.InvalidMemberSizeList;
+        if (std.mem.eql(u8, encoded, "-")) {
+            sizes[index] = null;
+        } else {
+            const size = try std.fmt.parseInt(u64, encoded, 10);
+            if (size == 0) return error.InvalidMemberSizeList;
+            sizes[index] = size;
+        }
+    }
+    if (index != sizes.len) return error.InvalidMemberSizeList;
+    return sizes;
+}
+
+fn declareMemberBoundary(
+    reader: *vort.CpioIncrementalMixedReader,
+    member_input_sizes: []const ?u64,
+    index: usize,
+) !void {
+    if (index < member_input_sizes.len) {
+        if (member_input_sizes[index]) |input_size|
+            try reader.setNextMemberInputSize(input_size);
+    }
 }
 
 fn parseFormats(

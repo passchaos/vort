@@ -417,9 +417,11 @@ def main() -> None:
                 ("gzip", temp / "wrapper-gzip.cpio"),
                 ("bzip2", temp / "wrapper-bzip2.cpio"),
                 ("brotli", temp / "wrapper-brotli.cpio"),
+                ("compress_z", temp / "wrapper-compress-z.cpio"),
                 ("lzma", temp / "wrapper-lzma.cpio"),
                 ("xz", temp / "wrapper-xz.cpio"),
                 ("lz4", temp / "wrapper-lz4.cpio"),
+                ("lz4_legacy", legacy_path),
                 ("zstandard", temp / "wrapper-zstd.cpio"),
                 ("lzip", temp / "wrapper-lzip.cpio"),
                 ("lzop", temp / "wrapper-lzop.cpio"),
@@ -432,6 +434,12 @@ def main() -> None:
             mixed_data.extend(b"\0" * 5)
             mixed_path.write_bytes(mixed_data)
             expected_formats = ",".join(name for name, _ in mixed_names)
+            member_sizes = ",".join(
+                str(path.stat().st_size)
+                if name in ("compress_z", "lz4_legacy")
+                else "-"
+                for name, path in mixed_names
+            )
             for pattern in ("one", "micro"):
                 run(
                     args.incremental_mixed_reader,
@@ -439,6 +447,7 @@ def main() -> None:
                     "payload.bin",
                     str(source),
                     expected_formats,
+                    member_sizes,
                     pattern,
                 )
             incremental_mixed_reader_cases += 1
@@ -547,11 +556,27 @@ def main() -> None:
                     )
                 incremental_auto_reader_external += 1
         if args.incremental_mixed_reader is not None:
-            external_order = ("gzip", "bzip2", "brotli", "lzma", "xz", "lz4", "zstd", "lzip", "lzop")
+            external_order = (
+                "gzip",
+                "bzip2",
+                "brotli",
+                "compress-z",
+                "lzma",
+                "xz",
+                "lz4",
+                "lz4-legacy",
+                "zstd",
+                "lzip",
+                "lzop",
+            )
             mixed_names = [("raw_cpio", raw_reference)]
             mixed_names.extend(
                 (
-                    "zstandard" if name == "zstd" else name,
+                    {
+                        "compress-z": "compress_z",
+                        "lz4-legacy": "lz4_legacy",
+                        "zstd": "zstandard",
+                    }.get(name, name),
                     external_inputs[name],
                 )
                 for name in external_order
@@ -564,6 +589,10 @@ def main() -> None:
                 mixed_data.extend(b"\0" * (index % 2))
             mixed_path.write_bytes(mixed_data)
             expected_formats = ",".join(name for name, _ in mixed_names)
+            member_sizes = ",".join(
+                str(len(data)) if name in ("compress_z", "lz4_legacy") else "-"
+                for name, data in mixed_names
+            )
             for pattern in ("one", "micro"):
                 run(
                     args.incremental_mixed_reader,
@@ -571,6 +600,7 @@ def main() -> None:
                     "payload.bin",
                     str(source),
                     expected_formats,
+                    member_sizes,
                     pattern,
                 )
             incremental_mixed_reader_cases += 1

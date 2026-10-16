@@ -11,9 +11,11 @@ const formats = [_]auto.Format{
     .gzip,
     .bzip2,
     .brotli,
+    .compress_z,
     .lzma,
     .xz,
     .lz4,
+    .lz4_legacy,
     .zstandard,
     .lzf,
     .lzip,
@@ -37,6 +39,7 @@ fn compressionFor(format: auto.Format) ?compressed.Compression {
         .gzip => .gzip,
         .bzip2 => .bzip2,
         .brotli => .brotli,
+        .compress_z => .compress_z,
         .lzma => .lzma,
         .xz => .xz,
         .lz4 => .lz4,
@@ -46,6 +49,15 @@ fn compressionFor(format: auto.Format) ?compressed.Compression {
         .lzop => .lzop,
         else => unreachable,
     };
+}
+
+fn requiresDeclaredInputSize(format: auto.Format) bool {
+    return format == .compress_z or format == .lz4_legacy;
+}
+
+fn declareMemberBoundary(reader: *mixed.Reader, fixture: Fixture, index: usize) !void {
+    if (index < formats.len and requiresDeclaredInputSize(formats[index]))
+        try reader.setNextMemberInputSize(fixture.sizes[index]);
 }
 
 fn makeFixture(allocator: std.mem.Allocator) !Fixture {
@@ -61,14 +73,25 @@ fn makeFixture(allocator: std.mem.Allocator) !Fixture {
         const data = try std.fmt.allocPrint(allocator, "member-{d}-data", .{index});
         defer allocator.free(data);
         const entries = [_]writer.EncodeEntry{.{ .name = name, .data = data }};
-        const encoded = if (compressionFor(format)) |compression| encoded: {
-            var options = compressed.EncodeOptions{ .compression = compression };
-            if (compression == .lzf) options.lzf_options.eof_marker = true;
-            break :encoded try compressed.encodeAlloc(allocator, &entries, options);
-        } else try writer.encodeAlloc(allocator, &entries, .{
-            .format = .crc,
-            .block_size = 512,
-        });
+        const encoded = switch (format) {
+            .raw_cpio => try writer.encodeAlloc(allocator, &entries, .{
+                .format = .crc,
+                .block_size = 512,
+            }),
+            .lz4_legacy => encoded: {
+                const raw = try writer.encodeAlloc(allocator, &entries, .{});
+                defer allocator.free(raw);
+                break :encoded try lz4_legacy.encodeAlloc(allocator, raw, .{
+                    .block_size = 1024,
+                });
+            },
+            else => encoded: {
+                const compression = compressionFor(format).?;
+                var options = compressed.EncodeOptions{ .compression = compression };
+                if (compression == .lzf) options.lzf_options.eof_marker = true;
+                break :encoded try compressed.encodeAlloc(allocator, &entries, options);
+            },
+        };
         defer allocator.free(encoded);
         starts[index] = output.items.len;
         sizes[index] = encoded.len;
@@ -112,6 +135,7 @@ fn exercise(
     var member_index: usize = 0;
     var finish_sent = false;
     var recovered_any = false;
+    try declareMemberBoundary(&reader, fixture, member_index);
     while (true) {
         const input_end = @min(fixture.bytes.len, input_offset + input_chunk);
         const stepped = try reader.step(fixture.bytes[input_offset..input_end], output);
@@ -137,8 +161,14 @@ fn exercise(
                 try std.testing.expectEqual(formats[member_index], info.format);
                 try std.testing.expectEqual(@as(u64, fixture.starts[member_index]), info.input_offset);
                 try std.testing.expectEqual(@as(u64, fixture.sizes[member_index]), info.input_size);
+                const declared: ?u64 = if (requiresDeclaredInputSize(formats[member_index]))
+                    fixture.sizes[member_index]
+                else
+                    null;
+                try std.testing.expectEqual(declared, info.declared_input_size);
                 recovered_any = recovered_any or info.recovered_suffix_size != 0;
                 member_index += 1;
+                try declareMemberBoundary(&reader, fixture, member_index);
             },
             .need_input => if (input_offset == fixture.bytes.len and !finish_sent) {
                 try reader.finish();
@@ -162,7 +192,7 @@ fn exercise(
     if (input_chunk > 1) try std.testing.expect(recovered_any);
 }
 
-test "CPIO mixed reader streams raw and ten compressed member formats" {
+test "CPIO mixed reader streams raw and twelve compressed member formats" {
     const allocator = std.testing.allocator;
     const fixture = try makeFixture(allocator);
     defer fixture.deinit(allocator);
@@ -206,34 +236,86 @@ test "CPIO mixed reader rejects formats without exact member boundaries" {
     );
 }
 
+test "CPIO mixed reader validates declared member boundaries" {
+    const allocator = std.testing.allocator;
+    const entries = [_]writer.EncodeEntry{.{ .name = "payload", .data = "abc" }};
+    const raw_padded = try writer.encodeAlloc(allocator, &entries, .{});
+    defer allocator.free(raw_padded);
+    const parsed = try archive.parse(raw_padded);
+    const raw = raw_padded[0..parsed.archive_end];
+    const joined = try std.mem.concat(allocator, u8, &.{ raw, "N" });
+    defer allocator.free(joined);
+
+    var oversized = try mixed.Reader.init(allocator);
+    defer oversized.deinit();
+    try std.testing.expectError(
+        error.InvalidCpioMixedReaderState,
+        oversized.setNextMemberInputSize(0),
+    );
+    try oversized.setNextMemberInputSize(raw.len + 1);
+    try std.testing.expectError(
+        error.InvalidCpioMixedReaderState,
+        oversized.setNextMemberInputSize(raw.len),
+    );
+    var output: [17]u8 = undefined;
+    var offset: usize = 0;
+    while (true) {
+        const stepped = oversized.step(joined[offset..], &output) catch |err| {
+            try std.testing.expectEqual(error.CpioMemberInputSizeMismatch, err);
+            break;
+        };
+        offset += stepped.input_read;
+    }
+
+    var active = try mixed.Reader.init(allocator);
+    defer active.deinit();
+    const first = try active.step(raw[0..1], &output);
+    try std.testing.expectEqual(@as(usize, 1), first.input_read);
+    try std.testing.expectError(
+        error.InvalidCpioMixedReaderState,
+        active.setNextMemberInputSize(raw.len),
+    );
+
+    var missing = try mixed.Reader.init(allocator);
+    defer missing.deinit();
+    try missing.setNextMemberInputSize(raw.len);
+    try std.testing.expectError(error.CpioMemberInputSizeMismatch, missing.finish());
+}
+
 test "CPIO mixed reader enforces sequence and replay limits" {
     const allocator = std.testing.allocator;
     const fixture = try makeFixture(allocator);
     defer fixture.deinit(allocator);
     const Cases = struct {
-        fn expectLimit(bytes: []const u8, options: mixed.Options) !void {
+        fn expectLimit(fixture_value: Fixture, options: mixed.Options) !void {
             var reader = try mixed.Reader.initWithOptions(std.testing.allocator, options);
             defer reader.deinit();
             var output: [64]u8 = undefined;
             var offset: usize = 0;
+            var member_index: usize = 0;
+            try declareMemberBoundary(&reader, fixture_value, member_index);
             while (true) {
-                const stepped = reader.step(bytes[offset..], &output) catch |err| {
+                const stepped = reader.step(fixture_value.bytes[offset..], &output) catch |err| {
                     try std.testing.expectEqual(error.OutputLimitExceeded, err);
                     return;
                 };
                 offset += stepped.input_read;
-                if (stepped.status == .need_input and offset == bytes.len)
+                if (stepped.status == .archive_done) {
+                    member_index += 1;
+                    try declareMemberBoundary(&reader, fixture_value, member_index);
+                }
+                if (stepped.status == .need_input and offset == fixture_value.bytes.len)
                     try reader.finish();
                 if (stepped.status == .done) return error.TestUnexpectedResult;
             }
         }
     };
-    try Cases.expectLimit(fixture.bytes, .{ .max_members = 1 });
-    try Cases.expectLimit(fixture.bytes, .{ .max_padding_size = 1 });
-    try Cases.expectLimit(fixture.bytes, .{
+    try Cases.expectLimit(fixture, .{ .max_members = 1 });
+    try Cases.expectLimit(fixture, .{ .max_padding_size = 1 });
+    try Cases.expectLimit(fixture, .{
         .max_total_input_size = fixture.bytes.len - 1,
     });
-    try Cases.expectLimit(fixture.bytes, .{ .max_total_output_size = 1 });
+    try Cases.expectLimit(fixture, .{ .max_total_output_size = 1 });
     try std.testing.expectError(
         error.InvalidCpioMixedReaderState,
         mixed.Reader.initWithOptions(allocator, .{ .decoder_input_chunk_size = 0 }),
@@ -245,24 +327,30 @@ test "CPIO mixed reader releases every allocation failure" {
     const fixture = try makeFixture(allocator);
     defer fixture.deinit(allocator);
     const Test = struct {
-        fn run(failing_allocator: std.mem.Allocator, bytes: []const u8) !void {
+        fn run(failing_allocator: std.mem.Allocator, fixture_value: Fixture) !void {
             var reader = try mixed.Reader.initWithOptions(failing_allocator, .{
                 .decoder_input_chunk_size = 64 * 1024,
             });
             defer reader.deinit();
             var output: [31]u8 = undefined;
             var offset: usize = 0;
+            var member_index: usize = 0;
             var finish_sent = false;
+            try declareMemberBoundary(&reader, fixture_value, member_index);
             while (true) {
-                const stepped = try reader.step(bytes[offset..], &output);
+                const stepped = try reader.step(fixture_value.bytes[offset..], &output);
                 offset += stepped.input_read;
                 if (stepped.status == .done) break;
-                if (!finish_sent and offset == bytes.len) {
+                if (stepped.status == .archive_done) {
+                    member_index += 1;
+                    try declareMemberBoundary(&reader, fixture_value, member_index);
+                }
+                if (!finish_sent and offset == fixture_value.bytes.len) {
                     try reader.finish();
                     finish_sent = true;
                 }
             }
         }
     };
-    try std.testing.checkAllAllocationFailures(allocator, Test.run, .{fixture.bytes});
+    try std.testing.checkAllAllocationFailures(allocator, Test.run, .{fixture});
 }

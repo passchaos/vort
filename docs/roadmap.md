@@ -20936,3 +20936,17 @@ reuse, so production keeps the simpler independently owned plans.
   mixed-sequence gates. The CPIO suffix matrix now covers ten codecs and the
   mixed dispatcher covers raw plus ten compressed formats. Only physical-EOF
   `.Z` and legacy-LZ4 members still require caller-supplied compressed lengths.
+
+- Added exact caller-supplied member boundaries for physical-EOF compressed
+  CPIO streams. `CpioIncrementalMixedReader.setNextMemberInputSize` binds a
+  size to the next non-padding member; the auto reader caps accepted input,
+  turns the boundary into decoder EOF, leaves following caller bytes
+  unconsumed, and rejects self-delimiting members whose actual boundary differs
+  from the declaration. The contract survives an already-signalled physical
+  EOF while later members remain in the bounded replay queue. Archive and
+  reader snapshots expose declared and remaining sizes. One-byte and 64 KiB
+  unit schedules now cover raw CPIO plus twelve compressed formats, including
+  `.Z` and legacy LZ4, along with missing/duplicate/incorrect declaration,
+  sequence-limit, replay-limit, and exhaustive OOM cases. The Vort differential
+  always includes both physical-EOF formats, and independently encoded
+  `compress`/legacy-LZ4 members join when their system tools are available.

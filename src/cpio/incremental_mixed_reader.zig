@@ -41,6 +41,7 @@ pub const ArchiveInfo = struct {
     format: auto_reader.Format,
     input_offset: u64,
     input_size: u64,
+    declared_input_size: ?u64,
     entry_count: usize,
     output_size: usize,
     recovered_suffix_size: usize,
@@ -55,6 +56,8 @@ pub const Reader = struct {
     phase: Phase = .padding,
     member_count: usize = 0,
     member_start: u64 = 0,
+    next_member_input_size: ?u64 = null,
+    member_input_size: ?u64 = null,
     last_archive: ?ArchiveInfo = null,
     total_input: u64 = 0,
     logical_offset: u64 = 0,
@@ -72,6 +75,9 @@ pub const Reader = struct {
         padding_bytes: u64,
         member_count: usize,
         member_start: u64,
+        next_member_input_size: ?u64,
+        member_input_size: ?u64,
+        member_input_remaining: ?u64,
         pending_replay_bytes: usize,
         finish_requested: bool,
         active: auto_reader.Reader.Snapshot,
@@ -108,6 +114,9 @@ pub const Reader = struct {
             .padding_bytes = self.padding_bytes,
             .member_count = self.member_count,
             .member_start = self.member_start,
+            .next_member_input_size = self.next_member_input_size,
+            .member_input_size = self.member_input_size,
+            .member_input_remaining = self.memberInputRemaining(),
             .pending_replay_bytes = self.replay.items.len - self.replay_offset,
             .finish_requested = self.finish_requested,
             .active = self.auto.snapshot(),
@@ -122,9 +131,27 @@ pub const Reader = struct {
         return self.last_archive;
     }
 
+    /// Declares the exact encoded size of the next non-padding member. This is
+    /// required for physical-EOF formats such as Unix compress and legacy LZ4,
+    /// and may also be used to enforce a boundary on self-delimiting formats.
+    pub fn setNextMemberInputSize(self: *Self, input_size: u64) Error!void {
+        if (self.phase == .poisoned) return error.CpioMixedReaderPoisoned;
+        if (self.phase != .padding or self.next_member_input_size != null or
+            input_size == 0)
+        {
+            return error.InvalidCpioMixedReaderState;
+        }
+        self.next_member_input_size = input_size;
+    }
+
     pub fn finish(self: *Self) Error!void {
         if (self.phase == .poisoned) return error.CpioMixedReaderPoisoned;
         if (self.phase == .done) return;
+        if (self.phase == .padding and !self.hasReplay() and
+            self.next_member_input_size != null)
+        {
+            return error.CpioMemberInputSizeMismatch;
+        }
         self.finish_requested = true;
         if (self.phase == .padding and !self.hasReplay()) {
             self.phase = .done;
@@ -161,6 +188,8 @@ pub const Reader = struct {
                     }
                     if (input_read == input.len) {
                         if (self.finish_requested) {
+                            if (self.next_member_input_size != null)
+                                return error.CpioMemberInputSizeMismatch;
                             self.phase = .done;
                             return result(input_read, output_written, .done);
                         }
@@ -174,6 +203,9 @@ pub const Reader = struct {
                 if (self.member_count == self.options.max_members)
                     return error.OutputLimitExceeded;
                 self.auto.reset();
+                try self.auto.setMemberInputSize(self.next_member_input_size);
+                self.member_input_size = self.next_member_input_size;
+                self.next_member_input_size = null;
                 self.member_start = self.logical_offset;
                 self.last_archive = null;
                 self.phase = .member;
@@ -224,6 +256,10 @@ pub const Reader = struct {
                             return error.InvalidCpioMixedReaderState;
                         const format = self.auto.detectedFormat() orelse
                             return error.InvalidCpioMixedReaderState;
+                        if (self.member_input_size) |declared| {
+                            if (self.logical_offset - self.member_start != declared)
+                                return error.CpioMemberInputSizeMismatch;
+                        }
                         const remaining_replay = if (from_replay)
                             self.replay.items[self.replay_offset..]
                         else
@@ -234,6 +270,7 @@ pub const Reader = struct {
                             .format = format,
                             .input_offset = self.member_start,
                             .input_size = self.logical_offset - self.member_start,
+                            .declared_input_size = self.member_input_size,
                             .entry_count = raw_snapshot.entry_count,
                             .output_size = raw_snapshot.output_written,
                             .recovered_suffix_size = trailing.len,
@@ -243,6 +280,7 @@ pub const Reader = struct {
                             self.member_count,
                             1,
                         ) catch return error.IntegerOverflow;
+                        self.member_input_size = null;
                         self.phase = .padding;
                         return result(input_read, output_written, .archive_done);
                     },
@@ -321,6 +359,13 @@ pub const Reader = struct {
             return error.IntegerOverflow;
         if (self.total_output > self.options.max_total_output_size)
             return error.OutputLimitExceeded;
+    }
+
+    fn memberInputRemaining(self: *const Self) ?u64 {
+        const input_size = self.member_input_size orelse return null;
+        const consumed = self.logical_offset - self.member_start;
+        if (consumed > input_size) return 0;
+        return input_size - consumed;
     }
 };
 
