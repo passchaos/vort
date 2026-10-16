@@ -93,8 +93,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   Vort;
 - pure Zig LZ4 legacy-frame parsing and deterministic writing with independent
   blocks up to 8 MiB, zero-allocation metadata iteration, decoded-size preflight,
-  bounded/caller-owned decode, system `lz4 -l` interoperability, and automatic
-  TAR/CPIO legacy-magic detection;
+  bounded/caller-owned decode, a one-block-bounded incremental decoder, system
+  `lz4 -l` interoperability, and automatic TAR/CPIO legacy-magic detection;
 - pure Zig Windows LZNT1 encoding and decoding with 4 KiB chunks, dynamic
   length/displacement token partitions, overlapping-copy matches, stored-block
   fallback, optional end markers, inter-chunk zero padding, decoded-size
@@ -349,7 +349,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   and dictionary limits;
 - pure Zig raw LZF block and standard `ZV` stream encoding/decoding with
   8 KiB match distances, 65,535-byte stored/compressed blocks, optional EOF markers,
-  bounded/caller-owned APIs, decoded-size preflight, metadata inspection, and
+  bounded/caller-owned APIs, a one-block-bounded incremental decoder,
+  decoded-size preflight, metadata inspection, and
   automatic `.tar.lzf` composition;
 - dependency-free LHA/LZH level-0/1/2/3 and SFX-prefix reading plus deterministic
   level-0 writing with stored, LH1, LH4, LH5, LH6, LH7, LZ5, LZS, and directory
@@ -403,8 +404,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   strict extent validation, logical hole reconstruction, safe-path
   classification, borrowed entry views, bounded caller-output incremental
   raw reading and writing for regular/link/PAX/sparse entries, direct incremental
-  gzip/Bzip2/Brotli/LZMA/XZ/LZ4/Zstandard/LZOP-to-TAR reading, and automatic raw/gzip/
-  Bzip2/Brotli/Unix-compress/LZMA-Alone/XZ/LZ4/lzip/LZF/Zstandard/LZOP tarball composition;
+  gzip/Bzip2/Brotli/LZMA/XZ/modern+legacy-LZ4/LZF/Zstandard/LZOP-to-TAR
+  reading, and automatic raw/gzip/Bzip2/Brotli/Unix-compress/LZMA-Alone/XZ/
+  LZ4/lzip/LZF/Zstandard/LZOP tarball composition;
 - dependency-free CPIO reading and deterministic writing for SVR4 newc/CRC,
   POSIX ODC, and little-/big-endian old binary archives, including regular,
   directory, symlink, and special-file metadata, strict per-format alignment,

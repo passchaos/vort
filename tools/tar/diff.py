@@ -415,6 +415,7 @@ def main() -> None:
             "lzma",
             "xz",
             "lz4",
+            "lzf",
             "zstd",
             "lzop",
         }
@@ -437,6 +438,7 @@ def main() -> None:
                         pattern,
                     )
                 incremental_compressed_reader_cases += 1
+
             if compression == "brotli":
                 raw = brotli_decompress(archive_path.read_bytes(), 16 * 1024 * 1024)
                 with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as archive:
@@ -510,6 +512,25 @@ def main() -> None:
                     if archive.extractfile("payload.bin").read() != payload:
                         raise AssertionError(f"Python could not read Vort tarball {compression}")
 
+        legacy_lz4_archive = temp / "vort.tar.lz4-legacy"
+        run(
+            args.cli,
+            "encode-lz4-legacy-file",
+            str(first),
+            str(legacy_lz4_archive),
+            "1024",
+        )
+        for pattern in ("one", "micro"):
+            run(
+                args.incremental_compressed_reader,
+                str(legacy_lz4_archive),
+                "plain.txt",
+                str(plain_expected),
+                "lz4-legacy",
+                pattern,
+            )
+        incremental_compressed_reader_cases += 1
+
         python_tar, payloads = python_archive(tarfile.PAX_FORMAT)
         compressed_inputs = {
             "none": python_tar,
@@ -541,6 +562,13 @@ def main() -> None:
             compressed_inputs["lzf"] = subprocess.run(
                 [lzf_tool, "-c"], input=python_tar, check=True, stdout=subprocess.PIPE
             ).stdout
+        if lz4_tool is not None:
+            compressed_inputs["lz4-legacy"] = subprocess.run(
+                [lz4_tool, "-l", "-q", "-c"],
+                input=python_tar,
+                check=True,
+                stdout=subprocess.PIPE,
+            ).stdout
         if lzop_tool is not None:
             compressed_inputs["lzop"] = subprocess.run(
                 [lzop_tool, "-c"], input=python_tar, check=True, stdout=subprocess.PIPE
@@ -549,7 +577,7 @@ def main() -> None:
             path = temp / f"python.tar.{compression}"
             path.write_bytes(data)
             validate_with_vort(args.cli, path, payloads)
-            if compression in streaming_compressions:
+            if compression in streaming_compressions or compression == "lz4-legacy":
                 name, payload = next(iter(payloads.items()))
                 expected_path = temp / f"python-{compression}-incremental-expected.bin"
                 expected_path.write_bytes(payload)

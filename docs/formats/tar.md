@@ -151,14 +151,16 @@ and micro schedules (`incremental_reader_cases=14`).
 
 ### Compressed incremental readers
 
-Eight outer formats compose directly with the same raw reader without retaining
+Ten outer formats compose directly with the same raw reader without retaining
 the decompressed TAR: `TarGzipIncrementalReader`,
 `TarBzip2IncrementalReader`, `TarBrotliIncrementalReader`,
 `TarLzmaIncrementalReader`, `TarXzIncrementalReader`,
-`TarLz4IncrementalReader`, `TarZstandardIncrementalReader`, and
-`TarLzopIncrementalReader`. The LZ4 type targets modern LZ4 frames, not the
-legacy LZ4 stream format. `TarIncrementalCompressedReader(Codec)` is the
-generic composition surface behind the named types.
+`TarLz4IncrementalReader`, `TarLz4LegacyIncrementalReader`,
+`TarLzfIncrementalReader`, `TarZstandardIncrementalReader`, and
+`TarLzopIncrementalReader`. The first LZ4 type targets modern frames; the
+legacy type handles the original EOF-terminated stream.
+`TarIncrementalCompressedReader(Codec)` is the generic composition surface
+behind the named types.
 
 Each type has the same `step`/`finish`/`currentEntry` contract as the raw
 reader. A configurable decoded bridge is the only storage between the outer
@@ -168,17 +170,18 @@ blocks must be zero. `max_decoded_size` bounds all decoded TAR/padding bytes,
 while `Options.decoder` exposes that wrapper's block, dictionary, history and
 compressed-buffer limits. Gzip accepts concatenated members by default.
 
-One-byte and micro-schedule tests cover all eight Vort writers, and the required
+One-byte and micro-schedule tests cover all ten Vort writers, and the required
 external differential adds independently produced gzip, Bzip2, Brotli,
-LZMA-Alone, XZ, LZ4 and Zstandard inputs. The current required report is
-`incremental_compressed_reader_cases=15`; an installed external `lzop` adds one
-more direction. Zero-output backpressure, decoded limits, nonzero TAR trailers,
-truncated gzip and full-decode allocation failures have focused coverage.
+LZMA-Alone, XZ, modern LZ4, legacy LZ4 and Zstandard inputs. The current
+required report is `incremental_compressed_reader_cases=18`; installed external
+`lzf` and `lzop` tools add one direction each. Zero-output backpressure,
+decoded limits, nonzero TAR trailers, truncation and full-decode allocation
+failures have focused coverage.
 
-Unix compress, lzip, LZF and legacy LZ4 remain one-shot tarball readers because
-their underlying codecs do not yet expose full incremental decoders. They are
-the next composition gap; the API does not claim they stream by buffering an
-entire decoded TAR internally.
+Unix compress and lzip remain one-shot tarball readers because their underlying
+codecs do not yet expose full incremental decoders. They are the remaining
+composition gap; the API does not claim they stream by buffering an entire
+decoded TAR internally.
 
 ## Incremental writer
 

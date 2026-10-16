@@ -2,6 +2,7 @@ const std = @import("std");
 const compressed_reader = @import("incremental_compressed_reader.zig");
 const compressed = @import("compressed.zig");
 const deflate = @import("../deflate.zig");
+const lz4_legacy = @import("../lz4_legacy.zig");
 const tar = @import("../tar.zig");
 
 const regular_payload = "compressed TAR streaming payload\n" ** 37;
@@ -121,6 +122,49 @@ test "compressed TAR incremental readers compose eight streaming wrappers" {
     }) |case| {
         try exercise(case[0], case[1], 1, 1);
         try exercise(case[0], case[1], 13, 17);
+    }
+}
+
+test "compressed TAR incremental readers compose LZF and legacy LZ4" {
+    try exercise(compressed_reader.LzfReader, .lzf, 1, 1);
+    try exercise(compressed_reader.LzfReader, .lzf, 13, 17);
+
+    const allocator = std.testing.allocator;
+    const entries = [_]tar.EncodeEntry{.{ .name = "payload", .data = regular_payload }};
+    const raw = try tar.encodeAlloc(allocator, &entries);
+    defer allocator.free(raw);
+    const encoded = try lz4_legacy.encodeAlloc(allocator, raw, .{ .block_size = 1024 });
+    defer allocator.free(encoded);
+    inline for (.{
+        .{ @as(usize, 1), @as(usize, 1) },
+        .{ @as(usize, 13), @as(usize, 17) },
+    }) |schedule| {
+        var reader = try compressed_reader.Lz4LegacyReader.initWithOptions(allocator, .{
+            .decoded_bridge_size = 1,
+            .max_decoded_size = raw.len,
+        });
+        defer reader.deinit();
+        var actual: std.ArrayList(u8) = .empty;
+        defer actual.deinit(allocator);
+        const output = try allocator.alloc(u8, schedule[1]);
+        defer allocator.free(output);
+        var input_offset: usize = 0;
+        var finish_sent = false;
+        while (true) {
+            const input_end = @min(encoded.len, input_offset + schedule[0]);
+            const stepped = try reader.step(encoded[input_offset..input_end], output);
+            input_offset += stepped.input_read;
+            try actual.appendSlice(allocator, output[0..stepped.output_written]);
+            if (stepped.status == .entry_header) actual.clearRetainingCapacity();
+            if (stepped.status == .entry_done)
+                try std.testing.expectEqualSlices(u8, regular_payload, actual.items);
+            if (stepped.status == .done) break;
+            if (!finish_sent and input_offset == encoded.len) {
+                try reader.finish();
+                finish_sent = true;
+            }
+        }
+        try std.testing.expectEqual(encoded.len, input_offset);
     }
 }
 

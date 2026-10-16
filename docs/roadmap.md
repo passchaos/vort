@@ -20696,7 +20696,11 @@ reuse, so production keeps the simpler independently owned plans.
   decoder's block/dictionary/history limits, defers EOF until pending output is
   drained, and enables concatenated gzip members by default. One-byte and micro
   schedules cover all eight Vort writers, while independent gzip/Bzip2/Brotli/
-  LZMA/XZ/LZ4/Zstandard streams bring the required differential to 15 cases
-  (`incremental_compressed_reader_cases=15`). Unix compress, lzip, LZF and
-  legacy LZ4 remain explicit one-shot gaps until their codecs gain incremental
-  decoders.
+  LZMA/XZ/LZ4/Zstandard streams initially brought the required differential to
+  15 cases. Block-bounded LZF and legacy-LZ4 decoders now retain at most one
+  explicitly limited independent block, expose exact progress/EOF semantics,
+  and compose as `TarLzfIncrementalReader` and
+  `TarLz4LegacyIncrementalReader`. Their one-byte/micro schedules plus system
+  `lz4 -l` input raise the required result to 18
+  (`incremental_compressed_reader_cases=18`). Unix compress and lzip are the
+  remaining one-shot tarball gaps.

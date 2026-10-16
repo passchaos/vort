@@ -30,6 +30,14 @@ also controls the optional EOF marker. Allocating, caller-owned, transactional
 append, encoded-bound, decoded-size, bounded decode, and metadata inspection
 APIs are exposed for both raw blocks and framed streams.
 
+`LzfIncrementalDecoder` accepts arbitrary compressed input slices and drains
+decoded bytes through caller-owned output. Stored payloads copy directly;
+compressed records retain at most one explicitly limited 65,535-byte input
+block and its validated decoded block. Independent compressed/decoded block,
+total-output and expected-output limits apply before output becomes visible.
+EOF is valid at a block boundary, while the optional zero marker must still be
+the last encoded byte. Snapshots expose retained capacities and exact progress.
+
 ```zig
 const encoded = try vort.encodeLzfAlloc(allocator, input, .{
     .block_size = 32 * 1024,
@@ -49,6 +57,8 @@ defer allocator.free(decoded);
 TAR composition recognizes and writes `.tar.lzf` through
 `TarCompression.lzf`. Automatic detection uses the unambiguous `ZV` signature
 after first checking for a structurally valid raw TAR.
+`TarLzfIncrementalReader` connects this decoder to the bounded TAR state
+machine without retaining the decompressed archive.
 
 CLI validation surfaces:
 
@@ -71,6 +81,5 @@ make
 zig build run-lzf-diff -- --reference path/to/liblzf-3.6/lzf
 ```
 
-Incremental input/output state machines and the unused type-2 checksum
-extension remain future functionality. They are not needed to decode streams
-emitted by the upstream liblzf 3.6 utility.
+The unused type-2 checksum extension remains future functionality. It is not
+needed to decode streams emitted by the upstream liblzf 3.6 utility.

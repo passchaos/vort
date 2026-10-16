@@ -242,6 +242,8 @@ pub const BrotliReader = Reader(codecs.Brotli);
 pub const LzmaReader = Reader(codecs.Lzma);
 pub const XzReader = Reader(codecs.Xz);
 pub const Lz4Reader = Reader(codecs.Lz4);
+pub const Lz4LegacyReader = Reader(codecs.Lz4Legacy);
+pub const LzfReader = Reader(codecs.Lzf);
 pub const ZstandardReader = Reader(codecs.Zstandard);
 pub const LzopReader = Reader(codecs.Lzop);
 
