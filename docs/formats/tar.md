@@ -117,3 +117,25 @@ deterministic PAX-1.0 and old-GNU writer output
 round trip through all twelve compressed-tar wrappers. Device/FIFO materialization is
 not implemented. Symbolic and hard links are exposed as metadata but are not
 followed or materialized by the in-memory extraction helpers.
+
+## Incremental writer
+
+`TarIncrementalWriter` emits raw TAR through caller output without retaining an
+archive or member. `beginEntry` serializes a bounded control prefix; regular
+files then accept exactly the pledged size, while directories and links accept
+no payload. PAX long path/link records, PAX sparse 1.0 maps, old-GNU sparse
+extension chains, entry padding and the two final zero blocks all drain under
+arbitrary output backpressure.
+
+Incremental sparse input is the complete logical file. The caller supplies only
+offset/length layout metadata; the writer discards declared holes and streams
+normalized stored ranges directly. By default every discarded byte must be
+zero, so an incorrect sparse map fails with `NonZeroSparseHole` rather than
+silently losing data. State contains copied normalized extents, the current TAR
+control record, and counters—never the file. One-byte and micro schedules are
+byte-identical to `encodeTarAlloc` for regular files, long PAX metadata, links,
+PAX sparse and old-GNU sparse.
+
+The external differential requires seven schedule-independent incremental
+writer entries (`incremental_writer_cases=7`) and exact byte equality with the
+one-shot writer before Python and GNU tar interoperability checks run.

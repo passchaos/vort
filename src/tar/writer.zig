@@ -1,5 +1,6 @@
 const std = @import("std");
 const archive = @import("archive.zig");
+const wire = @import("wire.zig");
 
 pub const Error = archive.Error || error{
     InvalidTarEntryName,
@@ -52,22 +53,22 @@ pub fn encodeAppend(allocator: std.mem.Allocator, output: *std.ArrayList(u8), en
         defer pax.deinit(allocator);
         if (entry.sparse) |sparse_options| switch (sparse_options.format) {
             .pax_1_0 => {
-                try appendPaxRecord(allocator, &pax, "GNU.sparse.major", "1");
-                try appendPaxRecord(allocator, &pax, "GNU.sparse.minor", "0");
-                try appendPaxRecord(allocator, &pax, "GNU.sparse.name", entry.name);
+                try wire.appendPaxRecord(allocator, &pax, "GNU.sparse.major", "1");
+                try wire.appendPaxRecord(allocator, &pax, "GNU.sparse.minor", "0");
+                try wire.appendPaxRecord(allocator, &pax, "GNU.sparse.name", entry.name);
                 var size_buffer: [32]u8 = undefined;
                 const logical_size = try std.fmt.bufPrint(
                     &size_buffer,
                     "{d}",
                     .{sparse_options.logical_size},
                 );
-                try appendPaxRecord(allocator, &pax, "GNU.sparse.realsize", logical_size);
+                try wire.appendPaxRecord(allocator, &pax, "GNU.sparse.realsize", logical_size);
             },
             .gnu_old => {},
         } else if (entry.name.len > 100) {
-            try appendPaxRecord(allocator, &pax, "path", entry.name);
+            try wire.appendPaxRecord(allocator, &pax, "path", entry.name);
         }
-        if (entry.link_name.len > 100) try appendPaxRecord(allocator, &pax, "linkpath", entry.link_name);
+        if (entry.link_name.len > 100) try wire.appendPaxRecord(allocator, &pax, "linkpath", entry.link_name);
         if (pax.items.len != 0) {
             try appendHeader(allocator, &archive_bytes, .{
                 .name = "PaxHeaders.X/vort",
@@ -144,51 +145,19 @@ fn appendHeader(
     entry: EncodeEntry,
     type_flag: u8,
 ) !void {
-    var header: [512]u8 = @splat(0);
     const header_name = if (entry.name.len <= 100) entry.name else "PaxEntry";
-    @memcpy(header[0..header_name.len], header_name);
-    try writeOctal(header[100..108], if (entry.mode != 0) entry.mode else defaultMode(entry.kind));
-    try writeOctal(header[108..116], 0);
-    try writeOctal(header[116..124], 0);
-    try writeOctal(header[124..136], entry.data.len);
-    try writeOctal(header[136..148], entry.mtime);
-    @memset(header[148..156], ' ');
-    header[156] = type_flag;
     const header_link = if (entry.link_name.len <= 100) entry.link_name else "";
-    @memcpy(header[157..][0..header_link.len], header_link);
-    @memcpy(header[257..263], "ustar\x00");
-    @memcpy(header[263..265], "00");
-    var checksum: u64 = 0;
-    for (header) |byte| checksum += byte;
-    try writeChecksum(header[148..156], checksum);
-    try output.appendSlice(allocator, &header);
+    try wire.appendUstarHeader(allocator, output, .{
+        .name = header_name,
+        .link_name = header_link,
+        .mode = if (entry.mode != 0) entry.mode else defaultMode(entry.kind),
+        .mtime = entry.mtime,
+        .size = entry.data.len,
+        .type_flag = type_flag,
+    });
     try output.appendSlice(allocator, entry.data);
     const remainder = entry.data.len % 512;
     if (remainder != 0) try output.appendNTimes(allocator, 0, 512 - remainder);
-}
-
-fn appendPaxRecord(
-    allocator: std.mem.Allocator,
-    output: *std.ArrayList(u8),
-    key: []const u8,
-    value: []const u8,
-) !void {
-    var digits: usize = 1;
-    while (true) {
-        const length = digits + 1 + key.len + 1 + value.len + 1;
-        const actual_digits = decimalDigits(length);
-        if (actual_digits == digits) {
-            var buffer: [32]u8 = undefined;
-            const prefix = try std.fmt.bufPrint(&buffer, "{d} ", .{length});
-            try output.appendSlice(allocator, prefix);
-            try output.appendSlice(allocator, key);
-            try output.append(allocator, '=');
-            try output.appendSlice(allocator, value);
-            try output.append(allocator, '\n');
-            return;
-        }
-        digits = actual_digits;
-    }
 }
 
 fn appendDecimalLine(
@@ -298,11 +267,11 @@ fn appendOldGnuSparse(
 
     var header: [512]u8 = @splat(0);
     @memcpy(header[0..entry.name.len], entry.name);
-    try writeOctal(header[100..108], if (entry.mode != 0) entry.mode else defaultMode(.file));
-    try writeOctal(header[108..116], 0);
-    try writeOctal(header[116..124], 0);
-    try writeOctal(header[124..136], physical_size);
-    try writeOctal(header[136..148], entry.mtime);
+    try wire.writeOctal(header[100..108], if (entry.mode != 0) entry.mode else defaultMode(.file));
+    try wire.writeOctal(header[108..116], 0);
+    try wire.writeOctal(header[116..124], 0);
+    try wire.writeOctal(header[124..136], physical_size);
+    try wire.writeOctal(header[136..148], entry.mtime);
     @memset(header[148..156], ' ');
     header[156] = 'S';
     @memcpy(header[257..263], "ustar ");
@@ -316,10 +285,8 @@ fn appendOldGnuSparse(
             index,
         );
     header[482] = @intFromBool(map_entry_count > 4);
-    try writeOctal(header[483..495], options.logical_size);
-    var checksum: u64 = 0;
-    for (header) |byte| checksum += byte;
-    try writeChecksum(header[148..156], checksum);
+    try wire.writeOctal(header[483..495], options.logical_size);
+    try wire.finishChecksum(&header);
     try output.appendSlice(allocator, &header);
 
     var map_index: usize = 4;
@@ -350,15 +317,8 @@ fn writeOldGnuSparseSlot(
 ) Error!void {
     const offset = if (index < normalized.len) normalized[index].offset else logical_size;
     const len = if (index < normalized.len) normalized[index].len else 0;
-    try writeOctal(slot[0..12], offset);
-    try writeOctal(slot[12..24], len);
-}
-
-fn decimalDigits(value: usize) usize {
-    var remaining = value;
-    var digits: usize = 1;
-    while (remaining >= 10) : (digits += 1) remaining /= 10;
-    return digits;
+    try wire.writeOctal(slot[0..12], offset);
+    try wire.writeOctal(slot[12..24], len);
 }
 
 fn defaultMode(kind: Kind) u32 {
@@ -378,34 +338,6 @@ fn typeFlag(kind: Kind) u8 {
         .hard_link => '1',
         .other => unreachable,
     };
-}
-
-fn writeOctal(field: []u8, value_arg: anytype) Error!void {
-    var value: u64 = @intCast(value_arg);
-    @memset(field, '0');
-    field[field.len - 1] = 0;
-    var position = field.len - 1;
-    while (value != 0 and position != 0) {
-        position -= 1;
-        field[position] = '0' + @as(u8, @intCast(value & 7));
-        value >>= 3;
-    }
-    if (value != 0) return error.TarNumericOverflow;
-}
-
-fn writeChecksum(field: []u8, value: u64) Error!void {
-    if (field.len != 8) return error.InvalidTarHeader;
-    @memset(field, '0');
-    field[6] = 0;
-    field[7] = ' ';
-    var remaining = value;
-    var position: usize = 6;
-    while (remaining != 0 and position != 0) {
-        position -= 1;
-        field[position] = '0' + @as(u8, @intCast(remaining & 7));
-        remaining >>= 3;
-    }
-    if (remaining != 0) return error.TarNumericOverflow;
 }
 
 test "TAR writer emits deterministic PAX long paths" {

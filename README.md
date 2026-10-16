@@ -401,7 +401,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   old GNU plus PAX sparse 0.0/0.1/1.0 reading, deterministic PAX-1.0 and
   old-GNU writing with chained sparse extension headers,
   strict extent validation, logical hole reconstruction, safe-path
-  classification, borrowed entry views, and automatic raw/gzip/
+  classification, borrowed entry views, bounded caller-output incremental
+  writing for regular/link/PAX/sparse entries, and automatic raw/gzip/
   Bzip2/Brotli/Unix-compress/LZMA-Alone/XZ/LZ4/lzip/LZF/Zstandard/LZOP tarball composition;
 - dependency-free CPIO reading and deterministic writing for SVR4 newc/CRC,
   POSIX ODC, and little-/big-endian old binary archives, including regular,

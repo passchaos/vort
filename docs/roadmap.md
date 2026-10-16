@@ -20658,3 +20658,14 @@ reuse, so production keeps the simpler independently owned plans.
   rejection. GNU tar independently supplies both single-header and chained
   reader fixtures; Python `tarfile` and GNU tar extract both Vort PAX-1.0 and
   old-GNU outputs (`gnu_sparse_reader_cases=5`, `sparse_writer_readers=4`).
+
+- Added `TarIncrementalWriter`, a bounded caller-output raw-TAR writer for
+  regular files, directories, symbolic/hard links, PAX long metadata, PAX
+  sparse 1.0 and old-GNU sparse extension chains. Sparse entries consume the
+  full logical input, validate that discarded holes are zero, and emit only
+  normalized physical ranges; no member or archive is retained. One-byte and
+  2/3/5/7-byte schedules are byte-identical to the one-shot writer across seven
+  entries, including both sparse formats (`incremental_writer_cases=7`). State,
+  logical/extent/control/archive limits, nonzero holes, poisoning and allocation
+  failure have focused coverage. Shared `tar/wire.zig` now owns USTAR headers,
+  PAX records, sparse normalization and both sparse prefix serializers.

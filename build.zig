@@ -1827,10 +1827,21 @@ pub fn build(b: *std.Build) void {
             .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
         }),
     });
+    const tar_incremental_writer_probe_exe = b.addExecutable(.{
+        .name = "vort-tar-incremental-writer-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/tar/incremental_writer_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
     const tar_diff = b.addSystemCommand(&.{ "python3", "tools/tar/diff.py", "--cli" });
     tar_diff.addArtifactArg(cli_exe);
     tar_diff.addArg("--writer");
     tar_diff.addArtifactArg(tar_writer_probe_exe);
+    tar_diff.addArg("--incremental-writer");
+    tar_diff.addArtifactArg(tar_incremental_writer_probe_exe);
     if (b.args) |args| tar_diff.addArgs(args);
     const tar_diff_step = b.step("run-tar-diff", "Validate TAR and common compressed tarballs against Python tarfile, Brotli, lzma, and optional LZF");
     tar_diff_step.dependOn(&tar_diff.step);

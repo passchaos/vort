@@ -268,6 +268,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
     parser.add_argument("--writer", required=True, type=Path)
+    parser.add_argument("--incremental-writer", required=True, type=Path)
     parser.add_argument("--lzip", type=Path)
     parser.add_argument("--lzf", type=Path)
     parser.add_argument("--lzop", type=Path)
@@ -307,6 +308,14 @@ def main() -> None:
         run(args.writer, str(second))
         if first.read_bytes() != second.read_bytes():
             raise AssertionError("Vort TAR output is not deterministic")
+        incremental_one = temp / "vort-incremental-one.tar"
+        incremental_micro = temp / "vort-incremental-micro.tar"
+        run(args.incremental_writer, str(incremental_one), "one")
+        run(args.incremental_writer, str(incremental_micro), "micro")
+        if incremental_one.read_bytes() != incremental_micro.read_bytes():
+            raise AssertionError("incremental TAR output changed with scheduling")
+        if incremental_one.read_bytes() != first.read_bytes():
+            raise AssertionError("incremental TAR output differs from one-shot writer")
         with tarfile.open(first, mode="r:") as archive:
             names = archive.getnames()
             if len(names) != 7:
@@ -467,7 +476,7 @@ def main() -> None:
         f"tar_diff=ok raw_formats=2 compressions={len(compressions)} "
         f"brotli_directions=2 lzf_directions={2 if lzf_tool is not None else 0} "
         f"entries=7 gnu_sparse_reader_cases={gnu_sparse_reader_cases} "
-        "sparse_writer_readers=4"
+        "sparse_writer_readers=4 incremental_writer_cases=7"
     )
 
 
