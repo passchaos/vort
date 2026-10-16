@@ -16,6 +16,8 @@ const TestEntry = struct {
     method: zip.CompressionMethod,
     expected_size: ?u64,
     comment: []const u8 = "",
+    unicode_name: ?[]const u8 = null,
+    unicode_comment: ?[]const u8 = null,
     modified: zip.DosTimestamp = .deterministic,
     extended_timestamp: ?zip.ExtendedTimestamp = null,
     ntfs_timestamp: ?zip.NtfsTimestamp = null,
@@ -45,6 +47,8 @@ test "ZIP incremental writer round trips known and unknown common codec entries"
             .method = .stored,
             .expected_size = 14,
             .comment = "known",
+            .unicode_name = "已知-存储.bin",
+            .unicode_comment = "已知注释",
             .modified = modified,
             .extended_timestamp = .{
                 .modified = 1_700_000_001,
@@ -99,6 +103,7 @@ test "ZIP incremental writer round trips known and unknown common codec entries"
     };
     const bytes = try encodeEntries(allocator, &entries, .{
         .archive_comment = "streamed",
+        .utf8 = false,
         .ppmd_options = .{ .properties = .{ .memory_size = 1024 * 1024 } },
     }, 7, 5);
     defer allocator.free(bytes);
@@ -110,6 +115,12 @@ test "ZIP incremental writer round trips known and unknown common codec entries"
         const entry = try archive.entryAt(index);
         try std.testing.expectEqualStrings(expected.name, entry.name);
         try std.testing.expectEqualStrings(expected.comment, entry.comment);
+        if (expected.unicode_name) |unicode_name| {
+            try std.testing.expectEqualStrings(unicode_name, entry.unicode_name.?);
+            try std.testing.expectEqualStrings(unicode_name, entry.preferredName());
+        }
+        if (expected.unicode_comment) |unicode_comment|
+            try std.testing.expectEqualStrings(unicode_comment, entry.preferredComment());
         try std.testing.expectEqual(expected.method, entry.method);
         try std.testing.expect(entry.flags & wire.descriptor_flag != 0);
         const decoded = try archive.extractAlloc(allocator, entry);
@@ -621,6 +632,14 @@ test "ZIP incremental writer enforces method and metadata limits" {
     );
     try std.testing.expectEqual(incremental.Phase.ready, unsupported.snapshot().phase);
     try std.testing.expectError(
+        error.InvalidZipTextEncoding,
+        unsupported.beginEntry(.{
+            .name = "legacy",
+            .unicode_name = "Unicode 名称",
+        }),
+    );
+    try std.testing.expectEqual(incremental.Phase.ready, unsupported.snapshot().phase);
+    try std.testing.expectError(
         error.InvalidZipTimestamp,
         unsupported.beginEntry(.{
             .name = "bad-time",
@@ -666,6 +685,27 @@ test "ZIP incremental writer enforces method and metadata limits" {
     try std.testing.expectEqual(
         incremental.Phase.ready,
         timestamp_metadata_limited.snapshot().phase,
+    );
+
+    var unicode_metadata_limited = try incremental.Writer.initWithOptions(
+        std.testing.allocator,
+        .{
+            .utf8 = false,
+            .max_central_directory_size = wire.central_file_header_len +
+                "legacy".len + 8,
+        },
+    );
+    defer unicode_metadata_limited.deinit();
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        unicode_metadata_limited.beginEntry(.{
+            .name = "legacy",
+            .unicode_name = "Unicode 名称",
+        }),
+    );
+    try std.testing.expectEqual(
+        incremental.Phase.ready,
+        unicode_metadata_limited.snapshot().phase,
     );
 
     var entry_limited = try incremental.Writer.initWithOptions(std.testing.allocator, .{
@@ -1384,6 +1424,8 @@ fn encodeEntries(
         try writer.beginEntry(.{
             .name = entry.name,
             .comment = entry.comment,
+            .unicode_name = entry.unicode_name,
+            .unicode_comment = entry.unicode_comment,
             .method = entry.method,
             .expected_size = entry.expected_size,
             .modified = entry.modified,

@@ -84,6 +84,8 @@ pub const Options = struct {
 pub const EntryOptions = struct {
     name: []const u8,
     comment: []const u8 = "",
+    unicode_name: ?[]const u8 = null,
+    unicode_comment: ?[]const u8 = null,
     method: CompressionMethod = .deflate,
     expected_size: ?u64 = null,
     /// Validated MS-DOS modification time; defaults preserve deterministic wire.
@@ -144,6 +146,9 @@ pub const Writer = struct {
     const CurrentEntry = struct {
         metadata: []u8,
         name_len: usize,
+        comment_len: usize,
+        unicode_name_len: usize,
+        unicode_comment_len: usize,
         method: CompressionMethod,
         expected_size: ?u64,
         local_header_offset: u64,
@@ -174,15 +179,25 @@ pub const Writer = struct {
                 codec_options,
             );
             errdefer codec.deinit();
+            const unicode_name = entry_options.unicode_name orelse "";
+            const unicode_comment = entry_options.unicode_comment orelse "";
             const metadata_len = std.math.add(
                 usize,
-                entry_options.name.len,
-                entry_options.comment.len,
+                try checkedAdd(entry_options.name.len, entry_options.comment.len),
+                try checkedAdd(unicode_name.len, unicode_comment.len),
             ) catch return error.IntegerOverflow;
             const metadata = try allocator.alloc(u8, metadata_len);
             errdefer allocator.free(metadata);
-            @memcpy(metadata[0..entry_options.name.len], entry_options.name);
-            @memcpy(metadata[entry_options.name.len..], entry_options.comment);
+            var metadata_offset: usize = 0;
+            inline for (.{
+                entry_options.name,
+                entry_options.comment,
+                unicode_name,
+                unicode_comment,
+            }) |value| {
+                @memcpy(metadata[metadata_offset..][0..value.len], value);
+                metadata_offset += value.len;
+            }
             const encryption = if (entry_options.traditional_encryption) |options|
                 writer_encryption.State.initTraditional(options, entry_options.modified.time)
             else if (entry_options.winzip_aes) |options|
@@ -194,6 +209,9 @@ pub const Writer = struct {
             return .{
                 .metadata = metadata,
                 .name_len = entry_options.name.len,
+                .comment_len = entry_options.comment.len,
+                .unicode_name_len = unicode_name.len,
+                .unicode_comment_len = unicode_comment.len,
                 .method = entry_options.method,
                 .expected_size = entry_options.expected_size,
                 .local_header_offset = local_header_offset,
@@ -215,7 +233,19 @@ pub const Writer = struct {
         }
 
         fn comment(self: *const CurrentEntry) []const u8 {
-            return self.metadata[self.name_len..];
+            return self.metadata[self.name_len..][0..self.comment_len];
+        }
+
+        fn unicodeName(self: *const CurrentEntry) ?[]const u8 {
+            if (self.unicode_name_len == 0) return null;
+            const offset = self.name_len + self.comment_len;
+            return self.metadata[offset..][0..self.unicode_name_len];
+        }
+
+        fn unicodeComment(self: *const CurrentEntry) ?[]const u8 {
+            if (self.unicode_comment_len == 0) return null;
+            const offset = self.name_len + self.comment_len + self.unicode_name_len;
+            return self.metadata[offset..][0..self.unicode_comment_len];
         }
 
         fn encryptionFlag(self: *const CurrentEntry) u16 {
@@ -349,7 +379,7 @@ pub const Writer = struct {
                 wire.localTimestampExtraLen(
                     entry_options.extended_timestamp,
                     entry_options.ntfs_timestamp,
-                ),
+                ) + wire.unicodeExtraLen(entry_options.unicode_name),
         );
         const encryption_header_len = if (entry_options.traditional_encryption != null)
             traditional_encryption.header_len
@@ -379,8 +409,18 @@ pub const Writer = struct {
                 wire.centralTimestampExtraLen(
                     entry_options.extended_timestamp,
                     entry_options.ntfs_timestamp,
-                ),
+                ) + wire.unicodeExtraLen(entry_options.unicode_name) +
+                wire.unicodeExtraLen(entry_options.unicode_comment),
         );
+        const local_extra_len = local_header_len - wire.local_file_header_len -
+            entry_options.name.len;
+        const central_extra_len = central_header_len - wire.central_file_header_len -
+            entry_options.name.len - entry_options.comment.len;
+        if (local_extra_len > std.math.maxInt(u16) or
+            central_extra_len > std.math.maxInt(u16))
+        {
+            return error.Zip32LimitExceeded;
+        }
         if (central_header_len > self.options.max_central_directory_size or
             self.central.items.len > self.options.max_central_directory_size - central_header_len)
             return error.OutputLimitExceeded;
@@ -412,6 +452,8 @@ pub const Writer = struct {
         try wire.appendLocalHeader(self.allocator, &self.pending, .{
             .name = current.name(),
             .comment = current.comment(),
+            .unicode_name = current.unicodeName(),
+            .unicode_comment = current.unicodeComment(),
             .method = current.method,
             .flags = wire.descriptor_flag | codecs.zipFlags(&current.codec) |
                 current.encryptionFlag() |
@@ -782,6 +824,16 @@ pub const Writer = struct {
             try pkware_strong.validateOptions(strong);
         if (entry.name.len > std.math.maxInt(u16) or entry.comment.len > std.math.maxInt(u16))
             return error.Zip32LimitExceeded;
+        inline for (.{ entry.unicode_name, entry.unicode_comment }) |unicode_text| {
+            if (unicode_text) |text| {
+                if (self.options.utf8 or text.len == 0 or
+                    text.len > std.math.maxInt(u16) - 5 or
+                    !std.unicode.utf8ValidateSlice(text))
+                {
+                    return error.InvalidZipTextEncoding;
+                }
+            }
+        }
         if (entry.expected_size) |expected| {
             if (expected > self.options.max_uncompressed_size) return error.OutputLimitExceeded;
             if (self.options.zip64 == .never and expected >= std.math.maxInt(u32))
@@ -923,6 +975,8 @@ pub const Writer = struct {
         const record = wire.EncodedEntry{
             .name = entry.name(),
             .comment = entry.comment(),
+            .unicode_name = entry.unicodeName(),
+            .unicode_comment = entry.unicodeComment(),
             .method = entry.method,
             .flags = wire.descriptor_flag | codecs.zipFlags(&entry.codec) |
                 entry.encryptionFlag() |

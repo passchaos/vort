@@ -7,6 +7,8 @@ const Entry = struct {
     method: vort.ZipCompressionMethod,
     expected_size: ?u64,
     comment: []const u8 = "",
+    unicode_name: ?[]const u8 = null,
+    unicode_comment: ?[]const u8 = null,
     modified: vort.ZipDosTimestamp = .deterministic,
     extended_timestamp: ?vort.ZipExtendedTimestamp = null,
     ntfs_timestamp: ?vort.ZipNtfsTimestamp = null,
@@ -504,6 +506,24 @@ pub fn main(init: std.process.Init) !void {
             },
         },
     };
+    const unicode_entries = [_]Entry{
+        .{
+            .name = "\x82-stream-name.txt",
+            .unicode_name = "流式/数据.txt",
+            .data = "incremental Unicode path payload\n" ** 31,
+            .method = .deflate,
+            .expected_size = null,
+            .comment = "\x82-stream-comment",
+            .unicode_comment = "流式注释",
+        },
+        .{
+            .name = "stream-directory/",
+            .unicode_name = "流式目录/",
+            .data = "",
+            .method = .stored,
+            .expected_size = 0,
+        },
+    };
 
     const selected_entries: []const Entry = if (entry_mode) |value|
         if (std.mem.eql(u8, value, "zipcrypto"))
@@ -512,6 +532,8 @@ pub fn main(init: std.process.Init) !void {
             &winzip_aes_entries
         else if (std.mem.eql(u8, value, "pkware-strong"))
             &pkware_strong_entries
+        else if (std.mem.eql(u8, value, "unicode"))
+            &unicode_entries
         else if (std.mem.eql(u8, value, "split"))
             entries[0..6]
         else
@@ -559,6 +581,12 @@ const SplitArchive = struct {
     }
 };
 
+fn usesUnicodeExtra(entries: []const Entry) bool {
+    for (entries) |entry|
+        if (entry.unicode_name != null or entry.unicode_comment != null) return true;
+    return false;
+}
+
 fn encodeSplitArchive(
     allocator: std.mem.Allocator,
     entries: []const Entry,
@@ -569,6 +597,7 @@ fn encodeSplitArchive(
         .writer_options = .{
             .archive_comment = "vort incremental split writer interop",
             .zip64 = zip64,
+            .utf8 = !usesUnicodeExtra(entries),
             .max_deflate_buffer_size = 1024 * 1024,
         },
         .max_part_size = 160,
@@ -588,6 +617,8 @@ fn encodeSplitArchive(
         try writer.beginEntry(.{
             .name = entry.name,
             .comment = entry.comment,
+            .unicode_name = entry.unicode_name,
+            .unicode_comment = entry.unicode_comment,
             .method = entry.method,
             .expected_size = entry.expected_size,
             .modified = entry.modified,
@@ -683,6 +714,7 @@ fn encodeArchive(
     var writer = try vort.ZipIncrementalWriter.initWithOptions(allocator, .{
         .archive_comment = "vort incremental writer interop",
         .zip64 = zip64,
+        .utf8 = !usesUnicodeExtra(entries),
         .bzip2_options = .{ .block_size_100k = 1 },
         .zstd_options = .{
             .content_checksum = true,
@@ -719,6 +751,8 @@ fn encodeArchive(
         try writer.beginEntry(.{
             .name = entry.name,
             .comment = entry.comment,
+            .unicode_name = entry.unicode_name,
+            .unicode_comment = entry.unicode_comment,
             .method = entry.method,
             .expected_size = entry.expected_size,
             .modified = entry.modified,

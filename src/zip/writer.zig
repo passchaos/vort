@@ -53,6 +53,8 @@ pub const EncodeEntry = struct {
     data: []const u8,
     method: CompressionMethod = .deflate,
     comment: []const u8 = "",
+    unicode_name: ?[]const u8 = null,
+    unicode_comment: ?[]const u8 = null,
     /// Validated MS-DOS modification time; defaults preserve deterministic wire.
     modified: DosTimestamp = .deterministic,
     extended_timestamp: ?ExtendedTimestamp = null,
@@ -242,6 +244,8 @@ pub fn encodeAppend(
         encoded.* = .{
             .name = entry.name,
             .comment = entry.comment,
+            .unicode_name = entry.unicode_name,
+            .unicode_comment = entry.unicode_comment,
             .method = entry.method,
             .flags = flags,
             .crc32 = if (entry.winzip_aes) |aes|
@@ -266,6 +270,11 @@ pub fn encodeAppend(
                 .strength = strong.strength,
             } else null,
         };
+        if (wire.localExtraLen(encoded.*) > std.math.maxInt(u16) or
+            wire.centralExtraLen(encoded.*) > std.math.maxInt(u16))
+        {
+            return error.Zip32LimitExceeded;
+        }
         try wire.appendLocalHeader(allocator, &archive, encoded.*, .{});
         try archive.appendSlice(allocator, compressed);
         if (options.data_descriptor) try wire.appendDataDescriptor(allocator, &archive, encoded.*);
@@ -330,6 +339,16 @@ fn validateInputs(entries: []const EncodeEntry, options: EncodeOptions) Error!vo
         if (entry.name.len == 0) return error.InvalidZipEntryName;
         if (entry.name.len > std.math.maxInt(u16) or entry.comment.len > std.math.maxInt(u16))
             return error.Zip32LimitExceeded;
+        inline for (.{ entry.unicode_name, entry.unicode_comment }) |unicode_text| {
+            if (unicode_text) |text| {
+                if (options.utf8 or text.len == 0 or
+                    text.len > std.math.maxInt(u16) - 5 or
+                    !std.unicode.utf8ValidateSlice(text))
+                {
+                    return error.InvalidZipTextEncoding;
+                }
+            }
+        }
         if (options.zip64 == .never and entry.data.len >= std.math.maxInt(u32))
             return error.Zip32LimitExceeded;
         switch (entry.method) {

@@ -20983,3 +20983,20 @@ reuse, so production keeps the simpler independently owned plans.
   records are covered. Python independently parses exact local/central field
   widths, flags, signed seconds, NTFS tags, and three FILETIMEs; real Info-ZIP
   archives with its canonical flags-plus-mtime central form pass Vort readers.
+
+- Added CRC-bound Info-ZIP Unicode Path `0x7075` and Unicode Comment `0x6375`
+  across one-shot, incremental, owned-split, and sparse-split APIs. Writers
+  retain arbitrary legacy name/comment bytes while emitting version-1 UTF-8
+  alternatives when bit 11 is disabled; combined extra-field lengths are
+  preflighted before any local header is published. Readers retain raw and
+  Unicode views separately, select raw whenever bit 11 is authoritative, and
+  expose `preferredName`/`preferredComment`; one-shot lookup and streaming CLI
+  extraction accept the preferred name. APPNOTE-compatible CRC mismatch or an
+  unknown version falls back to raw, while truncation, duplicate fields,
+  CRC-valid invalid UTF-8, empty overrides, and valid local/central conflicts
+  fail explicitly. Unicode allocations count against sequential metadata
+  limits and allocation-failure coverage. Focused ZIP32/ZIP64,
+  descriptor/no-descriptor, tiny-fragmentation, split, corruption, and limit
+  tests pass. Python raw-parses both extras but on this host deliberately keeps
+  CP437 names; Info-ZIP independently selects and extracts Vort's Unicode path,
+  and Vort extracts both one-shot and incremental probes by that preferred name.

@@ -5,7 +5,9 @@ const records = @import("../records.zig");
 
 pub const Record = struct {
     name: []u8,
+    unicode_name: ?[]u8 = null,
     comment: []u8 = &.{},
+    unicode_comment: ?[]u8 = null,
     method: api.CompressionMethod,
     flags: u16,
     crc32: u32 = 0,
@@ -28,7 +30,9 @@ pub const Record = struct {
     pub fn info(self: *const Record) api.EntryInfo {
         return .{
             .name = self.name,
+            .unicode_name = self.unicode_name,
             .comment = if (self.central_seen) self.comment else null,
+            .unicode_comment = if (self.central_seen) self.unicode_comment else null,
             .method = self.method,
             .flags = self.flags,
             .local_header_offset = self.local_header_offset,
@@ -72,7 +76,9 @@ pub const State = struct {
     pub fn reset(self: *Self, allocator: std.mem.Allocator) void {
         for (self.records.items) |entry| {
             allocator.free(entry.name);
+            if (entry.unicode_name) |value| allocator.free(value);
             if (entry.comment.len != 0) allocator.free(entry.comment);
+            if (entry.unicode_comment) |value| allocator.free(value);
         }
         self.records.clearRetainingCapacity();
         self.retained_metadata_size = 0;
@@ -116,6 +122,11 @@ pub const State = struct {
             local.ntfs_timestamp,
             central.ntfs_timestamp,
         );
+        if (local.unicode_name != null and central.unicode_name != null and
+            !std.mem.eql(u8, local.unicode_name.?, central.unicode_name.?))
+        {
+            return error.InvalidZipArchive;
+        }
         if (!local.complete or
             !std.mem.eql(u8, local.name, central.name) or
             local.method != central.method or
@@ -131,17 +142,44 @@ pub const State = struct {
             return error.IntegerOverflow;
         const central_size = absolute_end - self.central_offset;
         if (central_size > max_central_size) return error.OutputLimitExceeded;
+        const unicode_name_to_copy = if (local.unicode_name == null)
+            central.unicode_name
+        else
+            null;
+        const unicode_metadata_size = std.math.add(
+            usize,
+            if (unicode_name_to_copy) |value| value.len else 0,
+            if (central.unicode_comment) |value| value.len else 0,
+        ) catch return error.IntegerOverflow;
+        const new_metadata_size = std.math.add(
+            usize,
+            central.comment.len,
+            unicode_metadata_size,
+        ) catch return error.IntegerOverflow;
         const retained_metadata_size = std.math.add(
             usize,
             self.retained_metadata_size,
-            central.comment.len,
+            new_metadata_size,
         ) catch return error.IntegerOverflow;
         if (retained_metadata_size > max_metadata_size)
             return error.OutputLimitExceeded;
         var comment: []u8 = &.{};
         if (central.comment.len != 0)
             comment = try allocator.dupe(u8, central.comment);
+        errdefer if (comment.len != 0) allocator.free(comment);
+        const unicode_name = if (unicode_name_to_copy) |value|
+            try allocator.dupe(u8, value)
+        else
+            null;
+        errdefer if (unicode_name) |value| allocator.free(value);
+        const unicode_comment = if (central.unicode_comment) |value|
+            try allocator.dupe(u8, value)
+        else
+            null;
+        errdefer if (unicode_comment) |value| allocator.free(value);
         local.comment = comment;
+        if (unicode_name) |value| local.unicode_name = value;
+        local.unicode_comment = unicode_comment;
         local.extended_timestamp = extended_timestamp;
         local.ntfs_timestamp = ntfs_timestamp;
         local.version_made_by = central.version_made_by;

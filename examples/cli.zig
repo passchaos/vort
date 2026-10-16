@@ -1123,7 +1123,11 @@ pub fn main(init: std.process.Init) !void {
             switch (result.status) {
                 .entry_header => {
                     const current = reader.currentEntry().?;
-                    selected = !found and std.mem.eql(u8, current.name, entry_name);
+                    selected = !found and std.mem.eql(
+                        u8,
+                        current.preferredName(),
+                        entry_name,
+                    );
                 },
                 .entry_done => {
                     if (selected) found = true;

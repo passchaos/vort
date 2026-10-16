@@ -75,9 +75,11 @@ pub const StepResult = struct {
 /// `deinit`. Descriptor-derived values become non-null at `.entry_done`.
 pub const EntryInfo = struct {
     name: []const u8,
+    unicode_name: ?[]const u8 = null,
     /// Central-directory comment; null until its matching central record has
     /// been validated.
     comment: ?[]const u8 = null,
+    unicode_comment: ?[]const u8 = null,
     method: CompressionMethod,
     flags: u16,
     local_header_offset: usize,
@@ -112,8 +114,20 @@ pub const EntryInfo = struct {
     }
 
     pub fn isDirectory(self: EntryInfo) bool {
-        if (self.name.len != 0 and self.name[self.name.len - 1] == '/') return true;
+        const name = self.preferredName();
+        if (name.len != 0 and name[name.len - 1] == '/') return true;
         return if (self.unixMode()) |mode| mode & 0o170000 == 0o040000 else false;
+    }
+
+    pub fn preferredName(self: EntryInfo) []const u8 {
+        if (self.flags & (1 << 11) != 0) return self.name;
+        return self.unicode_name orelse self.name;
+    }
+
+    pub fn preferredComment(self: EntryInfo) ?[]const u8 {
+        const comment_value = self.comment orelse return null;
+        if (self.flags & (1 << 11) != 0) return comment_value;
+        return self.unicode_comment orelse comment_value;
     }
 
     pub fn modifiedUnixSeconds(self: EntryInfo) ?i64 {

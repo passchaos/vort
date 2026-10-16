@@ -596,10 +596,21 @@ pub const Reader = struct {
                 return error.InvalidZipArchive,
             else => return error.UnsupportedZipCompressionMethod,
         }
-        if (local.name.len > self.options.max_metadata_size -| self.directory.retained_metadata_size)
+        const unicode_name_len = if (local.unicode_name) |value| value.len else 0;
+        const entry_metadata_size = std.math.add(
+            usize,
+            local.name.len,
+            unicode_name_len,
+        ) catch return error.IntegerOverflow;
+        if (entry_metadata_size > self.options.max_metadata_size -| self.directory.retained_metadata_size)
             return error.OutputLimitExceeded;
         const name = try self.allocator.dupe(u8, local.name);
         errdefer self.allocator.free(name);
+        const unicode_name = if (local.unicode_name) |value|
+            try self.allocator.dupe(u8, value)
+        else
+            null;
+        errdefer if (unicode_name) |value| self.allocator.free(value);
         try self.directory.records.ensureUnusedCapacity(self.allocator, 1);
 
         const entry_limit = @min(
@@ -841,6 +852,7 @@ pub const Reader = struct {
         const record_index = self.directory.records.items.len;
         self.directory.records.appendAssumeCapacity(.{
             .name = name,
+            .unicode_name = unicode_name,
             .method = local.method,
             .flags = local.flags,
             .crc32 = local.crc32 orelse 0,
@@ -855,7 +867,7 @@ pub const Reader = struct {
             .winzip_aes = local.winzip_aes,
             .pkware_strong_encryption = null,
         });
-        self.directory.retained_metadata_size += name.len;
+        self.directory.retained_metadata_size += entry_metadata_size;
         self.current_index = record_index;
         self.current_state = state;
         self.current_encryption = encryption_state;

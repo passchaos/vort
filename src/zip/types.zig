@@ -196,6 +196,8 @@ pub const CompressionMethod = enum(u16) {
 pub const Entry = struct {
     name: []const u8,
     comment: []const u8 = "",
+    unicode_name: ?[]const u8 = null,
+    unicode_comment: ?[]const u8 = null,
     method: CompressionMethod,
     flags: u16,
     crc32: u32,
@@ -214,8 +216,19 @@ pub const Entry = struct {
     pkware_strong_encryption: ?PkwareStrongEncryptionInfo = null,
 
     pub fn isDirectory(self: Entry) bool {
-        if (self.name.len != 0 and self.name[self.name.len - 1] == '/') return true;
+        const name = self.preferredName();
+        if (name.len != 0 and name[name.len - 1] == '/') return true;
         return if (self.unixMode()) |mode| mode & 0o170000 == 0o040000 else false;
+    }
+
+    pub fn preferredName(self: Entry) []const u8 {
+        if (self.flags & (1 << 11) != 0) return self.name;
+        return self.unicode_name orelse self.name;
+    }
+
+    pub fn preferredComment(self: Entry) []const u8 {
+        if (self.flags & (1 << 11) != 0) return self.comment;
+        return self.unicode_comment orelse self.comment;
     }
 
     pub fn creatorSystem(self: Entry) CreatorSystem {

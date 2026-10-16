@@ -112,6 +112,20 @@ cross-checked exactly while unknown NTFS attributes remain skippable.
 epoch conversion. `modifiedUnixSeconds()` prefers the higher-precision NTFS
 value over `0x5455`; both raw representations remain separately available.
 
+Info-ZIP Unicode Path `0x7075` and Unicode Comment `0x6375` carry version 1,
+the CRC-32 of the corresponding raw header field, and UTF-8 text. Writers emit
+them through `unicode_name`/`unicode_comment` only when archive option `utf8`
+is false, so bit 11 and the compatibility fields cannot contradict one another.
+Readers keep `name`/`comment` as byte-exact legacy fields and expose the valid
+alternatives separately. `preferredName()`/`preferredComment()` select raw
+fields whenever bit 11 is set, otherwise select a CRC-valid Unicode field.
+`Archive.find` checks preferred names first and then raw aliases;
+`Archive.findRaw` is exact, while the streaming CLI accepts preferred names.
+Per APPNOTE, an
+unknown Unicode-field version or CRC mismatch is ignored and falls back to raw;
+truncation, duplicates, CRC-valid malformed UTF-8, empty overrides, or two
+valid but conflicting local/central values are rejected.
+
 The central `version made by` value combines the selected creator system with
 the automatically derived version-needed value. `zipUnixExternalAttributes`
 places a Unix mode in the upper 16 bits and mirrors the DOS directory bit.
@@ -124,8 +138,8 @@ and central-only attributes become available after central validation.
 `entryAt(index)` retains them until reset/deinit, while `currentEntry()` keeps
 its existing event-oriented view. Entry comments share `max_metadata_size`
 with names and the archive comment. The sparse and owned split readers preserve
-the same metadata, and the split sequential adapter forwards `entryAt` without
-joining physical parts.
+Unicode names/comments under the same limit, and the split sequential adapter
+forwards `entryAt` without joining physical parts.
 
 ## Traditional ZipCrypto
 
@@ -622,7 +636,12 @@ DOS timestamp, entry comment, Unix creator/mode, and internal attribute that
 Python `zipfile` must reproduce exactly. Python raw parsing additionally checks
 local 13-byte versus central 5-byte `0x5455` payloads, flags and signed values,
 plus both 32-byte NTFS payloads and all three FILETIMEs; `zipfile` tests and
-reads every method it supports. System
+reads every method it supports. Separate one-shot and ZIP32/ZIP64 incremental
+cases raw-parse `0x7075`/`0x6375`, verify CRC bindings, and extract by preferred
+Unicode name through Vort. This host's Python retains CP437 raw names despite
+valid Unicode extras, while system Info-ZIP selects and extracts the Unicode
+paths; the differential records that implementation difference explicitly
+(`vort_unicode_cases=2`, `incremental_unicode_cases=4`). System
 Info-ZIP validates the ordered member prefix before the first unsupported
 Zstandard entry, system `zstd` independently decodes methods 20/93, and Python
 `zipfile` independently extracts method-14 entries and checks bit 1. Python
@@ -1008,8 +1027,9 @@ zig build run-zip-diff
 ```
 
 The writer rejects empty names, invalid DOS calendar timestamps, invalid UTF-8
-names/comments when UTF-8 mode is enabled, fields longer than ZIP's 16-bit
-name/comment limit, and methods other
+names/comments when UTF-8 mode is enabled, Unicode overrides combined with bit
+11, empty/invalid Unicode overrides, fields longer than ZIP's 16-bit
+name/comment/extra limits, and methods other
 than stored/Shrink/Reduce1-4/Implode/Deflate/Deflate64/DCL-Implode/Bzip2/LZMA/Zstandard-20/Zstandard-93/XZ/PPMd. The
 one-shot reader accepts Traditional ZipCrypto, WinZip AES, and password-based
 PKWARE Strong AES when `ZipDecodeOptions.password` is provided. It deliberately

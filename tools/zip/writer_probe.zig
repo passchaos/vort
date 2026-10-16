@@ -37,6 +37,7 @@ pub fn main(init: std.process.Init) !void {
     var pkware_strong_mode = false;
     var pkware_strong_descriptor_mode = false;
     var split_mode = false;
+    var unicode_mode = false;
     if (mode) |value| {
         if (std.mem.eql(u8, value, "zip64")) {
             zip64 = .always;
@@ -83,6 +84,8 @@ pub fn main(init: std.process.Init) !void {
         } else if (std.mem.eql(u8, value, "pkware-strong-descriptor")) {
             pkware_strong_mode = true;
             pkware_strong_descriptor_mode = true;
+        } else if (std.mem.eql(u8, value, "unicode")) {
+            unicode_mode = true;
         } else if (std.mem.startsWith(u8, value, "dcl-")) {
             dcl_mode = true;
             const specification = value["dcl-".len..];
@@ -318,12 +321,30 @@ pub fn main(init: std.process.Init) !void {
             .comment = "final stored entry",
         },
     };
+    const unicode_entries = [_]vort.ZipEncodeEntry{
+        .{
+            .name = "\x82-legacy-name.txt",
+            .unicode_name = "目录/数据.txt",
+            .data = "Vort Unicode path payload.\n" ** 17,
+            .method = .deflate,
+            .comment = "\x82-legacy-comment",
+            .unicode_comment = "条目注释",
+        },
+        .{
+            .name = "legacy-directory/",
+            .unicode_name = "目录/",
+            .data = "",
+            .method = .stored,
+        },
+    };
 
     var bytes: std.ArrayList(u8) = .empty;
     defer bytes.deinit(init.gpa);
     try bytes.appendSlice(init.gpa, "MZ-VORT-ZIP-PREFIX\n");
     const selected_entries: []const vort.ZipEncodeEntry = if (split_mode)
         &split_entries
+    else if (unicode_mode)
+        &unicode_entries
     else if (winzip_aes_mode)
         &winzip_aes_entries
     else if (pkware_strong_mode)
@@ -338,6 +359,7 @@ pub fn main(init: std.process.Init) !void {
         &entries;
     const encode_options: vort.ZipEncodeOptions = .{
         .archive_comment = "vort zip writer differential",
+        .utf8 = !unicode_mode,
         .data_descriptor = split_mode or implode_descriptor_mode or reduce_descriptor_mode or
             zipcrypto_descriptor_mode or winzip_aes_descriptor_mode or pkware_strong_descriptor_mode or
             !(implode_mode or reduce_mode or dcl_mode or zipcrypto_mode or winzip_aes_mode or pkware_strong_mode),

@@ -219,6 +219,13 @@ pub const Archive = struct {
     pub fn find(self: Archive, name: []const u8) Error!?Entry {
         var it = self.iterator();
         while (try it.next()) |entry|
+            if (std.mem.eql(u8, entry.preferredName(), name)) return entry;
+        return self.findRaw(name);
+    }
+
+    pub fn findRaw(self: Archive, name: []const u8) Error!?Entry {
+        var it = self.iterator();
+        while (try it.next()) |entry|
             if (std.mem.eql(u8, entry.name, name)) return entry;
         return null;
     }
@@ -555,12 +562,13 @@ pub fn extractByNameAllocWithOptions(
 
 const ParsedCentralEntry = struct { entry: Entry, next_offset: usize };
 
-const LocalTimestamps = struct {
+const LocalMetadata = struct {
     extended: ?ExtendedTimestamp,
     ntfs: ?NtfsTimestamp,
+    unicode_name: ?[]const u8,
 };
 
-fn parseLocalTimestamps(archive: Archive, offset: usize) Error!LocalTimestamps {
+fn parseLocalMetadata(archive: Archive, offset: usize) Error!LocalMetadata {
     if (try readU32(archive.bytes, offset) != local_file_signature)
         return error.InvalidZipArchive;
     const fixed_end = try checkedEnd(
@@ -581,9 +589,11 @@ fn parseLocalTimestamps(archive: Archive, offset: usize) Error!LocalTimestamps {
         archive.central_directory_offset,
     );
     const extra = archive.bytes[name_end..extra_end];
+    const raw_name = archive.bytes[fixed_end..name_end];
     return .{
         .extended = try records.parseExtendedTimestampExtra(extra, .local),
         .ntfs = try records.parseNtfsTimestampExtra(extra),
+        .unicode_name = try records.parseUnicodePathExtra(extra, raw_name),
     };
 }
 
@@ -625,6 +635,16 @@ fn parseCentralEntry(archive: Archive, offset: usize) Error!ParsedCentralEntry {
         disk_start_u16,
     );
     const parsed_aes = try records.parseWinZipAesExtra(archive.bytes[name_end..extra_end]);
+    const raw_name = archive.bytes[name_start..name_end];
+    const raw_comment = archive.bytes[extra_end..next_offset];
+    const central_unicode_name = try records.parseUnicodePathExtra(
+        archive.bytes[name_end..extra_end],
+        raw_name,
+    );
+    const unicode_comment = try records.parseUnicodeCommentExtra(
+        archive.bytes[name_end..extra_end],
+        raw_comment,
+    );
     const central_extended_timestamp = try records.parseExtendedTimestampExtra(
         archive.bytes[name_end..extra_end],
         .central,
@@ -655,23 +675,29 @@ fn parseCentralEntry(archive: Archive, offset: usize) Error!ParsedCentralEntry {
     if (isZstandardMethod(method) and version_needed < 63)
         return error.InvalidZipArchive;
     if (values.local_header_offset >= archive.central_directory_offset) return error.InvalidZipArchive;
-    const local_timestamps = try parseLocalTimestamps(
+    const local_metadata = try parseLocalMetadata(
         archive,
         values.local_header_offset,
     );
     const extended_timestamp = try records.mergeExtendedTimestamps(
-        local_timestamps.extended,
+        local_metadata.extended,
         central_extended_timestamp,
     );
     const ntfs_timestamp = try records.mergeNtfsTimestamps(
-        local_timestamps.ntfs,
+        local_metadata.ntfs,
         central_ntfs_timestamp,
+    );
+    const unicode_name = try records.mergeUnicodeText(
+        local_metadata.unicode_name,
+        central_unicode_name,
     );
 
     return .{
         .entry = .{
-            .name = archive.bytes[name_start..name_end],
-            .comment = archive.bytes[extra_end..next_offset],
+            .name = raw_name,
+            .comment = raw_comment,
+            .unicode_name = unicode_name,
+            .unicode_comment = unicode_comment,
             .method = method,
             .flags = flags,
             .crc32 = crc,
@@ -732,6 +758,10 @@ fn localPayloadData(
     const local_ntfs_timestamp = try records.parseNtfsTimestampExtra(
         archive.bytes[local_extra_start..data_start],
     );
+    const local_unicode_name = try records.parseUnicodePathExtra(
+        archive.bytes[local_extra_start..data_start],
+        archive.bytes[name_start..name_end],
+    );
     const local_strong = try records.parsePkwareStrongEncryptionExtra(
         archive.bytes[local_extra_start..data_start],
     );
@@ -761,6 +791,7 @@ fn localPayloadData(
         entry.extended_timestamp,
     );
     _ = try records.mergeNtfsTimestamps(local_ntfs_timestamp, entry.ntfs_timestamp);
+    _ = try records.mergeUnicodeText(local_unicode_name, entry.unicode_name);
     const data_end = try checkedEnd(data_start, entry.compressed_size, archive.central_directory_offset);
     if ((local_compressed == std.math.maxInt(u32) or local_uncompressed == std.math.maxInt(u32)) and
         local_version_needed < 45) return error.InvalidZipArchive;
@@ -793,6 +824,8 @@ fn localPayloadData(
 fn sameEntry(a: Entry, b: Entry) bool {
     return std.mem.eql(u8, a.name, b.name) and
         std.mem.eql(u8, a.comment, b.comment) and
+        optionalSlicesEqual(a.unicode_name, b.unicode_name) and
+        optionalSlicesEqual(a.unicode_comment, b.unicode_comment) and
         a.method == b.method and
         a.flags == b.flags and
         a.crc32 == b.crc32 and
@@ -809,6 +842,11 @@ fn sameEntry(a: Entry, b: Entry) bool {
         a.external_attributes == b.external_attributes and
         std.meta.eql(a.winzip_aes, b.winzip_aes) and
         std.meta.eql(a.pkware_strong_encryption, b.pkware_strong_encryption);
+}
+
+fn optionalSlicesEqual(a: ?[]const u8, b: ?[]const u8) bool {
+    if (a == null or b == null) return a == null and b == null;
+    return std.mem.eql(u8, a.?, b.?);
 }
 
 fn readU16(bytes: []const u8, offset: usize) Error!u16 {
@@ -1094,6 +1132,13 @@ test "ZIP entry metadata round trips comments timestamps and Unix attributes" {
         error.InvalidZipArchive,
         records.parseNtfsTimestampExtra(&invalid_ntfs),
     );
+    const truncated_unicode_path = [_]u8{
+        0x75, 0x70, 0x04, 0x00, 1, 0, 0, 0,
+    };
+    try std.testing.expectError(
+        error.InvalidZipArchive,
+        records.parseUnicodePathExtra(&truncated_unicode_path, "raw"),
+    );
     try std.testing.expectError(
         error.InvalidZipTimestamp,
         DosTimestamp.fromComponents(.{
@@ -1129,10 +1174,12 @@ test "ZIP entry metadata round trips comments timestamps and Unix attributes" {
     );
     const entries = [_]EncodeEntry{
         .{
-            .name = "regular.txt",
+            .name = "legacy-regular.txt",
+            .unicode_name = "目录/常规.txt",
             .data = "metadata payload",
             .method = .stored,
             .comment = "entry comment",
+            .unicode_comment = "条目注释",
             .modified = modified,
             .extended_timestamp = extended,
             .ntfs_timestamp = ntfs,
@@ -1141,8 +1188,9 @@ test "ZIP entry metadata round trips comments timestamps and Unix attributes" {
             .external_attributes = unixExternalAttributes(0o100640),
         },
         .{
-            .name = "link",
-            .data = "regular.txt",
+            .name = "legacy-link",
+            .unicode_name = "链接",
+            .data = "legacy-regular.txt",
             .method = .stored,
             .comment = "symbolic link",
             .modified = modified,
@@ -1151,7 +1199,8 @@ test "ZIP entry metadata round trips comments timestamps and Unix attributes" {
             .external_attributes = unixExternalAttributes(0o120777),
         },
         .{
-            .name = "directory/",
+            .name = "legacy-directory/",
+            .unicode_name = "目录/",
             .data = "",
             .method = .stored,
             .modified = modified,
@@ -1166,12 +1215,30 @@ test "ZIP entry metadata round trips comments timestamps and Unix attributes" {
             const bytes = try encodeAlloc(allocator, &entries, .{
                 .zip64 = zip64_mode,
                 .data_descriptor = descriptor_mode,
+                .utf8 = false,
             });
             defer allocator.free(bytes);
             const archive = try parse(bytes);
+            try std.testing.expect((try archive.find("目录/常规.txt")) != null);
+            try std.testing.expect((try archive.findRaw(entries[0].name)) != null);
+            try std.testing.expect((try archive.findRaw("目录/常规.txt")) == null);
             for (entries, 0..) |expected, index| {
                 const entry = try archive.entryAt(index);
                 try std.testing.expectEqualStrings(expected.comment, entry.comment);
+                try std.testing.expectEqualStrings(expected.unicode_name.?, entry.unicode_name.?);
+                if (expected.unicode_comment) |unicode_comment| {
+                    try std.testing.expectEqualStrings(unicode_comment, entry.unicode_comment.?);
+                } else {
+                    try std.testing.expect(entry.unicode_comment == null);
+                }
+                try std.testing.expectEqualStrings(
+                    expected.unicode_name orelse expected.name,
+                    entry.preferredName(),
+                );
+                try std.testing.expectEqualStrings(
+                    expected.unicode_comment orelse expected.comment,
+                    entry.preferredComment(),
+                );
                 try std.testing.expectEqual(modified, entry.modified);
                 try std.testing.expectEqual(expected.extended_timestamp, entry.extended_timestamp);
                 try std.testing.expectEqual(expected.ntfs_timestamp, entry.ntfs_timestamp);
@@ -1237,6 +1304,113 @@ test "ZIP entry metadata round trips comments timestamps and Unix attributes" {
                             wire.ntfs_timestamp_extra_id,
                         )).?.len,
                     );
+                    const local_unicode = (try records.findExtra(
+                        local_extra,
+                        wire.unicode_path_extra_id,
+                    )).?;
+                    const central_unicode = (try records.findExtra(
+                        central_extra,
+                        wire.unicode_path_extra_id,
+                    )).?;
+                    const central_unicode_comment = (try records.findExtra(
+                        central_extra,
+                        wire.unicode_comment_extra_id,
+                    )).?;
+                    for ([_][]const u8{ local_unicode, central_unicode }) |payload| {
+                        try std.testing.expectEqual(@as(u8, 1), payload[0]);
+                        try std.testing.expectEqual(
+                            checksum.crc32Best(entry.name),
+                            std.mem.readInt(u32, payload[1..5], .little),
+                        );
+                        try std.testing.expectEqualStrings(entry.unicode_name.?, payload[5..]);
+                    }
+                    try std.testing.expectEqual(
+                        checksum.crc32Best(entry.comment),
+                        std.mem.readInt(u32, central_unicode_comment[1..5], .little),
+                    );
+                    try std.testing.expectEqualStrings(
+                        entry.unicode_comment.?,
+                        central_unicode_comment[5..],
+                    );
+
+                    const local_unicode_offset = @intFromPtr(local_unicode.ptr) -
+                        @intFromPtr(bytes.ptr);
+                    const central_unicode_offset = @intFromPtr(central_unicode.ptr) -
+                        @intFromPtr(bytes.ptr);
+                    const unicode_field = bytes[central_unicode_offset - 4 .. central_unicode_offset + central_unicode.len];
+                    const duplicate_unicode = try std.mem.concat(
+                        allocator,
+                        u8,
+                        &.{ unicode_field, unicode_field },
+                    );
+                    defer allocator.free(duplicate_unicode);
+                    try std.testing.expectError(
+                        error.InvalidZipArchive,
+                        records.parseUnicodePathExtra(duplicate_unicode, entry.name),
+                    );
+                    var ignored_crc = try allocator.dupe(u8, bytes);
+                    defer allocator.free(ignored_crc);
+                    ignored_crc[local_unicode_offset + 1] ^= 1;
+                    ignored_crc[central_unicode_offset + 1] ^= 1;
+                    const ignored_crc_entry = try (try parse(ignored_crc)).entryAt(0);
+                    try std.testing.expect(ignored_crc_entry.unicode_name == null);
+                    try std.testing.expectEqualStrings(
+                        entries[0].name,
+                        ignored_crc_entry.preferredName(),
+                    );
+
+                    var ignored_version = try allocator.dupe(u8, bytes);
+                    defer allocator.free(ignored_version);
+                    ignored_version[local_unicode_offset] = 2;
+                    ignored_version[central_unicode_offset] = 2;
+                    const ignored_version_entry = try (try parse(ignored_version)).entryAt(0);
+                    try std.testing.expect(ignored_version_entry.unicode_name == null);
+
+                    var authoritative_utf8 = try allocator.dupe(u8, bytes);
+                    defer allocator.free(authoritative_utf8);
+                    const local_flags = std.mem.readInt(
+                        u16,
+                        authoritative_utf8[entry.local_header_offset + 6 ..][0..2],
+                        .little,
+                    ) | wire.utf8_flag;
+                    const central_flags = std.mem.readInt(
+                        u16,
+                        authoritative_utf8[entry.central_header_offset + 8 ..][0..2],
+                        .little,
+                    ) | wire.utf8_flag;
+                    std.mem.writeInt(
+                        u16,
+                        authoritative_utf8[entry.local_header_offset + 6 ..][0..2],
+                        local_flags,
+                        .little,
+                    );
+                    std.mem.writeInt(
+                        u16,
+                        authoritative_utf8[entry.central_header_offset + 8 ..][0..2],
+                        central_flags,
+                        .little,
+                    );
+                    const authoritative_entry = try (try parse(authoritative_utf8)).entryAt(0);
+                    try std.testing.expectEqualStrings(
+                        entries[0].name,
+                        authoritative_entry.preferredName(),
+                    );
+
+                    var conflicting_unicode = try allocator.dupe(u8, bytes);
+                    defer allocator.free(conflicting_unicode);
+                    conflicting_unicode[central_unicode_offset + central_unicode.len - 1] ^= 1;
+                    try std.testing.expectError(
+                        error.InvalidZipArchive,
+                        (try parse(conflicting_unicode)).entryAt(0),
+                    );
+
+                    var invalid_unicode = try allocator.dupe(u8, bytes);
+                    defer allocator.free(invalid_unicode);
+                    invalid_unicode[central_unicode_offset + 5] = 0xff;
+                    try std.testing.expectError(
+                        error.InvalidZipArchive,
+                        (try parse(invalid_unicode)).entryAt(0),
+                    );
                     var corrupt_timestamp = try allocator.dupe(u8, bytes);
                     defer allocator.free(corrupt_timestamp);
                     const timestamp_offset = @intFromPtr(central_extended.ptr) -
@@ -1285,6 +1459,24 @@ test "ZIP entry metadata round trips comments timestamps and Unix attributes" {
     try std.testing.expectError(
         error.InvalidZipTimestamp,
         encodeAlloc(allocator, &invalid_extended, .{}),
+    );
+    const conflicting_encoding = [_]EncodeEntry{.{
+        .name = "legacy-name",
+        .unicode_name = "Unicode 名称",
+        .data = "",
+    }};
+    try std.testing.expectError(
+        error.InvalidZipTextEncoding,
+        encodeAlloc(allocator, &conflicting_encoding, .{}),
+    );
+    const invalid_unicode = [_]EncodeEntry{.{
+        .name = "legacy-name",
+        .unicode_name = "\xff",
+        .data = "",
+    }};
+    try std.testing.expectError(
+        error.InvalidZipTextEncoding,
+        encodeAlloc(allocator, &invalid_unicode, .{ .utf8 = false }),
     );
 }
 
@@ -2358,9 +2550,11 @@ test "ZIP split writer plans standard atomic records and round trips" {
         .{ .name = "crossing.bin", .data = payload, .method = .deflate },
         .{
             .name = "tail.bin",
+            .unicode_name = "尾部.bin",
             .data = "split writer stored tail" ** 97,
             .method = .stored,
             .comment = "split metadata",
+            .unicode_comment = "分卷元数据",
             .modified = modified,
             .extended_timestamp = .{ .modified = 1_590_000_001 },
             .ntfs_timestamp = .{
@@ -2379,6 +2573,7 @@ test "ZIP split writer plans standard atomic records and round trips" {
                     .archive_comment = "split writer comment",
                     .data_descriptor = descriptor,
                     .zip64 = zip64_mode,
+                    .utf8 = false,
                 },
                 .max_part_size = 4096,
             };
@@ -2415,6 +2610,8 @@ test "ZIP split writer plans standard atomic records and round trips" {
                 defer allocator.free(decoded);
                 try std.testing.expectEqualSlices(u8, expected.data, decoded);
                 try std.testing.expectEqualStrings(expected.comment, entry.comment);
+                if (expected.unicode_name) |unicode_name|
+                    try std.testing.expectEqualStrings(unicode_name, entry.preferredName());
             }
             var stream_reader = try SplitIncrementalReader.initAlloc(
                 allocator,
@@ -2425,6 +2622,8 @@ test "ZIP split writer plans standard atomic records and round trips" {
             try drainSplitIncrementalReader(&stream_reader);
             const streamed_tail = stream_reader.entryAt(1).?;
             try std.testing.expectEqualStrings("split metadata", streamed_tail.comment.?);
+            try std.testing.expectEqualStrings("尾部.bin", streamed_tail.preferredName());
+            try std.testing.expectEqualStrings("分卷元数据", streamed_tail.preferredComment().?);
             try std.testing.expectEqual(modified, streamed_tail.modified);
             try std.testing.expectEqual(entries[1].extended_timestamp, streamed_tail.extended_timestamp);
             try std.testing.expectEqual(entries[1].ntfs_timestamp, streamed_tail.ntfs_timestamp);
@@ -2433,6 +2632,7 @@ test "ZIP split writer plans standard atomic records and round trips" {
     }
 
     var single = try encodeSplitAlloc(allocator, &entries, .{
+        .zip_options = .{ .utf8 = false },
         .max_part_size = 1024 * 1024,
     });
     defer single.deinit();
@@ -2455,15 +2655,22 @@ test "ZIP split writer plans standard atomic records and round trips" {
 
     try std.testing.expectError(
         error.InvalidZipSplitSize,
-        encodeSplitAlloc(allocator, &entries, .{ .max_part_size = 3 }),
+        encodeSplitAlloc(allocator, &entries, .{
+            .zip_options = .{ .utf8 = false },
+            .max_part_size = 3,
+        }),
     );
     try std.testing.expectError(
         error.InvalidZipSplitSize,
-        encodeSplitAlloc(allocator, &entries, .{ .max_part_size = 16 }),
+        encodeSplitAlloc(allocator, &entries, .{
+            .zip_options = .{ .utf8 = false },
+            .max_part_size = 16,
+        }),
     );
     try std.testing.expectError(
         error.ZipSplitLimitExceeded,
         encodeSplitAlloc(allocator, &entries, .{
+            .zip_options = .{ .utf8 = false },
             .max_part_size = 4096,
             .max_parts = 1,
         }),
@@ -2471,12 +2678,14 @@ test "ZIP split writer plans standard atomic records and round trips" {
     try std.testing.expectError(
         error.OutputLimitExceeded,
         encodeSplitAlloc(allocator, &entries, .{
+            .zip_options = .{ .utf8 = false },
             .max_archive_size = 1,
         }),
     );
     try std.testing.expectError(
         error.ZipSplitLimitExceeded,
         encodeSplitAlloc(allocator, &entries, .{
+            .zip_options = .{ .utf8 = false },
             .max_parts = @as(usize, std.math.maxInt(u16)) + 1,
         }),
     );

@@ -1,4 +1,5 @@
 const std = @import("std");
+const checksum = @import("../checksum.zig");
 const types = @import("types.zig");
 const wire = @import("wire.zig");
 
@@ -145,6 +146,60 @@ pub fn parseNtfsTimestampExtra(extra: []const u8) Error!?types.NtfsTimestamp {
         cursor = attribute_end;
     }
     return result;
+}
+
+pub fn parseUnicodePathExtra(
+    extra: []const u8,
+    raw_name: []const u8,
+) Error!?[]const u8 {
+    return parseUnicodeExtra(
+        extra,
+        wire.unicode_path_extra_id,
+        raw_name,
+        false,
+    );
+}
+
+pub fn parseUnicodeCommentExtra(
+    extra: []const u8,
+    raw_comment: []const u8,
+) Error!?[]const u8 {
+    return parseUnicodeExtra(
+        extra,
+        wire.unicode_comment_extra_id,
+        raw_comment,
+        false,
+    );
+}
+
+fn parseUnicodeExtra(
+    extra: []const u8,
+    field_id: u16,
+    raw_text: []const u8,
+    allow_empty: bool,
+) Error!?[]const u8 {
+    const payload = (try findExtra(extra, field_id)) orelse return null;
+    if (payload.len < 5) return error.InvalidZipArchive;
+    if (payload[0] != 1) return null;
+    const expected_crc = std.mem.readInt(u32, payload[1..5], .little);
+    if (expected_crc != checksum.crc32Best(raw_text)) return null;
+    const unicode_text = payload[5..];
+    if ((!allow_empty and unicode_text.len == 0) or
+        !std.unicode.utf8ValidateSlice(unicode_text))
+    {
+        return error.InvalidZipArchive;
+    }
+    return unicode_text;
+}
+
+pub fn mergeUnicodeText(
+    local: ?[]const u8,
+    central: ?[]const u8,
+) Error!?[]const u8 {
+    if (local == null) return central;
+    if (central == null) return local;
+    if (!std.mem.eql(u8, local.?, central.?)) return error.InvalidZipArchive;
+    return local;
 }
 
 pub fn mergeExtendedTimestamps(

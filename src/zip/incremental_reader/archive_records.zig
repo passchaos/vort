@@ -16,6 +16,7 @@ pub const LocalHeader = struct {
     extended_timestamp: ?types.ExtendedTimestamp,
     ntfs_timestamp: ?types.NtfsTimestamp,
     name: []const u8,
+    unicode_name: ?[]const u8,
     extra: []const u8,
     descriptor_layout: ?descriptor.Layout,
     crc32: ?u32,
@@ -55,6 +56,8 @@ pub fn parseLocal(bytes: []const u8) Error!LocalHeader {
     const extra_end = name_end + extra_len;
     const extra = bytes[name_end..extra_end];
     const parsed_aes = try records.parseWinZipAesExtra(extra);
+    const name = bytes[wire.local_file_header_len..name_end];
+    const unicode_name = try records.parseUnicodePathExtra(extra, name);
     const extended_timestamp = try records.parseExtendedTimestampExtra(extra, .local);
     const ntfs_timestamp = try records.parseNtfsTimestampExtra(extra);
     if (try records.parsePkwareStrongEncryptionExtra(extra) != null)
@@ -90,7 +93,8 @@ pub fn parseLocal(bytes: []const u8) Error!LocalHeader {
             },
             .extended_timestamp = extended_timestamp,
             .ntfs_timestamp = ntfs_timestamp,
-            .name = bytes[wire.local_file_header_len..name_end],
+            .name = name,
+            .unicode_name = unicode_name,
             .extra = extra,
             .descriptor_layout = if (zip64) .zip64 else .zip32,
             .crc32 = null,
@@ -114,7 +118,8 @@ pub fn parseLocal(bytes: []const u8) Error!LocalHeader {
         },
         .extended_timestamp = extended_timestamp,
         .ntfs_timestamp = ntfs_timestamp,
-        .name = bytes[wire.local_file_header_len..name_end],
+        .name = name,
+        .unicode_name = unicode_name,
         .extra = extra,
         .descriptor_layout = null,
         .crc32 = crc32,
@@ -133,6 +138,8 @@ pub const CentralHeader = struct {
     method: CompressionMethod,
     name: []const u8,
     comment: []const u8,
+    unicode_name: ?[]const u8,
+    unicode_comment: ?[]const u8,
     modified: types.DosTimestamp,
     extended_timestamp: ?types.ExtendedTimestamp,
     ntfs_timestamp: ?types.NtfsTimestamp,
@@ -181,6 +188,8 @@ pub fn parseCentral(bytes: []const u8) Error!CentralHeader {
     const name_end = wire.central_file_header_len + name_len;
     const extra_end = name_end + extra_len;
     const comment_end = extra_end + comment_len;
+    const name = bytes[wire.central_file_header_len..name_end];
+    const comment = bytes[extra_end..comment_end];
     const values = try records.resolveCentralEntry(
         bytes[name_end..extra_end],
         compressed_u32,
@@ -189,6 +198,14 @@ pub fn parseCentral(bytes: []const u8) Error!CentralHeader {
         disk_start,
     );
     const parsed_aes = try records.parseWinZipAesExtra(bytes[name_end..extra_end]);
+    const unicode_name = try records.parseUnicodePathExtra(
+        bytes[name_end..extra_end],
+        name,
+    );
+    const unicode_comment = try records.parseUnicodeCommentExtra(
+        bytes[name_end..extra_end],
+        comment,
+    );
     const extended_timestamp = try records.parseExtendedTimestampExtra(
         bytes[name_end..extra_end],
         .central,
@@ -234,8 +251,10 @@ pub fn parseCentral(bytes: []const u8) Error!CentralHeader {
         .version_needed = version_needed,
         .flags = flags,
         .method = method,
-        .name = bytes[wire.central_file_header_len..name_end],
-        .comment = bytes[extra_end..comment_end],
+        .name = name,
+        .comment = comment,
+        .unicode_name = unicode_name,
+        .unicode_comment = unicode_comment,
         .modified = .{
             .time = std.mem.readInt(u16, bytes[12..14], .little),
             .date = std.mem.readInt(u16, bytes[14..16], .little),

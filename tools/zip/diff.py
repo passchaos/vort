@@ -410,6 +410,75 @@ def validate_python_archive_with_vort(
     )
 
 
+def validate_vort_unicode_archive(
+    cli: Path,
+    writer: Path,
+    temp: Path,
+    unzip_tool: str,
+) -> int:
+    archive_path = temp / "vort-unicode-extra.zip"
+    run(writer, str(archive_path), "unicode")
+    raw = archive_path.read_bytes()
+    expected = {
+        "目录/数据.txt": b"Vort Unicode path payload.\n" * 17,
+        "目录/": b"",
+    }
+    raw_names = {
+        "目录/数据.txt": b"\x82-legacy-name.txt",
+        "目录/": b"legacy-directory/",
+    }
+    with zipfile.ZipFile(archive_path) as archive:
+        if archive.namelist() != ["é-legacy-name.txt", "legacy-directory/"]:
+            raise AssertionError("Python legacy-name decoding changed unexpectedly")
+        for index, (name, payload) in enumerate(expected.items()):
+            info = archive.infolist()[index]
+            if info.flag_bits & 0x0800:
+                raise AssertionError("Unicode extra entry unexpectedly set UTF-8 bit")
+            if archive.read(info) != payload:
+                raise AssertionError("Python raw-name Unicode-extra archive mismatch")
+            validate_unicode_extra(
+                info.extra,
+                0x7075,
+                raw_names[name],
+                name,
+                f"one-shot central Unicode path {index}",
+            )
+            local_name_len, local_extra_len = struct.unpack_from(
+                "<HH", raw, info.header_offset + 26
+            )
+            local_extra_start = info.header_offset + 30 + local_name_len
+            validate_unicode_extra(
+                raw[local_extra_start : local_extra_start + local_extra_len],
+                0x7075,
+                raw_names[name],
+                name,
+                f"one-shot local Unicode path {index}",
+            )
+            if index == 0:
+                validate_unicode_extra(
+                    info.extra,
+                    0x6375,
+                    b"\x82-legacy-comment",
+                    "条目注释",
+                    "one-shot central Unicode comment",
+                )
+            for command in ("extract-zip-file", "extract-zip-stream-file"):
+                output = temp / f"unicode-{index}-{command}.out"
+                run(cli, command, str(archive_path), name, str(output))
+                if output.read_bytes() != payload:
+                    raise AssertionError(f"Vort {command} Unicode selection mismatch")
+
+    extracted = subprocess.run(
+        [unzip_tool, "-p", str(archive_path), "目录/数据.txt"],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ).stdout
+    if extracted != expected["目录/数据.txt"]:
+        raise AssertionError("Info-ZIP did not extract Vort Unicode path entry")
+    return len(expected)
+
+
 def validate_vort_archive_with_python(
     cli: Path,
     writer: Path,
@@ -1475,6 +1544,25 @@ def validate_timestamp_extras(extra: bytes, context: str, local: bool) -> None:
         raise AssertionError(f"{context} NTFS timestamp values mismatch")
 
 
+def validate_unicode_extra(
+    extra: bytes,
+    field_id: int,
+    raw_text: bytes,
+    unicode_text: str,
+    context: str,
+) -> None:
+    payload = parse_extra_fields(extra, context).get(field_id)
+    expected_utf8 = unicode_text.encode("utf-8")
+    if payload is None or len(payload) != 5 + len(expected_utf8):
+        raise AssertionError(f"{context} Unicode extra width mismatch")
+    if payload[0] != 1:
+        raise AssertionError(f"{context} Unicode extra version mismatch")
+    if struct.unpack_from("<I", payload, 1)[0] != binascii.crc32(raw_text) & 0xFFFFFFFF:
+        raise AssertionError(f"{context} Unicode extra CRC mismatch")
+    if payload[5:] != expected_utf8:
+        raise AssertionError(f"{context} Unicode extra text mismatch")
+
+
 def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
     eocd_offset = raw.rfind(b"PK\x05\x06")
     if eocd_offset < 0 or eocd_offset + 22 > len(raw):
@@ -1783,6 +1871,70 @@ def validate_incremental_raw_layout(raw: bytes, force_zip64: bool) -> None:
         INCREMENTAL_PAYLOADS["unknown-stored.bin"].count(b"PK\x07\x08") != 2
     ):
         raise AssertionError("incremental stored fixtures lost descriptor-signature payloads")
+
+
+def validate_incremental_unicode_archive(
+    cli: Path,
+    writer: Path,
+    temp: Path,
+    force_zip64: bool,
+) -> tuple[int, int]:
+    suffix = "zip64" if force_zip64 else "zip32"
+    one = temp / f"incremental-unicode-{suffix}-one.zip"
+    micro = temp / f"incremental-unicode-{suffix}-micro.zip"
+    run(writer, str(one), suffix, "one", "unicode")
+    run(writer, str(micro), suffix, "micro", "unicode")
+    raw = one.read_bytes()
+    if raw != micro.read_bytes():
+        raise AssertionError("incremental Unicode output depends on schedule")
+    expected = {
+        "流式/数据.txt": b"incremental Unicode path payload\n" * 31,
+        "流式目录/": b"",
+    }
+    raw_names = {
+        "流式/数据.txt": b"\x82-stream-name.txt",
+        "流式目录/": b"stream-directory/",
+    }
+    cases = 0
+    with zipfile.ZipFile(one) as archive:
+        if archive.namelist() != ["é-stream-name.txt", "stream-directory/"]:
+            raise AssertionError("Python incremental legacy-name decoding changed")
+        for index, (name, payload) in enumerate(expected.items()):
+            info = archive.infolist()[index]
+            if info.flag_bits & 0x0800 or archive.read(info) != payload:
+                raise AssertionError("incremental Unicode Python mismatch")
+            validate_unicode_extra(
+                info.extra,
+                0x7075,
+                raw_names[name],
+                name,
+                f"incremental central Unicode path {index}",
+            )
+            name_len, extra_len = struct.unpack_from(
+                "<HH", raw, info.header_offset + 26
+            )
+            extra_start = info.header_offset + 30 + name_len
+            validate_unicode_extra(
+                raw[extra_start : extra_start + extra_len],
+                0x7075,
+                raw_names[name],
+                name,
+                f"incremental local Unicode path {index}",
+            )
+            if index == 0:
+                validate_unicode_extra(
+                    info.extra,
+                    0x6375,
+                    b"\x82-stream-comment",
+                    "流式注释",
+                    "incremental central Unicode comment",
+                )
+            output = temp / f"incremental-unicode-{suffix}-{index}.out"
+            run(cli, "extract-zip-stream-file", str(one), name, str(output))
+            if output.read_bytes() != payload:
+                raise AssertionError("Vort incremental Unicode extraction mismatch")
+            cases += 1
+    return len(raw), cases
 
 
 def validate_incremental_writer_archive(
@@ -2867,6 +3019,12 @@ def main() -> None:
         vort_zip64_bytes = validate_vort_archive_with_python(
             args.cli, args.writer, temp, True, seven_zip_tool
         )
+        vort_unicode_cases = validate_vort_unicode_archive(
+            args.cli,
+            args.writer,
+            temp,
+            unzip_tool,
+        )
         vort_zipcrypto_cases, vort_incremental_reader_zipcrypto_cases = (
             validate_vort_zipcrypto(args.cli, args.writer, unzip_tool, temp)
         )
@@ -2890,6 +3048,22 @@ def main() -> None:
         incremental_zip64_bytes, incremental_zip64_unzip, incremental_zip64_7zip = (
             validate_incremental_writer_archive(
                 args.cli, args.incremental_writer, temp, True, unzip_tool, seven_zip_tool
+            )
+        )
+        incremental_unicode_zip32_bytes, incremental_unicode_zip32_cases = (
+            validate_incremental_unicode_archive(
+                args.cli,
+                args.incremental_writer,
+                temp,
+                False,
+            )
+        )
+        incremental_unicode_zip64_bytes, incremental_unicode_zip64_cases = (
+            validate_incremental_unicode_archive(
+                args.cli,
+                args.incremental_writer,
+                temp,
+                True,
             )
         )
         (
@@ -3056,6 +3230,7 @@ def main() -> None:
         f"incremental_archive_implode_cases={incremental_archive_implode_cases} "
         f"incremental_archive_implode_fixture_cases={incremental_archive_implode_fixture_cases} "
         f"vort_zip32_bytes={vort_zip32_bytes} vort_zip64_bytes={vort_zip64_bytes} "
+        f"vort_unicode_cases={vort_unicode_cases} "
         f"vort_zipcrypto_cases={vort_zipcrypto_cases} "
         f"infozip_zipcrypto_cases={infozip_zipcrypto_cases} "
         f"infozip_incremental_reader_zipcrypto_cases={infozip_incremental_reader_zipcrypto_cases} "
@@ -3068,6 +3243,9 @@ def main() -> None:
         f"incremental_entries={len(INCREMENTAL_PAYLOADS)} "
         f"incremental_zip32_bytes={incremental_zip32_bytes} "
         f"incremental_zip64_bytes={incremental_zip64_bytes} "
+        f"incremental_unicode_cases={incremental_unicode_zip32_cases + incremental_unicode_zip64_cases} "
+        f"incremental_unicode_zip32_bytes={incremental_unicode_zip32_bytes} "
+        f"incremental_unicode_zip64_bytes={incremental_unicode_zip64_bytes} "
         f"incremental_zipcrypto_cases={len(INCREMENTAL_ZIPCRYPTO_PAYLOADS) * 2} "
         f"incremental_zipcrypto_zip32_bytes={incremental_zipcrypto_zip32_bytes} "
         f"incremental_zipcrypto_zip64_bytes={incremental_zipcrypto_zip64_bytes} "

@@ -1,4 +1,5 @@
 const std = @import("std");
+const checksum = @import("../checksum.zig");
 const types = @import("types.zig");
 
 pub const CompressionMethod = types.CompressionMethod;
@@ -13,6 +14,8 @@ pub const central_directory_digital_signature: u32 = 0x0505_4b50;
 pub const zip64_extra_id: u16 = 0x0001;
 pub const ntfs_timestamp_extra_id: u16 = 0x000a;
 pub const extended_timestamp_extra_id: u16 = 0x5455;
+pub const unicode_comment_extra_id: u16 = 0x6375;
+pub const unicode_path_extra_id: u16 = 0x7075;
 pub const pkware_strong_extra_id: u16 = 0x0017;
 pub const winzip_aes_extra_id: u16 = 0x9901;
 
@@ -45,6 +48,8 @@ pub const utf8_flag: u16 = 1 << 11;
 pub const EncodedEntry = struct {
     name: []const u8,
     comment: []const u8,
+    unicode_name: ?[]const u8 = null,
+    unicode_comment: ?[]const u8 = null,
     method: CompressionMethod,
     flags: u16,
     crc32: u32,
@@ -103,6 +108,14 @@ pub fn appendLocalHeader(
         try appendExtendedTimestampExtra(allocator, out, timestamp, .local);
     if (entry.ntfs_timestamp) |timestamp|
         try appendNtfsTimestampExtra(allocator, out, timestamp);
+    if (entry.unicode_name) |unicode_name|
+        try appendUnicodeExtra(
+            allocator,
+            out,
+            unicode_path_extra_id,
+            entry.name,
+            unicode_name,
+        );
 }
 
 pub fn appendDataDescriptor(
@@ -170,20 +183,43 @@ pub fn appendCentralHeader(
             try appendExtendedTimestampExtra(allocator, out, timestamp, .central);
     if (entry.ntfs_timestamp) |timestamp|
         try appendNtfsTimestampExtra(allocator, out, timestamp);
+    if (entry.unicode_name) |unicode_name|
+        try appendUnicodeExtra(
+            allocator,
+            out,
+            unicode_path_extra_id,
+            entry.name,
+            unicode_name,
+        );
+    if (entry.unicode_comment) |unicode_comment|
+        try appendUnicodeExtra(
+            allocator,
+            out,
+            unicode_comment_extra_id,
+            entry.comment,
+            unicode_comment,
+        );
     try out.appendSlice(allocator, entry.comment);
 }
 
 pub fn localExtraLen(entry: EncodedEntry) usize {
     return (if (entry.zip64) @as(usize, 20) else 0) +
         (if (entry.winzip_aes != null) @as(usize, 11) else 0) +
-        localTimestampExtraLen(entry.extended_timestamp, entry.ntfs_timestamp);
+        localTimestampExtraLen(entry.extended_timestamp, entry.ntfs_timestamp) +
+        unicodeExtraLen(entry.unicode_name);
 }
 
 pub fn centralExtraLen(entry: EncodedEntry) usize {
     return (if (entry.zip64) @as(usize, 28) else 0) +
         (if (entry.winzip_aes != null) @as(usize, 11) else 0) +
         (if (entry.pkware_strong_encryption != null) @as(usize, 12) else 0) +
-        centralTimestampExtraLen(entry.extended_timestamp, entry.ntfs_timestamp);
+        centralTimestampExtraLen(entry.extended_timestamp, entry.ntfs_timestamp) +
+        unicodeExtraLen(entry.unicode_name) +
+        unicodeExtraLen(entry.unicode_comment);
+}
+
+pub fn unicodeExtraLen(value: ?[]const u8) usize {
+    return if (value) |text| 9 + text.len else 0;
 }
 
 pub fn localTimestampExtraLen(
@@ -253,6 +289,20 @@ fn appendNtfsTimestampExtra(
     try appendU64(allocator, out, timestamp.modified);
     try appendU64(allocator, out, timestamp.accessed);
     try appendU64(allocator, out, timestamp.created);
+}
+
+fn appendUnicodeExtra(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    field_id: u16,
+    raw_text: []const u8,
+    unicode_text: []const u8,
+) !void {
+    try appendU16(allocator, out, field_id);
+    try appendU16(allocator, out, @intCast(5 + unicode_text.len));
+    try out.append(allocator, 1);
+    try appendU32(allocator, out, checksum.crc32Best(raw_text));
+    try out.appendSlice(allocator, unicode_text);
 }
 
 fn extendedTimestampFlags(timestamp: types.ExtendedTimestamp) u8 {
