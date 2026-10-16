@@ -440,7 +440,7 @@ pub const Reader = struct {
             ) },
             .lz4 => .{ .lz4 = try self.createCompressed(
                 compressed_reader.Lz4Reader,
-                self.options.lz4,
+                self.lz4Options(),
             ) },
             .lz4_legacy => .{ .lz4_legacy = try self.createCompressed(
                 compressed_reader.Lz4LegacyReader,
@@ -538,6 +538,12 @@ pub const Reader = struct {
         return options;
     }
 
+    fn lz4Options(self: *const Self) codecs.Lz4.Options {
+        var options = self.options.lz4;
+        if (self.options.member_mode) options.stop_after_first_frame = true;
+        return options;
+    }
+
     fn lzipOptions(self: *const Self) codecs.Lzip.Options {
         var options = self.options.lzip;
         if (self.options.member_mode) options.stop_after_first_member = true;
@@ -576,12 +582,13 @@ fn memberFormatSupported(format: Format) bool {
         .bzip2,
         .lzma,
         .xz,
+        .lz4,
         .lzip,
         .lzf,
         .zstandard,
         .lzop,
         => true,
-        .brotli, .compress_z, .lz4, .lz4_legacy => false,
+        .brotli, .compress_z, .lz4_legacy => false,
     };
 }
 

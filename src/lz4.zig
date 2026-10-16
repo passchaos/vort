@@ -1560,6 +1560,10 @@ pub const NativeIncrementalFrameDecoder = struct {
         /// exceed this count and `finish` reports `SizeMismatch` if EOF arrives
         /// before the count is reached.
         expected_output_len: ?usize = null,
+        /// Stop after the first validated data frame and retain any accepted
+        /// following bytes for an outer member dispatcher. Skippable frames do
+        /// not satisfy this boundary.
+        stop_after_first_frame: bool = false,
         skippable_output: []u8 = &.{},
         skippable_events: []SkippableEvent = &.{},
     };
@@ -1576,6 +1580,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         skippable_truncated: bool,
         skippable_event_count: usize,
         skippable_events_captured: usize,
+        trailing_input_bytes: usize,
         last_error_name: []const u8,
         last_error_phase: ?Phase,
     };
@@ -1656,6 +1661,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             .skippable_truncated = self.skippable_written != self.skippable_total,
             .skippable_event_count = self.skippable_event_count,
             .skippable_events_captured = @min(self.skippable_event_count, self.skippable_events.len),
+            .trailing_input_bytes = self.trailingInput().len,
             .last_error_name = self.last_error_name,
             .last_error_phase = self.last_error_phase,
         };
@@ -1677,6 +1683,11 @@ pub const NativeIncrementalFrameDecoder = struct {
     /// Number of compressed input bytes currently retained by the decoder.
     pub fn compressedBufferedBytes(self: *const NativeIncrementalFrameDecoder) usize {
         return self.frame_scratch.items.len;
+    }
+
+    pub fn trailingInput(self: *const NativeIncrementalFrameDecoder) []const u8 {
+        if (!self.options.stop_after_first_frame or self.phase != .done) return &.{};
+        return self.frame_scratch.items;
     }
 
     /// Allocated capacity backing retained compressed input. With a finite
@@ -1717,6 +1728,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     pub fn finish(self: *NativeIncrementalFrameDecoder) Error!void {
+        if (self.phase == .done) return;
         if (self.phase == .skippable_stream) {
             self.recordError(.skippable_stream, error.TruncatedFrame);
             return error.TruncatedFrame;
@@ -1849,6 +1861,11 @@ pub const NativeIncrementalFrameDecoder = struct {
                 },
                 .output => {
                     if (self.decoded_offset == self.decoded_scratch.items.len) {
+                        if (try self.finishFirstDataFrame())
+                            return .{
+                                .progress = .{ .input_read = input_read, .output_written = output_written_step },
+                                .status = .done,
+                            };
                         if (self.frame_scratch.items.len != 0) {
                             self.phase = .frame;
                             continue;
@@ -1889,6 +1906,11 @@ pub const NativeIncrementalFrameDecoder = struct {
                         const frame_len = self.direct_frame_len;
                         self.resetDirectOutput();
                         self.discardFrameScratchPrefix(frame_len);
+                        if (try self.finishFirstDataFrame())
+                            return .{
+                                .progress = .{ .input_read = input_read, .output_written = output_written_step },
+                                .status = .done,
+                            };
                         if (self.frame_scratch.items.len != 0) {
                             self.phase = .frame;
                             continue;
@@ -2245,6 +2267,11 @@ pub const NativeIncrementalFrameDecoder = struct {
                         },
                         .finished => {
                             try self.finishBlockStreamFrame();
+                            if (try self.finishFirstDataFrame())
+                                return .{
+                                    .progress = .{ .input_read = input_read, .output_written = output_written_step },
+                                    .status = .done,
+                                };
                             if (self.blockStreamInput().len != 0 or input_read < input.len) {
                                 self.phase = .frame;
                                 continue;
@@ -2549,6 +2576,14 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.resetBlockStream();
         self.resetDirectOutput();
         self.phase = .frame;
+    }
+
+    fn finishFirstDataFrame(self: *NativeIncrementalFrameDecoder) Error!bool {
+        if (!self.options.stop_after_first_frame) return false;
+        if (self.options.expected_output_len) |expected|
+            if (self.output_written != expected) return error.SizeMismatch;
+        self.phase = .done;
+        return true;
     }
 
     fn resetSkippableStream(self: *NativeIncrementalFrameDecoder) void {
@@ -8454,6 +8489,59 @@ test "lz4 native incremental compressed block checksum fits exact payload cap" {
     try std.testing.expectEqual(@as(usize, 0), bad.snapshot().output_written);
     try std.testing.expectEqualSlices(u8, "ChecksumMismatch", bad.diagnostics().last_error_name);
     try std.testing.expectEqualSlices(u8, "direct_output", bad.diagnostics().last_error_phase_name);
+}
+
+test "lz4 native incremental first-frame stop preserves suffix across execution paths" {
+    const payload = ("first-frame-stop-0123456789abcdef" ** 32) ** 8;
+    const encoded = try encodePureFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .content_checksum = true,
+        .block_checksum = true,
+        .block_mode = .independent,
+        .block_size_id = .max64kb,
+    });
+    defer std.testing.allocator.free(encoded);
+    const first_block = (try inspectNativeFrameFirstBlock(encoded)) orelse
+        return error.CorruptFrame;
+    const suffix = "NEXT-OUTER-MEMBER";
+    const joined = try std.mem.concat(std.testing.allocator, u8, &.{ encoded, suffix });
+    defer std.testing.allocator.free(joined);
+
+    inline for (0..2) |path_index| {
+        var options = NativeIncrementalFrameDecoder.Options{
+            .expected_output_len = payload.len,
+            .max_decoded_buffer_len = payload.len,
+            .stop_after_first_frame = true,
+        };
+        if (path_index == 1)
+            options.max_compressed_buffer_len = first_block.payload_len;
+        var decoder = NativeIncrementalFrameDecoder.initWithOptions(
+            std.testing.allocator,
+            options,
+        );
+        defer decoder.deinit();
+        var output: [payload.len]u8 = undefined;
+        var input_offset: usize = 0;
+        var output_offset: usize = 0;
+        while (true) {
+            const output_end = @min(output.len, output_offset + 127);
+            const stepped = try decoder.step(
+                joined[input_offset..],
+                output[output_offset..output_end],
+            );
+            input_offset += stepped.progress.input_read;
+            output_offset += stepped.progress.output_written;
+            if (stepped.status == .done) break;
+        }
+        const trailing = decoder.trailingInput();
+        try std.testing.expectEqual(encoded.len, input_offset - trailing.len);
+        try std.testing.expectEqualSlices(u8, suffix[0..trailing.len], trailing);
+        try std.testing.expectEqualSlices(u8, suffix[trailing.len..], joined[input_offset..]);
+        try std.testing.expectEqualSlices(u8, payload, &output);
+        try std.testing.expectEqual(trailing.len, decoder.snapshot().trailing_input_bytes);
+        if (path_index == 1)
+            try std.testing.expect(decoder.streamedCompressedBlockCount() != 0);
+        try decoder.finish();
+    }
 }
 
 test "lz4 native block stream waits for a split compressed block checksum before output" {

@@ -452,6 +452,11 @@ test "compressed CPIO readers expose recoverable first-stream suffixes" {
         compressed_reader.codecs.Zstandard.Options{ .stop_after_first_frame = true },
     );
     try expectRecoverableSuffix(
+        compressed_reader.Lz4Reader,
+        .lz4,
+        compressed_reader.codecs.Lz4.Options{ .stop_after_first_frame = true },
+    );
+    try expectRecoverableSuffix(
         compressed_reader.LzfReader,
         .lzf,
         compressed_reader.codecs.Lzf.Options{ .stop_after_eof_marker = true },
