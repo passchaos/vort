@@ -20899,3 +20899,19 @@ reuse, so production keeps the simpler independently owned plans.
   LZF, lzip and LZOP -- and requires each accepted/unaccepted suffix split to
   reconstruct the synthetic next member byte-exactly under tiny output
   backpressure.
+
+- Added `CpioIncrementalMixedReader` for bounded mixed initramfs sequences.
+  One state machine automatically switches among raw CPIO, gzip, Bzip2,
+  LZMA-Alone, XZ, Zstandard, EOF-marked LZF, lzip and LZOP members. It separates
+  physical accepted input from logical member offsets, copies bounded borrowed
+  lookahead into a replay queue, and probes replay before accepting more caller
+  bytes. `archive_done` reports global offset, exact encoded size, format,
+  entry/output counts and recovered-suffix size. One-byte and 64 KiB input
+  schedules cover all nine formats in one stream; the latter requires at least
+  one real suffix recovery. Unsupported Brotli/modern-LZ4 first-frame and
+  physical-EOF `.Z`/legacy-LZ4 members fail explicitly. Archive, padding,
+  physical input, logical output, decoder input chunk and replay limits plus
+  exhaustive OOM are covered. The differential concatenates eight Vort member
+  types and the independently available raw/gzip/Bzip2/LZMA/XZ/Zstd/lzip/LZOP
+  subset (`incremental_mixed_reader_cases=2`,
+  `incremental_mixed_reader_external=1`).

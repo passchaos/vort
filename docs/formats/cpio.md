@@ -48,6 +48,16 @@ wire size, entry count, and output size. Archive count, aggregate padding,
 total input, total output, and each underlying archive remain independently
 bounded. Adjacent archives may use different newc/CRC/ODC/binary formats.
 
+`CpioIncrementalMixedReader` extends those boundaries across raw CPIO plus
+gzip, Bzip2, LZMA-Alone, XZ, Zstandard, EOF-marked LZF, lzip, and LZOP. It
+tracks physical caller input separately from logical member consumption,
+copies bounded decoder lookahead into a replay queue at `archive_done`, and
+feeds that suffix into the next 14-byte format probe before requesting new
+caller bytes. Per-member format, global offset, encoded size, entry/output
+counts, and recovered-suffix size are exposed. Brotli and modern LZ4 do not yet
+offer the required progressive first-frame boundary; legacy LZ4 and Unix
+compress are physical-EOF formats. Mixed mode rejects all four explicitly.
+
 `encodeCpioAlloc`, `encodeCpioAppend`, and `encodeCpioInto` write any of the
 five exposed variants (`newc`, `crc`, `odc`, `binary_little`, or
 `binary_big`). Writers support regular files, directories, symbolic links,
@@ -190,12 +200,17 @@ GNU-produced formats with varying zero padding under one-byte and micro
 schedules (`incremental_sequence_reader_cases=2`,
 `incremental_sequence_reader_external=1`).
 
+Mixed-member validation concatenates Vort raw/gzip/Bzip2/LZMA/XZ/Zstd/lzip/
+LZOP output and an independently encoded available subset, again under both
+schedules (`incremental_mixed_reader_cases=2`,
+`incremental_mixed_reader_external=1`).
+
 ```sh
 python3 tools/cpio/diff.py --cli path/to/vort --cpio /usr/bin/cpio
 zig build run-cpio-diff -- --cpio /usr/bin/cpio
 ```
 
-Future functionality can extend sequence dispatch across mixed raw/compressed
-initramfs members, and add one-shot hard-link writer controls, HP-UX
-device-number variants, and afio's extended ODC header without changing the
-current entry or compression APIs.
+Future functionality can add progressive first-frame stops for modern LZ4 and
+Brotli, externally sized physical-EOF members, one-shot hard-link writer
+controls, HP-UX device-number variants, and afio's extended ODC header without
+changing the current entry or compression APIs.

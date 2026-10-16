@@ -203,6 +203,7 @@ def main() -> None:
     parser.add_argument("--writer", type=Path)
     parser.add_argument("--incremental-reader", type=Path)
     parser.add_argument("--incremental-sequence-reader", type=Path)
+    parser.add_argument("--incremental-mixed-reader", type=Path)
     parser.add_argument("--incremental-compressed-reader", type=Path)
     parser.add_argument("--incremental-auto-reader", type=Path)
     parser.add_argument("--incremental-compressed-writer", type=Path)
@@ -239,6 +240,8 @@ def main() -> None:
     incremental_reader_cases = 0
     incremental_sequence_reader_cases = 0
     incremental_sequence_reader_external = 0
+    incremental_mixed_reader_cases = 0
+    incremental_mixed_reader_external = 0
     incremental_compressed_reader_cases = 0
     incremental_compressed_reader_external = 0
     incremental_auto_reader_cases = 0
@@ -408,6 +411,36 @@ def main() -> None:
                 )
             incremental_auto_reader_cases += 1
 
+        if args.incremental_mixed_reader is not None:
+            mixed_names = (
+                ("raw_cpio", raw_reference_path),
+                ("gzip", temp / "wrapper-gzip.cpio"),
+                ("bzip2", temp / "wrapper-bzip2.cpio"),
+                ("lzma", temp / "wrapper-lzma.cpio"),
+                ("xz", temp / "wrapper-xz.cpio"),
+                ("zstandard", temp / "wrapper-zstd.cpio"),
+                ("lzip", temp / "wrapper-lzip.cpio"),
+                ("lzop", temp / "wrapper-lzop.cpio"),
+            )
+            mixed_path = temp / "vort-mixed-initramfs.cpio"
+            mixed_data = bytearray(b"\0" * 3)
+            for index, (_, path) in enumerate(mixed_names):
+                mixed_data.extend(path.read_bytes())
+                mixed_data.extend(b"\0" * (index % 3))
+            mixed_data.extend(b"\0" * 5)
+            mixed_path.write_bytes(mixed_data)
+            expected_formats = ",".join(name for name, _ in mixed_names)
+            for pattern in ("one", "micro"):
+                run(
+                    args.incremental_mixed_reader,
+                    str(mixed_path),
+                    "payload.bin",
+                    str(source),
+                    expected_formats,
+                    pattern,
+                )
+            incremental_mixed_reader_cases += 1
+
         external_inputs = {
             "gzip": __import__("gzip").compress(raw_reference, mtime=0),
             "bzip2": __import__("bz2").compress(raw_reference),
@@ -511,6 +544,35 @@ def main() -> None:
                         pattern,
                     )
                 incremental_auto_reader_external += 1
+        if args.incremental_mixed_reader is not None:
+            external_order = ("gzip", "bzip2", "lzma", "xz", "zstd", "lzip", "lzop")
+            mixed_names = [("raw_cpio", raw_reference)]
+            mixed_names.extend(
+                (
+                    "zstandard" if name == "zstd" else name,
+                    external_inputs[name],
+                )
+                for name in external_order
+                if name in external_inputs
+            )
+            mixed_path = temp / "external-mixed-initramfs.cpio"
+            mixed_data = bytearray(b"\0" * 2)
+            for index, (_, data) in enumerate(mixed_names):
+                mixed_data.extend(data)
+                mixed_data.extend(b"\0" * (index % 2))
+            mixed_path.write_bytes(mixed_data)
+            expected_formats = ",".join(name for name, _ in mixed_names)
+            for pattern in ("one", "micro"):
+                run(
+                    args.incremental_mixed_reader,
+                    str(mixed_path),
+                    "payload.bin",
+                    str(source),
+                    expected_formats,
+                    pattern,
+                )
+            incremental_mixed_reader_cases += 1
+            incremental_mixed_reader_external += 1
 
         if args.incremental_compressed_writer is not None:
             for compression in (
@@ -702,6 +764,8 @@ def main() -> None:
         f"incremental_reader_cases={incremental_reader_cases} "
         f"incremental_sequence_reader_cases={incremental_sequence_reader_cases} "
         f"incremental_sequence_reader_external={incremental_sequence_reader_external} "
+        f"incremental_mixed_reader_cases={incremental_mixed_reader_cases} "
+        f"incremental_mixed_reader_external={incremental_mixed_reader_external} "
         f"incremental_compressed_reader_cases={incremental_compressed_reader_cases} "
         f"incremental_compressed_reader_external={incremental_compressed_reader_external} "
         f"incremental_auto_reader_cases={incremental_auto_reader_cases} "

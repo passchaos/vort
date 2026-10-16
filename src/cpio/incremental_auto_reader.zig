@@ -37,6 +37,9 @@ pub const Options = struct {
     max_input_size: u64 = std.math.maxInt(u64),
     max_skippable_frames: usize = 1024 * 1024,
     ambiguous_fallback: AmbiguousFallback = .brotli,
+    /// Configure active decoders to stop after one outer member. Formats that
+    /// cannot preserve an exact following-member boundary are rejected.
+    member_mode: bool = false,
     gzip: codecs.Gzip.Options = codecs.Gzip.default_options,
     bzip2: codecs.Bzip2.Options = codecs.Bzip2.default_options,
     brotli: codecs.Brotli.Options = codecs.Brotli.default_options,
@@ -70,6 +73,7 @@ pub const Error = cpio_reader.Error ||
     UnknownCpioCompression,
     InvalidCpioAutoReaderState,
     TooManySkippableFrames,
+    UnsupportedCpioSequenceCompression,
     CpioAutoReaderPoisoned,
 };
 
@@ -118,6 +122,20 @@ const Active = union(Format) {
             inline else => |reader| reader.currentEntry(),
         };
     }
+
+    fn trailingInput(self: *const Active) []const u8 {
+        return switch (self.*) {
+            .raw_cpio => &.{},
+            inline else => |reader| reader.trailingInput(),
+        };
+    }
+
+    fn cpioSnapshot(self: *const Active) cpio_reader.Reader.Snapshot {
+        return switch (self.*) {
+            .raw_cpio => |reader| reader.snapshot(),
+            inline else => |reader| reader.snapshot().cpio,
+        };
+    }
 };
 
 pub const Reader = struct {
@@ -164,6 +182,13 @@ pub const Reader = struct {
         self.* = undefined;
     }
 
+    pub fn reset(self: *Self) void {
+        if (self.active) |*active| active.deinit(self.allocator);
+        const allocator = self.allocator;
+        const options = self.options;
+        self.* = .{ .allocator = allocator, .options = options };
+    }
+
     pub fn snapshot(self: *const Self) Snapshot {
         return .{
             .phase = self.phase,
@@ -184,6 +209,14 @@ pub const Reader = struct {
 
     pub fn currentEntry(self: *const Self) ?cpio_reader.EntryInfo {
         return if (self.active) |*active| active.currentEntry() else null;
+    }
+
+    pub fn trailingInput(self: *const Self) []const u8 {
+        return if (self.active) |*active| active.trailingInput() else &.{};
+    }
+
+    pub fn cpioSnapshot(self: *const Self) ?cpio_reader.Reader.Snapshot {
+        return if (self.active) |*active| active.cpioSnapshot() else null;
     }
 
     pub fn finish(self: *Self) Error!void {
@@ -377,15 +410,17 @@ pub const Reader = struct {
 
     fn activate(self: *Self, format: Format) Error!void {
         if (self.active != null) return error.InvalidCpioAutoReaderState;
+        if (self.options.member_mode and !memberFormatSupported(format))
+            return error.UnsupportedCpioSequenceCompression;
         const prepared: Active = switch (format) {
             .raw_cpio => .{ .raw_cpio = try self.createRaw() },
             .gzip => .{ .gzip = try self.createCompressed(
                 compressed_reader.GzipReader,
-                self.options.gzip,
+                self.gzipOptions(),
             ) },
             .bzip2 => .{ .bzip2 = try self.createCompressed(
                 compressed_reader.Bzip2Reader,
-                self.options.bzip2,
+                self.bzip2Options(),
             ) },
             .brotli => .{ .brotli = try self.createCompressed(
                 compressed_reader.BrotliReader,
@@ -397,11 +432,11 @@ pub const Reader = struct {
             ) },
             .lzma => .{ .lzma = try self.createCompressed(
                 compressed_reader.LzmaReader,
-                self.options.lzma,
+                self.lzmaOptions(),
             ) },
             .xz => .{ .xz = try self.createCompressed(
                 compressed_reader.XzReader,
-                self.options.xz,
+                self.xzOptions(),
             ) },
             .lz4 => .{ .lz4 = try self.createCompressed(
                 compressed_reader.Lz4Reader,
@@ -413,19 +448,19 @@ pub const Reader = struct {
             ) },
             .lzip => .{ .lzip = try self.createCompressed(
                 compressed_reader.LzipReader,
-                self.options.lzip,
+                self.lzipOptions(),
             ) },
             .lzf => .{ .lzf = try self.createCompressed(
                 compressed_reader.LzfReader,
-                self.options.lzf,
+                self.lzfOptions(),
             ) },
             .zstandard => .{ .zstandard = try self.createCompressed(
                 compressed_reader.ZstandardReader,
-                self.options.zstandard,
+                self.zstandardOptions(),
             ) },
             .lzop => .{ .lzop = try self.createCompressed(
                 compressed_reader.LzopReader,
-                self.options.lzop,
+                self.lzopOptions(),
             ) },
         };
         self.active = prepared;
@@ -437,7 +472,9 @@ pub const Reader = struct {
 
     fn createRaw(self: *Self) Error!*cpio_reader.Reader {
         const reader = try self.allocator.create(cpio_reader.Reader);
-        reader.* = cpio_reader.Reader.initWithOptions(self.allocator, self.options.cpio);
+        var options = self.options.cpio;
+        if (self.options.member_mode) options.stop_after_trailer = true;
+        reader.* = cpio_reader.Reader.initWithOptions(self.allocator, options);
         return reader;
     }
 
@@ -448,13 +485,75 @@ pub const Reader = struct {
     ) Error!*ReaderType {
         const reader = try self.allocator.create(ReaderType);
         errdefer self.allocator.destroy(reader);
+        var cpio_options = self.options.cpio;
+        if (self.options.member_mode) cpio_options.stop_after_trailer = true;
         reader.* = try ReaderType.initWithOptions(self.allocator, .{
-            .cpio = self.options.cpio,
+            .cpio = cpio_options,
             .decoder = decoder_options,
             .decoded_bridge_size = self.options.decoded_bridge_size,
             .max_decoded_size = self.options.max_decoded_size,
         });
         return reader;
+    }
+
+    fn gzipOptions(self: *const Self) codecs.Gzip.Options {
+        var options = self.options.gzip;
+        if (self.options.member_mode) {
+            options.allow_concatenated = false;
+            options.allow_trailing_data = true;
+        }
+        return options;
+    }
+
+    fn bzip2Options(self: *const Self) codecs.Bzip2.Options {
+        var options = self.options.bzip2;
+        if (self.options.member_mode) {
+            options.stop_after_first_stream = true;
+            options.first_stream_retry_granularity = 16;
+        }
+        return options;
+    }
+
+    fn lzmaOptions(self: *const Self) codecs.Lzma.Options {
+        var options = self.options.lzma;
+        if (self.options.member_mode) {
+            options.stop_after_end_marker = true;
+            options.end_marker_input_guard = 16;
+        }
+        return options;
+    }
+
+    fn xzOptions(self: *const Self) codecs.Xz.Options {
+        var options = self.options.xz;
+        if (self.options.member_mode) {
+            options.stop_after_first_stream = true;
+            options.first_stream_footer_retry_granularity = 16;
+        }
+        return options;
+    }
+
+    fn lzfOptions(self: *const Self) codecs.Lzf.Options {
+        var options = self.options.lzf;
+        if (self.options.member_mode) options.stop_after_eof_marker = true;
+        return options;
+    }
+
+    fn lzipOptions(self: *const Self) codecs.Lzip.Options {
+        var options = self.options.lzip;
+        if (self.options.member_mode) options.stop_after_first_member = true;
+        return options;
+    }
+
+    fn zstandardOptions(self: *const Self) codecs.Zstandard.Options {
+        var options = self.options.zstandard;
+        if (self.options.member_mode) options.stop_after_first_frame = true;
+        return options;
+    }
+
+    fn lzopOptions(self: *const Self) codecs.Lzop.Options {
+        var options = self.options.lzop;
+        if (self.options.member_mode) options.stop_after_first_stream = true;
+        return options;
     }
 
     fn recordInput(self: *Self, count: usize) Error!void {
@@ -469,6 +568,22 @@ pub const Reader = struct {
             return error.IntegerOverflow;
     }
 };
+
+fn memberFormatSupported(format: Format) bool {
+    return switch (format) {
+        .raw_cpio,
+        .gzip,
+        .bzip2,
+        .lzma,
+        .xz,
+        .lzip,
+        .lzf,
+        .zstandard,
+        .lzop,
+        => true,
+        .brotli, .compress_z, .lz4, .lz4_legacy => false,
+    };
+}
 
 fn detectMagic(bytes: []const u8) ?Format {
     if (bytes.len >= 2 and bytes[0] == 0x1f and bytes[1] == 0x8b) return .gzip;
