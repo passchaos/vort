@@ -415,11 +415,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - dependency-free CPIO reading and deterministic writing for SVR4 newc/CRC,
   POSIX ODC, and little-/big-endian old binary archives, including regular,
   directory, symlink, and special-file metadata, strict per-format alignment,
-  bounded extraction, bounded caller-output incremental writing for all five
-  formats, streaming CRC verification, CRC byte sums, safe-path classification,
-  GNU cpio bidirectional interoperability, and automatic composition with the
-  same twelve raw/gzip/Bzip2/Brotli/compress/LZMA/XZ/LZ4/lzip/LZF/Zstd/LZOP
-  modes;
+  bounded extraction, bounded caller-output incremental reading and writing
+  for all five formats, streamed CRC/alignment/trailer verification, exact
+  entry events and progress, safe-path classification, GNU cpio bidirectional
+  interoperability, and automatic composition with the same twelve raw/gzip/
+  Bzip2/Brotli/compress/LZMA/XZ/LZ4/lzip/LZF/Zstd/LZOP modes;
 - dependency-free RAR4/RAR5 container parsing plus deterministic stored-file
   and directory writing, non-solid RAR15 and RAR20/26 decompression including
   adaptive/ST-mode, dynamic Huffman, multiblock, table reuse, long-history and

@@ -22,6 +22,23 @@ header/data offsets, and path-safety classification. Regular-file data and
 symbolic-link targets can be extracted into caller-owned buffers or through
 bounded allocation APIs.
 
+`CpioIncrementalReader` parses the same five formats from arbitrarily
+fragmented caller input and streams each stored payload directly into caller
+output. It emits explicit `entry_header` and `entry_done` events, retains only
+the fixed header and current pathname, reports exact input/output progress,
+validates name/data alignment plus CRC byte sums, and requires the physical EOF
+to be confirmed with `finish()` after `TRAILER!!!`. Post-trailer record padding
+is accepted only when every byte is zero. Format changes inside one archive,
+missing trailers and truncated fields/data are rejected.
+
+Reader options independently bound retained control/path bytes, entry count,
+per-entry output, total output, and consumed archive bytes. `reset()` reuses
+the retained pathname allocation across independent archives. Streaming emits
+the stored payload attached to each physical member; unlike the seekable
+one-shot facade, it does not look ahead to replay a later hard-link payload for
+an earlier zero-sized member. Inode, device and link-count metadata are exposed
+so callers can reconstruct such groups without hidden buffering.
+
 `encodeCpioAlloc`, `encodeCpioAppend`, and `encodeCpioInto` write any of the
 five exposed variants (`newc`, `crc`, `odc`, `binary_little`, or
 `binary_big`). Writers support regular files, directories, symbolic links,
@@ -98,18 +115,19 @@ compression argument is `none`, `gzip`, `bzip2`, `brotli`, `compress-z`,
 ## Differential validation
 
 `tools/cpio/diff.py` verifies all five Vort writers with GNU cpio, requires the
-one-byte and micro-buffer incremental schedules to be byte-identical to the
-one-shot writer for every format, reads all four formats GNU cpio can create on
-the host, checks directory and symlink metadata, exercises all twelve wrapper
-choices, and rejects corrupt CRC data, truncated headers, and nonzero bytes
-after the trailer:
+one-byte and micro-buffer incremental writer schedules to be byte-identical to
+the one-shot writer for every format, and runs the incremental reader over
+both schedules for all five Vort formats plus all four formats GNU cpio can
+create on the host. It also checks directory and symlink metadata, exercises
+all twelve wrapper choices, and rejects corrupt CRC data, truncated headers,
+and nonzero bytes after the trailer:
 
 ```sh
 python3 tools/cpio/diff.py --cli path/to/vort --cpio /usr/bin/cpio
 zig build run-cpio-diff -- --cpio /usr/bin/cpio
 ```
 
-Future functionality can add bounded incremental reading and compressed-stream
-composition, one-shot hard-link writer controls, concatenated CPIO members,
-HP-UX device-number variants, and afio's extended ODC header without changing
-the current entry or compression APIs.
+Future functionality can add incremental compressed-stream composition,
+one-shot hard-link writer controls, concatenated CPIO members, HP-UX
+device-number variants, and afio's extended ODC header without changing the
+current entry or compression APIs.

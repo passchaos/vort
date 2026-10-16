@@ -1,10 +1,12 @@
 const archive = @import("cpio/archive.zig");
 const compressed = @import("cpio/compressed.zig");
+const incremental_reader = @import("cpio/incremental_reader.zig");
+const incremental_reader_tests = @import("cpio/incremental_reader_tests.zig");
 const incremental_writer = @import("cpio/incremental_writer.zig");
 const incremental_writer_tests = @import("cpio/incremental_writer_tests.zig");
 const writer = @import("cpio/writer.zig");
 
-pub const Error = archive.Error || writer.Error || compressed.Error || incremental_writer.Error;
+pub const Error = archive.Error || writer.Error || compressed.Error || incremental_reader.Error || incremental_writer.Error;
 pub const Format = archive.Format;
 pub const Kind = archive.Kind;
 pub const Entry = archive.Entry;
@@ -26,6 +28,12 @@ pub const encodeCompressedAlloc = compressed.encodeAlloc;
 pub const encodeCompressedAppend = compressed.encodeAppend;
 pub const decodeCompressedAlloc = compressed.decodeAlloc;
 pub const decodeAutoAlloc = compressed.decodeAutoAlloc;
+pub const IncrementalReader = incremental_reader.Reader;
+pub const IncrementalReaderOptions = incremental_reader.Options;
+pub const IncrementalReaderEntryInfo = incremental_reader.EntryInfo;
+pub const IncrementalReaderPhase = incremental_reader.Phase;
+pub const IncrementalReaderStatus = incremental_reader.Status;
+pub const IncrementalReaderStepResult = incremental_reader.StepResult;
 pub const IncrementalWriter = incremental_writer.Writer;
 pub const IncrementalWriterOptions = incremental_writer.Options;
 pub const IncrementalWriterEntryOptions = incremental_writer.EntryOptions;
@@ -36,6 +44,8 @@ pub const IncrementalWriterStepResult = incremental_writer.StepResult;
 test {
     _ = archive;
     _ = compressed;
+    _ = incremental_reader;
+    _ = incremental_reader_tests;
     _ = incremental_writer;
     _ = incremental_writer_tests;
     _ = writer;

@@ -1793,10 +1793,21 @@ pub fn build(b: *std.Build) void {
             .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
         }),
     });
+    const cpio_incremental_reader_probe_exe = b.addExecutable(.{
+        .name = "vort-cpio-incremental-reader-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/cpio/incremental_reader_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
     const cpio_diff = b.addSystemCommand(&.{ "python3", "tools/cpio/diff.py", "--cli" });
     cpio_diff.addArtifactArg(cli_exe);
     cpio_diff.addArg("--writer");
     cpio_diff.addArtifactArg(cpio_writer_probe_exe);
+    cpio_diff.addArg("--incremental-reader");
+    cpio_diff.addArtifactArg(cpio_incremental_reader_probe_exe);
     if (b.args) |args| cpio_diff.addArgs(args);
     const cpio_diff_step = b.step("run-cpio-diff", "Validate CPIO header formats, metadata, and compression wrappers against optional GNU cpio");
     cpio_diff_step.dependOn(&cpio_diff.step);

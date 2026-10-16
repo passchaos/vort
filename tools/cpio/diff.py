@@ -62,6 +62,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
     parser.add_argument("--writer", type=Path)
+    parser.add_argument("--incremental-reader", type=Path)
     parser.add_argument("--cpio", type=Path)
     args = parser.parse_args()
     cpio_tool = args.cpio or (Path(found) if (found := shutil.which("cpio")) else None)
@@ -92,6 +93,7 @@ def main() -> None:
     reference_writer = 0
     wrapper_cases = 0
     incremental_writer_cases = 0
+    incremental_reader_cases = 0
 
     with tempfile.TemporaryDirectory(prefix="vort-cpio-diff-") as temp_text:
         temp = Path(temp_text)
@@ -112,6 +114,16 @@ def main() -> None:
             run(args.cli, "extract-cpio-file", str(first), "payload.bin", str(output), str(len(payload)))
             if output.read_bytes() != payload:
                 raise AssertionError(f"Vort CPIO {format_name} self-extraction mismatch")
+            if args.incremental_reader is not None:
+                for pattern in ("one", "micro"):
+                    run(
+                        args.incremental_reader,
+                        str(first),
+                        "payload.bin",
+                        str(source),
+                        pattern,
+                    )
+                    incremental_reader_cases += 1
             if cpio_tool is not None:
                 listed = run(cpio_tool, "-it", "--quiet", "-F", str(first)).stdout.splitlines()
                 if listed != ["payload.bin"]:
@@ -201,6 +213,16 @@ def main() -> None:
                 run(args.cli, "extract-cpio-file", str(archive), "hard-a", str(hard_output), str(len(payload)))
                 if hard_output.read_bytes() != payload:
                     raise AssertionError(f"Vort failed GNU cpio {format_name} hard-link resolution")
+                if args.incremental_reader is not None:
+                    for pattern in ("one", "micro"):
+                        run(
+                            args.incremental_reader,
+                            str(archive),
+                            "payload.bin",
+                            str(reference / "payload.bin"),
+                            pattern,
+                        )
+                        incremental_reader_cases += 1
                 reference_writer += 1
 
         crc_archive = temp / "vort-crc-first.cpio"
@@ -239,6 +261,7 @@ def main() -> None:
         f"cpio={cpio_tool is not None} writer_external={writer_external} "
         f"reference_writer={reference_writer} wrapper_cases={wrapper_cases} "
         f"incremental_writer_cases={incremental_writer_cases} "
+        f"incremental_reader_cases={incremental_reader_cases} "
         "corrupt_crc=True truncated=True trailing=True"
     )
 

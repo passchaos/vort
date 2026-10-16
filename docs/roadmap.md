@@ -20798,3 +20798,20 @@ reuse, so production keeps the simpler independently owned plans.
   differential adds ten schedule cases across all five formats
   (`incremental_writer_cases=10`). Bounded raw CPIO reading and composition
   with the twelve incremental outer codecs remain the next streaming gaps.
+
+- Added `CpioIncrementalReader` for the same SVR4 newc/CRC, POSIX ODC, and
+  little-/big-endian old-binary formats. One-shot and incremental parsing now
+  share one fixed-header/name/type validation contract rather than maintaining
+  three duplicated field decoders. The reader accepts arbitrary input/output
+  fragmentation, emits explicit header/done events, streams physical member
+  data without retaining it, verifies CRC byte sums plus zero name/data/post-
+  trailer padding, rejects mid-archive format changes, and requires explicit
+  EOF after `TRAILER!!!`. Path/control, entry, total-output and archive limits
+  are preflighted; reset retains bounded pathname scratch. Focused coverage
+  includes all file kinds and five formats, one-byte/micro fragmentation,
+  backpressure, GNU zero-checksum symlinks, corruption, every truncation cut,
+  mixed formats, unsafe names, limits and exhaustive OOM. The required GNU
+  cpio differential reads all five Vort formats and four GNU-produced formats
+  under both schedules (`incremental_reader_cases=18`). Raw CPIO now has
+  bounded incremental read/write parity; composition with the twelve
+  incremental compression wrappers remains the next CPIO streaming gap.
