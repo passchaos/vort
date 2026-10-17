@@ -21341,7 +21341,7 @@ reuse, so production keeps the simpler independently owned plans.
   distinct trees, duplicate empty metadata and boot image 2; wimlib verifies
   both archives and extracts the first two trees byte-exactly
   (`writer_multi=2`, `writer_multi_wimlib=2`). Focused WIM/LZX coverage is now
-  105 tests. In-place append/update and additional WIM codecs remain follow-ups.
+  107 tests. In-place append/update and additional WIM codecs remain follow-ups.
 
 - Added deterministic standard SWM writing. `splitWimAlloc` accepts a supported
   standalone non-solid WIM, while one- and multi-image composition helpers
@@ -21375,4 +21375,16 @@ reuse, so production keeps the simpler independently owned plans.
   `writer_pipable_wimlib=2`). Explicit-integrity stored/XPRESS variants also
   pass seekable extraction and wimlib verify (`writer_pipable_integrity=2`,
   `writer_pipable_integrity_wimlib=2`). This closes ordinary pipable output;
-  concatenated pipable SWM writing, LZX/LZMS and in-place update remain open.
+  LZX/LZMS and in-place update remain open.
+
+- Added deterministic pipable SWM composition. One- and multi-image helpers run
+  the standard soft-size planner, convert every local-lookup part to `WLPWM`,
+  preserve shared GUID/compression/image/part geometry, and return the same
+  caller-owned part surface as ordinary SWM. Each part works independently for
+  seekable access, while direct caller-order concatenation crosses the previous
+  part's trailing and next part's leading header without repacking. Unit tests
+  route a later-part image through `WimArchiveSet`, then extract it from a
+  one-byte-input concatenated stream and exhaust all allocation failures.
+  Stored and XPRESS probes use 13-byte input/17-byte output cuts; wimlib joins
+  the Vort parts with `--check`, verifies, and extracts both shared and unique
+  content (`writer_pipable_split=2`, `writer_pipable_split_wimlib=2`).

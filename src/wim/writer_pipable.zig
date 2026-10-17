@@ -30,8 +30,8 @@ pub fn encodeAlloc(
     options: Options,
 ) Error![]u8 {
     const archive = try archive_mod.Archive.init(input);
-    if (archive.header.pipable or archive.header.total_parts != 1 or
-        archive.header.part_number != 1 or archive.header.image_count == 0)
+    if (archive.header.pipable or archive.header.image_count == 0 or
+        ((archive.header.flags & 0x08 != 0) != (archive.header.total_parts > 1)))
         return error.UnsupportedPipableWimInput;
     var lookup = try archive.readLookupTableRawAlloc(
         allocator,
@@ -58,7 +58,11 @@ pub fn encodeAlloc(
         }
         plan.* = .{ .entry = entry };
     }
-    if (metadata_count != archive.header.image_count)
+    const expected_metadata: u32 = if (archive.header.part_number == 1)
+        archive.header.image_count
+    else
+        0;
+    if (metadata_count != expected_metadata)
         return error.UnsupportedPipableWimInput;
 
     var output: std.ArrayList(u8) = .empty;
@@ -180,7 +184,7 @@ fn validateEntry(
     header: format.Header,
     entry: archive_mod.LookupEntry,
 ) Error!void {
-    if (entry.part_number != 1 or entry.reference_count == 0 or
+    if (entry.part_number != header.part_number or entry.reference_count == 0 or
         entry.resource.isSolid() or entry.resource.isSpanned())
         return error.UnsupportedPipableWimInput;
     if (entry.resource.isCompressed() and header.compression == .none)
@@ -319,7 +323,7 @@ fn appendLookupEntry(
     const offset = output.items.len;
     try output.appendNTimes(allocator, 0, format.lookup_entry_size);
     writeResourceHeader(output.items, offset, plan.output_resource);
-    writeU16(output.items, offset + 24, 1);
+    writeU16(output.items, offset + 24, plan.entry.part_number);
     writeU32(output.items, offset + 26, plan.entry.reference_count);
     @memcpy(output.items[offset + 30 .. offset + 50], &plan.entry.sha1);
 }
@@ -369,11 +373,11 @@ fn writeHeader(
     @memcpy(output[0..8], &format.pipable_magic);
     writeU32(output, 8, format.header_size);
     writeU32(output, 12, source.version);
-    writeU32(output, 16, source.flags & ~@as(u32, 0x0000_0048));
+    writeU32(output, 16, source.flags & ~@as(u32, 0x0000_0040));
     writeU32(output, 20, @intCast(source.chunk_size));
     @memcpy(output[24..40], &source.guid);
-    writeU16(output, 40, 1);
-    writeU16(output, 42, 1);
+    writeU16(output, 40, source.part_number);
+    writeU16(output, 42, source.total_parts);
     writeU32(output, 44, source.image_count);
     if (full) {
         writeResourceHeader(output, 48, lookup);

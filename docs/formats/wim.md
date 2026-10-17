@@ -215,6 +215,15 @@ wimlib verification, but the raw table between final XML and trailing header is
 not consumed by `WimPipableStreamPathExtractor`. Pipable WIM remains a wimlib
 extension and intentionally uses non-Microsoft magic.
 
+`encodeWimPipableSplitAlloc` and `encodeWimImagesPipableSplitAlloc` compose
+the standard SWM planner with per-part pipable conversion. Metadata remains in
+part 1, each part retains its local lookup and XML copies, and all leading and
+trailing headers preserve the shared part geometry with boot index zero. Parts
+are individually seekable WIMs; concatenating their bytes in part-number order
+creates the exact stream consumed by `WimPipableStreamPathExtractor`, including
+cross-part target blobs. The returned `WimEncodedSplitArchive` owns every part
+as with the standard split API.
+
 The current writer remains whole-archive and caller-buffer based. In-place image
 append/update, wire-spanned individual resources, LZX/LZMS encoding, automatic
 host-filesystem security capture, short names, and tagged metadata remain
@@ -427,3 +436,8 @@ and extracts both images byte-exactly (`writer_pipable=2`,
 `writer_pipable_wimlib=2`). Separate seekable stored/XPRESS variants enable
 integrity and pass Vort extraction plus wimlib verification
 (`writer_pipable_integrity=2`, `writer_pipable_integrity_wimlib=2`).
+Stored and XPRESS pipable SWM sets are also tested independently: Vort performs
+seekable `WimArchiveSet` routing and 13-byte-input/17-byte-output extraction
+from directly concatenated parts, while wimlib joins with `--check`, verifies,
+and extracts the later image (`writer_pipable_split=2`,
+`writer_pipable_split_wimlib=2`).

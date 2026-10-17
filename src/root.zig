@@ -1685,6 +1685,8 @@ pub const encodeWimPipableInto = wim.encodePipableInto;
 pub const encodeWimImagesPipableAlloc = wim.encodeImagesPipableAlloc;
 pub const encodeWimImagesPipableAppend = wim.encodeImagesPipableAppend;
 pub const encodeWimImagesPipableInto = wim.encodeImagesPipableInto;
+pub const encodeWimPipableSplitAlloc = wim.encodePipableSplitAlloc;
+pub const encodeWimImagesPipableSplitAlloc = wim.encodeImagesPipableSplitAlloc;
 
 pub const Lznt1Error = lznt1.Error;
 pub const Lznt1EncodeOptions = lznt1.EncodeOptions;

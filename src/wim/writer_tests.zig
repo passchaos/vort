@@ -669,6 +669,7 @@ test "WIM pipable writer supports seekable and byte-progressive extraction" {
     const progressive = try extractPipableOneByteAlloc(
         allocator,
         encoded,
+        1,
         "nested/payload.bin",
         payload.len,
     );
@@ -700,6 +701,65 @@ test "WIM pipable writer supports seekable and byte-progressive extraction" {
         error.UnsupportedPipableWimInput,
         writer.toPipableAlloc(allocator, encoded, .{}),
     );
+}
+
+test "WIM pipable split writer streams across concatenated SWM parts" {
+    const allocator = std.testing.allocator;
+    const large = "L" ** 700;
+    const shared = "S" ** 300;
+    const second_only = "T" ** 400;
+    const first_entries = [_]writer.Entry{
+        .{ .path = "large.bin", .data = large },
+        .{ .path = "shared.bin", .data = shared },
+    };
+    const second_entries = [_]writer.Entry{
+        .{ .path = "second.bin", .data = second_only },
+        .{ .path = "shared.bin", .data = shared },
+    };
+    const images = [_]writer.Image{
+        .{ .name = "first", .entries = &first_entries },
+        .{ .name = "second", .entries = &second_entries },
+    };
+    var split = try writer.encodeImagesPipableSplitAlloc(
+        allocator,
+        &images,
+        .{ .compression = .stored, .boot_index = 2 },
+        .{ .max_part_size = 600 },
+        .{},
+    );
+    defer split.deinit();
+    try std.testing.expect(split.parts.len >= 3);
+    const archives = try allocator.alloc(archive_mod.Archive, split.parts.len);
+    defer allocator.free(archives);
+    var concatenated: std.ArrayList(u8) = .empty;
+    defer concatenated.deinit(allocator);
+    for (split.parts, archives, 0..) |part, *archive, index| {
+        archive.* = try archive_mod.Archive.init(part.bytes);
+        try std.testing.expect(archive.header.pipable);
+        try std.testing.expectEqual(@as(u16, @intCast(index + 1)), archive.header.part_number);
+        try std.testing.expectEqual(@as(u16, @intCast(split.parts.len)), archive.header.total_parts);
+        try std.testing.expectEqual(@as(u32, 0), archive.header.boot_index);
+        try concatenated.appendSlice(allocator, part.bytes);
+    }
+    const set = try set_mod.ArchiveSet.init(archives);
+    const seekable = try set.extractByPathAllocLimited(
+        allocator,
+        2,
+        "second.bin",
+        second_only.len,
+        limits,
+    );
+    defer allocator.free(seekable);
+    try std.testing.expectEqualSlices(u8, second_only, seekable);
+    const progressive = try extractPipableOneByteAlloc(
+        allocator,
+        concatenated.items,
+        2,
+        "second.bin",
+        second_only.len,
+    );
+    defer allocator.free(progressive);
+    try std.testing.expectEqualSlices(u8, second_only, progressive);
 }
 
 test "WIM writer validates paths, XML and compression geometry" {
@@ -991,6 +1051,31 @@ test "WIM pipable writer is allocation failure safe" {
     );
 }
 
+test "WIM pipable split writer is allocation failure safe" {
+    const AllocationTest = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const entries = [_]writer.Entry{
+                .{ .path = "a", .data = "a" ** 256 },
+                .{ .path = "b", .data = "b" ** 256 },
+            };
+            var split = try writer.encodePipableSplitAlloc(
+                allocator,
+                &entries,
+                .{ .compression = .stored },
+                .{ .max_part_size = 300 },
+                .{},
+            );
+            defer split.deinit();
+            try std.testing.expect(split.parts.len >= 2);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        AllocationTest.run,
+        .{},
+    );
+}
+
 fn utf16ContainsAscii(utf16: []const u8, ascii: []const u8) bool {
     if (ascii.len == 0) return true;
     if (utf16.len < ascii.len * 2) return false;
@@ -1032,10 +1117,12 @@ fn countUtf16Ascii(utf16: []const u8, ascii: []const u8) usize {
 fn extractPipableOneByteAlloc(
     allocator: std.mem.Allocator,
     input: []const u8,
+    image_index: u32,
     path: []const u8,
     expected_len: usize,
 ) ![]u8 {
     var extractor = pipable_stream.PathExtractor.init(allocator, .{
+        .image_index = image_index,
         .path = path,
         .max_output_len = expected_len,
         .limits = .{

@@ -186,6 +186,8 @@ def main() -> None:
     writer_pipable_wimlib_cases = 0
     writer_pipable_integrity_cases = 0
     writer_pipable_integrity_wimlib_cases = 0
+    writer_pipable_split_cases = 0
+    writer_pipable_split_wimlib_cases = 0
     stream_error_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-wim-") as temp_text:
@@ -960,6 +962,93 @@ def main() -> None:
             if wimlib is not None:
                 run(wimlib, "verify", integrity_image)
                 writer_pipable_integrity_wimlib_cases += 1
+
+        for writer_compression, expected_compression in (
+            ("stored", "none"),
+            ("xpress", "xpress"),
+        ):
+            split_prefix = temp / (
+                f"vort-writer-pipable-split-{writer_compression}"
+            )
+            run(args.writer, split_prefix, writer_compression, "pipable-split")
+            split_parts = sorted(
+                temp.glob(f"{split_prefix.name}.part*"),
+                key=lambda path: int(path.name.rsplit("part", 1)[1]),
+            )
+            if len(split_parts) < 3:
+                raise AssertionError("Vort pipable SWM writer part count mismatch")
+            concatenated = temp / (
+                f"vort-writer-pipable-concat-{writer_compression}.wim"
+            )
+            concatenated.write_bytes(
+                b"".join(part.read_bytes() for part in split_parts)
+            )
+            for index, part in enumerate(split_parts, 1):
+                listing = run(args.cli, "list-wim-file", part).stdout
+                for marker in (
+                    b"layout=pipable",
+                    f"compression={expected_compression}".encode(),
+                    f"part={index}/{len(split_parts)}".encode(),
+                ):
+                    if marker not in listing:
+                        raise AssertionError(
+                            f"Vort pipable SWM header missing {marker!r}"
+                        )
+            set_output = temp / f"writer-pipable-split-set-{writer_compression}.out"
+            run(
+                args.cli,
+                "extract-wim-parts-path",
+                2,
+                "/second.bin",
+                set_output,
+                70_000,
+                *split_parts,
+            )
+            if set_output.read_bytes() != split_expected[(2, "/second.bin")]:
+                raise AssertionError("Vort pipable SWM set extraction mismatch")
+            progressive = temp / (
+                f"writer-pipable-split-progressive-{writer_compression}.out"
+            )
+            run(
+                args.cli,
+                "extract-wim-pipable-stream-path",
+                concatenated,
+                2,
+                "/second.bin",
+                progressive,
+                70_000,
+                13,
+                17,
+            )
+            if progressive.read_bytes() != split_expected[(2, "/second.bin")]:
+                raise AssertionError("Vort concatenated pipable SWM mismatch")
+            writer_pipable_split_cases += 1
+
+            if wimlib is not None:
+                joined = temp / (
+                    f"vort-writer-pipable-split-joined-{writer_compression}.wim"
+                )
+                run(wimlib, "join", joined, *split_parts, "--check")
+                run(wimlib, "verify", joined)
+                destination = temp / (
+                    f"writer-pipable-split-wimlib-{writer_compression}"
+                )
+                run(
+                    wimlib,
+                    "extract",
+                    joined,
+                    2,
+                    f"--dest-dir={destination}",
+                    "--no-acls",
+                )
+                if (
+                    (destination / "second.bin").read_bytes()
+                    != split_expected[(2, "/second.bin")]
+                    or (destination / "shared.bin").read_bytes()
+                    != split_expected[(2, "/shared.bin")]
+                ):
+                    raise AssertionError("wimlib pipable SWM join mismatch")
+                writer_pipable_split_wimlib_cases += 1
         if wimlib is not None:
             encrypted_result = run(wimlib, "info", encrypted_esd, check=False)
             if encrypted_result.returncode == 0 or b"encrypted" not in encrypted_result.stderr.lower():
@@ -1452,6 +1541,8 @@ def main() -> None:
         f"writer_pipable_wimlib={writer_pipable_wimlib_cases} "
         f"writer_pipable_integrity={writer_pipable_integrity_cases} "
         f"writer_pipable_integrity_wimlib={writer_pipable_integrity_wimlib_cases} "
+        f"writer_pipable_split={writer_pipable_split_cases} "
+        f"writer_pipable_split_wimlib={writer_pipable_split_wimlib_cases} "
         f"malformed={malformed}"
     )
 

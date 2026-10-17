@@ -440,6 +440,72 @@ pub fn encodeImagesPipableInto(
     return encoded.len;
 }
 
+pub fn encodePipableSplitAlloc(
+    allocator: std.mem.Allocator,
+    entries: []const Entry,
+    options: Options,
+    split_options: SplitOptions,
+    pipable_options: PipableOptions,
+) Error!SplitArchive {
+    var standard_options = options;
+    standard_options.integrity = false;
+    var standard_split_options = split_options;
+    standard_split_options.integrity = false;
+    var standard = try encodeSplitAlloc(
+        allocator,
+        entries,
+        standard_options,
+        standard_split_options,
+    );
+    defer standard.deinit();
+    return pipableSplitAlloc(allocator, standard.parts, pipable_options);
+}
+
+pub fn encodeImagesPipableSplitAlloc(
+    allocator: std.mem.Allocator,
+    images: []const Image,
+    options: ImagesOptions,
+    split_options: SplitOptions,
+    pipable_options: PipableOptions,
+) Error!SplitArchive {
+    var standard_options = options;
+    standard_options.integrity = false;
+    var standard_split_options = split_options;
+    standard_split_options.integrity = false;
+    var standard = try encodeImagesSplitAlloc(
+        allocator,
+        images,
+        standard_options,
+        standard_split_options,
+    );
+    defer standard.deinit();
+    return pipableSplitAlloc(allocator, standard.parts, pipable_options);
+}
+
+fn pipableSplitAlloc(
+    allocator: std.mem.Allocator,
+    source_parts: []const SplitPart,
+    options: PipableOptions,
+) Error!SplitArchive {
+    if (source_parts.len == 0) return error.InvalidWimSplitOptions;
+    const parts = try allocator.alloc(SplitPart, source_parts.len);
+    errdefer allocator.free(parts);
+    var initialized: usize = 0;
+    errdefer for (parts[0..initialized]) |part| allocator.free(part.bytes);
+    for (source_parts, parts) |source, *part| {
+        part.* = .{
+            .part_number = source.part_number,
+            .bytes = try pipable_writer.encodeAlloc(
+                allocator,
+                source.bytes,
+                options,
+            ),
+        };
+        initialized += 1;
+    }
+    return .{ .allocator = allocator, .parts = parts };
+}
+
 fn deinitPlannedImages(
     allocator: std.mem.Allocator,
     planned: *std.ArrayList(PlannedImage),

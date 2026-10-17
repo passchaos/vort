@@ -68,6 +68,8 @@ pub const encodePipableInto = writer.encodePipableInto;
 pub const encodeImagesPipableAlloc = writer.encodeImagesPipableAlloc;
 pub const encodeImagesPipableAppend = writer.encodeImagesPipableAppend;
 pub const encodeImagesPipableInto = writer.encodeImagesPipableInto;
+pub const encodePipableSplitAlloc = writer.encodePipableSplitAlloc;
+pub const encodeImagesPipableSplitAlloc = writer.encodeImagesPipableSplitAlloc;
 
 test {
     _ = format;

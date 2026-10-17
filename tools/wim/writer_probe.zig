@@ -18,7 +18,9 @@ pub fn main(init: std.process.Init) !void {
     if (std.mem.eql(u8, mode, "multi"))
         return writeMultiImage(init, output_path, compression);
     if (std.mem.eql(u8, mode, "split"))
-        return writeSplit(init, output_path, compression);
+        return writeSplit(init, output_path, compression, false);
+    if (std.mem.eql(u8, mode, "pipable-split"))
+        return writeSplit(init, output_path, compression, true);
     if (std.mem.eql(u8, mode, "pipable"))
         return writePipable(init, output_path, compression, false);
     if (std.mem.eql(u8, mode, "pipable-integrity"))
@@ -170,6 +172,7 @@ fn writeSplit(
     init: std.process.Init,
     output_prefix: []const u8,
     compression: vort.WimEncodeCompression,
+    pipable: bool,
 ) !void {
     var first_data: [70_000]u8 = undefined;
     var second_data: [70_000]u8 = undefined;
@@ -189,12 +192,21 @@ fn writeSplit(
         .{ .name = "first", .entries = &first_entries },
         .{ .name = "second", .entries = &second_entries },
     };
-    var split = try vort.encodeWimImagesSplitAlloc(
-        init.gpa,
-        &images,
-        .{ .compression = compression, .boot_index = 2 },
-        .{ .max_part_size = 80_000 },
-    );
+    var split = if (pipable)
+        try vort.encodeWimImagesPipableSplitAlloc(
+            init.gpa,
+            &images,
+            .{ .compression = compression, .boot_index = 2 },
+            .{ .max_part_size = 80_000 },
+            .{},
+        )
+    else
+        try vort.encodeWimImagesSplitAlloc(
+            init.gpa,
+            &images,
+            .{ .compression = compression, .boot_index = 2 },
+            .{ .max_part_size = 80_000 },
+        );
     defer split.deinit();
     for (split.parts) |part| {
         const path = try std.fmt.allocPrint(
