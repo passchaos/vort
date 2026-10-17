@@ -411,7 +411,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   positional parsing that avoids loading the complete archive and fetches only
   tail/auxiliary metadata plus selected-folder packed ranges, and a
   symbol-progressive source entry decoder for Copy/Deflate/Bzip2/LZMA/LZMA2/PPMd7,
-  7zAES, solid-substream selection, Delta, and all classic BCJ filters;
+  7zAES, solid-substream selection, Delta, all classic BCJ filters, and BCJ2's
+  independently packed MAIN/CALL/JUMP/range branches;
 - deterministic TAR reading/writing with USTAR, PAX and GNU long-name support,
   old GNU plus PAX sparse 0.0/0.1/1.0 reading, deterministic PAX-1.0 and
   old-GNU writing with chained sparse extension headers,

@@ -1557,6 +1557,13 @@ pub fn main(init: std.process.Init) !void {
     );
     defer init.gpa.free(seven_zip);
     try fuzzOne(init.gpa, seven_zip);
+    const seven_zip_bcj2 = try vort.encodeSevenZipAlloc(
+        init.gpa,
+        &seven_zip_entries,
+        .{ .compression = .lzma2, .solid = true, .bcj2 = true },
+    );
+    defer init.gpa.free(seven_zip_bcj2);
+    try fuzzOne(init.gpa, seven_zip_bcj2);
 
     const lz4hc_frame = try vort.lz4EncodeHcFrameAlloc(
         init.gpa,
@@ -1955,7 +1962,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 39,
+        samples.len + 40,
         data.len,
     });
     try stdout.flush();

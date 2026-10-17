@@ -7,6 +7,7 @@
 const std = @import("std");
 const archive_mod = @import("archive.zig");
 const aes = @import("aes.zig");
+const bcj2_decoder = @import("source_entry/bcj2_decoder.zig");
 const checksum = @import("../checksum.zig");
 const codec_mod = @import("source_entry/codec.zig");
 const core = @import("../core.zig");
@@ -18,7 +19,7 @@ const types = @import("types.zig");
 const xz = @import("../xz.zig");
 const xz_filters = @import("../xz/filters.zig");
 
-pub const Decoder = struct {
+pub const LinearDecoder = struct {
     allocator: std.mem.Allocator,
     source: source_mod.Source,
     options: Options,
@@ -92,7 +93,7 @@ pub const Decoder = struct {
         packed_data_limit: u64,
         entry: types.Entry,
         options: Options,
-    ) Error!Decoder {
+    ) Error!LinearDecoder {
         const entry_size = std.math.cast(usize, entry.size) orelse
             return error.OutputLimitExceeded;
         if (entry_size > options.max_output_len) return error.OutputLimitExceeded;
@@ -246,7 +247,7 @@ pub const Decoder = struct {
         };
     }
 
-    pub fn deinit(self: *Decoder) void {
+    pub fn deinit(self: *LinearDecoder) void {
         if (self.decryptor) |*decryptor| decryptor.deinit();
         if (self.filters) |*filters| filters.deinit();
         self.filtered.deinit(self.allocator);
@@ -256,7 +257,7 @@ pub const Decoder = struct {
         self.* = undefined;
     }
 
-    pub fn snapshot(self: *const Decoder) Snapshot {
+    pub fn snapshot(self: *const LinearDecoder) Snapshot {
         return .{
             .folder_produced = self.folder_produced,
             .entry_written = self.entry_written,
@@ -270,14 +271,14 @@ pub const Decoder = struct {
         };
     }
 
-    pub fn step(self: *Decoder, output: []u8) Error!core.StepResult {
+    pub fn step(self: *LinearDecoder, output: []u8) Error!core.StepResult {
         return self.stepInternal(output) catch |err| {
             self.last_error_name = @errorName(err);
             return err;
         };
     }
 
-    fn stepInternal(self: *Decoder, output: []u8) Error!core.StepResult {
+    fn stepInternal(self: *LinearDecoder, output: []u8) Error!core.StepResult {
         if (self.done) return .{ .status = .done };
         if (self.empty_entry) {
             self.done = true;
@@ -361,7 +362,7 @@ pub const Decoder = struct {
         }
     }
 
-    fn fillInput(self: *Decoder) Error!usize {
+    fn fillInput(self: *LinearDecoder) Error!usize {
         try self.compactInput();
         const available = self.input_buffer.len - self.input_len;
         if (available == 0) return 0;
@@ -388,7 +389,7 @@ pub const Decoder = struct {
         return count;
     }
 
-    fn acceptDecoded(self: *Decoder, raw: []const u8, finish: bool) Error!void {
+    fn acceptDecoded(self: *LinearDecoder, raw: []const u8, finish: bool) Error!void {
         const bytes = if (self.filters) |*filter_decoder| filtered: {
             self.filtered.clearRetainingCapacity();
             try filter_decoder.push(raw, finish, &self.filtered);
@@ -409,7 +410,7 @@ pub const Decoder = struct {
         self.folder_crc.update(bytes);
     }
 
-    fn compactInput(self: *Decoder) Error!void {
+    fn compactInput(self: *LinearDecoder) Error!void {
         if (self.input_start == 0) return;
         const remaining = self.input_len - self.input_start;
         std.mem.copyForwards(
@@ -422,7 +423,7 @@ pub const Decoder = struct {
     }
 
     fn drainDecoded(
-        self: *Decoder,
+        self: *LinearDecoder,
         output: []u8,
         output_written: *usize,
     ) bool {
@@ -456,7 +457,7 @@ pub const Decoder = struct {
         return true;
     }
 
-    fn validatePackedEnd(self: *Decoder) Error!void {
+    fn validatePackedEnd(self: *LinearDecoder) Error!void {
         if (self.packed_validated) return;
         if (self.packed_remaining != 0 or self.input_start != self.input_len or
             self.aes_plain_remaining != 0)
@@ -466,7 +467,7 @@ pub const Decoder = struct {
         self.packed_validated = true;
     }
 
-    fn finishChecks(self: *Decoder) Error!void {
+    fn finishChecks(self: *LinearDecoder) Error!void {
         if (self.folder_produced != self.folder_size or
             self.entry_written != self.entry_end - self.entry_start)
             return error.SizeMismatch;
@@ -477,7 +478,7 @@ pub const Decoder = struct {
     }
 };
 
-fn parseFilter(coder: streams_mod.Coder) Decoder.Error!xz.Filter {
+fn parseFilter(coder: streams_mod.Coder) LinearDecoder.Error!xz.Filter {
     const filter_id: u64 = switch (coder.method) {
         .delta => 0x03,
         .x86 => 0x04,
@@ -495,6 +496,89 @@ fn parseFilter(coder: streams_mod.Coder) Decoder.Error!xz.Filter {
         error.UnsupportedXzFeature => error.Unsupported7zFeature,
     };
 }
+
+pub const Decoder = union(enum) {
+    linear: LinearDecoder,
+    bcj2: bcj2_decoder.Decoder,
+
+    pub const Options = LinearDecoder.Options;
+    pub const Snapshot = LinearDecoder.Snapshot;
+    pub const Error = LinearDecoder.Error || bcj2_decoder.Error;
+
+    pub fn init(
+        allocator: std.mem.Allocator,
+        source: source_mod.Source,
+        streams: *const streams_mod.Streams,
+        packed_data_limit: u64,
+        entry: types.Entry,
+        options: Options,
+    ) Error!Decoder {
+        if (entry.folder_index) |folder_index| {
+            if (folder_index >= streams.folders.len) return error.Invalid7zArchive;
+            if (streams.folders[folder_index].bcj2_coder_index != null)
+                return .{ .bcj2 = try bcj2_decoder.Decoder.init(
+                    allocator,
+                    source,
+                    streams,
+                    packed_data_limit,
+                    entry,
+                    .{
+                        .max_output_len = options.max_output_len,
+                        .max_dictionary_size = options.max_dictionary_size,
+                        .max_folder_output_len = options.max_folder_output_len,
+                        .max_packed_stream_size = options.max_packed_stream_size,
+                        .max_kdf_cycles_power = options.max_kdf_cycles_power,
+                        .password = options.password,
+                        .input_buffer_size = options.input_buffer_size,
+                        .decoded_buffer_size = options.decoded_buffer_size,
+                    },
+                ) };
+        }
+        return .{ .linear = try LinearDecoder.init(
+            allocator,
+            source,
+            streams,
+            packed_data_limit,
+            entry,
+            options,
+        ) };
+    }
+
+    pub fn deinit(self: *Decoder) void {
+        switch (self.*) {
+            .linear => |*decoder| decoder.deinit(),
+            .bcj2 => |*decoder| decoder.deinit(),
+        }
+        self.* = undefined;
+    }
+
+    pub fn step(self: *Decoder, output: []u8) Error!core.StepResult {
+        return switch (self.*) {
+            .linear => |*decoder| decoder.step(output),
+            .bcj2 => |*decoder| decoder.step(output),
+        };
+    }
+
+    pub fn snapshot(self: *const Decoder) Snapshot {
+        return switch (self.*) {
+            .linear => |*decoder| decoder.snapshot(),
+            .bcj2 => |*decoder| blk: {
+                const snap = decoder.snapshot();
+                break :blk .{
+                    .folder_produced = snap.folder_produced,
+                    .entry_written = snap.entry_written,
+                    .source_bytes_remaining = snap.source_bytes_remaining,
+                    .buffered_codec_input = snap.buffered_codec_input,
+                    .buffered_decoded_output = snap.buffered_decoded_output,
+                    .codec_name = snap.codec_name,
+                    .encrypted = snap.encrypted,
+                    .done = snap.done,
+                    .last_error_name = snap.last_error_name,
+                };
+            },
+        };
+    }
+};
 
 fn result(
     input_read: usize,

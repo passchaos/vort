@@ -18045,12 +18045,15 @@ reuse, so production keeps the simpler independently owned plans.
   once through Vail, decrypts CBC blocks before the codec, incrementally applies
   Delta and all classic BCJ filters with bounded history/overlap, discards solid
   prefixes and suffixes, honors caller backpressure, and validates packed,
-  folder, and entry CRCs. Sixteen real file-backed differential variants cover
+  folder, and entry CRCs. Fifty-four real file-backed differential variants cover
   every supported data plane, solid/encoded/encrypted headers, and x86 filters;
   tiny-buffer, short-read, wrong-password, resource-limit, and OOM tests cover
   state transitions. PPMd7 retains its bounded model while consuming only a
-  512-byte range-decoder transaction window. Branched BCJ2 remains the explicit
-  incremental data-plane gap while its allocating extraction path stays supported.
+  512-byte range-decoder transaction window. BCJ2 owns four independent
+  positional/AES/CRC branch readers, incrementally decompresses MAIN, consumes
+  CALL/JUMP targets and range decisions on demand, merges converted addresses
+  under caller backpressure, and validates exact branch exhaustion. Real
+  converted and four-AES archives plus all seven Vort primary codecs pass.
   Deeper LZMA parsing, other branching or multi-packed-stream graphs,
   comments, and start-position properties remain follow-up work. See
   `docs/formats/7z.md`.

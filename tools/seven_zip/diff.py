@@ -288,6 +288,8 @@ def main() -> None:
                     )
                 verify_with_vort(args.cli, archive, expected_vort)
                 verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
+                verify_with_vort_source_stream(args.cli, archive, expected_vort)
+                stream_variants += 1
             vort_writer_variants += 7
 
             encryption_password = "vort-password-密码"
@@ -430,6 +432,8 @@ def main() -> None:
                     )
                 verify_with_vort(args.cli, archive, expected_vort)
                 verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
+                verify_with_vort_source_stream(args.cli, archive, expected_vort)
+                stream_variants += 1
             vort_writer_variants += 7
 
             for metadata_compression in (
@@ -509,6 +513,8 @@ def main() -> None:
                     raise AssertionError(f"Vort BCJ2 {compression} output is not deterministic")
                 verify_with_vort(args.cli, archive, expected_vort)
                 verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
+                verify_with_vort_source_stream(args.cli, archive, expected_vort)
+                stream_variants += 1
             vort_writer_variants += 7
 
             tree = temp / "tree"
@@ -710,6 +716,12 @@ def main() -> None:
                 )
                 create_reference_payload(reference_tool, filter_tree, archive, payload, options)
                 verify_with_vort(args.cli, archive, {"payload.bin": payload})
+                verify_with_vort_source_stream(
+                    args.cli,
+                    archive,
+                    {"payload.bin": payload},
+                )
+                stream_variants += 1
             external_variants += len(filter_variants)
 
             encrypted_payload = b"7-Zip AES reference payload\n" * 37
@@ -797,6 +809,13 @@ def main() -> None:
             )
             external_variants += 1
             source_variants += 1
+            verify_with_vort_source_stream(
+                args.cli,
+                encrypted_bcj2_archive,
+                {"payload.bin": x86_payload},
+                "seven-zip-password",
+            )
+            stream_variants += 1
 
             wrong_password = run(
                 args.cli,
@@ -901,6 +920,13 @@ def main() -> None:
             )
             vort_writer_variants += 1
             source_variants += 1
+            verify_with_vort_source_stream(
+                args.cli,
+                encrypted_bcj2_output,
+                {"payload.bin": x86_payload},
+                encryption_password,
+            )
+            stream_variants += 1
 
             writer_variants = {
                 "lzma2-multichunk": (

@@ -668,6 +668,33 @@ test "7z reader decodes a real LZMA2 BCJ2 folder" {
     );
 }
 
+test "7z source entry decoder streams a real converted BCJ2 folder" {
+    const encoded_hex = @embedFile("seven_zip/testdata/7zip-bcj2.7z.hex");
+    const encoded = try std.testing.allocator.alloc(u8, encoded_hex.len / 2);
+    defer std.testing.allocator.free(encoded);
+    _ = try std.fmt.hexToBytes(encoded, std.mem.trim(u8, encoded_hex, "\r\n \t"));
+    var context = SourceTestContext{ .bytes = encoded, .max_chunk = 3 };
+    const parsed = try parseSourceAlloc(std.testing.allocator, context.source());
+    defer parsed.deinit();
+    const decoded = try decodeSourceEntryFragmented(
+        std.testing.allocator,
+        &parsed,
+        parsed.entries[0],
+        .{
+            .max_output_len = 9216,
+            .max_folder_output_len = 9216,
+            .input_buffer_size = 17,
+            .decoded_buffer_size = 7,
+        },
+        5,
+    );
+    defer std.testing.allocator.free(decoded);
+    const digest = std.crypto.hash.Md5.hashResult(decoded);
+    var expected_digest: [16]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&expected_digest, "2f299cef81f2f837cbcd62726befc2e2");
+    try std.testing.expectEqual(expected_digest, digest);
+}
+
 test "7z reader decodes a real four-branch AES BCJ2 folder" {
     const allocator = std.testing.allocator;
     const password = "seven-zip-password";
@@ -1064,6 +1091,13 @@ test "7z source entry decoder streams AES filters and releases allocation failur
             .input_buffer_size = 15,
         }),
     );
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        parsed.entryDecoder(std.testing.allocator, parsed.entries[0], .{
+            .password = encryption.password,
+            .max_packed_stream_size = 1,
+        }),
+    );
     var blocked = try parsed.entryDecoder(std.testing.allocator, parsed.entries[0], .{
         .password = encryption.password,
         .max_output_len = payload.len,
@@ -1076,7 +1110,6 @@ test "7z source entry decoder streams AES filters and releases allocation failur
         core.StepResult.Status.need_output,
         (try blocked.step(&.{})).status,
     );
-
     const decoded = try decodeSourceEntryFragmented(
         std.testing.allocator,
         &parsed,
@@ -1172,20 +1205,131 @@ test "7z source entry decoder streams compound filters" {
     try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
-test "7z source entry decoder reports remaining BCJ2 data plane" {
+test "7z source entry decoder streams BCJ2 data plane" {
+    const prefix = "BCJ2 solid prefix\n" ** 97;
     const payload = "remaining incremental graph payload\n" ** 64;
-    const entries = [_]EncodeEntry{.{ .name = "payload.bin", .data = payload }};
+    const entries = [_]EncodeEntry{
+        .{ .name = "prefix.bin", .data = prefix },
+        .{ .name = "payload.bin", .data = payload },
+    };
     const encoded = try encodeAlloc(std.testing.allocator, &entries, .{
         .compression = .lzma2,
         .bcj2 = true,
+        .solid = true,
     });
     defer std.testing.allocator.free(encoded);
     var context = SourceTestContext{ .bytes = encoded, .max_chunk = 31 };
     const parsed = try parseSourceAlloc(std.testing.allocator, context.source());
     defer parsed.deinit();
+    const decoded = try decodeSourceEntryFragmented(
+        std.testing.allocator,
+        &parsed,
+        parsed.entries[1],
+        .{
+            .max_output_len = payload.len,
+            .max_folder_output_len = prefix.len + payload.len,
+            .input_buffer_size = 17,
+            .decoded_buffer_size = 11,
+        },
+        5,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "7z source entry decoder streams encrypted BCJ2 and releases OOM" {
+    const payload = "\x90\xe8\x10\x00\x00\x00\xe9\xf0\xff\xff\xff\x90 encrypted BCJ2\n" ** 64;
+    const entries = [_]EncodeEntry{.{ .name = "encrypted-bcj2.bin", .data = payload }};
+    const encryption = EncryptionOptions{
+        .password = "bcj2-entry-password-密码",
+        .iv = [_]u8{0x42} ** 16,
+        .salt = [_]u8{0x24} ** 16,
+        .salt_len = 8,
+        .num_cycles_power = @import("seven_zip/aes.zig").direct_key_power,
+    };
+    const encoded = try encodeAlloc(std.testing.allocator, &entries, .{
+        .compression = .lzma2,
+        .bcj2 = true,
+        .encryption = encryption,
+    });
+    defer std.testing.allocator.free(encoded);
+    var context = SourceTestContext{ .bytes = encoded, .max_chunk = 5 };
+    const parsed = try parseSourceAlloc(std.testing.allocator, context.source());
+    defer parsed.deinit();
     try std.testing.expectError(
-        error.Unsupported7zFeature,
+        error.PasswordRequired,
         parsed.entryDecoder(std.testing.allocator, parsed.entries[0], .{}),
+    );
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        parsed.entryDecoder(std.testing.allocator, parsed.entries[0], .{
+            .password = encryption.password,
+            .input_buffer_size = 15,
+        }),
+    );
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        parsed.entryDecoder(std.testing.allocator, parsed.entries[0], .{
+            .password = encryption.password,
+            .max_packed_stream_size = 1,
+        }),
+    );
+    var blocked = try parsed.entryDecoder(std.testing.allocator, parsed.entries[0], .{
+        .password = encryption.password,
+        .max_output_len = payload.len,
+        .max_folder_output_len = payload.len,
+        .input_buffer_size = 32,
+        .decoded_buffer_size = 11,
+    });
+    defer blocked.deinit();
+    try std.testing.expectEqual(
+        core.StepResult.Status.need_output,
+        (try blocked.step(&.{})).status,
+    );
+    const decoded = try decodeSourceEntryFragmented(
+        std.testing.allocator,
+        &parsed,
+        parsed.entries[0],
+        .{
+            .password = encryption.password,
+            .max_output_len = payload.len,
+            .max_folder_output_len = payload.len,
+            .input_buffer_size = 31,
+            .decoded_buffer_size = 9,
+        },
+        3,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    const FailureTest = struct {
+        fn run(
+            allocator: std.mem.Allocator,
+            archive_value: *const SourceArchive,
+            password: []const u8,
+            expected: []const u8,
+        ) !void {
+            const result = try decodeSourceEntryFragmented(
+                allocator,
+                archive_value,
+                archive_value.entries[0],
+                .{
+                    .password = password,
+                    .max_output_len = expected.len,
+                    .max_folder_output_len = expected.len,
+                    .input_buffer_size = 32,
+                    .decoded_buffer_size = 11,
+                },
+                5,
+            );
+            defer allocator.free(result);
+            try std.testing.expectEqualSlices(u8, expected, result);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        FailureTest.run,
+        .{ &parsed, encryption.password, payload },
     );
 }
 
