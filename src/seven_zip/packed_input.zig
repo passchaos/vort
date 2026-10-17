@@ -129,13 +129,13 @@ pub const Input = union(enum) {
     }
 };
 
-const Range = struct {
+pub const Range = struct {
     start: u64,
     size: u64,
     end: u64,
 };
 
-fn packRange(
+pub fn packRange(
     input: Input,
     streams: *const streams_mod.Streams,
     index: usize,

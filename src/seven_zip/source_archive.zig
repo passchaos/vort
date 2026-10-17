@@ -10,6 +10,7 @@ const archive_mod = @import("archive.zig");
 const checksum = @import("../checksum.zig");
 const packed_input = @import("packed_input.zig");
 const source_mod = @import("source.zig");
+const source_entry_decoder = @import("source_entry_decoder.zig");
 const streams_mod = @import("streams.zig");
 
 pub const Error = archive_mod.Error || source_mod.Error;
@@ -106,6 +107,22 @@ pub const Archive = struct {
         name: []const u8,
     ) ![]u8 {
         return self.extractByNameAllocLimited(allocator, name, std.math.maxInt(usize));
+    }
+
+    pub fn entryDecoder(
+        self: *const Archive,
+        allocator: std.mem.Allocator,
+        entry: Entry,
+        options: source_entry_decoder.Decoder.Options,
+    ) !source_entry_decoder.Decoder {
+        return source_entry_decoder.Decoder.init(
+            allocator,
+            self.source,
+            &self.streams,
+            self.packed_data_limit,
+            entry,
+            options,
+        );
     }
 };
 

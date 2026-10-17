@@ -334,7 +334,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   limits, exact-size pledges, and reusable container scratch, plus block-bounded
   incremental compressed/stored encoding with split-independent wire,
   Delta/BCJ filters, selectable checks, flushable blocks, Index/Footer
-  generation, concatenated continuation, pledged input, and output backpressure;
+  generation, concatenated continuation, pledged input, and output backpressure,
+  plus a chunk-bounded raw LZMA2 caller-output decoder with persistent
+  probability/dictionary state for embedding formats such as 7z;
 - dependency-free LZMA-Alone encoding and decoding with known-size or
   end-marker streams, caller-selected output/dictionary limits, caller-owned
   output, exact-size MicroLZMA decoding with inverted properties and strict
@@ -407,7 +409,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   limits and caller-supplied IV material, CRC validation, UTF-16LE names,
   directories, empty files, and bounded extraction, plus source-backed
   positional parsing that avoids loading the complete archive and fetches only
-  tail/auxiliary metadata plus selected-folder packed ranges;
+  tail/auxiliary metadata plus selected-folder packed ranges, and a
+  symbol-progressive source entry decoder for Copy/Deflate/Bzip2/LZMA/LZMA2,
+  7zAES, solid-substream selection, Delta, and all classic BCJ filters;
 - deterministic TAR reading/writing with USTAR, PAX and GNU long-name support,
   old GNU plus PAX sparse 0.0/0.1/1.0 reading, deterministic PAX-1.0 and
   old-GNU writing with chained sparse extension headers,

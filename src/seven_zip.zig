@@ -1,7 +1,9 @@
 const std = @import("std");
 const checksum = @import("checksum.zig");
+const core = @import("core.zig");
 const archive = @import("seven_zip/archive.zig");
 const source_archive = @import("seven_zip/source_archive.zig");
+const source_entry_decoder = @import("seven_zip/source_entry_decoder.zig");
 const writer = @import("seven_zip/writer.zig");
 
 pub const Error = archive.Error || source_archive.Error || writer.Error;
@@ -10,6 +12,7 @@ pub const Entry = archive.Entry;
 pub const Archive = archive.Archive;
 pub const Source = source_archive.Source;
 pub const SourceArchive = source_archive.Archive;
+pub const SourceEntryDecoder = source_entry_decoder.Decoder;
 pub const DecodeOptions = archive.DecodeOptions;
 pub const ParseOptions = archive.ParseOptions;
 pub const EncodeEntry = writer.EncodeEntry;
@@ -51,6 +54,7 @@ test {
     _ = @import("seven_zip/number.zig");
     _ = @import("seven_zip/ppmd7.zig");
     _ = source_archive;
+    _ = source_entry_decoder;
     _ = writer;
 }
 
@@ -906,4 +910,301 @@ test "7z writer round trips ARM64 and RISC-V branch filters" {
         defer std.testing.allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, case.payload, decoded);
     }
+}
+
+const SourceTestContext = struct {
+    bytes: []const u8,
+    max_chunk: usize,
+
+    fn readAt(
+        raw_context: *anyopaque,
+        offset: u64,
+        output: []u8,
+    ) error{SourceReadFailed}!usize {
+        const self: *@This() = @ptrCast(@alignCast(raw_context));
+        const start = std.math.cast(usize, offset) orelse return error.SourceReadFailed;
+        if (start >= self.bytes.len) return 0;
+        const count = @min(output.len, @min(self.max_chunk, self.bytes.len - start));
+        @memcpy(output[0..count], self.bytes[start..][0..count]);
+        return count;
+    }
+
+    fn source(self: *@This()) Source {
+        return .{ .context = self, .len = self.bytes.len, .read_at = readAt };
+    }
+};
+
+fn decodeSourceEntryFragmented(
+    allocator: std.mem.Allocator,
+    archive_value: *const SourceArchive,
+    entry: Entry,
+    options: SourceEntryDecoder.Options,
+    output_chunk_size: usize,
+) ![]u8 {
+    var decoder = try archive_value.entryDecoder(allocator, entry, options);
+    defer decoder.deinit();
+    const expected_size = std.math.cast(usize, entry.size) orelse
+        return error.OutputLimitExceeded;
+    const output = try allocator.alloc(u8, expected_size);
+    errdefer allocator.free(output);
+    var output_offset: usize = 0;
+    var calls: usize = 0;
+    while (true) {
+        calls += 1;
+        if (calls > 1_000_000) return error.Invalid7zArchive;
+        const output_end = @min(output.len, output_offset + output_chunk_size);
+        const stepped = try decoder.step(output[output_offset..output_end]);
+        output_offset += stepped.progress.output_written;
+        if (stepped.status == .done) break;
+        if (stepped.status == .need_input) return error.Invalid7zArchive;
+        if (output_offset == output.len and stepped.status == .need_output)
+            return error.Invalid7zArchive;
+    }
+    if (output_offset != output.len) return error.SizeMismatch;
+    return output;
+}
+
+test "7z source entry decoder streams common codecs and solid substreams" {
+    const first = "solid prefix that must be decoded and discarded\n" ** 257;
+    const second = "selected source entry payload\n" ** 521;
+    const entries = [_]EncodeEntry{
+        .{ .name = "first.bin", .data = first },
+        .{ .name = "second.bin", .data = second },
+        .{ .name = "empty.bin" },
+    };
+    inline for (.{
+        Compression.copy,
+        Compression.deflate,
+        Compression.bzip2,
+        Compression.lzma,
+        Compression.lzma2,
+        Compression.lzma2_stored,
+    }) |compression| {
+        errdefer std.debug.print("source entry codec failed: {s}\n", .{@tagName(compression)});
+        const encoded = try encodeAlloc(std.testing.allocator, &entries, .{
+            .compression = compression,
+            .solid = true,
+        });
+        defer std.testing.allocator.free(encoded);
+        var context = SourceTestContext{ .bytes = encoded, .max_chunk = 7 };
+        const parsed = try parseSourceAlloc(std.testing.allocator, context.source());
+        defer parsed.deinit();
+        const selected = parsed.find("second.bin") orelse return error.EntryNotFound;
+        const decoded = try decodeSourceEntryFragmented(
+            std.testing.allocator,
+            &parsed,
+            selected,
+            .{
+                .max_output_len = second.len,
+                .max_folder_output_len = first.len + second.len,
+                .input_buffer_size = 17,
+                .decoded_buffer_size = 13,
+            },
+            5,
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, second, decoded);
+
+        const empty = parsed.find("empty.bin") orelse return error.EntryNotFound;
+        const empty_decoded = try decodeSourceEntryFragmented(
+            std.testing.allocator,
+            &parsed,
+            empty,
+            .{},
+            1,
+        );
+        defer std.testing.allocator.free(empty_decoded);
+        try std.testing.expectEqual(@as(usize, 0), empty_decoded.len);
+    }
+}
+
+test "7z source entry decoder streams AES filters and releases allocation failures" {
+    const payload = "\x90\xe8\x10\x00\x00\x00\xe9\xf0\xff\xff\xff\x90 encrypted\n" ** 257;
+    const entries = [_]EncodeEntry{.{ .name = "encrypted.bin", .data = payload }};
+    const encryption = EncryptionOptions{
+        .password = "entry-password-密码",
+        .iv = [_]u8{0x42} ** 16,
+        .salt = [_]u8{0x24} ** 16,
+        .salt_len = 8,
+        .num_cycles_power = @import("seven_zip/aes.zig").direct_key_power,
+    };
+    const filters = [_]Filter{Filter.x86(0x1000)};
+    const encoded = try encodeAlloc(std.testing.allocator, &entries, .{
+        .compression = .lzma2,
+        .encryption = encryption,
+        .filters = &filters,
+    });
+    defer std.testing.allocator.free(encoded);
+    var context = SourceTestContext{ .bytes = encoded, .max_chunk = 3 };
+    const parsed = try parseSourceAlloc(std.testing.allocator, context.source());
+    defer parsed.deinit();
+    try std.testing.expectError(
+        error.PasswordRequired,
+        parsed.entryDecoder(std.testing.allocator, parsed.entries[0], .{}),
+    );
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        parsed.entryDecoder(std.testing.allocator, parsed.entries[0], .{
+            .password = encryption.password,
+            .max_packed_stream_size = 1,
+        }),
+    );
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        parsed.entryDecoder(std.testing.allocator, parsed.entries[0], .{
+            .password = encryption.password,
+            .max_dictionary_size = 4095,
+        }),
+    );
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        parsed.entryDecoder(std.testing.allocator, parsed.entries[0], .{
+            .password = encryption.password,
+            .input_buffer_size = 15,
+        }),
+    );
+    var blocked = try parsed.entryDecoder(std.testing.allocator, parsed.entries[0], .{
+        .password = encryption.password,
+        .max_output_len = payload.len,
+        .max_folder_output_len = payload.len,
+        .input_buffer_size = 32,
+        .decoded_buffer_size = 11,
+    });
+    defer blocked.deinit();
+    try std.testing.expectEqual(
+        core.StepResult.Status.need_output,
+        (try blocked.step(&.{})).status,
+    );
+
+    const decoded = try decodeSourceEntryFragmented(
+        std.testing.allocator,
+        &parsed,
+        parsed.entries[0],
+        .{
+            .password = encryption.password,
+            .max_output_len = payload.len,
+            .max_folder_output_len = payload.len,
+            .input_buffer_size = 31,
+            .decoded_buffer_size = 7,
+        },
+        3,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    var wrong = try parsed.entryDecoder(std.testing.allocator, parsed.entries[0], .{
+        .password = "wrong-password",
+        .max_output_len = payload.len,
+        .max_folder_output_len = payload.len,
+        .input_buffer_size = 32,
+        .decoded_buffer_size = 11,
+    });
+    defer wrong.deinit();
+    var wrong_scratch: [7]u8 = undefined;
+    var wrong_rejected = false;
+    for (0..100_000) |_| {
+        if (wrong.step(&wrong_scratch)) |stepped| {
+            if (stepped.status == .done) break;
+        } else |_| {
+            wrong_rejected = true;
+            break;
+        }
+    }
+    try std.testing.expect(wrong_rejected);
+
+    const FailureTest = struct {
+        fn run(
+            allocator: std.mem.Allocator,
+            archive_value: *const SourceArchive,
+            password: []const u8,
+            expected: []const u8,
+        ) !void {
+            const result = try decodeSourceEntryFragmented(
+                allocator,
+                archive_value,
+                archive_value.entries[0],
+                .{
+                    .password = password,
+                    .max_output_len = expected.len,
+                    .max_folder_output_len = expected.len,
+                    .input_buffer_size = 32,
+                    .decoded_buffer_size = 11,
+                },
+                5,
+            );
+            defer allocator.free(result);
+            try std.testing.expectEqualSlices(u8, expected, result);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        FailureTest.run,
+        .{ &parsed, encryption.password, payload },
+    );
+}
+
+test "7z source entry decoder streams compound filters" {
+    const payload = "\x90\xe8\x10\x00\x00\x00branch" ** 32;
+    const entries = [_]EncodeEntry{.{ .name = "filtered.bin", .data = payload }};
+    const filters = [_]Filter{ Filter.x86(0), try Filter.delta(4) };
+    const encoded = try encodeAlloc(std.testing.allocator, &entries, .{
+        .compression = .lzma2,
+        .filters = &filters,
+    });
+    defer std.testing.allocator.free(encoded);
+    var context = SourceTestContext{ .bytes = encoded, .max_chunk = 17 };
+    const parsed = try parseSourceAlloc(std.testing.allocator, context.source());
+    defer parsed.deinit();
+    const decoded = try decodeSourceEntryFragmented(
+        std.testing.allocator,
+        &parsed,
+        parsed.entries[0],
+        .{
+            .max_output_len = payload.len,
+            .max_folder_output_len = payload.len,
+            .input_buffer_size = 19,
+            .decoded_buffer_size = 9,
+        },
+        4,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "7z source entry decoder reports remaining PPMd7 and BCJ2 data planes" {
+    const payload = "remaining incremental graph payload\n" ** 64;
+    const entries = [_]EncodeEntry{.{ .name = "payload.bin", .data = payload }};
+    inline for (.{
+        EncodeOptions{ .compression = .ppmd7 },
+        EncodeOptions{ .compression = .lzma2, .bcj2 = true },
+    }) |options| {
+        const encoded = try encodeAlloc(std.testing.allocator, &entries, options);
+        defer std.testing.allocator.free(encoded);
+        var context = SourceTestContext{ .bytes = encoded, .max_chunk = 31 };
+        const parsed = try parseSourceAlloc(std.testing.allocator, context.source());
+        defer parsed.deinit();
+        try std.testing.expectError(
+            error.Unsupported7zFeature,
+            parsed.entryDecoder(std.testing.allocator, parsed.entries[0], .{}),
+        );
+    }
+}
+
+test "7z source entry decoder reports terminal folder CRC corruption" {
+    const payload = "streamed bytes precede terminal CRC validation" ** 32;
+    const entries = [_]EncodeEntry{.{ .name = "corrupt.bin", .data = payload }};
+    const encoded = try encodeAlloc(std.testing.allocator, &entries, .{ .compression = .copy });
+    defer std.testing.allocator.free(encoded);
+    encoded[32] ^= 1;
+    var context = SourceTestContext{ .bytes = encoded, .max_chunk = 23 };
+    const parsed = try parseSourceAlloc(std.testing.allocator, context.source());
+    defer parsed.deinit();
+    var decoder = try parsed.entryDecoder(std.testing.allocator, parsed.entries[0], .{
+        .max_output_len = payload.len,
+        .max_folder_output_len = payload.len,
+    });
+    defer decoder.deinit();
+    var output: [payload.len]u8 = undefined;
+    try std.testing.expectError(error.ChecksumMismatch, decoder.step(&output));
+    try std.testing.expect(!std.mem.eql(u8, payload, &output));
 }

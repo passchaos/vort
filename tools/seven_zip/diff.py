@@ -147,6 +147,30 @@ def verify_with_vort_source(
             raise AssertionError(f"Vort source extraction mismatch for {name!r}")
 
 
+def verify_with_vort_source_stream(
+    cli: Path,
+    archive: Path,
+    payloads: dict[str, bytes],
+    password: str | None = None,
+) -> None:
+    for index, (name, payload) in enumerate(payloads.items()):
+        output = archive.with_name(f"{archive.stem}-source-stream-{index}.out")
+        extract_args = [
+            "extract-7z-source-stream-file",
+            str(archive),
+            name,
+            str(output),
+            str(len(payload)),
+        ]
+        if password is not None:
+            extract_args.extend(("536870912", "536870912", password))
+        result = run(cli, *extract_args).stdout
+        if "seven_zip_source_stream_reads=" not in result:
+            raise AssertionError("7z source stream extraction omitted diagnostics")
+        if output.read_bytes() != payload:
+            raise AssertionError(f"Vort source stream mismatch for {name!r}")
+
+
 def verify_vort_metadata(
     cli: Path,
     archive: Path,
@@ -195,6 +219,7 @@ def main() -> None:
     external_variants = 0
     vort_writer_variants = 1
     source_variants = 1
+    stream_variants = 1
 
     with tempfile.TemporaryDirectory(prefix="vort-seven-zip-diff-") as temp_text:
         temp = Path(temp_text)
@@ -211,6 +236,7 @@ def main() -> None:
         }
         verify_with_vort(args.cli, first, expected_vort)
         verify_with_vort_source(args.cli, first, expected_vort)
+        verify_with_vort_source_stream(args.cli, first, expected_vort)
         filetime_epoch = 116_444_736_000_000_000
         verify_vort_metadata(
             args.cli,
@@ -368,6 +394,13 @@ def main() -> None:
                 encryption_password,
             )
             source_variants += 1
+            verify_with_vort_source_stream(
+                args.cli,
+                combined_encrypted,
+                expected_vort,
+                encryption_password,
+            )
+            stream_variants += 1
             vort_writer_variants += 1
 
             for name_compression in (
@@ -532,6 +565,17 @@ def main() -> None:
                 if variant == "lzma2-solid-encoded":
                     verify_with_vort_source(args.cli, archive, payloads)
                     source_variants += 1
+                if variant in (
+                    "copy-plain",
+                    "deflate-plain",
+                    "bzip2-plain",
+                    "lzma-plain",
+                    "lzma2-plain",
+                    "lzma-solid-encoded",
+                    "lzma2-solid-encoded",
+                ):
+                    verify_with_vort_source_stream(args.cli, archive, payloads)
+                    stream_variants += 1
                 if variant == "copy-plain":
                     verify_vort_metadata(
                         args.cli,
@@ -711,6 +755,14 @@ def main() -> None:
                         "seven-zip-password",
                     )
                     source_variants += 1
+                if variant in ("aes-data", "aes-header"):
+                    verify_with_vort_source_stream(
+                        args.cli,
+                        archive,
+                        {"payload.bin": encrypted_payload},
+                        "seven-zip-password",
+                    )
+                    stream_variants += 1
             external_variants += len(encrypted_references)
 
             encrypted_bcj2_archive = temp / "aes-bcj2.7z"
@@ -792,7 +844,14 @@ def main() -> None:
                 {"payload.bin": x86_payload},
                 encryption_password,
             )
+            verify_with_vort_source_stream(
+                args.cli,
+                encrypted_filter_archive,
+                {"payload.bin": x86_payload},
+                encryption_password,
+            )
             vort_writer_variants += 1
+            stream_variants += 1
 
             encrypted_bcj2_output = temp / "vort-aes-bcj2.7z"
             run(
@@ -959,6 +1018,7 @@ def main() -> None:
         f"external_variants={external_variants} "
         f"vort_writer_variants={vort_writer_variants} "
         f"source_variants={source_variants} "
+        f"stream_variants={stream_variants} "
         f"system_7zip={seven_zip_tool is not None} "
         f"modern_7zip={modern_seven_zip_tool is not None} "
         f"modern_branch_filters={modern_branch_filters}"

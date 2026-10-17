@@ -1485,14 +1485,26 @@ fn fuzzSevenZipSource(allocator: std.mem.Allocator, data: []const u8) !void {
         defer archive.deinit();
         for (archive.entries) |entry| {
             if (entry.folder_index == null) continue;
-            if (archive.decodeEntryAllocWithOptions(allocator, entry, .{
+            if (archive.entryDecoder(allocator, entry, .{
                 .max_output_len = 1 << 20,
                 .max_dictionary_size = 4 << 20,
                 .max_folder_output_len = 1 << 20,
                 .max_packed_stream_size = 1 << 20,
                 .max_kdf_cycles_power = 8,
-            })) |decoded| {
-                allocator.free(decoded);
+                .input_buffer_size = 4096,
+                .decoded_buffer_size = 4096,
+            })) |decoder_value| {
+                var decoder = decoder_value;
+                defer decoder.deinit();
+                var scratch: [4096]u8 = undefined;
+                for (0..1_000_000) |_| {
+                    if (decoder.step(&scratch)) |stepped| {
+                        if (stepped.status == .done) break;
+                    } else |err| switch (err) {
+                        error.OutOfMemory => return error.OutOfMemory,
+                        else => break,
+                    }
+                }
             } else |err| switch (err) {
                 error.OutOfMemory => return error.OutOfMemory,
                 else => {},
