@@ -1,7 +1,8 @@
 const std = @import("std");
+const core = @import("../../core.zig");
 const model_mod = @import("model.zig");
 
-pub const Error = model_mod.Error || error{
+pub const Error = model_mod.Error || core.Error || error{
     InvalidPpmdData,
     TruncatedPpmdInput,
     PpmdTrailingData,
@@ -215,6 +216,214 @@ fn decodeSymbol(model: *model_mod.Model, range_decoder: *RangeDecoder) Error!u8 
     }
 }
 
+pub const IncrementalDecoder = struct {
+    allocator: std.mem.Allocator,
+    options: Options,
+    model: model_mod.Model,
+    compressed: std.ArrayList(u8) = .empty,
+    range_decoder: ?RangeDecoder = null,
+    decoded: usize = 0,
+    output_written: usize = 0,
+    input_finished: bool = false,
+    phase: Phase = .range_prefix,
+    last_error_name: []const u8 = "",
+
+    const symbol_input_guard: usize = 512;
+
+    pub const Options = struct {
+        order: u8,
+        memory_size: u32,
+        expected_output_len: usize,
+        max_output_len: usize = std.math.maxInt(usize),
+        max_memory_size: usize = std.math.maxInt(usize),
+        max_compressed_buffer_len: usize = 1024 * 1024,
+    };
+
+    pub const Phase = enum {
+        range_prefix,
+        symbols,
+        validate,
+        done,
+    };
+
+    pub const Snapshot = struct {
+        phase: Phase,
+        decoded: usize,
+        output_written: usize,
+        buffered_compressed_bytes: usize,
+        retained_compressed_capacity: usize,
+        model_memory_size: u32,
+        input_finished: bool,
+        last_error_name: []const u8,
+    };
+
+    pub fn init(allocator: std.mem.Allocator, options: Options) Error!IncrementalDecoder {
+        if (options.expected_output_len > options.max_output_len or
+            options.memory_size > options.max_memory_size or
+            options.max_compressed_buffer_len < 5)
+            return error.OutputLimitExceeded;
+        return .{
+            .allocator = allocator,
+            .options = options,
+            .model = try model_mod.Model.init(allocator, options.order, options.memory_size),
+        };
+    }
+
+    pub fn deinit(self: *IncrementalDecoder) void {
+        self.model.deinit();
+        self.compressed.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn finish(self: *IncrementalDecoder) void {
+        self.input_finished = true;
+    }
+
+    pub fn snapshot(self: *const IncrementalDecoder) Snapshot {
+        return .{
+            .phase = self.phase,
+            .decoded = self.decoded,
+            .output_written = self.output_written,
+            .buffered_compressed_bytes = self.bufferedLen(),
+            .retained_compressed_capacity = self.compressed.capacity,
+            .model_memory_size = self.options.memory_size,
+            .input_finished = self.input_finished,
+            .last_error_name = self.last_error_name,
+        };
+    }
+
+    pub fn step(
+        self: *IncrementalDecoder,
+        input: []const u8,
+        output: []u8,
+    ) Error!core.StepResult {
+        return self.stepInternal(input, output) catch |err| {
+            self.last_error_name = @errorName(err);
+            return err;
+        };
+    }
+
+    fn stepInternal(
+        self: *IncrementalDecoder,
+        input: []const u8,
+        output: []u8,
+    ) Error!core.StepResult {
+        if (self.phase == .done) {
+            if (input.len != 0) return error.PpmdTrailingData;
+            return .{ .status = .done };
+        }
+        if (self.input_finished and input.len != 0) return error.PpmdTrailingData;
+
+        var input_read: usize = 0;
+        var output_written: usize = 0;
+        while (true) switch (self.phase) {
+            .range_prefix => {
+                if (!try self.ensureBuffered(5, input, &input_read)) {
+                    if (self.input_finished) return error.TruncatedPpmdInput;
+                    return streamResult(input_read, output_written, .need_input);
+                }
+                self.range_decoder = try RangeDecoder.init(self.compressed.items);
+                self.phase = .symbols;
+            },
+            .symbols => {
+                if (self.decoded == self.options.expected_output_len) {
+                    self.phase = .validate;
+                    continue;
+                }
+                if (output_written == output.len)
+                    return streamResult(input_read, output_written, .need_output);
+                if (!self.input_finished and self.bufferedLen() < symbol_input_guard) {
+                    if (!try self.ensureBuffered(symbol_input_guard, input, &input_read))
+                        return streamResult(input_read, output_written, .need_input);
+                }
+                self.range_decoder.?.input = self.compressed.items;
+                output[output_written] = try decodeSymbol(&self.model, &self.range_decoder.?);
+                output_written += 1;
+                self.output_written += 1;
+                self.decoded += 1;
+            },
+            .validate => {
+                if (input_read != input.len) {
+                    try self.appendInput(input[input_read..]);
+                    input_read = input.len;
+                    self.range_decoder.?.input = self.compressed.items;
+                }
+                if (!self.input_finished)
+                    return streamResult(input_read, output_written, .need_input);
+                if (self.range_decoder.?.code != 0) return error.InvalidPpmdData;
+                if (self.range_decoder.?.position != self.compressed.items.len)
+                    return error.PpmdTrailingData;
+                self.phase = .done;
+                return streamResult(input_read, output_written, .done);
+            },
+            .done => unreachable,
+        };
+    }
+
+    fn ensureBuffered(
+        self: *IncrementalDecoder,
+        needed: usize,
+        input: []const u8,
+        input_read: *usize,
+    ) Error!bool {
+        if (self.bufferedLen() >= needed) return true;
+        try self.compact();
+        const target = @min(needed, self.options.max_compressed_buffer_len);
+        if (target <= self.compressed.items.len) return error.OutputLimitExceeded;
+        const take = @min(target - self.compressed.items.len, input.len - input_read.*);
+        if (take != 0) {
+            try self.compressed.appendSlice(
+                self.allocator,
+                input[input_read.*..][0..take],
+            );
+            input_read.* += take;
+            if (self.range_decoder) |*decoder| decoder.input = self.compressed.items;
+        }
+        return self.bufferedLen() >= needed;
+    }
+
+    fn appendInput(self: *IncrementalDecoder, input: []const u8) Error!void {
+        try self.compact();
+        const next = std.math.add(usize, self.compressed.items.len, input.len) catch
+            return error.OutputLimitExceeded;
+        if (next > self.options.max_compressed_buffer_len)
+            return error.OutputLimitExceeded;
+        try self.compressed.appendSlice(self.allocator, input);
+        if (self.range_decoder) |*decoder| decoder.input = self.compressed.items;
+    }
+
+    fn compact(self: *IncrementalDecoder) Error!void {
+        const position = if (self.range_decoder) |decoder| decoder.position else 0;
+        if (position == 0) return;
+        if (position > self.compressed.items.len) return error.InvalidPpmdData;
+        const remaining = self.compressed.items.len - position;
+        std.mem.copyForwards(
+            u8,
+            self.compressed.items[0..remaining],
+            self.compressed.items[position..],
+        );
+        self.compressed.items.len = remaining;
+        self.range_decoder.?.position = 0;
+        self.range_decoder.?.input = self.compressed.items;
+    }
+
+    fn bufferedLen(self: *const IncrementalDecoder) usize {
+        const position = if (self.range_decoder) |decoder| decoder.position else 0;
+        return self.compressed.items.len - position;
+    }
+};
+
+fn streamResult(
+    input_read: usize,
+    output_written: usize,
+    status: core.StepResult.Status,
+) core.StepResult {
+    return .{
+        .progress = .{ .input_read = input_read, .output_written = output_written },
+        .status = status,
+    };
+}
+
 test "PPMd7 range decoder rejects malformed initialization and truncation" {
     var output: [1]u8 = undefined;
     try std.testing.expectError(
@@ -262,4 +471,107 @@ test "PPMd7 decodes a 7-Zip range-coded payload and rejects corruption" {
     } else |err| {
         try std.testing.expect(err == error.InvalidPpmdData or err == error.TruncatedPpmdInput);
     }
+}
+
+test "PPMd7 incremental decoder handles byte input and tiny output" {
+    const encoded = [_]u8{
+        0x00, 0x73, 0x02, 0x14, 0x49, 0xc6, 0x00, 0x2c,
+        0x4c, 0x7f, 0xcc, 0x8f, 0xf0, 0xb0, 0x74, 0x5b,
+        0x24, 0x9d, 0xa3, 0x94, 0x7b, 0xcf, 0x29, 0xdb,
+        0xf7, 0xa3, 0xf8, 0x00,
+    };
+    const expected = "src/br/dictionary.bin binary\n";
+    var decoder = try IncrementalDecoder.init(std.testing.allocator, .{
+        .order = 6,
+        .memory_size = 64 * 1024,
+        .expected_output_len = expected.len,
+        .max_output_len = expected.len,
+    });
+    defer decoder.deinit();
+    var output: [expected.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (true) {
+        const input_end = @min(encoded.len, input_offset + 1);
+        if (input_offset == encoded.len) decoder.finish();
+        const output_end = @min(output.len, output_offset + 1);
+        const stepped = try decoder.step(
+            encoded[input_offset..input_end],
+            output[output_offset..output_end],
+        );
+        input_offset += stepped.progress.input_read;
+        output_offset += stepped.progress.output_written;
+        if (stepped.status == .done) break;
+    }
+    try std.testing.expectEqual(encoded.len, input_offset);
+    try std.testing.expectEqual(expected.len, output_offset);
+    try std.testing.expectEqualSlices(u8, expected, &output);
+}
+
+test "PPMd7 incremental decoder enforces limits truncation and OOM" {
+    const encoded = [_]u8{
+        0x00, 0x73, 0x02, 0x14, 0x49, 0xc6, 0x00, 0x2c,
+        0x4c, 0x7f, 0xcc, 0x8f, 0xf0, 0xb0, 0x74, 0x5b,
+        0x24, 0x9d, 0xa3, 0x94, 0x7b, 0xcf, 0x29, 0xdb,
+        0xf7, 0xa3, 0xf8, 0x00,
+    };
+    const expected = "src/br/dictionary.bin binary\n";
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        IncrementalDecoder.init(std.testing.allocator, .{
+            .order = 6,
+            .memory_size = 64 * 1024,
+            .expected_output_len = expected.len,
+            .max_memory_size = 32 * 1024,
+        }),
+    );
+
+    var truncated = try IncrementalDecoder.init(std.testing.allocator, .{
+        .order = 6,
+        .memory_size = 64 * 1024,
+        .expected_output_len = expected.len,
+    });
+    defer truncated.deinit();
+    _ = try truncated.step(encoded[0 .. encoded.len - 1], &.{});
+    truncated.finish();
+    var scratch: [expected.len]u8 = undefined;
+    if (truncated.step("", &scratch)) |_| {
+        return error.TestUnexpectedResult;
+    } else |err| {
+        try std.testing.expect(err == error.TruncatedPpmdInput or err == error.InvalidPpmdData);
+    }
+
+    const FailureTest = struct {
+        fn run(allocator: std.mem.Allocator, payload: []const u8, plain: []const u8) !void {
+            var state = try IncrementalDecoder.init(allocator, .{
+                .order = 6,
+                .memory_size = 64 * 1024,
+                .expected_output_len = plain.len,
+                .max_output_len = plain.len,
+            });
+            defer state.deinit();
+            const output = try allocator.alloc(u8, plain.len);
+            defer allocator.free(output);
+            var input_offset: usize = 0;
+            var output_offset: usize = 0;
+            while (true) {
+                const input_end = @min(payload.len, input_offset + 3);
+                if (input_offset == payload.len) state.finish();
+                const output_end = @min(output.len, output_offset + 2);
+                const stepped = try state.step(
+                    payload[input_offset..input_end],
+                    output[output_offset..output_end],
+                );
+                input_offset += stepped.progress.input_read;
+                output_offset += stepped.progress.output_written;
+                if (stepped.status == .done) break;
+            }
+            try std.testing.expectEqualSlices(u8, plain, output);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        FailureTest.run,
+        .{ &encoded, expected },
+    );
 }

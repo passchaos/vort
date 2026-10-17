@@ -141,6 +141,7 @@ test "7z solid writer shares one folder across files" {
         Compression.lzma2,
         Compression.lzma2_stored,
         Compression.ppmd7,
+        Compression.ppmd7,
     }) |compression| {
         const options = EncodeOptions{ .compression = compression, .solid = true };
         const encoded = try encodeAlloc(std.testing.allocator, &entries, options);
@@ -1171,23 +1172,21 @@ test "7z source entry decoder streams compound filters" {
     try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
-test "7z source entry decoder reports remaining PPMd7 and BCJ2 data planes" {
+test "7z source entry decoder reports remaining BCJ2 data plane" {
     const payload = "remaining incremental graph payload\n" ** 64;
     const entries = [_]EncodeEntry{.{ .name = "payload.bin", .data = payload }};
-    inline for (.{
-        EncodeOptions{ .compression = .ppmd7 },
-        EncodeOptions{ .compression = .lzma2, .bcj2 = true },
-    }) |options| {
-        const encoded = try encodeAlloc(std.testing.allocator, &entries, options);
-        defer std.testing.allocator.free(encoded);
-        var context = SourceTestContext{ .bytes = encoded, .max_chunk = 31 };
-        const parsed = try parseSourceAlloc(std.testing.allocator, context.source());
-        defer parsed.deinit();
-        try std.testing.expectError(
-            error.Unsupported7zFeature,
-            parsed.entryDecoder(std.testing.allocator, parsed.entries[0], .{}),
-        );
-    }
+    const encoded = try encodeAlloc(std.testing.allocator, &entries, .{
+        .compression = .lzma2,
+        .bcj2 = true,
+    });
+    defer std.testing.allocator.free(encoded);
+    var context = SourceTestContext{ .bytes = encoded, .max_chunk = 31 };
+    const parsed = try parseSourceAlloc(std.testing.allocator, context.source());
+    defer parsed.deinit();
+    try std.testing.expectError(
+        error.Unsupported7zFeature,
+        parsed.entryDecoder(std.testing.allocator, parsed.entries[0], .{}),
+    );
 }
 
 test "7z source entry decoder reports terminal folder CRC corruption" {

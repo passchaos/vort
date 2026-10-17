@@ -6,11 +6,12 @@ const bzip2 = @import("../../bzip2.zig");
 const core = @import("../../core.zig");
 const deflate = @import("../../deflate.zig");
 const lzma = @import("../../lzma.zig");
+const ppmd7 = @import("../ppmd7.zig");
 const streams_mod = @import("../streams.zig");
 const xz = @import("../../xz.zig");
 
 pub const Error = archive_mod.Error || deflate.Error || bzip2.Error ||
-    lzma.Error || xz.Error;
+    lzma.Error || ppmd7.Error || xz.Error;
 
 pub const Codec = union(enum) {
     copy: Copy,
@@ -18,6 +19,7 @@ pub const Codec = union(enum) {
     bzip2: bzip2.IncrementalDecoder,
     lzma: Lzma7z,
     lzma2: xz.RawLzma2IncrementalDecoder,
+    ppmd7: ppmd7.IncrementalDecoder,
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -62,6 +64,16 @@ pub const Codec = union(enum) {
                 .max_output_len = expected_size,
                 .expected_output_len = expected_size,
             }) },
+            .ppmd7 => ppmd: {
+                const properties = try ppmd7.parseProperties(coder.propertyBytes());
+                break :ppmd .{ .ppmd7 = try ppmd7.IncrementalDecoder.init(allocator, .{
+                    .order = properties.order,
+                    .memory_size = properties.memory_size,
+                    .expected_output_len = expected_size,
+                    .max_output_len = expected_size,
+                    .max_memory_size = max_dictionary_size,
+                }) };
+            },
             else => error.Unsupported7zFeature,
         };
     }
@@ -73,6 +85,7 @@ pub const Codec = union(enum) {
             .bzip2 => |*state| state.deinit(),
             .lzma => |*state| state.deinit(),
             .lzma2 => |*state| state.deinit(),
+            .ppmd7 => |*state| state.deinit(),
         }
         self.* = undefined;
     }
@@ -84,6 +97,7 @@ pub const Codec = union(enum) {
             .bzip2 => |*state| state.step(input, output),
             .lzma => |*state| state.step(input, output),
             .lzma2 => |*state| state.step(input, output),
+            .ppmd7 => |*state| state.step(input, output),
         };
     }
 
@@ -94,6 +108,7 @@ pub const Codec = union(enum) {
             .bzip2 => |*state| state.finish(),
             .lzma => |*state| state.finish(),
             .lzma2 => |*state| state.finish(),
+            .ppmd7 => |*state| state.finish(),
         }
     }
 
@@ -104,6 +119,7 @@ pub const Codec = union(enum) {
             .bzip2 => "bzip2",
             .lzma => "lzma",
             .lzma2 => "lzma2",
+            .ppmd7 => "ppmd7",
         };
     }
 };

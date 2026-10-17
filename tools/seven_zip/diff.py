@@ -573,6 +573,9 @@ def main() -> None:
                     "lzma2-plain",
                     "lzma-solid-encoded",
                     "lzma2-solid-encoded",
+                    "ppmd-order2-plain",
+                    "ppmd-order6-solid",
+                    "ppmd-order16-plain",
                 ):
                     verify_with_vort_source_stream(args.cli, archive, payloads)
                     stream_variants += 1
@@ -755,7 +758,7 @@ def main() -> None:
                         "seven-zip-password",
                     )
                     source_variants += 1
-                if variant in ("aes-data", "aes-header"):
+                if variant in ("aes-data", "aes-header", "aes-ppmd"):
                     verify_with_vort_source_stream(
                         args.cli,
                         archive,

@@ -13,6 +13,8 @@ pub const Properties = struct {
     memory_size: u32,
 };
 
+pub const IncrementalDecoder = decoder.IncrementalDecoder;
+
 pub fn validateProperties(properties: Properties) Error!void {
     if (properties.order < model.min_order or properties.order > model.max_order or
         properties.memory_size < model.min_memory_size or properties.memory_size > model.max_memory_size)

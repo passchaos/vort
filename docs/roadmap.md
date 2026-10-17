@@ -18040,16 +18040,17 @@ reuse, so production keeps the simpler independently owned plans.
   external metadata, solid folders, and four-AES BCJ2, and releases every
   allocation failure. File-backed CLI differentials cover six representative
   Vort and 7-Zip archives. A symbol-progressive source entry decoder now drives
-  Copy, raw Deflate, Bzip2, LZMA1, and a new chunk-bounded raw LZMA2 core with
+  Copy, raw Deflate, Bzip2, LZMA1, PPMd7, and a new chunk-bounded raw LZMA2 core with
   persistent probability and circular-dictionary state. It derives AES keys
   once through Vail, decrypts CBC blocks before the codec, incrementally applies
   Delta and all classic BCJ filters with bounded history/overlap, discards solid
   prefixes and suffixes, honors caller backpressure, and validates packed,
-  folder, and entry CRCs. Twelve real file-backed differential variants cover
+  folder, and entry CRCs. Sixteen real file-backed differential variants cover
   every supported data plane, solid/encoded/encrypted headers, and x86 filters;
   tiny-buffer, short-read, wrong-password, resource-limit, and OOM tests cover
-  state transitions. PPMd7 and branched BCJ2 remain explicit incremental data
-  plane gaps while their allocating extraction paths stay supported.
+  state transitions. PPMd7 retains its bounded model while consuming only a
+  512-byte range-decoder transaction window. Branched BCJ2 remains the explicit
+  incremental data-plane gap while its allocating extraction path stays supported.
   Deeper LZMA parsing, other branching or multi-packed-stream graphs,
   comments, and start-position properties remain follow-up work. See
   `docs/formats/7z.md`.
