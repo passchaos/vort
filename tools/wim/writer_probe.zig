@@ -17,6 +17,8 @@ pub fn main(init: std.process.Init) !void {
         return writeInodeMetadata(init, output_path, compression);
     if (std.mem.eql(u8, mode, "multi"))
         return writeMultiImage(init, output_path, compression);
+    if (std.mem.eql(u8, mode, "solid"))
+        return writeSolid(init, output_path);
     if (std.mem.eql(u8, mode, "split"))
         return writeSplit(init, output_path, compression, false);
     if (std.mem.eql(u8, mode, "pipable-split"))
@@ -159,6 +161,41 @@ fn writeMultiImage(
     };
     const encoded = try vort.encodeWimImagesAlloc(init.gpa, &images, .{
         .compression = compression,
+        .boot_index = 2,
+    });
+    defer init.gpa.free(encoded);
+    try std.Io.Dir.cwd().writeFile(init.io, .{
+        .sub_path = output_path,
+        .data = encoded,
+    });
+}
+
+fn writeSolid(
+    init: std.process.Init,
+    output_path: []const u8,
+) !void {
+    var repeated: [70_000]u8 = undefined;
+    const phrase = "Vort solid LZMS writer payload 0123456789\n";
+    for (&repeated, 0..) |*byte, index|
+        byte.* = phrase[index % phrase.len];
+    var random: [70_000]u8 = undefined;
+    fillPseudoRandomSeed(&random, 0x534f_4c49);
+    const shared = "shared packed LZMS stream\n" ** 1024;
+    const first_entries = [_]vort.WimEncodeEntry{
+        .{ .path = "repeat.bin", .data = &repeated },
+        .{ .path = "shared.bin", .data = shared },
+    };
+    const second_entries = [_]vort.WimEncodeEntry{
+        .{ .path = "random.bin", .data = &random },
+        .{ .path = "shared.bin", .data = shared },
+    };
+    const images = [_]vort.WimEncodeImage{
+        .{ .name = "solid-first", .entries = &first_entries },
+        .{ .name = "solid-second", .entries = &second_entries },
+    };
+    const encoded = try vort.encodeWimImagesSolidAlloc(init.gpa, &images, .{
+        .metadata_chunk_size = 32 * 1024,
+        .solid_chunk_size = 32 * 1024,
         .boot_index = 2,
     });
     defer init.gpa.free(encoded);

@@ -21424,3 +21424,23 @@ reuse, so production keeps the simpler independently owned plans.
   LZ/delta match parsing, recent-offset selection and optimal parsing remain
   ratio/performance work; solid LZMS writing and in-place WIM update remain
   separate functionality slices.
+
+- Added deterministic packed/solid LZMS WIM/ESD writing. Single- and
+  multi-image Alloc/Append/Into APIs keep metadata in ordinary LZMS resources,
+  concatenate each deduplicated nonempty data stream once, emit the 16-byte
+  alternate resource header plus per-chunk size table, and serialize the
+  zero-hash resource marker followed by logical-offset solid blob entries.
+  Cross-image references, boot metadata, XML statistics, integrity tables,
+  compressed-or-raw chunk selection and all-empty data sets are covered. The
+  default 128 KiB metadata and 64 MiB packed chunk geometry matches wimlib and
+  remains caller-selectable. Writer planning and common lookup/header/integrity
+  serialization moved into cohesive shared modules instead of duplicating the
+  ordinary writer. Unit tests cover four chunks spanning blob boundaries,
+  compressed and high-entropy raw chunks, deterministic bytes, shared refcounts,
+  empty payload sets, invalid geometry, transactional buffers and exhaustive
+  allocation cleanup. The black-box gate extracts every path through Vort, then
+  requires wimlib 1.14.5 to verify and byte-compare both images
+  (`writer_solid=1`, `writer_solid_wimlib=1`). Focused WIM/LZX/LZMS coverage is
+  now 120 tests. Solid SWM/pipable output is intentionally not exposed because
+  those layouts do not support packed resources; in-place image update remains
+  the next WIM functionality slice.

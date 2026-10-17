@@ -193,6 +193,19 @@ per-image counts. `WimEncodeImagesOptions.boot_index` optionally copies the
 selected metadata resource into the header boot descriptor. Deterministic GUID
 derivation includes every image metadata hash and length-delimited name.
 
+`encodeWimSolidAlloc`/Append/Into and the corresponding `encodeWimImagesSolid*`
+APIs produce version `0x0e00` packed WIM/ESD archives. Metadata remains in
+ordinary independently addressable LZMS resources, while every deduplicated
+nonempty file/ADS/reparse/EFSRPC stream is concatenated once into a deterministic
+solid resource. Its alternate header records the true decoded size, chunk size
+and LZMS format number; the lookup table writes image-ordered metadata entries,
+a zero-hash resource marker, then logical-offset blob entries with accumulated
+cross-image reference counts. Images with no nonempty streams omit the marker
+rather than inventing a zero-length packed resource. Defaults match wimlib's
+LZMS geometry: 128 KiB metadata chunks and 64 MiB solid chunks; both are
+caller-selectable power-of-two sizes. Solid output supports boot metadata and
+integrity, but is a standard seekable archive rather than SWM or pipable output.
+
 `splitWimAlloc` converts any supported standalone, non-solid standard WIM into
 caller-owned SWM parts. `encodeWimSplitAlloc` and
 `encodeWimImagesSplitAlloc` compose this with the one- or multi-image writers.
@@ -333,6 +346,11 @@ const multi_wim = try vort.encodeWimImagesAlloc(allocator, &images, .{
 });
 defer allocator.free(multi_wim);
 
+const solid_esd = try vort.encodeWimImagesSolidAlloc(allocator, &images, .{
+    .boot_index = 1,
+});
+defer allocator.free(solid_esd);
+
 var swm = try vort.encodeWimImagesSplitAlloc(
     allocator,
     &images,
@@ -433,6 +451,11 @@ including a cross-image shared blob, distinct trees, two byte-identical empty
 metadata resources, consecutive XML indexes and boot image 2. Both readers map
 all four images correctly; wimlib verifies the archives and byte-compares the
 first two extracted trees (`writer_multi=4`, `writer_multi_wimlib=4`).
+The solid writer gate packs repeated, high-entropy and cross-image shared blobs
+into one four-chunk LZMS resource behind two independently compressed metadata
+resources. Vort validates the marker/logical offsets and extracts every path;
+wimlib verifies the archive and byte-compares both images
+(`writer_solid=1`, `writer_solid_wimlib=1`).
 The SWM writer matrix then emits multi-image stored, XPRESS, LZX, and LZMS sets with three
 indivisible 70,000-byte blobs and a cross-image shared resource. Vort validates
 every local lookup and extracts all paths through `WimArchiveSet`; wimlib joins

@@ -40,6 +40,11 @@ defer allocator.free(encoded);
 caller-owned surfaces; allocation failure and `OutputTooSmall` leave existing
 caller output unchanged.
 
+WIM's solid APIs compose the same raw encoder into packed LZMS resources while
+leaving image metadata independently addressable. The resource layer chooses
+compressed or raw representation per chunk; solid blob lookup entries retain
+logical offsets into the decoded concatenation.
+
 The deterministic reference encoder writes literal items through the real
 forward adaptive range stream and backward adaptive canonical-Huffman stream,
 including mandatory x86 preprocessing. Adaptive literal coding already

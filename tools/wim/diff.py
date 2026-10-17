@@ -180,6 +180,8 @@ def main() -> None:
     writer_inode_wimlib_cases = 0
     writer_multi_cases = 0
     writer_multi_wimlib_cases = 0
+    writer_solid_cases = 0
+    writer_solid_wimlib_cases = 0
     writer_split_cases = 0
     writer_split_wimlib_cases = 0
     writer_pipable_cases = 0
@@ -774,6 +776,64 @@ def main() -> None:
                     ):
                         raise AssertionError("wimlib multi-image extraction mismatch")
                 writer_multi_wimlib_cases += 1
+
+        solid_image = temp / "vort-writer-solid-lzms.esd"
+        run(args.writer, solid_image, "lzms", "solid")
+        solid_listing = run(args.cli, "list-wim-file", solid_image).stdout
+        for marker in (b"compression=lzms", b"images=2"):
+            if marker not in solid_listing:
+                raise AssertionError(
+                    f"Vort solid writer header missing {marker!r}"
+                )
+        solid_phrase = b"Vort solid LZMS writer payload 0123456789\n"
+        solid_repeated = (solid_phrase * (70_000 // len(solid_phrase) + 1))[
+            :70_000
+        ]
+        solid_random = xorshift_bytes(0x534F_4C49, 70_000)
+        solid_shared = b"shared packed LZMS stream\n" * 1024
+        for image_index, path, expected in (
+            (1, "/repeat.bin", solid_repeated),
+            (1, "/shared.bin", solid_shared),
+            (2, "/random.bin", solid_random),
+            (2, "/shared.bin", solid_shared),
+        ):
+            output = temp / (
+                f"writer-solid-{image_index}-{path[1:].replace('/', '-')}"
+            )
+            run(
+                args.cli,
+                "extract-wim-path",
+                solid_image,
+                image_index,
+                path,
+                output,
+                len(expected),
+            )
+            if output.read_bytes() != expected:
+                raise AssertionError("Vort solid LZMS extraction mismatch")
+        writer_solid_cases += 1
+
+        if wimlib is not None:
+            run(wimlib, "verify", solid_image)
+            for image_index, unique_name, expected in (
+                (1, "repeat.bin", solid_repeated),
+                (2, "random.bin", solid_random),
+            ):
+                destination = temp / f"writer-solid-wimlib-{image_index}"
+                run(
+                    wimlib,
+                    "extract",
+                    solid_image,
+                    image_index,
+                    f"--dest-dir={destination}",
+                    "--no-acls",
+                )
+                if (
+                    (destination / unique_name).read_bytes() != expected
+                    or (destination / "shared.bin").read_bytes() != solid_shared
+                ):
+                    raise AssertionError("wimlib solid LZMS extraction mismatch")
+            writer_solid_wimlib_cases += 1
 
         split_expected = {
             (1, "/first.bin"): xorshift_bytes(0x1111_1111, 70_000),
@@ -1549,6 +1609,8 @@ def main() -> None:
         f"writer_inode_wimlib={writer_inode_wimlib_cases} "
         f"writer_multi={writer_multi_cases} "
         f"writer_multi_wimlib={writer_multi_wimlib_cases} "
+        f"writer_solid={writer_solid_cases} "
+        f"writer_solid_wimlib={writer_solid_wimlib_cases} "
         f"writer_split={writer_split_cases} "
         f"writer_split_wimlib={writer_split_wimlib_cases} "
         f"writer_pipable={writer_pipable_cases} "
