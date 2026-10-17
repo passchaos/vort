@@ -7,9 +7,10 @@ const pipable = @import("wim/pipable.zig");
 const pipable_stream = @import("wim/pipable_stream.zig");
 const encrypted_esd = @import("wim/encrypted_esd.zig");
 const set = @import("wim/set.zig");
+const writer = @import("wim/writer.zig");
 
 pub const Error = format.Error || codec.Error || metadata.Error || archive.Error || set.Error ||
-    std.mem.Allocator.Error;
+    writer.Error || std.mem.Allocator.Error;
 pub const Archive = archive.Archive;
 pub const ArchiveSet = set.ArchiveSet;
 pub const Compression = format.Compression;
@@ -33,10 +34,17 @@ pub const ResourceHeader = format.ResourceHeader;
 pub const SecurityData = metadata.SecurityData;
 pub const SolidResource = archive.SolidResource;
 pub const StreamSelector = archive.StreamSelector;
+pub const EncodeEntry = writer.Entry;
+pub const EncodeEntryKind = writer.EntryKind;
+pub const EncodeCompression = writer.Compression;
+pub const EncodeOptions = writer.Options;
 pub const parse = archive.Archive.init;
 pub const parseHeader = format.parseHeader;
 pub const parseImageMetadataOwned = metadata.ImageMetadata.fromOwnedBytes;
 pub const solidResourceMagic = archive.solid_resource_magic;
+pub const encodeAlloc = writer.encodeAlloc;
+pub const encodeAppend = writer.encodeAppend;
+pub const encodeInto = writer.encodeInto;
 
 test {
     _ = format;
@@ -49,4 +57,6 @@ test {
     _ = @import("wim/encrypted_esd_tests.zig");
     _ = @import("wim/pipable_stream_tests.zig");
     _ = set;
+    _ = writer;
+    _ = @import("wim/writer_tests.zig");
 }

@@ -1651,10 +1651,17 @@ pub const WimResourceHeader = wim.ResourceHeader;
 pub const WimSecurityData = wim.SecurityData;
 pub const WimSolidResource = wim.SolidResource;
 pub const WimStreamSelector = wim.StreamSelector;
+pub const WimEncodeEntry = wim.EncodeEntry;
+pub const WimEncodeEntryKind = wim.EncodeEntryKind;
+pub const WimEncodeCompression = wim.EncodeCompression;
+pub const WimEncodeOptions = wim.EncodeOptions;
 pub const parseWim = wim.parse;
 pub const parseWimHeader = wim.parseHeader;
 pub const parseWimImageMetadataOwned = wim.parseImageMetadataOwned;
 pub const wimSolidResourceMagic = wim.solidResourceMagic;
+pub const encodeWimAlloc = wim.encodeAlloc;
+pub const encodeWimAppend = wim.encodeAppend;
+pub const encodeWimInto = wim.encodeInto;
 
 pub const Lznt1Error = lznt1.Error;
 pub const Lznt1EncodeOptions = lznt1.EncodeOptions;

@@ -1660,8 +1660,19 @@ pub fn build(b: *std.Build) void {
     const erofs_diff_step = b.step("run-erofs-diff", "Validate EROFS reading and writing against optional erofs-utils");
     erofs_diff_step.dependOn(&erofs_diff.step);
 
+    const wim_writer_probe = b.addExecutable(.{
+        .name = "vort-wim-writer-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/wim/writer_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
     const wim_diff = b.addSystemCommand(&.{ "python3", "tools/wim/diff.py", "--cli" });
     wim_diff.addArtifactArg(cli_exe);
+    wim_diff.addArg("--writer");
+    wim_diff.addArtifactArg(wim_writer_probe);
     if (b.args) |args| wim_diff.addArgs(args);
     const wim_diff_step = b.step("run-wim-diff", "Validate WIM resources against optional wimlib-imagex");
     wim_diff_step.dependOn(&wim_diff.step);

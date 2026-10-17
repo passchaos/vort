@@ -145,6 +145,7 @@ def verify_vort(
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
+    parser.add_argument("--writer", required=True, type=Path)
     parser.add_argument("--wimlib-imagex", type=Path)
     args = parser.parse_args()
     wimlib = args.wimlib_imagex or (
@@ -160,6 +161,8 @@ def main() -> None:
     pipable_stream_cases = 0
     encrypted_raw_cases = 0
     encrypted_esd_cases = 0
+    writer_cases = 0
+    writer_wimlib_cases = 0
     stream_error_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-wim-") as temp_text:
@@ -419,6 +422,52 @@ def main() -> None:
 
         source = temp / "tree"
         payloads = write_tree(source)
+        writer_random = bytearray()
+        writer_random_state = 0x5749_4D31
+        for _ in range(70_000):
+            writer_random_state ^= (writer_random_state << 13) & 0xFFFF_FFFF
+            writer_random_state ^= writer_random_state >> 17
+            writer_random_state ^= (writer_random_state << 5) & 0xFFFF_FFFF
+            writer_random.append(writer_random_state & 0xFF)
+        writer_payloads = {
+            "nested/config.txt": b"Vort WIM writer interop\n",
+            "large.bin": b"Vort WIM writer multichunk payload 0123456789\n"
+            * 4096,
+            "random.bin": bytes(writer_random),
+            "empty.bin": b"",
+            "unicode/文件.txt": "UTF-8 WIM path\n".encode(),
+        }
+        for writer_compression, expected_compression in (
+            ("stored", "none"),
+            ("xpress", "xpress"),
+        ):
+            writer_image = temp / f"vort-writer-{writer_compression}.wim"
+            run(args.writer, writer_image, writer_compression)
+            verify_vort(
+                args.cli,
+                writer_image,
+                expected_compression,
+                writer_payloads,
+                temp,
+            )
+            writer_cases += 1
+            if wimlib is not None:
+                run(wimlib, "verify", writer_image)
+                writer_extract = temp / f"vort-writer-{writer_compression}-extract"
+                run(
+                    wimlib,
+                    "extract",
+                    writer_image,
+                    1,
+                    f"--dest-dir={writer_extract}",
+                )
+                for name, expected in writer_payloads.items():
+                    if (writer_extract / name).read_bytes() != expected:
+                        raise AssertionError(
+                            "wimlib extraction mismatch for "
+                            f"Vort writer {writer_compression}/{name}"
+                        )
+                writer_wimlib_cases += 1
         if wimlib is not None:
             encrypted_result = run(wimlib, "info", encrypted_esd, check=False)
             if encrypted_result.returncode == 0 or b"encrypted" not in encrypted_result.stderr.lower():
@@ -898,6 +947,7 @@ def main() -> None:
         f"split={split_cases} reparse={reparse_cases} "
         f"pipable_stream={pipable_stream_cases} encrypted_raw={encrypted_raw_cases} "
         f"encrypted_esd={encrypted_esd_cases} stream_errors={stream_error_cases} "
+        f"writer={writer_cases} writer_wimlib={writer_wimlib_cases} "
         f"malformed={malformed}"
     )
 

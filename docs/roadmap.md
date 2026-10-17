@@ -21278,3 +21278,19 @@ reuse, so production keeps the simpler independently owned plans.
   extraction, wimlib encrypted-input rejection and successful verification of
   the decrypted image (`encrypted_esd=5`). EFS filesystem application remains
   separate from this container-level mechanism.
+
+- Added a deterministic, single-image WIM writer for ordinary files and
+  directories. Borrowed UTF-8 entries are normalized into an automatically
+  completed and stably sorted tree; the serializer emits the security prefix,
+  aligned dentries, child-list offsets, SHA-1 stream references, stored or
+  multichunk XPRESS resources, deduplicated 50-byte lookup entries, UTF-16LE
+  image XML, and an optional 10 MiB-chunk integrity table. Empty streams use
+  the zero-hash convention, repeated content shares one blob with an exact
+  reference count, and caller attributes/timestamps are preserved. Alloc,
+  append, and caller-buffer APIs are transactional and covered by invalid-path,
+  geometry, round-trip, deterministic-output, output-limit and exhaustive OOM
+  tests. The black-box gate reopens both writer modes through Vort, then requires
+  wimlib 1.14.5 to verify and byte-exactly extract them (`writer=2`,
+  `writer_wimlib=2`). Multi-image update, split/pipable output, LZX/LZMS,
+  security descriptors, hard links, ADS, reparse and EFSRPC authoring remain
+  writer follow-ups.

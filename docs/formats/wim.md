@@ -1,7 +1,8 @@
 # WIM, ESD, and SWM
 
-Vort provides a dependency-free pure Zig reader for Microsoft's Windows Imaging
-Format family. Standard WIM headers, solid-version ESD headers, and split SWM
+Vort provides a dependency-free pure Zig reader and deterministic single-image
+writer for Microsoft's Windows Imaging Format family. Standard WIM headers,
+solid-version ESD headers, and split SWM
 part headers are recognized. Seekable byte slices using wimlib's pipable WIM
 extension are recognized through their `WLPWM` leading and trailing headers.
 `WimPipableStreamPathExtractor` also consumes this layout incrementally without
@@ -119,6 +120,32 @@ extraction are covered by exhaustive allocation-failure tests.
 The shared LZX core preserves its CAB mode and adds WIM block headers and WIM's
 fixed-12,000,000-byte Intel E8 postprocessing semantics.
 
+The writer accepts borrowed relative UTF-8 paths and file data through
+`WimEncodeEntry`. It inserts missing parent directories, sorts the complete tree
+deterministically, rejects duplicate and ASCII-case-ambiguous sibling names,
+and writes real security-prefix/dentry/child-list metadata rather than a flat
+resource bundle. Empty files use WIM's zero SHA-1 convention; identical
+nonempty data is stored once with an accumulated lookup reference count.
+
+`encodeWimAlloc`, `encodeWimAppend`, and `encodeWimInto` produce a standard
+single-part, single-image WIM using either stored resources or 32 KiB XPRESS
+chunks. XPRESS chunks independently select compressed or raw representation,
+and the writer emits the original cumulative chunk table. Image metadata and
+ordinary file blobs use the selected codec, while the lookup table and UTF-16LE
+XML remain uncompressed for Microsoft compatibility. A 10 MiB-chunk integrity
+table covers the bytes from offset 208 through the lookup table. Output is
+reproducible for the same entries/options: timestamps default to zero, a
+content-derived GUID is used unless supplied, and all ordering is stable.
+`encodeAppend` and `encodeInto` materialize into temporary owned storage first,
+so invalid input, allocation failure, and `OutputTooSmall` leave caller output
+unchanged.
+
+The current writer intentionally limits its public surface to ordinary files
+and directories. Multi-image append/update, WIM/SWM splitting, pipable output,
+LZX/LZMS encoding, security descriptors, hard links, named streams, reparse
+points, and EFSRPC raw-stream authoring remain follow-up slices. The reader
+already supports many of those representations.
+
 ```zig
 const archive = try vort.parseWim(image_bytes);
 var lookup = try archive.readLookupTableAlloc(
@@ -168,6 +195,16 @@ const split_file = try set.extractByPathAllocLimited(
     .{},
 );
 defer allocator.free(split_file);
+
+const input = [_]vort.WimEncodeEntry{
+    .{ .path = "Windows/System32/example.dll", .data = dll_bytes },
+    .{ .path = "empty.txt" },
+};
+const encoded_wim = try vort.encodeWimAlloc(allocator, &input, .{
+    .compression = .xpress,
+    .image_name = "Deterministic image",
+});
+defer allocator.free(encoded_wim);
 ```
 
 ```sh
@@ -233,3 +270,7 @@ stream. A separate deterministic encrypted-ESD fixture pins CryptoAPI RSA-OAEP
 key unwrapping, direct AES equivalence, range decryption, XML/header/integrity
 reconstruction, wrong-key and limit failures. wimlib rejects the encrypted
 input and verifies the Vort-decrypted output (`encrypted_esd=5`).
+It also generates stored and multichunk XPRESS images through Vort's public
+writer, reopens and extracts every path through Vort, then requires wimlib to
+verify and byte-exactly extract both archives (`writer=2`,
+`writer_wimlib=2`).
