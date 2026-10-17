@@ -46,7 +46,7 @@ pub const EncodedSubstream = struct {
 pub const max_external_streams: usize = 1 + file_properties.kind_count;
 
 pub const EncodedExternalStreams = struct {
-    pack_position: usize = 0,
+    pack_position: u64 = 0,
     folders: [max_external_streams]EncodedFolder = undefined,
     substreams: [max_external_streams]EncodedSubstream = undefined,
     options: [max_external_streams]coders.Options = undefined,
@@ -156,7 +156,7 @@ pub fn writeStreamsBody(
     folders: []const EncodedFolder,
     substreams: []const EncodedSubstream,
     options: coders.Options,
-    pack_position: usize,
+    pack_position: u64,
 ) !void {
     return writeStreamsBodyConfigured(
         allocator,
@@ -176,7 +176,7 @@ fn writeStreamsBodyConfigured(
     substreams: []const EncodedSubstream,
     default_options: coders.Options,
     configured_options: ?[]const coders.Options,
-    pack_position: usize,
+    pack_position: u64,
 ) !void {
     if (configured_options) |folder_options|
         std.debug.assert(folder_options.len == folders.len);

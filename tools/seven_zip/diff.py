@@ -228,8 +228,10 @@ def verify_vort_metadata(
     name: str,
     expected: dict[str, int],
     defined: tuple[str, ...] = (),
+    password: str | None = None,
 ) -> None:
-    listing = run(cli, "list-7z-file", str(archive)).stdout
+    list_args = (str(archive), password) if password is not None else (str(archive),)
+    listing = run(cli, "list-7z-file", *list_args).stdout
     line = next((item for item in listing.splitlines() if f"name={name}" in item), None)
     if line is None:
         raise AssertionError(f"7z listing omitted metadata entry {name!r}: {listing}")
@@ -367,6 +369,61 @@ def main() -> None:
                         archive,
                         expected_vort,
                         password,
+                    )
+                    incremental_writer_variants += 1
+
+            for terminal_compression in (
+                "copy",
+                "deflate",
+                "bzip2",
+                "lzma",
+                "lzma2",
+                "lzma2-stored",
+                "ppmd7",
+            ):
+                for mode, encryption_mode, password in (
+                    ("independent", "plain", None),
+                    ("solid", "encrypted", "vort-password-密码"),
+                ):
+                    archive = temp / (
+                        "vort-incremental-terminal-"
+                        f"{terminal_compression}-{mode}-{encryption_mode}.7z"
+                    )
+                    duplicate = temp / (
+                        "vort-incremental-terminal-"
+                        f"{terminal_compression}-{mode}-{encryption_mode}-repeat.7z"
+                    )
+                    writer_args = (
+                        "lzma2",
+                        mode,
+                        encryption_mode,
+                        terminal_compression,
+                    )
+                    run(args.incremental_writer, str(archive), *writer_args)
+                    run(args.incremental_writer, str(duplicate), *writer_args)
+                    if archive.read_bytes() != duplicate.read_bytes():
+                        raise AssertionError(
+                            "Vort incremental terminal metadata is not deterministic: "
+                            f"{terminal_compression}/{mode}/{encryption_mode}"
+                        )
+                    verify_with_vort(args.cli, archive, expected_vort, password)
+                    verify_with_seven_zip(
+                        seven_zip_tool,
+                        archive,
+                        expected_vort,
+                        password,
+                    )
+                    verify_vort_metadata(
+                        args.cli,
+                        archive,
+                        "plain.txt",
+                        {
+                            "creation": filetime_epoch + 10_000_000,
+                            "access": filetime_epoch + 20_000_000,
+                            "modification": filetime_epoch + 30_000_000,
+                            "attributes": 0x81A4_0020,
+                        },
+                        password=password,
                     )
                     incremental_writer_variants += 1
 

@@ -18070,10 +18070,15 @@ reuse, so production keeps the simpler independently owned plans.
   sequenced Vail-backed 7zAES, inline metadata, and both independent and solid
   folders without retaining complete entry payloads. Tiny 1--5-byte output
   schedules cover lifecycle and patching; allocation-failure and resource-limit
-  tests cover retained state. 7-Zip 21.07 and 26.04 validate fourteen incremental
-  output variants spanning all seven codecs in independent/plain and
-  solid/encrypted modes, in addition to Vort self-decoding and determinism.
-  Incremental encoded/external metadata remains terminal-metadata work, while
+  tests cover retained state. A bounded terminal phase now emits external names,
+  external time/attribute vectors, compressed Next Headers, and encrypted hidden
+  headers with all seven codecs while continuing the archive-wide Vail AES IV
+  sequence. One-shot and incremental writers share the same auxiliary-folder
+  and encoded-header builder. 7-Zip 21.07 and 26.04 validate twenty-eight
+  incremental output variants: all seven main codecs in independent/plain and
+  solid/encrypted modes plus all seven terminal codecs in plain and encrypted
+  external/encoded-header configurations. Vort also verifies metadata values,
+  self-decoding, determinism, tiny output buffers, limits, and OOM cleanup.
   BCJ2 incremental output intentionally waits for an explicit branch spool or
   replay contract rather than buffering a complete side stream invisibly.
   Deeper LZMA parsing, other branching or multi-packed-stream graphs,

@@ -7,6 +7,7 @@ const bcj2 = @import("bcj2.zig");
 const file_properties = @import("file_properties.zig");
 const number = @import("number.zig");
 const types = @import("types.zig");
+const writer_metadata = @import("writer_metadata.zig");
 const wire = @import("writer_wire.zig");
 
 pub const Error = core.Error || number.Error || coders.Error || error{
@@ -22,7 +23,6 @@ pub const EncodeOptions = coders.Options;
 const EncodedFolder = wire.EncodedFolder;
 const EncodedSubstream = wire.EncodedSubstream;
 const EncodedExternalStreams = wire.EncodedExternalStreams;
-const max_external_streams = wire.max_external_streams;
 
 pub fn encodeAlloc(
     allocator: std.mem.Allocator,
@@ -85,7 +85,7 @@ pub fn encodeAppend(
             };
             stream_index += 1;
         }
-        folder_options[0] = try optionsForNextEncryptedStream(
+        folder_options[0] = try writer_metadata.optionsForNextEncryptedStream(
             options,
             &next_encryption_stream_index,
         );
@@ -104,7 +104,7 @@ pub fn encodeAppend(
             const unpacked_size = std.math.cast(u64, entry.data.len) orelse
                 return error.IntegerOverflow;
             const crc32 = checksum.crc32Best(entry.data);
-            folder_options[stream_index] = try optionsForNextEncryptedStream(
+            folder_options[stream_index] = try writer_metadata.optionsForNextEncryptedStream(
                 options,
                 &next_encryption_stream_index,
             );
@@ -128,7 +128,7 @@ pub fn encodeAppend(
     try wire.appendNames(allocator, &names, entries);
     var external_streams = EncodedExternalStreams{};
     if (options.external_names) |compression| {
-        external_streams.name_index = try appendExternalPayload(
+        external_streams.name_index = try writer_metadata.appendExternalPayload(
             allocator,
             &packed_data,
             &external_streams,
@@ -136,6 +136,7 @@ pub fn encodeAppend(
             options,
             compression,
             &next_encryption_stream_index,
+            std.math.cast(u64, packed_data.items.len) orelse return error.IntegerOverflow,
         );
     }
     if (options.external_metadata) |compression| {
@@ -146,7 +147,7 @@ pub fn encodeAppend(
             metadata_values.clearRetainingCapacity();
             try file_properties.appendValues(allocator, &metadata_values, entries, kind);
             if (metadata_values.items.len != 0)
-                external_streams.metadata_indices[@intFromEnum(kind)] = try appendExternalPayload(
+                external_streams.metadata_indices[@intFromEnum(kind)] = try writer_metadata.appendExternalPayload(
                     allocator,
                     &packed_data,
                     &external_streams,
@@ -154,6 +155,7 @@ pub fn encodeAppend(
                     options,
                     compression,
                     &next_encryption_stream_index,
+                    std.math.cast(u64, packed_data.items.len) orelse return error.IntegerOverflow,
                 );
         }
     }
@@ -171,67 +173,15 @@ pub fn encodeAppend(
 
     var next_header: std.ArrayList(u8) = .empty;
     defer next_header.deinit(allocator);
-    if (options.header_compression != null or options.encrypt_header) {
-        const pack_position = packed_data.items.len;
-        var header_options = options;
-        header_options.compression = options.header_compression orelse .copy;
-        header_options.solid = false;
-        header_options.header_compression = null;
-        header_options.external_names = null;
-        header_options.external_metadata = null;
-        header_options.encrypt_header = false;
-        if (!options.encrypt_header) header_options.encryption = null;
-        header_options.bcj2 = false;
-        header_options.bcj2_start_ip = 0;
-        header_options.filters = &.{};
-        header_options = try optionsForNextEncryptedStream(
-            header_options,
-            &next_encryption_stream_index,
-        );
-        const payload = try coders.appendPayloadDetailed(
-            allocator,
-            &packed_data,
-            header.items,
-            header_options,
-        );
-        const header_folders = [_]EncodedFolder{.{
-            .packed_sizes = .{
-                std.math.cast(u64, payload.packed_size) orelse return error.IntegerOverflow,
-                0,
-                0,
-                0,
-            },
-            .unpacked_size = std.math.cast(u64, header.items.len) orelse
-                return error.IntegerOverflow,
-            .aes_unpack_sizes = .{
-                if (payload.aes_unpack_size) |size|
-                    std.math.cast(u64, size) orelse return error.IntegerOverflow
-                else
-                    null,
-                null,
-                null,
-                null,
-            },
-            .crc32 = checksum.crc32Best(header.items),
-            .first_substream = 0,
-            .substream_count = 1,
-        }};
-        const header_substreams = [_]EncodedSubstream{.{
-            .unpacked_size = header_folders[0].unpacked_size,
-            .crc32 = header_folders[0].crc32,
-        }};
-        try next_header.append(allocator, wire.Nid.encoded_header);
-        try wire.writeStreamsBody(
-            allocator,
-            &next_header,
-            &header_folders,
-            &header_substreams,
-            header_options,
-            pack_position,
-        );
-    } else {
-        try next_header.appendSlice(allocator, header.items);
-    }
+    try writer_metadata.appendFinalHeader(
+        allocator,
+        &packed_data,
+        &next_header,
+        header.items,
+        options,
+        &next_encryption_stream_index,
+        std.math.cast(u64, packed_data.items.len) orelse return error.IntegerOverflow,
+    );
 
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(allocator);
@@ -281,19 +231,6 @@ pub fn encodeStoredAppend(
 fn validateStoredOptions(options: EncodeOptions) Error!void {
     if (options.compression != .copy or options.filters.len != 0)
         return error.Invalid7zOptions;
-}
-
-fn optionsForNextEncryptedStream(
-    base: EncodeOptions,
-    next_stream_index: *u64,
-) !EncodeOptions {
-    if (base.encryption == null) return base;
-    var options = base;
-    options.encryption_stream_index = next_stream_index.*;
-    const stream_count: u64 = if (base.bcj2) 4 else 1;
-    next_stream_index.* = std.math.add(u64, next_stream_index.*, stream_count) catch
-        return error.IntegerOverflow;
-    return options;
 }
 
 fn appendFolderPayload(
@@ -364,62 +301,6 @@ fn appendFolderPayload(
             return error.IntegerOverflow;
     }
     return folder;
-}
-
-fn appendExternalPayload(
-    allocator: std.mem.Allocator,
-    packed_data: *std.ArrayList(u8),
-    external: *EncodedExternalStreams,
-    input: []const u8,
-    base_options: EncodeOptions,
-    compression: Compression,
-    next_encryption_stream_index: *u64,
-) !usize {
-    std.debug.assert(external.count < max_external_streams);
-    if (external.count == 0) external.pack_position = packed_data.items.len;
-    var options = base_options;
-    options.compression = compression;
-    options.solid = false;
-    options.header_compression = null;
-    options.external_names = null;
-    options.external_metadata = null;
-    options.bcj2 = false;
-    options.bcj2_start_ip = 0;
-    options.filters = &.{};
-    options = try optionsForNextEncryptedStream(options, next_encryption_stream_index);
-    const payload = try coders.appendPayloadDetailed(allocator, packed_data, input, options);
-    const unpacked_size = std.math.cast(u64, input.len) orelse
-        return error.IntegerOverflow;
-    const crc32 = checksum.crc32Best(input);
-    const index = external.count;
-    external.folders[index] = .{
-        .packed_sizes = .{
-            std.math.cast(u64, payload.packed_size) orelse return error.IntegerOverflow,
-            0,
-            0,
-            0,
-        },
-        .unpacked_size = unpacked_size,
-        .aes_unpack_sizes = .{
-            if (payload.aes_unpack_size) |size|
-                std.math.cast(u64, size) orelse return error.IntegerOverflow
-            else
-                null,
-            null,
-            null,
-            null,
-        },
-        .crc32 = crc32,
-        .first_substream = index,
-        .substream_count = 1,
-    };
-    external.substreams[index] = .{
-        .unpacked_size = unpacked_size,
-        .crc32 = crc32,
-    };
-    external.options[index] = options;
-    external.count += 1;
-    return index;
 }
 
 test "7z stored writer emits deterministic signature and metadata" {

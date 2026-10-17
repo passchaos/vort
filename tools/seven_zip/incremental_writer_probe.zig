@@ -20,6 +20,10 @@ pub fn main(init: std.process.Init) !void {
         if (std.mem.eql(u8, value, "encrypted")) true else if (std.mem.eql(u8, value, "plain")) false else return error.InvalidMode
     else
         false;
+    const terminal_compression: ?vort.SevenZipCompression = if (args.next()) |value|
+        if (std.mem.eql(u8, value, "inline")) null else try parseCompression(value)
+    else
+        null;
     if (args.next() != null) return error.UnexpectedArgument;
 
     const filetime_epoch: u64 = 116_444_736_000_000_000;
@@ -77,7 +81,11 @@ pub fn main(init: std.process.Init) !void {
         .encode = .{
             .compression = compression,
             .solid = solid,
+            .header_compression = terminal_compression,
+            .external_names = terminal_compression,
+            .external_metadata = terminal_compression,
             .encryption = encryption,
+            .encrypt_header = encrypted and terminal_compression != null,
         },
     });
     defer writer.deinit();

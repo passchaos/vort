@@ -2,7 +2,9 @@ const std = @import("std");
 const checksum = @import("../checksum.zig");
 const core = @import("../core.zig");
 const coders = @import("coders.zig");
+const file_properties = @import("file_properties.zig");
 const types = @import("types.zig");
+const writer_metadata = @import("writer_metadata.zig");
 const wire = @import("writer_wire.zig");
 const codecs = @import("incremental_writer/codecs.zig");
 
@@ -38,6 +40,7 @@ pub const Phase = enum {
     ready,
     entry_data,
     solid_finish,
+    terminal_packed,
     next_header,
     done,
     poisoned,
@@ -93,6 +96,8 @@ pub const Writer = struct {
     folder_options: std.ArrayList(EncodeOptions) = .empty,
     substreams: std.ArrayList(wire.EncodedSubstream) = .empty,
     current: ?CurrentEntry = null,
+    terminal_packed: std.ArrayList(u8) = .empty,
+    terminal_packed_offset: usize = 0,
     next_header: std.ArrayList(u8) = .empty,
     next_header_offset: usize = 0,
     next_header_crc32: u32 = 0,
@@ -113,9 +118,7 @@ pub const Writer = struct {
         try coders.validate(options.encode);
         try codecs.State.validate(options.encode);
         if (options.max_entries == 0 or options.max_metadata_size == 0 or
-            options.encode.header_compression != null or
-            options.encode.external_names != null or options.encode.external_metadata != null or
-            options.encode.encrypt_header or options.encode.bcj2)
+            options.encode.bcj2)
         {
             return error.Invalid7zIncrementalOptions;
         }
@@ -148,6 +151,7 @@ pub const Writer = struct {
         self.folders.deinit(self.allocator);
         self.folder_options.deinit(self.allocator);
         self.substreams.deinit(self.allocator);
+        self.terminal_packed.deinit(self.allocator);
         self.next_header.deinit(self.allocator);
         self.allocator.free(self.owned_filters);
         self.allocator.free(self.owned_password);
@@ -231,12 +235,60 @@ pub const Writer = struct {
         var names: std.ArrayList(u8) = .empty;
         defer names.deinit(self.allocator);
         try wire.appendNames(self.allocator, &names, self.entries.items);
-        var header: std.ArrayList(u8) = .empty;
-        errdefer header.deinit(self.allocator);
-        const external_streams = wire.EncodedExternalStreams{};
+        try self.checkMetadataExtra(&.{names.capacity});
+
+        var terminal_packed: std.ArrayList(u8) = .empty;
+        defer terminal_packed.deinit(self.allocator);
+        var external_streams = wire.EncodedExternalStreams{};
+        var next_encryption_stream_index = self.next_encryption_stream_index;
+        if (self.options.encode.external_names) |compression| {
+            external_streams.name_index = try writer_metadata.appendExternalPayload(
+                self.allocator,
+                &terminal_packed,
+                &external_streams,
+                names.items,
+                self.options.encode,
+                compression,
+                &next_encryption_stream_index,
+                self.packed_output,
+            );
+            try self.checkMetadataExtra(&.{ names.capacity, terminal_packed.capacity });
+        }
+        if (self.options.encode.external_metadata) |compression| {
+            var metadata_values: std.ArrayList(u8) = .empty;
+            defer metadata_values.deinit(self.allocator);
+            inline for (std.meta.tags(file_properties.Kind)) |kind| {
+                metadata_values.clearRetainingCapacity();
+                try file_properties.appendValues(
+                    self.allocator,
+                    &metadata_values,
+                    self.entries.items,
+                    kind,
+                );
+                if (metadata_values.items.len != 0)
+                    external_streams.metadata_indices[@intFromEnum(kind)] = try writer_metadata.appendExternalPayload(
+                        self.allocator,
+                        &terminal_packed,
+                        &external_streams,
+                        metadata_values.items,
+                        self.options.encode,
+                        compression,
+                        &next_encryption_stream_index,
+                        self.packed_output,
+                    );
+                try self.checkMetadataExtra(&.{
+                    names.capacity,
+                    terminal_packed.capacity,
+                    metadata_values.capacity,
+                });
+            }
+        }
+
+        var ordinary_header: std.ArrayList(u8) = .empty;
+        defer ordinary_header.deinit(self.allocator);
         try wire.writeNextHeader(
             self.allocator,
-            &header,
+            &ordinary_header,
             self.entries.items,
             self.folders.items,
             self.folder_options.items,
@@ -245,13 +297,41 @@ pub const Writer = struct {
             names.items,
             &external_streams,
         );
-        if (header.items.len > self.options.max_metadata_size) return error.OutputLimitExceeded;
+        try self.checkMetadataExtra(&.{
+            names.capacity,
+            terminal_packed.capacity,
+            ordinary_header.capacity,
+        });
 
+        var next_header: std.ArrayList(u8) = .empty;
+        defer next_header.deinit(self.allocator);
+        const header_pack_position = std.math.add(
+            u64,
+            self.packed_output,
+            std.math.cast(u64, terminal_packed.items.len) orelse return error.IntegerOverflow,
+        ) catch return error.IntegerOverflow;
+        try writer_metadata.appendFinalHeader(
+            self.allocator,
+            &terminal_packed,
+            &next_header,
+            ordinary_header.items,
+            self.options.encode,
+            &next_encryption_stream_index,
+            header_pack_position,
+        );
+        try self.checkMetadataExtra(&.{ terminal_packed.capacity, next_header.capacity });
+
+        self.terminal_packed.deinit(self.allocator);
+        self.terminal_packed = terminal_packed;
+        terminal_packed = .empty;
+        self.terminal_packed_offset = 0;
         self.next_header.deinit(self.allocator);
-        self.next_header = header;
+        self.next_header = next_header;
+        next_header = .empty;
         self.next_header_offset = 0;
         self.next_header_crc32 = checksum.crc32Best(self.next_header.items);
-        self.phase = .next_header;
+        self.next_encryption_stream_index = next_encryption_stream_index;
+        self.phase = if (self.terminal_packed.items.len == 0) .next_header else .terminal_packed;
     }
 
     pub fn startHeaderPatch(self: *const Self) Error![wire.start_header_len]u8 {
@@ -438,6 +518,22 @@ pub const Writer = struct {
                 if (encoded.status != .need_output) return error.InvalidBlockPlan;
                 return result(input_read, output_written, .need_output);
             },
+            .terminal_packed => {
+                if (input_read != input.len) return error.TrailingData;
+                const remaining = self.terminal_packed.items[self.terminal_packed_offset..];
+                const take = @min(remaining.len, output.len - output_written);
+                @memcpy(output[output_written..][0..take], remaining[0..take]);
+                self.terminal_packed_offset += take;
+                output_written += take;
+                self.packed_output = std.math.add(u64, self.packed_output, @intCast(take)) catch
+                    return error.IntegerOverflow;
+                try self.addArchiveOutput(take);
+                if (self.terminal_packed_offset != self.terminal_packed.items.len)
+                    return result(input_read, output_written, .need_output);
+                self.phase = .next_header;
+                if (output_written == output.len)
+                    return result(input_read, output_written, .need_output);
+            },
             .next_header => {
                 if (input_read != input.len) return error.TrailingData;
                 const remaining = self.next_header.items[self.next_header_offset..];
@@ -543,8 +639,17 @@ pub const Writer = struct {
             return error.IntegerOverflow;
     }
 
+    fn checkMetadataExtra(self: *const Self, extras: []const usize) Error!void {
+        var size = self.metadataSize();
+        for (extras) |extra|
+            size = std.math.add(usize, size, extra) catch return error.OutputLimitExceeded;
+        if (size > self.options.max_metadata_size) return error.OutputLimitExceeded;
+    }
+
     fn metadataSize(self: *const Self) usize {
-        var size = self.next_header.capacity;
+        var size = self.terminal_packed.capacity +| self.next_header.capacity;
+        size +|= self.owned_filters.len *| @sizeOf(coders.Filter);
+        size +|= self.owned_password.len;
         for (self.entries.items) |entry| size +|= entry.name.len;
         if (self.current) |current| size +|= current.name.len;
         size +|= self.entries.capacity *| @sizeOf(types.EncodeEntry);
@@ -738,11 +843,122 @@ test "7z incremental writer retains one solid codec across entries" {
     }
 }
 
-test "7z incremental writer enforces lifecycle and metadata limits" {
-    try std.testing.expectError(
-        error.Invalid7zIncrementalOptions,
-        Writer.init(std.testing.allocator, .{ .encode = .{ .header_compression = .copy } }),
+test "7z incremental writer emits external metadata and encoded headers" {
+    const archive = @import("archive.zig");
+    const filetime_epoch: u64 = 116_444_736_000_000_000;
+    const payload = "terminal metadata payload\n" ** 37;
+    const expected = [_]struct { EntryOptions, []const u8 }{
+        .{ .{
+            .name = "目录/payload.txt",
+            .expected_size = payload.len,
+            .creation_time = filetime_epoch + 10_000_000,
+            .access_time = filetime_epoch + 20_000_000,
+            .modification_time = filetime_epoch + 30_000_000,
+            .attributes = 0x81a4_0020,
+        }, payload },
+        .{ .{
+            .name = "empty.txt",
+            .expected_size = 0,
+            .modification_time = filetime_epoch + 40_000_000,
+        }, "" },
+    };
+    inline for (.{
+        Compression.copy,
+        Compression.deflate,
+        Compression.bzip2,
+        Compression.lzma,
+        Compression.lzma2,
+        Compression.lzma2_stored,
+        Compression.ppmd7,
+    }) |metadata_compression| {
+        const encoded = try encodeTestArchive(
+            std.testing.allocator,
+            .{
+                .encode = .{
+                    .compression = .lzma2,
+                    .solid = true,
+                    .header_compression = metadata_compression,
+                    .external_names = metadata_compression,
+                    .external_metadata = metadata_compression,
+                },
+            },
+            &expected,
+            7,
+            2,
+        );
+        defer std.testing.allocator.free(encoded);
+        const parsed = try archive.parseAlloc(std.testing.allocator, encoded);
+        defer parsed.deinit();
+        const entry = parsed.find("目录/payload.txt") orelse return error.EntryNotFound;
+        try std.testing.expectEqual(expected[0][0].creation_time, entry.creation_time);
+        try std.testing.expectEqual(expected[0][0].access_time, entry.access_time);
+        try std.testing.expectEqual(expected[0][0].modification_time, entry.modification_time);
+        try std.testing.expectEqual(expected[0][0].attributes, entry.attributes);
+        const decoded = try parsed.extractEntryAlloc(std.testing.allocator, entry);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
+}
+
+test "7z incremental writer encrypts terminal metadata with distinct IVs" {
+    const archive = @import("archive.zig");
+    const aes = @import("aes.zig");
+    const password = "terminal metadata 密码";
+    const encryption = coders.EncryptionOptions{
+        .password = password,
+        .iv = [_]u8{0x52} ** 16,
+        .salt = [_]u8{0x25} ** 16,
+        .salt_len = 8,
+        .num_cycles_power = aes.direct_key_power,
+    };
+    const payload = "encrypted terminal metadata\n" ** 29;
+    const expected = [_]struct { EntryOptions, []const u8 }{
+        .{ .{
+            .name = "secret/数据.txt",
+            .expected_size = payload.len,
+            .modification_time = 116_444_736_050_000_000,
+            .attributes = 0x81a4_0020,
+        }, payload },
+    };
+    const encoded = try encodeTestArchive(
+        std.testing.allocator,
+        .{
+            .encode = .{
+                .compression = .ppmd7,
+                .solid = true,
+                .header_compression = .lzma2,
+                .external_names = .deflate,
+                .external_metadata = .copy,
+                .encryption = encryption,
+                .encrypt_header = true,
+            },
+        },
+        &expected,
+        11,
+        1,
     );
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expectError(
+        error.PasswordRequired,
+        archive.parseAlloc(std.testing.allocator, encoded),
+    );
+    const parsed = try archive.parseAllocWithOptions(
+        std.testing.allocator,
+        encoded,
+        .{ .password = password },
+    );
+    defer parsed.deinit();
+    const entry = parsed.find("secret/数据.txt") orelse return error.EntryNotFound;
+    const decoded = try parsed.decodeEntryAllocWithOptions(
+        std.testing.allocator,
+        entry,
+        .{ .password = password },
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "7z incremental writer enforces lifecycle and metadata limits" {
     try std.testing.expectError(
         error.Invalid7zIncrementalOptions,
         Writer.init(std.testing.allocator, .{ .encode = .{ .bcj2 = true } }),
@@ -768,6 +984,21 @@ test "7z incremental writer enforces lifecycle and metadata limits" {
     }
     try limited.finishArchive();
     try std.testing.expectError(error.StartHeaderPatchUnavailable, limited.startHeaderPatch());
+
+    const long_name = "n" ** 400;
+    var terminal_limited = try Writer.init(std.testing.allocator, .{
+        .encode = .{ .external_names = .copy, .header_compression = .copy },
+        .max_metadata_size = 1024,
+    });
+    defer terminal_limited.deinit();
+    try terminal_limited.beginEntry(.{ .name = long_name, .expected_size = 0 });
+    try terminal_limited.finishEntry();
+    while (terminal_limited.snapshot().phase == .start_header) {
+        var output: [32]u8 = undefined;
+        _ = try terminal_limited.step(&.{}, &output);
+    }
+    try std.testing.expectError(error.OutputLimitExceeded, terminal_limited.finishArchive());
+    try std.testing.expectEqual(Phase.ready, terminal_limited.snapshot().phase);
 }
 
 test "7z incremental writer releases every allocation failure" {
@@ -775,12 +1006,24 @@ test "7z incremental writer releases every allocation failure" {
         fn run(allocator: std.mem.Allocator) !void {
             const payload = "allocation-safe incremental 7z payload\n" ** 17;
             const expected = [_]struct { EntryOptions, []const u8 }{
-                .{ .{ .name = "payload.txt", .expected_size = payload.len }, payload },
+                .{ .{
+                    .name = "payload.txt",
+                    .expected_size = payload.len,
+                    .modification_time = 116_444_736_010_000_000,
+                    .attributes = 0x81a4_0020,
+                }, payload },
                 .{ .{ .name = "empty.txt", .expected_size = 0 }, "" },
             };
             const encoded = try encodeTestArchive(
                 allocator,
-                .{ .encode = .{ .compression = .deflate } },
+                .{
+                    .encode = .{
+                        .compression = .deflate,
+                        .header_compression = .lzma2_stored,
+                        .external_names = .copy,
+                        .external_metadata = .copy,
+                    },
+                },
                 &expected,
                 13,
                 5,
