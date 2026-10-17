@@ -21406,3 +21406,21 @@ reuse, so production keeps the simpler independently owned plans.
   aligned blocks, deeper match search, LZMS writing and in-place update remain
   follow-ups; these are ratio/performance or separate codec/API work rather than
   missing LZX wire compatibility.
+
+- Added a dependency-free deterministic LZMS reference encoder and wired it
+  through every WIM composition surface. The encoder mirrors the decoder's
+  adaptive probability history and canonical-Huffman rebuild schedule, emits
+  the forward 16-bit range stream and backward 16-bit symbol stream, and applies
+  the inverse of mandatory LZMS x86 postprocessing. It currently emits literal
+  items, which already provides real compression for skewed inputs; high-entropy
+  chunks fall back to their original bytes at the WIM resource layer. Direct
+  tests cover repetitive and random round trips, x86 filter reversibility and
+  exhaustive allocation failure cleanup. The raw differential now has wimlib
+  independently decode five Vort-generated text/delta/mixed/source/x86 cases
+  (`vort_encode=5`). Ordinary, Windows-stream, inode, multi-image, SWM,
+  pipable, integrity-pipable and pipable-SWM writer matrices also include LZMS,
+  and wimlib verifies/extracts every form (all writer and writer-wimlib counters
+  are now `4`). Focused LZMS coverage is 68 tests and WIM/LZX coverage is 116.
+  LZ/delta match parsing, recent-offset selection and optimal parsing remain
+  ratio/performance work; solid LZMS writing and in-place WIM update remain
+  separate functionality slices.

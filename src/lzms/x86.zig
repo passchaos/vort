@@ -3,7 +3,15 @@ const std = @import("std");
 const id_window_size: i32 = 65_535;
 const max_translation_offset: i32 = 1_023;
 
+pub fn apply(data: []u8, last_target_usages: *[65_536]i32) void {
+    filter(data, last_target_usages, false);
+}
+
 pub fn undo(data: []u8, last_target_usages: *[65_536]i32) void {
+    filter(data, last_target_usages, true);
+}
+
+fn filter(data: []u8, last_target_usages: *[65_536]i32, undo_filter: bool) void {
     if (data.len <= 17) return;
     @memset(last_target_usages, -id_window_size - 1);
     var last_x86_position: i32 = -max_translation_offset - 1;
@@ -18,6 +26,7 @@ pub fn undo(data: []u8, last_target_usages: *[65_536]i32) void {
             position,
             &last_x86_position,
             last_target_usages,
+            undo_filter,
         );
     }
 }
@@ -32,6 +41,7 @@ fn translateIfNeeded(
     position: usize,
     last_x86_position: *i32,
     last_target_usages: *[65_536]i32,
+    undo_filter: bool,
 ) usize {
     var max_offset = max_translation_offset;
     var opcode_bytes: usize = undefined;
@@ -67,13 +77,26 @@ fn translateIfNeeded(
 
     const instruction_position: i32 = @intCast(position);
     const operand = position + opcode_bytes;
-    if (instruction_position - last_x86_position.* <= max_offset) {
-        const absolute = readU32(data, operand);
-        writeU32(data, operand, absolute -% @as(u32, @intCast(instruction_position)));
+    var target: u16 = undefined;
+    if (!undo_filter) {
+        target = @truncate(
+            @as(u32, @intCast(instruction_position)) +% readU16(data, operand),
+        );
     }
-    const target: u16 = @truncate(
-        @as(u32, @intCast(instruction_position)) +% readU16(data, operand),
-    );
+    if (instruction_position - last_x86_position.* <= max_offset) {
+        const value = readU32(data, operand);
+        const position_u32: u32 = @intCast(instruction_position);
+        writeU32(
+            data,
+            operand,
+            if (undo_filter) value -% position_u32 else value +% position_u32,
+        );
+    }
+    if (undo_filter) {
+        target = @truncate(
+            @as(u32, @intCast(instruction_position)) +% readU16(data, operand),
+        );
+    }
     const likely_instruction_position: i32 = @intCast(
         position + opcode_bytes + @sizeOf(u32) - 1,
     );
@@ -111,4 +134,24 @@ test "LZMS x86 filter restores translated repeated targets" {
             target - @as(u32, @intCast(position)),
             readU32(&data, position + 1),
         );
+}
+
+test "LZMS x86 filter applies and reverses translations" {
+    var data: [96]u8 = @splat(0x90);
+    const positions = [_]usize{ 1, 10, 20, 40 };
+    const target: u32 = 72;
+    for (positions) |position| {
+        data[position] = 0xe8;
+        writeU32(
+            &data,
+            position + 1,
+            target - @as(u32, @intCast(position)),
+        );
+    }
+    const original = data;
+    var scratch: [65_536]i32 = undefined;
+    apply(&data, &scratch);
+    try std.testing.expect(!std.mem.eql(u8, &original, &data));
+    undo(&data, &scratch);
+    try std.testing.expectEqualSlices(u8, &original, &data);
 }

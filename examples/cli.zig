@@ -181,6 +181,8 @@ pub fn main(init: std.process.Init) !void {
         try xpress_cli.decodeHuffman(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-xpress-huffman-file")) {
         try xpress_cli.inspectHuffman(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-lzms-file")) {
+        try lzms_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-lzms-file")) {
         try lzms_cli.decode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-wof-file")) {
@@ -2717,6 +2719,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  encode-xpress-huffman-file <in> <out>
         \\  decode-xpress-huffman-file <in> <out> <decoded_size>
         \\  inspect-xpress-huffman-file <path> <decoded_size>
+        \\  encode-lzms-file <in> <out>
         \\  decode-lzms-file <in> <out> <decoded_size>
         \\  encode-wof-file <in> <out> <xpress4k|xpress8k|xpress16k|lzx>
         \\  decode-wof-file <in> <out> <algorithm> <decoded_size> [max_output]

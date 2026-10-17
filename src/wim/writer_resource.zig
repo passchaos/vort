@@ -1,10 +1,11 @@
 const std = @import("std");
 const core = @import("../core.zig");
+const lzms_encoder = @import("../lzms/encoder.zig");
 const lzx_encoder = @import("../cab/lzx/encoder.zig");
 const xpress = @import("../xpress.zig");
 const format = @import("format.zig");
 
-pub const Error = core.Error || lzx_encoder.Error || xpress.Error || std.mem.Allocator.Error || error{
+pub const Error = core.Error || lzms_encoder.Error || lzx_encoder.Error || xpress.Error || std.mem.Allocator.Error || error{
     InvalidWimWriterOptions,
     WimResourceTooLarge,
 };
@@ -13,6 +14,7 @@ pub const Compression = enum {
     stored,
     xpress,
     lzx,
+    lzms,
 };
 
 pub fn validate(compression: Compression, chunk_size: usize) Error!void {
@@ -25,6 +27,8 @@ pub fn validate(compression: Compression, chunk_size: usize) Error!void {
                 return error.InvalidWimWriterOptions;
         },
         .lzx => format.validateChunkSize(.lzx, chunk_size) catch
+            return error.InvalidWimWriterOptions,
+        .lzms => format.validateChunkSize(.lzms, chunk_size) catch
             return error.InvalidWimWriterOptions,
     }
 }
@@ -40,7 +44,7 @@ pub fn append(
     const offset = output.items.len;
     switch (compression) {
         .stored => try output.appendSlice(allocator, input),
-        .xpress, .lzx => try appendChunked(allocator, output, input, compression, chunk_size),
+        .xpress, .lzx, .lzms => try appendChunked(allocator, output, input, compression, chunk_size),
     }
     const stored_size = output.items.len - offset;
     if (stored_size >= @as(u64, 1) << 56)
@@ -84,6 +88,7 @@ fn appendChunked(
                 chunk,
                 @intCast(std.math.log2_int(usize, chunk_size)),
             ),
+            .lzms => try lzms_encoder.encodeAlloc(allocator, chunk),
         };
         defer allocator.free(encoded);
         if (encoded.len < chunk.len) {
@@ -155,6 +160,34 @@ test "WIM LZX resource mixes compressed and raw chunks" {
         &encoded,
         &input,
         .lzx,
+        32 * 1024,
+        0,
+    );
+    try std.testing.expect(resource.isCompressed());
+    const first_end = format.readU32(encoded.items, 0);
+    try std.testing.expect(first_end < 32 * 1024);
+    try std.testing.expectEqual(
+        @as(usize, 4) + first_end + 32 * 1024,
+        encoded.items.len,
+    );
+}
+
+test "WIM LZMS resource mixes compressed and raw chunks" {
+    const allocator = std.testing.allocator;
+    var input: [64 * 1024]u8 = undefined;
+    const phrase = "WIM LZMS adaptive literal payload\n";
+    for (input[0 .. 32 * 1024], 0..) |*byte, index|
+        byte.* = phrase[index % phrase.len];
+    var prng = std.Random.DefaultPrng.init(0x4c5a_4d53_21);
+    prng.random().bytes(input[32 * 1024 ..]);
+
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(allocator);
+    const resource = try append(
+        allocator,
+        &encoded,
+        &input,
+        .lzms,
         32 * 1024,
         0,
     );

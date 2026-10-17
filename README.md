@@ -106,11 +106,12 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   512-symbol canonical tables, 64 KiB history, interwoven raw length bytes, and
   exact-size bounded decode. Both modes have caller-owned APIs, MS-XCA official
   vectors, fuzzing, and pinned Rust/Python plus wimlib interoperability;
-- pure Zig Windows LZMS raw-block decoding with forward 16-bit range coding,
-  backward adaptive canonical Huffman codes, LZ and delta matches, delayed LRU
-  repeat queues, mandatory x86 address postprocessing, reusable decoder state,
-  exact-size/caller-owned APIs, pinned fixtures, fuzzing, and wimlib-generated
-  text, delta, mixed, source, and x86-code differentials;
+- pure Zig Windows LZMS raw-block encoding and decoding with forward 16-bit
+  range coding, backward adaptive canonical Huffman codes, mandatory x86
+  address transforms, reusable decoder state, exact-size/caller-owned APIs,
+  pinned fixtures, fuzzing, and bidirectional wimlib text, delta, mixed, source,
+  and x86-code differentials. The reference encoder emits adaptive literal
+  items today; LZ/delta match parsing remains ratio work;
 - dependency-free WOF/CompactOS file-provider metadata and backing-stream
   support with XPRESS4K/8K/16K and WIM-LZX chunks, strict 32-/64-bit cumulative
   offset tables, raw-chunk fallback, bounded whole-file and random-range decode,
@@ -254,11 +255,13 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   UTF-16 XML access, bounded resource extraction, validated image-metadata
   security tables, borrowed dentry/extra-stream views, directory iteration,
   UTF-16LE path lookup, and bounded regular-file extraction by image/path.
-  Stored, XPRESS-Huffman, and WIM-flavored LZX chunks are decoded across
+  Stored, XPRESS-Huffman, WIM-flavored LZX, and LZMS chunks are decoded across
   multi-chunk resources; LZMS metadata chunks and alternate-table solid LZMS
   resources support bounded individual-blob extraction without materializing
-  the whole solid stream. Pipable WIMs, cross-part SWM assembly, and encrypted/
-  reparse/ADS path extraction are reported explicitly as unsupported;
+  the whole solid stream. Pipable sequential extraction, caller-ordered SWM
+  sets, encrypted/reparse/ADS path selectors, encrypted-ESD reconstruction,
+  and deterministic stored/XPRESS/LZX/LZMS one-/multi-image, SWM, pipable and
+  pipable-SWM writing are also available;
 - raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode,
   with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
   Zig-native incremental encoders provide `blockFlush()`/`partialFlush()` with

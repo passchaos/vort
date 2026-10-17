@@ -30,7 +30,7 @@ pub const PipableOptions = pipable_writer.Options;
 
 pub const Options = struct {
     compression: Compression = .xpress,
-    /// null selects 32 KiB for XPRESS/LZX and 0 for stored WIMs.
+    /// null selects 32 KiB for XPRESS/LZX/LZMS and 0 for stored WIMs.
     chunk_size: ?usize = null,
     image_name: []const u8 = "Vort Image",
     integrity: bool = true,
@@ -57,7 +57,7 @@ pub const Image = struct {
 
 pub const ImagesOptions = struct {
     compression: Compression = .xpress,
-    /// null selects 32 KiB for XPRESS/LZX and 0 for stored WIMs.
+    /// null selects 32 KiB for XPRESS/LZX/LZMS and 0 for stored WIMs.
     chunk_size: ?usize = null,
     integrity: bool = true,
     guid: ?[16]u8 = null,
@@ -525,6 +525,7 @@ fn effectiveChunkSize(
         .stored => 0,
         .xpress => 32 * 1024,
         .lzx => 32 * 1024,
+        .lzms => 32 * 1024,
     };
 }
 
@@ -717,6 +718,7 @@ fn writeHeader(
         .stored => 0,
         .xpress => 0x0000_0002 | 0x0002_0000,
         .lzx => 0x0000_0002 | 0x0004_0000,
+        .lzms => 0x0000_0002 | 0x0008_0000,
     };
     writeU32(header, 16, flags);
     writeU32(header, 20, @as(u32, @intCast(chunk_size)));

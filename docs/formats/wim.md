@@ -161,8 +161,8 @@ only the duplicate inode bytes. This preserves both extraction progress
 semantics and hard-link space reporting.
 
 `encodeWimAlloc`, `encodeWimAppend`, and `encodeWimInto` produce a standard
-single-part, single-image WIM using stored resources, XPRESS, or LZX. XPRESS
-and LZX default to Microsoft-compatible 32 KiB chunks; explicitly selected LZX
+single-part, single-image WIM using stored resources, XPRESS, LZX, or LZMS.
+Compressed modes default to 32 KiB chunks; explicitly selected LZX
 windows from 64 KiB through 2 MiB use the corresponding wimlib extension.
 Chunks independently select compressed or raw representation, and the writer
 emits the original cumulative chunk table.
@@ -170,7 +170,9 @@ The deterministic LZX reference encoder writes standard verbatim blocks with
 3...8-byte explicit-offset matches and WIM's fixed-size E8 preprocessing. Its
 current matcher retains one candidate per 3-byte hash; longer matches,
 secondary lengths, aligned blocks, deeper chains, and ratio tuning remain
-optimization work rather than wire-format gaps. Image metadata and ordinary
+optimization work rather than wire-format gaps. LZMS uses the native adaptive
+literal encoder and retains raw chunks when they are smaller; LZ and delta
+matches remain ratio work. Image metadata and ordinary
 file blobs use the selected codec, while the lookup table and UTF-16LE XML
 remain uncompressed for Microsoft compatibility. A 10 MiB-chunk integrity
 table covers the bytes from offset 208 through the lookup table. Output is
@@ -232,7 +234,7 @@ cross-part target blobs. The returned `WimEncodedSplitArchive` owns every part
 as with the standard split API.
 
 The current writer remains whole-archive and caller-buffer based. In-place image
-append/update, wire-spanned individual resources, LZMS encoding, automatic
+append/update, wire-spanned individual resources, automatic
 host-filesystem security capture, short names, and tagged metadata remain
 follow-up slices. Filesystem capture/application and construction of EFSRPC or
 reparse payloads from OS objects stay outside the wire serializer.
@@ -411,40 +413,40 @@ stream. A separate deterministic encrypted-ESD fixture pins CryptoAPI RSA-OAEP
 key unwrapping, direct AES equivalence, range decryption, XML/header/integrity
 reconstruction, wrong-key and limit failures. wimlib rejects the encrypted
 input and verifies the Vort-decrypted output (`encrypted_esd=5`).
-It also generates stored, multichunk XPRESS, and LZX images through Vort's public
+It also generates stored, multichunk XPRESS, LZX, and LZMS images through Vort's public
 writer, reopens and extracts every path through Vort, then requires wimlib to
-verify and byte-exactly extract all three archives (`writer=3`,
-`writer_wimlib=3`).
-Separate stored, XPRESS, and LZX stream images cover default and Unicode/empty named
+verify and byte-exactly extract all four archives (`writer=4`,
+`writer_wimlib=4`).
+Separate stored, XPRESS, LZX, and LZMS stream images cover default and Unicode/empty named
 streams, directory ADS, single and dual unnamed reparse layouts, file and
 directory EFSRPC raw streams, and a relative symbolic-link buffer. Vort extracts
 each selector byte-exactly; wimlib verifies every image, labels all three stream
-kinds, and restores the Vort-written link (`writer_stream=3`,
-`writer_stream_wimlib=3`).
+kinds, and restores the Vort-written link (`writer_stream=4`,
+`writer_stream_wimlib=4`).
 The per-codec inode writer images cover descriptor validation/deduplication,
 root and per-entry security IDs, hard-link lookup reference counts and XML
 accounting. wimlib reports the exact descriptor bytes and two-link group, then
-extracts both aliases to the same inode (`writer_inode=3`,
-`writer_inode_wimlib=3`).
-The multi-image writer gate generates four-image stored, XPRESS, and LZX archives,
+extracts both aliases to the same inode (`writer_inode=4`,
+`writer_inode_wimlib=4`).
+The multi-image writer gate generates four-image stored, XPRESS, LZX, and LZMS archives,
 including a cross-image shared blob, distinct trees, two byte-identical empty
 metadata resources, consecutive XML indexes and boot image 2. Both readers map
 all four images correctly; wimlib verifies the archives and byte-compares the
-first two extracted trees (`writer_multi=3`, `writer_multi_wimlib=3`).
-The SWM writer matrix then emits multi-image stored, XPRESS, and LZX sets with three
+first two extracted trees (`writer_multi=4`, `writer_multi_wimlib=4`).
+The SWM writer matrix then emits multi-image stored, XPRESS, LZX, and LZMS sets with three
 indivisible 70,000-byte blobs and a cross-image shared resource. Vort validates
 every local lookup and extracts all paths through `WimArchiveSet`; wimlib joins
 the parts with `--check`, verifies the result, and byte-compares both images
-(`writer_split=3`, `writer_split_wimlib=3`).
-Finally, stored, XPRESS, and LZX multi-image pipable archives cover large compressed
+(`writer_split=4`, `writer_split_wimlib=4`).
+Finally, stored, XPRESS, LZX, and LZMS multi-image pipable archives cover large compressed
 data, 70,000-byte raw-fallback data, empty files, boot image 2, seekable path
 reads, and 7-byte-input/11-byte-output progressive extraction. wimlib verifies
-and extracts both images byte-exactly (`writer_pipable=3`,
-`writer_pipable_wimlib=3`). Separate seekable stored/XPRESS/LZX variants enable
+and extracts both images byte-exactly (`writer_pipable=4`,
+`writer_pipable_wimlib=4`). Separate seekable stored/XPRESS/LZX/LZMS variants enable
 integrity and pass Vort extraction plus wimlib verification
-(`writer_pipable_integrity=3`, `writer_pipable_integrity_wimlib=3`).
-Stored, XPRESS, and LZX pipable SWM sets are also tested independently: Vort performs
+(`writer_pipable_integrity=4`, `writer_pipable_integrity_wimlib=4`).
+Stored, XPRESS, LZX, and LZMS pipable SWM sets are also tested independently: Vort performs
 seekable `WimArchiveSet` routing and 13-byte-input/17-byte-output extraction
 from directly concatenated parts, while wimlib joins with `--check`, verifies,
-and extracts the later image (`writer_pipable_split=3`,
-`writer_pipable_split_wimlib=3`).
+and extracts the later image (`writer_pipable_split=4`,
+`writer_pipable_split_wimlib=4`).

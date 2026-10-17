@@ -196,6 +196,52 @@ test "WIM writer emits deterministic mixed LZX chunks" {
     try std.testing.expectEqualSlices(u8, &payload, extracted);
 }
 
+test "WIM writer emits deterministic mixed LZMS chunks" {
+    const allocator = std.testing.allocator;
+    var payload: [64 * 1024]u8 = undefined;
+    const phrase = "Vort deterministic WIM LZMS payload 0123456789\n";
+    for (payload[0 .. 32 * 1024], 0..) |*byte, index|
+        byte.* = phrase[index % phrase.len];
+    var prng = std.Random.DefaultPrng.init(0x5749_4d4c_5a4d_53);
+    prng.random().bytes(payload[32 * 1024 ..]);
+    const entries = [_]writer.Entry{.{ .path = "nested/payload.bin", .data = &payload }};
+    const options: writer.Options = .{
+        .compression = .lzms,
+        .integrity = false,
+    };
+    const encoded = try writer.encodeAlloc(allocator, &entries, options);
+    defer allocator.free(encoded);
+    const repeated = try writer.encodeAlloc(allocator, &entries, options);
+    defer allocator.free(repeated);
+    try std.testing.expectEqualSlices(u8, encoded, repeated);
+
+    const archive = try archive_mod.Archive.init(encoded);
+    try std.testing.expectEqual(format.Compression.lzms, archive.header.compression);
+    try std.testing.expectEqual(@as(usize, 32 * 1024), archive.header.chunk_size);
+    var lookup = try archive.readLookupTableAlloc(allocator, 64, 4096);
+    defer lookup.deinit();
+    var hash: [20]u8 = undefined;
+    std.crypto.hash.Sha1.hash(&payload, &hash, .{});
+    const entry = lookup.findData(&hash).?;
+    try std.testing.expect(entry.resource.isCompressed());
+    const resource_start: usize = @intCast(entry.resource.offset_in_wim);
+    const first_end: usize = format.readU32(encoded, resource_start);
+    try std.testing.expect(first_end < 32 * 1024);
+    try std.testing.expectEqual(
+        @as(u64, 4 + first_end + 32 * 1024),
+        entry.resource.size_in_wim,
+    );
+    const extracted = try archive.extractByPathAllocLimited(
+        allocator,
+        1,
+        "nested/payload.bin",
+        payload.len,
+        limits,
+    );
+    defer allocator.free(extracted);
+    try std.testing.expectEqualSlices(u8, &payload, extracted);
+}
+
 test "WIM writer preserves named reparse and encrypted raw streams" {
     const allocator = std.testing.allocator;
     const file_streams = [_]writer.NamedStream{
@@ -849,6 +895,13 @@ test "WIM writer validates paths, XML and compression geometry" {
     try std.testing.expectError(
         error.InvalidWimWriterOptions,
         writer.encodeAlloc(std.testing.allocator, &.{}, .{
+            .compression = .lzms,
+            .chunk_size = 4096,
+        }),
+    );
+    try std.testing.expectError(
+        error.InvalidWimWriterOptions,
+        writer.encodeAlloc(std.testing.allocator, &.{}, .{
             .image_name = "bad\x00name",
         }),
     );
@@ -1039,6 +1092,36 @@ test "WIM LZX writer is allocation failure safe" {
             }};
             const encoded = try writer.encodeAlloc(allocator, &entries, .{
                 .compression = .lzx,
+                .integrity = false,
+            });
+            defer allocator.free(encoded);
+            const archive = try archive_mod.Archive.init(encoded);
+            const extracted = try archive.extractByPathAllocLimited(
+                allocator,
+                1,
+                "repetitive.bin",
+                16 * 1024,
+                limits,
+            );
+            defer allocator.free(extracted);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        AllocationTest.run,
+        .{},
+    );
+}
+
+test "WIM LZMS writer is allocation failure safe" {
+    const AllocationTest = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const entries = [_]writer.Entry{.{
+                .path = "repetitive.bin",
+                .data = "WIM LZMS allocation coverage\n" ** 128,
+            }};
+            const encoded = try writer.encodeAlloc(allocator, &entries, .{
+                .compression = .lzms,
                 .integrity = false,
             });
             defer allocator.free(encoded);

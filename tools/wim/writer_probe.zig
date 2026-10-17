@@ -281,6 +281,7 @@ fn parseCompression(name: []const u8) ?vort.WimEncodeCompression {
     if (std.mem.eql(u8, name, "stored")) return .stored;
     if (std.mem.eql(u8, name, "xpress")) return .xpress;
     if (std.mem.eql(u8, name, "lzx")) return .lzx;
+    if (std.mem.eql(u8, name, "lzms")) return .lzms;
     return null;
 }
 

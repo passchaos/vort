@@ -71,6 +71,7 @@ def main() -> None:
     )
     pinned_cases = 0
     external_cases = 0
+    vort_encode_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-lzms-") as temp_text:
         temp = Path(temp_text)
@@ -123,6 +124,18 @@ def main() -> None:
                     raise AssertionError(f"Vort LZMS decode mismatch for {name}")
                 external_cases += 1
 
+                vort_encoded = temp / f"{name}-vort.lzms"
+                vort_oracle = temp / f"{name}-vort-oracle.out"
+                run(args.cli, "encode-lzms-file", source, vort_encoded)
+                run(probe, "decode", vort_encoded, vort_oracle, len(plain))
+                if vort_oracle.read_bytes() != plain:
+                    raise AssertionError(
+                        f"wimlib decode of Vort LZMS mismatch for {name}"
+                    )
+                if name == "repeated" and vort_encoded.stat().st_size >= len(plain):
+                    raise AssertionError("Vort LZMS did not compress repeated input")
+                vort_encode_cases += 1
+
         odd = temp / "odd.lzms"
         odd.write_bytes(b"\0" * 5)
         expect_failure(
@@ -159,7 +172,8 @@ def main() -> None:
 
     print(
         f"pinned={pinned_cases} wimlib={probe is not None} "
-        f"external={external_cases} malformed={malformed}"
+        f"external={external_cases} vort_encode={vort_encode_cases} "
+        f"malformed={malformed}"
     )
 
 

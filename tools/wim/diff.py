@@ -466,6 +466,7 @@ def main() -> None:
             ("stored", "none"),
             ("xpress", "xpress"),
             ("lzx", "lzx"),
+            ("lzms", "lzms"),
         ):
             writer_image = temp / f"vort-writer-{writer_compression}.wim"
             run(args.writer, writer_image, writer_compression)
@@ -502,6 +503,7 @@ def main() -> None:
             ("stored", "none"),
             ("xpress", "xpress"),
             ("lzx", "lzx"),
+            ("lzms", "lzms"),
         ):
             stream_image = temp / f"vort-writer-streams-{writer_compression}.wim"
             run(args.writer, stream_image, writer_compression, "streams")
@@ -615,6 +617,7 @@ def main() -> None:
             ("stored", "none"),
             ("xpress", "xpress"),
             ("lzx", "lzx"),
+            ("lzms", "lzms"),
         ):
             inode_image = temp / f"vort-writer-inode-{writer_compression}.wim"
             run(args.writer, inode_image, writer_compression, "inode")
@@ -679,6 +682,7 @@ def main() -> None:
             ("stored", "none"),
             ("xpress", "xpress"),
             ("lzx", "lzx"),
+            ("lzms", "lzms"),
         ):
             multi_image = temp / f"vort-writer-multi-{writer_compression}.wim"
             run(args.writer, multi_image, writer_compression, "multi")
@@ -781,6 +785,7 @@ def main() -> None:
             ("stored", "none"),
             ("xpress", "xpress"),
             ("lzx", "lzx"),
+            ("lzms", "lzms"),
         ):
             split_prefix = temp / f"vort-writer-split-{writer_compression}"
             run(args.writer, split_prefix, writer_compression, "split")
@@ -850,6 +855,7 @@ def main() -> None:
             ("stored", "none"),
             ("xpress", "xpress"),
             ("lzx", "lzx"),
+            ("lzms", "lzms"),
         ):
             pipable_image = temp / f"vort-writer-pipable-{writer_compression}.wim"
             run(args.writer, pipable_image, writer_compression, "pipable")
@@ -973,6 +979,7 @@ def main() -> None:
             ("stored", "none"),
             ("xpress", "xpress"),
             ("lzx", "lzx"),
+            ("lzms", "lzms"),
         ):
             split_prefix = temp / (
                 f"vort-writer-pipable-split-{writer_compression}"
