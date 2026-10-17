@@ -1,6 +1,7 @@
 const std = @import("std");
 const checksum = @import("../checksum.zig");
 const core = @import("../core.zig");
+const aes = @import("aes.zig");
 const coders = @import("coders.zig");
 const bcj2 = @import("bcj2.zig");
 const file_properties = @import("file_properties.zig");
@@ -43,7 +44,7 @@ const EncodedFolder = struct {
     packed_sizes: [4]u64 = @splat(0),
     pack_stream_count: u3 = 1,
     unpacked_size: u64,
-    aes_unpack_size: ?u64 = null,
+    aes_unpack_sizes: [4]?u64 = @splat(null),
     crc32: u32,
     first_substream: usize,
     substream_count: usize,
@@ -245,10 +246,15 @@ pub fn encodeAppend(
             },
             .unpacked_size = std.math.cast(u64, header.items.len) orelse
                 return error.IntegerOverflow,
-            .aes_unpack_size = if (payload.aes_unpack_size) |size|
-                std.math.cast(u64, size) orelse return error.IntegerOverflow
-            else
+            .aes_unpack_sizes = .{
+                if (payload.aes_unpack_size) |size|
+                    std.math.cast(u64, size) orelse return error.IntegerOverflow
+                else
+                    null,
                 null,
+                null,
+                null,
+            },
             .crc32 = checksum.crc32Best(header.items),
             .first_substream = 0,
             .substream_count = 1,
@@ -342,7 +348,8 @@ fn optionsForNextEncryptedStream(
     if (base.encryption == null) return base;
     var options = base;
     options.encryption_stream_index = next_stream_index.*;
-    next_stream_index.* = std.math.add(u64, next_stream_index.*, 1) catch
+    const stream_count: u64 = if (base.bcj2) 4 else 1;
+    next_stream_index.* = std.math.add(u64, next_stream_index.*, stream_count) catch
         return error.IntegerOverflow;
     return options;
 }
@@ -366,7 +373,7 @@ fn appendFolderPayload(
         const payload = try coders.appendPayloadDetailed(allocator, packed_data, input, options);
         folder.packed_sizes[0] = std.math.cast(u64, payload.packed_size) orelse
             return error.IntegerOverflow;
-        folder.aes_unpack_size = if (payload.aes_unpack_size) |size|
+        folder.aes_unpack_sizes[0] = if (payload.aes_unpack_size) |size|
             std.math.cast(u64, size) orelse return error.IntegerOverflow
         else
             null;
@@ -379,20 +386,40 @@ fn appendFolderPayload(
     primary_options.bcj2 = false;
     primary_options.bcj2_start_ip = 0;
     primary_options.filters = &.{};
-    const main_size = try coders.appendPayload(
+    primary_options.encryption = null;
+    var main_stream: std.ArrayList(u8) = .empty;
+    defer main_stream.deinit(allocator);
+    _ = try coders.appendPayload(
         allocator,
-        packed_data,
+        &main_stream,
         input,
         primary_options,
     );
-    try packed_data.appendSlice(allocator, range_stream);
     folder.pack_stream_count = 4;
-    folder.packed_sizes = .{
-        std.math.cast(u64, main_size) orelse return error.IntegerOverflow,
-        0,
-        0,
-        std.math.cast(u64, range_stream.len) orelse return error.IntegerOverflow,
-    };
+    const branch_streams = [_][]const u8{ main_stream.items, &.{}, &.{}, range_stream };
+    for (branch_streams, 0..) |branch_stream, branch_index| {
+        const packed_size = if (options.encryption) |encryption| encrypted: {
+            const stream_index = std.math.add(
+                u64,
+                options.encryption_stream_index,
+                @intCast(branch_index),
+            ) catch return error.IntegerOverflow;
+            folder.aes_unpack_sizes[branch_index] = std.math.cast(u64, branch_stream.len) orelse
+                return error.IntegerOverflow;
+            break :encrypted try aes.encryptAppend(
+                allocator,
+                packed_data,
+                branch_stream,
+                encryption,
+                stream_index,
+            );
+        } else plain: {
+            try packed_data.appendSlice(allocator, branch_stream);
+            break :plain branch_stream.len;
+        };
+        folder.packed_sizes[branch_index] = std.math.cast(u64, packed_size) orelse
+            return error.IntegerOverflow;
+    }
     return folder;
 }
 
@@ -430,10 +457,15 @@ fn appendExternalPayload(
             0,
         },
         .unpacked_size = unpacked_size,
-        .aes_unpack_size = if (payload.aes_unpack_size) |size|
-            std.math.cast(u64, size) orelse return error.IntegerOverflow
-        else
+        .aes_unpack_sizes = .{
+            if (payload.aes_unpack_size) |size|
+                std.math.cast(u64, size) orelse return error.IntegerOverflow
+            else
+                null,
             null,
+            null,
+            null,
+        },
         .crc32 = crc32,
         .first_substream = index,
         .substream_count = 1,
@@ -558,8 +590,12 @@ fn writeStreamsBodyConfigured(
         else
             default_options;
         for (0..coders.coderCount(options)) |coder_index| {
-            const unpack_size = if (coder_index == 0 and options.encryption != null)
-                folder.aes_unpack_size orelse return error.Invalid7zOptions
+            const unpack_size = if (options.bcj2 and options.encryption != null and
+                coder_index < 4)
+                folder.aes_unpack_sizes[3 - coder_index] orelse
+                    return error.Invalid7zOptions
+            else if (!options.bcj2 and coder_index == 0 and options.encryption != null)
+                folder.aes_unpack_sizes[0] orelse return error.Invalid7zOptions
             else
                 folder.unpacked_size;
             try number.append(allocator, output, unpack_size);

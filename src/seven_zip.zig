@@ -657,6 +657,52 @@ test "7z reader decodes a real LZMA2 BCJ2 folder" {
     );
 }
 
+test "7z reader decodes a real four-branch AES BCJ2 folder" {
+    const allocator = std.testing.allocator;
+    const password = "seven-zip-password";
+    const encoded_hex = std.mem.trim(
+        u8,
+        @embedFile("seven_zip/testdata/7zip-bcj2-aes.7z.hex"),
+        "\r\n \t",
+    );
+    const encoded = try allocator.alloc(u8, encoded_hex.len / 2);
+    defer allocator.free(encoded);
+    _ = try std.fmt.hexToBytes(encoded, encoded_hex);
+
+    const parsed = try parseAlloc(allocator, encoded);
+    defer parsed.deinit();
+    try std.testing.expectEqual(@as(usize, 1), parsed.entries.len);
+    try std.testing.expectEqualStrings("src/seven_zip/bcj2.zig", parsed.entries[0].name);
+    const folder = parsed.streams.folders[0];
+    try std.testing.expectEqual(@as(u3, 6), folder.coder_count);
+    try std.testing.expectEqual(@as(u4, 4), folder.pack_stream_count);
+    for (folder.bcj2_branches) |branch|
+        try std.testing.expect(branch.aes_coder_index != null);
+
+    try std.testing.expectError(
+        error.PasswordRequired,
+        parsed.extractEntryAlloc(allocator, parsed.entries[0]),
+    );
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        parsed.decodeEntryAllocWithOptions(allocator, parsed.entries[0], .{
+            .password = password,
+            .max_kdf_cycles_power = 18,
+        }),
+    );
+    const decoded = try parsed.decodeEntryAllocWithOptions(
+        allocator,
+        parsed.entries[0],
+        .{ .password = password },
+    );
+    defer allocator.free(decoded);
+    try std.testing.expectEqual(@as(usize, 7466), decoded.len);
+    const digest = std.crypto.hash.Md5.hashResult(decoded);
+    var expected_digest: [16]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&expected_digest, "54c1078f4d7495a609959a855a2945ac");
+    try std.testing.expectEqual(expected_digest, digest);
+}
+
 test "7z BCJ2 writer round trips every primary compression method" {
     const entries = [_]EncodeEntry{
         .{ .name = "code.bin", .data = "\x90\xe8\x10\x00\x00\x00\xe9\xf0\xff\xff\xff\x90" ** 256 },
@@ -698,6 +744,111 @@ test "7z BCJ2 writer round trips every primary compression method" {
             try std.testing.expectEqualSlices(u8, entry.data, decoded);
         }
     }
+}
+
+test "7z BCJ2 writer round trips four independently encrypted packed branches" {
+    const payload = "\x90\xe8\x10\x00\x00\x00\xe9\xf0\xff\xff\xff\x90" ** 256;
+    const entries = [_]EncodeEntry{.{ .name = "encrypted-code.bin", .data = payload }};
+    const encryption = EncryptionOptions{
+        .password = "bcj2-password-密码",
+        .iv = [_]u8{0x42} ** 16,
+        .salt = [_]u8{0x24} ** 16,
+        .salt_len = 8,
+        .num_cycles_power = @import("seven_zip/aes.zig").direct_key_power,
+    };
+    const encoded = try encodeAlloc(std.testing.allocator, &entries, .{
+        .compression = .lzma2,
+        .encryption = encryption,
+        .bcj2 = true,
+    });
+    defer std.testing.allocator.free(encoded);
+
+    const parsed = try parseAlloc(std.testing.allocator, encoded);
+    defer parsed.deinit();
+    const folder = parsed.streams.folders[0];
+    try std.testing.expectEqual(@as(u3, 6), folder.coder_count);
+    try std.testing.expectEqual(@as(u4, 4), folder.pack_stream_count);
+    for (folder.bcj2_branches, 0..) |branch, branch_index| {
+        try std.testing.expect(branch.aes_coder_index != null);
+        const aes_index = branch.aes_coder_index.?;
+        const properties = try @import("seven_zip/aes.zig").parseProperties(
+            folder.coders[aes_index].propertyBytes(),
+        );
+        for (folder.bcj2_branches[0..branch_index]) |previous_branch| {
+            const previous_index = previous_branch.aes_coder_index.?;
+            const previous = try @import("seven_zip/aes.zig").parseProperties(
+                folder.coders[previous_index].propertyBytes(),
+            );
+            try std.testing.expect(!std.mem.eql(u8, properties.ivBytes(), previous.ivBytes()));
+        }
+    }
+    try std.testing.expectError(
+        error.PasswordRequired,
+        parsed.extractByNameAlloc(std.testing.allocator, entries[0].name),
+    );
+    const decoded = try parsed.decodeEntryAllocWithOptions(
+        std.testing.allocator,
+        parsed.entries[0],
+        .{ .password = encryption.password },
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "7z encrypted BCJ2 releases every allocation failure" {
+    const payload = "\x90\xe8\x10\x00\x00\x00\xe9\xf0\xff\xff\xff\x90" ** 8;
+    const entries = [_]EncodeEntry{.{ .name = "oom-code.bin", .data = payload }};
+    const encryption = EncryptionOptions{
+        .password = "oom-password-密码",
+        .iv = [_]u8{0x42} ** 16,
+        .salt = [_]u8{0x24} ** 16,
+        .salt_len = 8,
+        .num_cycles_power = @import("seven_zip/aes.zig").direct_key_power,
+    };
+    const Options = struct {
+        entries: []const EncodeEntry,
+        encryption: EncryptionOptions,
+    };
+    const EncodeTest = struct {
+        fn run(allocator: std.mem.Allocator, options: Options) !void {
+            const encoded = try encodeAlloc(allocator, options.entries, .{
+                .compression = .lzma2,
+                .encryption = options.encryption,
+                .bcj2 = true,
+            });
+            allocator.free(encoded);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, EncodeTest.run, .{Options{
+        .entries = &entries,
+        .encryption = encryption,
+    }});
+
+    const encoded = try encodeAlloc(std.testing.allocator, &entries, .{
+        .compression = .lzma2,
+        .encryption = encryption,
+        .bcj2 = true,
+    });
+    defer std.testing.allocator.free(encoded);
+    const DecodeFailureCase = struct {
+        encoded: []const u8,
+        password: []const u8,
+    };
+    const DecodeTest = struct {
+        fn run(allocator: std.mem.Allocator, options: DecodeFailureCase) !void {
+            const parsed = try parseAlloc(allocator, options.encoded);
+            defer parsed.deinit();
+            const decoded = try parsed.decodeEntryAllocWithOptions(
+                allocator,
+                parsed.entries[0],
+                .{ .password = options.password },
+            );
+            allocator.free(decoded);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, DecodeTest.run, .{
+        DecodeFailureCase{ .encoded = encoded, .password = encryption.password },
+    });
 }
 
 test "7z writer round trips an LZMA2 Delta and BCJ chain" {

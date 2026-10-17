@@ -45,12 +45,22 @@ pub const Options = struct {
 pub fn validate(options: Options) Error!void {
     filters.validateChain(options.filters) catch return error.Invalid7zOptions;
     if (options.bcj2 and options.filters.len != 0) return error.Invalid7zOptions;
-    if (options.bcj2 and options.encryption != null) return error.Invalid7zOptions;
     if (options.encrypt_header and options.encryption == null) return error.Invalid7zOptions;
     if (!options.bcj2 and options.bcj2_start_ip != 0) return error.Invalid7zOptions;
-    if (options.encryption) |encryption|
-        _ = aes.propertiesForStream(encryption, options.encryption_stream_index) catch
-            return error.Invalid7zOptions;
+    if (options.bcj2 and options.encryption != null and options.bcj2_start_ip != 0)
+        return error.Invalid7zOptions;
+    if (options.encryption) |encryption| {
+        const stream_count: usize = if (options.bcj2) 4 else 1;
+        for (0..stream_count) |offset| {
+            const stream_index = std.math.add(
+                u64,
+                options.encryption_stream_index,
+                @intCast(offset),
+            ) catch return error.Invalid7zOptions;
+            _ = aes.propertiesForStream(encryption, stream_index) catch
+                return error.Invalid7zOptions;
+        }
+    }
     if (options.compression == .deflate and options.deflate_level > 9)
         return error.Invalid7zOptions;
     if (options.compression == .bzip2 and
@@ -72,7 +82,7 @@ pub fn validate(options: Options) Error!void {
 
 pub fn coderCount(options: Options) usize {
     return if (options.bcj2)
-        2
+        2 + @as(usize, 4) * @intFromBool(options.encryption != null)
     else
         1 + options.filters.len + @intFromBool(options.encryption != null);
 }
@@ -137,7 +147,8 @@ pub fn writeFolder(
     if (options.bcj2) return writeBcj2Folder(allocator, output, options);
     const coder_count = coderCount(options);
     try number.append(allocator, output, coder_count);
-    if (options.encryption != null) try writeAesCoder(allocator, output, options);
+    if (options.encryption != null)
+        try writeAesCoder(allocator, output, options, options.encryption_stream_index);
     try writeCompressionCoder(allocator, output, options);
 
     var filter_index = options.filters.len;
@@ -156,7 +167,20 @@ fn writeBcj2Folder(
     output: *std.ArrayList(u8),
     options: Options,
 ) !void {
-    try number.append(allocator, output, 2);
+    const encrypted = options.encryption != null;
+    try number.append(allocator, output, if (encrypted) 6 else 2);
+    if (encrypted) {
+        var reverse_branch: usize = 4;
+        while (reverse_branch != 0) {
+            reverse_branch -= 1;
+            const stream_index = std.math.add(
+                u64,
+                options.encryption_stream_index,
+                @intCast(reverse_branch),
+            ) catch return error.Invalid7zOptions;
+            try writeAesCoder(allocator, output, options, stream_index);
+        }
+    }
     try writeCompressionCoder(allocator, output, options);
     if (options.bcj2_start_ip == 0) {
         try output.appendSlice(allocator, &.{ 0x14, 0x03, 0x03, 0x01, 0x1b, 4, 1 });
@@ -166,10 +190,25 @@ fn writeBcj2Folder(
         std.mem.writeInt(u32, &property, options.bcj2_start_ip, .little);
         try output.appendSlice(allocator, &property);
     }
-    try number.append(allocator, output, 1);
-    try number.append(allocator, output, 0);
-    for ([_]u8{ 0, 2, 3, 4 }) |input_index|
-        try number.append(allocator, output, input_index);
+    if (encrypted) {
+        for ([_][2]u8{
+            .{ 8, 0 },
+            .{ 7, 1 },
+            .{ 6, 2 },
+            .{ 4, 3 },
+            .{ 5, 4 },
+        }) |bind_pair| {
+            try number.append(allocator, output, bind_pair[0]);
+            try number.append(allocator, output, bind_pair[1]);
+        }
+        for ([_]u8{ 3, 2, 1, 0 }) |input_index|
+            try number.append(allocator, output, input_index);
+    } else {
+        try number.append(allocator, output, 1);
+        try number.append(allocator, output, 0);
+        for ([_]u8{ 0, 2, 3, 4 }) |input_index|
+            try number.append(allocator, output, input_index);
+    }
 }
 
 fn appendCopy(allocator: std.mem.Allocator, output: *std.ArrayList(u8), input: []const u8) !usize {
@@ -206,11 +245,12 @@ fn writeAesCoder(
     allocator: std.mem.Allocator,
     output: *std.ArrayList(u8),
     options: Options,
+    stream_index: u64,
 ) !void {
     const encryption = options.encryption orelse return error.Invalid7zOptions;
     const properties = try aes.propertiesForStream(
         encryption,
-        options.encryption_stream_index,
+        stream_index,
     );
     var property_bytes: std.ArrayList(u8) = .empty;
     defer property_bytes.deinit(allocator);
@@ -371,8 +411,22 @@ test "7z coder writer validates method-specific options" {
         .iv = [_]u8{0x42} ** 16,
         .num_cycles_power = aes.direct_key_power,
     };
+    try validate(.{
+        .bcj2 = true,
+        .encryption = encryption,
+    });
+    try std.testing.expectEqual(@as(usize, 6), coderCount(.{
+        .bcj2 = true,
+        .encryption = encryption,
+    }));
     try std.testing.expectError(error.Invalid7zOptions, validate(.{
         .bcj2 = true,
+        .encryption = encryption,
+        .encryption_stream_index = std.math.maxInt(u64) - 2,
+    }));
+    try std.testing.expectError(error.Invalid7zOptions, validate(.{
+        .bcj2 = true,
+        .bcj2_start_ip = 1,
         .encryption = encryption,
     }));
     var invalid_encryption = encryption;

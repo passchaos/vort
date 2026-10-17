@@ -662,6 +662,29 @@ def main() -> None:
                 )
             external_variants += len(encrypted_references)
 
+            encrypted_bcj2_archive = temp / "aes-bcj2.7z"
+            create_reference_payload(
+                seven_zip_tool,
+                filter_tree,
+                encrypted_bcj2_archive,
+                x86_payload,
+                [
+                    "-m0=bcj2",
+                    "-m1=lzma2",
+                    "-mx=5",
+                    "-mhc=off",
+                    "-mhe=off",
+                    "-pseven-zip-password",
+                ],
+            )
+            verify_with_vort(
+                args.cli,
+                encrypted_bcj2_archive,
+                {"payload.bin": x86_payload},
+                "seven-zip-password",
+            )
+            external_variants += 1
+
             wrong_password = run(
                 args.cli,
                 "list-7z-file",
@@ -708,6 +731,45 @@ def main() -> None:
             verify_with_seven_zip(
                 seven_zip_tool,
                 encrypted_filter_archive,
+                {"payload.bin": x86_payload},
+                encryption_password,
+            )
+            vort_writer_variants += 1
+
+            encrypted_bcj2_output = temp / "vort-aes-bcj2.7z"
+            run(
+                args.cli,
+                "create-7z-file",
+                str(encrypted_bcj2_output),
+                "payload.bin",
+                str(encrypted_filter_input),
+                "lzma2",
+                "none",
+                "non-solid",
+                "plain",
+                "bcj2",
+                "0",
+                "inline-names",
+                "inline-metadata",
+                "-",
+                "-",
+                "-",
+                "-",
+                encryption_password,
+                "42424242424242424242424242424242",
+                "2424242424242424",
+                "63",
+                "plain-header",
+            )
+            verify_with_vort(
+                args.cli,
+                encrypted_bcj2_output,
+                {"payload.bin": x86_payload},
+                encryption_password,
+            )
+            verify_with_seven_zip(
+                seven_zip_tool,
+                encrypted_bcj2_output,
                 {"payload.bin": x86_payload},
                 encryption_password,
             )

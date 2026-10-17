@@ -350,7 +350,8 @@ fn decodeFolderAlloc(
     if (folder_index >= streams.folders.len) return error.Invalid7zArchive;
     const folder = streams.folders[folder_index];
     if (folder.bcj2_coder_index) |bcj2_index| {
-        if (folder.pack_stream_count != 4 or folder.coder_count != 2)
+        if (folder.pack_stream_count != 4 or
+            (folder.coder_count != 2 and folder.coder_count != 6))
             return error.Invalid7zArchive;
         var packed_streams: [4][]const u8 = undefined;
         for (&packed_streams, 0..) |*packed_stream, index| {
@@ -358,7 +359,35 @@ fn decodeFolderAlloc(
             if (streams.pack_crcs[folder.pack_index + index]) |expected|
                 if (checksum.crc32Best(packed_stream.*) != expected) return error.ChecksumMismatch;
         }
-        const primary_index = folder.decode_order[0];
+        var branch_streams: [4][]const u8 = undefined;
+        var owned_branches: [4]?[]u8 = @splat(null);
+        defer for (owned_branches) |owned|
+            if (owned) |bytes| allocator.free(bytes);
+        for (folder.bcj2_branches, 0..) |branch, branch_index| {
+            const packed_bytes = packed_streams[branch.pack_stream_offset];
+            branch_streams[branch_index] = if (branch.aes_coder_index) |aes_index| decrypted: {
+                const coder = folder.coders[aes_index];
+                const properties = aes.parseProperties(coder.propertyBytes()) catch
+                    return error.Invalid7zArchive;
+                const decoded_size = std.math.cast(
+                    usize,
+                    folder.coder_unpack_sizes[aes_index],
+                ) orelse return error.OutputLimitExceeded;
+                const decoded = try aes.decryptAlloc(
+                    allocator,
+                    packed_bytes,
+                    decoded_size,
+                    password,
+                    properties,
+                    max_kdf_cycles_power,
+                );
+                owned_branches[branch_index] = decoded;
+                break :decrypted decoded;
+            } else packed_bytes;
+        }
+
+        const primary_index = folder.primaryCoderIndex() orelse
+            return error.Invalid7zArchive;
         const primary = folder.coders[primary_index];
         const main_size = std.math.cast(
             usize,
@@ -366,8 +395,8 @@ fn decodeFolderAlloc(
         ) orelse return error.OutputLimitExceeded;
         const side_size = std.math.add(
             usize,
-            packed_streams[1].len,
-            packed_streams[2].len,
+            branch_streams[1].len,
+            branch_streams[2].len,
         ) catch return error.IntegerOverflow;
         const calculated_size = std.math.add(usize, main_size, side_size) catch
             return error.IntegerOverflow;
@@ -376,7 +405,7 @@ fn decodeFolderAlloc(
             return error.Invalid7zArchive;
         const main = try decodePrimaryAlloc(
             allocator,
-            packed_streams[0],
+            branch_streams[0],
             primary,
             main_size,
             max_dictionary_size,
@@ -390,9 +419,9 @@ fn decodeFolderAlloc(
         const decoded = try bcj2.decodeAlloc(
             allocator,
             main,
-            packed_streams[1],
-            packed_streams[2],
-            packed_streams[3],
+            branch_streams[1],
+            branch_streams[2],
+            branch_streams[3],
             expected_size,
             start_ip,
         );
