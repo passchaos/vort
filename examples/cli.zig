@@ -405,6 +405,8 @@ pub fn main(init: std.process.Init) !void {
         try wim_cli.extractNamedStream(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-wim-reparse")) {
         try wim_cli.extractReparseData(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-wim-encrypted-raw")) {
+        try wim_cli.extractEncryptedRawData(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-wim-pipable-stream-path")) {
         try wim_cli.extractPipablePathIncremental(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "list-wim-parts-image")) {
@@ -2818,7 +2820,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  extract-wim-path <image> <image_index> <entry> <out> [max_output]
         \\  extract-wim-stream <image> <image_index> <entry> <stream> <out> [max_output]
         \\  extract-wim-reparse <image> <image_index> <entry> <out> [max_output]
-        \\  extract-wim-pipable-stream-path <image> <image_index> <entry> <out> <max_output> [input_step] [output_step] [default|reparse|stream:name]
+        \\  extract-wim-encrypted-raw <image> <image_index> <entry> <out> [max_output]
+        \\  extract-wim-pipable-stream-path <image> <image_index> <entry> <out> <max_output> [input_step] [output_step] [default|reparse|encrypted-raw|stream:name]
         \\  list-wim-parts-image <image_index> <part>...
         \\  extract-wim-parts-path <image_index> <entry> <out> <max_output> <part>...
         \\  encode-bgzf-file <in> <out> [block_size]

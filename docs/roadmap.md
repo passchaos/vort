@@ -21244,3 +21244,20 @@ reuse, so production keeps the simpler independently owned plans.
   11 incremental cases across stored/XPRESS/LZX multi-chunk files, empty files,
   reparse buffers and a two-part 1.3 MB SWM stream; missing and reversed parts
   fail explicitly. Encrypted WIM file data remains the next core format gap.
+
+- Added explicit preservation/export of WIM EFS-encrypted file and directory
+  data. Metadata now validates the Windows-compatible representation: exactly
+  one nonempty unnamed MS-EFSR/EFSRPC raw stream, stored either in `main_hash`
+  or one unnamed extra entry, with named/duplicate/reparse combinations
+  rejected. `Dentry`, `WimArchive`, `WimArchiveSet`, the pipable incremental
+  extractor, and CLI expose an `encrypted_raw` path that retains normal part,
+  codec, SHA-1, output-limit and OOM guarantees. Ordinary default extraction
+  still rejects encrypted dentries so ciphertext is never mislabeled as file
+  plaintext. The default differential builds a synthetic wire-valid encrypted
+  WIM, exports its opaque raw bytes exactly, and pins wrong-selector,
+  non-encrypted and limit failures. wimlib 1.14.5 independently verifies the
+  image and labels it `Raw encrypted data stream` (`encrypted_raw=2`). This
+  representation has no archive password or KDF: actual decryption requires
+  the user's Windows EFS certificate/private key, so Vail has no correct
+  primitive to invoke here. Windows `WriteEncryptedFileRaw()` application and
+  separately encrypted ESD container segments remain follow-up work.

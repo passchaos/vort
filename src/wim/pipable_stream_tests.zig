@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("../core.zig");
 const archive_mod = @import("archive.zig");
 const format = @import("format.zig");
+const metadata = @import("metadata.zig");
 const pipable = @import("pipable.zig");
 const stream = @import("pipable_stream.zig");
 
@@ -200,5 +201,88 @@ test "WIM pipable stream path extraction releases every allocation failure" {
         std.testing.allocator,
         FailureTest.run,
         .{bytes},
+    );
+}
+
+fn appendUncompressedBlob(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    payload: []const u8,
+    flags: u32,
+) !void {
+    var header: [pipable.blob_header_size]u8 = @splat(0);
+    std.mem.writeInt(u64, header[0..8], pipable.blob_magic, .little);
+    std.mem.writeInt(u64, header[8..16], payload.len, .little);
+    std.crypto.hash.Sha1.hash(payload, header[16..36], .{});
+    std.mem.writeInt(u32, header[36..40], flags, .little);
+    try output.appendSlice(allocator, &header);
+    try output.appendSlice(allocator, payload);
+}
+
+test "WIM pipable stream exports opaque EFSRPC raw data explicitly" {
+    const allocator = std.testing.allocator;
+    const fixture = try fixtureAlloc(
+        allocator,
+        @embedFile("testdata/pipable-xpress.wim.b64"),
+    );
+    defer allocator.free(fixture);
+    const archive = try archive_mod.Archive.init(fixture);
+    var image = try archive.readImageMetadataAlloc(allocator, 1, .{
+        .max_metadata_bytes = 4096,
+        .max_lookup_entries = 16,
+        .max_lookup_bytes = 4096,
+        .max_directory_entries = 16,
+        .max_path_depth = 8,
+    });
+    defer image.deinit();
+    const dentry = try image.lookup(allocator, "/nested/payload.txt", 16, 8);
+    const raw = "opaque MS-EFSR raw stream";
+    var raw_hash: [20]u8 = undefined;
+    std.crypto.hash.Sha1.hash(raw, &raw_hash, .{});
+    std.mem.writeInt(
+        u32,
+        image.bytes[dentry.offset + 8 ..][0..4],
+        dentry.attributes | metadata.file_attribute_encrypted,
+        .little,
+    );
+    @memcpy(image.bytes[dentry.offset + 64 ..][0..20], &raw_hash);
+
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(allocator);
+    try encoded.appendSlice(allocator, fixture[0..format.header_size]);
+    try appendUncompressedBlob(allocator, &encoded, "<WIM/>", 0x02);
+    try appendUncompressedBlob(allocator, &encoded, image.bytes, 0x02);
+    try appendUncompressedBlob(allocator, &encoded, raw, 0);
+
+    var extractor = PathExtractor.init(allocator, .{
+        .path = "/nested/payload.txt",
+        .stream = .encrypted_raw,
+        .max_output_len = 1024,
+    });
+    defer extractor.deinit();
+    var output: std.ArrayList(u8) = .empty;
+    defer output.deinit(allocator);
+    var scratch: [2]u8 = undefined;
+    var input_offset: usize = 0;
+    while (true) {
+        const input_end = @min(encoded.items.len, input_offset + 1);
+        const stepped = try extractor.step(
+            encoded.items[input_offset..input_end],
+            &scratch,
+        );
+        input_offset += stepped.progress.input_read;
+        try output.appendSlice(allocator, scratch[0..stepped.progress.output_written]);
+        if (stepped.status == .done) break;
+    }
+    try std.testing.expectEqualStrings(raw, output.items);
+
+    var plaintext = PathExtractor.init(allocator, .{
+        .path = "/nested/payload.txt",
+        .max_output_len = 1024,
+    });
+    defer plaintext.deinit();
+    try std.testing.expectError(
+        error.UnsupportedWimFile,
+        plaintext.step(encoded.items, &scratch),
     );
 }

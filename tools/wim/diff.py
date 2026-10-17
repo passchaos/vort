@@ -52,6 +52,56 @@ def write_tree(root: Path) -> dict[str, bytes]:
     return payloads
 
 
+def resource_header(size: int, flags: int, offset: int, decoded_size: int) -> bytes:
+    if size >= 1 << 56:
+        raise AssertionError("synthetic WIM resource too large")
+    return size.to_bytes(7, "little") + bytes([flags]) + struct.pack(
+        "<QQ", offset, decoded_size
+    )
+
+
+def build_encrypted_raw_wim(metadata_input: bytes, xml: bytes, raw: bytes) -> bytes:
+    metadata = bytearray(metadata_input)
+    stored_security_length = struct.unpack_from("<I", metadata, 0)[0]
+    root_offset = 8 if stored_security_length == 0 else (stored_security_length + 7) & ~7
+    first_directory = struct.unpack_from("<Q", metadata, root_offset + 16)[0]
+    child_directory = struct.unpack_from("<Q", metadata, first_directory + 16)[0]
+    file_offset = child_directory
+    attributes = struct.unpack_from("<I", metadata, file_offset + 8)[0]
+    struct.pack_into("<I", metadata, file_offset + 8, attributes | 0x00004000)
+    raw_hash = hashlib.sha1(raw).digest()
+    metadata[file_offset + 64 : file_offset + 84] = raw_hash
+    metadata_hash = hashlib.sha1(metadata).digest()
+
+    header_size = 208
+    raw_offset = header_size
+    metadata_offset = raw_offset + len(raw)
+    lookup_offset = metadata_offset + len(metadata)
+    lookup_size = 2 * 50
+    xml_offset = lookup_offset + lookup_size
+    raw_resource = resource_header(len(raw), 0, raw_offset, len(raw))
+    metadata_resource = resource_header(
+        len(metadata), 0x02, metadata_offset, len(metadata)
+    )
+    lookup = (
+        metadata_resource
+        + struct.pack("<HI", 1, 1)
+        + metadata_hash
+        + raw_resource
+        + struct.pack("<HI", 1, 1)
+        + raw_hash
+    )
+    header = bytearray(header_size)
+    header[0:8] = b"MSWIM\0\0\0"
+    struct.pack_into("<I", header, 8, header_size)
+    struct.pack_into("<I", header, 12, 0x00010D00)
+    header[24:40] = bytes.fromhex("00112233445566778899aabbccddeeff")
+    struct.pack_into("<HHI", header, 40, 1, 1, 1)
+    header[48:72] = resource_header(len(lookup), 0x02, lookup_offset, len(lookup))
+    header[72:96] = resource_header(len(xml), 0x02, xml_offset, len(xml))
+    return bytes(header) + raw + bytes(metadata) + lookup + xml
+
+
 def verify_vort(
     cli: Path,
     image: Path,
@@ -108,6 +158,7 @@ def main() -> None:
     split_cases = 0
     reparse_cases = 0
     pipable_stream_cases = 0
+    encrypted_raw_cases = 0
     stream_error_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-wim-") as temp_text:
@@ -137,6 +188,75 @@ def main() -> None:
         if fixture_path_out.read_bytes() != b"hello WIM XPRESS payload\n":
             raise AssertionError("checked-in WIM path extraction mismatch")
         fixture_cases += 1
+
+        metadata_out = temp / "fixture-metadata.bin"
+        run(
+            args.cli,
+            "extract-wim-resource",
+            fixture,
+            "c5071b9147d869a9e7b5efc3e64e7e536e3d64fd",
+            metadata_out,
+            4096,
+        )
+        fixture_xml = temp / "fixture.xml"
+        run(args.cli, "extract-wim-xml", fixture, fixture_xml, 4096)
+        encrypted_raw = b"opaque MS-EFSR EFSRPC raw payload\x00\x01\x02"
+        encrypted_image = temp / "encrypted-raw.wim"
+        encrypted_image.write_bytes(
+            build_encrypted_raw_wim(
+                metadata_out.read_bytes(),
+                fixture_xml.read_bytes(),
+                encrypted_raw,
+            )
+        )
+        encrypted_listing = run(
+            args.cli, "list-wim-image", encrypted_image, 1
+        ).stdout
+        if b"encrypted\t/nested/file.txt" not in encrypted_listing:
+            raise AssertionError("synthetic EFSRPC encrypted entry not listed")
+        encrypted_out = temp / "encrypted-raw.out"
+        run(
+            args.cli,
+            "extract-wim-encrypted-raw",
+            encrypted_image,
+            1,
+            "/nested/file.txt",
+            encrypted_out,
+            len(encrypted_raw),
+        )
+        if encrypted_out.read_bytes() != encrypted_raw:
+            raise AssertionError("synthetic EFSRPC raw export mismatch")
+        expect_failure(
+            args.cli,
+            "extract-wim-encrypted-raw",
+            encrypted_image,
+            1,
+            "/nested/file.txt",
+            temp / "encrypted-raw-limited.out",
+            len(encrypted_raw) - 1,
+            error_name="OutputLimitExceeded",
+        )
+        expect_failure(
+            args.cli,
+            "extract-wim-path",
+            encrypted_image,
+            1,
+            "/nested/file.txt",
+            temp / "encrypted-plaintext.out",
+            len(encrypted_raw),
+            error_name="UnsupportedWimFile",
+        )
+        expect_failure(
+            args.cli,
+            "extract-wim-encrypted-raw",
+            fixture,
+            1,
+            "/nested/file.txt",
+            temp / "not-encrypted-raw.out",
+            1024,
+            error_name="WimNotEncryptedFile",
+        )
+        encrypted_raw_cases += 1
 
         lzms_fixture = temp / "fixture.esd"
         lzms_fixture.write_bytes(
@@ -220,6 +340,13 @@ def main() -> None:
         source = temp / "tree"
         payloads = write_tree(source)
         if wimlib is not None:
+            run(wimlib, "verify", encrypted_image)
+            encrypted_details = run(
+                wimlib, "dir", encrypted_image, 1, "--detailed"
+            ).stdout
+            if b"Raw encrypted data stream" not in encrypted_details:
+                raise AssertionError("wimlib did not recognize EFSRPC raw stream")
+            encrypted_raw_cases += 1
             rng = random.Random(0x5357_4D)
             for cli_name, expected_name in (
                 ("none", "none"),
@@ -680,7 +807,8 @@ def main() -> None:
         f"fixture={fixture_cases} wimlib={wimlib is not None} "
         f"codecs={codec_cases} images={image_cases} solid={solid_cases} "
         f"split={split_cases} reparse={reparse_cases} "
-        f"pipable_stream={pipable_stream_cases} stream_errors={stream_error_cases} "
+        f"pipable_stream={pipable_stream_cases} encrypted_raw={encrypted_raw_cases} "
+        f"stream_errors={stream_error_cases} "
         f"malformed={malformed}"
     )
 

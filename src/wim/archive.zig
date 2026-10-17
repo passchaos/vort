@@ -28,6 +28,7 @@ pub const StreamSelector = union(enum) {
     default,
     named: []const u8,
     reparse,
+    encrypted_raw,
 };
 
 pub fn selectDentryStreamSha1Alloc(
@@ -35,6 +36,10 @@ pub fn selectDentryStreamSha1Alloc(
     dentry: image_metadata.Dentry,
     stream: StreamSelector,
 ) Error![20]u8 {
+    switch (stream) {
+        .encrypted_raw => return dentry.encryptedRawDataSha1(),
+        else => {},
+    }
     if (dentry.isDirectory()) return error.WimNotRegularFile;
     if (dentry.isEncrypted()) return error.UnsupportedWimFile;
     return switch (stream) {
@@ -45,6 +50,7 @@ pub fn selectDentryStreamSha1Alloc(
         },
         .named => |name| try dentry.namedStreamSha1(allocator, name),
         .reparse => try dentry.reparseDataSha1(),
+        .encrypted_raw => unreachable,
     };
 }
 
@@ -273,6 +279,27 @@ pub const Archive = struct {
             image_index,
             path,
             .reparse,
+            max_output_len,
+            limits,
+        );
+    }
+
+    /// Extracts the opaque EFSRPC raw stream for an encrypted file or
+    /// directory. The returned bytes are suitable for WriteEncryptedFileRaw()
+    /// and are not plaintext.
+    pub fn extractEncryptedRawByPathAllocLimited(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        image_index: u32,
+        path: []const u8,
+        max_output_len: usize,
+        limits: PathLimits,
+    ) Error![]u8 {
+        return self.extractPathStreamAllocLimited(
+            allocator,
+            image_index,
+            path,
+            .encrypted_raw,
             max_output_len,
             limits,
         );
@@ -682,6 +709,74 @@ test "WIM reads XPRESS lookup XML metadata and stored blobs" {
             lookup,
             with_named_stream,
             .{ .named = "missing" },
+            1024,
+            1024,
+        ),
+    );
+    var encrypted = nested_file;
+    encrypted.attributes |= image_metadata.file_attribute_encrypted;
+    const encrypted_raw = try archive.extractDentryStreamAllocLimited(
+        allocator,
+        lookup,
+        encrypted,
+        .encrypted_raw,
+        1024,
+        1024,
+    );
+    defer allocator.free(encrypted_raw);
+    try std.testing.expectEqualStrings("hello WIM XPRESS payload\n", encrypted_raw);
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        archive.extractDentryStreamAllocLimited(
+            allocator,
+            lookup,
+            encrypted,
+            .encrypted_raw,
+            encrypted_raw.len - 1,
+            1024,
+        ),
+    );
+    const EncryptedFailureTest = struct {
+        fn run(
+            failure_allocator: std.mem.Allocator,
+            test_archive: Archive,
+            test_lookup: LookupTable,
+            test_dentry: image_metadata.Dentry,
+        ) !void {
+            const raw = try test_archive.extractDentryStreamAllocLimited(
+                failure_allocator,
+                test_lookup,
+                test_dentry,
+                .encrypted_raw,
+                1024,
+                1024,
+            );
+            defer failure_allocator.free(raw);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        allocator,
+        EncryptedFailureTest.run,
+        .{ archive, lookup, encrypted },
+    );
+    try std.testing.expectError(
+        error.UnsupportedWimFile,
+        archive.extractDentryStreamAllocLimited(
+            allocator,
+            lookup,
+            encrypted,
+            .default,
+            1024,
+            1024,
+        ),
+    );
+    try std.testing.expectError(
+        error.WimNotEncryptedFile,
+        archive.extractDentryStreamAllocLimited(
+            allocator,
+            lookup,
+            nested_file,
+            .encrypted_raw,
             1024,
             1024,
         ),

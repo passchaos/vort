@@ -203,6 +203,25 @@ pub const ArchiveSet = struct {
         );
     }
 
+    /// Extracts the opaque EFSRPC raw stream from its owning SWM part.
+    pub fn extractEncryptedRawByPathAllocLimited(
+        self: ArchiveSet,
+        allocator: std.mem.Allocator,
+        image_index: u32,
+        path: []const u8,
+        max_output_len: usize,
+        limits: archive_mod.PathLimits,
+    ) Error![]u8 {
+        return self.extractPathStreamAllocLimited(
+            allocator,
+            image_index,
+            path,
+            .encrypted_raw,
+            max_output_len,
+            limits,
+        );
+    }
+
     pub fn extractEntryAllocLimitedWithSolidLimit(
         self: ArchiveSet,
         allocator: std.mem.Allocator,
@@ -249,17 +268,11 @@ pub const ArchiveSet = struct {
             limits.max_directory_entries,
             limits.max_path_depth,
         );
-        if (dentry.isDirectory()) return error.WimNotRegularFile;
-        if (dentry.isEncrypted()) return error.UnsupportedWimFile;
-        const hash = switch (stream) {
-            .default => blk: {
-                if (dentry.isReparsePoint()) return error.WimNotRegularFile;
-                break :blk try dentry.defaultDataSha1() orelse
-                    return error.WimNotRegularFile;
-            },
-            .named => |name| try dentry.namedStreamSha1(allocator, name),
-            .reparse => try dentry.reparseDataSha1(),
-        };
+        const hash = try archive_mod.selectDentryStreamSha1Alloc(
+            allocator,
+            dentry,
+            stream,
+        );
         if (std.mem.allEqual(u8, &hash, 0)) return allocator.alloc(u8, 0);
         const entry = lookup.findData(&hash) orelse return error.WimResourceNotFound;
         return self.extractEntryAllocLimitedWithSolidLimit(

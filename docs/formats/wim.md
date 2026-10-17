@@ -57,9 +57,20 @@ ordinary default-stream extraction. Reparse points expose the stored tag and
 raw reparse buffer through `reparseTag`, `reparseDataSha1`, and
 `extractReparseDataByPathAllocLimited`. Callers that already retain metadata and
 the lookup table can use `extractDentryStreamAllocLimited` with `.default`,
-`.named`, or `.reparse` without repeating path traversal. Every selected hash
-still uses the normal output, solid-chunk, part-number, and SHA-1 checks.
-Encrypted files remain explicitly unsupported.
+`.named`, `.reparse`, or `.encrypted_raw` without repeating path traversal.
+Every selected hash still uses the normal output, solid-chunk, part-number, and
+SHA-1 checks.
+
+Files and directories with `FILE_ATTRIBUTE_ENCRYPTED` expose their single
+opaque MS-EFSR/EFSRPC raw stream through `encryptedRawDataSha1` and
+`extractEncryptedRawByPathAllocLimited`. This is the byte stream produced by
+Windows `ReadEncryptedFileRaw()` and consumed by `WriteEncryptedFileRaw()`; it
+contains EFS metadata plus ciphertext for all data streams and is deliberately
+not returned by ordinary `.default` extraction. Vort requires exactly one
+nonempty unnamed raw stream and rejects named, duplicate, missing, zero-hash,
+or reparse combinations. Decryption requires the user's EFS certificate/private
+key and Windows EFS semantics, not an archive password or a standalone AES
+operation, so there is no applicable Vail primitive to compose at this layer.
 
 Incremental pipable extraction borrows the requested path and optional named
 stream, retains only the selected image metadata plus one encoded and decoded
@@ -67,11 +78,11 @@ compression chunk, and writes selected file bytes into caller buffers. It skips
 the leading XML resource, decodes the selected metadata resource, resolves the
 path before file blobs arrive, then scans blob headers until the selected SHA-1
 appears. Empty files finish immediately after metadata. Stored, XPRESS, LZX,
-default, named, and reparse streams share the same state machine and SHA-1
-verification. `step` reports exact input/output progress and `need_input`,
-`need_output`, or `done`; `finish` distinguishes truncation from a complete
-stream that lacks the selected blob. Caller limits bound metadata, output,
-directory traversal, path depth, and chunk scratch.
+default, named, reparse, and encrypted-raw streams share the same state machine
+and SHA-1 verification. `step` reports exact input/output progress and
+`need_input`, `need_output`, or `done`; `finish` distinguishes truncation from a
+complete stream that lacks the selected blob. Caller limits bound metadata,
+output, directory traversal, path depth, and chunk scratch.
 
 Concatenated pipable SWM parts are accepted only in exact order. The extractor
 consumes the prior part's trailing header and the next part's preliminary
@@ -148,6 +159,7 @@ zig build run -- list-wim-image install.wim 1
 zig build run -- extract-wim-path install.wim 1 /Windows/System32/example.dll output.bin 1073741824
 zig build run -- extract-wim-stream install.wim 1 /file.txt Zone.Identifier zone.bin 1048576
 zig build run -- extract-wim-reparse install.wim 1 /link reparse.bin 1048576
+zig build run -- extract-wim-encrypted-raw install.wim 1 /secret.dat secret.efsrpc 1073741824
 zig build run -- extract-wim-pipable-stream-path pipable.wim 1 /large.bin output.bin 2147483648 4096 32768
 zig build run -- list-wim-parts-image 1 install.swm install2.swm
 zig build run -- extract-wim-parts-path 1 /large.bin output.bin 2147483648 install.swm install2.swm
@@ -165,11 +177,13 @@ from their owning part rather than interpreting the same physical offset in
 part 1. Missing,
 reordered, duplicate-position, or mismatched sets fail before extraction.
 Metadata, default data, ADS, reparse buffers, SHA-1, output, lookup and solid
-chunk limits are identical to the single-archive APIs.
+chunk limits are identical to the single-archive APIs; EFSRPC raw resources use
+the same owning-part routing.
 
-Encrypted file data and filesystem application of reparse/alternate-stream
-semantics remain follow-up work. The library exposes and verifies raw content
-without creating links or host filesystem ADS implicitly.
+EFS certificate/private-key decryption, container-level encrypted ESD segments,
+and filesystem application of EFSRPC/reparse/alternate-stream semantics remain
+follow-up work. The library exposes and verifies raw content without invoking
+Windows filesystem mutation implicitly.
 
 The differential gate creates stored, XPRESS, and LZX multi-chunk WIMs with
 pinned wimlib, verifies them with `wimlib-imagex`, compares metadata tree paths,
@@ -190,4 +204,7 @@ terminators. When wimlib is available, each generated compression mode also
 captures a Unix symbolic link, requires Vort to list and extract its raw reparse
 buffer, and requires wimlib to restore the same link target. Its split fixture
 also requires two-part `WimArchiveSet` listing and byte-exact cross-part path
-extraction, plus missing and reversed set rejection.
+extraction, plus missing and reversed set rejection. A synthetic wire-valid
+encrypted dentry pins opaque EFSRPC export and plaintext-selector rejection;
+wimlib independently verifies and labels the same entry as a raw encrypted data
+stream.

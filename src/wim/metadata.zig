@@ -9,6 +9,7 @@ pub const Error = core.Error || std.mem.Allocator.Error || error{
     WimNotDirectory,
     WimNotRegularFile,
     WimNotReparsePoint,
+    WimNotEncryptedFile,
     UnsupportedWimFile,
 };
 
@@ -165,6 +166,24 @@ pub const Dentry = struct {
         while (try streams.next()) |stream|
             if (!stream.isNamed()) return stream.hash;
         return error.WimNotRegularFile;
+    }
+
+    /// Returns the opaque MS-EFSR/EFSRPC raw stream used by
+    /// ReadEncryptedFileRaw()/WriteEncryptedFileRaw(). This is not plaintext.
+    pub fn encryptedRawDataSha1(self: Dentry) Error![20]u8 {
+        if (!self.isEncrypted()) return error.WimNotEncryptedFile;
+        if (self.isReparsePoint()) return error.InvalidWimMetadata;
+        var selected: ?[20]u8 = if (hashIsZero(&self.main_hash))
+            null
+        else
+            self.main_hash;
+        var streams = self.extraStreams();
+        while (try streams.next()) |stream| {
+            if (stream.isNamed() or hashIsZero(&stream.hash) or selected != null)
+                return error.InvalidWimMetadata;
+            selected = stream.hash;
+        }
+        return selected orelse error.InvalidWimMetadata;
     }
 
     /// Returns the SHA-1 of the ordinary unnamed data stream. A zero digest
@@ -449,11 +468,12 @@ fn parseDentry(
     }
     var main_hash: [20]u8 = undefined;
     @memcpy(&main_hash, bytes[offset + 64 .. offset + 84]);
+    const attributes = readU32(bytes, offset + 8);
     try validateExtraStreams(
         bytes,
         dentry_end,
         extra_stream_count,
-        readU32(bytes, offset + 8) & file_attribute_reparse_point != 0,
+        attributes,
         &main_hash,
     );
     return .{
@@ -462,7 +482,7 @@ fn parseDentry(
             .offset = offset,
             .length = length,
             .next_offset = next_offset,
-            .attributes = readU32(bytes, offset + 8),
+            .attributes = attributes,
             .security_id = security_id,
             .subdir_offset = std.math.cast(usize, readU64(bytes, offset + 16)) orelse
                 return error.IntegerOverflow,
@@ -540,17 +560,23 @@ fn validateExtraStreams(
     bytes: []const u8,
     first_offset: usize,
     count: u16,
-    reparse: bool,
+    attributes: u32,
     main_hash: *const [20]u8,
 ) Error!void {
+    const reparse = attributes & file_attribute_reparse_point != 0;
+    const encrypted = attributes & file_attribute_encrypted != 0;
+    if (encrypted and reparse) return error.InvalidWimMetadata;
     var offset = first_offset;
     var unnamed_count: usize = 0;
     for (0..count) |index| {
         const parsed = try parseExtraStream(bytes, offset);
         const stream = parsed.stream;
         if (!stream.isNamed()) {
+            if (encrypted and hashIsZero(&stream.hash))
+                return error.InvalidWimMetadata;
             unnamed_count += 1;
         } else {
+            if (encrypted) return error.InvalidWimMetadata;
             if (!validUtf16StreamName(stream.name_utf16le))
                 return error.InvalidWimMetadata;
             var prior_offset = first_offset;
@@ -563,6 +589,11 @@ fn validateExtraStreams(
             }
         }
         offset = parsed.next_offset;
+    }
+    if (encrypted) {
+        const main_count: usize = @intFromBool(!hashIsZero(main_hash));
+        if (main_count + unnamed_count != 1) return error.InvalidWimMetadata;
+        return;
     }
     const max_unnamed: usize = if (reparse and hashIsZero(main_hash)) 2 else 1;
     if (unnamed_count > max_unnamed) return error.InvalidWimMetadata;
@@ -694,7 +725,49 @@ test "WIM metadata assigns unnamed and named streams" {
 
     var encrypted = file;
     encrypted.attributes |= file_attribute_encrypted;
+    encrypted.extra_stream_count = 1;
+    try std.testing.expectEqual(data_hash, try encrypted.encryptedRawDataSha1());
     try std.testing.expectError(error.UnsupportedWimFile, encrypted.defaultDataSha1());
+    try std.testing.expectError(error.WimNotEncryptedFile, file.encryptedRawDataSha1());
+    encrypted.extra_stream_count = 2;
+    try std.testing.expectError(
+        error.InvalidWimMetadata,
+        encrypted.encryptedRawDataSha1(),
+    );
+    encrypted.extra_stream_count = 0;
+    try std.testing.expectError(
+        error.InvalidWimMetadata,
+        encrypted.encryptedRawDataSha1(),
+    );
+    encrypted.main_hash = data_hash;
+    try std.testing.expectEqual(data_hash, try encrypted.encryptedRawDataSha1());
+    encrypted.attributes |= file_attribute_reparse_point;
+    try std.testing.expectError(
+        error.InvalidWimMetadata,
+        encrypted.encryptedRawDataSha1(),
+    );
+
+    std.mem.writeInt(
+        u32,
+        image.bytes[file_offset + 8 ..][0..4],
+        file_attribute_encrypted,
+        .little,
+    );
+    std.mem.writeInt(u16, image.bytes[file_offset + 96 ..][0..2], 1, .little);
+    std.mem.writeInt(u64, image.bytes[named_stream_offset..][0..8], 0, .little);
+    var encrypted_directory = try image.readDirectoryAlloc(allocator, image.root, 4);
+    defer encrypted_directory.deinit();
+    try std.testing.expectEqual(
+        data_hash,
+        try encrypted_directory.entries[0].encryptedRawDataSha1(),
+    );
+    std.mem.writeInt(u64, image.bytes[named_stream_offset..][0..8], 48, .little);
+    std.mem.writeInt(u16, image.bytes[file_offset + 96 ..][0..2], 2, .little);
+    try std.testing.expectError(
+        error.InvalidWimMetadata,
+        image.readDirectoryAlloc(allocator, image.root, 4),
+    );
+    std.mem.writeInt(u32, image.bytes[file_offset + 8 ..][0..4], 0x80, .little);
 
     image.bytes[named_stream_offset + 38] = '/';
     try std.testing.expectError(

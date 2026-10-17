@@ -313,6 +313,43 @@ pub fn extractReparseData(
     });
 }
 
+pub fn extractEncryptedRawData(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const image_index = try std.fmt.parseInt(
+        u32,
+        args.next() orelse return error.MissingCorpusPath,
+        10,
+    );
+    const entry_path = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const limit = if (args.next()) |text|
+        try std.fmt.parseInt(usize, text, 10)
+    else
+        max_file_size;
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    const archive = try vort.parseWim(input);
+    const raw = try archive.extractEncryptedRawByPathAllocLimited(
+        init.gpa,
+        image_index,
+        entry_path,
+        limit,
+        path_limits,
+    );
+    defer init.gpa.free(raw);
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = raw });
+    try stdout.print("image={d} entry={s} efsrpc_raw_bytes={d} path={s}\n", .{
+        image_index,
+        entry_path,
+        raw.len,
+        output_path,
+    });
+}
+
 pub fn extractPipablePathIncremental(
     init: std.process.Init,
     args: *std.process.Args.Iterator,
@@ -344,6 +381,8 @@ pub fn extractPipablePathIncremental(
             .default
         else if (std.mem.eql(u8, text, "reparse"))
             .reparse
+        else if (std.mem.eql(u8, text, "encrypted-raw"))
+            .encrypted_raw
         else if (std.mem.startsWith(u8, text, "stream:"))
             .{ .named = text["stream:".len..] }
         else
