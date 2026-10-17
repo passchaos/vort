@@ -19,6 +19,10 @@ pub fn main(init: std.process.Init) !void {
         return writeMultiImage(init, output_path, compression);
     if (std.mem.eql(u8, mode, "split"))
         return writeSplit(init, output_path, compression);
+    if (std.mem.eql(u8, mode, "pipable"))
+        return writePipable(init, output_path, compression, false);
+    if (std.mem.eql(u8, mode, "pipable-integrity"))
+        return writePipable(init, output_path, compression, true);
     if (!std.mem.eql(u8, mode, "basic")) return error.InvalidBlockPlan;
 
     const large = "Vort WIM writer multichunk payload 0123456789\n" ** 4096;
@@ -204,6 +208,41 @@ fn writeSplit(
             .data = part.bytes,
         });
     }
+}
+
+fn writePipable(
+    init: std.process.Init,
+    output_path: []const u8,
+    compression: vort.WimEncodeCompression,
+    integrity: bool,
+) !void {
+    const large = "Vort pipable writer multi-chunk payload\n" ** 4096;
+    var random: [70_000]u8 = undefined;
+    fillPseudoRandomSeed(&random, 0x5049_5045);
+    const first_entries = [_]vort.WimEncodeEntry{
+        .{ .path = "large.bin", .data = large },
+        .{ .path = "random.bin", .data = &random },
+        .{ .path = "empty" },
+    };
+    const second_entries = [_]vort.WimEncodeEntry{
+        .{ .path = "second.txt", .data = "second pipable image\n" },
+        .{ .path = "random.bin", .data = &random },
+    };
+    const images = [_]vort.WimEncodeImage{
+        .{ .name = "first", .entries = &first_entries },
+        .{ .name = "second", .entries = &second_entries },
+    };
+    const encoded = try vort.encodeWimImagesPipableAlloc(
+        init.gpa,
+        &images,
+        .{ .compression = compression, .boot_index = 2 },
+        .{ .integrity = integrity },
+    );
+    defer init.gpa.free(encoded);
+    try std.Io.Dir.cwd().writeFile(init.io, .{
+        .sub_path = output_path,
+        .data = encoded,
+    });
 }
 
 fn writeArchive(

@@ -45,6 +45,7 @@ pub const EncodeImagesOptions = writer.ImagesOptions;
 pub const SplitEncodeOptions = writer.SplitOptions;
 pub const EncodedSplitPart = writer.SplitPart;
 pub const EncodedSplitArchive = writer.SplitArchive;
+pub const PipableEncodeOptions = writer.PipableOptions;
 pub const parse = archive.Archive.init;
 pub const parseHeader = format.parseHeader;
 pub const parseImageMetadataOwned = metadata.ImageMetadata.fromOwnedBytes;
@@ -58,6 +59,15 @@ pub const encodeImagesInto = writer.encodeImagesInto;
 pub const splitAlloc = writer.splitArchiveAlloc;
 pub const encodeSplitAlloc = writer.encodeSplitAlloc;
 pub const encodeImagesSplitAlloc = writer.encodeImagesSplitAlloc;
+pub const toPipableAlloc = writer.toPipableAlloc;
+pub const toPipableAppend = writer.toPipableAppend;
+pub const toPipableInto = writer.toPipableInto;
+pub const encodePipableAlloc = writer.encodePipableAlloc;
+pub const encodePipableAppend = writer.encodePipableAppend;
+pub const encodePipableInto = writer.encodePipableInto;
+pub const encodeImagesPipableAlloc = writer.encodeImagesPipableAlloc;
+pub const encodeImagesPipableAppend = writer.encodeImagesPipableAppend;
+pub const encodeImagesPipableInto = writer.encodeImagesPipableInto;
 
 test {
     _ = format;

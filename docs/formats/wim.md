@@ -197,12 +197,29 @@ set the SPANNED header flag, share the deterministic GUID and image geometry,
 and clear boot metadata/index as required by SWM. A one-part result remains a
 normal WIM and retains the source boot descriptor.
 
+`toPipableWimAlloc`/Append/Into convert a supported standard WIM to wimlib's
+seekable and sequential `WLPWM` layout. Direct one- and multi-image composition
+is available through `encodeWimPipable*` and `encodeWimImagesPipable*`. The
+writer emits the zero-resource leading header, leading XML blob, image-ordered
+metadata blobs, data blobs, pipable lookup and final XML blobs, optional raw
+integrity table, and complete trailing header with no gaps. Every blob has the
+40-byte hash/size/flags prefix; compressed resources move their cumulative
+table to the tail, add a 4-byte size before every chunk, and retain table offsets
+that exclude those size fields. Stored and raw-fallback chunks use the same
+ordering contract.
+
+`WimPipableEncodeOptions.integrity` defaults to false. This is the true
+nonseekable-friendly form: after the final XML blob, the incremental reader sees
+the trailing header directly. Explicit integrity is supported for seekable and
+wimlib verification, but the raw table between final XML and trailing header is
+not consumed by `WimPipableStreamPathExtractor`. Pipable WIM remains a wimlib
+extension and intentionally uses non-Microsoft magic.
+
 The current writer remains whole-archive and caller-buffer based. In-place image
-append/update, wire-spanned individual resources, pipable output, LZX/LZMS
-encoding, automatic host-filesystem security capture, short names, and tagged
-metadata remain follow-up slices. Filesystem capture/application and
-construction of EFSRPC or reparse payloads from OS objects stay outside the
-wire serializer.
+append/update, wire-spanned individual resources, LZX/LZMS encoding, automatic
+host-filesystem security capture, short names, and tagged metadata remain
+follow-up slices. Filesystem capture/application and construction of EFSRPC or
+reparse payloads from OS objects stay outside the wire serializer.
 
 ```zig
 const archive = try vort.parseWim(image_bytes);
@@ -305,6 +322,14 @@ var swm = try vort.encodeWimImagesSplitAlloc(
     .{ .max_part_size = 4 * 1024 * 1024 * 1024 },
 );
 defer swm.deinit();
+
+const pipable_wim = try vort.encodeWimImagesPipableAlloc(
+    allocator,
+    &images,
+    .{ .compression = .xpress, .boot_index = 1 },
+    .{},
+);
+defer allocator.free(pipable_wim);
 ```
 
 ```sh
@@ -395,3 +420,10 @@ indivisible 70,000-byte blobs and a cross-image shared resource. Vort validates
 every local lookup and extracts all paths through `WimArchiveSet`; wimlib joins
 the parts with `--check`, verifies the result, and byte-compares both images
 (`writer_split=2`, `writer_split_wimlib=2`).
+Finally, stored and XPRESS multi-image pipable archives cover large compressed
+data, 70,000-byte raw-fallback data, empty files, boot image 2, seekable path
+reads, and 7-byte-input/11-byte-output progressive extraction. wimlib verifies
+and extracts both images byte-exactly (`writer_pipable=2`,
+`writer_pipable_wimlib=2`). Separate seekable stored/XPRESS variants enable
+integrity and pass Vort extraction plus wimlib verification
+(`writer_pipable_integrity=2`, `writer_pipable_integrity_wimlib=2`).

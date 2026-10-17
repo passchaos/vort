@@ -21341,8 +21341,7 @@ reuse, so production keeps the simpler independently owned plans.
   distinct trees, duplicate empty metadata and boot image 2; wimlib verifies
   both archives and extracts the first two trees byte-exactly
   (`writer_multi=2`, `writer_multi_wimlib=2`). Focused WIM/LZX coverage is now
-  102 tests. In-place append/update, pipable output and additional WIM codecs
-  remain follow-ups.
+  105 tests. In-place append/update and additional WIM codecs remain follow-ups.
 
 - Added deterministic standard SWM writing. `splitWimAlloc` accepts a supported
   standalone non-solid WIM, while one- and multi-image composition helpers
@@ -21359,3 +21358,21 @@ reuse, so production keeps the simpler independently owned plans.
   sets byte-exactly, and wimlib joins with `--check`, verifies, and extracts both
   images (`writer_split=2`, `writer_split_wimlib=2`). Individual resource
   spanning, pipable output, in-place update, and additional codecs remain open.
+
+- Added deterministic pipable WIM writing and standard-to-pipable conversion.
+  Alloc/append/into APIs cover one or many images and emit the complete `WLPWM`
+  sequence: preliminary zero-resource header, leading XML, ordered metadata,
+  data blobs, pipable lookup/final XML, optional raw integrity, and trailing
+  complete header. Blob headers bind SHA-1/size/flags; compressed resources use
+  per-chunk sizes and a tail cumulative table whose offsets deliberately exclude
+  those headers. The default omits integrity for true sequential consumption;
+  explicit integrity is documented as seekable-only for Vort's current stream
+  extractor. Unit tests cover deterministic standard conversion, boot metadata,
+  compressed and raw-fallback chunks, seekable reads, one-byte-input progressive
+  extraction, transactional buffers, invalid re-conversion and OOM. Stored and
+  XPRESS multi-image probes pass Vort's 7/11-byte progressive schedule and
+  wimlib verify/extract with boot image 2 (`writer_pipable=2`,
+  `writer_pipable_wimlib=2`). Explicit-integrity stored/XPRESS variants also
+  pass seekable extraction and wimlib verify (`writer_pipable_integrity=2`,
+  `writer_pipable_integrity_wimlib=2`). This closes ordinary pipable output;
+  concatenated pipable SWM writing, LZX/LZMS and in-place update remain open.

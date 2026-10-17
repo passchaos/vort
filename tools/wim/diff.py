@@ -182,6 +182,10 @@ def main() -> None:
     writer_multi_wimlib_cases = 0
     writer_split_cases = 0
     writer_split_wimlib_cases = 0
+    writer_pipable_cases = 0
+    writer_pipable_wimlib_cases = 0
+    writer_pipable_integrity_cases = 0
+    writer_pipable_integrity_wimlib_cases = 0
     stream_error_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-wim-") as temp_text:
@@ -832,6 +836,130 @@ def main() -> None:
                     ):
                         raise AssertionError("wimlib joined SWM extraction mismatch")
                 writer_split_wimlib_cases += 1
+
+        pipable_large = b"Vort pipable writer multi-chunk payload\n" * 4096
+        pipable_random = xorshift_bytes(0x5049_5045, 70_000)
+        for writer_compression, expected_compression in (
+            ("stored", "none"),
+            ("xpress", "xpress"),
+        ):
+            pipable_image = temp / f"vort-writer-pipable-{writer_compression}.wim"
+            run(args.writer, pipable_image, writer_compression, "pipable")
+            listing = run(args.cli, "list-wim-file", pipable_image).stdout
+            for marker in (
+                b"layout=pipable",
+                f"compression={expected_compression}".encode(),
+                b"images=2",
+            ):
+                if marker not in listing:
+                    raise AssertionError(
+                        f"Vort pipable writer header missing {marker!r}"
+                    )
+            for image_index, path, expected in (
+                (1, "/large.bin", pipable_large),
+                (1, "/random.bin", pipable_random),
+                (2, "/second.txt", b"second pipable image\n"),
+                (2, "/random.bin", pipable_random),
+            ):
+                output = temp / (
+                    f"writer-pipable-{writer_compression}-{image_index}-"
+                    f"{path[1:].replace('/', '-')}"
+                )
+                run(
+                    args.cli,
+                    "extract-wim-path",
+                    pipable_image,
+                    image_index,
+                    path,
+                    output,
+                    len(expected),
+                )
+                if output.read_bytes() != expected:
+                    raise AssertionError("Vort pipable seekable extraction mismatch")
+            progressive = temp / f"writer-pipable-progressive-{writer_compression}.out"
+            run(
+                args.cli,
+                "extract-wim-pipable-stream-path",
+                pipable_image,
+                1,
+                "/large.bin",
+                progressive,
+                len(pipable_large),
+                7,
+                11,
+            )
+            if progressive.read_bytes() != pipable_large:
+                raise AssertionError("Vort pipable progressive extraction mismatch")
+            empty = temp / f"writer-pipable-empty-{writer_compression}.out"
+            run(
+                args.cli,
+                "extract-wim-pipable-stream-path",
+                pipable_image,
+                1,
+                "/empty",
+                empty,
+                0,
+                5,
+                7,
+            )
+            if empty.read_bytes() != b"":
+                raise AssertionError("Vort pipable empty extraction mismatch")
+            writer_pipable_cases += 1
+
+            if wimlib is not None:
+                run(wimlib, "verify", pipable_image)
+                info = run(wimlib, "info", pipable_image).stdout
+                if b"Image Count:    2" not in info or b"Boot Index:     2" not in info:
+                    raise AssertionError("wimlib pipable image mapping mismatch")
+                for image_index, unique_name, unique_payload in (
+                    (1, "large.bin", pipable_large),
+                    (2, "second.txt", b"second pipable image\n"),
+                ):
+                    destination = temp / (
+                        f"writer-pipable-wimlib-{writer_compression}-{image_index}"
+                    )
+                    run(
+                        wimlib,
+                        "extract",
+                        pipable_image,
+                        image_index,
+                        f"--dest-dir={destination}",
+                        "--no-acls",
+                    )
+                    if (
+                        (destination / unique_name).read_bytes() != unique_payload
+                        or (destination / "random.bin").read_bytes() != pipable_random
+                    ):
+                        raise AssertionError("wimlib pipable extraction mismatch")
+                writer_pipable_wimlib_cases += 1
+
+            integrity_image = temp / (
+                f"vort-writer-pipable-integrity-{writer_compression}.wim"
+            )
+            run(
+                args.writer,
+                integrity_image,
+                writer_compression,
+                "pipable-integrity",
+            )
+            integrity_output = temp / (
+                f"writer-pipable-integrity-{writer_compression}.out"
+            )
+            run(
+                args.cli,
+                "extract-wim-path",
+                integrity_image,
+                1,
+                "/random.bin",
+                integrity_output,
+                len(pipable_random),
+            )
+            if integrity_output.read_bytes() != pipable_random:
+                raise AssertionError("Vort pipable integrity seekable mismatch")
+            writer_pipable_integrity_cases += 1
+            if wimlib is not None:
+                run(wimlib, "verify", integrity_image)
+                writer_pipable_integrity_wimlib_cases += 1
         if wimlib is not None:
             encrypted_result = run(wimlib, "info", encrypted_esd, check=False)
             if encrypted_result.returncode == 0 or b"encrypted" not in encrypted_result.stderr.lower():
@@ -1320,6 +1448,10 @@ def main() -> None:
         f"writer_multi_wimlib={writer_multi_wimlib_cases} "
         f"writer_split={writer_split_cases} "
         f"writer_split_wimlib={writer_split_wimlib_cases} "
+        f"writer_pipable={writer_pipable_cases} "
+        f"writer_pipable_wimlib={writer_pipable_wimlib_cases} "
+        f"writer_pipable_integrity={writer_pipable_integrity_cases} "
+        f"writer_pipable_integrity_wimlib={writer_pipable_integrity_wimlib_cases} "
         f"malformed={malformed}"
     )
 

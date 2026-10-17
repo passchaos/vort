@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("../core.zig");
 const format = @import("format.zig");
 const metadata_writer = @import("writer_metadata.zig");
+const pipable_writer = @import("writer_pipable.zig");
 const resource_writer = @import("writer_resource.zig");
 const security = @import("writer_security.zig");
 const split_writer = @import("writer_split.zig");
@@ -10,7 +11,7 @@ const tree_mod = @import("writer_tree.zig");
 const xml_writer = @import("writer_xml.zig");
 
 pub const Error = core.Error || format.Error || metadata_writer.Error ||
-    resource_writer.Error || split_writer.Error || tree_mod.Error ||
+    pipable_writer.Error || resource_writer.Error || split_writer.Error || tree_mod.Error ||
     std.mem.Allocator.Error || error{
     InvalidWimWriterOptions,
     InvalidWimEntry,
@@ -25,6 +26,7 @@ pub const Compression = resource_writer.Compression;
 pub const SplitOptions = split_writer.Options;
 pub const SplitPart = split_writer.Part;
 pub const SplitArchive = split_writer.SplitArchive;
+pub const PipableOptions = pipable_writer.Options;
 
 pub const Options = struct {
     compression: Compression = .xpress,
@@ -308,6 +310,134 @@ pub fn encodeImagesSplitAlloc(
     const encoded = try encodeImagesAlloc(allocator, images, options);
     defer allocator.free(encoded);
     return split_writer.splitAlloc(allocator, encoded, split_options);
+}
+
+pub fn toPipableAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: PipableOptions,
+) Error![]u8 {
+    return pipable_writer.encodeAlloc(allocator, input, options);
+}
+
+pub fn toPipableAppend(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    input: []const u8,
+    options: PipableOptions,
+) Error!usize {
+    return pipable_writer.encodeAppend(allocator, output, input, options);
+}
+
+pub fn toPipableInto(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    output: []u8,
+    options: PipableOptions,
+) Error!usize {
+    return pipable_writer.encodeInto(allocator, input, output, options);
+}
+
+pub fn encodePipableAlloc(
+    allocator: std.mem.Allocator,
+    entries: []const Entry,
+    options: Options,
+    pipable_options: PipableOptions,
+) Error![]u8 {
+    var standard_options = options;
+    standard_options.integrity = false;
+    const standard = try encodeAlloc(allocator, entries, standard_options);
+    defer allocator.free(standard);
+    return pipable_writer.encodeAlloc(allocator, standard, pipable_options);
+}
+
+pub fn encodePipableAppend(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    entries: []const Entry,
+    options: Options,
+    pipable_options: PipableOptions,
+) Error!usize {
+    const encoded = try encodePipableAlloc(
+        allocator,
+        entries,
+        options,
+        pipable_options,
+    );
+    defer allocator.free(encoded);
+    try output.ensureUnusedCapacity(allocator, encoded.len);
+    output.appendSliceAssumeCapacity(encoded);
+    return encoded.len;
+}
+
+pub fn encodePipableInto(
+    allocator: std.mem.Allocator,
+    entries: []const Entry,
+    output: []u8,
+    options: Options,
+    pipable_options: PipableOptions,
+) Error!usize {
+    const encoded = try encodePipableAlloc(
+        allocator,
+        entries,
+        options,
+        pipable_options,
+    );
+    defer allocator.free(encoded);
+    if (encoded.len > output.len) return error.OutputTooSmall;
+    @memcpy(output[0..encoded.len], encoded);
+    return encoded.len;
+}
+
+pub fn encodeImagesPipableAlloc(
+    allocator: std.mem.Allocator,
+    images: []const Image,
+    options: ImagesOptions,
+    pipable_options: PipableOptions,
+) Error![]u8 {
+    var standard_options = options;
+    standard_options.integrity = false;
+    const standard = try encodeImagesAlloc(allocator, images, standard_options);
+    defer allocator.free(standard);
+    return pipable_writer.encodeAlloc(allocator, standard, pipable_options);
+}
+
+pub fn encodeImagesPipableAppend(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    images: []const Image,
+    options: ImagesOptions,
+    pipable_options: PipableOptions,
+) Error!usize {
+    const encoded = try encodeImagesPipableAlloc(
+        allocator,
+        images,
+        options,
+        pipable_options,
+    );
+    defer allocator.free(encoded);
+    try output.ensureUnusedCapacity(allocator, encoded.len);
+    output.appendSliceAssumeCapacity(encoded);
+    return encoded.len;
+}
+
+pub fn encodeImagesPipableInto(
+    allocator: std.mem.Allocator,
+    images: []const Image,
+    output: []u8,
+    options: ImagesOptions,
+    pipable_options: PipableOptions,
+) Error!usize {
+    const encoded = try encodeImagesPipableAlloc(
+        allocator,
+        images,
+        options,
+        pipable_options,
+    );
+    defer allocator.free(encoded);
+    if (encoded.len > output.len) return error.OutputTooSmall;
+    @memcpy(output[0..encoded.len], encoded);
+    return encoded.len;
 }
 
 fn deinitPlannedImages(

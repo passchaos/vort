@@ -1,6 +1,8 @@
 const std = @import("std");
 const archive_mod = @import("archive.zig");
 const format = @import("format.zig");
+const pipable = @import("pipable.zig");
+const pipable_stream = @import("pipable_stream.zig");
 const set_mod = @import("set.zig");
 const writer = @import("writer.zig");
 
@@ -602,6 +604,104 @@ test "WIM split writer emits local lookup tables and routes a SWM set" {
     try std.testing.expect(one.header.flags & 0x08 == 0);
 }
 
+test "WIM pipable writer supports seekable and byte-progressive extraction" {
+    const allocator = std.testing.allocator;
+    const payload = "pipable XPRESS multi-chunk payload\n" ** 3000;
+    var random: [70_000]u8 = undefined;
+    var prng = std.Random.DefaultPrng.init(0x5049_5045);
+    prng.random().bytes(&random);
+    const entries = [_]writer.Entry{
+        .{ .path = "nested/payload.bin", .data = payload },
+        .{ .path = "random.bin", .data = &random },
+        .{ .path = "empty" },
+    };
+    const options: writer.Options = .{
+        .compression = .xpress,
+        .integrity = false,
+        .bootable = true,
+    };
+    const encoded = try writer.encodePipableAlloc(allocator, &entries, options, .{});
+    defer allocator.free(encoded);
+    try std.testing.expectEqualSlices(u8, &format.pipable_magic, encoded[0..8]);
+    try std.testing.expectEqualSlices(
+        u8,
+        &format.pipable_magic,
+        encoded[encoded.len - format.header_size ..][0..8],
+    );
+    const leading = try format.parsePipableLeadingHeader(encoded[0..format.header_size]);
+    try std.testing.expect(leading.lookup_table.isZero());
+    try std.testing.expectEqual(@as(u32, 1), leading.boot_index);
+    try std.testing.expectEqual(
+        pipable.blob_magic,
+        format.readU64(encoded, format.header_size),
+    );
+    const leading_xml_len: usize = @intCast(format.readU64(
+        encoded,
+        format.header_size + 8,
+    ));
+    const leading_xml = encoded[format.header_size + pipable.blob_header_size ..][0..leading_xml_len];
+    try std.testing.expectEqual(
+        @as(usize, 1),
+        countUtf16Ascii(leading_xml, "<TOTALBYTES>"),
+    );
+
+    const archive = try archive_mod.Archive.init(encoded);
+    try std.testing.expect(archive.header.pipable);
+    try std.testing.expectEqual(@as(u32, 1), archive.header.boot_index);
+    const final_xml = try archive.readXmlAllocLimited(allocator, 32 * 1024);
+    defer allocator.free(final_xml);
+    const expected_total = try std.fmt.allocPrint(
+        allocator,
+        "<TOTALBYTES>{d}</TOTALBYTES></WIM>",
+        .{archive.header.xml_data.offset_in_wim - pipable.blob_header_size},
+    );
+    defer allocator.free(expected_total);
+    try std.testing.expect(utf16ContainsAscii(final_xml, expected_total));
+    const seekable = try archive.extractByPathAllocLimited(
+        allocator,
+        1,
+        "nested/payload.bin",
+        payload.len,
+        limits,
+    );
+    defer allocator.free(seekable);
+    try std.testing.expectEqualSlices(u8, payload, seekable);
+    const progressive = try extractPipableOneByteAlloc(
+        allocator,
+        encoded,
+        "nested/payload.bin",
+        payload.len,
+    );
+    defer allocator.free(progressive);
+    try std.testing.expectEqualSlices(u8, payload, progressive);
+
+    const standard = try writer.encodeAlloc(allocator, &entries, options);
+    defer allocator.free(standard);
+    const converted = try writer.toPipableAlloc(allocator, standard, .{});
+    defer allocator.free(converted);
+    try std.testing.expectEqualSlices(u8, encoded, converted);
+
+    const with_integrity = try writer.toPipableAlloc(allocator, standard, .{
+        .integrity = true,
+    });
+    defer allocator.free(with_integrity);
+    const integrity_archive = try archive_mod.Archive.init(with_integrity);
+    try std.testing.expect(!integrity_archive.header.integrity_table.isZero());
+
+    const too_small = try allocator.alloc(u8, encoded.len - 1);
+    defer allocator.free(too_small);
+    @memset(too_small, 0xa5);
+    try std.testing.expectError(
+        error.OutputTooSmall,
+        writer.encodePipableInto(allocator, &entries, too_small, options, .{}),
+    );
+    try std.testing.expect(std.mem.allEqual(u8, too_small, 0xa5));
+    try std.testing.expectError(
+        error.UnsupportedPipableWimInput,
+        writer.toPipableAlloc(allocator, encoded, .{}),
+    );
+}
+
 test "WIM writer validates paths, XML and compression geometry" {
     const bad_path = [_]writer.Entry{.{ .path = "a//b" }};
     try std.testing.expectError(
@@ -867,6 +967,30 @@ test "WIM split writer is allocation failure safe" {
     );
 }
 
+test "WIM pipable writer is allocation failure safe" {
+    const AllocationTest = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const entries = [_]writer.Entry{
+                .{ .path = "nested/data", .data = "pipable OOM" ** 64 },
+                .{ .path = "empty" },
+            };
+            const encoded = try writer.encodePipableAlloc(
+                allocator,
+                &entries,
+                .{ .compression = .xpress },
+                .{},
+            );
+            defer allocator.free(encoded);
+            _ = try archive_mod.Archive.init(encoded);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        AllocationTest.run,
+        .{},
+    );
+}
+
 fn utf16ContainsAscii(utf16: []const u8, ascii: []const u8) bool {
     if (ascii.len == 0) return true;
     if (utf16.len < ascii.len * 2) return false;
@@ -884,6 +1008,64 @@ fn utf16ContainsAscii(utf16: []const u8, ascii: []const u8) bool {
         if (matches) return true;
     }
     return false;
+}
+
+fn countUtf16Ascii(utf16: []const u8, ascii: []const u8) usize {
+    if (ascii.len == 0 or utf16.len < ascii.len * 2) return 0;
+    var count: usize = 0;
+    var start: usize = 0;
+    while (start + ascii.len * 2 <= utf16.len) : (start += 2) {
+        var matches = true;
+        for (ascii, 0..) |byte, index| {
+            if (utf16[start + index * 2] != byte or
+                utf16[start + index * 2 + 1] != 0)
+            {
+                matches = false;
+                break;
+            }
+        }
+        count += @intFromBool(matches);
+    }
+    return count;
+}
+
+fn extractPipableOneByteAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    path: []const u8,
+    expected_len: usize,
+) ![]u8 {
+    var extractor = pipable_stream.PathExtractor.init(allocator, .{
+        .path = path,
+        .max_output_len = expected_len,
+        .limits = .{
+            .max_metadata_bytes = 1024 * 1024,
+            .max_directory_entries = 64,
+            .max_path_depth = 16,
+            .max_chunk_bytes = 64 * 1024,
+        },
+    });
+    defer extractor.deinit();
+    var output: std.ArrayList(u8) = .empty;
+    errdefer output.deinit(allocator);
+    var input_offset: usize = 0;
+    var scratch: [17]u8 = undefined;
+    while (true) {
+        const input_end = @min(input.len, input_offset + 1);
+        const step = try extractor.step(input[input_offset..input_end], &scratch);
+        input_offset += step.progress.input_read;
+        try output.appendSlice(allocator, scratch[0..step.progress.output_written]);
+        switch (step.status) {
+            .done => break,
+            .need_input => if (input_offset == input.len) {
+                try extractor.finish();
+                return error.TruncatedFrame;
+            },
+            .need_output => {},
+        }
+    }
+    try std.testing.expectEqual(expected_len, output.items.len);
+    return output.toOwnedSlice(allocator);
 }
 
 fn expectResourceEqual(
