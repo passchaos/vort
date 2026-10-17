@@ -99,6 +99,27 @@ pub const Archive = struct {
         max_entries: usize,
         max_table_bytes: usize,
     ) Error!LookupTable {
+        var lookup = try self.readLookupTableRawAlloc(
+            allocator,
+            max_entries,
+            max_table_bytes,
+        );
+        errdefer lookup.deinit();
+        try solid.resolveEntries(
+            allocator,
+            self.bytes,
+            self.header.version,
+            lookup.entries,
+        );
+        return lookup;
+    }
+
+    pub fn readLookupTableRawAlloc(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        max_entries: usize,
+        max_table_bytes: usize,
+    ) Error!LookupTable {
         if (self.header.lookup_table.isZero()) {
             return .{
                 .allocator = allocator,
@@ -131,12 +152,6 @@ pub const Archive = struct {
                 .sha1 = sha1,
             };
         }
-        try solid.resolveEntries(
-            allocator,
-            self.bytes,
-            self.header.version,
-            entries,
-        );
         return .{ .allocator = allocator, .bytes = bytes, .entries = entries };
     }
 

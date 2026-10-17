@@ -3,10 +3,12 @@ const format = @import("wim/format.zig");
 const codec = @import("wim/codec.zig");
 const metadata = @import("wim/metadata.zig");
 const archive = @import("wim/archive.zig");
+const set = @import("wim/set.zig");
 
-pub const Error = format.Error || codec.Error || metadata.Error || archive.Error ||
+pub const Error = format.Error || codec.Error || metadata.Error || archive.Error || set.Error ||
     std.mem.Allocator.Error;
 pub const Archive = archive.Archive;
+pub const ArchiveSet = set.ArchiveSet;
 pub const Compression = format.Compression;
 pub const Dentry = metadata.Dentry;
 pub const Directory = metadata.Directory;
@@ -32,4 +34,5 @@ test {
     _ = codec;
     _ = metadata;
     _ = archive;
+    _ = set;
 }

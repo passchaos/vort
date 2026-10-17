@@ -303,7 +303,44 @@ def main() -> None:
                 len(split_payload),
                 error_name="WimResourceInOtherPart",
             )
-            split_cases += 2
+            set_tree = run(
+                args.cli,
+                "list-wim-parts-image",
+                1,
+                first_part,
+                second_part,
+            ).stdout
+            if b"/large.bin" not in set_tree or b"parts=2" not in set_tree:
+                raise AssertionError("SWM set metadata tree mismatch")
+            set_output = temp / "split-set-path.out"
+            run(
+                args.cli,
+                "extract-wim-parts-path",
+                1,
+                "/large.bin",
+                set_output,
+                len(split_payload),
+                first_part,
+                second_part,
+            )
+            if set_output.read_bytes() != split_payload:
+                raise AssertionError("SWM set cross-part extraction mismatch")
+            expect_failure(
+                args.cli,
+                "list-wim-parts-image",
+                1,
+                first_part,
+                error_name="InvalidWimSet",
+            )
+            expect_failure(
+                args.cli,
+                "list-wim-parts-image",
+                1,
+                second_part,
+                first_part,
+                error_name="InvalidWimSet",
+            )
+            split_cases += 6
 
         original = fixture.read_bytes()
         malformed_cases = []

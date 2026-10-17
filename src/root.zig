@@ -1628,6 +1628,7 @@ pub const parseErofs = erofs.parse;
 pub const parseErofsSuperblock = erofs.parseSuperblock;
 
 pub const WimArchive = wim.Archive;
+pub const WimArchiveSet = wim.ArchiveSet;
 pub const WimError = wim.Error;
 pub const WimCompression = wim.Compression;
 pub const WimDentry = wim.Dentry;

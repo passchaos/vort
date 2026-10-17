@@ -312,6 +312,111 @@ pub fn extractReparseData(
     });
 }
 
+pub fn listSetImage(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const image_index = try std.fmt.parseInt(
+        u32,
+        args.next() orelse return error.MissingCorpusPath,
+        10,
+    );
+    var loaded = try loadSet(init, args);
+    defer loaded.deinit();
+    const set = try vort.WimArchiveSet.init(loaded.archives);
+    var image = try set.readImageMetadataAlloc(init.gpa, image_index, path_limits);
+    defer image.deinit();
+    try stdout.print("image={d} parts={d} security_descriptors={d}\n", .{
+        image_index,
+        loaded.archives.len,
+        image.security.descriptor_count,
+    });
+    try listImageDirectory(init, image, image.root, "", 0, stdout);
+}
+
+pub fn extractSetPath(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const image_index = try std.fmt.parseInt(
+        u32,
+        args.next() orelse return error.MissingCorpusPath,
+        10,
+    );
+    const entry_path = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const limit = try std.fmt.parseInt(
+        usize,
+        args.next() orelse return error.MissingCorpusPath,
+        10,
+    );
+    var loaded = try loadSet(init, args);
+    defer loaded.deinit();
+    const set = try vort.WimArchiveSet.init(loaded.archives);
+    const decoded = try set.extractByPathAllocLimited(
+        init.gpa,
+        image_index,
+        entry_path,
+        limit,
+        path_limits,
+    );
+    defer init.gpa.free(decoded);
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+    try stdout.print("image={d} parts={d} entry={s} decoded_bytes={d} path={s}\n", .{
+        image_index,
+        loaded.archives.len,
+        entry_path,
+        decoded.len,
+        output_path,
+    });
+}
+
+const LoadedSet = struct {
+    allocator: std.mem.Allocator,
+    buffers: [][]u8,
+    archives: []vort.WimArchive,
+
+    fn deinit(self: *LoadedSet) void {
+        for (self.buffers) |bytes| self.allocator.free(bytes);
+        self.allocator.free(self.buffers);
+        self.allocator.free(self.archives);
+        self.* = undefined;
+    }
+};
+
+fn loadSet(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+) !LoadedSet {
+    var buffers: std.ArrayList([]u8) = .empty;
+    defer buffers.deinit(init.gpa);
+    var archives: std.ArrayList(vort.WimArchive) = .empty;
+    defer archives.deinit(init.gpa);
+    errdefer for (buffers.items) |bytes| init.gpa.free(bytes);
+    while (args.next()) |path| {
+        const bytes = try readFile(init, path);
+        errdefer init.gpa.free(bytes);
+        const archive = try vort.parseWim(bytes);
+        try buffers.ensureUnusedCapacity(init.gpa, 1);
+        try archives.ensureUnusedCapacity(init.gpa, 1);
+        buffers.appendAssumeCapacity(bytes);
+        archives.appendAssumeCapacity(archive);
+    }
+    if (archives.items.len == 0) return error.MissingCorpusPath;
+    const owned_buffers = try buffers.toOwnedSlice(init.gpa);
+    errdefer {
+        for (owned_buffers) |bytes| init.gpa.free(bytes);
+        init.gpa.free(owned_buffers);
+    }
+    return .{
+        .allocator = init.gpa,
+        .buffers = owned_buffers,
+        .archives = try archives.toOwnedSlice(init.gpa),
+    };
+}
+
 fn readFile(init: std.process.Init, path: []const u8) ![]u8 {
     return std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(max_file_size));
 }

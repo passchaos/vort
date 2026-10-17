@@ -1,0 +1,435 @@
+//! Caller-ordered WIM/SWM part-set routing.
+
+const std = @import("std");
+const archive_mod = @import("archive.zig");
+const metadata = @import("metadata.zig");
+const solid = @import("solid.zig");
+
+pub const Error = archive_mod.Error || metadata.Error || solid.Error ||
+    std.mem.Allocator.Error || error{InvalidWimSet};
+
+pub const ArchiveSet = struct {
+    /// Borrowed archives in exact part-number order. Their bytes and this slice
+    /// remain stable for the lifetime of the set.
+    parts: []const archive_mod.Archive,
+
+    pub fn init(parts: []const archive_mod.Archive) Error!ArchiveSet {
+        if (parts.len == 0 or parts.len > std.math.maxInt(u16))
+            return error.InvalidWimSet;
+        const first = parts[0].header;
+        if (first.part_number != 1 or first.total_parts != parts.len)
+            return error.InvalidWimSet;
+        for (parts, 0..) |part, index| {
+            const header = part.header;
+            if (header.part_number != index + 1 or
+                header.total_parts != first.total_parts or
+                !std.mem.eql(u8, &header.guid, &first.guid) or
+                header.version != first.version or
+                header.compression != first.compression or
+                header.chunk_size != first.chunk_size or
+                header.image_count != first.image_count or
+                header.boot_index != first.boot_index)
+                return error.InvalidWimSet;
+        }
+        return .{ .parts = parts };
+    }
+
+    pub fn primary(self: ArchiveSet) archive_mod.Archive {
+        return self.parts[0];
+    }
+
+    pub fn readXmlAllocLimited(
+        self: ArchiveSet,
+        allocator: std.mem.Allocator,
+        max_output_len: usize,
+    ) Error![]u8 {
+        return self.primary().readXmlAllocLimited(allocator, max_output_len);
+    }
+
+    pub fn readLookupTableAlloc(
+        self: ArchiveSet,
+        allocator: std.mem.Allocator,
+        max_entries: usize,
+        max_table_bytes: usize,
+    ) Error!archive_mod.LookupTable {
+        var lookup = try self.primary().readLookupTableRawAlloc(
+            allocator,
+            max_entries,
+            max_table_bytes,
+        );
+        errdefer lookup.deinit();
+        var context = PartContext{ .set = self };
+        try solid.resolveEntriesFromParts(
+            allocator,
+            self.primary().header.version,
+            lookup.entries,
+            .{
+                .context = &context,
+                .bytes_for_part = PartContext.bytesForPart,
+            },
+        );
+        return lookup;
+    }
+
+    pub fn extractBySha1AllocLimited(
+        self: ArchiveSet,
+        allocator: std.mem.Allocator,
+        sha1: *const [20]u8,
+        max_output_len: usize,
+        max_lookup_entries: usize,
+        max_lookup_bytes: usize,
+    ) Error![]u8 {
+        var lookup = try self.readLookupTableAlloc(
+            allocator,
+            max_lookup_entries,
+            max_lookup_bytes,
+        );
+        defer lookup.deinit();
+        const entry = lookup.find(sha1) orelse return error.WimResourceNotFound;
+        return self.extractEntryAllocLimitedWithSolidLimit(
+            allocator,
+            entry,
+            max_output_len,
+            max_output_len,
+        );
+    }
+
+    pub fn readImageMetadataAlloc(
+        self: ArchiveSet,
+        allocator: std.mem.Allocator,
+        image_index: u32,
+        limits: archive_mod.PathLimits,
+    ) Error!metadata.ImageMetadata {
+        var lookup = try self.readLookupTableAlloc(
+            allocator,
+            limits.max_lookup_entries,
+            limits.max_lookup_bytes,
+        );
+        defer lookup.deinit();
+        const entry = try self.imageMetadataEntry(lookup, image_index);
+        const bytes = try self.extractEntryAllocLimitedWithSolidLimit(
+            allocator,
+            entry,
+            limits.max_metadata_bytes,
+            limits.max_solid_chunk_bytes,
+        );
+        return metadata.ImageMetadata.fromOwnedBytes(allocator, bytes);
+    }
+
+    pub fn extractByPathAllocLimited(
+        self: ArchiveSet,
+        allocator: std.mem.Allocator,
+        image_index: u32,
+        path: []const u8,
+        max_output_len: usize,
+        limits: archive_mod.PathLimits,
+    ) Error![]u8 {
+        return self.extractPathStreamAllocLimited(
+            allocator,
+            image_index,
+            path,
+            .default,
+            max_output_len,
+            limits,
+        );
+    }
+
+    pub fn extractNamedStreamByPathAllocLimited(
+        self: ArchiveSet,
+        allocator: std.mem.Allocator,
+        image_index: u32,
+        path: []const u8,
+        stream_name: []const u8,
+        max_output_len: usize,
+        limits: archive_mod.PathLimits,
+    ) Error![]u8 {
+        return self.extractPathStreamAllocLimited(
+            allocator,
+            image_index,
+            path,
+            .{ .named = stream_name },
+            max_output_len,
+            limits,
+        );
+    }
+
+    pub fn extractReparseDataByPathAllocLimited(
+        self: ArchiveSet,
+        allocator: std.mem.Allocator,
+        image_index: u32,
+        path: []const u8,
+        max_output_len: usize,
+        limits: archive_mod.PathLimits,
+    ) Error![]u8 {
+        return self.extractPathStreamAllocLimited(
+            allocator,
+            image_index,
+            path,
+            .reparse,
+            max_output_len,
+            limits,
+        );
+    }
+
+    pub fn extractEntryAllocLimitedWithSolidLimit(
+        self: ArchiveSet,
+        allocator: std.mem.Allocator,
+        entry: archive_mod.LookupEntry,
+        max_output_len: usize,
+        max_solid_chunk_bytes: usize,
+    ) Error![]u8 {
+        const part = try self.partAt(entry.part_number);
+        return part.extractEntryAllocLimitedWithSolidLimit(
+            allocator,
+            entry,
+            max_output_len,
+            max_solid_chunk_bytes,
+        );
+    }
+
+    fn extractPathStreamAllocLimited(
+        self: ArchiveSet,
+        allocator: std.mem.Allocator,
+        image_index: u32,
+        path: []const u8,
+        stream: archive_mod.StreamSelector,
+        max_output_len: usize,
+        limits: archive_mod.PathLimits,
+    ) Error![]u8 {
+        var lookup = try self.readLookupTableAlloc(
+            allocator,
+            limits.max_lookup_entries,
+            limits.max_lookup_bytes,
+        );
+        defer lookup.deinit();
+        const metadata_entry = try self.imageMetadataEntry(lookup, image_index);
+        const metadata_bytes = try self.extractEntryAllocLimitedWithSolidLimit(
+            allocator,
+            metadata_entry,
+            limits.max_metadata_bytes,
+            limits.max_solid_chunk_bytes,
+        );
+        var image = try metadata.ImageMetadata.fromOwnedBytes(allocator, metadata_bytes);
+        defer image.deinit();
+        const dentry = try image.lookup(
+            allocator,
+            path,
+            limits.max_directory_entries,
+            limits.max_path_depth,
+        );
+        if (dentry.isDirectory()) return error.WimNotRegularFile;
+        if (dentry.isEncrypted()) return error.UnsupportedWimFile;
+        const hash = switch (stream) {
+            .default => blk: {
+                if (dentry.isReparsePoint()) return error.WimNotRegularFile;
+                break :blk try dentry.defaultDataSha1() orelse
+                    return error.WimNotRegularFile;
+            },
+            .named => |name| try dentry.namedStreamSha1(allocator, name),
+            .reparse => try dentry.reparseDataSha1(),
+        };
+        if (std.mem.allEqual(u8, &hash, 0)) return allocator.alloc(u8, 0);
+        const entry = lookup.findData(&hash) orelse return error.WimResourceNotFound;
+        return self.extractEntryAllocLimitedWithSolidLimit(
+            allocator,
+            entry,
+            max_output_len,
+            limits.max_solid_chunk_bytes,
+        );
+    }
+
+    fn imageMetadataEntry(
+        self: ArchiveSet,
+        lookup: archive_mod.LookupTable,
+        image_index: u32,
+    ) Error!archive_mod.LookupEntry {
+        const header = self.primary().header;
+        if (image_index == 0 or image_index > header.image_count)
+            return error.WimImageNotFound;
+        var count: u32 = 0;
+        var selected: ?archive_mod.LookupEntry = null;
+        for (lookup.entries) |entry| {
+            if (!entry.resource.isMetadata() or entry.reference_count == 0) continue;
+            if (entry.reference_count != 1 or entry.hashIsZero() or
+                entry.resource.isSolid() or entry.resource.isSpanned())
+                return error.InvalidWim;
+            _ = try self.partAt(entry.part_number);
+            count = std.math.add(u32, count, 1) catch return error.IntegerOverflow;
+            if (count == image_index) selected = entry;
+        }
+        if (count != header.image_count) return error.InvalidWim;
+        return selected orelse error.WimImageNotFound;
+    }
+
+    fn partAt(self: ArchiveSet, part_number: u16) Error!archive_mod.Archive {
+        if (part_number == 0 or part_number > self.parts.len)
+            return error.InvalidWimSet;
+        return self.parts[part_number - 1];
+    }
+
+    const PartContext = struct {
+        set: ArchiveSet,
+
+        fn bytesForPart(context: *anyopaque, part_number: u16) solid.Error![]const u8 {
+            const self: *@This() = @ptrCast(@alignCast(context));
+            const part = self.set.partAt(part_number) catch return error.InvalidWim;
+            return part.bytes;
+        }
+    };
+};
+
+fn fixtureAlloc(allocator: std.mem.Allocator, encoded_base64: []const u8) ![]u8 {
+    const decoder = std.base64.standard.decoderWithIgnore(" \r\n\t");
+    const bytes = try allocator.alloc(
+        u8,
+        decoder.calcSizeUpperBound(encoded_base64.len),
+    );
+    errdefer allocator.free(bytes);
+    const written = try decoder.decode(bytes, encoded_base64);
+    return allocator.realloc(bytes, written);
+}
+
+test "WIM archive set validates order and routes cross-part resources" {
+    const allocator = std.testing.allocator;
+    const bytes = try fixtureAlloc(
+        allocator,
+        @embedFile("testdata/xpress-small.wim.b64"),
+    );
+    defer allocator.free(bytes);
+    var first = try archive_mod.Archive.init(bytes);
+    first.header.part_number = 1;
+    first.header.total_parts = 2;
+    var second = try archive_mod.Archive.init(bytes);
+    second.header.part_number = 2;
+    second.header.total_parts = 2;
+    const parts = [_]archive_mod.Archive{ first, second };
+    const set = try ArchiveSet.init(&parts);
+    var lookup = try set.readLookupTableAlloc(allocator, 16, 4096);
+    defer lookup.deinit();
+    try std.testing.expectEqual(@as(usize, 2), lookup.entries.len);
+    var file_entry = lookup.entries[0];
+    if (file_entry.resource.isMetadata()) file_entry = lookup.entries[1];
+    file_entry.part_number = 2;
+    try std.testing.expectError(
+        error.WimResourceInOtherPart,
+        first.extractEntryAllocLimited(allocator, file_entry, 1024),
+    );
+    const output = try set.extractEntryAllocLimitedWithSolidLimit(
+        allocator,
+        file_entry,
+        1024,
+        1024,
+    );
+    defer allocator.free(output);
+    try std.testing.expectEqualStrings("hello WIM XPRESS payload\n", output);
+    const by_path = try set.extractByPathAllocLimited(
+        allocator,
+        1,
+        "/nested/file.txt",
+        1024,
+        .{
+            .max_metadata_bytes = 4096,
+            .max_lookup_entries = 16,
+            .max_lookup_bytes = 4096,
+            .max_directory_entries = 16,
+            .max_path_depth = 8,
+        },
+    );
+    defer allocator.free(by_path);
+    try std.testing.expectEqualSlices(u8, output, by_path);
+
+    const reversed = [_]archive_mod.Archive{ second, first };
+    try std.testing.expectError(error.InvalidWimSet, ArchiveSet.init(&reversed));
+    try std.testing.expectError(error.InvalidWimSet, ArchiveSet.init(parts[0..1]));
+    var wrong_guid = second;
+    wrong_guid.header.guid[0] ^= 1;
+    const mismatched = [_]archive_mod.Archive{ first, wrong_guid };
+    try std.testing.expectError(error.InvalidWimSet, ArchiveSet.init(&mismatched));
+}
+
+test "WIM archive set releases lookup and routed extraction failures" {
+    const bytes = try fixtureAlloc(
+        std.testing.allocator,
+        @embedFile("testdata/xpress-small.wim.b64"),
+    );
+    defer std.testing.allocator.free(bytes);
+    var first = try archive_mod.Archive.init(bytes);
+    first.header.part_number = 1;
+    first.header.total_parts = 2;
+    var second = try archive_mod.Archive.init(bytes);
+    second.header.part_number = 2;
+    second.header.total_parts = 2;
+    const parts = [_]archive_mod.Archive{ first, second };
+
+    const FailureTest = struct {
+        fn run(failure_allocator: std.mem.Allocator, archives: []const archive_mod.Archive) !void {
+            const set = try ArchiveSet.init(archives);
+            const output = try set.extractByPathAllocLimited(
+                failure_allocator,
+                1,
+                "/nested/file.txt",
+                1024,
+                .{
+                    .max_metadata_bytes = 4096,
+                    .max_lookup_entries = 16,
+                    .max_lookup_bytes = 4096,
+                    .max_directory_entries = 16,
+                    .max_path_depth = 8,
+                },
+            );
+            defer failure_allocator.free(output);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        FailureTest.run,
+        .{parts[0..]},
+    );
+}
+
+test "WIM archive set resolves solid resources from their owning part" {
+    const allocator = std.testing.allocator;
+    const bytes = try fixtureAlloc(
+        allocator,
+        @embedFile("testdata/lzms-small.esd.b64"),
+    );
+    defer allocator.free(bytes);
+    var first = try archive_mod.Archive.init(bytes);
+    first.header.part_number = 1;
+    first.header.total_parts = 2;
+    var second = try archive_mod.Archive.init(bytes);
+    second.header.part_number = 2;
+    second.header.total_parts = 2;
+    const parts = [_]archive_mod.Archive{ first, second };
+    const set = try ArchiveSet.init(&parts);
+    var lookup = try first.readLookupTableRawAlloc(allocator, 16, 4096);
+    defer lookup.deinit();
+    for (lookup.entries) |*entry| {
+        if (entry.resource.isSolid()) entry.part_number = 2;
+    }
+    var context = ArchiveSet.PartContext{ .set = set };
+    try solid.resolveEntriesFromParts(
+        allocator,
+        first.header.version,
+        lookup.entries,
+        .{
+            .context = &context,
+            .bytes_for_part = ArchiveSet.PartContext.bytesForPart,
+        },
+    );
+    const blob = for (lookup.entries) |entry| {
+        if (entry.kind == .solid_blob) break entry;
+    } else return error.TestUnexpectedResult;
+    const output = try set.extractEntryAllocLimitedWithSolidLimit(
+        allocator,
+        blob,
+        4096,
+        4096,
+    );
+    defer allocator.free(output);
+    try std.testing.expectEqualSlices(
+        u8,
+        @embedFile("../lzms/testdata/lzms-small.txt"),
+        output,
+    );
+}

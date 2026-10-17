@@ -98,6 +98,20 @@ const file = try archive.extractByPathAllocLimited(
     .{},
 );
 defer allocator.free(file);
+
+const parts = [_]vort.WimArchive{
+    try vort.parseWim(first_part_bytes),
+    try vort.parseWim(second_part_bytes),
+};
+const set = try vort.WimArchiveSet.init(&parts);
+const split_file = try set.extractByPathAllocLimited(
+    allocator,
+    1,
+    "/sources/install.esd",
+    max_output,
+    .{},
+);
+defer allocator.free(split_file);
 ```
 
 ```sh
@@ -108,13 +122,26 @@ zig build run -- list-wim-image install.wim 1
 zig build run -- extract-wim-path install.wim 1 /Windows/System32/example.dll output.bin 1073741824
 zig build run -- extract-wim-stream install.wim 1 /file.txt Zone.Identifier zone.bin 1048576
 zig build run -- extract-wim-reparse install.wim 1 /link reparse.bin 1048576
+zig build run -- list-wim-parts-image 1 install.swm install2.swm
+zig build run -- extract-wim-parts-path 1 /large.bin output.bin 2147483648 install.swm install2.swm
 zig build run-wim-diff
 ```
 
-Pipable WIM layout, cross-part SWM resource assembly, encrypted file data,
-and filesystem application of reparse/alternate-stream semantics remain
-follow-up work. The library exposes and verifies their raw content without
-creating links or host filesystem ADS implicitly.
+`WimArchiveSet` borrows an explicitly ordered caller-provided archive slice; it
+never guesses sibling filenames. Initialization requires every part exactly
+once in `1...total_parts` order and cross-checks GUID, version, compression,
+chunk geometry, image count, and boot index. Part 1 owns the global lookup and
+metadata mapping, while standalone and solid resources are routed by each
+lookup entry's part number. Solid resource markers are parsed from their owning
+part rather than interpreting the same physical offset in part 1. Missing,
+reordered, duplicate-position, or mismatched sets fail before extraction.
+Metadata, default data, ADS, reparse buffers, SHA-1, output, lookup and solid
+chunk limits are identical to the single-archive APIs.
+
+Pipable WIM layout, encrypted file data, and filesystem application of
+reparse/alternate-stream semantics remain follow-up work. The library exposes
+and verifies raw content without creating links or host filesystem ADS
+implicitly.
 
 The differential gate creates stored, XPRESS, and LZX multi-chunk WIMs with
 pinned wimlib, verifies them with `wimlib-imagex`, compares metadata tree paths,
@@ -129,4 +156,6 @@ malformed headers, security lengths, UTF-16 name lengths, child offsets, stream
 counts, duplicate/unsafe stream names, alternate chunk headers, and directory
 terminators. When wimlib is available, each generated compression mode also
 captures a Unix symbolic link, requires Vort to list and extract its raw reparse
-buffer, and requires wimlib to restore the same link target.
+buffer, and requires wimlib to restore the same link target. Its split fixture
+also requires two-part `WimArchiveSet` listing and byte-exact cross-part path
+extraction, plus missing and reversed set rejection.
