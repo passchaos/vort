@@ -171,6 +171,21 @@ pub fn build(b: *std.Build) void {
     seven_zip_incremental_writer_test_step.dependOn(
         &run_seven_zip_incremental_writer_tests.step,
     );
+    const zip_incremental_entry_decoder_tests = b.addTest(.{
+        .name = "vort-zip-incremental-entry-decoder-tests",
+        .root_module = tests_mod,
+        .filters = &.{"ZIP incremental entry decoder"},
+    });
+    const run_zip_incremental_entry_decoder_tests = b.addRunArtifact(
+        zip_incremental_entry_decoder_tests,
+    );
+    const zip_incremental_entry_decoder_test_step = b.step(
+        "test-zip-incremental-entry-decoder",
+        "Run focused ZIP random-access incremental entry decoder tests",
+    );
+    zip_incremental_entry_decoder_test_step.dependOn(
+        &run_zip_incremental_entry_decoder_tests.step,
+    );
     const rar_tests = b.addTest(.{
         .name = "vort-rar-tests",
         .root_module = tests_mod,

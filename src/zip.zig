@@ -258,6 +258,15 @@ pub const Archive = struct {
         return localCompressedData(self, canonical);
     }
 
+    /// Returns the exact local member payload, including any encryption
+    /// header, ciphertext, and authentication suffix. This is the input for
+    /// `OwnedIncrementalEntryDecoder` when a password is configured.
+    pub fn rawEntryData(self: Archive, entry: Entry) Error![]const u8 {
+        const canonical = (try parseCentralEntry(self, entry.central_header_offset)).entry;
+        if (!sameEntry(entry, canonical)) return error.InvalidZipArchive;
+        return (try localPayloadData(self, canonical, true)).data;
+    }
+
     pub fn extractIntoWithAllocator(
         self: Archive,
         allocator: std.mem.Allocator,

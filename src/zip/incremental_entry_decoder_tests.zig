@@ -199,6 +199,14 @@ test "ZIP incremental entry decoder owned state resets across Stored and Deflate
     defer allocator.free(first.bytes);
     try std.testing.expectEqualSlices(u8, stored_payload, first.bytes);
 
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        decoder.resetWithOptions(deflated_entry, .{
+            .max_output_len = deflated_payload.len - 1,
+        }),
+    );
+    try std.testing.expectEqual(.done, (try decoder.step(&.{}, &.{})).status);
+
     try decoder.reset(deflated_entry);
     const second = try decodeFragmented(allocator, &decoder, compressed, 2, 5);
     defer allocator.free(second.bytes);
@@ -243,4 +251,457 @@ test "ZIP incremental entry decoder uses archive-validated ZIP64 descriptor payl
         try std.testing.expectEqualSlices(u8, expected, decoded.bytes);
         try std.testing.expectEqual(compressed.len, decoded.input_read);
     }
+}
+
+test "ZIP owned incremental entry decoder streams every supported method" {
+    const allocator = std.testing.allocator;
+    const payload = ("all-method random-access incremental ZIP payload\n" ** 97) ++
+        ("0123456789abcdef" ** 31);
+    const methods = [_]zip.CompressionMethod{
+        .shrink,
+        .reduce_1,
+        .reduce_2,
+        .reduce_3,
+        .reduce_4,
+        .implode,
+        .deflate64,
+        .dcl_implode,
+        .bzip2,
+        .lzma,
+        .xz,
+        .ppmd,
+        .zstandard_legacy,
+        .zstandard,
+    };
+    var entries: [methods.len]zip.EncodeEntry = undefined;
+    var names: [methods.len][32]u8 = undefined;
+    var name_lengths: [methods.len]usize = undefined;
+    for (methods, 0..) |method, index| {
+        const name = try std.fmt.bufPrint(&names[index], "method-{d}.bin", .{@intFromEnum(method)});
+        name_lengths[index] = name.len;
+        entries[index] = .{
+            .name = names[index][0..name.len],
+            .data = payload,
+            .method = method,
+        };
+    }
+    const encoded = try zip.encodeAlloc(allocator, &entries, .{ .data_descriptor = true });
+    defer allocator.free(encoded);
+    const archive = try zip.parse(encoded);
+
+    var decoder: ?incremental.OwnedDecoder = null;
+    defer if (decoder) |*active| active.deinit();
+    for (methods, 0..) |method, index| {
+        const entry = try archive.entryAt(index);
+        try std.testing.expectEqual(method, entry.method);
+        try std.testing.expectEqualStrings(names[index][0..name_lengths[index]], entry.name);
+        const compressed = try archive.compressedData(entry);
+        const with_suffix = try std.mem.concat(allocator, u8, &.{ compressed, "suffix" });
+        defer allocator.free(with_suffix);
+        if (decoder) |*active|
+            try active.reset(entry)
+        else
+            decoder = try incremental.OwnedDecoder.init(allocator, entry);
+        const decoded = try decodeFragmented(
+            allocator,
+            &decoder.?,
+            with_suffix,
+            3,
+            2,
+        );
+        defer allocator.free(decoded.bytes);
+        try std.testing.expectEqualSlices(u8, payload, decoded.bytes);
+        try std.testing.expectEqual(compressed.len, decoded.input_read);
+
+        var bad_crc = entry;
+        bad_crc.crc32 ^= 1;
+        try decoder.?.reset(bad_crc);
+        try std.testing.expectError(
+            error.ChecksumMismatch,
+            decodeFragmented(allocator, &decoder.?, compressed, 11, 13),
+        );
+
+        try decoder.?.reset(entry);
+        try std.testing.expectError(
+            error.TruncatedFrame,
+            decodeFragmented(
+                allocator,
+                &decoder.?,
+                compressed[0 .. compressed.len - 1],
+                7,
+                5,
+            ),
+        );
+    }
+}
+
+test "ZIP owned incremental entry decoder releases all-method allocation failures" {
+    const payload = "allocation-safe universal ZIP entry decoder\n" ** 23;
+    const methods = [_]zip.CompressionMethod{
+        .shrink,
+        .reduce_4,
+        .implode,
+        .deflate64,
+        .dcl_implode,
+        .bzip2,
+        .lzma,
+        .xz,
+        .ppmd,
+        .zstandard,
+    };
+    var entries: [methods.len]zip.EncodeEntry = undefined;
+    var names: [methods.len][24]u8 = undefined;
+    for (methods, 0..) |method, index| {
+        const name = try std.fmt.bufPrint(&names[index], "oom-{d}", .{@intFromEnum(method)});
+        entries[index] = .{ .name = name, .data = payload, .method = method };
+    }
+    const encoded = try zip.encodeAlloc(std.testing.allocator, &entries, .{});
+    defer std.testing.allocator.free(encoded);
+
+    const FailureTest = struct {
+        fn run(
+            allocator: std.mem.Allocator,
+            archive_bytes: []const u8,
+            expected: []const u8,
+            count: usize,
+        ) !void {
+            const archive = try zip.parse(archive_bytes);
+            for (0..count) |index| {
+                const entry = try archive.entryAt(index);
+                const compressed = try archive.compressedData(entry);
+                var decoder = try incremental.OwnedDecoder.init(allocator, entry);
+                defer decoder.deinit();
+                const decoded = try decodeFragmented(allocator, &decoder, compressed, 7, 11);
+                defer allocator.free(decoded.bytes);
+                try std.testing.expectEqualSlices(u8, expected, decoded.bytes);
+            }
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        FailureTest.run,
+        .{ encoded, payload, methods.len },
+    );
+}
+
+test "ZIP owned incremental entry decoder streams ZipCrypto and WinZip AES" {
+    const allocator = std.testing.allocator;
+    const zipcrypto_password = "entry ZipCrypto 密码";
+    const aes_password = "entry WinZip AES 密码";
+    const payload = "encrypted random-access incremental ZIP payload\n" ** 71;
+    const salt128 = [_]u8{0x18} ** 8;
+    const salt192 = [_]u8{0x29} ** 12;
+    const salt256 = [_]u8{0x3a} ** 16;
+    const entries = [_]zip.EncodeEntry{
+        .{
+            .name = "zipcrypto-bzip2.bin",
+            .data = payload,
+            .method = .bzip2,
+            .traditional_encryption = .{
+                .password = zipcrypto_password,
+                .header_random = .{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 },
+            },
+        },
+        .{
+            .name = "zipcrypto-lzma.bin",
+            .data = payload,
+            .method = .lzma,
+            .traditional_encryption = .{
+                .password = zipcrypto_password,
+                .header_random = .{ 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0 },
+            },
+        },
+        .{
+            .name = "aes-bzip2.bin",
+            .data = payload,
+            .method = .bzip2,
+            .winzip_aes = .{
+                .password = aes_password,
+                .strength = .aes128,
+                .salt = &salt128,
+                .version = .ae1,
+            },
+        },
+        .{
+            .name = "aes-lzma.bin",
+            .data = payload,
+            .method = .lzma,
+            .winzip_aes = .{
+                .password = aes_password,
+                .strength = .aes192,
+                .salt = &salt192,
+                .version = .ae2,
+            },
+        },
+        .{
+            .name = "aes-ppmd.bin",
+            .data = payload,
+            .method = .ppmd,
+            .winzip_aes = .{
+                .password = aes_password,
+                .strength = .aes256,
+                .salt = &salt256,
+                .version = .ae1,
+            },
+        },
+    };
+    const encoded = try zip.encodeAlloc(allocator, &entries, .{ .data_descriptor = true });
+    defer allocator.free(encoded);
+    const archive = try zip.parse(encoded);
+    var decoder: ?incremental.OwnedDecoder = null;
+    defer if (decoder) |*active| active.deinit();
+    for (entries, 0..) |expected, index| {
+        const entry = try archive.entryAt(index);
+        const raw = try archive.rawEntryData(entry);
+        const options = incremental.Options{
+            .max_output_len = payload.len,
+            .password = if (entry.winzip_aes != null) aes_password else zipcrypto_password,
+        };
+        if (decoder) |*active|
+            try active.resetWithOptions(entry, options)
+        else
+            decoder = try incremental.OwnedDecoder.initWithOptions(allocator, entry, options);
+        const decoded = try decodeFragmented(allocator, &decoder.?, raw, 3, 2);
+        defer allocator.free(decoded.bytes);
+        try std.testing.expectEqualSlices(u8, expected.data, decoded.bytes);
+        try std.testing.expectEqual(raw.len, decoded.input_read);
+    }
+
+    const first = try archive.entryAt(0);
+    var wrong = try incremental.OwnedDecoder.initWithOptions(allocator, first, .{
+        .password = "wrong password",
+    });
+    defer wrong.deinit();
+    try std.testing.expectError(
+        error.InvalidZipPassword,
+        decodeFragmented(allocator, &wrong, try archive.rawEntryData(first), 5, 7),
+    );
+
+    const aes_entry = try archive.entryAt(2);
+    var wrong_aes = try incremental.OwnedDecoder.initWithOptions(allocator, aes_entry, .{
+        .password = "wrong password",
+    });
+    defer wrong_aes.deinit();
+    try std.testing.expectError(
+        error.InvalidZipPassword,
+        decodeFragmented(allocator, &wrong_aes, try archive.rawEntryData(aes_entry), 5, 7),
+    );
+
+    const aes_raw = try archive.rawEntryData(aes_entry);
+    const aes_offset = @intFromPtr(aes_raw.ptr) - @intFromPtr(encoded.ptr);
+    var corrupt = try allocator.dupe(u8, encoded);
+    defer allocator.free(corrupt);
+    corrupt[aes_offset + aes_raw.len - 1] ^= 1;
+    const corrupt_archive = try zip.parse(corrupt);
+    const corrupt_entry = try corrupt_archive.entryAt(2);
+    var corrupt_decoder = try incremental.OwnedDecoder.initWithOptions(
+        allocator,
+        corrupt_entry,
+        .{ .password = aes_password },
+    );
+    defer corrupt_decoder.deinit();
+    try std.testing.expectError(
+        error.InvalidAuthenticationCode,
+        decodeFragmented(
+            allocator,
+            &corrupt_decoder,
+            try corrupt_archive.rawEntryData(corrupt_entry),
+            5,
+            7,
+        ),
+    );
+}
+
+test "ZIP owned incremental entry decoder streams PKWARE Strong Encryption" {
+    const allocator = std.testing.allocator;
+    const password = "PKWARE strong entry 密码";
+    const payload = "PKWARE Strong random-access incremental payload\n" ** 59;
+    const iv128 = [_]u8{0x11} ** 16;
+    const iv192 = [_]u8{0x22} ** 16;
+    const iv256 = [_]u8{0x33} ** 16;
+    const random128 = [_]u8{0x41} ** 16;
+    const random192 = [_]u8{0x42} ** 16;
+    const random256 = [_]u8{0x43} ** 32;
+    const validation = [_]u8{0x51} ** 12;
+    const entries = [_]zip.EncodeEntry{
+        .{
+            .name = "strong-stored.bin",
+            .data = payload,
+            .method = .stored,
+            .pkware_strong_encryption = .{
+                .password = password,
+                .strength = .aes128,
+                .iv = iv128,
+                .random_data = &random128,
+                .validation_data = &validation,
+            },
+        },
+        .{
+            .name = "strong-deflate.bin",
+            .data = payload,
+            .method = .deflate,
+            .pkware_strong_encryption = .{
+                .password = password,
+                .strength = .aes192,
+                .iv = iv192,
+                .random_data = &random192,
+                .validation_data = &validation,
+            },
+        },
+        .{
+            .name = "strong-bzip2.bin",
+            .data = payload,
+            .method = .bzip2,
+            .pkware_strong_encryption = .{
+                .password = password,
+                .strength = .aes256,
+                .iv = iv256,
+                .random_data = &random256,
+                .validation_data = &validation,
+            },
+        },
+    };
+    const encoded = try zip.encodeAlloc(allocator, &entries, .{ .data_descriptor = true });
+    defer allocator.free(encoded);
+    const archive = try zip.parse(encoded);
+    var decoder: ?incremental.OwnedDecoder = null;
+    defer if (decoder) |*active| active.deinit();
+    for (entries, 0..) |expected, index| {
+        const entry = try archive.entryAt(index);
+        const raw = try archive.rawEntryData(entry);
+        const options = incremental.Options{
+            .max_output_len = payload.len,
+            .password = password,
+        };
+        if (decoder) |*active|
+            try active.resetWithOptions(entry, options)
+        else
+            decoder = try incremental.OwnedDecoder.initWithOptions(allocator, entry, options);
+        const decoded = try decodeFragmented(allocator, &decoder.?, raw, 5, 3);
+        defer allocator.free(decoded.bytes);
+        try std.testing.expectEqualSlices(u8, expected.data, decoded.bytes);
+        try std.testing.expectEqual(raw.len, decoded.input_read);
+    }
+
+    const first = try archive.entryAt(0);
+    var wrong = try incremental.OwnedDecoder.initWithOptions(allocator, first, .{
+        .password = "wrong password",
+    });
+    defer wrong.deinit();
+    try std.testing.expectError(
+        error.InvalidPasswordValidation,
+        decodeFragmented(allocator, &wrong, try archive.rawEntryData(first), 5, 7),
+    );
+}
+
+test "ZIP owned incremental PKWARE Strong composes every compression method" {
+    const allocator = std.testing.allocator;
+    const password = "all-method strong password";
+    const payload = "all-method PKWARE Strong payload\n" ** 31;
+    const iv = [_]u8{0x45} ** 16;
+    const random_data = [_]u8{0x56} ** 32;
+    const validation = [_]u8{0x67} ** 12;
+    const methods = [_]zip.CompressionMethod{
+        .stored,
+        .shrink,
+        .reduce_1,
+        .reduce_2,
+        .reduce_3,
+        .reduce_4,
+        .implode,
+        .deflate,
+        .deflate64,
+        .dcl_implode,
+        .bzip2,
+        .lzma,
+        .xz,
+        .ppmd,
+        .zstandard_legacy,
+        .zstandard,
+    };
+    var entries: [methods.len]zip.EncodeEntry = undefined;
+    var names: [methods.len][24]u8 = undefined;
+    for (methods, 0..) |method, index| {
+        const name = try std.fmt.bufPrint(&names[index], "strong-{d}", .{@intFromEnum(method)});
+        entries[index] = .{
+            .name = name,
+            .data = payload,
+            .method = method,
+            .pkware_strong_encryption = .{
+                .password = password,
+                .strength = .aes256,
+                .iv = iv,
+                .random_data = &random_data,
+                .validation_data = &validation,
+            },
+        };
+    }
+    const encoded = try zip.encodeAlloc(allocator, &entries, .{});
+    defer allocator.free(encoded);
+    const archive = try zip.parse(encoded);
+    var decoder: ?incremental.OwnedDecoder = null;
+    defer if (decoder) |*active| active.deinit();
+    for (methods, 0..) |method, index| {
+        const entry = try archive.entryAt(index);
+        try std.testing.expectEqual(method, entry.method);
+        const raw = try archive.rawEntryData(entry);
+        const options = incremental.Options{ .password = password };
+        if (decoder) |*active|
+            try active.resetWithOptions(entry, options)
+        else
+            decoder = try incremental.OwnedDecoder.initWithOptions(allocator, entry, options);
+        const decoded = try decodeFragmented(allocator, &decoder.?, raw, 7, 5);
+        defer allocator.free(decoded.bytes);
+        try std.testing.expectEqualSlices(u8, payload, decoded.bytes);
+    }
+}
+
+test "ZIP owned incremental encrypted decoder releases allocation failures" {
+    const password = "allocation-safe encrypted decoder";
+    const payload = "encrypted allocation failure payload\n" ** 19;
+    const iv = [_]u8{0x61} ** 16;
+    const random_data = [_]u8{0x72} ** 32;
+    const validation = [_]u8{0x83} ** 12;
+    const entries = [_]zip.EncodeEntry{.{
+        .name = "strong-oom.bin",
+        .data = payload,
+        .method = .bzip2,
+        .pkware_strong_encryption = .{
+            .password = password,
+            .strength = .aes256,
+            .iv = iv,
+            .random_data = &random_data,
+            .validation_data = &validation,
+        },
+    }};
+    const encoded = try zip.encodeAlloc(std.testing.allocator, &entries, .{});
+    defer std.testing.allocator.free(encoded);
+    const archive = try zip.parse(encoded);
+    const entry = try archive.entryAt(0);
+    const raw = try archive.rawEntryData(entry);
+
+    const FailureTest = struct {
+        fn run(
+            allocator: std.mem.Allocator,
+            canonical: zip.Entry,
+            encrypted: []const u8,
+            expected: []const u8,
+            secret: []const u8,
+        ) !void {
+            var decoder = try incremental.OwnedDecoder.initWithOptions(
+                allocator,
+                canonical,
+                .{ .password = secret },
+            );
+            defer decoder.deinit();
+            const decoded = try decodeFragmented(allocator, &decoder, encrypted, 7, 5);
+            defer allocator.free(decoded.bytes);
+            try std.testing.expectEqualSlices(u8, expected, decoded.bytes);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        FailureTest.run,
+        .{ entry, raw, payload, password },
+    );
 }

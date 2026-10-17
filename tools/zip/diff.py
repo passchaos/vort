@@ -2077,6 +2077,18 @@ def validate_incremental_writer_archive(
                     raise AssertionError("incremental ZIP attributes did not round trip")
             if info.compress_type != INCREMENTAL_METHODS[name]:
                 raise AssertionError(f"Python incremental method mismatch for {name!r}")
+            owned_output = temp / f"incremental-owned-{suffix}-{name.replace('/', '_')}.out"
+            run(
+                cli,
+                "extract-zip-file-incremental",
+                str(one_byte_path),
+                name,
+                str(owned_output),
+            )
+            if owned_output.read_bytes() != expected:
+                raise AssertionError(
+                    f"Vort owned incremental entry decoder mismatch for {name!r}"
+                )
             if info.compress_type in (20, 93):
                 name_len, extra_len = struct.unpack_from("<HH", raw, info.header_offset + 26)
                 data_offset = info.header_offset + 30 + name_len + extra_len
@@ -2245,6 +2257,20 @@ def validate_incremental_zipcrypto_writer(
                     f"Vort sequential reader could not extract incremental {name!r}"
                 )
             sequential_cases += 1
+            owned_output = temp / f"incremental-zipcrypto-owned-{suffix}-{index}.out"
+            run(
+                cli,
+                "extract-zip-file-incremental",
+                str(one_path),
+                name,
+                str(owned_output),
+                str(512 * 1024 * 1024),
+                ZIPCRYPTO_PASSWORD,
+            )
+            if owned_output.read_bytes() != expected:
+                raise AssertionError(
+                    f"Vort owned incremental ZipCrypto mismatch for {name!r}"
+                )
 
     extracted = subprocess.run(
         [unzip_tool, "-P", ZIPCRYPTO_PASSWORD, "-p", str(one_path)],
@@ -2329,6 +2355,20 @@ def validate_incremental_winzip_aes_writer(
                     f"Vort sequential reader could not extract incremental WinZip AES {name!r}"
                 )
             sequential_cases += 1
+            owned_output = temp / f"incremental-winzip-aes-owned-{suffix}-{index}.out"
+            run(
+                cli,
+                "extract-zip-file-incremental",
+                str(one_path),
+                name,
+                str(owned_output),
+                str(512 * 1024 * 1024),
+                WINZIP_AES_PASSWORD,
+            )
+            if owned_output.read_bytes() != expected:
+                raise AssertionError(
+                    f"Vort owned incremental WinZip AES mismatch for {name!r}"
+                )
             cases += 1
     return len(raw), cases, sequential_cases
 
@@ -2410,6 +2450,20 @@ def validate_incremental_pkware_strong_writer(
             if stream_output.read_bytes() != expected:
                 raise AssertionError(
                     f"incremental PKWARE Strong sequential mismatch for {name!r}"
+                )
+            owned_output = temp / f"incremental-pkware-strong-owned-{suffix}-{index}.out"
+            run(
+                cli,
+                "extract-zip-file-incremental",
+                str(one_path),
+                name,
+                str(owned_output),
+                str(512 * 1024 * 1024),
+                PKWARE_STRONG_PASSWORD,
+            )
+            if owned_output.read_bytes() != expected:
+                raise AssertionError(
+                    f"Vort owned incremental PKWARE Strong mismatch for {name!r}"
                 )
             reader_cases += 1
             cases += 1
@@ -3358,6 +3412,7 @@ def main() -> None:
         f"pkware_strong_7zip_cases={pkware_strong_7zip_cases} "
         f"incremental_reader_pkware_strong_cases={incremental_reader_pkware_strong_cases} "
         f"incremental_entries={len(INCREMENTAL_PAYLOADS)} "
+        f"incremental_owned_entry_cases={(len(INCREMENTAL_PAYLOADS) + len(INCREMENTAL_ZIPCRYPTO_PAYLOADS) + len(INCREMENTAL_WINZIP_AES_PAYLOADS) + len(INCREMENTAL_PKWARE_STRONG_PAYLOADS)) * 2} "
         f"incremental_zip32_bytes={incremental_zip32_bytes} "
         f"incremental_zip64_bytes={incremental_zip64_bytes} "
         f"incremental_unicode_cases={incremental_unicode_zip32_cases + incremental_unicode_zip64_cases} "

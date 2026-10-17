@@ -291,22 +291,31 @@ archives are required through the sequential CLI.
 
 ## Incremental entry decoder
 
-`ZipIncrementalEntryDecoder` is the caller-memory data plane for a single
-Stored or raw-Deflate member. It takes a canonical `ZipEntry` obtained from the
-central directory, so data-descriptor and ZIP64 entries already have
+`ZipIncrementalEntryDecoder` is the allocation-free caller-memory data plane
+for a single Stored or raw-Deflate member. Its allocator-owned companion,
+`ZipOwnedIncrementalEntryDecoder`, extends the same central-directory-selected
+API to Stored, Shrink, Reduce 1...4, traditional Implode, Deflate, Deflate64,
+DCL Implode, Bzip2, LZMA, XZ, PPMd8, and legacy/current Zstandard. It takes a
+canonical `ZipEntry`, so data-descriptor and ZIP64 entries already have
 authoritative CRC and 64-bit size values. `Archive.compressedData(entry)`
-validates the matching local header and returns the borrowed compressed payload.
+validates the matching local header and returns an unencrypted borrowed payload;
+`Archive.rawEntryData(entry)` returns the exact encryption header, ciphertext,
+and authentication suffix for a password-configured owned decoder.
 
-The decoder accepts arbitrary compressed-input and uncompressed-output slices,
+Both decoders accept arbitrary compressed-input and uncompressed-output slices,
 returns exact progress with `need_input`, `need_output`, or `done`, and never
 consumes bytes beyond `entry.compressed_size`. Completion requires exact
 compressed and uncompressed lengths plus the central IEEE CRC-32. The output
-limit is checked before decoding; encrypted entries, unsupported methods,
-malformed Stored sizes, short history, corruption, truncation, and checksum
-failure have distinct errors. A failing `step` enters `.failed`; `reset`
-starts another independent entry with the same history storage. `finish`
-reports `TruncatedFrame` if the compressed source ends before the declared
-boundary.
+limit is checked before decoding; unsupported methods, malformed Stored sizes,
+short history, corruption, truncation, and checksum failure have distinct
+errors. The owned decoder additionally streams traditional ZipCrypto, WinZip
+AES-128/192/256 AE-1/AE-2, and PKWARE Strong AES-128/192/256. Password headers
+are validated before codec output, WinZip authentication is checked before
+`.done`, and PKWARE's final CBC block remains withheld until PKCS#7 succeeds.
+A failing `step` enters `.failed`; transactional `reset` starts another
+independent method/encryption combination while retaining reusable history.
+`finish` reports `TruncatedFrame` if the supplied local payload ends before the
+central-directory boundary.
 
 ```zig
 const archive = try vort.parseZipArchive(zip_bytes);
@@ -330,9 +339,14 @@ while (true) {
 ```
 
 Stored members accept an empty history slice. The allocator-owned
-`ZipOwnedIncrementalEntryDecoder` always retains one reusable 32 KiB history
-buffer, making Stored-to-Deflate reset straightforward. Methods other than
-Stored and Deflate retain their complete-buffer extraction paths.
+`ZipOwnedIncrementalEntryDecoder` retains one reusable 32 KiB Deflate history
+plus only the active method's bounded workspace/model. Its `codec_limits`
+option reuses the sequential-reader limits for Bzip2 blocks, LZMA/XZ
+dictionaries and compressed buffers, PPMd model memory, Zstandard buffering,
+and PKWARE control headers. Known central sizes remove descriptor scanning from
+this random-access path while still leaving any caller suffix unconsumed. The
+ZIP differential currently exercises 108 ZIP32/ZIP64 owned entry cases across
+all methods and three encryption families.
 
 ## Incremental archive reader
 

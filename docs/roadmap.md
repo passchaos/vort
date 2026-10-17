@@ -21171,3 +21171,19 @@ reuse, so production keeps the simpler independently owned plans.
   Vort's `目录/данные.txt`, while Vort reads the equivalent RAR 6.21 archive
   (`writer_rar4_unicode=1`, `writer_rar4_unicode_external=1`,
   `reference_rar4_unicode=1`).
+
+- Extended the central-directory-selected `ZipOwnedIncrementalEntryDecoder`
+  from Stored/Deflate to the complete sequential ZIP codec matrix: Shrink, all
+  four Reduce factors, traditional Implode, Deflate64, DCL Implode, Bzip2,
+  LZMA, XZ, PPMd8, and legacy/current Zstandard. It reuses established bounded
+  codec states and exposes their dictionary/block/model limits through
+  `codec_limits`, while the caller-owned Stored/Deflate decoder stays
+  allocation-free. Exact central sizes eliminate descriptor scanning and leave
+  caller suffix bytes untouched. The same owned path now incrementally handles
+  ZipCrypto, WinZip AES AE-1/AE-2, and PKWARE Strong AES with Vail-owned crypto,
+  password/authentication/padding validation before `.done`, and transactional
+  cross-method reset. Tiny 2/3-byte schedules cover every method, CRC and
+  truncation failures, wrong passwords, corrupt authentication, output limits,
+  and exhaustive codec/PKWARE allocation failures. The ZIP black-box
+  differential adds 108 ZIP32/ZIP64 random-access entry cases across the full
+  method and encryption matrix.

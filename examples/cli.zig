@@ -1055,13 +1055,22 @@ pub fn main(init: std.process.Init) !void {
         const entry_name = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
         const max_output_len = (try parseOptionalLimit(args.next())) orelse std.math.maxInt(usize);
+        const password_arg = args.next();
+        const password = if (password_arg) |value|
+            if (std.mem.eql(u8, value, "-")) null else value
+        else
+            null;
         const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
         defer init.gpa.free(bytes);
         const archive = try vort.parseZipArchive(bytes);
         const entry = (try archive.find(entry_name)) orelse return error.ZipEntryNotFound;
-        const compressed = try archive.compressedData(entry);
+        const compressed = if (entry.isEncrypted())
+            try archive.rawEntryData(entry)
+        else
+            try archive.compressedData(entry);
         var decoder = try vort.ZipOwnedIncrementalEntryDecoder.initWithOptions(init.gpa, entry, .{
             .max_output_len = max_output_len,
+            .password = password,
         });
         defer decoder.deinit();
         var decoded: std.ArrayList(u8) = .empty;
@@ -2959,7 +2968,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Sequentially extract split ZIP without a joined archive copy
         \\  extract-zip-split-source-files <entry> <out> <max_output> <password|-> <part1> <part2> [...]
         \\                              Extract while retaining at most one physical part file
-        \\  extract-zip-file-incremental <zip> <entry> <out> [max_output]
+        \\  extract-zip-file-incremental <zip> <entry> <out> [max_output] [password|-]
         \\                              Incrementally extract one Stored/Deflate ZIP entry
         \\  extract-zip-stream-file <zip> <entry> <out> [max_output] [password|-]
         \\                              Sequentially parse and extract a supported ZIP entry
