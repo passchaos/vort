@@ -1,6 +1,7 @@
 const std = @import("std");
 const archive_mod = @import("archive.zig");
 const format = @import("format.zig");
+const set_mod = @import("set.zig");
 const writer = @import("writer.zig");
 
 const limits: archive_mod.PathLimits = .{
@@ -493,6 +494,114 @@ test "WIM writer emits ordered multi-image metadata and shared blobs" {
     try std.testing.expect(std.mem.allEqual(u8, too_small, 0xa5));
 }
 
+test "WIM split writer emits local lookup tables and routes a SWM set" {
+    const allocator = std.testing.allocator;
+    const large = "L" ** 700;
+    const shared = "S" ** 300;
+    const second_only = "T" ** 400;
+    const first_entries = [_]writer.Entry{
+        .{ .path = "large.bin", .data = large },
+        .{ .path = "shared.bin", .data = shared },
+    };
+    const second_entries = [_]writer.Entry{
+        .{ .path = "second.bin", .data = second_only },
+        .{ .path = "shared.bin", .data = shared },
+    };
+    const images = [_]writer.Image{
+        .{ .name = "first", .entries = &first_entries },
+        .{ .name = "second", .entries = &second_entries },
+    };
+    var split = try writer.encodeImagesSplitAlloc(
+        allocator,
+        &images,
+        .{ .compression = .stored, .boot_index = 1 },
+        .{ .max_part_size = 600 },
+    );
+    defer split.deinit();
+    try std.testing.expect(split.parts.len >= 3);
+    const archives = try allocator.alloc(archive_mod.Archive, split.parts.len);
+    defer allocator.free(archives);
+    for (split.parts, archives, 0..) |part, *archive, index| {
+        archive.* = try archive_mod.Archive.init(part.bytes);
+        try std.testing.expectEqual(@as(u16, @intCast(index + 1)), archive.header.part_number);
+        try std.testing.expectEqual(@as(u16, @intCast(split.parts.len)), archive.header.total_parts);
+        try std.testing.expectEqual(@as(u32, 2), archive.header.image_count);
+        try std.testing.expectEqual(@as(u32, 0), archive.header.boot_index);
+        try std.testing.expect(archive.header.flags & 0x08 != 0);
+        try std.testing.expect(!archive.header.xml_data.isZero());
+        var local_lookup = try archive.readLookupTableRawAlloc(allocator, 32, 4096);
+        defer local_lookup.deinit();
+        for (local_lookup.entries) |entry|
+            try std.testing.expectEqual(archive.header.part_number, entry.part_number);
+    }
+    const set = try set_mod.ArchiveSet.init(archives);
+    const extracted_large = try set.extractByPathAllocLimited(
+        allocator,
+        1,
+        "large.bin",
+        large.len,
+        limits,
+    );
+    defer allocator.free(extracted_large);
+    try std.testing.expectEqualSlices(u8, large, extracted_large);
+    const extracted_second = try set.extractByPathAllocLimited(
+        allocator,
+        2,
+        "second.bin",
+        second_only.len,
+        limits,
+    );
+    defer allocator.free(extracted_second);
+    try std.testing.expectEqualSlices(u8, second_only, extracted_second);
+    const extracted_shared = try set.extractByPathAllocLimited(
+        allocator,
+        2,
+        "shared.bin",
+        shared.len,
+        limits,
+    );
+    defer allocator.free(extracted_shared);
+    try std.testing.expectEqualSlices(u8, shared, extracted_shared);
+    try std.testing.expectError(
+        error.WimResourceInOtherPart,
+        archives[0].extractByPathAllocLimited(
+            allocator,
+            1,
+            "large.bin",
+            large.len,
+            limits,
+        ),
+    );
+
+    var repeated = try writer.encodeImagesSplitAlloc(
+        allocator,
+        &images,
+        .{ .compression = .stored, .boot_index = 1 },
+        .{ .max_part_size = 600 },
+    );
+    defer repeated.deinit();
+    try std.testing.expectEqual(split.parts.len, repeated.parts.len);
+    for (split.parts, repeated.parts) |left, right|
+        try std.testing.expectEqualSlices(u8, left.bytes, right.bytes);
+
+    const standard = try writer.encodeImagesAlloc(allocator, &images, .{
+        .compression = .stored,
+        .boot_index = 1,
+    });
+    defer allocator.free(standard);
+    var one_part = try writer.splitArchiveAlloc(allocator, standard, .{
+        .max_part_size = std.math.maxInt(usize),
+        .integrity = false,
+    });
+    defer one_part.deinit();
+    try std.testing.expectEqual(@as(usize, 1), one_part.parts.len);
+    const one = try archive_mod.Archive.init(one_part.parts[0].bytes);
+    try std.testing.expectEqual(@as(u32, 1), one.header.boot_index);
+    try std.testing.expect(!one.header.boot_metadata.isZero());
+    try std.testing.expect(one.header.integrity_table.isZero());
+    try std.testing.expect(one.header.flags & 0x08 == 0);
+}
+
 test "WIM writer validates paths, XML and compression geometry" {
     const bad_path = [_]writer.Entry{.{ .path = "a//b" }};
     try std.testing.expectError(
@@ -643,6 +752,12 @@ test "WIM writer validates paths, XML and compression geometry" {
         error.InvalidWimWriterOptions,
         writer.encodeImagesAlloc(std.testing.allocator, &duplicate_images, .{}),
     );
+    try std.testing.expectError(
+        error.InvalidWimSplitOptions,
+        writer.encodeSplitAlloc(std.testing.allocator, &.{}, .{}, .{
+            .max_part_size = 0,
+        }),
+    );
 
     var existing: std.ArrayList(u8) = .empty;
     defer existing.deinit(std.testing.allocator);
@@ -719,6 +834,30 @@ test "WIM multi-image writer is allocation failure safe" {
             });
             defer allocator.free(encoded);
             _ = try archive_mod.Archive.init(encoded);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        AllocationTest.run,
+        .{},
+    );
+}
+
+test "WIM split writer is allocation failure safe" {
+    const AllocationTest = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const entries = [_]writer.Entry{
+                .{ .path = "a", .data = "a" ** 256 },
+                .{ .path = "b", .data = "b" ** 256 },
+            };
+            var split = try writer.encodeSplitAlloc(
+                allocator,
+                &entries,
+                .{ .compression = .stored },
+                .{ .max_part_size = 300 },
+            );
+            defer split.deinit();
+            try std.testing.expect(split.parts.len >= 2);
         }
     };
     try std.testing.checkAllAllocationFailures(

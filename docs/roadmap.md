@@ -21341,5 +21341,21 @@ reuse, so production keeps the simpler independently owned plans.
   distinct trees, duplicate empty metadata and boot image 2; wimlib verifies
   both archives and extracts the first two trees byte-exactly
   (`writer_multi=2`, `writer_multi_wimlib=2`). Focused WIM/LZX coverage is now
-  100 tests. In-place append/update, split/pipable output and additional WIM
-  codecs remain follow-ups.
+  102 tests. In-place append/update, pipable output and additional WIM codecs
+  remain follow-ups.
+
+- Added deterministic standard SWM writing. `splitWimAlloc` accepts a supported
+  standalone non-solid WIM, while one- and multi-image composition helpers
+  return caller-owned part buffers. Planning mirrors wimlib's soft payload
+  target: metadata stays in part 1, whole blobs move between parts without
+  wire-spanning, and an oversize indivisible blob may exceed the target. Every
+  part gets a local lookup with exact part numbers, copied XML, optional freshly
+  calculated integrity data, shared GUID/compression/image geometry, and the
+  SPANNED flag; multi-part boot metadata is cleared, while a one-part result
+  retains it. Unit tests cover ArchiveSet routing, local lookup invariants,
+  cross-image shared blobs, oversize resources, deterministic bytes, one-part
+  boot behavior, integrity override, invalid sizes and OOM. Stored and XPRESS
+  probes distribute three 70,000-byte resources across parts; Vort extracts the
+  sets byte-exactly, and wimlib joins with `--check`, verifies, and extracts both
+  images (`writer_split=2`, `writer_split_wimlib=2`). Individual resource
+  spanning, pipable output, in-place update, and additional codecs remain open.

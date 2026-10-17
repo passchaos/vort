@@ -4,12 +4,14 @@ const format = @import("format.zig");
 const metadata_writer = @import("writer_metadata.zig");
 const resource_writer = @import("writer_resource.zig");
 const security = @import("writer_security.zig");
+const split_writer = @import("writer_split.zig");
 const streams = @import("writer_streams.zig");
 const tree_mod = @import("writer_tree.zig");
 const xml_writer = @import("writer_xml.zig");
 
 pub const Error = core.Error || format.Error || metadata_writer.Error ||
-    resource_writer.Error || tree_mod.Error || std.mem.Allocator.Error || error{
+    resource_writer.Error || split_writer.Error || tree_mod.Error ||
+    std.mem.Allocator.Error || error{
     InvalidWimWriterOptions,
     InvalidWimEntry,
     WimResourceTooLarge,
@@ -20,6 +22,9 @@ pub const EntryKind = tree_mod.EntryKind;
 pub const NamedStream = streams.NamedStream;
 pub const ReparseData = streams.ReparseData;
 pub const Compression = resource_writer.Compression;
+pub const SplitOptions = split_writer.Options;
+pub const SplitPart = split_writer.Part;
+pub const SplitArchive = split_writer.SplitArchive;
 
 pub const Options = struct {
     compression: Compression = .xpress,
@@ -273,6 +278,36 @@ pub fn encodeImagesInto(
     if (encoded.len > output.len) return error.OutputTooSmall;
     @memcpy(output[0..encoded.len], encoded);
     return encoded.len;
+}
+
+pub fn splitArchiveAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: SplitOptions,
+) Error!SplitArchive {
+    return split_writer.splitAlloc(allocator, input, options);
+}
+
+pub fn encodeSplitAlloc(
+    allocator: std.mem.Allocator,
+    entries: []const Entry,
+    options: Options,
+    split_options: SplitOptions,
+) Error!SplitArchive {
+    const encoded = try encodeAlloc(allocator, entries, options);
+    defer allocator.free(encoded);
+    return split_writer.splitAlloc(allocator, encoded, split_options);
+}
+
+pub fn encodeImagesSplitAlloc(
+    allocator: std.mem.Allocator,
+    images: []const Image,
+    options: ImagesOptions,
+    split_options: SplitOptions,
+) Error!SplitArchive {
+    const encoded = try encodeImagesAlloc(allocator, images, options);
+    defer allocator.free(encoded);
+    return split_writer.splitAlloc(allocator, encoded, split_options);
 }
 
 fn deinitPlannedImages(

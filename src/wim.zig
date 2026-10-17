@@ -42,6 +42,9 @@ pub const EncodeCompression = writer.Compression;
 pub const EncodeOptions = writer.Options;
 pub const EncodeImage = writer.Image;
 pub const EncodeImagesOptions = writer.ImagesOptions;
+pub const SplitEncodeOptions = writer.SplitOptions;
+pub const EncodedSplitPart = writer.SplitPart;
+pub const EncodedSplitArchive = writer.SplitArchive;
 pub const parse = archive.Archive.init;
 pub const parseHeader = format.parseHeader;
 pub const parseImageMetadataOwned = metadata.ImageMetadata.fromOwnedBytes;
@@ -52,6 +55,9 @@ pub const encodeInto = writer.encodeInto;
 pub const encodeImagesAlloc = writer.encodeImagesAlloc;
 pub const encodeImagesAppend = writer.encodeImagesAppend;
 pub const encodeImagesInto = writer.encodeImagesInto;
+pub const splitAlloc = writer.splitArchiveAlloc;
+pub const encodeSplitAlloc = writer.encodeSplitAlloc;
+pub const encodeImagesSplitAlloc = writer.encodeImagesSplitAlloc;
 
 test {
     _ = format;

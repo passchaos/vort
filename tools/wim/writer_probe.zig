@@ -17,6 +17,8 @@ pub fn main(init: std.process.Init) !void {
         return writeInodeMetadata(init, output_path, compression);
     if (std.mem.eql(u8, mode, "multi"))
         return writeMultiImage(init, output_path, compression);
+    if (std.mem.eql(u8, mode, "split"))
+        return writeSplit(init, output_path, compression);
     if (!std.mem.eql(u8, mode, "basic")) return error.InvalidBlockPlan;
 
     const large = "Vort WIM writer multichunk payload 0123456789\n" ** 4096;
@@ -160,6 +162,50 @@ fn writeMultiImage(
     });
 }
 
+fn writeSplit(
+    init: std.process.Init,
+    output_prefix: []const u8,
+    compression: vort.WimEncodeCompression,
+) !void {
+    var first_data: [70_000]u8 = undefined;
+    var second_data: [70_000]u8 = undefined;
+    var shared_data: [70_000]u8 = undefined;
+    fillPseudoRandomSeed(&first_data, 0x1111_1111);
+    fillPseudoRandomSeed(&second_data, 0x2222_2222);
+    fillPseudoRandomSeed(&shared_data, 0x3333_3333);
+    const first_entries = [_]vort.WimEncodeEntry{
+        .{ .path = "first.bin", .data = &first_data },
+        .{ .path = "shared.bin", .data = &shared_data },
+    };
+    const second_entries = [_]vort.WimEncodeEntry{
+        .{ .path = "second.bin", .data = &second_data },
+        .{ .path = "shared.bin", .data = &shared_data },
+    };
+    const images = [_]vort.WimEncodeImage{
+        .{ .name = "first", .entries = &first_entries },
+        .{ .name = "second", .entries = &second_entries },
+    };
+    var split = try vort.encodeWimImagesSplitAlloc(
+        init.gpa,
+        &images,
+        .{ .compression = compression, .boot_index = 2 },
+        .{ .max_part_size = 80_000 },
+    );
+    defer split.deinit();
+    for (split.parts) |part| {
+        const path = try std.fmt.allocPrint(
+            init.gpa,
+            "{s}.part{d}",
+            .{ output_prefix, part.part_number },
+        );
+        defer init.gpa.free(path);
+        try std.Io.Dir.cwd().writeFile(init.io, .{
+            .sub_path = path,
+            .data = part.bytes,
+        });
+    }
+}
+
 fn writeArchive(
     init: std.process.Init,
     output_path: []const u8,
@@ -186,7 +232,11 @@ fn parseCompression(name: []const u8) ?vort.WimEncodeCompression {
 }
 
 fn fillPseudoRandom(output: []u8) void {
-    var state: u32 = 0x5749_4d31;
+    fillPseudoRandomSeed(output, 0x5749_4d31);
+}
+
+fn fillPseudoRandomSeed(output: []u8, seed: u32) void {
+    var state = seed;
     for (output) |*byte| {
         state ^= state << 13;
         state ^= state >> 17;

@@ -184,11 +184,25 @@ per-image counts. `WimEncodeImagesOptions.boot_index` optionally copies the
 selected metadata resource into the header boot descriptor. Deterministic GUID
 derivation includes every image metadata hash and length-delimited name.
 
+`splitWimAlloc` converts any supported standalone, non-solid standard WIM into
+caller-owned SWM parts. `encodeWimSplitAlloc` and
+`encodeWimImagesSplitAlloc` compose this with the one- or multi-image writers.
+`WimEncodedSplitArchive.deinit()` releases the part array and every part buffer.
+The selected `max_part_size` is a soft blob-payload target, matching
+`wimlib_split()`: header, lookup, XML, and integrity overhead are excluded, all
+metadata remains in part 1, and an indivisible resource may make a part larger
+than the target instead of being wire-spanned. Each part receives its own local
+lookup and recomputed integrity table plus a copy of the XML. Multi-part sets
+set the SPANNED header flag, share the deterministic GUID and image geometry,
+and clear boot metadata/index as required by SWM. A one-part result remains a
+normal WIM and retains the source boot descriptor.
+
 The current writer remains whole-archive and caller-buffer based. In-place image
-append/update, WIM/SWM splitting, pipable output, LZX/LZMS encoding, automatic
-host-filesystem security capture, short names, and tagged metadata remain
-follow-up slices. Filesystem capture/application and construction of EFSRPC or
-reparse payloads from OS objects stay outside the wire serializer.
+append/update, wire-spanned individual resources, pipable output, LZX/LZMS
+encoding, automatic host-filesystem security capture, short names, and tagged
+metadata remain follow-up slices. Filesystem capture/application and
+construction of EFSRPC or reparse payloads from OS objects stay outside the
+wire serializer.
 
 ```zig
 const archive = try vort.parseWim(image_bytes);
@@ -283,6 +297,14 @@ const multi_wim = try vort.encodeWimImagesAlloc(allocator, &images, .{
     .boot_index = 1,
 });
 defer allocator.free(multi_wim);
+
+var swm = try vort.encodeWimImagesSplitAlloc(
+    allocator,
+    &images,
+    .{ .compression = .xpress },
+    .{ .max_part_size = 4 * 1024 * 1024 * 1024 },
+);
+defer swm.deinit();
 ```
 
 ```sh
@@ -368,3 +390,8 @@ including a cross-image shared blob, distinct trees, two byte-identical empty
 metadata resources, consecutive XML indexes and boot image 2. Both readers map
 all four images correctly; wimlib verifies the archives and byte-compares the
 first two extracted trees (`writer_multi=2`, `writer_multi_wimlib=2`).
+The SWM writer matrix then emits multi-image stored and XPRESS sets with three
+indivisible 70,000-byte blobs and a cross-image shared resource. Vort validates
+every local lookup and extracts all paths through `WimArchiveSet`; wimlib joins
+the parts with `--check`, verifies the result, and byte-compares both images
+(`writer_split=2`, `writer_split_wimlib=2`).

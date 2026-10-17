@@ -52,6 +52,17 @@ def write_tree(root: Path) -> dict[str, bytes]:
     return payloads
 
 
+def xorshift_bytes(seed: int, size: int) -> bytes:
+    state = seed
+    output = bytearray()
+    for _ in range(size):
+        state ^= (state << 13) & 0xFFFF_FFFF
+        state ^= state >> 17
+        state ^= (state << 5) & 0xFFFF_FFFF
+        output.append(state & 0xFF)
+    return bytes(output)
+
+
 def resource_header(size: int, flags: int, offset: int, decoded_size: int) -> bytes:
     if size >= 1 << 56:
         raise AssertionError("synthetic WIM resource too large")
@@ -169,6 +180,8 @@ def main() -> None:
     writer_inode_wimlib_cases = 0
     writer_multi_cases = 0
     writer_multi_wimlib_cases = 0
+    writer_split_cases = 0
+    writer_split_wimlib_cases = 0
     stream_error_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-wim-") as temp_text:
@@ -747,6 +760,78 @@ def main() -> None:
                     ):
                         raise AssertionError("wimlib multi-image extraction mismatch")
                 writer_multi_wimlib_cases += 1
+
+        split_expected = {
+            (1, "/first.bin"): xorshift_bytes(0x1111_1111, 70_000),
+            (1, "/shared.bin"): xorshift_bytes(0x3333_3333, 70_000),
+            (2, "/second.bin"): xorshift_bytes(0x2222_2222, 70_000),
+            (2, "/shared.bin"): xorshift_bytes(0x3333_3333, 70_000),
+        }
+        for writer_compression, expected_compression in (
+            ("stored", "none"),
+            ("xpress", "xpress"),
+        ):
+            split_prefix = temp / f"vort-writer-split-{writer_compression}"
+            run(args.writer, split_prefix, writer_compression, "split")
+            split_parts = sorted(
+                temp.glob(f"{split_prefix.name}.part*"),
+                key=lambda path: int(path.name.rsplit("part", 1)[1]),
+            )
+            if len(split_parts) < 3:
+                raise AssertionError("Vort SWM writer did not create enough parts")
+            for index, part in enumerate(split_parts, 1):
+                listing = run(args.cli, "list-wim-file", part).stdout
+                for marker in (
+                    f"compression={expected_compression}".encode(),
+                    b"images=2",
+                    f"part={index}/{len(split_parts)}".encode(),
+                ):
+                    if marker not in listing:
+                        raise AssertionError(
+                            f"Vort SWM part header missing {marker!r}"
+                        )
+            for (image_index, path), expected in split_expected.items():
+                output = temp / (
+                    f"writer-split-{writer_compression}-{image_index}-"
+                    f"{path[1:].replace('/', '-')}"
+                )
+                run(
+                    args.cli,
+                    "extract-wim-parts-path",
+                    image_index,
+                    path,
+                    output,
+                    len(expected),
+                    *split_parts,
+                )
+                if output.read_bytes() != expected:
+                    raise AssertionError("Vort SWM set extraction mismatch")
+            writer_split_cases += 1
+
+            if wimlib is not None:
+                joined = temp / f"vort-writer-joined-{writer_compression}.wim"
+                run(wimlib, "join", joined, *split_parts, "--check")
+                run(wimlib, "verify", joined)
+                for image_index, unique_name in ((1, "first.bin"), (2, "second.bin")):
+                    destination = temp / (
+                        f"writer-split-wimlib-{writer_compression}-{image_index}"
+                    )
+                    run(
+                        wimlib,
+                        "extract",
+                        joined,
+                        image_index,
+                        f"--dest-dir={destination}",
+                        "--no-acls",
+                    )
+                    if (
+                        (destination / unique_name).read_bytes()
+                        != split_expected[(image_index, f"/{unique_name}")]
+                        or (destination / "shared.bin").read_bytes()
+                        != split_expected[(image_index, "/shared.bin")]
+                    ):
+                        raise AssertionError("wimlib joined SWM extraction mismatch")
+                writer_split_wimlib_cases += 1
         if wimlib is not None:
             encrypted_result = run(wimlib, "info", encrypted_esd, check=False)
             if encrypted_result.returncode == 0 or b"encrypted" not in encrypted_result.stderr.lower():
@@ -1233,6 +1318,8 @@ def main() -> None:
         f"writer_inode_wimlib={writer_inode_wimlib_cases} "
         f"writer_multi={writer_multi_cases} "
         f"writer_multi_wimlib={writer_multi_wimlib_cases} "
+        f"writer_split={writer_split_cases} "
+        f"writer_split_wimlib={writer_split_wimlib_cases} "
         f"malformed={malformed}"
     )
 
