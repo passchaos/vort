@@ -615,8 +615,12 @@ pub fn main(init: std.process.Init) !void {
         try seven_zip_cli.createFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "list-7z-file")) {
         try seven_zip_cli.listFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "list-7z-source-file")) {
+        try seven_zip_cli.listSourceFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-7z-file")) {
         try seven_zip_cli.extractFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-7z-source-file")) {
+        try seven_zip_cli.extractSourceFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-lzma-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -2894,8 +2898,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  create-7z-file <out> <entry> <in> [copy|deflate|bzip2|lzma|lzma2|lzma2-stored|ppmd7] [filters] [solid|non-solid] [header-codec|plain] [bcj2|classic] [start_ip] [external-CODEC|inline-names] [external-metadata-CODEC|inline-metadata] [ctime|-] [atime|-] [mtime|-] [attributes|-] [password|-] [iv_hex] [salt_hex|-] [cycles] [encrypted-header|plain-header]
         \\                              Create a deterministic 7z archive; filters are comma-separated
         \\  list-7z-file <path> [password|-]
+        \\  list-7z-source-file <path> [password|-]
         \\                              List entries in a supported 7z archive
         \\  extract-7z-file <7z> <entry> <out> [max_output] [max_dictionary] [max_folder] [password|-]
+        \\  extract-7z-source-file <7z> <entry> <out> [max_output] [max_dictionary] [max_folder] [password|-]
         \\                              Extract a common-codec, Delta, or BCJ-filtered 7z entry
         \\  encode-lzma-file <in> <out> [end-marker|known]
         \\                              Encode deterministic LZMA-Alone data

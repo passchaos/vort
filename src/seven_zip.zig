@@ -1,12 +1,15 @@
 const std = @import("std");
 const checksum = @import("checksum.zig");
 const archive = @import("seven_zip/archive.zig");
+const source_archive = @import("seven_zip/source_archive.zig");
 const writer = @import("seven_zip/writer.zig");
 
-pub const Error = archive.Error || writer.Error;
+pub const Error = archive.Error || source_archive.Error || writer.Error;
 pub const Kind = @import("seven_zip/types.zig").Kind;
 pub const Entry = archive.Entry;
 pub const Archive = archive.Archive;
+pub const Source = source_archive.Source;
+pub const SourceArchive = source_archive.Archive;
 pub const DecodeOptions = archive.DecodeOptions;
 pub const ParseOptions = archive.ParseOptions;
 pub const EncodeEntry = writer.EncodeEntry;
@@ -16,6 +19,8 @@ pub const EncryptionOptions = writer.EncryptionOptions;
 pub const EncodeOptions = writer.EncodeOptions;
 pub const parseAlloc = archive.parseAlloc;
 pub const parseAllocWithOptions = archive.parseAllocWithOptions;
+pub const parseSourceAlloc = source_archive.parseAlloc;
+pub const parseSourceAllocWithOptions = source_archive.parseAllocWithOptions;
 pub fn extractByNameAlloc(allocator: std.mem.Allocator, input: []const u8, name: []const u8) ![]u8 {
     const parsed = try archive.parseAlloc(allocator, input);
     defer parsed.deinit();
@@ -45,6 +50,7 @@ test {
     _ = @import("seven_zip/bcj2.zig");
     _ = @import("seven_zip/number.zig");
     _ = @import("seven_zip/ppmd7.zig");
+    _ = source_archive;
     _ = writer;
 }
 

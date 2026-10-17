@@ -3,6 +3,8 @@ const aes = @import("aes.zig");
 const checksum = @import("../checksum.zig");
 const core = @import("../core.zig");
 const number = @import("number.zig");
+const packed_input = @import("packed_input.zig");
+const source_mod = @import("source.zig");
 const streams_mod = @import("streams.zig");
 const files_mod = @import("files.zig");
 const types = @import("types.zig");
@@ -15,7 +17,8 @@ const bcj2 = @import("bcj2.zig");
 const ppmd7 = @import("ppmd7.zig");
 
 pub const Error = core.Error || number.Error || streams_mod.Error || files_mod.Error || aes.Error ||
-    deflate.Error || bzip2.Error || lzma_decoder.Error || xz_container.Error || ppmd7.Error || error{
+    deflate.Error || bzip2.Error || lzma_decoder.Error || xz_container.Error || ppmd7.Error ||
+    packed_input.Error || source_mod.Error || error{
     Invalid7zArchive,
     Unsupported7zFeature,
     EntryNotFound,
@@ -28,12 +31,15 @@ pub const DecodeOptions = struct {
     max_output_len: usize = std.math.maxInt(usize),
     max_dictionary_size: usize = 512 * 1024 * 1024,
     max_folder_output_len: usize = 512 * 1024 * 1024,
+    max_packed_stream_size: usize = 512 * 1024 * 1024,
     max_kdf_cycles_power: u6 = aes.max_cycles_power,
     password: ?[]const u8 = null,
 };
 
 pub const ParseOptions = struct {
+    max_next_header_size: usize = 64 * 1024 * 1024,
     max_encoded_header_size: usize = 64 * 1024 * 1024,
+    max_packed_stream_size: usize = 64 * 1024 * 1024,
     max_external_metadata_size: usize = 64 * 1024 * 1024,
     max_dictionary_size: usize = 64 * 1024 * 1024,
     max_entries: usize = 1_000_000,
@@ -110,41 +116,17 @@ pub const Archive = struct {
         entry: Entry,
         options: DecodeOptions,
     ) ![]u8 {
-        const folder_index = entry.folder_index orelse {
-            if (entry.kind == .file and entry.size == 0) return allocator.alloc(u8, 0);
-            return error.EntryHasNoStream;
-        };
-        const folder = self.streams.folders[folder_index];
-        const folder_size = std.math.cast(usize, folder.unpack_size) orelse
-            return error.OutputLimitExceeded;
-        const entry_size = std.math.cast(usize, entry.size) orelse
-            return error.OutputLimitExceeded;
-        if (entry_size > options.max_output_len) return error.OutputLimitExceeded;
-        if (folder_size > options.max_folder_output_len) return error.OutputLimitExceeded;
-        const decoded = try decodeFolderAlloc(
+        return decodeEntryFromInputAlloc(
             allocator,
-            self.bytes,
-            self.packed_data_limit,
+            entry,
             &self.streams,
-            folder_index,
-            folder_size,
-            options.max_dictionary_size,
-            options.password,
-            options.max_kdf_cycles_power,
+            packed_input.Input.fromBytes(
+                self.bytes,
+                self.packed_data_limit,
+                options.max_packed_stream_size,
+            ),
+            options,
         );
-        errdefer allocator.free(decoded);
-        const entry_start = std.math.cast(usize, entry.offset_in_folder) orelse
-            return error.Invalid7zArchive;
-        const entry_end = std.math.add(usize, entry_start, entry_size) catch
-            return error.Invalid7zArchive;
-        if (entry_end > decoded.len) return error.SizeMismatch;
-        const entry_bytes = decoded[entry_start..entry_end];
-        if (entry.crc32) |expected|
-            if (checksum.crc32Best(entry_bytes) != expected) return error.ChecksumMismatch;
-        if (entry_start == 0 and entry_end == decoded.len) return decoded;
-        const result = try allocator.dupe(u8, entry_bytes);
-        allocator.free(decoded);
-        return result;
     }
 
     pub fn extractByNameAllocLimited(
@@ -171,31 +153,90 @@ pub fn parseAllocWithOptions(
     input: []const u8,
     options: ParseOptions,
 ) !Archive {
-    if (input.len < signature_header_size) return error.TruncatedFrame;
-    if (!std.mem.eql(u8, input[0..signature.len], &signature)) return error.InvalidMagic;
-    if (input[6] != 0 or input[7] != 4) return error.UnsupportedVersion;
-    if (checksum.crc32Best(input[12..32]) != std.mem.readInt(u32, input[8..12], .little))
-        return error.ChecksumMismatch;
-
-    const next_offset_u64 = std.mem.readInt(u64, input[12..20], .little);
-    const next_size_u64 = std.mem.readInt(u64, input[20..28], .little);
-    const next_offset = std.math.cast(usize, next_offset_u64) orelse
+    const layout = try parseSignatureHeader(input, input.len, options);
+    const next_start = std.math.cast(usize, layout.next_header_start) orelse
         return error.Invalid7zArchive;
-    const next_size = std.math.cast(usize, next_size_u64) orelse
+    const next_end = std.math.add(usize, next_start, layout.next_header_size) catch
         return error.Invalid7zArchive;
-    const next_start = std.math.add(usize, signature_header_size, next_offset) catch
-        return error.Invalid7zArchive;
-    const next_end = std.math.add(usize, next_start, next_size) catch
-        return error.Invalid7zArchive;
-    if (next_end != input.len) return error.Invalid7zArchive;
     const next_header = input[next_start..next_end];
-    if (checksum.crc32Best(next_header) != std.mem.readInt(u32, input[28..32], .little))
+    if (checksum.crc32Best(next_header) != layout.next_header_crc)
+        return error.ChecksumMismatch;
+    const parsed = try parseBodyAlloc(
+        allocator,
+        next_header,
+        packed_input.Input.fromBytes(input, next_start, options.max_packed_stream_size),
+        options,
+    );
+    errdefer parsed.deinit();
+    return .{
+        .allocator = allocator,
+        .bytes = input,
+        .entries = parsed.entries,
+        .streams = parsed.streams,
+        .next_header_start = next_start,
+        .next_header_size = layout.next_header_size,
+        .packed_data_limit = std.math.cast(usize, parsed.packed_data_limit) orelse
+            return error.Invalid7zArchive,
+    };
+}
+
+pub const HeaderLayout = struct {
+    next_header_start: u64,
+    next_header_size: usize,
+    next_header_crc: u32,
+};
+
+pub fn parseSignatureHeader(
+    header: []const u8,
+    archive_len: u64,
+    options: ParseOptions,
+) Error!HeaderLayout {
+    if (header.len < signature_header_size) return error.TruncatedFrame;
+    if (!std.mem.eql(u8, header[0..signature.len], &signature)) return error.InvalidMagic;
+    if (header[6] != 0 or header[7] != 4) return error.UnsupportedVersion;
+    if (checksum.crc32Best(header[12..32]) != std.mem.readInt(u32, header[8..12], .little))
         return error.ChecksumMismatch;
 
+    const next_offset = std.mem.readInt(u64, header[12..20], .little);
+    const next_size_u64 = std.mem.readInt(u64, header[20..28], .little);
+    const next_size = std.math.cast(usize, next_size_u64) orelse
+        return error.OutputLimitExceeded;
+    if (next_size > options.max_next_header_size) return error.OutputLimitExceeded;
+    const next_start = std.math.add(u64, signature_header_size, next_offset) catch
+        return error.IntegerOverflow;
+    const next_end = std.math.add(u64, next_start, next_size_u64) catch
+        return error.IntegerOverflow;
+    if (next_end != archive_len) return error.Invalid7zArchive;
+    return .{
+        .next_header_start = next_start,
+        .next_header_size = next_size,
+        .next_header_crc = std.mem.readInt(u32, header[28..32], .little),
+    };
+}
+
+pub const ParsedArchive = struct {
+    allocator: std.mem.Allocator,
+    entries: []Entry,
+    streams: streams_mod.Streams,
+    packed_data_limit: u64,
+
+    pub fn deinit(self: ParsedArchive) void {
+        for (self.entries) |entry| self.allocator.free(entry.name);
+        self.allocator.free(self.entries);
+        self.streams.deinit();
+    }
+};
+
+pub fn parseBodyAlloc(
+    allocator: std.mem.Allocator,
+    next_header: []const u8,
+    initial_input: packed_input.Input,
+    options: ParseOptions,
+) !ParsedArchive {
     var owned_header: ?[]u8 = null;
     defer if (owned_header) |bytes| allocator.free(bytes);
     var header_bytes = next_header;
-    var packed_data_limit = next_start;
+    var packed_data_limit = initial_input.packedLimit();
     if (next_header.len == 0) return error.Invalid7zArchive;
     if (next_header[0] == Nid.encoded_header) {
         var encoded_reader = number.Reader.init(next_header[1..]);
@@ -204,18 +245,17 @@ pub fn parseAllocWithOptions(
         if (encoded_reader.remaining() != 0) return error.TrailingData;
         if (encoded_streams.folders.len != 1 or encoded_streams.substream_sizes.len != 1)
             return error.Unsupported7zFeature;
-        try validatePackedStreams(input, next_start, &encoded_streams);
+        const encoded_input = initial_input;
+        try encoded_input.validateStreams(&encoded_streams);
         const encoded_pack_start_u64 = std.math.add(u64, signature_header_size, encoded_streams.pack_position) catch
             return error.IntegerOverflow;
-        packed_data_limit = std.math.cast(usize, encoded_pack_start_u64) orelse
-            return error.Invalid7zArchive;
+        packed_data_limit = encoded_pack_start_u64;
         const unpack_size = std.math.cast(usize, encoded_streams.folders[0].unpack_size) orelse
             return error.OutputLimitExceeded;
         if (unpack_size > options.max_encoded_header_size) return error.OutputLimitExceeded;
         owned_header = try decodeFolderAlloc(
             allocator,
-            input,
-            next_start,
+            encoded_input,
             &encoded_streams,
             0,
             unpack_size,
@@ -244,11 +284,11 @@ pub fn parseAllocWithOptions(
                 return error.Invalid7zArchive;
             const additional = try streams_mod.parse(allocator, &reader, options.max_streams);
             defer additional.deinit();
-            try validatePackedStreams(input, packed_data_limit, &additional);
+            const additional_input = initial_input.withLimit(packed_data_limit);
+            try additional_input.validateStreams(&additional);
             external_streams = try decodeExternalStreamsAlloc(
                 allocator,
-                input,
-                packed_data_limit,
+                additional_input,
                 &additional,
                 options.max_dictionary_size,
                 options.max_external_metadata_size,
@@ -280,22 +320,62 @@ pub fn parseAllocWithOptions(
     };
     if (reader.remaining() != 0) return error.TrailingData;
     const owned_files = files orelse return error.Invalid7zArchive;
-    try validatePackedStreams(input, packed_data_limit, &streams);
+    try initial_input.withLimit(packed_data_limit).validateStreams(&streams);
     return .{
         .allocator = allocator,
-        .bytes = input,
         .entries = owned_files.entries,
         .streams = streams,
-        .next_header_start = next_start,
-        .next_header_size = next_size,
         .packed_data_limit = packed_data_limit,
     };
 }
 
+pub fn decodeEntryFromInputAlloc(
+    allocator: std.mem.Allocator,
+    entry: Entry,
+    streams: *const streams_mod.Streams,
+    input: packed_input.Input,
+    options: DecodeOptions,
+) ![]u8 {
+    const folder_index = entry.folder_index orelse {
+        if (entry.kind == .file and entry.size == 0) return allocator.alloc(u8, 0);
+        return error.EntryHasNoStream;
+    };
+    if (folder_index >= streams.folders.len) return error.Invalid7zArchive;
+    const folder = streams.folders[folder_index];
+    const folder_size = std.math.cast(usize, folder.unpack_size) orelse
+        return error.OutputLimitExceeded;
+    const entry_size = std.math.cast(usize, entry.size) orelse
+        return error.OutputLimitExceeded;
+    if (entry_size > options.max_output_len) return error.OutputLimitExceeded;
+    if (folder_size > options.max_folder_output_len) return error.OutputLimitExceeded;
+    const decoded = try decodeFolderAlloc(
+        allocator,
+        input,
+        streams,
+        folder_index,
+        folder_size,
+        options.max_dictionary_size,
+        options.password,
+        options.max_kdf_cycles_power,
+    );
+    errdefer allocator.free(decoded);
+    const entry_start = std.math.cast(usize, entry.offset_in_folder) orelse
+        return error.Invalid7zArchive;
+    const entry_end = std.math.add(usize, entry_start, entry_size) catch
+        return error.Invalid7zArchive;
+    if (entry_end > decoded.len) return error.SizeMismatch;
+    const entry_bytes = decoded[entry_start..entry_end];
+    if (entry.crc32) |expected|
+        if (checksum.crc32Best(entry_bytes) != expected) return error.ChecksumMismatch;
+    if (entry_start == 0 and entry_end == decoded.len) return decoded;
+    const result = try allocator.dupe(u8, entry_bytes);
+    allocator.free(decoded);
+    return result;
+}
+
 fn decodeExternalStreamsAlloc(
     allocator: std.mem.Allocator,
-    input: []const u8,
-    packed_limit: usize,
+    input: packed_input.Input,
     streams: *const streams_mod.Streams,
     max_dictionary_size: usize,
     max_output_size: usize,
@@ -318,7 +398,6 @@ fn decodeExternalStreamsAlloc(
         items[index] = try decodeFolderAlloc(
             allocator,
             input,
-            packed_limit,
             streams,
             index,
             size,
@@ -338,8 +417,7 @@ fn freeExternalStreams(allocator: std.mem.Allocator, items: [][]u8) void {
 
 fn decodeFolderAlloc(
     allocator: std.mem.Allocator,
-    input: []const u8,
-    packed_limit: usize,
+    input: packed_input.Input,
     streams: *const streams_mod.Streams,
     folder_index: usize,
     expected_size: usize,
@@ -353,18 +431,21 @@ fn decodeFolderAlloc(
         if (folder.pack_stream_count != 4 or
             (folder.coder_count != 2 and folder.coder_count != 6))
             return error.Invalid7zArchive;
-        var packed_streams: [4][]const u8 = undefined;
-        for (&packed_streams, 0..) |*packed_stream, index| {
-            packed_stream.* = try packBytes(input, packed_limit, streams, folder.pack_index + index);
+        var loaded_streams: [4]packed_input.Loaded = undefined;
+        var loaded_count: usize = 0;
+        defer for (loaded_streams[0..loaded_count]) |loaded| loaded.deinit(allocator);
+        for (&loaded_streams, 0..) |*loaded, index| {
+            loaded.* = try input.load(allocator, streams, folder.pack_index + index);
+            loaded_count += 1;
             if (streams.pack_crcs[folder.pack_index + index]) |expected|
-                if (checksum.crc32Best(packed_stream.*) != expected) return error.ChecksumMismatch;
+                if (checksum.crc32Best(loaded.bytes) != expected) return error.ChecksumMismatch;
         }
         var branch_streams: [4][]const u8 = undefined;
         var owned_branches: [4]?[]u8 = @splat(null);
         defer for (owned_branches) |owned|
             if (owned) |bytes| allocator.free(bytes);
         for (folder.bcj2_branches, 0..) |branch, branch_index| {
-            const packed_bytes = packed_streams[branch.pack_stream_offset];
+            const packed_bytes = loaded_streams[branch.pack_stream_offset].bytes;
             branch_streams[branch_index] = if (branch.aes_coder_index) |aes_index| decrypted: {
                 const coder = folder.coders[aes_index];
                 const properties = aes.parseProperties(coder.propertyBytes()) catch
@@ -431,7 +512,9 @@ fn decodeFolderAlloc(
         return decoded;
     }
 
-    const packed_bytes = try packBytes(input, packed_limit, streams, folder.pack_index);
+    const loaded = try input.load(allocator, streams, folder.pack_index);
+    defer loaded.deinit(allocator);
+    const packed_bytes = loaded.bytes;
     if (streams.pack_crcs[folder.pack_index]) |expected|
         if (checksum.crc32Best(packed_bytes) != expected) return error.ChecksumMismatch;
 
@@ -542,41 +625,12 @@ fn decodePrimaryAlloc(
     };
 }
 
-fn packBytes(
-    input: []const u8,
-    packed_limit: usize,
-    streams: *const streams_mod.Streams,
-    index: usize,
-) Error![]const u8 {
-    if (index >= streams.pack_sizes.len) return error.Invalid7zArchive;
-    var relative: u64 = streams.pack_position;
-    for (streams.pack_sizes[0..index]) |size|
-        relative = std.math.add(u64, relative, size) catch return error.IntegerOverflow;
-    const start_u64 = std.math.add(u64, signature_header_size, relative) catch
-        return error.IntegerOverflow;
-    const start = std.math.cast(usize, start_u64) orelse return error.Invalid7zArchive;
-    const size = std.math.cast(usize, streams.pack_sizes[index]) orelse
-        return error.Invalid7zArchive;
-    const end = std.math.add(usize, start, size) catch return error.Invalid7zArchive;
-    if (end > packed_limit or end > input.len) return error.Invalid7zArchive;
-    return input[start..end];
-}
-
 fn skipArchiveProperties(reader: *number.Reader) !void {
     while (true) {
         const property = try reader.readByte();
         if (property == Nid.end) return;
         _ = try reader.take(try reader.readSize());
     }
-}
-
-fn validatePackedStreams(input: []const u8, next_header_start: usize, streams: *const streams_mod.Streams) Error!void {
-    var end_u64 = std.math.add(u64, signature_header_size, streams.pack_position) catch
-        return error.IntegerOverflow;
-    for (streams.pack_sizes) |size|
-        end_u64 = std.math.add(u64, end_u64, size) catch return error.IntegerOverflow;
-    const end = std.math.cast(usize, end_u64) orelse return error.Invalid7zArchive;
-    if (end > next_header_start or end > input.len) return error.Invalid7zArchive;
 }
 
 test "7z parser reads external stored archive and extracts Copy data" {

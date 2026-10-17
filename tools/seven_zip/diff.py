@@ -116,6 +116,37 @@ def verify_with_vort(
             raise AssertionError(f"Vort 7z extraction mismatch for {name!r}")
 
 
+def verify_with_vort_source(
+    cli: Path,
+    archive: Path,
+    payloads: dict[str, bytes],
+    password: str | None = None,
+) -> None:
+    list_args = (str(archive), password) if password is not None else (str(archive),)
+    listing = run(cli, "list-7z-source-file", *list_args).stdout
+    if "seven_zip_source_reads=" not in listing:
+        raise AssertionError("7z source listing omitted positional-read diagnostics")
+    for name in payloads:
+        if f"name={name}" not in listing:
+            raise AssertionError(f"7z source listing omitted {name!r}: {listing}")
+    for index, (name, payload) in enumerate(payloads.items()):
+        output = archive.with_name(f"{archive.stem}-source-{index}.out")
+        extract_args = [
+            "extract-7z-source-file",
+            str(archive),
+            name,
+            str(output),
+            str(len(payload)),
+        ]
+        if password is not None:
+            extract_args.extend(("536870912", "536870912", password))
+        result = run(cli, *extract_args).stdout
+        if "seven_zip_source_reads=" not in result:
+            raise AssertionError("7z source extraction omitted read diagnostics")
+        if output.read_bytes() != payload:
+            raise AssertionError(f"Vort source extraction mismatch for {name!r}")
+
+
 def verify_vort_metadata(
     cli: Path,
     archive: Path,
@@ -163,6 +194,7 @@ def main() -> None:
         modern_branch_filters = "ARM64" in methods_output and "RISCV" in methods_output
     external_variants = 0
     vort_writer_variants = 1
+    source_variants = 1
 
     with tempfile.TemporaryDirectory(prefix="vort-seven-zip-diff-") as temp_text:
         temp = Path(temp_text)
@@ -178,6 +210,7 @@ def main() -> None:
             "utf8-目录/数据.txt": "Vort 7z UTF-8\n".encode(),
         }
         verify_with_vort(args.cli, first, expected_vort)
+        verify_with_vort_source(args.cli, first, expected_vort)
         filetime_epoch = 116_444_736_000_000_000
         verify_vort_metadata(
             args.cli,
@@ -328,6 +361,13 @@ def main() -> None:
                 expected_vort,
                 encryption_password,
             )
+            verify_with_vort_source(
+                args.cli,
+                combined_encrypted,
+                expected_vort,
+                encryption_password,
+            )
+            source_variants += 1
             vort_writer_variants += 1
 
             for name_compression in (
@@ -489,6 +529,9 @@ def main() -> None:
                 archive = temp / f"{variant}.7z"
                 create_reference(seven_zip_tool, tree, archive, options)
                 verify_with_vort(args.cli, archive, payloads)
+                if variant == "lzma2-solid-encoded":
+                    verify_with_vort_source(args.cli, archive, payloads)
+                    source_variants += 1
                 if variant == "copy-plain":
                     verify_vort_metadata(
                         args.cli,
@@ -660,6 +703,14 @@ def main() -> None:
                     {"payload.bin": encrypted_payload},
                     "seven-zip-password",
                 )
+                if variant == "aes-header":
+                    verify_with_vort_source(
+                        args.cli,
+                        archive,
+                        {"payload.bin": encrypted_payload},
+                        "seven-zip-password",
+                    )
+                    source_variants += 1
             external_variants += len(encrypted_references)
 
             encrypted_bcj2_archive = temp / "aes-bcj2.7z"
@@ -683,7 +734,14 @@ def main() -> None:
                 {"payload.bin": x86_payload},
                 "seven-zip-password",
             )
+            verify_with_vort_source(
+                args.cli,
+                encrypted_bcj2_archive,
+                {"payload.bin": x86_payload},
+                "seven-zip-password",
+            )
             external_variants += 1
+            source_variants += 1
 
             wrong_password = run(
                 args.cli,
@@ -773,7 +831,14 @@ def main() -> None:
                 {"payload.bin": x86_payload},
                 encryption_password,
             )
+            verify_with_vort_source(
+                args.cli,
+                encrypted_bcj2_output,
+                {"payload.bin": x86_payload},
+                encryption_password,
+            )
             vort_writer_variants += 1
+            source_variants += 1
 
             writer_variants = {
                 "lzma2-multichunk": (
@@ -893,6 +958,7 @@ def main() -> None:
         f"seven_zip_diff=ok writer_entries={len(expected_vort) + 1} "
         f"external_variants={external_variants} "
         f"vort_writer_variants={vort_writer_variants} "
+        f"source_variants={source_variants} "
         f"system_7zip={seven_zip_tool is not None} "
         f"modern_7zip={modern_seven_zip_tool is not None} "
         f"modern_branch_filters={modern_branch_filters}"

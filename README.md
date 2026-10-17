@@ -395,16 +395,19 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   split-independent wire, Adler/CRC metadata, flushable blocks, concatenated
   continuation, pledged input sizes, and caller-output backpressure;
 - pure Zig 7z parsing and deterministic independent-folder writing, with
-  Copy/Deflate/Bzip2/LZMA/LZMA2 decode and encode,
-  bounded linear Delta/BCJ filter chains including ARM64/RISC-V and BCJ2 four-stream graphs in
-  both directions,
+  Copy/Deflate/Bzip2/LZMA/LZMA2/PPMd7 decode and encode,
+  bounded linear Delta/BCJ filter chains including ARM64/RISC-V, BCJ2
+  four-stream graphs in both directions, and independent 7zAES on all four
+  BCJ2 packed branches,
   compressed Next Header reading and writing, solid substream reading and
   writing, bounded AdditionalStreamsInfo decoding, external folder/name
   references, inline/external FILETIME and platform attributes, optional
-  six-codec external name/metadata writing, 7zAES/SHA-256 data and encoded
-  header reading/writing with explicit password/KDF limits and caller-supplied
-  IV material, CRC validation, UTF-16LE names, directories, empty files, and
-  bounded extraction;
+  seven-codec external name/metadata writing, 7zAES/SHA-256 data and encoded
+  header reading/writing backed by Vail crypto with explicit password/KDF
+  limits and caller-supplied IV material, CRC validation, UTF-16LE names,
+  directories, empty files, and bounded extraction, plus source-backed
+  positional parsing that avoids loading the complete archive and fetches only
+  tail/auxiliary metadata plus selected-folder packed ranges;
 - deterministic TAR reading/writing with USTAR, PAX and GNU long-name support,
   old GNU plus PAX sparse 0.0/0.1/1.0 reading, deterministic PAX-1.0 and
   old-GNU writing with chained sparse extension headers,

@@ -2,6 +2,7 @@ const std = @import("std");
 const vort = @import("vort");
 
 pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
+    try fuzzSevenZipSource(allocator, data);
     _ = vort.store.parseHeader(data) catch |err| switch (err) {
         error.TruncatedFrame, error.InvalidMagic, error.UnsupportedVersion, error.CorruptFrame => {},
         else => return err,
@@ -1448,6 +1449,62 @@ pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
     }
 }
 
+const SevenZipFuzzSource = struct {
+    bytes: []const u8,
+
+    fn readAt(
+        context: *anyopaque,
+        offset: u64,
+        output: []u8,
+    ) error{SourceReadFailed}!usize {
+        const self: *@This() = @ptrCast(@alignCast(context));
+        const start = std.math.cast(usize, offset) orelse return error.SourceReadFailed;
+        if (start >= self.bytes.len) return 0;
+        const count = @min(output.len, self.bytes.len - start);
+        @memcpy(output[0..count], self.bytes[start..][0..count]);
+        return count;
+    }
+};
+
+fn fuzzSevenZipSource(allocator: std.mem.Allocator, data: []const u8) !void {
+    var context = SevenZipFuzzSource{ .bytes = data };
+    if (vort.parseSevenZipSourceArchiveAllocWithOptions(
+        allocator,
+        .{ .context = &context, .len = data.len, .read_at = SevenZipFuzzSource.readAt },
+        .{
+            .max_next_header_size = 1 << 20,
+            .max_encoded_header_size = 1 << 20,
+            .max_packed_stream_size = 1 << 20,
+            .max_external_metadata_size = 1 << 20,
+            .max_dictionary_size = 4 << 20,
+            .max_entries = 4096,
+            .max_streams = 4096,
+            .max_kdf_cycles_power = 8,
+        },
+    )) |archive| {
+        defer archive.deinit();
+        for (archive.entries) |entry| {
+            if (entry.folder_index == null) continue;
+            if (archive.decodeEntryAllocWithOptions(allocator, entry, .{
+                .max_output_len = 1 << 20,
+                .max_dictionary_size = 4 << 20,
+                .max_folder_output_len = 1 << 20,
+                .max_packed_stream_size = 1 << 20,
+                .max_kdf_cycles_power = 8,
+            })) |decoded| {
+                allocator.free(decoded);
+            } else |err| switch (err) {
+                error.OutOfMemory => return error.OutOfMemory,
+                else => {},
+            }
+            break;
+        }
+    } else |err| switch (err) {
+        error.OutOfMemory => return error.OutOfMemory,
+        else => {},
+    }
+}
+
 pub fn main(init: std.process.Init) !void {
     const samples = [_][]const u8{
         "",
@@ -1476,6 +1533,18 @@ pub fn main(init: std.process.Init) !void {
         "EROFS",
     };
     for (samples) |sample| try fuzzOne(init.gpa, sample);
+
+    const seven_zip_entries = [_]vort.SevenZipEncodeEntry{
+        .{ .name = "fuzz-first.bin", .data = "7z source fuzz payload" },
+        .{ .name = "fuzz-second.bin", .data = "unselected folder" ** 32 },
+    };
+    const seven_zip = try vort.encodeSevenZipStoredAlloc(
+        init.gpa,
+        &seven_zip_entries,
+        .{},
+    );
+    defer init.gpa.free(seven_zip);
+    try fuzzOne(init.gpa, seven_zip);
 
     const lz4hc_frame = try vort.lz4EncodeHcFrameAlloc(
         init.gpa,
@@ -1874,7 +1943,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("fuzz target smoke: samples={d} stdin_bytes={d}\n", .{
-        samples.len + 38,
+        samples.len + 39,
         data.len,
     });
     try stdout.flush();

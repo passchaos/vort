@@ -387,6 +387,7 @@ fn appendFolderPayload(
     primary_options.bcj2_start_ip = 0;
     primary_options.filters = &.{};
     primary_options.encryption = null;
+    primary_options.encrypt_header = false;
     var main_stream: std.ArrayList(u8) = .empty;
     defer main_stream.deinit(allocator);
     _ = try coders.appendPayload(

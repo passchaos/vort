@@ -17996,22 +17996,28 @@ reuse, so production keeps the simpler independently owned plans.
   and consumption checks, and all seven auxiliary-stream codecs. The
   differential pins a system-generated mtime plus Unix attributes and validates all seven Vort
   external-metadata modes through 7-Zip.
-  Common linear 7zAES/SHA-256 folders are now supported in both directions.
-  The reader accepts AES-only encoded headers and AES followed by
+  Common linear and four-branch BCJ2 7zAES/SHA-256 folders are now supported
+  in both directions. The reader accepts AES-only encoded headers and AES followed by
   Copy/Deflate/Bzip2/LZMA/LZMA2/PPMd7 plus classic filters, converts UTF-8
-  passwords to UTF-16LE, implements the standard counter-based SHA-256 KDF and direct-key
-  mode, decrypts zero-padded AES-256-CBC, and bounds KDF power before work. The
+  passwords to UTF-16LE, delegates the standard counter-based SHA-256 KDF,
+  direct-key mode, and resumable AES-256-CBC transform to Vail, decrypts
+  zero-padded blocks, and bounds KDF power before work. The
   writer requires caller-supplied base IV material, derives a distinct IV for
-  each data/external-metadata/header folder, and can hide the complete encoded
-  header. Differential coverage includes all seven Vort main codecs, encrypted
-  names/metadata, an x86 filter chain, wrong passwords, and system 7-Zip's
-  default-power data-only and header-encrypted archives. BCJ2+AES remains a
-  separate branching-graph extension.
+  each data/external-metadata/header folder, reserves four consecutive IVs for
+  BCJ2 MAIN/CALL/JUMP/range branches, and can hide the complete encoded header.
+  The six-coder parser derives semantic branches from bind pairs rather than
+  coder order and rejects partial encryption. Differential coverage includes
+  all seven Vort main codecs, encrypted names/metadata, x86 and BCJ2 graphs,
+  wrong passwords, and system 7-Zip's default-power data-only,
+  header-encrypted, and BCJ2 archives. Real 7-Zip 26.04 input plus Vort output
+  tested by 21.07 and 26.04 provide bidirectional evidence. Encrypted BCJ2
+  rejects non-zero `bcj2_start_ip`, which 7-Zip 26.04 reports as an unsupported
+  mixer even though it accepts that property on the unencrypted graph.
   Modern ARM64 BL/ADRP and RISC-V JAL/AUIPC branch filters are now shared by
   XZ and 7z in both directions, with aligned start-offset validation and
   per-architecture XZ inspection counts. Branch-heavy reader/writer variants
-  pass 7-Zip 26.02; the existing 21.07 differential remains for BCJ2 because
-  the newer Linux package does not expose that decoder.
+  pass 7-Zip 26.04; the existing 21.07 differential remains for older-output
+  regression coverage while 26.04 now exposes BCJ2 on Linux.
   The reader now also supports PPMd7 without a C/Rust binding. A shared packed
   model implements checked 32-bit offsets, the 12-byte-unit suballocator,
   free-list glue/restart, successor construction, frequency rescaling, binary
@@ -18025,6 +18031,16 @@ reuse, so production keeps the simpler independently owned plans.
   that model with a 7z range encoder and no end marker; a raw fixture is
   bit-exact with 7-Zip, and system 7-Zip validates independent/solid data,
   encoded headers, external names/metadata, AES, BCJ2, and classic filters.
+  A source-backed random-access archive facade now accepts a stable positional
+  read callback and 64-bit length, reads only the 32-byte signature header, the
+  tail Next Header, referenced metadata, and selected-folder packed ranges,
+  and shares all folder graph/CRC/KDF validation with the borrowed-slice API.
+  It completes arbitrary short reads, reports source failures, bounds the Next
+  Header and each loaded packed stream, supports encoded/encrypted headers,
+  external metadata, solid folders, and four-AES BCJ2, and releases every
+  allocation failure. File-backed CLI differentials cover six representative
+  Vort and 7-Zip archives. Folder decoding is still buffered and is documented
+  separately from the future symbol-progressive codec data plane.
   Deeper LZMA parsing, other branching or multi-packed-stream graphs,
   comments, and start-position properties remain follow-up work. See
   `docs/formats/7z.md`.

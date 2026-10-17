@@ -4,6 +4,28 @@ const filters_cli = @import("filters.zig");
 
 const max_archive_size = 512 * 1024 * 1024;
 
+const FileSource = struct {
+    file: std.Io.File,
+    io: std.Io,
+    read_calls: usize = 0,
+    bytes_read: usize = 0,
+
+    fn readAt(
+        context: *anyopaque,
+        offset: u64,
+        output: []u8,
+    ) error{SourceReadFailed}!usize {
+        const self: *FileSource = @ptrCast(@alignCast(context));
+        const amount = self.file.readPositional(self.io, &.{output}, offset) catch
+            return error.SourceReadFailed;
+        self.read_calls = std.math.add(usize, self.read_calls, 1) catch
+            return error.SourceReadFailed;
+        self.bytes_read = std.math.add(usize, self.bytes_read, amount) catch
+            return error.SourceReadFailed;
+        return amount;
+    }
+};
+
 pub fn createFile(
     init: std.process.Init,
     args: *std.process.Args.Iterator,
@@ -193,8 +215,37 @@ pub fn listFile(
         .password = password,
     });
     defer archive.deinit();
-    try stdout.print("seven_zip_entries={d}\n", .{archive.entries.len});
-    for (archive.entries, 0..) |entry, index|
+    try writeListing(stdout, archive.entries);
+}
+
+pub fn listSourceFile(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const password = parseOptionalPassword(args.next());
+    var file = try std.Io.Dir.cwd().openFile(init.io, input_path, .{});
+    defer file.close(init.io);
+    const stat = try file.stat(init.io);
+    var context = FileSource{ .file = file, .io = init.io };
+    const archive = try vort.parseSevenZipSourceArchiveAllocWithOptions(
+        init.gpa,
+        .{ .context = &context, .len = stat.size, .read_at = FileSource.readAt },
+        .{ .password = password },
+    );
+    defer archive.deinit();
+    try writeListing(stdout, archive.entries);
+    try stdout.print("seven_zip_source_reads={d} bytes={d} archive_bytes={d}\n", .{
+        context.read_calls,
+        context.bytes_read,
+        stat.size,
+    });
+}
+
+fn writeListing(stdout: *std.Io.Writer, entries: []const vort.SevenZipEntry) !void {
+    try stdout.print("seven_zip_entries={d}\n", .{entries.len});
+    for (entries, 0..) |entry, index|
         try stdout.print("index={d} kind={s} method={s} size={d} creation_defined={} creation={d} access_defined={} access={d} modification_defined={} modification={d} attributes_defined={} attributes={d} name={s}\n", .{
             index,
             @tagName(entry.kind),
@@ -246,6 +297,50 @@ pub fn extractFile(
         entry_name,
         output_path,
     });
+}
+
+pub fn extractSourceFile(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const entry_name = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const max_output_len = try parseLimit(args.next(), std.math.maxInt(usize));
+    const max_dictionary_size = try parseLimit(args.next(), 512 * 1024 * 1024);
+    const max_folder_output_len = try parseLimit(args.next(), 512 * 1024 * 1024);
+    const password = parseOptionalPassword(args.next());
+    var file = try std.Io.Dir.cwd().openFile(init.io, input_path, .{});
+    defer file.close(init.io);
+    const stat = try file.stat(init.io);
+    var context = FileSource{ .file = file, .io = init.io };
+    const archive = try vort.parseSevenZipSourceArchiveAllocWithOptions(
+        init.gpa,
+        .{ .context = &context, .len = stat.size, .read_at = FileSource.readAt },
+        .{ .max_dictionary_size = max_dictionary_size, .password = password },
+    );
+    defer archive.deinit();
+    const entry = archive.find(entry_name) orelse return error.EntryNotFound;
+    const decoded = try archive.decodeEntryAllocWithOptions(init.gpa, entry, .{
+        .max_output_len = max_output_len,
+        .max_dictionary_size = max_dictionary_size,
+        .max_folder_output_len = max_folder_output_len,
+        .password = password,
+    });
+    defer init.gpa.free(decoded);
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+    try stdout.print(
+        "seven_zip_source_reads={d} bytes={d} archive_bytes={d} decoded_bytes={d} entry={s} path={s}\n",
+        .{
+            context.read_calls,
+            context.bytes_read,
+            stat.size,
+            decoded.len,
+            entry_name,
+            output_path,
+        },
+    );
 }
 
 fn readFile(init: std.process.Init, path: []const u8) ![]u8 {
