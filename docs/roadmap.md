@@ -21485,3 +21485,24 @@ reuse, so production keeps the simpler independently owned plans.
   `writer_solid_delete_wimlib=1`, `writer_reference_delete=1`,
   `writer_reference_delete_wimlib=1`). Focused WIM coverage is now 128 tests.
   Image replacement and physical compaction remain the next update slices.
+
+- Added transactional image replacement for ordinary and solid WIM archives.
+  Alloc/Append/Into APIs accept a borrowed image and preserve its selected
+  index, including the only image in an archive. The implementation composes
+  the already validated append/delete reference transitions, then rebuilds the
+  final metadata lookup order, XML target element, integrity table and header;
+  unchanged images keep their indexes and XML bytes. Same-name replacement is
+  allowed while names conflicting with another image are rejected. Nullable
+  boot policy preserves the prior boot identity by default, explicitly selects
+  the replacement, or clears it when replacing the boot image. Ordinary data
+  reuses byte-verified hashes, dead entries leave lookup, and packed archives
+  retain old markers while routing new blobs through an appended solid
+  resource. Five independent focused tests cover exact refcounts, ordinary and
+  solid extraction, one-image archives, all boot modes, deterministic output,
+  transactional append/into buffers, limits, unsupported layouts and exhaustive
+  allocation failure cleanup; focused WIM coverage is now 133 tests. Vort and
+  wimlib verify and byte-compare ordinary, solid and checked-in wimlib-authored
+  replacements (`writer_replace=1`, `writer_replace_wimlib=1`,
+  `writer_solid_replace=1`, `writer_solid_replace_wimlib=1`,
+  `writer_reference_replace=1`, `writer_reference_replace_wimlib=1`). Physical
+  compaction remains the next update slice.

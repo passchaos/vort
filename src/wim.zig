@@ -48,6 +48,7 @@ pub const EncodedSplitArchive = writer.SplitArchive;
 pub const PipableEncodeOptions = writer.PipableOptions;
 pub const AppendImageOptions = writer.AppendImageOptions;
 pub const DeleteImageOptions = writer.DeleteImageOptions;
+pub const ReplaceImageOptions = writer.ReplaceImageOptions;
 pub const SolidEncodeOptions = writer.SolidOptions;
 pub const SolidEncodeImagesOptions = writer.SolidImagesOptions;
 pub const parse = archive.Archive.init;
@@ -66,6 +67,9 @@ pub const appendImageInto = writer.appendImageInto;
 pub const deleteImageAlloc = writer.deleteImageAlloc;
 pub const deleteImageAppend = writer.deleteImageAppend;
 pub const deleteImageInto = writer.deleteImageInto;
+pub const replaceImageAlloc = writer.replaceImageAlloc;
+pub const replaceImageAppend = writer.replaceImageAppend;
+pub const replaceImageInto = writer.replaceImageInto;
 pub const encodeSolidAlloc = writer.encodeSolidAlloc;
 pub const encodeSolidAppend = writer.encodeSolidAppend;
 pub const encodeSolidInto = writer.encodeSolidInto;
@@ -100,4 +104,5 @@ test {
     _ = set;
     _ = writer;
     _ = @import("wim/writer_tests.zig");
+    _ = @import("wim/writer_replace_tests.zig");
 }

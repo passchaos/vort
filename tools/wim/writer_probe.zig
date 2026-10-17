@@ -40,6 +40,16 @@ pub fn main(init: std.process.Init) !void {
             output_path,
             source_path orelse return error.MissingCorpusPath,
         );
+    if (std.mem.eql(u8, mode, "replace"))
+        return writeReplaced(init, output_path, false);
+    if (std.mem.eql(u8, mode, "solid-replace"))
+        return writeReplaced(init, output_path, true);
+    if (std.mem.eql(u8, mode, "replace-existing"))
+        return writeReplacedExisting(
+            init,
+            output_path,
+            source_path orelse return error.MissingCorpusPath,
+        );
     if (std.mem.eql(u8, mode, "split"))
         return writeSplit(init, output_path, compression, false);
     if (std.mem.eql(u8, mode, "pipable-split"))
@@ -362,6 +372,85 @@ fn writeDeletedExisting(
     }, .{});
     defer init.gpa.free(appended);
     const updated = try vort.deleteWimImageAlloc(init.gpa, appended, 1, .{});
+    defer init.gpa.free(updated);
+    try std.Io.Dir.cwd().writeFile(init.io, .{
+        .sub_path = output_path,
+        .data = updated,
+    });
+}
+
+fn writeReplaced(
+    init: std.process.Init,
+    output_path: []const u8,
+    solid: bool,
+) !void {
+    const shared = "shared replaced WIM payload\n" ** 1024;
+    const first_entries = [_]vort.WimEncodeEntry{
+        .{ .path = "first.bin", .data = "first remains after replace\n" ** 1024 },
+        .{ .path = "shared.bin", .data = shared },
+    };
+    const old_entries = [_]vort.WimEncodeEntry{
+        .{ .path = "old.bin", .data = "old replaced image payload\n" ** 1024 },
+        .{ .path = "shared.bin", .data = shared },
+    };
+    const third_entries = [_]vort.WimEncodeEntry{
+        .{ .path = "third.bin", .data = "third remains after replace\n" ** 1024 },
+        .{ .path = "shared.bin", .data = shared },
+    };
+    const images = [_]vort.WimEncodeImage{
+        .{ .name = "first", .entries = &first_entries },
+        .{ .name = "replace-me", .entries = &old_entries },
+        .{ .name = "third", .entries = &third_entries },
+    };
+    const source = if (solid)
+        try vort.encodeWimImagesSolidAlloc(init.gpa, &images, .{
+            .metadata_chunk_size = 32 * 1024,
+            .solid_chunk_size = 32 * 1024,
+            .boot_index = 2,
+        })
+    else
+        try vort.encodeWimImagesAlloc(init.gpa, &images, .{
+            .compression = .xpress,
+            .boot_index = 2,
+        });
+    defer init.gpa.free(source);
+    const replacement_entries = [_]vort.WimEncodeEntry{
+        .{ .path = "new.bin", .data = "new replacement image payload\n" ** 1024 },
+        .{ .path = "shared.bin", .data = shared },
+    };
+    const updated = try vort.replaceWimImageAlloc(init.gpa, source, 2, .{
+        .name = "replaced",
+        .entries = &replacement_entries,
+    }, .{
+        .solid_chunk_size = if (solid) 32 * 1024 else null,
+    });
+    defer init.gpa.free(updated);
+    try std.Io.Dir.cwd().writeFile(init.io, .{
+        .sub_path = output_path,
+        .data = updated,
+    });
+}
+
+fn writeReplacedExisting(
+    init: std.process.Init,
+    output_path: []const u8,
+    source_path: []const u8,
+) !void {
+    const source = try std.Io.Dir.cwd().readFileAlloc(
+        init.io,
+        source_path,
+        init.gpa,
+        .limited(256 * 1024 * 1024),
+    );
+    defer init.gpa.free(source);
+    const entries = [_]vort.WimEncodeEntry{.{
+        .path = "replacement.txt",
+        .data = "Vort replaced a wimlib archive image\n",
+    }};
+    const updated = try vort.replaceWimImageAlloc(init.gpa, source, 1, .{
+        .name = "vort-replaced",
+        .entries = &entries,
+    }, .{ .bootable = true });
     defer init.gpa.free(updated);
     try std.Io.Dir.cwd().writeFile(init.io, .{
         .sub_path = output_path,

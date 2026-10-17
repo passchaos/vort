@@ -15,6 +15,13 @@ pub const ImageInfo = struct {
     last_modification_time: u64,
 };
 
+const ImageSpan = struct {
+    start: usize,
+    end: usize,
+    digits_start: usize,
+    digits_end: usize,
+};
+
 pub fn validateName(name: []const u8) Error!void {
     if (!validXmlText(name)) return error.InvalidWimWriterOptions;
 }
@@ -84,17 +91,19 @@ pub fn appendImageAlloc(
         return error.InvalidWimWriterOptions;
     const total_end = value_end + total_close.len;
 
-    var escaped_name = std.Io.Writer.Allocating.init(allocator);
-    defer escaped_name.deinit();
-    try writeEscaped(&escaped_name.writer, image.name);
-    var name_offset: usize = 0;
-    while (std.mem.indexOfPos(u8, existing, name_offset, "<NAME>")) |name_start| {
-        const name_value_start = name_start + "<NAME>".len;
-        const name_end = std.mem.indexOfPos(u8, existing, name_value_start, "</NAME>") orelse
-            return error.InvalidWimWriterOptions;
-        if (std.ascii.eqlIgnoreCase(existing[name_value_start..name_end], escaped_name.written()))
-            return error.InvalidWimWriterOptions;
-        name_offset = name_end + "</NAME>".len;
+    if (image.name.len != 0) {
+        var escaped_name = std.Io.Writer.Allocating.init(allocator);
+        defer escaped_name.deinit();
+        try writeEscaped(&escaped_name.writer, image.name);
+        var name_offset: usize = 0;
+        while (std.mem.indexOfPos(u8, existing, name_offset, "<NAME>")) |name_start| {
+            const name_value_start = name_start + "<NAME>".len;
+            const name_end = std.mem.indexOfPos(u8, existing, name_value_start, "</NAME>") orelse
+                return error.InvalidWimWriterOptions;
+            if (std.ascii.eqlIgnoreCase(existing[name_value_start..name_end], escaped_name.written()))
+                return error.InvalidWimWriterOptions;
+            name_offset = name_end + "</NAME>".len;
+        }
     }
 
     var updated = std.Io.Writer.Allocating.init(allocator);
@@ -122,45 +131,13 @@ pub fn deleteImageAlloc(
         return error.InvalidWimWriterOptions;
     const existing = try xmlToUtf8Alloc(allocator, existing_xml);
     defer allocator.free(existing);
-    const Span = struct {
-        start: usize,
-        end: usize,
-        digits_start: usize,
-        digits_end: usize,
-    };
-    var spans: std.ArrayList(Span) = .empty;
-    defer spans.deinit(allocator);
-    const index_prefix = "<IMAGE INDEX=\"";
-    const image_close = "</IMAGE>";
-    var search_offset: usize = 0;
-    while (std.mem.indexOfPos(u8, existing, search_offset, index_prefix)) |start| {
-        const digits_start = start + index_prefix.len;
-        const digits_end = std.mem.indexOfScalarPos(u8, existing, digits_start, '"') orelse
-            return error.InvalidWimWriterOptions;
-        if (digits_end == digits_start or digits_end + 1 >= existing.len or
-            existing[digits_end + 1] != '>')
-            return error.InvalidWimWriterOptions;
-        const index = std.fmt.parseInt(usize, existing[digits_start..digits_end], 10) catch
-            return error.InvalidWimWriterOptions;
-        if (index != spans.items.len + 1) return error.InvalidWimWriterOptions;
-        const close_start = std.mem.indexOfPos(u8, existing, digits_end + 2, image_close) orelse
-            return error.InvalidWimWriterOptions;
-        const end = close_start + image_close.len;
-        try spans.append(allocator, .{
-            .start = start,
-            .end = end,
-            .digits_start = digits_start,
-            .digits_end = digits_end,
-        });
-        search_offset = end;
-    }
-    if (spans.items.len != expected_image_count)
-        return error.InvalidWimWriterOptions;
+    const spans = try imageSpansAlloc(allocator, existing, expected_image_count);
+    defer allocator.free(spans);
 
     var removed = std.Io.Writer.Allocating.init(allocator);
     defer removed.deinit();
     var cursor: usize = 0;
-    for (spans.items, 1..) |span, index| {
+    for (spans, 1..) |span, index| {
         try writeAll(&removed.writer, existing[cursor..span.start]);
         if (index != image_index) {
             if (index > image_index) {
@@ -199,6 +176,115 @@ pub fn deleteImageAlloc(
         without_image[value_end + total_close.len ..],
     );
     return utf8ToXmlAlloc(allocator, updated.written());
+}
+
+pub fn replaceImageAlloc(
+    allocator: std.mem.Allocator,
+    existing_xml: []const u8,
+    expected_image_count: usize,
+    image_index: usize,
+    image: ImageInfo,
+    total_bytes: usize,
+) Error![]u8 {
+    if (expected_image_count == 0 or image_index == 0 or
+        image_index > expected_image_count)
+        return error.InvalidWimWriterOptions;
+    const existing = try xmlToUtf8Alloc(allocator, existing_xml);
+    defer allocator.free(existing);
+    const spans = try imageSpansAlloc(allocator, existing, expected_image_count);
+    defer allocator.free(spans);
+    try validateReplacementName(allocator, existing, spans, image_index, image.name);
+
+    const replaced_span = spans[image_index - 1];
+    var replaced = std.Io.Writer.Allocating.init(allocator);
+    defer replaced.deinit();
+    try writeAll(&replaced.writer, existing[0..replaced_span.start]);
+    try writeImage(&replaced.writer, image, image_index);
+    try writeAll(&replaced.writer, existing[replaced_span.end..]);
+
+    const with_image = replaced.written();
+    const root_end = std.mem.lastIndexOf(u8, with_image, "</WIM>") orelse
+        return error.InvalidWimWriterOptions;
+    const total_open = "<TOTALBYTES>";
+    const total_close = "</TOTALBYTES>";
+    const total_start = std.mem.lastIndexOf(u8, with_image[0..root_end], total_open) orelse
+        return error.InvalidWimWriterOptions;
+    const value_start = total_start + total_open.len;
+    const value_end = std.mem.indexOfPos(u8, with_image, value_start, total_close) orelse
+        return error.InvalidWimWriterOptions;
+    if (value_end > root_end or value_end == value_start)
+        return error.InvalidWimWriterOptions;
+    _ = std.fmt.parseInt(u64, with_image[value_start..value_end], 10) catch
+        return error.InvalidWimWriterOptions;
+
+    var updated = std.Io.Writer.Allocating.init(allocator);
+    defer updated.deinit();
+    try writeAll(&updated.writer, with_image[0..total_start]);
+    try print(&updated.writer, "<TOTALBYTES>{d}</TOTALBYTES>", .{total_bytes});
+    try writeAll(&updated.writer, with_image[value_end + total_close.len ..]);
+    return utf8ToXmlAlloc(allocator, updated.written());
+}
+
+fn imageSpansAlloc(
+    allocator: std.mem.Allocator,
+    existing: []const u8,
+    expected_image_count: usize,
+) Error![]ImageSpan {
+    var spans: std.ArrayList(ImageSpan) = .empty;
+    errdefer spans.deinit(allocator);
+    const index_prefix = "<IMAGE INDEX=\"";
+    const image_close = "</IMAGE>";
+    var search_offset: usize = 0;
+    while (std.mem.indexOfPos(u8, existing, search_offset, index_prefix)) |start| {
+        const digits_start = start + index_prefix.len;
+        const digits_end = std.mem.indexOfScalarPos(u8, existing, digits_start, '"') orelse
+            return error.InvalidWimWriterOptions;
+        if (digits_end == digits_start or digits_end + 1 >= existing.len or
+            existing[digits_end + 1] != '>')
+            return error.InvalidWimWriterOptions;
+        const index = std.fmt.parseInt(usize, existing[digits_start..digits_end], 10) catch
+            return error.InvalidWimWriterOptions;
+        if (index != spans.items.len + 1) return error.InvalidWimWriterOptions;
+        const close_start = std.mem.indexOfPos(u8, existing, digits_end + 2, image_close) orelse
+            return error.InvalidWimWriterOptions;
+        const end = close_start + image_close.len;
+        try spans.append(allocator, .{
+            .start = start,
+            .end = end,
+            .digits_start = digits_start,
+            .digits_end = digits_end,
+        });
+        search_offset = end;
+    }
+    if (spans.items.len != expected_image_count)
+        return error.InvalidWimWriterOptions;
+    return spans.toOwnedSlice(allocator);
+}
+
+fn validateReplacementName(
+    allocator: std.mem.Allocator,
+    existing: []const u8,
+    spans: []const ImageSpan,
+    image_index: usize,
+    name: []const u8,
+) Error!void {
+    try validateName(name);
+    if (name.len == 0) return;
+    var escaped_name = std.Io.Writer.Allocating.init(allocator);
+    defer escaped_name.deinit();
+    try writeEscaped(&escaped_name.writer, name);
+    for (spans, 1..) |span, index| {
+        if (index == image_index) continue;
+        const name_start = std.mem.indexOfPos(u8, existing, span.start, "<NAME>") orelse
+            continue;
+        if (name_start >= span.end) continue;
+        const value_start = name_start + "<NAME>".len;
+        const name_end = std.mem.indexOfPos(u8, existing, value_start, "</NAME>") orelse
+            return error.InvalidWimWriterOptions;
+        if (name_end > span.end) return error.InvalidWimWriterOptions;
+        if (std.ascii.eqlIgnoreCase(existing[value_start..name_end], escaped_name.written()))
+            return error.InvalidWimWriterOptions;
+    }
 }
 
 fn writeImage(output: *std.Io.Writer, image: ImageInfo, index: usize) Error!void {

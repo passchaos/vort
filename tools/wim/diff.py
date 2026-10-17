@@ -194,6 +194,12 @@ def main() -> None:
     writer_solid_delete_wimlib_cases = 0
     writer_reference_delete_cases = 0
     writer_reference_delete_wimlib_cases = 0
+    writer_replace_cases = 0
+    writer_replace_wimlib_cases = 0
+    writer_solid_replace_cases = 0
+    writer_solid_replace_wimlib_cases = 0
+    writer_reference_replace_cases = 0
+    writer_reference_replace_wimlib_cases = 0
     writer_split_cases = 0
     writer_split_wimlib_cases = 0
     writer_pipable_cases = 0
@@ -1094,6 +1100,144 @@ def main() -> None:
                 raise AssertionError("wimlib reference delete mismatch")
             writer_reference_delete_wimlib_cases += 1
 
+        replace_shared = b"shared replaced WIM payload\n" * 1024
+        replace_first = b"first remains after replace\n" * 1024
+        replace_new = b"new replacement image payload\n" * 1024
+        replace_third = b"third remains after replace\n" * 1024
+        for replace_mode, expected_compression in (
+            ("replace", "xpress"),
+            ("solid-replace", "lzms"),
+        ):
+            replace_image = temp / f"vort-writer-{replace_mode}.wim"
+            run(args.writer, replace_image, expected_compression, replace_mode)
+            listing = run(args.cli, "list-wim-file", replace_image).stdout
+            for marker in (
+                f"compression={expected_compression}".encode(),
+                b"images=3",
+            ):
+                if marker not in listing:
+                    raise AssertionError(
+                        f"Vort replaced WIM header missing {marker!r}"
+                    )
+            for image_index, path, expected in (
+                (1, "/first.bin", replace_first),
+                (1, "/shared.bin", replace_shared),
+                (2, "/new.bin", replace_new),
+                (2, "/shared.bin", replace_shared),
+                (3, "/third.bin", replace_third),
+                (3, "/shared.bin", replace_shared),
+            ):
+                output = temp / (
+                    f"writer-{replace_mode}-{image_index}-"
+                    f"{path[1:].replace('/', '-')}"
+                )
+                run(
+                    args.cli,
+                    "extract-wim-path",
+                    replace_image,
+                    image_index,
+                    path,
+                    output,
+                    len(expected),
+                )
+                if output.read_bytes() != expected:
+                    raise AssertionError("Vort replaced WIM extraction mismatch")
+            expect_failure(
+                args.cli,
+                "extract-wim-path",
+                replace_image,
+                2,
+                "/old.bin",
+                temp / f"writer-{replace_mode}-old.out",
+                64 * 1024,
+                error_name="WimPathNotFound",
+            )
+            if replace_mode == "replace":
+                writer_replace_cases += 1
+            else:
+                writer_solid_replace_cases += 1
+
+            if wimlib is not None:
+                run(wimlib, "verify", replace_image)
+                for image_index, unique_name, expected in (
+                    (1, "first.bin", replace_first),
+                    (2, "new.bin", replace_new),
+                    (3, "third.bin", replace_third),
+                ):
+                    destination = temp / (
+                        f"writer-{replace_mode}-wimlib-{image_index}"
+                    )
+                    run(
+                        wimlib,
+                        "extract",
+                        replace_image,
+                        image_index,
+                        f"--dest-dir={destination}",
+                        "--no-acls",
+                    )
+                    if (
+                        (destination / unique_name).read_bytes() != expected
+                        or (destination / "shared.bin").read_bytes()
+                        != replace_shared
+                    ):
+                        raise AssertionError(
+                            "wimlib replaced WIM extraction mismatch"
+                        )
+                if replace_mode == "replace":
+                    writer_replace_wimlib_cases += 1
+                else:
+                    writer_solid_replace_wimlib_cases += 1
+
+        reference_replace = temp / "vort-writer-reference-replace.wim"
+        run(
+            args.writer,
+            reference_replace,
+            "xpress",
+            "replace-existing",
+            fixture,
+        )
+        reference_replacement = temp / "writer-reference-replace.out"
+        reference_replacement_bytes = b"Vort replaced a wimlib archive image\n"
+        run(
+            args.cli,
+            "extract-wim-path",
+            reference_replace,
+            1,
+            "/replacement.txt",
+            reference_replacement,
+            len(reference_replacement_bytes),
+        )
+        if reference_replacement.read_bytes() != reference_replacement_bytes:
+            raise AssertionError("Vort reference replacement mismatch")
+        expect_failure(
+            args.cli,
+            "extract-wim-path",
+            reference_replace,
+            1,
+            "/nested/file.txt",
+            temp / "writer-reference-replace-old.out",
+            1024,
+            error_name="WimPathNotFound",
+        )
+        writer_reference_replace_cases += 1
+        if wimlib is not None:
+            run(wimlib, "verify", reference_replace)
+            destination = temp / "writer-reference-replace-wimlib"
+            run(
+                wimlib,
+                "extract",
+                reference_replace,
+                1,
+                f"--dest-dir={destination}",
+                "--no-acls",
+            )
+            if (
+                (destination / "replacement.txt").read_bytes()
+                != reference_replacement_bytes
+            ):
+                raise AssertionError("wimlib reference replacement mismatch")
+            writer_reference_replace_wimlib_cases += 1
+
         split_expected = {
             (1, "/first.bin"): xorshift_bytes(0x1111_1111, 70_000),
             (1, "/shared.bin"): xorshift_bytes(0x3333_3333, 70_000),
@@ -1882,6 +2026,12 @@ def main() -> None:
         f"writer_solid_delete_wimlib={writer_solid_delete_wimlib_cases} "
         f"writer_reference_delete={writer_reference_delete_cases} "
         f"writer_reference_delete_wimlib={writer_reference_delete_wimlib_cases} "
+        f"writer_replace={writer_replace_cases} "
+        f"writer_replace_wimlib={writer_replace_wimlib_cases} "
+        f"writer_solid_replace={writer_solid_replace_cases} "
+        f"writer_solid_replace_wimlib={writer_solid_replace_wimlib_cases} "
+        f"writer_reference_replace={writer_reference_replace_cases} "
+        f"writer_reference_replace_wimlib={writer_reference_replace_wimlib_cases} "
         f"writer_split={writer_split_cases} "
         f"writer_split_wimlib={writer_split_wimlib_cases} "
         f"writer_pipable={writer_pipable_cases} "

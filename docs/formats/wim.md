@@ -237,6 +237,20 @@ higher indexes are shifted down. Deleting the boot image clears the descriptor;
 a later boot index shifts down. Integrity presence is inherited or explicitly
 overridden, and metadata/directory/path/lookup/XML limits bound hostile inputs.
 
+`replaceWimImageAlloc`/Append/Into transactionally substitute one borrowed
+`WimEncodeImage` at an existing index, including the only image in an archive.
+The update reuses byte-verified existing blobs, decrements every stream
+reference from the removed metadata tree, appends only newly required ordinary
+or packed-solid data, and rebuilds metadata lookup order so all other image
+indexes remain unchanged. The target XML element is replaced in place; all
+other elements remain byte-equivalent and the new name may equal the old name
+but not another nonempty image name. `bootable = null` preserves the target's
+existing boot identity, `true` selects it, and `false` clears boot metadata only
+when the target was bootable. Integrity is inherited unless overridden. As with
+append/delete, prior physical resource and authority records remain until a
+later compaction pass, and pipable, split, resource-only, metadata-only and
+write-in-progress inputs are rejected.
+
 `splitWimAlloc` converts any supported standalone, non-solid standard WIM into
 caller-owned SWM parts. `encodeWimSplitAlloc` and
 `encodeWimImagesSplitAlloc` compose this with the one- or multi-image writers.
@@ -277,8 +291,8 @@ creates the exact stream consumed by `WimPipableStreamPathExtractor`, including
 cross-part target blobs. The returned `WimEncodedSplitArchive` owns every part
 as with the standard split API.
 
-The current writer remains whole-archive and caller-buffer based. Image
-replacement, physical compaction, wire-spanned individual resources, automatic
+The current writer remains whole-archive and caller-buffer based. Physical
+compaction, wire-spanned individual resources, automatic
 host-filesystem security capture, short names, and tagged metadata remain
 follow-up slices. Filesystem capture/application and construction of EFSRPC or
 reparse payloads from OS objects stay outside the wire serializer.
@@ -397,6 +411,15 @@ const deleted = try vort.deleteWimImageAlloc(
     .{},
 );
 defer allocator.free(deleted);
+
+const replaced = try vort.replaceWimImageAlloc(
+    allocator,
+    existing_wim,
+    2,
+    .{ .name = "replacement", .entries = replacement_entries },
+    .{ .bootable = null },
+);
+defer allocator.free(replaced);
 
 var swm = try vort.encodeWimImagesSplitAlloc(
     allocator,
@@ -518,6 +541,14 @@ wimlib verify and byte-compare every survivor (`writer_delete=1`,
 `writer_delete_wimlib=1`, `writer_solid_delete=1`,
 `writer_solid_delete_wimlib=1`, `writer_reference_delete=1`,
 `writer_reference_delete_wimlib=1`).
+Ordinary-XPRESS and solid-LZMS replacement gates keep the first and third image
+indexes stable, replace the middle boot image, reuse a shared blob, remove the
+old unique blob from lookup and retain solid-resource routing. The same API
+replaces the sole image in the checked-in wimlib-authored XPRESS archive. Vort
+and wimlib verify and byte-compare every replacement
+(`writer_replace=1`, `writer_replace_wimlib=1`,
+`writer_solid_replace=1`, `writer_solid_replace_wimlib=1`,
+`writer_reference_replace=1`, `writer_reference_replace_wimlib=1`).
 The SWM writer matrix then emits multi-image stored, XPRESS, LZX, and LZMS sets with three
 indivisible 70,000-byte blobs and a cross-image shared resource. Vort validates
 every local lookup and extracts all paths through `WimArchiveSet`; wimlib joins
