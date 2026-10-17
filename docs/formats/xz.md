@@ -123,6 +123,15 @@ compressed and explicitly stored LZMA2 payloads. It reuses the one-shot stream
 header, block, check, Index, and Footer writers, so omitting `flush` yields the
 same wire regardless of caller input/output fragmentation.
 
+`RawLzma2IncrementalEncoder` is the lower-level payload writer used by 7z and
+other containers. Its fixed 64 KiB chunks retain the standard 4 KiB preceding
+dictionary, LZMA probability model, recent distances, and property state across
+boundaries. Compressed continuations therefore use control `0x80`; a stored
+fallback retains dictionary bytes and makes the next compressed chunk use the
+appropriate state reset without resending unchanged properties. Its output is
+byte-exact with the one-shot raw LZMA2 writer for identical input and is
+independent of caller fragmentation.
+
 ```zig
 var encoder = try vort.XzIncrementalEncoder.initExactSize(allocator, .{
     .check = .sha256,
@@ -163,7 +172,16 @@ zig build run -- size-xz-file input.xz 268435456
 zig build run -- inspect-xz-file input.xz
 zig build run-xz-diff
 zig build -Doptimize=ReleaseFast run-xz-encode-bench-gate
+zig build run-lzma2-incremental-report -- 3
 ```
+
+The raw incremental report compares persistent state with the former
+dictionary-reset-per-chunk behavior on a deterministic 256 KiB boundary-repeat
+corpus. On an Intel Core i7-10700K, ReleaseFast, five iterations, the persistent
+wire is 252,525 bytes versus 262,157 bytes (9,632 bytes smaller), at 12.18 MiB/s
+versus 12.60 MiB/s. The report fails if persistent state does not improve size;
+throughput is reported rather than gated because the persistent path performs
+useful match/range coding where the reset baseline falls back to stored chunks.
 
 The reader and writer support Delta plus all eight XZ BCJ filters. Filter
 chains may contain up to three preprocessing filters followed by LZMA2, and

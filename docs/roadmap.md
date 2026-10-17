@@ -19092,6 +19092,20 @@ reuse, so production keeps the simpler independently owned plans.
   real-distance, XZ focused, external differential, AArch64 ReleaseFast, and
   nine-row encode-gate checks pass; no full repository test was run.
 
+- Replaced the raw LZMA2 incremental encoder's per-64-KiB independent streams
+  with the same persistent 4 KiB dictionary, probability model, recent-distance
+  state, property sequencing, and stored-fallback transitions used by the
+  one-shot writer. Arbitrary caller fragmentation is now byte-exact with
+  one-shot raw LZMA2, and consecutive compressed chunks use control `0x80`
+  instead of resetting dictionary/properties. A deterministic 262,144-byte
+  boundary-repeat corpus shrinks from 262,157 reset-per-chunk bytes to 252,525
+  persistent bytes, saving 9,632 bytes. The reproducible ReleaseFast report on
+  an Intel Core i7-10700K measures 12.18 MiB/s persistent versus 12.60 MiB/s
+  reset for five iterations; the small speed cost reflects real compression of
+  cross-boundary matches where the reset path stores data. Bit-exact,
+  fragmentation, decode, 7z incremental writer, and report gates cover the new
+  state transitions.
+
 - Extended ratio-mode Brotli literal context modeling from one fixed UTF-8
   suffix split to a bounded adaptive search across all four RFC 7932 modes:
   LSB6, MSB6, UTF8, and Signed. Each mode builds its complete 64-context

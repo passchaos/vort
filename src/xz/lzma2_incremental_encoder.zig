@@ -8,12 +8,18 @@ const writer = @import("lzma2_writer.zig");
 pub const Encoder = struct {
     allocator: std.mem.Allocator,
     options: Options,
+    model: lzma_encoder.Model,
     input: std.ArrayList(u8) = .empty,
+    history: std.ArrayList(u8) = .empty,
+    candidate: std.ArrayList(u8) = .empty,
     pending: std.ArrayList(u8) = .empty,
     pending_offset: usize = 0,
     expected_input_len: ?usize = null,
     total_input: usize = 0,
+    encoded_input: usize = 0,
     total_output: usize = 0,
+    model_valid: bool = false,
+    properties_initialized: bool = false,
     finishing: bool = false,
     terminator_written: bool = false,
     done: bool = false,
@@ -33,7 +39,11 @@ pub const Encoder = struct {
 
     pub fn init(allocator: std.mem.Allocator, options: Options) Error!Encoder {
         try validateOptions(options);
-        return .{ .allocator = allocator, .options = options };
+        return .{
+            .allocator = allocator,
+            .options = options,
+            .model = try lzma_encoder.initModel(lzmaOptions()),
+        };
     }
 
     pub fn initExactSize(
@@ -41,17 +51,16 @@ pub const Encoder = struct {
         options: Options,
         expected_input_len: usize,
     ) Error!Encoder {
-        try validateOptions(options);
+        var state = try init(allocator, options);
         if (expected_input_len > options.max_input_len) return error.OutputLimitExceeded;
-        return .{
-            .allocator = allocator,
-            .options = options,
-            .expected_input_len = expected_input_len,
-        };
+        state.expected_input_len = expected_input_len;
+        return state;
     }
 
     pub fn deinit(self: *Encoder) void {
         self.input.deinit(self.allocator);
+        self.history.deinit(self.allocator);
+        self.candidate.deinit(self.allocator);
         self.pending.deinit(self.allocator);
         self.* = undefined;
     }
@@ -125,26 +134,96 @@ pub const Encoder = struct {
 
     fn emitChunk(self: *Encoder) Error!void {
         std.debug.assert(self.input.items.len != 0);
-        const start = self.pending.items.len;
         switch (self.options.mode) {
-            .compressed => _ = try writer.appendCompressedPayload(
-                self.allocator,
-                &self.pending,
-                self.input.items,
-            ),
-            .stored => _ = try writer.appendStoredPayload(
-                self.allocator,
-                &self.pending,
-                self.input.items,
-            ),
+            .compressed => try self.emitCompressedChunk(),
+            .stored => try self.emitStoredChunk(),
         }
-        // Each bounded helper emits a complete one-chunk stream. Keep the
-        // dictionary-reset chunk and defer the sole stream terminator to
-        // `finish`, allowing subsequent chunks without retaining all input.
-        std.debug.assert(self.pending.items.len > start and self.pending.items[self.pending.items.len - 1] == 0);
-        self.pending.items.len -= 1;
+        try self.retainHistory(self.input.items);
+        self.encoded_input = std.math.add(usize, self.encoded_input, self.input.items.len) catch
+            return error.IntegerOverflow;
         try self.checkPendingLimit();
         self.input.clearRetainingCapacity();
+    }
+
+    fn emitCompressedChunk(self: *Encoder) Error!void {
+        const options = lzmaOptions();
+        if (!self.model_valid) self.model = try lzma_encoder.initModel(options);
+        const reset: u2 = if (self.encoded_input == 0)
+            3
+        else if (!self.properties_initialized)
+            2
+        else if (!self.model_valid)
+            1
+        else
+            0;
+        self.candidate.clearRetainingCapacity();
+        _ = try lzma_encoder.encodeChunkAppendWithModel(
+            self.allocator,
+            &self.candidate,
+            self.input.items,
+            self.history.items,
+            self.encoded_input,
+            options,
+            null,
+            &self.model,
+        );
+        const header_delta: usize = if (reset >= 2) 3 else 2;
+        if (self.candidate.items.len <= writer.max_uncompressed_chunk and
+            self.candidate.items.len + header_delta < self.input.items.len)
+        {
+            try self.pending.append(self.allocator, 0x80 | (@as(u8, reset) << 5));
+            try appendU16Big(
+                self.allocator,
+                &self.pending,
+                @intCast(self.input.items.len - 1),
+            );
+            try appendU16Big(
+                self.allocator,
+                &self.pending,
+                @intCast(self.candidate.items.len - 1),
+            );
+            if (reset >= 2) try self.pending.append(self.allocator, writer.lzma_property);
+            try self.pending.appendSlice(self.allocator, self.candidate.items);
+            self.model_valid = true;
+            self.properties_initialized = true;
+            return;
+        }
+        try self.emitStoredChunk();
+        self.model_valid = false;
+    }
+
+    fn emitStoredChunk(self: *Encoder) Error!void {
+        try self.pending.append(
+            self.allocator,
+            if (self.encoded_input == 0) 1 else 2,
+        );
+        try appendU16Big(
+            self.allocator,
+            &self.pending,
+            @intCast(self.input.items.len - 1),
+        );
+        try self.pending.appendSlice(self.allocator, self.input.items);
+    }
+
+    fn retainHistory(self: *Encoder, chunk: []const u8) Error!void {
+        const dictionary_size = writer.dictionary_size;
+        if (chunk.len >= dictionary_size) {
+            self.history.clearRetainingCapacity();
+            try self.history.appendSlice(
+                self.allocator,
+                chunk[chunk.len - dictionary_size ..],
+            );
+            return;
+        }
+        const keep = @min(self.history.items.len, dictionary_size - chunk.len);
+        if (keep != self.history.items.len)
+            std.mem.copyForwards(
+                u8,
+                self.history.items[0..keep],
+                self.history.items[self.history.items.len - keep ..],
+            );
+        self.history.items.len = keep;
+        try self.history.appendSlice(self.allocator, chunk);
     }
 
     fn checkPendingLimit(self: *const Encoder) Error!void {
@@ -152,6 +231,23 @@ pub const Encoder = struct {
             return error.OutputLimitExceeded;
     }
 };
+
+fn lzmaOptions() lzma_encoder.EncodeOptions {
+    return .{
+        .dictionary_size = writer.dictionary_size,
+        .mode = .greedy,
+    };
+}
+
+fn appendU16Big(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    value: u16,
+) !void {
+    var bytes: [2]u8 = undefined;
+    std.mem.writeInt(u16, &bytes, value, .big);
+    try output.appendSlice(allocator, &bytes);
+}
 
 fn validateOptions(options: Encoder.Options) Encoder.Error!void {
     if (options.max_pending_output_len < writer.max_uncompressed_chunk + 3)
@@ -212,6 +308,29 @@ test "raw LZMA2 incremental encoder is fragmentation independent" {
             );
             defer std.testing.allocator.free(decoded);
             try std.testing.expectEqualSlices(u8, input, decoded);
+        }
+        var expected: std.ArrayList(u8) = .empty;
+        defer expected.deinit(std.testing.allocator);
+        switch (mode) {
+            .compressed => _ = try writer.appendCompressedPayload(
+                std.testing.allocator,
+                &expected,
+                input,
+            ),
+            .stored => _ = try writer.appendStoredPayload(
+                std.testing.allocator,
+                &expected,
+                input,
+            ),
+        }
+        try std.testing.expectEqualSlices(u8, expected.items, baseline.?);
+        if (mode == .compressed) {
+            const first_packed_size = @as(
+                usize,
+                std.mem.readInt(u16, baseline.?[3..5], .big),
+            ) + 1;
+            const second_chunk = 6 + first_packed_size;
+            try std.testing.expectEqual(@as(u8, 0x80), baseline.?[second_chunk]);
         }
     }
 }

@@ -1734,6 +1734,23 @@ pub fn build(b: *std.Build) void {
     );
     xz_encode_bench_gate_step.dependOn(&xz_encode_bench_gate.step);
 
+    const lzma2_incremental_report_exe = b.addExecutable(.{
+        .name = "vort-lzma2-incremental-report",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/xz/lzma2_incremental_report.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const run_lzma2_incremental_report = b.addRunArtifact(lzma2_incremental_report_exe);
+    if (b.args) |args| run_lzma2_incremental_report.addArgs(args);
+    const lzma2_incremental_report_step = b.step(
+        "run-lzma2-incremental-report",
+        "Measure persistent-state raw LZMA2 incremental encoding",
+    );
+    lzma2_incremental_report_step.dependOn(&run_lzma2_incremental_report.step);
+
     const lzma_diff = b.addSystemCommand(&.{ "python3", "tools/lzma/diff.py", "--cli" });
     lzma_diff.addArtifactArg(cli_exe);
     const lzma_diff_step = b.step("run-lzma-diff", "Validate dependency-free LZMA-Alone encoding and decoding against Python lzma and xz");
@@ -5745,6 +5762,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_native_frame_probe_exe.step);
     check_step.dependOn(&zstd_native_dictionary_probe_exe.step);
     check_step.dependOn(&lz4_native_dictionary_probe_exe.step);
+    check_step.dependOn(&lzma2_incremental_report_exe.step);
 
     const ci_smoke_step = b.step("ci-smoke", "Run local CI smoke validation across tests, fuzz, differential, and benchmark reports");
     ci_smoke_step.dependOn(test_step);

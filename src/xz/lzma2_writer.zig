@@ -3,7 +3,7 @@ const core = @import("../core.zig");
 const lzma_encoder = @import("../lzma/encoder.zig");
 
 pub const max_uncompressed_chunk: usize = 65_536;
-const lzma_property: u8 = 0x5d;
+pub const lzma_property: u8 = 0x5d;
 pub const dictionary_property: u8 = 0;
 pub const dictionary_size: usize = 4096;
 pub const max_dictionary_size: usize = lzma_encoder.max_dictionary_size;
