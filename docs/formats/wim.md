@@ -173,7 +173,18 @@ content-derived GUID is used unless supplied, and all ordering is stable.
 so invalid input, allocation failure, and `OutputTooSmall` leave caller output
 unchanged.
 
-The current writer remains single-image and caller-buffer based. Multi-image
+`WimEncodeImage` plus `encodeWimImagesAlloc`, `encodeWimImagesAppend`, and
+`encodeWimImagesInto` extend the same transactional contract to 1...65,535
+ordered images. Each image owns its name, tree, root metadata/security and XML
+timestamps. Ordinary stream blobs are deduplicated across all images and their
+lookup reference count is accumulated globally; metadata resources remain one
+per image and their lookup entries retain image-index order even when two images
+have byte-identical metadata and SHA-1. XML emits consecutive `INDEX` values and
+per-image counts. `WimEncodeImagesOptions.boot_index` optionally copies the
+selected metadata resource into the header boot descriptor. Deterministic GUID
+derivation includes every image metadata hash and length-delimited name.
+
+The current writer remains whole-archive and caller-buffer based. In-place image
 append/update, WIM/SWM splitting, pipable output, LZX/LZMS encoding, automatic
 host-filesystem security capture, short names, and tagged metadata remain
 follow-up slices. Filesystem capture/application and construction of EFSRPC or
@@ -262,6 +273,16 @@ const encoded_wim = try vort.encodeWimAlloc(allocator, &input, .{
     .root_security_descriptor = security_descriptor,
 });
 defer allocator.free(encoded_wim);
+
+const images = [_]vort.WimEncodeImage{
+    .{ .name = "workstation", .entries = workstation_entries },
+    .{ .name = "server", .entries = server_entries },
+};
+const multi_wim = try vort.encodeWimImagesAlloc(allocator, &images, .{
+    .compression = .xpress,
+    .boot_index = 1,
+});
+defer allocator.free(multi_wim);
 ```
 
 ```sh
@@ -342,3 +363,8 @@ root and per-entry security IDs, hard-link lookup reference counts and XML
 accounting. wimlib reports the exact descriptor bytes and two-link group, then
 extracts both aliases to the same inode (`writer_inode=2`,
 `writer_inode_wimlib=2`).
+The multi-image writer gate generates four-image stored and XPRESS archives,
+including a cross-image shared blob, distinct trees, two byte-identical empty
+metadata resources, consecutive XML indexes and boot image 2. Both readers map
+all four images correctly; wimlib verifies the archives and byte-compares the
+first two extracted trees (`writer_multi=2`, `writer_multi_wimlib=2`).

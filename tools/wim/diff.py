@@ -167,6 +167,8 @@ def main() -> None:
     writer_stream_wimlib_cases = 0
     writer_inode_cases = 0
     writer_inode_wimlib_cases = 0
+    writer_multi_cases = 0
+    writer_multi_wimlib_cases = 0
     stream_error_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-wim-") as temp_text:
@@ -650,6 +652,101 @@ def main() -> None:
                 ):
                     raise AssertionError("wimlib did not restore Vort hard links")
                 writer_inode_wimlib_cases += 1
+
+        for writer_compression, expected_compression in (
+            ("stored", "none"),
+            ("xpress", "xpress"),
+        ):
+            multi_image = temp / f"vort-writer-multi-{writer_compression}.wim"
+            run(args.writer, multi_image, writer_compression, "multi")
+            multi_listing = run(args.cli, "list-wim-file", multi_image).stdout
+            if (
+                f"compression={expected_compression}".encode() not in multi_listing
+                or b"images=4" not in multi_listing
+            ):
+                raise AssertionError("Vort writer multi-image header mismatch")
+            for image_index, unique_name, unique_payload in (
+                (1, "first.txt", b"first image payload\n"),
+                (2, "second.txt", b"second image payload\n"),
+            ):
+                unique_output = temp / (
+                    f"writer-multi-{writer_compression}-{unique_name}"
+                )
+                run(
+                    args.cli,
+                    "extract-wim-path",
+                    multi_image,
+                    image_index,
+                    f"/{unique_name}",
+                    unique_output,
+                    1024,
+                )
+                if unique_output.read_bytes() != unique_payload:
+                    raise AssertionError("Vort writer multi-image mapping mismatch")
+                shared_output = temp / (
+                    f"writer-multi-{writer_compression}-shared-{image_index}"
+                )
+                run(
+                    args.cli,
+                    "extract-wim-path",
+                    multi_image,
+                    image_index,
+                    "/shared.txt",
+                    shared_output,
+                    1024,
+                )
+                if shared_output.read_bytes() != b"shared multi-image payload\n":
+                    raise AssertionError("Vort writer cross-image blob mismatch")
+            for image_index in (3, 4):
+                empty_tree = run(
+                    args.cli,
+                    "list-wim-image",
+                    multi_image,
+                    image_index,
+                ).stdout
+                if empty_tree != (
+                    f"image={image_index} security_descriptors=0\n".encode()
+                ):
+                    raise AssertionError("Vort writer empty image mismatch")
+            writer_multi_cases += 1
+
+            if wimlib is not None:
+                run(wimlib, "verify", multi_image)
+                info = run(wimlib, "info", multi_image).stdout
+                for marker in (
+                    b"Image Count:    4",
+                    b"Boot Index:     2",
+                    b"Name:                   first",
+                    b"Name:                   second",
+                    b"Name:                   empty-a",
+                    b"Name:                   empty-b",
+                ):
+                    if marker not in info:
+                        raise AssertionError(
+                            f"wimlib did not recognize Vort multi-image {marker!r}"
+                        )
+                for image_index, unique_name, unique_payload in (
+                    (1, "first.txt", b"first image payload\n"),
+                    (2, "second.txt", b"second image payload\n"),
+                ):
+                    destination = temp / (
+                        f"writer-multi-wimlib-{writer_compression}-{image_index}"
+                    )
+                    run(
+                        wimlib,
+                        "extract",
+                        multi_image,
+                        image_index,
+                        f"--dest-dir={destination}",
+                        "--no-acls",
+                    )
+                    if (
+                        (destination / unique_name).read_bytes() != unique_payload
+                        or (destination / "shared.txt").read_bytes()
+                        != b"shared multi-image payload\n"
+                    ):
+                        raise AssertionError("wimlib multi-image extraction mismatch")
+                writer_multi_wimlib_cases += 1
         if wimlib is not None:
             encrypted_result = run(wimlib, "info", encrypted_esd, check=False)
             if encrypted_result.returncode == 0 or b"encrypted" not in encrypted_result.stderr.lower():
@@ -1134,6 +1231,8 @@ def main() -> None:
         f"writer_stream_wimlib={writer_stream_wimlib_cases} "
         f"writer_inode={writer_inode_cases} "
         f"writer_inode_wimlib={writer_inode_wimlib_cases} "
+        f"writer_multi={writer_multi_cases} "
+        f"writer_multi_wimlib={writer_multi_wimlib_cases} "
         f"malformed={malformed}"
     )
 

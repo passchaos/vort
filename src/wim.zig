@@ -40,6 +40,8 @@ pub const EncodeNamedStream = writer.NamedStream;
 pub const EncodeReparseData = writer.ReparseData;
 pub const EncodeCompression = writer.Compression;
 pub const EncodeOptions = writer.Options;
+pub const EncodeImage = writer.Image;
+pub const EncodeImagesOptions = writer.ImagesOptions;
 pub const parse = archive.Archive.init;
 pub const parseHeader = format.parseHeader;
 pub const parseImageMetadataOwned = metadata.ImageMetadata.fromOwnedBytes;
@@ -47,6 +49,9 @@ pub const solidResourceMagic = archive.solid_resource_magic;
 pub const encodeAlloc = writer.encodeAlloc;
 pub const encodeAppend = writer.encodeAppend;
 pub const encodeInto = writer.encodeInto;
+pub const encodeImagesAlloc = writer.encodeImagesAlloc;
+pub const encodeImagesAppend = writer.encodeImagesAppend;
+pub const encodeImagesInto = writer.encodeImagesInto;
 
 test {
     _ = format;

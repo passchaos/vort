@@ -403,6 +403,96 @@ test "WIM writer deduplicates security descriptors and preserves hard links" {
     try std.testing.expect(utf16ContainsAscii(xml, expected_xml));
 }
 
+test "WIM writer emits ordered multi-image metadata and shared blobs" {
+    const allocator = std.testing.allocator;
+    const first_entries = [_]writer.Entry{
+        .{ .path = "shared.txt", .data = "cross-image shared payload" },
+        .{ .path = "first.txt", .data = "first image only" },
+    };
+    const second_entries = [_]writer.Entry{
+        .{ .path = "shared.txt", .data = "cross-image shared payload" },
+        .{ .path = "second.txt", .data = "second image only" },
+    };
+    const images = [_]writer.Image{
+        .{ .name = "first", .entries = &first_entries, .creation_time = 1 },
+        .{ .name = "second", .entries = &second_entries, .creation_time = 2 },
+        .{ .name = "empty-a", .entries = &.{} },
+        .{ .name = "empty-b", .entries = &.{} },
+    };
+    const options: writer.ImagesOptions = .{
+        .compression = .xpress,
+        .boot_index = 2,
+    };
+    const encoded = try writer.encodeImagesAlloc(allocator, &images, options);
+    defer allocator.free(encoded);
+    const repeated = try writer.encodeImagesAlloc(allocator, &images, options);
+    defer allocator.free(repeated);
+    try std.testing.expectEqualSlices(u8, encoded, repeated);
+
+    const archive = try archive_mod.Archive.init(encoded);
+    try std.testing.expectEqual(@as(u32, 4), archive.header.image_count);
+    try std.testing.expectEqual(@as(u32, 2), archive.header.boot_index);
+    var lookup = try archive.readLookupTableAlloc(allocator, 64, 4096);
+    defer lookup.deinit();
+    try std.testing.expectEqual(@as(usize, 7), lookup.entries.len);
+    var shared_hash: [20]u8 = undefined;
+    std.crypto.hash.Sha1.hash("cross-image shared payload", &shared_hash, .{});
+    try std.testing.expectEqual(@as(u32, 2), lookup.findData(&shared_hash).?.reference_count);
+
+    var metadata_index: usize = 0;
+    for (lookup.entries) |entry| {
+        if (!entry.resource.isMetadata()) continue;
+        metadata_index += 1;
+        if (metadata_index == 2)
+            try expectResourceEqual(archive.header.boot_metadata, entry.resource);
+    }
+    try std.testing.expectEqual(@as(usize, 4), metadata_index);
+
+    const first = try archive.extractByPathAllocLimited(
+        allocator,
+        1,
+        "first.txt",
+        1024,
+        limits,
+    );
+    defer allocator.free(first);
+    try std.testing.expectEqualStrings("first image only", first);
+    const second = try archive.extractByPathAllocLimited(
+        allocator,
+        2,
+        "second.txt",
+        1024,
+        limits,
+    );
+    defer allocator.free(second);
+    try std.testing.expectEqualStrings("second image only", second);
+    var empty_a = try archive.readImageMetadataAlloc(allocator, 3, limits);
+    defer empty_a.deinit();
+    var empty_b = try archive.readImageMetadataAlloc(allocator, 4, limits);
+    defer empty_b.deinit();
+    try std.testing.expectEqual(@as(usize, 0), empty_a.root.subdir_offset);
+    try std.testing.expectEqual(@as(usize, 0), empty_b.root.subdir_offset);
+
+    const xml = try archive.readXmlAllocLimited(allocator, 32 * 1024);
+    defer allocator.free(xml);
+    try std.testing.expect(utf16ContainsAscii(xml, "<IMAGE INDEX=\"4\"><NAME>empty-b</NAME>"));
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(allocator);
+    try appended.appendSlice(allocator, "prefix");
+    const written = try writer.encodeImagesAppend(allocator, &appended, &images, options);
+    try std.testing.expectEqual(encoded.len, written);
+    try std.testing.expectEqualSlices(u8, encoded, appended.items[6..]);
+    const too_small = try allocator.alloc(u8, encoded.len - 1);
+    defer allocator.free(too_small);
+    @memset(too_small, 0xa5);
+    try std.testing.expectError(
+        error.OutputTooSmall,
+        writer.encodeImagesInto(allocator, &images, too_small, options),
+    );
+    try std.testing.expect(std.mem.allEqual(u8, too_small, 0xa5));
+}
+
 test "WIM writer validates paths, XML and compression geometry" {
     const bad_path = [_]writer.Entry{.{ .path = "a//b" }};
     try std.testing.expectError(
@@ -534,6 +624,25 @@ test "WIM writer validates paths, XML and compression geometry" {
         error.InvalidWimEntry,
         writer.encodeAlloc(std.testing.allocator, &descriptor_entry, .{}),
     );
+    try std.testing.expectError(
+        error.InvalidWimWriterOptions,
+        writer.encodeImagesAlloc(std.testing.allocator, &.{}, .{}),
+    );
+    const empty_image = [_]writer.Image{.{ .name = "one", .entries = &.{} }};
+    try std.testing.expectError(
+        error.InvalidWimWriterOptions,
+        writer.encodeImagesAlloc(std.testing.allocator, &empty_image, .{
+            .boot_index = 2,
+        }),
+    );
+    const duplicate_images = [_]writer.Image{
+        .{ .name = "Same", .entries = &.{} },
+        .{ .name = "same", .entries = &.{} },
+    };
+    try std.testing.expectError(
+        error.InvalidWimWriterOptions,
+        writer.encodeImagesAlloc(std.testing.allocator, &duplicate_images, .{}),
+    );
 
     var existing: std.ArrayList(u8) = .empty;
     defer existing.deinit(std.testing.allocator);
@@ -592,6 +701,33 @@ test "WIM writer is allocation failure safe" {
     );
 }
 
+test "WIM multi-image writer is allocation failure safe" {
+    const AllocationTest = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const first = [_]writer.Entry{.{ .path = "shared", .data = "same" }};
+            const second = [_]writer.Entry{
+                .{ .path = "shared", .data = "same" },
+                .{ .path = "other", .data = "different" },
+            };
+            const images = [_]writer.Image{
+                .{ .name = "first", .entries = &first },
+                .{ .name = "second", .entries = &second },
+            };
+            const encoded = try writer.encodeImagesAlloc(allocator, &images, .{
+                .compression = .stored,
+                .boot_index = 1,
+            });
+            defer allocator.free(encoded);
+            _ = try archive_mod.Archive.init(encoded);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        AllocationTest.run,
+        .{},
+    );
+}
+
 fn utf16ContainsAscii(utf16: []const u8, ascii: []const u8) bool {
     if (ascii.len == 0) return true;
     if (utf16.len < ascii.len * 2) return false;
@@ -609,6 +745,16 @@ fn utf16ContainsAscii(utf16: []const u8, ascii: []const u8) bool {
         if (matches) return true;
     }
     return false;
+}
+
+fn expectResourceEqual(
+    expected: format.ResourceHeader,
+    actual: format.ResourceHeader,
+) !void {
+    try std.testing.expectEqual(expected.size_in_wim, actual.size_in_wim);
+    try std.testing.expectEqual(expected.flags, actual.flags);
+    try std.testing.expectEqual(expected.offset_in_wim, actual.offset_in_wim);
+    try std.testing.expectEqual(expected.uncompressed_size, actual.uncompressed_size);
 }
 
 fn verifyIntegrity(bytes: []const u8, header: format.Header) !void {

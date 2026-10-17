@@ -15,6 +15,8 @@ pub fn main(init: std.process.Init) !void {
         return writeStreams(init, output_path, compression);
     if (std.mem.eql(u8, mode, "inode"))
         return writeInodeMetadata(init, output_path, compression);
+    if (std.mem.eql(u8, mode, "multi"))
+        return writeMultiImage(init, output_path, compression);
     if (!std.mem.eql(u8, mode, "basic")) return error.InvalidBlockPlan;
 
     const large = "Vort WIM writer multichunk payload 0123456789\n" ** 4096;
@@ -126,6 +128,36 @@ fn writeInodeMetadata(
         .{ .path = "no-security.txt", .data = "no security descriptor\n" },
     };
     try writeArchive(init, output_path, compression, &entries, &null_dacl);
+}
+
+fn writeMultiImage(
+    init: std.process.Init,
+    output_path: []const u8,
+    compression: vort.WimEncodeCompression,
+) !void {
+    const first_entries = [_]vort.WimEncodeEntry{
+        .{ .path = "shared.txt", .data = "shared multi-image payload\n" },
+        .{ .path = "first.txt", .data = "first image payload\n" },
+    };
+    const second_entries = [_]vort.WimEncodeEntry{
+        .{ .path = "shared.txt", .data = "shared multi-image payload\n" },
+        .{ .path = "second.txt", .data = "second image payload\n" },
+    };
+    const images = [_]vort.WimEncodeImage{
+        .{ .name = "first", .entries = &first_entries, .creation_time = 1 },
+        .{ .name = "second", .entries = &second_entries, .creation_time = 2 },
+        .{ .name = "empty-a", .entries = &.{} },
+        .{ .name = "empty-b", .entries = &.{} },
+    };
+    const encoded = try vort.encodeWimImagesAlloc(init.gpa, &images, .{
+        .compression = compression,
+        .boot_index = 2,
+    });
+    defer init.gpa.free(encoded);
+    try std.Io.Dir.cwd().writeFile(init.io, .{
+        .sub_path = output_path,
+        .data = encoded,
+    });
 }
 
 fn writeArchive(

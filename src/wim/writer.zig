@@ -6,6 +6,7 @@ const resource_writer = @import("writer_resource.zig");
 const security = @import("writer_security.zig");
 const streams = @import("writer_streams.zig");
 const tree_mod = @import("writer_tree.zig");
+const xml_writer = @import("writer_xml.zig");
 
 pub const Error = core.Error || format.Error || metadata_writer.Error ||
     resource_writer.Error || tree_mod.Error || std.mem.Allocator.Error || error{
@@ -33,6 +34,27 @@ pub const Options = struct {
     xml_creation_time: u64 = 0,
     xml_last_modification_time: u64 = 0,
     root_security_descriptor: ?[]const u8 = null,
+    bootable: bool = false,
+};
+
+pub const Image = struct {
+    name: []const u8 = "Vort Image",
+    entries: []const Entry,
+    root_creation_time: u64 = 0,
+    root_last_access_time: u64 = 0,
+    root_last_write_time: u64 = 0,
+    root_security_descriptor: ?[]const u8 = null,
+    creation_time: u64 = 0,
+    last_modification_time: u64 = 0,
+};
+
+pub const ImagesOptions = struct {
+    compression: Compression = .xpress,
+    /// null selects 32 KiB for XPRESS and 0 for stored WIMs.
+    chunk_size: ?usize = null,
+    integrity: bool = true,
+    guid: ?[16]u8 = null,
+    boot_index: u32 = 0,
 };
 
 const Blob = struct {
@@ -42,6 +64,13 @@ const Blob = struct {
     resource: format.ResourceHeader = undefined,
 };
 
+const PlannedImage = struct {
+    tree: tree_mod.Tree,
+    metadata: []u8,
+    metadata_hash: [std.crypto.hash.Sha1.digest_length]u8,
+    metadata_resource: format.ResourceHeader = undefined,
+};
+
 const integrity_chunk_size: usize = 10 * 1024 * 1024;
 
 pub fn encodeAlloc(
@@ -49,106 +78,23 @@ pub fn encodeAlloc(
     entries: []const Entry,
     options: Options,
 ) Error![]u8 {
-    const chunk_size = try effectiveChunkSize(options);
-    try validateOptions(options, chunk_size);
-
-    var tree = try tree_mod.build(allocator, entries, .{
-        .creation_time = options.root_creation_time,
-        .last_access_time = options.root_last_access_time,
-        .last_write_time = options.root_last_write_time,
-        .security_descriptor = options.root_security_descriptor,
+    const images = [_]Image{.{
+        .name = options.image_name,
+        .entries = entries,
+        .root_creation_time = options.root_creation_time,
+        .root_last_access_time = options.root_last_access_time,
+        .root_last_write_time = options.root_last_write_time,
+        .root_security_descriptor = options.root_security_descriptor,
+        .creation_time = options.xml_creation_time,
+        .last_modification_time = options.xml_last_modification_time,
+    }};
+    return encodeImagesAlloc(allocator, &images, .{
+        .compression = options.compression,
+        .chunk_size = options.chunk_size,
+        .integrity = options.integrity,
+        .guid = options.guid,
+        .boot_index = @intFromBool(options.bootable),
     });
-    defer tree.deinit();
-    var security_table = try security.plan(allocator, &tree);
-    defer security_table.deinit();
-    const metadata = try metadata_writer.encodeAlloc(
-        allocator,
-        &tree,
-        security_table.descriptors,
-    );
-    defer allocator.free(metadata);
-    var metadata_hash: [std.crypto.hash.Sha1.digest_length]u8 = undefined;
-    std.crypto.hash.Sha1.hash(metadata, &metadata_hash, .{});
-
-    var blobs: std.ArrayList(Blob) = .empty;
-    defer blobs.deinit(allocator);
-    try collectBlobs(allocator, &blobs, tree.nodes);
-
-    var output: std.ArrayList(u8) = .empty;
-    errdefer output.deinit(allocator);
-    try output.appendNTimes(allocator, 0, format.header_size);
-
-    for (blobs.items) |*blob| {
-        blob.resource = try resource_writer.append(
-            allocator,
-            &output,
-            blob.data,
-            options.compression,
-            chunk_size,
-            0,
-        );
-    }
-    const metadata_resource = try resource_writer.append(
-        allocator,
-        &output,
-        metadata,
-        options.compression,
-        chunk_size,
-        0x02,
-    );
-
-    const lookup_offset = output.items.len;
-    for (blobs.items) |blob|
-        try appendLookupEntry(allocator, &output, blob.resource, blob.reference_count, &blob.sha1);
-    try appendLookupEntry(allocator, &output, metadata_resource, 1, &metadata_hash);
-    const lookup_resource = try resourceHeader(
-        lookup_offset,
-        output.items.len - lookup_offset,
-        output.items.len - lookup_offset,
-        0x02,
-    );
-    const lookup_end = output.items.len;
-
-    const xml_offset = output.items.len;
-    const xml = try buildXmlAlloc(
-        allocator,
-        options,
-        tree.directoryCount(),
-        tree.fileCount(),
-        try tree.totalStreamBytes(),
-        try tree.hardLinkBytes(),
-        xml_offset,
-    );
-    defer allocator.free(xml);
-    try output.appendSlice(allocator, xml);
-    const xml_resource = try resourceHeader(
-        xml_offset,
-        xml.len,
-        xml.len,
-        0x02,
-    );
-
-    const integrity_resource = if (options.integrity)
-        try appendIntegrity(allocator, &output, lookup_end)
-    else
-        format.ResourceHeader{
-            .size_in_wim = 0,
-            .flags = 0,
-            .offset_in_wim = 0,
-            .uncompressed_size = 0,
-        };
-
-    const guid = options.guid orelse deriveGuid(&metadata_hash, options.image_name);
-    writeHeader(
-        output.items[0..format.header_size],
-        options.compression,
-        chunk_size,
-        &guid,
-        lookup_resource,
-        xml_resource,
-        integrity_resource,
-    );
-    return output.toOwnedSlice(allocator);
 }
 
 pub fn encodeAppend(
@@ -177,16 +123,195 @@ pub fn encodeInto(
     return encoded.len;
 }
 
-fn effectiveChunkSize(options: Options) Error!usize {
-    return options.chunk_size orelse switch (options.compression) {
+pub fn encodeImagesAlloc(
+    allocator: std.mem.Allocator,
+    images: []const Image,
+    options: ImagesOptions,
+) Error![]u8 {
+    const chunk_size = try effectiveChunkSize(options.compression, options.chunk_size);
+    try validateImagesOptions(images, options, chunk_size);
+
+    var planned: std.ArrayList(PlannedImage) = .empty;
+    defer deinitPlannedImages(allocator, &planned);
+    for (images) |image| {
+        var tree = try tree_mod.build(allocator, image.entries, .{
+            .creation_time = image.root_creation_time,
+            .last_access_time = image.root_last_access_time,
+            .last_write_time = image.root_last_write_time,
+            .security_descriptor = image.root_security_descriptor,
+        });
+        errdefer tree.deinit();
+        var security_table = try security.plan(allocator, &tree);
+        defer security_table.deinit();
+        const metadata = try metadata_writer.encodeAlloc(
+            allocator,
+            &tree,
+            security_table.descriptors,
+        );
+        errdefer allocator.free(metadata);
+        var metadata_hash: [std.crypto.hash.Sha1.digest_length]u8 = undefined;
+        std.crypto.hash.Sha1.hash(metadata, &metadata_hash, .{});
+        try planned.append(allocator, .{
+            .tree = tree,
+            .metadata = metadata,
+            .metadata_hash = metadata_hash,
+        });
+    }
+
+    var blobs: std.ArrayList(Blob) = .empty;
+    defer blobs.deinit(allocator);
+    for (planned.items) |image|
+        try collectBlobs(allocator, &blobs, image.tree.nodes);
+
+    var output: std.ArrayList(u8) = .empty;
+    errdefer output.deinit(allocator);
+    try output.appendNTimes(allocator, 0, format.header_size);
+    for (blobs.items) |*blob| {
+        blob.resource = try resource_writer.append(
+            allocator,
+            &output,
+            blob.data,
+            options.compression,
+            chunk_size,
+            0,
+        );
+    }
+    for (planned.items) |*image| {
+        image.metadata_resource = try resource_writer.append(
+            allocator,
+            &output,
+            image.metadata,
+            options.compression,
+            chunk_size,
+            0x02,
+        );
+    }
+
+    const lookup_offset = output.items.len;
+    for (blobs.items) |blob|
+        try appendLookupEntry(allocator, &output, blob.resource, blob.reference_count, &blob.sha1);
+    for (planned.items) |image|
+        try appendLookupEntry(
+            allocator,
+            &output,
+            image.metadata_resource,
+            1,
+            &image.metadata_hash,
+        );
+    const lookup_resource = try resourceHeader(
+        lookup_offset,
+        output.items.len - lookup_offset,
+        output.items.len - lookup_offset,
+        0x02,
+    );
+    const lookup_end = output.items.len;
+
+    const xml_offset = output.items.len;
+    const xml_infos = try allocator.alloc(xml_writer.ImageInfo, images.len);
+    defer allocator.free(xml_infos);
+    for (images, planned.items, xml_infos) |image, plan, *info| {
+        info.* = .{
+            .name = image.name,
+            .directory_count = plan.tree.directoryCount(),
+            .file_count = plan.tree.fileCount(),
+            .total_bytes = try plan.tree.totalStreamBytes(),
+            .hard_link_bytes = try plan.tree.hardLinkBytes(),
+            .creation_time = image.creation_time,
+            .last_modification_time = image.last_modification_time,
+        };
+    }
+    const xml = try xml_writer.encodeAlloc(allocator, xml_infos, xml_offset);
+    defer allocator.free(xml);
+    try output.appendSlice(allocator, xml);
+    const xml_resource = try resourceHeader(xml_offset, xml.len, xml.len, 0x02);
+
+    const integrity_resource = if (options.integrity)
+        try appendIntegrity(allocator, &output, lookup_end)
+    else
+        zeroResource();
+    const guid = options.guid orelse deriveImagesGuid(planned.items, images);
+    const boot_metadata = if (options.boot_index == 0)
+        zeroResource()
+    else
+        planned.items[options.boot_index - 1].metadata_resource;
+    writeHeader(
+        output.items[0..format.header_size],
+        options.compression,
+        chunk_size,
+        &guid,
+        @intCast(images.len),
+        lookup_resource,
+        xml_resource,
+        boot_metadata,
+        options.boot_index,
+        integrity_resource,
+    );
+    return output.toOwnedSlice(allocator);
+}
+
+pub fn encodeImagesAppend(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    images: []const Image,
+    options: ImagesOptions,
+) Error!usize {
+    const encoded = try encodeImagesAlloc(allocator, images, options);
+    defer allocator.free(encoded);
+    try output.ensureUnusedCapacity(allocator, encoded.len);
+    output.appendSliceAssumeCapacity(encoded);
+    return encoded.len;
+}
+
+pub fn encodeImagesInto(
+    allocator: std.mem.Allocator,
+    images: []const Image,
+    output: []u8,
+    options: ImagesOptions,
+) Error!usize {
+    const encoded = try encodeImagesAlloc(allocator, images, options);
+    defer allocator.free(encoded);
+    if (encoded.len > output.len) return error.OutputTooSmall;
+    @memcpy(output[0..encoded.len], encoded);
+    return encoded.len;
+}
+
+fn deinitPlannedImages(
+    allocator: std.mem.Allocator,
+    planned: *std.ArrayList(PlannedImage),
+) void {
+    for (planned.items) |*image| {
+        allocator.free(image.metadata);
+        image.tree.deinit();
+    }
+    planned.deinit(allocator);
+}
+
+fn effectiveChunkSize(
+    compression: Compression,
+    selected: ?usize,
+) Error!usize {
+    return selected orelse switch (compression) {
         .stored => 0,
         .xpress => 32 * 1024,
     };
 }
 
-fn validateOptions(options: Options, chunk_size: usize) Error!void {
+fn validateImagesOptions(
+    images: []const Image,
+    options: ImagesOptions,
+    chunk_size: usize,
+) Error!void {
+    if (images.len == 0 or images.len > 65_535 or options.boot_index > images.len)
+        return error.InvalidWimWriterOptions;
     try resource_writer.validate(options.compression, chunk_size);
-    if (!validXmlText(options.image_name)) return error.InvalidWimWriterOptions;
+    for (images, 0..) |image, index| {
+        try xml_writer.validateName(image.name);
+        if (image.name.len == 0) continue;
+        for (images[0..index]) |prior| {
+            if (prior.name.len != 0 and std.ascii.eqlIgnoreCase(prior.name, image.name))
+                return error.InvalidWimWriterOptions;
+        }
+    }
 }
 
 fn collectBlobs(
@@ -237,95 +362,6 @@ fn appendLookupEntry(
     writeU16(output.items, offset + 24, 1);
     writeU32(output.items, offset + 26, reference_count);
     @memcpy(output.items[offset + 30 .. offset + 50], sha1);
-}
-
-fn buildXmlAlloc(
-    allocator: std.mem.Allocator,
-    options: Options,
-    directory_count: usize,
-    file_count: usize,
-    total_file_bytes: u64,
-    hard_link_bytes: u64,
-    xml_offset: usize,
-) Error![]u8 {
-    const escaped_name = try escapeXmlAlloc(allocator, options.image_name);
-    defer allocator.free(escaped_name);
-    const creation_high: u32 = @truncate(options.xml_creation_time >> 32);
-    const creation_low: u32 = @truncate(options.xml_creation_time);
-    const modified_high: u32 = @truncate(options.xml_last_modification_time >> 32);
-    const modified_low: u32 = @truncate(options.xml_last_modification_time);
-    const utf8 = try std.fmt.allocPrint(
-        allocator,
-        "<WIM><IMAGE INDEX=\"1\"><NAME>{s}</NAME>" ++
-            "<DIRCOUNT>{d}</DIRCOUNT><FILECOUNT>{d}</FILECOUNT>" ++
-            "<TOTALBYTES>{d}</TOTALBYTES><HARDLINKBYTES>{d}</HARDLINKBYTES>" ++
-            "<CREATIONTIME><HIGHPART>{d}</HIGHPART><LOWPART>{d}</LOWPART>" ++
-            "</CREATIONTIME><LASTMODIFICATIONTIME><HIGHPART>{d}</HIGHPART>" ++
-            "<LOWPART>{d}</LOWPART></LASTMODIFICATIONTIME></IMAGE>" ++
-            "<TOTALBYTES>{d}</TOTALBYTES></WIM>",
-        .{
-            escaped_name,
-            directory_count,
-            file_count,
-            total_file_bytes,
-            hard_link_bytes,
-            creation_high,
-            creation_low,
-            modified_high,
-            modified_low,
-            xml_offset,
-        },
-    );
-    defer allocator.free(utf8);
-    const units = std.unicode.utf8ToUtf16LeAlloc(allocator, utf8) catch |err| switch (err) {
-        error.OutOfMemory => return error.OutOfMemory,
-        error.InvalidUtf8 => return error.InvalidWimWriterOptions,
-    };
-    defer allocator.free(units);
-    const byte_len = std.math.mul(usize, units.len, 2) catch
-        return error.IntegerOverflow;
-    const output = try allocator.alloc(u8, try checkedAdd(2, byte_len));
-    output[0] = 0xff;
-    output[1] = 0xfe;
-    for (units, 0..) |unit, index|
-        writeU16(output, 2 + index * 2, unit);
-    return output;
-}
-
-fn escapeXmlAlloc(
-    allocator: std.mem.Allocator,
-    text: []const u8,
-) Error![]u8 {
-    if (!validXmlText(text)) return error.InvalidWimWriterOptions;
-    var escaped: std.ArrayList(u8) = .empty;
-    errdefer escaped.deinit(allocator);
-    for (text) |byte| {
-        const replacement: []const u8 = switch (byte) {
-            '&' => "&amp;",
-            '<' => "&lt;",
-            '>' => "&gt;",
-            else => {
-                try escaped.append(allocator, byte);
-                continue;
-            },
-        };
-        try escaped.appendSlice(allocator, replacement);
-    }
-    return escaped.toOwnedSlice(allocator);
-}
-
-fn validXmlText(text: []const u8) bool {
-    if (!std.unicode.utf8ValidateSlice(text)) return false;
-    var view = std.unicode.Utf8View.initUnchecked(text);
-    var iterator = view.iterator();
-    while (iterator.nextCodepoint()) |codepoint| {
-        if (!(codepoint == 0x09 or codepoint == 0x0a or codepoint == 0x0d or
-            (codepoint >= 0x20 and codepoint <= 0xd7ff) or
-            (codepoint >= 0xe000 and codepoint <= 0xfffd) or
-            (codepoint >= 0x10000 and codepoint <= 0x10ffff)))
-            return false;
-    }
-    return true;
 }
 
 fn appendIntegrity(
@@ -396,13 +432,49 @@ fn deriveGuid(
     return guid;
 }
 
+fn deriveImagesGuid(
+    planned: []const PlannedImage,
+    images: []const Image,
+) [16]u8 {
+    if (images.len == 1)
+        return deriveGuid(&planned[0].metadata_hash, images[0].name);
+    var hasher = std.crypto.hash.Sha1.init(.{});
+    hasher.update("vort deterministic multi-image WIM\x00");
+    for (planned, images) |plan, image| {
+        hasher.update(&plan.metadata_hash);
+        var name_len: [8]u8 = undefined;
+        std.mem.writeInt(u64, &name_len, image.name.len, .little);
+        hasher.update(&name_len);
+        hasher.update(image.name);
+    }
+    var digest: [std.crypto.hash.Sha1.digest_length]u8 = undefined;
+    hasher.final(&digest);
+    var guid: [16]u8 = undefined;
+    @memcpy(&guid, digest[0..16]);
+    guid[6] = (guid[6] & 0x0f) | 0x50;
+    guid[8] = (guid[8] & 0x3f) | 0x80;
+    return guid;
+}
+
+fn zeroResource() format.ResourceHeader {
+    return .{
+        .size_in_wim = 0,
+        .flags = 0,
+        .offset_in_wim = 0,
+        .uncompressed_size = 0,
+    };
+}
+
 fn writeHeader(
     header: []u8,
     compression: Compression,
     chunk_size: usize,
     guid: *const [16]u8,
+    image_count: u32,
     lookup_resource: format.ResourceHeader,
     xml_resource: format.ResourceHeader,
+    boot_metadata: format.ResourceHeader,
+    boot_index: u32,
     integrity_resource: format.ResourceHeader,
 ) void {
     @memset(header, 0);
@@ -418,9 +490,11 @@ fn writeHeader(
     @memcpy(header[24..40], guid);
     writeU16(header, 40, 1);
     writeU16(header, 42, 1);
-    writeU32(header, 44, 1);
+    writeU32(header, 44, image_count);
     writeResourceHeader(header, 48, lookup_resource);
     writeResourceHeader(header, 72, xml_resource);
+    writeResourceHeader(header, 96, boot_metadata);
+    writeU32(header, 120, boot_index);
     writeResourceHeader(header, 124, integrity_resource);
 }
 

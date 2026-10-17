@@ -21291,7 +21291,7 @@ reuse, so production keeps the simpler independently owned plans.
   geometry, round-trip, deterministic-output, output-limit and exhaustive OOM
   tests. The black-box gate reopens both writer modes through Vort, then requires
   wimlib 1.14.5 to verify and byte-exactly extract them (`writer=2`,
-  `writer_wimlib=2`). Multi-image update, split/pipable output, LZX/LZMS,
+  `writer_wimlib=2`). In-place image update, split/pipable output, LZX/LZMS,
   short names and tagged metadata remain writer follow-ups.
 
 - Extended the WIM writer from ordinary data to Windows stream semantics.
@@ -21326,3 +21326,20 @@ reuse, so production keeps the simpler independently owned plans.
   black-box images are independently verified by wimlib; it reports the exact
   descriptors and two-link group, then restores both aliases to the same Unix
   inode (`writer_inode=2`, `writer_inode_wimlib=2`).
+
+- Added deterministic one-shot multi-image WIM writing. Borrowed
+  `WimEncodeImage` records carry independent names, trees, root ACL/timestamps
+  and XML timestamps; common options select stored/XPRESS, integrity, GUID and
+  a validated boot index. Data blobs deduplicate globally with cross-image
+  reference counts, while one metadata resource and lookup entry remains in
+  exact image-index order even for byte-identical metadata hashes. XML emits
+  consecutive image indexes and independent statistics, and the boot header
+  copies the selected metadata descriptor. Alloc/append/into surfaces remain
+  transactional and have deterministic, invalid-option, caller-buffer and OOM
+  tests. The XML builder moved to a cohesive module rather than growing the
+  container writer. Four-image stored and XPRESS probes cover a shared blob,
+  distinct trees, duplicate empty metadata and boot image 2; wimlib verifies
+  both archives and extracts the first two trees byte-exactly
+  (`writer_multi=2`, `writer_multi_wimlib=2`). Focused WIM/LZX coverage is now
+  100 tests. In-place append/update, split/pipable output and additional WIM
+  codecs remain follow-ups.
