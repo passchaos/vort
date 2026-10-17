@@ -8,6 +8,7 @@ pub const Error = core.Error || error{
     Invalid7zPassword,
     PasswordRequired,
 };
+pub const IncrementalError = Error || std.mem.Allocator.Error;
 
 pub const max_salt_len = crypto.max_salt_len;
 pub const block_len = crypto.block_len;
@@ -140,6 +141,116 @@ pub fn encryptAppend(
         std.crypto.secureZero(u8, &plain);
     }
     return padded_len;
+}
+
+/// Bounded 7z AES-CBC stream adapter. Vail owns key derivation and AES-CBC;
+/// this archive-layer wrapper only retains a partial block and applies 7z's
+/// zero padding at the terminal boundary.
+pub const IncrementalEncryptor = struct {
+    context: crypto.Encryptor,
+    plain: [block_len]u8 = @splat(0),
+    plain_len: usize = 0,
+    encrypted: [block_len]u8 = undefined,
+    encrypted_offset: usize = 0,
+    encrypted_len: usize = 0,
+    finishing: bool = false,
+    done: bool = false,
+
+    pub fn init(
+        allocator: std.mem.Allocator,
+        options: Options,
+        stream_index: u64,
+    ) IncrementalError!IncrementalEncryptor {
+        const properties = try propertiesForStream(options, stream_index);
+        var key = try deriveKey(allocator, options.password, properties, max_cycles_power);
+        defer std.crypto.secureZero(u8, &key);
+        return .{ .context = crypto.Encryptor.init(key, properties.iv) };
+    }
+
+    pub fn deinit(self: *IncrementalEncryptor) void {
+        self.context.deinit();
+        std.crypto.secureZero(u8, &self.plain);
+        std.crypto.secureZero(u8, &self.encrypted);
+        self.* = undefined;
+    }
+
+    pub fn finish(self: *IncrementalEncryptor) void {
+        if (!self.done) self.finishing = true;
+    }
+
+    pub fn step(
+        self: *IncrementalEncryptor,
+        input: []const u8,
+        output: []u8,
+    ) Error!core.StepResult {
+        if (self.done) {
+            if (input.len != 0) return error.TrailingData;
+            return .{ .status = .done };
+        }
+        if (self.finishing and input.len != 0) return error.TrailingData;
+
+        var input_read: usize = 0;
+        var output_written: usize = 0;
+        while (true) {
+            if (self.encrypted_offset != self.encrypted_len) {
+                const remaining = self.encrypted[self.encrypted_offset..self.encrypted_len];
+                const take = @min(remaining.len, output.len - output_written);
+                @memcpy(output[output_written..][0..take], remaining[0..take]);
+                self.encrypted_offset += take;
+                output_written += take;
+                if (self.encrypted_offset != self.encrypted_len)
+                    return aesStepResult(input_read, output_written, .need_output);
+                self.encrypted_offset = 0;
+                self.encrypted_len = 0;
+                if (output_written == output.len and output.len != 0)
+                    return aesStepResult(input_read, output_written, .need_output);
+            }
+
+            if (input_read < input.len) {
+                const take = @min(block_len - self.plain_len, input.len - input_read);
+                @memcpy(self.plain[self.plain_len..][0..take], input[input_read..][0..take]);
+                self.plain_len += take;
+                input_read += take;
+                if (self.plain_len == block_len) {
+                    self.encryptPlainBlock() catch return error.Invalid7zEncryptionOptions;
+                    continue;
+                }
+                continue;
+            }
+
+            if (self.finishing) {
+                if (self.plain_len != 0) {
+                    @memset(self.plain[self.plain_len..], 0);
+                    self.plain_len = block_len;
+                    self.encryptPlainBlock() catch return error.Invalid7zEncryptionOptions;
+                    continue;
+                }
+                self.done = true;
+                return aesStepResult(input_read, output_written, .done);
+            }
+            return aesStepResult(input_read, output_written, .need_input);
+        }
+    }
+
+    fn encryptPlainBlock(self: *IncrementalEncryptor) crypto.Error!void {
+        std.debug.assert(self.plain_len == block_len);
+        try self.context.encryptBlocks(&self.plain, &self.encrypted);
+        std.crypto.secureZero(u8, &self.plain);
+        self.plain_len = 0;
+        self.encrypted_offset = 0;
+        self.encrypted_len = block_len;
+    }
+};
+
+fn aesStepResult(
+    input_read: usize,
+    output_written: usize,
+    status: core.StepResult.Status,
+) core.StepResult {
+    return .{
+        .progress = .{ .input_read = input_read, .output_written = output_written },
+        .status = status,
+    };
 }
 
 pub fn decryptAlloc(

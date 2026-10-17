@@ -6,6 +6,7 @@ const source_archive = @import("seven_zip/source_archive.zig");
 const source_entry_decoder = @import("seven_zip/source_entry_decoder.zig");
 const split_source = @import("seven_zip/split_source.zig");
 const writer = @import("seven_zip/writer.zig");
+const incremental_writer = @import("seven_zip/incremental_writer.zig");
 
 pub const Error = archive.Error || source_archive.Error || writer.Error;
 pub const Kind = @import("seven_zip/types.zig").Kind;
@@ -25,6 +26,12 @@ pub const Compression = writer.Compression;
 pub const Filter = writer.Filter;
 pub const EncryptionOptions = writer.EncryptionOptions;
 pub const EncodeOptions = writer.EncodeOptions;
+pub const IncrementalWriter = incremental_writer.Writer;
+pub const IncrementalWriterOptions = incremental_writer.Options;
+pub const IncrementalEntryOptions = incremental_writer.EntryOptions;
+pub const IncrementalWriterPhase = incremental_writer.Phase;
+pub const IncrementalWriterSnapshot = incremental_writer.Snapshot;
+pub const IncrementalWriterError = incremental_writer.Error;
 pub const parseAlloc = archive.parseAlloc;
 pub const parseAllocWithOptions = archive.parseAllocWithOptions;
 pub const parseSourceAlloc = source_archive.parseAlloc;
@@ -62,6 +69,7 @@ test {
     _ = source_entry_decoder;
     _ = split_source;
     _ = writer;
+    _ = incremental_writer;
 }
 
 test "7z stored writer round trips files directories and UTF-8 names" {

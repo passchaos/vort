@@ -14,6 +14,7 @@ pub const Properties = struct {
 };
 
 pub const IncrementalDecoder = decoder.IncrementalDecoder;
+pub const IncrementalEncoder = encoder.IncrementalEncoder;
 
 pub fn validateProperties(properties: Properties) Error!void {
     if (properties.order < model.min_order or properties.order > model.max_order or

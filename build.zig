@@ -150,6 +150,26 @@ pub fn build(b: *std.Build) void {
         "Run focused compressed TAR incremental writer tests",
     );
     tar_incremental_writer_test_step.dependOn(&run_tar_incremental_writer_tests.step);
+    const seven_zip_incremental_writer_tests = b.addTest(.{
+        .name = "vort-seven-zip-incremental-writer-tests",
+        .root_module = tests_mod,
+        .filters = &.{
+            "7z incremental writer",
+            "raw LZMA2 incremental encoder",
+            "PPMd7 incremental encoder",
+            "incremental XZ forward filters",
+        },
+    });
+    const run_seven_zip_incremental_writer_tests = b.addRunArtifact(
+        seven_zip_incremental_writer_tests,
+    );
+    const seven_zip_incremental_writer_test_step = b.step(
+        "test-seven-zip-incremental-writer",
+        "Run focused 7z incremental writer tests",
+    );
+    seven_zip_incremental_writer_test_step.dependOn(
+        &run_seven_zip_incremental_writer_tests.step,
+    );
     const rar_tests = b.addTest(.{
         .name = "vort-rar-tests",
         .root_module = tests_mod,
@@ -1917,10 +1937,21 @@ pub fn build(b: *std.Build) void {
             .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
         }),
     });
+    const seven_zip_incremental_writer_probe_exe = b.addExecutable(.{
+        .name = "vort-seven-zip-incremental-writer-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/seven_zip/incremental_writer_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
     const seven_zip_diff = b.addSystemCommand(&.{ "python3", "tools/seven_zip/diff.py", "--cli" });
     seven_zip_diff.addArtifactArg(cli_exe);
     seven_zip_diff.addArg("--writer");
     seven_zip_diff.addArtifactArg(seven_zip_writer_probe_exe);
+    seven_zip_diff.addArg("--incremental-writer");
+    seven_zip_diff.addArtifactArg(seven_zip_incremental_writer_probe_exe);
     if (b.args) |args| seven_zip_diff.addArgs(args);
     const seven_zip_diff_step = b.step("run-seven-zip-diff", "Validate common 7z codecs and linear filters against 7-Zip");
     seven_zip_diff_step.dependOn(&seven_zip_diff.step);

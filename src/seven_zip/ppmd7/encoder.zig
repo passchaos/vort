@@ -1,4 +1,5 @@
 const std = @import("std");
+const core = @import("../../core.zig");
 const model_mod = @import("model.zig");
 
 pub const Error = model_mod.Error;
@@ -96,6 +97,175 @@ pub fn encodeAlloc(
     errdefer output.deinit(allocator);
     _ = try encodeAppend(allocator, &output, input, order, memory_size);
     return output.toOwnedSlice(allocator);
+}
+
+/// Symbol-progressive PPMd7 encoder. The model is retained for the whole
+/// stream while arithmetic-coder bytes are drained through a bounded pending
+/// buffer, so caller input/output fragmentation does not affect the wire.
+pub const IncrementalEncoder = struct {
+    allocator: std.mem.Allocator,
+    options: Options,
+    model: model_mod.Model,
+    pending: std.ArrayList(u8) = .empty,
+    pending_offset: usize = 0,
+    range: u32 = std.math.maxInt(u32),
+    low: u64 = 0,
+    cache: u8 = 0,
+    cache_size: u64 = 1,
+    expected_input_len: ?usize = null,
+    total_input: usize = 0,
+    total_output: usize = 0,
+    finishing: bool = false,
+    range_finished: bool = false,
+    done: bool = false,
+
+    pub const IncrementalError = Error || core.Error;
+
+    pub const Options = struct {
+        order: u8 = 6,
+        memory_size: u32 = 16 * 1024 * 1024,
+        max_input_len: usize = std.math.maxInt(usize),
+        max_pending_output_len: usize = 64 * 1024,
+    };
+
+    pub fn init(
+        allocator: std.mem.Allocator,
+        options: Options,
+    ) IncrementalError!IncrementalEncoder {
+        try validateIncrementalOptions(options);
+        return .{
+            .allocator = allocator,
+            .options = options,
+            .model = try model_mod.Model.init(allocator, options.order, options.memory_size),
+        };
+    }
+
+    pub fn initExactSize(
+        allocator: std.mem.Allocator,
+        options: Options,
+        expected_input_len: usize,
+    ) IncrementalError!IncrementalEncoder {
+        if (expected_input_len > options.max_input_len) return error.OutputLimitExceeded;
+        var result = try init(allocator, options);
+        result.expected_input_len = expected_input_len;
+        return result;
+    }
+
+    pub fn deinit(self: *IncrementalEncoder) void {
+        self.model.deinit();
+        self.pending.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn finish(self: *IncrementalEncoder) void {
+        if (!self.done) self.finishing = true;
+    }
+
+    pub fn step(
+        self: *IncrementalEncoder,
+        input: []const u8,
+        output: []u8,
+    ) IncrementalError!core.StepResult {
+        if (self.done) {
+            if (input.len != 0) return error.TrailingData;
+            return .{ .status = .done };
+        }
+        if (self.finishing and input.len != 0) return error.TrailingData;
+
+        var input_read: usize = 0;
+        var output_written: usize = 0;
+        while (true) {
+            if (self.pending_offset != self.pending.items.len) {
+                const remaining = self.pending.items[self.pending_offset..];
+                const take = @min(remaining.len, output.len - output_written);
+                @memcpy(output[output_written..][0..take], remaining[0..take]);
+                self.pending_offset += take;
+                output_written += take;
+                self.total_output = std.math.add(usize, self.total_output, take) catch
+                    return error.IntegerOverflow;
+                if (self.pending_offset != self.pending.items.len)
+                    return incrementalResult(input_read, output_written, .need_output);
+                self.pending.clearRetainingCapacity();
+                self.pending_offset = 0;
+                if (output_written == output.len and output.len != 0)
+                    return incrementalResult(input_read, output_written, .need_output);
+            }
+
+            if (input_read < input.len) {
+                const next_total = std.math.add(usize, self.total_input, 1) catch
+                    return error.IntegerOverflow;
+                if (next_total > self.options.max_input_len) return error.OutputLimitExceeded;
+                if (self.expected_input_len) |expected|
+                    if (next_total > expected) return error.SizeMismatch;
+                var range_encoder = self.rangeEncoder();
+                try encodeSymbol(&self.model, &range_encoder, input[input_read]);
+                self.saveRange(range_encoder);
+                input_read += 1;
+                self.total_input = next_total;
+                try self.checkPendingLimit();
+                continue;
+            }
+
+            if (self.finishing) {
+                if (self.expected_input_len) |expected|
+                    if (self.total_input != expected) return error.SizeMismatch;
+                if (!self.range_finished) {
+                    var range_encoder = self.rangeEncoder();
+                    try range_encoder.finish();
+                    self.saveRange(range_encoder);
+                    try self.checkPendingLimit();
+                    self.range_finished = true;
+                    continue;
+                }
+                self.done = true;
+                return incrementalResult(input_read, output_written, .done);
+            }
+            return incrementalResult(input_read, output_written, .need_input);
+        }
+    }
+
+    fn rangeEncoder(self: *IncrementalEncoder) RangeEncoder {
+        return .{
+            .allocator = self.allocator,
+            .output = &self.pending,
+            .range = self.range,
+            .low = self.low,
+            .cache = self.cache,
+            .cache_size = self.cache_size,
+        };
+    }
+
+    fn saveRange(self: *IncrementalEncoder, range_encoder: RangeEncoder) void {
+        self.range = range_encoder.range;
+        self.low = range_encoder.low;
+        self.cache = range_encoder.cache;
+        self.cache_size = range_encoder.cache_size;
+    }
+
+    fn checkPendingLimit(self: *const IncrementalEncoder) IncrementalError!void {
+        if (self.pending.items.len - self.pending_offset > self.options.max_pending_output_len)
+            return error.OutputLimitExceeded;
+    }
+};
+
+fn validateIncrementalOptions(options: IncrementalEncoder.Options) IncrementalEncoder.IncrementalError!void {
+    if (options.max_pending_output_len < 8) return error.InvalidBlockPlan;
+    if (options.order < model_mod.min_order or options.order > model_mod.max_order)
+        return error.InvalidPpmdOrder;
+    if (options.memory_size < model_mod.min_memory_size or
+        options.memory_size > model_mod.max_memory_size)
+        return error.InvalidPpmdMemorySize;
+}
+
+fn incrementalResult(
+    input_read: usize,
+    output_written: usize,
+    status: core.StepResult.Status,
+) core.StepResult {
+    return .{
+        .progress = .{ .input_read = input_read, .output_written = output_written },
+        .status = status,
+    };
 }
 
 fn encodeSymbol(
@@ -240,5 +410,42 @@ test "PPMd7 encoder round trips empty tiny and allocator-pressure payloads" {
         defer std.testing.allocator.free(output);
         try decoder.decodeInto(std.testing.allocator, encoded, output, 16, 64 * 1024);
         try std.testing.expectEqualSlices(u8, input, output);
+    }
+}
+
+test "PPMd7 incremental encoder matches one-shot across tiny schedules" {
+    const decoder = @import("decoder.zig");
+    const input = "symbol-progressive PPMd7 encoder payload\n" ** 257;
+    const expected = try encodeAlloc(std.testing.allocator, input, 6, 64 * 1024);
+    defer std.testing.allocator.free(expected);
+    for ([_]usize{ 1, 3, 17, 511 }) |input_chunk| {
+        var encoder = try IncrementalEncoder.initExactSize(
+            std.testing.allocator,
+            .{ .order = 6, .memory_size = 64 * 1024 },
+            input.len,
+        );
+        defer encoder.deinit();
+        var encoded: std.ArrayList(u8) = .empty;
+        defer encoded.deinit(std.testing.allocator);
+        var offset: usize = 0;
+        while (offset < input.len) {
+            const end = @min(input.len, offset + input_chunk);
+            var output: [5]u8 = undefined;
+            const stepped = try encoder.step(input[offset..end], &output);
+            offset += stepped.progress.input_read;
+            try encoded.appendSlice(std.testing.allocator, output[0..stepped.progress.output_written]);
+        }
+        encoder.finish();
+        while (true) {
+            var output: [5]u8 = undefined;
+            const stepped = try encoder.step(&.{}, &output);
+            try encoded.appendSlice(std.testing.allocator, output[0..stepped.progress.output_written]);
+            if (stepped.status == .done) break;
+        }
+        try std.testing.expectEqualSlices(u8, expected, encoded.items);
+        const decoded = try std.testing.allocator.alloc(u8, input.len);
+        defer std.testing.allocator.free(decoded);
+        try decoder.decodeInto(std.testing.allocator, encoded.items, decoded, 6, 64 * 1024);
+        try std.testing.expectEqualSlices(u8, input, decoded);
     }
 }

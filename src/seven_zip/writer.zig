@@ -7,6 +7,7 @@ const bcj2 = @import("bcj2.zig");
 const file_properties = @import("file_properties.zig");
 const number = @import("number.zig");
 const types = @import("types.zig");
+const wire = @import("writer_wire.zig");
 
 pub const Error = core.Error || number.Error || coders.Error || error{
     Invalid7zEntry,
@@ -18,54 +19,10 @@ pub const Filter = coders.Filter;
 pub const EncryptionOptions = coders.EncryptionOptions;
 pub const EncodeOptions = coders.Options;
 
-const signature = [_]u8{ '7', 'z', 0xbc, 0xaf, 0x27, 0x1c };
-
-const Nid = struct {
-    const end: u8 = 0x00;
-    const header: u8 = 0x01;
-    const additional_streams: u8 = 0x03;
-    const main_streams: u8 = 0x04;
-    const files: u8 = 0x05;
-    const pack_info: u8 = 0x06;
-    const unpack_info: u8 = 0x07;
-    const substreams_info: u8 = 0x08;
-    const size: u8 = 0x09;
-    const crc: u8 = 0x0a;
-    const folder: u8 = 0x0b;
-    const coders_unpack_size: u8 = 0x0c;
-    const num_unpack_stream: u8 = 0x0d;
-    const empty_stream: u8 = 0x0e;
-    const empty_file: u8 = 0x0f;
-    const name: u8 = 0x11;
-    const encoded_header: u8 = 0x17;
-};
-
-const EncodedFolder = struct {
-    packed_sizes: [4]u64 = @splat(0),
-    pack_stream_count: u3 = 1,
-    unpacked_size: u64,
-    aes_unpack_sizes: [4]?u64 = @splat(null),
-    crc32: u32,
-    first_substream: usize,
-    substream_count: usize,
-};
-
-const EncodedSubstream = struct {
-    unpacked_size: u64,
-    crc32: u32,
-};
-
-const max_external_streams: usize = 1 + file_properties.kind_count;
-
-const EncodedExternalStreams = struct {
-    pack_position: usize = 0,
-    folders: [max_external_streams]EncodedFolder = undefined,
-    substreams: [max_external_streams]EncodedSubstream = undefined,
-    options: [max_external_streams]EncodeOptions = undefined,
-    count: usize = 0,
-    name_index: ?usize = null,
-    metadata_indices: file_properties.Indices = @splat(null),
-};
+const EncodedFolder = wire.EncodedFolder;
+const EncodedSubstream = wire.EncodedSubstream;
+const EncodedExternalStreams = wire.EncodedExternalStreams;
+const max_external_streams = wire.max_external_streams;
 
 pub fn encodeAlloc(
     allocator: std.mem.Allocator,
@@ -102,10 +59,10 @@ pub fn encodeAppend(
     defer packed_data.deinit(allocator);
     var header: std.ArrayList(u8) = .empty;
     defer header.deinit(allocator);
-    try validateEntries(entries);
+    try wire.validateEntries(entries);
 
     var stream_count: usize = 0;
-    for (entries) |entry| stream_count += @intFromBool(hasStream(entry));
+    for (entries) |entry| stream_count += @intFromBool(wire.hasStream(entry));
     const folder_count = if (options.solid and stream_count != 0) 1 else stream_count;
     const folders = try allocator.alloc(EncodedFolder, folder_count);
     defer allocator.free(folders);
@@ -119,7 +76,7 @@ pub fn encodeAppend(
         defer solid_data.deinit(allocator);
         var stream_index: usize = 0;
         for (entries) |entry| {
-            if (!hasStream(entry)) continue;
+            if (!wire.hasStream(entry)) continue;
             try solid_data.appendSlice(allocator, entry.data);
             substreams[stream_index] = .{
                 .unpacked_size = std.math.cast(u64, entry.data.len) orelse
@@ -143,7 +100,7 @@ pub fn encodeAppend(
     } else {
         var stream_index: usize = 0;
         for (entries) |entry| {
-            if (!hasStream(entry)) continue;
+            if (!wire.hasStream(entry)) continue;
             const unpacked_size = std.math.cast(u64, entry.data.len) orelse
                 return error.IntegerOverflow;
             const crc32 = checksum.crc32Best(entry.data);
@@ -168,7 +125,7 @@ pub fn encodeAppend(
     }
     var names: std.ArrayList(u8) = .empty;
     defer names.deinit(allocator);
-    try appendNames(allocator, &names, entries);
+    try wire.appendNames(allocator, &names, entries);
     var external_streams = EncodedExternalStreams{};
     if (options.external_names) |compression| {
         external_streams.name_index = try appendExternalPayload(
@@ -200,7 +157,7 @@ pub fn encodeAppend(
                 );
         }
     }
-    try writeNextHeader(
+    try wire.writeNextHeader(
         allocator,
         &header,
         entries,
@@ -263,8 +220,8 @@ pub fn encodeAppend(
             .unpacked_size = header_folders[0].unpacked_size,
             .crc32 = header_folders[0].crc32,
         }};
-        try next_header.append(allocator, Nid.encoded_header);
-        try writeStreamsBody(
+        try next_header.append(allocator, wire.Nid.encoded_header);
+        try wire.writeStreamsBody(
             allocator,
             &next_header,
             &header_folders,
@@ -278,13 +235,11 @@ pub fn encodeAppend(
 
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(allocator);
-    try encoded.appendSlice(allocator, &signature);
-    try encoded.appendSlice(allocator, &.{ 0, 4 });
-    var start_header: [20]u8 = undefined;
-    std.mem.writeInt(u64, start_header[0..8], packed_data.items.len, .little);
-    std.mem.writeInt(u64, start_header[8..16], next_header.items.len, .little);
-    std.mem.writeInt(u32, start_header[16..20], checksum.crc32Best(next_header.items), .little);
-    try appendU32(allocator, &encoded, checksum.crc32Best(&start_header));
+    const start_header = wire.makeStartHeaderPatch(
+        std.math.cast(u64, packed_data.items.len) orelse return error.IntegerOverflow,
+        std.math.cast(u64, next_header.items.len) orelse return error.IntegerOverflow,
+        checksum.crc32Best(next_header.items),
+    );
     try encoded.appendSlice(allocator, &start_header);
     try encoded.appendSlice(allocator, packed_data.items);
     try encoded.appendSlice(allocator, next_header.items);
@@ -326,19 +281,6 @@ pub fn encodeStoredAppend(
 fn validateStoredOptions(options: EncodeOptions) Error!void {
     if (options.compression != .copy or options.filters.len != 0)
         return error.Invalid7zOptions;
-}
-
-fn validateEntries(entries: []const EncodeEntry) Error!void {
-    for (entries) |entry| {
-        if (entry.name.len == 0 or std.mem.indexOfScalar(u8, entry.name, 0) != null)
-            return error.Invalid7zEntry;
-        if (!std.unicode.utf8ValidateSlice(entry.name)) return error.Invalid7zEntry;
-        if (entry.kind == .directory and entry.data.len != 0) return error.Invalid7zEntry;
-    }
-}
-
-fn hasStream(entry: EncodeEntry) bool {
-    return entry.kind == .file and entry.data.len != 0;
 }
 
 fn optionsForNextEncryptedStream(
@@ -480,270 +422,6 @@ fn appendExternalPayload(
     return index;
 }
 
-fn writeNextHeader(
-    allocator: std.mem.Allocator,
-    output: *std.ArrayList(u8),
-    entries: []const EncodeEntry,
-    folders: []const EncodedFolder,
-    folder_options: []const EncodeOptions,
-    substreams: []const EncodedSubstream,
-    options: EncodeOptions,
-    names: []const u8,
-    external_streams: *const EncodedExternalStreams,
-) !void {
-    try output.append(allocator, Nid.header);
-    if (external_streams.count != 0) {
-        try output.append(allocator, Nid.additional_streams);
-        try writeStreamsBodyConfigured(
-            allocator,
-            output,
-            external_streams.folders[0..external_streams.count],
-            external_streams.substreams[0..external_streams.count],
-            external_streams.options[0],
-            external_streams.options[0..external_streams.count],
-            external_streams.pack_position,
-        );
-    }
-    if (folders.len != 0)
-        try writeStreamsInfo(allocator, output, folders, folder_options, substreams, options);
-    try writeFilesInfo(allocator, output, entries, names, external_streams);
-    try output.append(allocator, Nid.end);
-}
-
-fn writeStreamsInfo(
-    allocator: std.mem.Allocator,
-    output: *std.ArrayList(u8),
-    folders: []const EncodedFolder,
-    folder_options: []const EncodeOptions,
-    substreams: []const EncodedSubstream,
-    options: EncodeOptions,
-) !void {
-    try output.append(allocator, Nid.main_streams);
-    try writeStreamsBodyConfigured(
-        allocator,
-        output,
-        folders,
-        substreams,
-        options,
-        folder_options,
-        0,
-    );
-}
-
-fn writeStreamsBody(
-    allocator: std.mem.Allocator,
-    output: *std.ArrayList(u8),
-    folders: []const EncodedFolder,
-    substreams: []const EncodedSubstream,
-    options: EncodeOptions,
-    pack_position: usize,
-) !void {
-    return writeStreamsBodyConfigured(
-        allocator,
-        output,
-        folders,
-        substreams,
-        options,
-        null,
-        pack_position,
-    );
-}
-
-fn writeStreamsBodyConfigured(
-    allocator: std.mem.Allocator,
-    output: *std.ArrayList(u8),
-    folders: []const EncodedFolder,
-    substreams: []const EncodedSubstream,
-    default_options: EncodeOptions,
-    configured_options: ?[]const EncodeOptions,
-    pack_position: usize,
-) !void {
-    if (configured_options) |folder_options|
-        std.debug.assert(folder_options.len == folders.len);
-    try output.append(allocator, Nid.pack_info);
-    try number.append(allocator, output, pack_position);
-    var pack_stream_count: usize = 0;
-    for (folders) |folder|
-        pack_stream_count = std.math.add(usize, pack_stream_count, folder.pack_stream_count) catch
-            return error.IntegerOverflow;
-    try number.append(allocator, output, pack_stream_count);
-    try output.append(allocator, Nid.size);
-    for (folders) |folder|
-        for (folder.packed_sizes[0..folder.pack_stream_count]) |packed_size|
-            try number.append(allocator, output, packed_size);
-    try output.append(allocator, Nid.end);
-
-    try output.append(allocator, Nid.unpack_info);
-    try output.append(allocator, Nid.folder);
-    try number.append(allocator, output, folders.len);
-    try output.append(allocator, 0);
-    for (folders, 0..) |_, index| {
-        const options = if (configured_options) |folder_options|
-            folder_options[index]
-        else
-            default_options;
-        try coders.writeFolder(allocator, output, options);
-    }
-    try output.append(allocator, Nid.coders_unpack_size);
-    for (folders, 0..) |folder, index| {
-        const options = if (configured_options) |folder_options|
-            folder_options[index]
-        else
-            default_options;
-        for (0..coders.coderCount(options)) |coder_index| {
-            const unpack_size = if (options.bcj2 and options.encryption != null and
-                coder_index < 4)
-                folder.aes_unpack_sizes[3 - coder_index] orelse
-                    return error.Invalid7zOptions
-            else if (!options.bcj2 and coder_index == 0 and options.encryption != null)
-                folder.aes_unpack_sizes[0] orelse return error.Invalid7zOptions
-            else
-                folder.unpacked_size;
-            try number.append(allocator, output, unpack_size);
-        }
-    }
-    try output.append(allocator, Nid.crc);
-    try output.append(allocator, 1);
-    for (folders) |folder| try appendU32(allocator, output, folder.crc32);
-    try output.append(allocator, Nid.end);
-
-    try output.append(allocator, Nid.substreams_info);
-    var has_multiple = false;
-    for (folders) |folder| has_multiple = has_multiple or folder.substream_count != 1;
-    if (has_multiple) {
-        try output.append(allocator, Nid.num_unpack_stream);
-        for (folders) |folder| try number.append(allocator, output, folder.substream_count);
-        try output.append(allocator, Nid.size);
-        for (folders) |folder| {
-            const folder_substreams = substreams[folder.first_substream..][0..folder.substream_count];
-            for (folder_substreams[0 .. folder_substreams.len - 1]) |substream|
-                try number.append(allocator, output, substream.unpacked_size);
-        }
-        try output.append(allocator, Nid.crc);
-        try output.append(allocator, 1);
-        for (folders) |folder| {
-            const folder_substreams = substreams[folder.first_substream..][0..folder.substream_count];
-            for (folder_substreams) |substream|
-                try appendU32(allocator, output, substream.crc32);
-        }
-    }
-    try output.append(allocator, Nid.end);
-    try output.append(allocator, Nid.end);
-}
-
-fn writeFilesInfo(
-    allocator: std.mem.Allocator,
-    output: *std.ArrayList(u8),
-    entries: []const EncodeEntry,
-    names: []const u8,
-    external_streams: *const EncodedExternalStreams,
-) !void {
-    try output.append(allocator, Nid.files);
-    try number.append(allocator, output, entries.len);
-
-    var empty_count: usize = 0;
-    for (entries) |entry| empty_count += @intFromBool(!hasStream(entry));
-    if (empty_count != 0) {
-        try output.append(allocator, Nid.empty_stream);
-        try number.append(allocator, output, (entries.len + 7) / 8);
-        try appendBitVector(allocator, output, entries.len, entries, struct {
-            fn get(entry: EncodeEntry) bool {
-                return !hasStream(entry);
-            }
-        }.get);
-
-        try output.append(allocator, Nid.empty_file);
-        try number.append(allocator, output, (empty_count + 7) / 8);
-        var bits: std.ArrayList(bool) = .empty;
-        defer bits.deinit(allocator);
-        try bits.ensureTotalCapacity(allocator, empty_count);
-        for (entries) |entry| if (!hasStream(entry))
-            bits.appendAssumeCapacity(entry.kind == .file);
-        try appendBools(allocator, output, bits.items);
-    }
-
-    try output.append(allocator, Nid.name);
-    if (external_streams.name_index) |index| {
-        var property: std.ArrayList(u8) = .empty;
-        defer property.deinit(allocator);
-        try property.append(allocator, 1);
-        try number.append(allocator, &property, index);
-        try number.append(allocator, output, property.items.len);
-        try output.appendSlice(allocator, property.items);
-    } else {
-        const property_size = std.math.add(usize, names.len, 1) catch
-            return error.IntegerOverflow;
-        try number.append(allocator, output, property_size);
-        try output.append(allocator, 0);
-        try output.appendSlice(allocator, names);
-    }
-    try file_properties.write(
-        allocator,
-        output,
-        entries,
-        external_streams.metadata_indices,
-    );
-    try output.append(allocator, Nid.end);
-}
-
-fn appendNames(
-    allocator: std.mem.Allocator,
-    output: *std.ArrayList(u8),
-    entries: []const EncodeEntry,
-) !void {
-    for (entries) |entry| {
-        const utf16 = std.unicode.utf8ToUtf16LeAlloc(allocator, entry.name) catch |err| switch (err) {
-            error.InvalidUtf8 => return error.Invalid7zEntry,
-            error.OutOfMemory => return error.OutOfMemory,
-        };
-        defer allocator.free(utf16);
-        for (utf16) |unit| try appendU16(allocator, output, unit);
-        try appendU16(allocator, output, 0);
-    }
-}
-
-fn appendBitVector(
-    allocator: std.mem.Allocator,
-    output: *std.ArrayList(u8),
-    count: usize,
-    entries: []const EncodeEntry,
-    comptime predicate: fn (EncodeEntry) bool,
-) !void {
-    var byte: u8 = 0;
-    for (0..count) |index| {
-        if (predicate(entries[index])) byte |= @as(u8, 0x80) >> @intCast(index & 7);
-        if (index & 7 == 7) {
-            try output.append(allocator, byte);
-            byte = 0;
-        }
-    }
-    if (count & 7 != 0) try output.append(allocator, byte);
-}
-
-fn appendBools(allocator: std.mem.Allocator, output: *std.ArrayList(u8), values: []const bool) !void {
-    var byte: u8 = 0;
-    for (values, 0..) |value, index| {
-        if (value) byte |= @as(u8, 0x80) >> @intCast(index & 7);
-        if (index & 7 == 7) {
-            try output.append(allocator, byte);
-            byte = 0;
-        }
-    }
-    if (values.len & 7 != 0) try output.append(allocator, byte);
-}
-
-fn appendU16(allocator: std.mem.Allocator, output: *std.ArrayList(u8), value: u16) !void {
-    var bytes: [2]u8 = undefined;
-    std.mem.writeInt(u16, &bytes, value, .little);
-    try output.appendSlice(allocator, &bytes);
-}
-
-fn appendU32(allocator: std.mem.Allocator, output: *std.ArrayList(u8), value: u32) !void {
-    var bytes: [4]u8 = undefined;
-    std.mem.writeInt(u32, &bytes, value, .little);
-    try output.appendSlice(allocator, &bytes);
-}
-
 test "7z stored writer emits deterministic signature and metadata" {
     const entries = [_]EncodeEntry{
         .{ .name = "hello.txt", .data = "hello seven zip\n" },
@@ -756,7 +434,7 @@ test "7z stored writer emits deterministic signature and metadata" {
     const second = try encodeStoredAlloc(std.testing.allocator, &entries, .{});
     defer std.testing.allocator.free(second);
     try std.testing.expectEqualSlices(u8, first, second);
-    try std.testing.expectEqualSlices(u8, &signature, first[0..signature.len]);
+    try std.testing.expectEqualSlices(u8, &wire.signature, first[0..wire.signature.len]);
 
     const out = try std.testing.allocator.alloc(u8, first.len);
     defer std.testing.allocator.free(out);

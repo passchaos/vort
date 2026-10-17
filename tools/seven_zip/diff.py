@@ -246,6 +246,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
     parser.add_argument("--writer", required=True, type=Path)
+    parser.add_argument("--incremental-writer", required=True, type=Path)
     parser.add_argument("--seven-zip", type=Path)
     parser.add_argument("--modern-seven-zip", type=Path)
     args = parser.parse_args()
@@ -269,6 +270,7 @@ def main() -> None:
         modern_branch_filters = "ARM64" in methods_output and "RISCV" in methods_output
     external_variants = 0
     vort_writer_variants = 1
+    incremental_writer_variants = 0
     source_variants = 1
     stream_variants = 1
     volume_variants = 1
@@ -331,6 +333,42 @@ def main() -> None:
                 run(args.writer, str(archive), compression)
                 verify_with_seven_zip(seven_zip_tool, archive, expected_vort)
             vort_writer_variants += 5
+
+            for compression in (
+                "copy",
+                "deflate",
+                "bzip2",
+                "lzma",
+                "lzma2",
+                "lzma2-stored",
+                "ppmd7",
+            ):
+                for mode, encryption_mode, password in (
+                    ("independent", "plain", None),
+                    ("solid", "encrypted", "vort-password-密码"),
+                ):
+                    archive = temp / (
+                        f"vort-incremental-{compression}-{mode}-{encryption_mode}.7z"
+                    )
+                    duplicate = temp / (
+                        f"vort-incremental-{compression}-{mode}-{encryption_mode}-repeat.7z"
+                    )
+                    writer_args = (compression, mode, encryption_mode)
+                    run(args.incremental_writer, str(archive), *writer_args)
+                    run(args.incremental_writer, str(duplicate), *writer_args)
+                    if archive.read_bytes() != duplicate.read_bytes():
+                        raise AssertionError(
+                            "Vort incremental 7z output is not deterministic: "
+                            f"{compression}/{mode}/{encryption_mode}"
+                        )
+                    verify_with_vort(args.cli, archive, expected_vort, password)
+                    verify_with_seven_zip(
+                        seven_zip_tool,
+                        archive,
+                        expected_vort,
+                        password,
+                    )
+                    incremental_writer_variants += 1
 
             for compression in ("copy", "deflate", "bzip2", "lzma", "lzma2", "ppmd7"):
                 archive = temp / f"vort-{compression}-solid.7z"
@@ -1185,6 +1223,7 @@ def main() -> None:
         f"seven_zip_diff=ok writer_entries={len(expected_vort) + 1} "
         f"external_variants={external_variants} "
         f"vort_writer_variants={vort_writer_variants} "
+        f"incremental_writer_variants={incremental_writer_variants} "
         f"source_variants={source_variants} "
         f"stream_variants={stream_variants} "
         f"volume_variants={volume_variants} "

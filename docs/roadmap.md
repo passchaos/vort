@@ -18062,6 +18062,20 @@ reuse, so production keeps the simpler independently owned plans.
   differentials cover tiny Vort splits, system `-v1k` Copy output, encrypted
   hidden headers, symbol-progressive extraction, and missing/reordered-volume
   rejection.
+  A seekable/backpatch incremental writer now emits a 32-byte placeholder,
+  streams packed folders under arbitrary caller backpressure, appends the Next
+  Header, and returns the exact CRC-protected start-header patch only after
+  completion. It supports Copy, Deflate, Bzip2, raw LZMA1, bounded raw LZMA2,
+  symbol-progressive PPMd7, Delta and every classic BCJ filter, independently
+  sequenced Vail-backed 7zAES, inline metadata, and both independent and solid
+  folders without retaining complete entry payloads. Tiny 1--5-byte output
+  schedules cover lifecycle and patching; allocation-failure and resource-limit
+  tests cover retained state. 7-Zip 21.07 and 26.04 validate fourteen incremental
+  output variants spanning all seven codecs in independent/plain and
+  solid/encrypted modes, in addition to Vort self-decoding and determinism.
+  Incremental encoded/external metadata remains terminal-metadata work, while
+  BCJ2 incremental output intentionally waits for an explicit branch spool or
+  replay contract rather than buffering a complete side stream invisibly.
   Deeper LZMA parsing, other branching or multi-packed-stream graphs,
   comments, and start-position properties remain follow-up work. See
   `docs/formats/7z.md`.
