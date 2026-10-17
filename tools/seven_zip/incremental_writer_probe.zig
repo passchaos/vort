@@ -131,7 +131,7 @@ pub fn main(init: std.process.Init) !void {
             .encryption = encryption,
             .encrypt_header = encrypted and terminal_compression != null,
             .bcj2 = bcj2,
-            .bcj2_start_ip = if (bcj2 and !encrypted) 0x1000 else 0,
+            .bcj2_start_ip = 0,
         },
         .bcj2_spool = if (bcj2) spool.descriptor() else null,
         .bcj2_spool_read_buffer_size = 3,

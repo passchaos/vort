@@ -32,6 +32,7 @@ pub const EncodedFolder = struct {
     packed_sizes: [4]u64 = @splat(0),
     pack_stream_count: u3 = 1,
     unpacked_size: u64,
+    bcj2_main_size: ?u64 = null,
     aes_unpack_sizes: [4]?u64 = @splat(null),
     crc32: u32,
     first_substream: usize,
@@ -217,6 +218,9 @@ fn writeStreamsBodyConfigured(
                     return error.Invalid7zOptions
             else if (!options.bcj2 and coder_index == 0 and options.encryption != null)
                 folder.aes_unpack_sizes[0] orelse return error.Invalid7zOptions
+            else if (options.bcj2 and
+                coder_index == if (options.encryption != null) @as(usize, 4) else 0)
+                folder.bcj2_main_size orelse folder.unpacked_size
             else
                 folder.unpacked_size;
             try number.append(allocator, output, unpack_size);

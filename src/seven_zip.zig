@@ -774,14 +774,14 @@ test "7z BCJ2 writer round trips every primary compression method" {
             .compression = compression,
             .solid = true,
             .bcj2 = true,
-            .bcj2_start_ip = 0x1000,
+            .bcj2_start_ip = 0,
         });
         defer std.testing.allocator.free(encoded);
         const repeated = try encodeAlloc(std.testing.allocator, &entries, .{
             .compression = compression,
             .solid = true,
             .bcj2 = true,
-            .bcj2_start_ip = 0x1000,
+            .bcj2_start_ip = 0,
         });
         defer std.testing.allocator.free(repeated);
         try std.testing.expectEqualSlices(u8, encoded, repeated);
@@ -791,6 +791,13 @@ test "7z BCJ2 writer round trips every primary compression method" {
         try std.testing.expectEqual(@as(usize, 1), parsed.streams.folders.len);
         try std.testing.expectEqual(@as(u4, 4), parsed.streams.folders[0].pack_stream_count);
         try std.testing.expect(parsed.streams.folders[0].bcj2_coder_index != null);
+        const folder = parsed.streams.folders[0];
+        try std.testing.expect(
+            parsed.streams.pack_sizes[folder.pack_index + folder.bcj2_branches[1].pack_stream_offset] != 0,
+        );
+        try std.testing.expect(
+            parsed.streams.pack_sizes[folder.pack_index + folder.bcj2_branches[2].pack_stream_offset] != 0,
+        );
         for (entries) |entry| {
             const decoded = try parsed.extractByNameAlloc(std.testing.allocator, entry.name);
             defer std.testing.allocator.free(decoded);

@@ -229,6 +229,7 @@ pub const Writer = struct {
         }
         current.finish_requested = true;
         if (current.codec) |*codec| {
+            if (current.encode_options.bcj2) return;
             codec.finish();
             return;
         }
@@ -239,7 +240,10 @@ pub const Writer = struct {
         if (self.phase == .poisoned) return error.SevenZipWriterPoisoned;
         if (self.phase != .ready or self.current != null) return error.Invalid7zWriterState;
         if (self.options.encode.solid and self.solid_codec != null) {
-            self.solid_codec.?.finish();
+            if (self.solid_options.bcj2)
+                try self.solid_bcj2.?.finishInput()
+            else
+                self.solid_codec.?.finish();
             self.phase = .solid_finish;
             return;
         }
@@ -426,7 +430,7 @@ pub const Writer = struct {
                         current.codec = try codecs.Encoder.init(
                             self.allocator,
                             primaryCodecOptions(current.encode_options),
-                            current.expected_size,
+                            if (current.encode_options.bcj2) null else current.expected_size,
                         );
                         if (current.encode_options.bcj2)
                             current.bcj2 = try self.initBcj2Stream(current.encode_options);
@@ -440,24 +444,24 @@ pub const Writer = struct {
                 if (output_written == output.len)
                     return result(input_read, output_written, .need_output);
 
-                const input_end = if (current.encode_options.bcj2)
-                    @min(input.len, input_read + 64 * 1024)
-                else
-                    input.len;
+                if (current.encode_options.bcj2) {
+                    if (try self.stepBcj2Entry(
+                        input,
+                        output,
+                        &input_read,
+                        &output_written,
+                    )) |stepped| return stepped;
+                    continue;
+                }
+
                 const encoded = if (solid)
-                    try self.solid_codec.?.step(input[input_read..input_end], output[output_written..])
+                    try self.solid_codec.?.step(input[input_read..], output[output_written..])
                 else
-                    try current.codec.?.step(input[input_read..input_end], output[output_written..]);
-                if (encoded.progress.input_read > input_end - input_read or
+                    try current.codec.?.step(input[input_read..], output[output_written..]);
+                if (encoded.progress.input_read > input.len - input_read or
                     encoded.progress.output_written > output.len - output_written)
                     return error.InvalidBlockPlan;
                 const consumed = input[input_read..][0..encoded.progress.input_read];
-                if (current.encode_options.bcj2) {
-                    if (solid)
-                        try self.solid_bcj2.?.accept(consumed)
-                    else
-                        try current.bcj2.?.accept(consumed);
-                }
                 current.crc.update(consumed);
                 if (solid) self.solid_crc.update(consumed);
                 current.uncompressed_size = std.math.add(
@@ -496,13 +500,6 @@ pub const Writer = struct {
                 if (encoded.status == .done) {
                     if (solid) return error.InvalidBlockPlan;
                     if (!current.finish_requested) return error.InvalidBlockPlan;
-                    if (current.encode_options.bcj2) {
-                        try current.bcj2.?.finishInput();
-                        self.phase = .bcj2_replay;
-                        if (output_written == output.len)
-                            return result(input_read, output_written, .need_output);
-                        continue;
-                    }
                     try self.finalizeCurrent(true);
                     if (output_written == output.len)
                         return result(input_read, output_written, .need_output);
@@ -518,6 +515,14 @@ pub const Writer = struct {
             },
             .solid_finish => {
                 if (input_read != input.len) return error.TrailingData;
+                if (self.solid_options.bcj2) {
+                    if (try self.stepSolidBcj2Finish(
+                        output,
+                        input_read,
+                        &output_written,
+                    )) |stepped| return stepped;
+                    continue;
+                }
                 const encoded = try self.solid_codec.?.step(&.{}, output[output_written..]);
                 if (encoded.progress.input_read != 0 or
                     encoded.progress.output_written > output.len - output_written)
@@ -615,6 +620,177 @@ pub const Writer = struct {
         };
     }
 
+    fn stepBcj2Entry(
+        self: *Self,
+        input: []const u8,
+        output: []u8,
+        input_read: *usize,
+        output_written: *usize,
+    ) Error!?core.StepResult {
+        while (true) {
+            var current = &self.current.?;
+            const solid = self.options.encode.solid;
+            var state = if (solid) &self.solid_bcj2.? else &current.bcj2.?;
+            var codec = if (solid) &self.solid_codec.? else &current.codec.?;
+
+            if (state.hasMain()) {
+                const main = state.mainBytes();
+                const encoded = try codec.step(main, output[output_written.*..]);
+                if (encoded.progress.input_read > main.len or
+                    encoded.progress.output_written > output.len - output_written.*)
+                    return error.InvalidBlockPlan;
+                try state.consumeMain(encoded.progress.input_read);
+                current.compressed_size = std.math.add(
+                    u64,
+                    current.compressed_size,
+                    @intCast(encoded.progress.output_written),
+                ) catch return error.IntegerOverflow;
+                if (solid)
+                    self.solid_packed_size = std.math.add(
+                        u64,
+                        self.solid_packed_size,
+                        @intCast(encoded.progress.output_written),
+                    ) catch return error.IntegerOverflow;
+                self.packed_output = std.math.add(
+                    u64,
+                    self.packed_output,
+                    @intCast(encoded.progress.output_written),
+                ) catch return error.IntegerOverflow;
+                try self.addArchiveOutput(encoded.progress.output_written);
+                output_written.* += encoded.progress.output_written;
+                if (encoded.status == .done) return error.InvalidBlockPlan;
+                if (state.hasMain()) {
+                    if (encoded.status != .need_output) return error.InvalidBlockPlan;
+                    return result(input_read.*, output_written.*, .need_output);
+                }
+                if (output_written.* == output.len)
+                    return result(input_read.*, output_written.*, .need_output);
+                continue;
+            }
+
+            if (current.finish_requested) {
+                if (!state.inputFinished()) {
+                    try state.finishInput();
+                    continue;
+                }
+                if (!state.mainFinishSent()) {
+                    codec.finish();
+                    state.markMainFinishSent();
+                }
+                const encoded = try codec.step(&.{}, output[output_written.*..]);
+                if (encoded.progress.input_read != 0 or
+                    encoded.progress.output_written > output.len - output_written.*)
+                    return error.InvalidBlockPlan;
+                current.compressed_size = std.math.add(
+                    u64,
+                    current.compressed_size,
+                    @intCast(encoded.progress.output_written),
+                ) catch return error.IntegerOverflow;
+                self.packed_output = std.math.add(
+                    u64,
+                    self.packed_output,
+                    @intCast(encoded.progress.output_written),
+                ) catch return error.IntegerOverflow;
+                try self.addArchiveOutput(encoded.progress.output_written);
+                output_written.* += encoded.progress.output_written;
+                if (encoded.status == .done) {
+                    self.phase = .bcj2_replay;
+                    return null;
+                }
+                if (encoded.status != .need_output) return error.InvalidBlockPlan;
+                return result(input_read.*, output_written.*, .need_output);
+            }
+
+            if (input_read.* == input.len)
+                return result(input_read.*, output_written.*, .need_input);
+            const input_end = @min(input.len, input_read.* + 64 * 1024);
+            const consumed = input[input_read.*..input_end];
+            try state.accept(consumed);
+            current.crc.update(consumed);
+            if (solid) self.solid_crc.update(consumed);
+            current.uncompressed_size = std.math.add(
+                u64,
+                current.uncompressed_size,
+                @intCast(consumed.len),
+            ) catch return error.IntegerOverflow;
+            if (solid)
+                self.solid_uncompressed_size = std.math.add(
+                    u64,
+                    self.solid_uncompressed_size,
+                    @intCast(consumed.len),
+                ) catch return error.IntegerOverflow;
+            self.total_input = std.math.add(u64, self.total_input, @intCast(consumed.len)) catch
+                return error.IntegerOverflow;
+            input_read.* = input_end;
+        }
+    }
+
+    fn stepSolidBcj2Finish(
+        self: *Self,
+        output: []u8,
+        input_read: usize,
+        output_written: *usize,
+    ) Error!?core.StepResult {
+        var state = &self.solid_bcj2.?;
+        var codec = &self.solid_codec.?;
+        while (true) {
+            if (state.hasMain()) {
+                const main = state.mainBytes();
+                const encoded = try codec.step(main, output[output_written.*..]);
+                if (encoded.progress.input_read > main.len or
+                    encoded.progress.output_written > output.len - output_written.*)
+                    return error.InvalidBlockPlan;
+                try state.consumeMain(encoded.progress.input_read);
+                self.solid_packed_size = std.math.add(
+                    u64,
+                    self.solid_packed_size,
+                    @intCast(encoded.progress.output_written),
+                ) catch return error.IntegerOverflow;
+                self.packed_output = std.math.add(
+                    u64,
+                    self.packed_output,
+                    @intCast(encoded.progress.output_written),
+                ) catch return error.IntegerOverflow;
+                try self.addArchiveOutput(encoded.progress.output_written);
+                output_written.* += encoded.progress.output_written;
+                if (encoded.status == .done) return error.InvalidBlockPlan;
+                if (state.hasMain()) {
+                    if (encoded.status != .need_output) return error.InvalidBlockPlan;
+                    return result(input_read, output_written.*, .need_output);
+                }
+                if (output_written.* == output.len)
+                    return result(input_read, output_written.*, .need_output);
+                continue;
+            }
+            if (!state.mainFinishSent()) {
+                codec.finish();
+                state.markMainFinishSent();
+            }
+            const encoded = try codec.step(&.{}, output[output_written.*..]);
+            if (encoded.progress.input_read != 0 or
+                encoded.progress.output_written > output.len - output_written.*)
+                return error.InvalidBlockPlan;
+            self.solid_packed_size = std.math.add(
+                u64,
+                self.solid_packed_size,
+                @intCast(encoded.progress.output_written),
+            ) catch return error.IntegerOverflow;
+            self.packed_output = std.math.add(
+                u64,
+                self.packed_output,
+                @intCast(encoded.progress.output_written),
+            ) catch return error.IntegerOverflow;
+            try self.addArchiveOutput(encoded.progress.output_written);
+            output_written.* += encoded.progress.output_written;
+            if (encoded.status == .done) {
+                self.phase = .bcj2_replay;
+                return null;
+            }
+            if (encoded.status != .need_output) return error.InvalidBlockPlan;
+            return result(input_read, output_written.*, .need_output);
+        }
+    }
+
     fn finalizeCurrent(self: *Self, has_stream: bool) Error!void {
         var current = &self.current.?;
         try self.entries.ensureUnusedCapacity(self.allocator, 1);
@@ -645,9 +821,9 @@ pub const Writer = struct {
                 const packed_sizes: [4]u64 = if (is_bcj2)
                     .{
                         current.compressed_size,
-                        0,
-                        0,
-                        current.bcj2.?.packedSize(),
+                        current.bcj2.?.branchPackedSize(0),
+                        current.bcj2.?.branchPackedSize(1),
+                        current.bcj2.?.branchPackedSize(2),
                     }
                 else
                     .{ current.compressed_size, 0, 0, 0 };
@@ -655,9 +831,9 @@ pub const Writer = struct {
                     current.encode_options.encryption != null)
                     .{
                         current.codec.?.aesUnpackSize() orelse return error.InvalidBlockPlan,
-                        0,
-                        0,
-                        current.bcj2.?.plainSize(),
+                        current.bcj2.?.branchPlainSize(0),
+                        current.bcj2.?.branchPlainSize(1),
+                        current.bcj2.?.branchPlainSize(2),
                     }
                 else
                     .{ current.codec.?.aesUnpackSize(), null, null, null };
@@ -665,6 +841,7 @@ pub const Writer = struct {
                     .packed_sizes = packed_sizes,
                     .pack_stream_count = if (is_bcj2) 4 else 1,
                     .unpacked_size = current.uncompressed_size,
+                    .bcj2_main_size = if (is_bcj2) current.bcj2.?.mainSize() else null,
                     .aes_unpack_sizes = aes_unpack_sizes,
                     .crc32 = digest,
                     .first_substream = substream_index,
@@ -692,9 +869,9 @@ pub const Writer = struct {
         const packed_sizes: [4]u64 = if (is_bcj2)
             .{
                 self.solid_packed_size,
-                0,
-                0,
-                self.solid_bcj2.?.packedSize(),
+                self.solid_bcj2.?.branchPackedSize(0),
+                self.solid_bcj2.?.branchPackedSize(1),
+                self.solid_bcj2.?.branchPackedSize(2),
             }
         else
             .{ self.solid_packed_size, 0, 0, 0 };
@@ -702,9 +879,9 @@ pub const Writer = struct {
             self.solid_options.encryption != null)
             .{
                 self.solid_codec.?.aesUnpackSize() orelse return error.InvalidBlockPlan,
-                0,
-                0,
-                self.solid_bcj2.?.plainSize(),
+                self.solid_bcj2.?.branchPlainSize(0),
+                self.solid_bcj2.?.branchPlainSize(1),
+                self.solid_bcj2.?.branchPlainSize(2),
             }
         else
             .{ self.solid_codec.?.aesUnpackSize(), null, null, null };
@@ -712,6 +889,7 @@ pub const Writer = struct {
             .packed_sizes = packed_sizes,
             .pack_stream_count = if (is_bcj2) 4 else 1,
             .unpacked_size = self.solid_uncompressed_size,
+            .bcj2_main_size = if (is_bcj2) self.solid_bcj2.?.mainSize() else null,
             .aes_unpack_sizes = aes_unpack_sizes,
             .crc32 = self.solid_crc.digest(),
             .first_substream = 0,
@@ -730,6 +908,7 @@ pub const Writer = struct {
             self.options.bcj2_spool orelse return error.SecondarySpoolRequired,
             options.encryption,
             options.encryption_stream_index,
+            options.bcj2_start_ip,
             self.options.max_bcj2_spool_size,
             self.options.bcj2_spool_read_buffer_size,
         );
@@ -1036,7 +1215,7 @@ test "7z incremental writer replays BCJ2 range spools for every main codec" {
                 .encode = .{
                     .compression = compression,
                     .bcj2 = true,
-                    .bcj2_start_ip = 0x1000,
+                    .bcj2_start_ip = 0,
                 },
                 .bcj2_spool = spool.descriptor(),
                 .bcj2_spool_read_buffer_size = 3,
@@ -1048,7 +1227,14 @@ test "7z incremental writer replays BCJ2 range spools for every main codec" {
         defer std.testing.allocator.free(encoded);
         const parsed = try archive.parseAlloc(std.testing.allocator, encoded);
         defer parsed.deinit();
-        try std.testing.expect(parsed.streams.folders[0].bcj2_coder_index != null);
+        const folder = parsed.streams.folders[0];
+        try std.testing.expect(folder.bcj2_coder_index != null);
+        try std.testing.expect(
+            parsed.streams.pack_sizes[folder.pack_index + folder.bcj2_branches[1].pack_stream_offset] != 0,
+        );
+        try std.testing.expect(
+            parsed.streams.pack_sizes[folder.pack_index + folder.bcj2_branches[2].pack_stream_offset] != 0,
+        );
         const decoded = try parsed.extractByNameAlloc(
             std.testing.allocator,
             "branch-heavy.bin",

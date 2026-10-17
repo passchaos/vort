@@ -158,6 +158,7 @@ pub fn build(b: *std.Build) void {
             "raw LZMA2 incremental encoder",
             "PPMd7 incremental encoder",
             "incremental XZ forward filters",
+            "BCJ2 conversion encoder",
         },
     });
     const run_seven_zip_incremental_writer_tests = b.addRunArtifact(

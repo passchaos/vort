@@ -259,8 +259,8 @@ fn appendFolderPayload(
         return folder;
     }
 
-    const range_stream = try bcj2.encodeNoConversionAlloc(allocator, input);
-    defer allocator.free(range_stream);
+    var converted = try bcj2.encodeConvertedAlloc(allocator, input, options.bcj2_start_ip);
+    defer converted.deinit();
     var primary_options = options;
     primary_options.bcj2 = false;
     primary_options.bcj2_start_ip = 0;
@@ -272,11 +272,18 @@ fn appendFolderPayload(
     _ = try coders.appendPayload(
         allocator,
         &main_stream,
-        input,
+        converted.main,
         primary_options,
     );
     folder.pack_stream_count = 4;
-    const branch_streams = [_][]const u8{ main_stream.items, &.{}, &.{}, range_stream };
+    folder.bcj2_main_size = std.math.cast(u64, converted.main.len) orelse
+        return error.IntegerOverflow;
+    const branch_streams = [_][]const u8{
+        main_stream.items,
+        converted.call,
+        converted.jump,
+        converted.range,
+    };
     for (branch_streams, 0..) |branch_stream, branch_index| {
         const packed_size = if (options.encryption) |encryption| encrypted: {
             const stream_index = std.math.add(

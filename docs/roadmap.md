@@ -17980,10 +17980,12 @@ reuse, so production keeps the simpler independently owned plans.
   stream-size identities, range initialization, packed indices, CRCs, and
   exact consumption; real single-file and solid 7-Zip variants provide
   differential evidence. The deterministic BCJ2 writer emits the same standard
-  graph with any existing main compression method and range-codes valid
-  no-conversion decisions, leaving target extraction as a future ratio
-  optimization rather than a compatibility gap. System 7-Zip validates all seven
-  main methods, solid substreams, branch-heavy input, and non-zero start IP.
+  graph with any existing main compression method. Its zero-start-IP path now
+  extracts real absolute targets into non-empty CALL/JUMP streams, shortens MAIN,
+  and range-codes conversion decisions; non-zero legacy start properties retain
+  an explicit no-conversion fallback because reference 7-Zip releases disagree
+  on converted-target semantics. System 7-Zip validates all seven main methods,
+  solid substreams, branch-heavy input, and the fallback path.
   The reader now decodes bounded `AdditionalStreamsInfo` folders and resolves
   external folder definitions plus UTF-16LE name properties with strict index,
   consumption, CRC, and cumulative output checks. The deterministic writer can
@@ -18079,16 +18081,16 @@ reuse, so production keeps the simpler independently owned plans.
   BCJ2 now accepts an explicit caller-owned reset/write/read-at spool: MAIN is
   compressed directly to archive output while no-conversion range decisions are
   written incrementally and replayed after MAIN, with bounded replay memory and
-  a caller-selected spool-size ceiling. It supports all seven MAIN codecs,
+  a caller-selected spool-size ceiling. Tagged spool records carry real CALL,
+  JUMP, and range data; three bounded random-access scans publish them in final
+  packed-stream order without in-memory side streams. It supports all seven MAIN codecs,
   independent and solid folders, four-stream Vail AES sequencing, external
   metadata, and encrypted hidden headers. Short reads, callback failures,
   truncation, limits, tiny buffers, and allocation failures are covered. The
   complete 7-Zip 21.07/26.04 matrix now validates forty-two incremental output
   variants: fourteen linear main-codec variants, fourteen terminal-codec
   variants, and fourteen BCJ2 variants, alongside metadata values,
-  self-decoding, and determinism. Moving converted branch targets into non-empty
-  CALL/JUMP streams remains a ratio optimization rather than a compatibility
-  gap.
+  self-decoding, determinism, and non-empty CALL/JUMP streams.
   Deeper LZMA parsing, other branching or multi-packed-stream graphs,
   comments, and start-position properties remain follow-up work. See
   `docs/formats/7z.md`.
