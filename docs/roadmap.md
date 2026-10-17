@@ -21292,8 +21292,7 @@ reuse, so production keeps the simpler independently owned plans.
   tests. The black-box gate reopens both writer modes through Vort, then requires
   wimlib 1.14.5 to verify and byte-exactly extract them (`writer=2`,
   `writer_wimlib=2`). Multi-image update, split/pipable output, LZX/LZMS,
-  security descriptors, hard links, short names and tagged metadata remain
-  writer follow-ups.
+  short names and tagged metadata remain writer follow-ups.
 
 - Extended the WIM writer from ordinary data to Windows stream semantics.
   Borrowed entries now carry named ADS, raw reparse payloads with separate
@@ -21305,10 +21304,25 @@ reuse, so production keeps the simpler independently owned plans.
   names, mutually exclusive EFS combinations, and directory ADS/reparse/EFS
   selection have direct tests. The focused build now actually instantiates the
   WIM module (fixing a pre-existing false-green `test-wim` entrypoint) and runs
-  95 WIM/LZX tests; this exposed and corrected an encrypted-ESD output-limit
+  97 WIM/LZX tests; this exposed and corrected an encrypted-ESD output-limit
   test that had bounded the smaller reconstructed output with the encrypted
   input size. The black-box matrix verifies stored and XPRESS stream images
   through both implementations; wimlib recognizes named, reparse and encrypted
   raw streams and restores Vort's relative symlink (`writer_stream=2`,
   `writer_stream_wimlib=2`). EFSRPC bytes remain opaque by design, so no Vail
   cipher primitive is invoked.
+
+- Added WIM security descriptor tables and hard-link groups. Entries and the
+  root borrow self-relative Windows descriptors; the writer validates their
+  revision/control, SID, ACL and ACE bounds, deduplicates equal bytes in stable
+  tree order, assigns security IDs, and emits the aligned prefix size table and
+  descriptor payloads. The reader now returns any descriptor by ID as a
+  borrowed metadata view. Nonzero hard-link IDs require at least two regular
+  aliases with identical inode metadata and streams, reject reparse/encrypted
+  or inconsistent groups, and populate the dentry union. Blob reference counts
+  and `TOTALBYTES` include every alias while `HARDLINKBYTES` counts duplicate
+  inode bytes. Unit tests cover descriptor deduplication, IDs, raw recovery,
+  group validation, stream refcounts, XML accounting and OOM. Stored and XPRESS
+  black-box images are independently verified by wimlib; it reports the exact
+  descriptors and two-link group, then restores both aliases to the same Unix
+  inode (`writer_inode=2`, `writer_inode_wimlib=2`).

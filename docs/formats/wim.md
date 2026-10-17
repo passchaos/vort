@@ -144,6 +144,22 @@ or both reparse and ordinary data clears `main_hash` and writes extra-stream
 records in reparse, ordinary, then named order. Named and reparse streams on
 directories are selectable through the same archive APIs as file streams.
 
+Each entry may also borrow a self-relative Windows security descriptor through
+`security_descriptor`; the root uses `root_security_descriptor`. The writer
+validates descriptor headers, self-relative control, SID bounds, ACL bounds and
+ACE geometry, deduplicates identical descriptors in deterministic tree order,
+then assigns the dentry security IDs and serializes the aligned image security
+table. `ImageMetadata.security.descriptor(id)` returns the original descriptor
+as a borrowed view.
+
+Nonzero `hard_link_id` values group two or more regular, non-reparse,
+non-encrypted entries into one inode. Every alias must provide identical
+attributes, timestamps, security descriptor, default data and named streams;
+inconsistent or singleton groups are rejected. Lookup reference counts and XML
+`TOTALBYTES` count every alias as required by WIM, while `HARDLINKBYTES` counts
+only the duplicate inode bytes. This preserves both extraction progress
+semantics and hard-link space reporting.
+
 `encodeWimAlloc`, `encodeWimAppend`, and `encodeWimInto` produce a standard
 single-part, single-image WIM using either stored resources or 32 KiB XPRESS
 chunks. XPRESS chunks independently select compressed or raw representation,
@@ -158,10 +174,10 @@ so invalid input, allocation failure, and `OutputTooSmall` leave caller output
 unchanged.
 
 The current writer remains single-image and caller-buffer based. Multi-image
-append/update, WIM/SWM splitting, pipable output, LZX/LZMS encoding, security
-descriptors, hard-link groups, short names, and tagged metadata remain follow-up
-slices. Filesystem capture/application and construction of EFSRPC or reparse
-payloads from OS objects stay outside the wire serializer.
+append/update, WIM/SWM splitting, pipable output, LZX/LZMS encoding, automatic
+host-filesystem security capture, short names, and tagged metadata remain
+follow-up slices. Filesystem capture/application and construction of EFSRPC or
+reparse payloads from OS objects stay outside the wire serializer.
 
 ```zig
 const archive = try vort.parseWim(image_bytes);
@@ -217,11 +233,21 @@ const ads = [_]vort.WimEncodeNamedStream{.{
     .name = "Zone.Identifier",
     .data = zone_identifier,
 }};
+const security_descriptor = windows_self_relative_descriptor;
 const input = [_]vort.WimEncodeEntry{
     .{
         .path = "Windows/System32/example.dll",
         .data = dll_bytes,
         .named_streams = &ads,
+        .security_descriptor = security_descriptor,
+        .hard_link_id = 42,
+    },
+    .{
+        .path = "Windows/System32/example-alias.dll",
+        .data = dll_bytes,
+        .named_streams = &ads,
+        .security_descriptor = security_descriptor,
+        .hard_link_id = 42,
     },
     .{
         .path = "link",
@@ -233,6 +259,7 @@ const input = [_]vort.WimEncodeEntry{
 const encoded_wim = try vort.encodeWimAlloc(allocator, &input, .{
     .compression = .xpress,
     .image_name = "Deterministic image",
+    .root_security_descriptor = security_descriptor,
 });
 defer allocator.free(encoded_wim);
 ```
@@ -310,3 +337,8 @@ directory EFSRPC raw streams, and a relative symbolic-link buffer. Vort extracts
 each selector byte-exactly; wimlib verifies both images, labels all three stream
 kinds, and restores the Vort-written link (`writer_stream=2`,
 `writer_stream_wimlib=2`).
+Two more writer images per codec cover descriptor validation/deduplication,
+root and per-entry security IDs, hard-link lookup reference counts and XML
+accounting. wimlib reports the exact descriptor bytes and two-link group, then
+extracts both aliases to the same inode (`writer_inode=2`,
+`writer_inode_wimlib=2`).

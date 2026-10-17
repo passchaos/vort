@@ -3,6 +3,7 @@ const core = @import("../core.zig");
 const format = @import("format.zig");
 const metadata_writer = @import("writer_metadata.zig");
 const resource_writer = @import("writer_resource.zig");
+const security = @import("writer_security.zig");
 const streams = @import("writer_streams.zig");
 const tree_mod = @import("writer_tree.zig");
 
@@ -31,6 +32,7 @@ pub const Options = struct {
     root_last_write_time: u64 = 0,
     xml_creation_time: u64 = 0,
     xml_last_modification_time: u64 = 0,
+    root_security_descriptor: ?[]const u8 = null,
 };
 
 const Blob = struct {
@@ -54,9 +56,16 @@ pub fn encodeAlloc(
         .creation_time = options.root_creation_time,
         .last_access_time = options.root_last_access_time,
         .last_write_time = options.root_last_write_time,
+        .security_descriptor = options.root_security_descriptor,
     });
     defer tree.deinit();
-    const metadata = try metadata_writer.encodeAlloc(allocator, &tree);
+    var security_table = try security.plan(allocator, &tree);
+    defer security_table.deinit();
+    const metadata = try metadata_writer.encodeAlloc(
+        allocator,
+        &tree,
+        security_table.descriptors,
+    );
     defer allocator.free(metadata);
     var metadata_hash: [std.crypto.hash.Sha1.digest_length]u8 = undefined;
     std.crypto.hash.Sha1.hash(metadata, &metadata_hash, .{});
@@ -107,6 +116,7 @@ pub fn encodeAlloc(
         tree.directoryCount(),
         tree.fileCount(),
         try tree.totalStreamBytes(),
+        try tree.hardLinkBytes(),
         xml_offset,
     );
     defer allocator.free(xml);
@@ -235,6 +245,7 @@ fn buildXmlAlloc(
     directory_count: usize,
     file_count: usize,
     total_file_bytes: u64,
+    hard_link_bytes: u64,
     xml_offset: usize,
 ) Error![]u8 {
     const escaped_name = try escapeXmlAlloc(allocator, options.image_name);
@@ -247,7 +258,7 @@ fn buildXmlAlloc(
         allocator,
         "<WIM><IMAGE INDEX=\"1\"><NAME>{s}</NAME>" ++
             "<DIRCOUNT>{d}</DIRCOUNT><FILECOUNT>{d}</FILECOUNT>" ++
-            "<TOTALBYTES>{d}</TOTALBYTES><HARDLINKBYTES>0</HARDLINKBYTES>" ++
+            "<TOTALBYTES>{d}</TOTALBYTES><HARDLINKBYTES>{d}</HARDLINKBYTES>" ++
             "<CREATIONTIME><HIGHPART>{d}</HIGHPART><LOWPART>{d}</LOWPART>" ++
             "</CREATIONTIME><LASTMODIFICATIONTIME><HIGHPART>{d}</HIGHPART>" ++
             "<LOWPART>{d}</LOWPART></LASTMODIFICATIONTIME></IMAGE>" ++
@@ -257,6 +268,7 @@ fn buildXmlAlloc(
             directory_count,
             file_count,
             total_file_bytes,
+            hard_link_bytes,
             creation_high,
             creation_low,
             modified_high,

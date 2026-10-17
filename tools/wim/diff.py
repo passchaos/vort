@@ -165,6 +165,8 @@ def main() -> None:
     writer_wimlib_cases = 0
     writer_stream_cases = 0
     writer_stream_wimlib_cases = 0
+    writer_inode_cases = 0
+    writer_inode_wimlib_cases = 0
     stream_error_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-wim-") as temp_text:
@@ -585,6 +587,69 @@ def main() -> None:
                 if not link.is_symlink() or link.readlink() != Path("config.txt"):
                     raise AssertionError("wimlib did not restore Vort writer symlink")
                 writer_stream_wimlib_cases += 1
+
+        for writer_compression, expected_compression in (
+            ("stored", "none"),
+            ("xpress", "xpress"),
+        ):
+            inode_image = temp / f"vort-writer-inode-{writer_compression}.wim"
+            run(args.writer, inode_image, writer_compression, "inode")
+            inode_listing = run(args.cli, "list-wim-file", inode_image).stdout
+            if f"compression={expected_compression}".encode() not in inode_listing:
+                raise AssertionError("Vort writer inode compression mismatch")
+            image_tree = run(args.cli, "list-wim-image", inode_image, 1).stdout
+            for required in (b"/hard/a.txt", b"/hard/b.txt", b"/independent.txt"):
+                if required not in image_tree:
+                    raise AssertionError(f"Vort writer inode tree missing {required!r}")
+            for link_name in ("a.txt", "b.txt"):
+                output = temp / f"writer-inode-{writer_compression}-{link_name}"
+                run(
+                    args.cli,
+                    "extract-wim-path",
+                    inode_image,
+                    1,
+                    f"/hard/{link_name}",
+                    output,
+                    1024,
+                )
+                if output.read_bytes() != b"hard linked writer payload\n":
+                    raise AssertionError("Vort writer hard-link payload mismatch")
+            writer_inode_cases += 1
+
+            if wimlib is not None:
+                run(wimlib, "verify", inode_image)
+                details = run(wimlib, "dir", inode_image, 1, "--detailed").stdout
+                for marker in (
+                    b"Link Group ID       = 0x0000000000004242",
+                    b"Link Count          = 2",
+                    b"Security Descriptor = 01000480",
+                    b"Security Descriptor = 01000080",
+                ):
+                    if marker not in details:
+                        raise AssertionError(
+                            f"wimlib did not recognize Vort inode metadata {marker!r}"
+                        )
+                inode_extract = temp / f"writer-inode-extract-{writer_compression}"
+                run(
+                    wimlib,
+                    "extract",
+                    inode_image,
+                    1,
+                    f"--dest-dir={inode_extract}",
+                    "--no-acls",
+                )
+                first = inode_extract / "hard/a.txt"
+                second = inode_extract / "hard/b.txt"
+                first_stat = first.stat()
+                second_stat = second.stat()
+                if (
+                    first.read_bytes() != b"hard linked writer payload\n"
+                    or second.read_bytes() != first.read_bytes()
+                    or first_stat.st_ino != second_stat.st_ino
+                    or first_stat.st_nlink < 2
+                ):
+                    raise AssertionError("wimlib did not restore Vort hard links")
+                writer_inode_wimlib_cases += 1
         if wimlib is not None:
             encrypted_result = run(wimlib, "info", encrypted_esd, check=False)
             if encrypted_result.returncode == 0 or b"encrypted" not in encrypted_result.stderr.lower():
@@ -1067,6 +1132,8 @@ def main() -> None:
         f"writer={writer_cases} writer_wimlib={writer_wimlib_cases} "
         f"writer_stream={writer_stream_cases} "
         f"writer_stream_wimlib={writer_stream_wimlib_cases} "
+        f"writer_inode={writer_inode_cases} "
+        f"writer_inode_wimlib={writer_inode_wimlib_cases} "
         f"malformed={malformed}"
     )
 

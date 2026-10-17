@@ -10,6 +10,7 @@ pub const Error = core.Error || std.mem.Allocator.Error || error{
     WimNotRegularFile,
     WimNotReparsePoint,
     WimNotEncryptedFile,
+    WimSecurityDescriptorNotFound,
     UnsupportedWimFile,
 };
 
@@ -21,8 +22,37 @@ pub const file_attribute_reparse_point: u32 = 0x0000_0400;
 pub const file_attribute_encrypted: u32 = 0x0000_4000;
 
 pub const SecurityData = struct {
+    metadata_bytes: []const u8,
     total_length: usize,
     descriptor_count: u32,
+
+    /// Returns a borrowed self-relative Windows security descriptor.
+    pub fn descriptor(self: SecurityData, security_id: u32) Error![]const u8 {
+        if (security_id >= self.descriptor_count)
+            return error.WimSecurityDescriptorNotFound;
+        const sizes_bytes = std.math.mul(usize, self.descriptor_count, 8) catch
+            return error.IntegerOverflow;
+        var descriptor_offset = std.math.add(usize, 8, sizes_bytes) catch
+            return error.IntegerOverflow;
+        for (0..security_id) |index| {
+            const size = std.math.cast(
+                usize,
+                readU64(self.metadata_bytes, 8 + index * 8),
+            ) orelse return error.IntegerOverflow;
+            descriptor_offset = std.math.add(usize, descriptor_offset, size) catch
+                return error.IntegerOverflow;
+        }
+        const descriptor_size = std.math.cast(
+            usize,
+            readU64(self.metadata_bytes, 8 + @as(usize, security_id) * 8),
+        ) orelse return error.IntegerOverflow;
+        const end = try checkedEnd(
+            descriptor_offset,
+            descriptor_size,
+            self.total_length,
+        );
+        return self.metadata_bytes[descriptor_offset..end];
+    }
 };
 
 pub const ExtraStream = struct {
@@ -418,6 +448,7 @@ fn parseSecurityData(bytes: []const u8) Error!SecurityData {
     if (try align8(descriptor_offset) != total_length)
         return error.InvalidWimMetadata;
     return .{
+        .metadata_bytes = bytes,
         .total_length = total_length,
         .descriptor_count = descriptor_count,
     };

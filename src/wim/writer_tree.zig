@@ -24,6 +24,8 @@ pub const Entry = struct {
     named_streams: []const NamedStream = &.{},
     reparse: ?ReparseData = null,
     encrypted_raw: ?[]const u8 = null,
+    security_descriptor: ?[]const u8 = null,
+    hard_link_id: u64 = 0,
     attributes: u32 = 0,
     creation_time: u64 = 0,
     last_access_time: u64 = 0,
@@ -34,6 +36,7 @@ pub const RootInfo = struct {
     creation_time: u64 = 0,
     last_access_time: u64 = 0,
     last_write_time: u64 = 0,
+    security_descriptor: ?[]const u8 = null,
 };
 
 pub const Node = struct {
@@ -44,6 +47,9 @@ pub const Node = struct {
     named_streams: []const NamedStream = &.{},
     reparse: ?ReparseData = null,
     encrypted_raw: ?[]const u8 = null,
+    security_descriptor: ?[]const u8 = null,
+    security_id: ?u32 = null,
+    hard_link_id: u64 = 0,
     attributes: u32,
     creation_time: u64 = 0,
     last_access_time: u64 = 0,
@@ -100,6 +106,31 @@ pub const Tree = struct {
         }
         return total;
     }
+
+    pub fn hardLinkBytes(self: Tree) Error!u64 {
+        var total: u64 = 0;
+        for (self.nodes, 0..) |node, index| {
+            if (node.hard_link_id == 0) continue;
+            var seen_before = false;
+            for (self.nodes[0..index]) |prior| {
+                if (prior.hard_link_id == node.hard_link_id) {
+                    seen_before = true;
+                    break;
+                }
+            }
+            if (seen_before) continue;
+            var count: usize = 0;
+            for (self.nodes) |candidate|
+                count += @intFromBool(candidate.hard_link_id == node.hard_link_id);
+            const duplicate_count = count - 1;
+            const stream_bytes = try node.streamSet().totalBytes();
+            const duplicated = std.math.mul(u64, stream_bytes, duplicate_count) catch
+                return error.IntegerOverflow;
+            total = std.math.add(u64, total, duplicated) catch
+                return error.IntegerOverflow;
+        }
+        return total;
+    }
 };
 
 pub fn build(
@@ -115,6 +146,7 @@ pub fn build(
     nodes.items[0].creation_time = root_info.creation_time;
     nodes.items[0].last_access_time = root_info.last_access_time;
     nodes.items[0].last_write_time = root_info.last_write_time;
+    nodes.items[0].security_descriptor = root_info.security_descriptor;
 
     for (entries) |entry| {
         try validateEntry(entry);
@@ -143,6 +175,7 @@ pub fn build(
             return error.InvalidWimEntry;
     }
     try rejectAsciiCaseAliases(nodes.items);
+    try validateHardLinkGroups(nodes.items);
 
     return .{
         .allocator = allocator,
@@ -191,6 +224,8 @@ fn applyEntry(node: *Node, entry: Entry) void {
     node.named_streams = entry.named_streams;
     node.reparse = entry.reparse;
     node.encrypted_raw = entry.encrypted_raw;
+    node.security_descriptor = entry.security_descriptor;
+    node.hard_link_id = entry.hard_link_id;
     node.attributes = entry.attributes;
     if (entry.kind == .directory) {
         node.attributes |= metadata.file_attribute_directory;
@@ -267,6 +302,9 @@ fn validateEntry(entry: Entry) Error!void {
         .reparse = entry.reparse,
         .encrypted_raw = entry.encrypted_raw,
     }).validate();
+    if (entry.hard_link_id != 0 and
+        (entry.kind != .file or entry.reparse != null or entry.encrypted_raw != null))
+        return error.InvalidWimEntry;
     var components = std.mem.splitScalar(u8, entry.path, '/');
     while (components.next()) |component| {
         if (component.len == 0 or std.mem.eql(u8, component, ".") or
@@ -274,6 +312,50 @@ fn validateEntry(entry: Entry) Error!void {
             std.mem.indexOfAny(u8, component, "\\\x00") != null)
             return error.InvalidWimEntry;
     }
+}
+
+fn validateHardLinkGroups(nodes: []const Node) Error!void {
+    for (nodes, 0..) |node, index| {
+        if (node.hard_link_id == 0) continue;
+        var seen_before = false;
+        for (nodes[0..index]) |prior| {
+            if (prior.hard_link_id == node.hard_link_id) {
+                seen_before = true;
+                break;
+            }
+        }
+        if (seen_before) continue;
+
+        var count: usize = 0;
+        for (nodes[index..]) |candidate| {
+            if (candidate.hard_link_id != node.hard_link_id) continue;
+            count += 1;
+            if (!sameInode(node, candidate)) return error.InvalidWimEntry;
+        }
+        if (count < 2) return error.InvalidWimEntry;
+    }
+}
+
+fn sameInode(left: Node, right: Node) bool {
+    if (left.kind != right.kind or left.attributes != right.attributes or
+        left.creation_time != right.creation_time or
+        left.last_access_time != right.last_access_time or
+        left.last_write_time != right.last_write_time or
+        !optionalBytesEqual(left.security_descriptor, right.security_descriptor) or
+        !std.mem.eql(u8, left.data, right.data) or
+        left.named_streams.len != right.named_streams.len)
+        return false;
+    for (left.named_streams, right.named_streams) |left_stream, right_stream| {
+        if (!std.mem.eql(u8, left_stream.name, right_stream.name) or
+            !std.mem.eql(u8, left_stream.data, right_stream.data))
+            return false;
+    }
+    return true;
+}
+
+fn optionalBytesEqual(left: ?[]const u8, right: ?[]const u8) bool {
+    if (left == null or right == null) return left == null and right == null;
+    return std.mem.eql(u8, left.?, right.?);
 }
 
 test "WIM writer tree inserts and sorts implicit directories" {

@@ -13,6 +13,8 @@ pub fn main(init: std.process.Init) !void {
 
     if (std.mem.eql(u8, mode, "streams"))
         return writeStreams(init, output_path, compression);
+    if (std.mem.eql(u8, mode, "inode"))
+        return writeInodeMetadata(init, output_path, compression);
     if (!std.mem.eql(u8, mode, "basic")) return error.InvalidBlockPlan;
 
     const large = "Vort WIM writer multichunk payload 0123456789\n" ** 4096;
@@ -25,7 +27,7 @@ pub fn main(init: std.process.Init) !void {
         .{ .path = "empty.bin" },
         .{ .path = "unicode/文件.txt", .data = "UTF-8 WIM path\n" },
     };
-    try writeArchive(init, output_path, compression, &entries);
+    try writeArchive(init, output_path, compression, &entries, null);
 }
 
 fn writeStreams(
@@ -78,7 +80,52 @@ fn writeStreams(
             .encrypted_raw = "opaque EFSRPC raw directory data",
         },
     };
-    try writeArchive(init, output_path, compression, &entries);
+    try writeArchive(init, output_path, compression, &entries, null);
+}
+
+fn writeInodeMetadata(
+    init: std.process.Init,
+    output_path: []const u8,
+    compression: vort.WimEncodeCompression,
+) !void {
+    const null_dacl = [_]u8{ 1, 0, 4, 0x80 } ++ [_]u8{0} ** 16;
+    const world_owner = [_]u8{
+        1,  0, 0, 0x80,
+        20, 0, 0, 0,
+        0,  0, 0, 0,
+        0,  0, 0, 0,
+        0,  0, 0, 0,
+        1,  1, 0, 0,
+        0,  0, 0, 1,
+        0,  0, 0, 0,
+    };
+    const link_streams = [_]vort.WimEncodeNamedStream{.{
+        .name = "link.ads",
+        .data = "hard link alternate stream",
+    }};
+    const entries = [_]vort.WimEncodeEntry{
+        .{
+            .path = "hard/a.txt",
+            .data = "hard linked writer payload\n",
+            .named_streams = &link_streams,
+            .security_descriptor = &null_dacl,
+            .hard_link_id = 0x4242,
+        },
+        .{
+            .path = "hard/b.txt",
+            .data = "hard linked writer payload\n",
+            .named_streams = &link_streams,
+            .security_descriptor = &null_dacl,
+            .hard_link_id = 0x4242,
+        },
+        .{
+            .path = "independent.txt",
+            .data = "independent security descriptor\n",
+            .security_descriptor = &world_owner,
+        },
+        .{ .path = "no-security.txt", .data = "no security descriptor\n" },
+    };
+    try writeArchive(init, output_path, compression, &entries, &null_dacl);
 }
 
 fn writeArchive(
@@ -86,10 +133,12 @@ fn writeArchive(
     output_path: []const u8,
     compression: vort.WimEncodeCompression,
     entries: []const vort.WimEncodeEntry,
+    root_security_descriptor: ?[]const u8,
 ) !void {
     const encoded = try vort.encodeWimAlloc(init.gpa, entries, .{
         .compression = compression,
         .image_name = "Vort writer & interoperability",
+        .root_security_descriptor = root_security_descriptor,
     });
     defer init.gpa.free(encoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{

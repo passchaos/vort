@@ -315,6 +315,94 @@ test "WIM writer preserves named reparse and encrypted raw streams" {
     try std.testing.expectEqualStrings("opaque directory EFSRPC bytes", encrypted_dir);
 }
 
+test "WIM writer deduplicates security descriptors and preserves hard links" {
+    const allocator = std.testing.allocator;
+    const null_dacl = [_]u8{ 1, 0, 4, 0x80 } ++ [_]u8{0} ** 16;
+    const world_owner = [_]u8{
+        1,  0, 0, 0x80,
+        20, 0, 0, 0,
+        0,  0, 0, 0,
+        0,  0, 0, 0,
+        0,  0, 0, 0,
+        1,  1, 0, 0,
+        0,  0, 0, 1,
+        0,  0, 0, 0,
+    };
+    const link_streams = [_]writer.NamedStream{.{
+        .name = "link.ads",
+        .data = "hard link ADS",
+    }};
+    const entries = [_]writer.Entry{
+        .{
+            .path = "hard/a.txt",
+            .data = "hard linked payload",
+            .named_streams = &link_streams,
+            .security_descriptor = &null_dacl,
+            .hard_link_id = 0x4242,
+            .last_write_time = 9,
+        },
+        .{
+            .path = "hard/b.txt",
+            .data = "hard linked payload",
+            .named_streams = &link_streams,
+            .security_descriptor = &null_dacl,
+            .hard_link_id = 0x4242,
+            .last_write_time = 9,
+        },
+        .{
+            .path = "independent.txt",
+            .data = "hard linked payload",
+            .security_descriptor = &world_owner,
+        },
+    };
+    const encoded = try writer.encodeAlloc(allocator, &entries, .{
+        .compression = .stored,
+        .root_security_descriptor = &null_dacl,
+    });
+    defer allocator.free(encoded);
+    const archive = try archive_mod.Archive.init(encoded);
+    var image = try archive.readImageMetadataAlloc(allocator, 1, limits);
+    defer image.deinit();
+    try std.testing.expectEqual(@as(u32, 2), image.security.descriptor_count);
+    try std.testing.expectEqualSlices(u8, &null_dacl, try image.security.descriptor(0));
+    try std.testing.expectEqualSlices(u8, &world_owner, try image.security.descriptor(1));
+    try std.testing.expectError(
+        error.WimSecurityDescriptorNotFound,
+        image.security.descriptor(2),
+    );
+    try std.testing.expectEqual(@as(u32, 0), image.root.security_id);
+
+    const first = try image.lookup(allocator, "hard/a.txt", 64, 16);
+    const second = try image.lookup(allocator, "hard/b.txt", 64, 16);
+    const independent = try image.lookup(allocator, "independent.txt", 64, 16);
+    try std.testing.expectEqual(@as(?u64, 0x4242), first.hardLinkId());
+    try std.testing.expectEqual(@as(?u64, 0x4242), second.hardLinkId());
+    try std.testing.expectEqual(@as(?u64, null), independent.hardLinkId());
+    try std.testing.expectEqual(@as(u32, 0), first.security_id);
+    try std.testing.expectEqual(@as(u32, 0), second.security_id);
+    try std.testing.expectEqual(@as(u32, 1), independent.security_id);
+
+    var lookup = try archive.readLookupTableAlloc(allocator, 64, 4096);
+    defer lookup.deinit();
+    var payload_hash: [20]u8 = undefined;
+    std.crypto.hash.Sha1.hash("hard linked payload", &payload_hash, .{});
+    try std.testing.expectEqual(@as(u32, 3), lookup.findData(&payload_hash).?.reference_count);
+    var ads_hash: [20]u8 = undefined;
+    std.crypto.hash.Sha1.hash("hard link ADS", &ads_hash, .{});
+    try std.testing.expectEqual(@as(u32, 2), lookup.findData(&ads_hash).?.reference_count);
+
+    const xml = try archive.readXmlAllocLimited(allocator, 16 * 1024);
+    defer allocator.free(xml);
+    const hard_link_bytes = "hard linked payload".len + "hard link ADS".len;
+    const expected_xml = try std.fmt.allocPrint(
+        allocator,
+        "<HARDLINKBYTES>{d}</HARDLINKBYTES>",
+        .{hard_link_bytes},
+    );
+    defer allocator.free(expected_xml);
+    try std.testing.expect(utf16ContainsAscii(xml, expected_xml));
+}
+
 test "WIM writer validates paths, XML and compression geometry" {
     const bad_path = [_]writer.Entry{.{ .path = "a//b" }};
     try std.testing.expectError(
@@ -405,6 +493,47 @@ test "WIM writer validates paths, XML and compression geometry" {
         error.InvalidWimEntry,
         writer.encodeAlloc(std.testing.allocator, &invalid_reparse, .{}),
     );
+    const singleton_link = [_]writer.Entry{.{
+        .path = "one",
+        .hard_link_id = 1,
+    }};
+    try std.testing.expectError(
+        error.InvalidWimEntry,
+        writer.encodeAlloc(std.testing.allocator, &singleton_link, .{}),
+    );
+    const mismatched_links = [_]writer.Entry{
+        .{ .path = "one", .data = "a", .hard_link_id = 1 },
+        .{ .path = "two", .data = "b", .hard_link_id = 1 },
+    };
+    try std.testing.expectError(
+        error.InvalidWimEntry,
+        writer.encodeAlloc(std.testing.allocator, &mismatched_links, .{}),
+    );
+    const reparse_link = [_]writer.Entry{
+        .{
+            .path = "one",
+            .hard_link_id = 1,
+            .reparse = .{ .tag = 1, .data = "x" },
+        },
+        .{
+            .path = "two",
+            .hard_link_id = 1,
+            .reparse = .{ .tag = 1, .data = "x" },
+        },
+    };
+    try std.testing.expectError(
+        error.InvalidWimEntry,
+        writer.encodeAlloc(std.testing.allocator, &reparse_link, .{}),
+    );
+    const invalid_descriptor = [_]u8{ 1, 0, 0, 0 } ++ [_]u8{0} ** 16;
+    const descriptor_entry = [_]writer.Entry{.{
+        .path = "descriptor",
+        .security_descriptor = &invalid_descriptor,
+    }};
+    try std.testing.expectError(
+        error.InvalidWimEntry,
+        writer.encodeAlloc(std.testing.allocator, &descriptor_entry, .{}),
+    );
 
     var existing: std.ArrayList(u8) = .empty;
     defer existing.deinit(std.testing.allocator);
@@ -419,6 +548,7 @@ test "WIM writer validates paths, XML and compression geometry" {
 test "WIM writer is allocation failure safe" {
     const AllocationTest = struct {
         fn run(allocator: std.mem.Allocator) !void {
+            const descriptor = [_]u8{ 1, 0, 4, 0x80 } ++ [_]u8{0} ** 16;
             const entries = [_]writer.Entry{
                 .{
                     .path = "nested/data.txt",
@@ -433,10 +563,23 @@ test "WIM writer is allocation failure safe" {
                     .reparse = .{ .tag = 1, .data = "reparse" },
                 },
                 .{ .path = "encrypted", .encrypted_raw = "opaque" },
+                .{
+                    .path = "hard/a",
+                    .data = "linked",
+                    .security_descriptor = &descriptor,
+                    .hard_link_id = 1,
+                },
+                .{
+                    .path = "hard/b",
+                    .data = "linked",
+                    .security_descriptor = &descriptor,
+                    .hard_link_id = 1,
+                },
                 .{ .path = "empty" },
             };
             const encoded = try writer.encodeAlloc(allocator, &entries, .{
                 .compression = .stored,
+                .root_security_descriptor = &descriptor,
             });
             defer allocator.free(encoded);
             _ = try archive_mod.Archive.init(encoded);
@@ -447,6 +590,25 @@ test "WIM writer is allocation failure safe" {
         AllocationTest.run,
         .{},
     );
+}
+
+fn utf16ContainsAscii(utf16: []const u8, ascii: []const u8) bool {
+    if (ascii.len == 0) return true;
+    if (utf16.len < ascii.len * 2) return false;
+    var start: usize = 0;
+    while (start + ascii.len * 2 <= utf16.len) : (start += 2) {
+        var matches = true;
+        for (ascii, 0..) |byte, index| {
+            if (utf16[start + index * 2] != byte or
+                utf16[start + index * 2 + 1] != 0)
+            {
+                matches = false;
+                break;
+            }
+        }
+        if (matches) return true;
+    }
+    return false;
 }
 
 fn verifyIntegrity(bytes: []const u8, header: format.Header) !void {

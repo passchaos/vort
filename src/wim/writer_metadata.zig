@@ -1,6 +1,7 @@
 const std = @import("std");
 const core = @import("../core.zig");
 const metadata = @import("metadata.zig");
+const security = @import("writer_security.zig");
 const streams = @import("writer_streams.zig");
 const tree_mod = @import("writer_tree.zig");
 
@@ -8,17 +9,18 @@ pub const Error = core.Error || tree_mod.Error || std.mem.Allocator.Error || err
     InvalidWimEntry,
 };
 
-const security_data_size: usize = 8;
 const list_terminator_size: usize = 8;
 
 pub fn encodeAlloc(
     allocator: std.mem.Allocator,
     tree: *tree_mod.Tree,
+    descriptors: []const []const u8,
 ) Error![]u8 {
     if (tree.nodes.len == 0 or tree.nodes[0].path.len != 0 or
         tree.nodes[0].kind != .directory)
         return error.InvalidWimEntry;
 
+    const security_data_size = try security.encodedLength(descriptors);
     const root_len = try dentryLength(tree.nodes[0]);
     var cursor = try checkedAdd(security_data_size, root_len);
     cursor = try checkedAdd(cursor, list_terminator_size);
@@ -44,6 +46,8 @@ pub fn encodeAlloc(
     const output = try allocator.alloc(u8, cursor);
     errdefer allocator.free(output);
     @memset(output, 0);
+    if (try security.write(output, descriptors) != security_data_size)
+        return error.InvalidWimEntry;
     var output_offset = security_data_size;
     output_offset = try writeDentry(output, output_offset, tree.nodes[0]);
     output_offset = try checkedAdd(output_offset, list_terminator_size);
@@ -96,7 +100,7 @@ fn writeDentry(
 
     writeU64(output, offset, length);
     writeU32(output, offset + 8, node.attributes);
-    writeU32(output, offset + 12, std.math.maxInt(u32));
+    writeU32(output, offset + 12, node.security_id orelse std.math.maxInt(u32));
     writeU64(output, offset + 16, node.subdir_offset);
     writeU64(output, offset + 40, node.creation_time);
     writeU64(output, offset + 48, node.last_access_time);
@@ -108,6 +112,8 @@ fn writeDentry(
         writeU32(output, offset + 88, reparse.tag);
         writeU16(output, offset + 92, reparse.reserved);
         writeU16(output, offset + 94, reparse.flags);
+    } else {
+        writeU64(output, offset + 88, node.hard_link_id);
     }
     writeU16(output, offset + 96, @intCast(stream_set.extraCount()));
     writeU16(output, offset + 98, 0);
@@ -188,7 +194,7 @@ test "WIM writer metadata encodes a real deterministic directory tree" {
     };
     var tree = try tree_mod.build(allocator, &entries, .{});
     defer tree.deinit();
-    const bytes = try encodeAlloc(allocator, &tree);
+    const bytes = try encodeAlloc(allocator, &tree, &.{});
     var image = try metadata.ImageMetadata.fromOwnedBytes(allocator, bytes);
     defer image.deinit();
     try std.testing.expect(image.root.subdir_offset != 0);
