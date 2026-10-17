@@ -21466,3 +21466,22 @@ reuse, so production keeps the simpler independently owned plans.
   `writer_reference_append_wimlib=1`). Focused WIM coverage is now 124 tests.
   Image deletion/replacement and physical compaction remain the next update
   slices.
+
+- Added transactional image deletion for ordinary and solid WIM archives.
+  Recursive metadata traversal counts every nonzero dentry main/extra-stream
+  hash, so hard-link aliases, ADS, reparse and EFSRPC references decrement the
+  same lookup refcounts used during capture. The selected metadata entry and
+  zero-ref data entries are removed; physical resources remain orphaned until a
+  future compact pass. Solid resource markers are deliberately retained even
+  when unused so later packed-resource logical offsets remain stable. XML drops
+  the selected element, renumbers later indexes and refreshes top-level
+  `TOTALBYTES`; boot deletion clears the descriptor while later boot indexes
+  shift down. Tests cover ordinary hard links/ADS/shared blobs, two-resource
+  solid deletion, unused markers, boot clear/shift, deterministic and
+  transactional buffers, final-image/index/limit/pipable rejection and
+  exhaustive OOM. Vort and wimlib byte-compare survivors of ordinary, solid and
+  checked-in wimlib-authored updates (`writer_delete=1`,
+  `writer_delete_wimlib=1`, `writer_solid_delete=1`,
+  `writer_solid_delete_wimlib=1`, `writer_reference_delete=1`,
+  `writer_reference_delete_wimlib=1`). Focused WIM coverage is now 128 tests.
+  Image replacement and physical compaction remain the next update slices.

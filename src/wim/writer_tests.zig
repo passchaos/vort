@@ -622,6 +622,211 @@ test "WIM image append rejects duplicate names and unsupported layouts" {
     );
 }
 
+test "WIM image delete decrements stream references and shifts boot image" {
+    const allocator = std.testing.allocator;
+    const shared = "delete shared payload\n" ** 128;
+    const first_entries = [_]writer.Entry{
+        .{ .path = "first.txt", .data = "first remains\n" },
+        .{ .path = "shared.bin", .data = shared },
+    };
+    const hard_streams = [_]writer.NamedStream{.{
+        .name = "link.ads",
+        .data = "deleted hard-link ADS",
+    }};
+    const second_entries = [_]writer.Entry{
+        .{ .path = "shared.bin", .data = shared },
+        .{
+            .path = "hard/a.bin",
+            .data = "deleted hard-link data",
+            .named_streams = &hard_streams,
+            .hard_link_id = 77,
+        },
+        .{
+            .path = "hard/b.bin",
+            .data = "deleted hard-link data",
+            .named_streams = &hard_streams,
+            .hard_link_id = 77,
+        },
+    };
+    const third_entries = [_]writer.Entry{
+        .{ .path = "shared.bin", .data = shared },
+        .{ .path = "third.txt", .data = "third becomes second\n" },
+    };
+    const images = [_]writer.Image{
+        .{ .name = "first", .entries = &first_entries },
+        .{ .name = "delete-me", .entries = &second_entries },
+        .{ .name = "third", .entries = &third_entries },
+    };
+    const source = try writer.encodeImagesAlloc(allocator, &images, .{
+        .compression = .xpress,
+        .boot_index = 3,
+    });
+    defer allocator.free(source);
+    const updated = try writer.deleteImageAlloc(allocator, source, 2, .{});
+    defer allocator.free(updated);
+    const repeated = try writer.deleteImageAlloc(allocator, source, 2, .{});
+    defer allocator.free(repeated);
+    try std.testing.expectEqualSlices(u8, updated, repeated);
+    try std.testing.expectEqualSlices(u8, source[format.header_size..], updated[format.header_size..source.len]);
+
+    const archive = try archive_mod.Archive.init(updated);
+    try std.testing.expectEqual(@as(u32, 2), archive.header.image_count);
+    try std.testing.expectEqual(@as(u32, 2), archive.header.boot_index);
+    var lookup = try archive.readLookupTableAlloc(allocator, 32, 4096);
+    defer lookup.deinit();
+    var shared_hash: [20]u8 = undefined;
+    std.crypto.hash.Sha1.hash(shared, &shared_hash, .{});
+    try std.testing.expectEqual(@as(u32, 2), lookup.findData(&shared_hash).?.reference_count);
+    var deleted_hash: [20]u8 = undefined;
+    std.crypto.hash.Sha1.hash("deleted hard-link data", &deleted_hash, .{});
+    try std.testing.expect(lookup.findData(&deleted_hash) == null);
+    var deleted_ads_hash: [20]u8 = undefined;
+    std.crypto.hash.Sha1.hash("deleted hard-link ADS", &deleted_ads_hash, .{});
+    try std.testing.expect(lookup.findData(&deleted_ads_hash) == null);
+
+    const first = try archive.extractByPathAllocLimited(
+        allocator,
+        1,
+        "first.txt",
+        1024,
+        limits,
+    );
+    defer allocator.free(first);
+    try std.testing.expectEqualStrings("first remains\n", first);
+    const shifted = try archive.extractByPathAllocLimited(
+        allocator,
+        2,
+        "third.txt",
+        1024,
+        limits,
+    );
+    defer allocator.free(shifted);
+    try std.testing.expectEqualStrings("third becomes second\n", shifted);
+    const xml = try archive.readXmlAllocLimited(allocator, 32 * 1024);
+    defer allocator.free(xml);
+    try std.testing.expect(!utf16ContainsAscii(xml, "delete-me"));
+    try std.testing.expect(utf16ContainsAscii(xml, "IMAGE INDEX=\"2\""));
+    try verifyIntegrity(updated, archive.header);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(allocator);
+    try appended.appendSlice(allocator, "prefix");
+    const appended_len = try writer.deleteImageAppend(
+        allocator,
+        &appended,
+        source,
+        2,
+        .{},
+    );
+    try std.testing.expectEqual(updated.len, appended_len);
+    try std.testing.expectEqualStrings("prefix", appended.items[0..6]);
+    const too_small = try allocator.alloc(u8, updated.len - 1);
+    defer allocator.free(too_small);
+    @memset(too_small, 0xa5);
+    try std.testing.expectError(
+        error.OutputTooSmall,
+        writer.deleteImageInto(allocator, source, 2, too_small, .{}),
+    );
+    try std.testing.expect(std.mem.allEqual(u8, too_small, 0xa5));
+}
+
+test "WIM image delete preserves unused solid resource markers" {
+    const allocator = std.testing.allocator;
+    const shared = "solid delete shared\n" ** 128;
+    const base_entries = [_]writer.Entry{
+        .{ .path = "base.txt", .data = "base remains\n" ** 128 },
+        .{ .path = "shared.bin", .data = shared },
+    };
+    const base = try writer.encodeSolidAlloc(allocator, &base_entries, .{
+        .metadata_chunk_size = 32 * 1024,
+        .solid_chunk_size = 32 * 1024,
+    });
+    defer allocator.free(base);
+    const appended_entries = [_]writer.Entry{
+        .{ .path = "remove.txt", .data = "second resource only\n" ** 128 },
+        .{ .path = "shared.bin", .data = shared },
+    };
+    const appended = try writer.appendImageAlloc(allocator, base, .{
+        .name = "remove-solid",
+        .entries = &appended_entries,
+    }, .{
+        .bootable = true,
+        .solid_chunk_size = 32 * 1024,
+    });
+    defer allocator.free(appended);
+    const updated = try writer.deleteImageAlloc(allocator, appended, 2, .{});
+    defer allocator.free(updated);
+    const archive = try archive_mod.Archive.init(updated);
+    try std.testing.expectEqual(@as(u32, 1), archive.header.image_count);
+    try std.testing.expectEqual(@as(u32, 0), archive.header.boot_index);
+    try std.testing.expect(archive.header.boot_metadata.isZero());
+    var lookup = try archive.readLookupTableAlloc(allocator, 32, 4096);
+    defer lookup.deinit();
+    var resource_count: usize = 0;
+    for (lookup.entries) |entry|
+        resource_count += @intFromBool(entry.kind == .solid_resource);
+    try std.testing.expectEqual(@as(usize, 2), resource_count);
+    var removed_hash: [20]u8 = undefined;
+    std.crypto.hash.Sha1.hash("second resource only\n" ** 128, &removed_hash, .{});
+    try std.testing.expect(lookup.findData(&removed_hash) == null);
+    const extracted = try archive.extractByPathAllocLimited(
+        allocator,
+        1,
+        "base.txt",
+        32 * 1024,
+        limits,
+    );
+    defer allocator.free(extracted);
+    try std.testing.expectEqualStrings("base remains\n" ** 128, extracted);
+    try verifyIntegrity(updated, archive.header);
+}
+
+test "WIM image delete rejects final image, bad indexes and pipable input" {
+    const allocator = std.testing.allocator;
+    const entries = [_]writer.Entry{.{ .path = "data", .data = "data" }};
+    const one_image = try writer.encodeAlloc(allocator, &entries, .{
+        .compression = .stored,
+    });
+    defer allocator.free(one_image);
+    try std.testing.expectError(
+        error.UnsupportedWimUpdateInput,
+        writer.deleteImageAlloc(allocator, one_image, 1, .{}),
+    );
+    const images = [_]writer.Image{
+        .{ .name = "first", .entries = &entries },
+        .{ .name = "second", .entries = &.{} },
+    };
+    const two_images = try writer.encodeImagesAlloc(allocator, &images, .{
+        .compression = .stored,
+    });
+    defer allocator.free(two_images);
+    try std.testing.expectError(
+        error.UnsupportedWimUpdateInput,
+        writer.deleteImageAlloc(allocator, two_images, 0, .{}),
+    );
+    try std.testing.expectError(
+        error.UnsupportedWimUpdateInput,
+        writer.deleteImageAlloc(allocator, two_images, 3, .{}),
+    );
+    try std.testing.expectError(
+        error.InvalidWimWriterOptions,
+        writer.deleteImageAlloc(allocator, two_images, 1, .{
+            .max_metadata_bytes = 0,
+        }),
+    );
+    const pipable_bytes = try writer.encodeImagesPipableAlloc(
+        allocator,
+        &images,
+        .{ .compression = .stored },
+        .{},
+    );
+    defer allocator.free(pipable_bytes);
+    try std.testing.expectError(
+        error.UnsupportedWimUpdateInput,
+        writer.deleteImageAlloc(allocator, pipable_bytes, 1, .{}),
+    );
+}
+
 test "WIM writer preserves named reparse and encrypted raw streams" {
     const allocator = std.testing.allocator;
     const file_streams = [_]writer.NamedStream{
@@ -1615,6 +1820,53 @@ test "WIM solid image append is allocation failure safe" {
         allocator,
         AllocationTest.run,
         .{base},
+    );
+}
+
+test "WIM solid image delete is allocation failure safe" {
+    const allocator = std.testing.allocator;
+    const first_entries = [_]writer.Entry{
+        .{ .path = "first", .data = "first delete OOM stream\n" ** 32 },
+        .{ .path = "shared", .data = "delete OOM shared\n" ** 32 },
+    };
+    const second_entries = [_]writer.Entry{
+        .{ .path = "second", .data = "second remains\n" ** 32 },
+        .{ .path = "shared", .data = "delete OOM shared\n" ** 32 },
+    };
+    const images = [_]writer.Image{
+        .{ .name = "first", .entries = &first_entries },
+        .{ .name = "second", .entries = &second_entries },
+    };
+    const source = try writer.encodeImagesSolidAlloc(allocator, &images, .{
+        .metadata_chunk_size = 32 * 1024,
+        .solid_chunk_size = 32 * 1024,
+        .integrity = false,
+    });
+    defer allocator.free(source);
+    const AllocationTest = struct {
+        fn run(failing_allocator: std.mem.Allocator, archive_bytes: []const u8) !void {
+            const updated = try writer.deleteImageAlloc(
+                failing_allocator,
+                archive_bytes,
+                1,
+                .{},
+            );
+            defer failing_allocator.free(updated);
+            const archive = try archive_mod.Archive.init(updated);
+            const extracted = try archive.extractByPathAllocLimited(
+                failing_allocator,
+                1,
+                "second",
+                4096,
+                limits,
+            );
+            defer failing_allocator.free(extracted);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        allocator,
+        AllocationTest.run,
+        .{source},
     );
 }
 

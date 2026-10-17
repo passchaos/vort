@@ -30,6 +30,16 @@ pub fn main(init: std.process.Init) !void {
             output_path,
             source_path orelse return error.MissingCorpusPath,
         );
+    if (std.mem.eql(u8, mode, "delete"))
+        return writeDeleted(init, output_path, false);
+    if (std.mem.eql(u8, mode, "solid-delete"))
+        return writeDeleted(init, output_path, true);
+    if (std.mem.eql(u8, mode, "delete-existing"))
+        return writeDeletedExisting(
+            init,
+            output_path,
+            source_path orelse return error.MissingCorpusPath,
+        );
     if (std.mem.eql(u8, mode, "split"))
         return writeSplit(init, output_path, compression, false);
     if (std.mem.eql(u8, mode, "pipable-split"))
@@ -280,6 +290,78 @@ fn writeAppendedExisting(
         .name = "vort-appended",
         .entries = &entries,
     }, .{});
+    defer init.gpa.free(updated);
+    try std.Io.Dir.cwd().writeFile(init.io, .{
+        .sub_path = output_path,
+        .data = updated,
+    });
+}
+
+fn writeDeleted(
+    init: std.process.Init,
+    output_path: []const u8,
+    solid: bool,
+) !void {
+    const shared = "shared deleted WIM payload\n" ** 1024;
+    const first_entries = [_]vort.WimEncodeEntry{
+        .{ .path = "first.bin", .data = "first remains after delete\n" ** 1024 },
+        .{ .path = "shared.bin", .data = shared },
+    };
+    const deleted_entries = [_]vort.WimEncodeEntry{
+        .{ .path = "deleted.bin", .data = "deleted image payload\n" ** 1024 },
+        .{ .path = "shared.bin", .data = shared },
+    };
+    const third_entries = [_]vort.WimEncodeEntry{
+        .{ .path = "shared.bin", .data = shared },
+        .{ .path = "third.bin", .data = "third becomes second\n" ** 1024 },
+    };
+    const images = [_]vort.WimEncodeImage{
+        .{ .name = "first", .entries = &first_entries },
+        .{ .name = "deleted", .entries = &deleted_entries },
+        .{ .name = "third", .entries = &third_entries },
+    };
+    const source = if (solid)
+        try vort.encodeWimImagesSolidAlloc(init.gpa, &images, .{
+            .metadata_chunk_size = 32 * 1024,
+            .solid_chunk_size = 32 * 1024,
+            .boot_index = 3,
+        })
+    else
+        try vort.encodeWimImagesAlloc(init.gpa, &images, .{
+            .compression = .xpress,
+            .boot_index = 3,
+        });
+    defer init.gpa.free(source);
+    const updated = try vort.deleteWimImageAlloc(init.gpa, source, 2, .{});
+    defer init.gpa.free(updated);
+    try std.Io.Dir.cwd().writeFile(init.io, .{
+        .sub_path = output_path,
+        .data = updated,
+    });
+}
+
+fn writeDeletedExisting(
+    init: std.process.Init,
+    output_path: []const u8,
+    source_path: []const u8,
+) !void {
+    const source = try std.Io.Dir.cwd().readFileAlloc(
+        init.io,
+        source_path,
+        init.gpa,
+        .limited(256 * 1024 * 1024),
+    );
+    defer init.gpa.free(source);
+    const entries = [_]vort.WimEncodeEntry{.{
+        .path = "survivor.txt",
+        .data = "surviving appended image\n",
+    }};
+    const appended = try vort.appendWimImageAlloc(init.gpa, source, .{
+        .name = "survivor",
+        .entries = &entries,
+    }, .{});
+    defer init.gpa.free(appended);
+    const updated = try vort.deleteWimImageAlloc(init.gpa, appended, 1, .{});
     defer init.gpa.free(updated);
     try std.Io.Dir.cwd().writeFile(init.io, .{
         .sub_path = output_path,

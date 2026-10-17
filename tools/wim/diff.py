@@ -188,6 +188,12 @@ def main() -> None:
     writer_solid_append_wimlib_cases = 0
     writer_reference_append_cases = 0
     writer_reference_append_wimlib_cases = 0
+    writer_delete_cases = 0
+    writer_delete_wimlib_cases = 0
+    writer_solid_delete_cases = 0
+    writer_solid_delete_wimlib_cases = 0
+    writer_reference_delete_cases = 0
+    writer_reference_delete_wimlib_cases = 0
     writer_split_cases = 0
     writer_split_wimlib_cases = 0
     writer_pipable_cases = 0
@@ -963,6 +969,130 @@ def main() -> None:
             if (destination / "added.txt").read_bytes() != reference_new_bytes:
                 raise AssertionError("wimlib reference append mismatch")
             writer_reference_append_wimlib_cases += 1
+
+        delete_shared = b"shared deleted WIM payload\n" * 1024
+        delete_first = b"first remains after delete\n" * 1024
+        delete_third = b"third becomes second\n" * 1024
+        for delete_mode, expected_compression in (
+            ("delete", "xpress"),
+            ("solid-delete", "lzms"),
+        ):
+            delete_image = temp / f"vort-writer-{delete_mode}.wim"
+            run(args.writer, delete_image, expected_compression, delete_mode)
+            listing = run(args.cli, "list-wim-file", delete_image).stdout
+            for marker in (
+                f"compression={expected_compression}".encode(),
+                b"images=2",
+            ):
+                if marker not in listing:
+                    raise AssertionError(
+                        f"Vort deleted WIM header missing {marker!r}"
+                    )
+            for image_index, path, expected in (
+                (1, "/first.bin", delete_first),
+                (1, "/shared.bin", delete_shared),
+                (2, "/third.bin", delete_third),
+                (2, "/shared.bin", delete_shared),
+            ):
+                output = temp / (
+                    f"writer-{delete_mode}-{image_index}-"
+                    f"{path[1:].replace('/', '-')}"
+                )
+                run(
+                    args.cli,
+                    "extract-wim-path",
+                    delete_image,
+                    image_index,
+                    path,
+                    output,
+                    len(expected),
+                )
+                if output.read_bytes() != expected:
+                    raise AssertionError("Vort deleted WIM extraction mismatch")
+            expect_failure(
+                args.cli,
+                "extract-wim-path",
+                delete_image,
+                2,
+                "/deleted.bin",
+                temp / f"writer-{delete_mode}-deleted.out",
+                64 * 1024,
+                error_name="WimPathNotFound",
+            )
+            if delete_mode == "delete":
+                writer_delete_cases += 1
+            else:
+                writer_solid_delete_cases += 1
+
+            if wimlib is not None:
+                run(wimlib, "verify", delete_image)
+                for image_index, unique_name, expected in (
+                    (1, "first.bin", delete_first),
+                    (2, "third.bin", delete_third),
+                ):
+                    destination = temp / (
+                        f"writer-{delete_mode}-wimlib-{image_index}"
+                    )
+                    run(
+                        wimlib,
+                        "extract",
+                        delete_image,
+                        image_index,
+                        f"--dest-dir={destination}",
+                        "--no-acls",
+                    )
+                    if (
+                        (destination / unique_name).read_bytes() != expected
+                        or (destination / "shared.bin").read_bytes()
+                        != delete_shared
+                    ):
+                        raise AssertionError(
+                            "wimlib deleted WIM extraction mismatch"
+                        )
+                if delete_mode == "delete":
+                    writer_delete_wimlib_cases += 1
+                else:
+                    writer_solid_delete_wimlib_cases += 1
+
+        reference_delete = temp / "vort-writer-reference-delete.wim"
+        run(
+            args.writer,
+            reference_delete,
+            "xpress",
+            "delete-existing",
+            fixture,
+        )
+        reference_survivor = temp / "writer-reference-delete-survivor.out"
+        reference_survivor_bytes = b"surviving appended image\n"
+        run(
+            args.cli,
+            "extract-wim-path",
+            reference_delete,
+            1,
+            "/survivor.txt",
+            reference_survivor,
+            len(reference_survivor_bytes),
+        )
+        if reference_survivor.read_bytes() != reference_survivor_bytes:
+            raise AssertionError("Vort reference delete survivor mismatch")
+        writer_reference_delete_cases += 1
+        if wimlib is not None:
+            run(wimlib, "verify", reference_delete)
+            destination = temp / "writer-reference-delete-wimlib"
+            run(
+                wimlib,
+                "extract",
+                reference_delete,
+                1,
+                f"--dest-dir={destination}",
+                "--no-acls",
+            )
+            if (
+                (destination / "survivor.txt").read_bytes()
+                != reference_survivor_bytes
+            ):
+                raise AssertionError("wimlib reference delete mismatch")
+            writer_reference_delete_wimlib_cases += 1
 
         split_expected = {
             (1, "/first.bin"): xorshift_bytes(0x1111_1111, 70_000),
@@ -1746,6 +1876,12 @@ def main() -> None:
         f"writer_solid_append_wimlib={writer_solid_append_wimlib_cases} "
         f"writer_reference_append={writer_reference_append_cases} "
         f"writer_reference_append_wimlib={writer_reference_append_wimlib_cases} "
+        f"writer_delete={writer_delete_cases} "
+        f"writer_delete_wimlib={writer_delete_wimlib_cases} "
+        f"writer_solid_delete={writer_solid_delete_cases} "
+        f"writer_solid_delete_wimlib={writer_solid_delete_wimlib_cases} "
+        f"writer_reference_delete={writer_reference_delete_cases} "
+        f"writer_reference_delete_wimlib={writer_reference_delete_wimlib_cases} "
         f"writer_split={writer_split_cases} "
         f"writer_split_wimlib={writer_split_wimlib_cases} "
         f"writer_pipable={writer_pipable_cases} "
