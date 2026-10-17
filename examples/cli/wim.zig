@@ -441,6 +441,117 @@ pub fn extractPipablePathIncremental(
     );
 }
 
+pub fn inspectEncryptedEsd(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const max_xml = if (args.next()) |text|
+        try std.fmt.parseInt(usize, text, 10)
+    else
+        16 * 1024 * 1024;
+    const max_ranges = if (args.next()) |text|
+        try std.fmt.parseInt(usize, text, 10)
+    else
+        1024 * 1024;
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    const archive = try vort.parseWim(input);
+    var info = try archive.readEncryptedEsdInfoAlloc(init.gpa, .{
+        .max_xml_bytes = max_xml,
+        .max_ranges = max_ranges,
+    });
+    defer info.deinit();
+    try stdout.print("wrapped_key_bytes={d} ranges={d}\n", .{
+        info.wrapped_key.len,
+        info.ranges.len,
+    });
+    for (info.ranges, 0..) |range, index|
+        try stdout.print("range={d}\toffset={d}\tbytes={d}\n", .{
+            index,
+            range.offset,
+            range.length,
+        });
+}
+
+pub fn decryptEncryptedEsd(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const key_path = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const max_output = try std.fmt.parseInt(
+        usize,
+        args.next() orelse return error.MissingCorpusPath,
+        10,
+    );
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    const private_key = try readFile(init, key_path);
+    defer {
+        std.crypto.secureZero(u8, private_key);
+        init.gpa.free(private_key);
+    }
+    const archive = try vort.parseWim(input);
+    const decrypted = try archive.decryptEncryptedEsdAllocLimited(
+        init.gpa,
+        private_key,
+        max_output,
+        .{},
+    );
+    defer init.gpa.free(decrypted);
+    try std.Io.Dir.cwd().writeFile(init.io, .{
+        .sub_path = output_path,
+        .data = decrypted,
+    });
+    try stdout.print("encrypted_bytes={d} decrypted_bytes={d} path={s}\n", .{
+        input.len,
+        decrypted.len,
+        output_path,
+    });
+}
+
+pub fn decryptEncryptedEsdWithKey(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const key_hex = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const max_output = try std.fmt.parseInt(
+        usize,
+        args.next() orelse return error.MissingCorpusPath,
+        10,
+    );
+    if (key_hex.len != 64) return error.InvalidCorpusHex;
+    var key: [32]u8 = undefined;
+    defer std.crypto.secureZero(u8, &key);
+    _ = try std.fmt.hexToBytes(&key, key_hex);
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    const archive = try vort.parseWim(input);
+    const decrypted = try archive.decryptEncryptedEsdWithAesKeyAllocLimited(
+        init.gpa,
+        &key,
+        max_output,
+        .{},
+    );
+    defer init.gpa.free(decrypted);
+    try std.Io.Dir.cwd().writeFile(init.io, .{
+        .sub_path = output_path,
+        .data = decrypted,
+    });
+    try stdout.print("encrypted_bytes={d} decrypted_bytes={d} path={s}\n", .{
+        input.len,
+        decrypted.len,
+        output_path,
+    });
+}
+
 pub fn listSetImage(
     init: std.process.Init,
     args: *std.process.Args.Iterator,

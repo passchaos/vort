@@ -19,3 +19,11 @@ stored as base64 to keep repository transport text-only. The pipable fixture
 contains `nested/payload.txt` with the pinned LZMS test text and covers matching
 leading/trailing headers, blob headers, per-chunk headers, and the tail-position
 chunk table.
+
+`encrypted-esd-small.esd.b64` is a deterministic synthetic encrypted ESD whose
+single 32-byte range uses AES-256-CBC with a zero IV. Its XML session key is
+RSA-OAEP-SHA1 wrapped with the generated test-only CryptoAPI PRIVATEKEYBLOB in
+`encrypted-esd-test-private.blob.b64`. The decrypted payload SHA-1 is
+`0613af950acadbb268fb9b7d1b58f3ec5ca57101`; its integrity table intentionally
+covers the encrypted bytes so decryption must rebuild it. These keys protect no
+real content and exist only for interoperability regression tests.

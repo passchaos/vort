@@ -21261,3 +21261,20 @@ reuse, so production keeps the simpler independently owned plans.
   the user's Windows EFS certificate/private key, so Vail has no correct
   primitive to invoke here. Windows `WriteEncryptedFileRaw()` application and
   separately encrypted ESD container segments remain follow-up work.
+
+- Added complete caller-keyed encrypted ESD segment decryption without source
+  mutation. The UTF-16LE parser bounds and validates the `<KEY>`, declared
+  range count, absolute offsets, 16-byte lengths, ordering, overlap, archive
+  bounds, and XML/integrity exclusion. Vail commit `751ca10` owns CryptoAPI
+  PRIVATEKEYBLOB parsing, best-effort constant-time 2048/4096-bit private RSA,
+  OAEP-SHA1 validation and AES-256-CBC zero-IV range transforms; Vort owns wire
+  policy and accepts either the private blob or an already-unwrapped 32-byte
+  session key. Reconstruction removes `<ESD>`, stabilizes `TOTALBYTES`, updates
+  XML/integrity descriptors, recomputes the full WIM integrity SHA-1 table,
+  relocates it and truncates the owned output. Historical Microsoft private keys
+  are intentionally not bundled. A deterministic test-only RSA/AES fixture
+  covers both key paths, malformed ranges, limits and exhaustive OOM; the
+  black-box gate requires byte-identical RSA/direct-AES results, payload SHA-1
+  extraction, wimlib encrypted-input rejection and successful verification of
+  the decrypted image (`encrypted_esd=5`). EFS filesystem application remains
+  separate from this container-level mechanism.

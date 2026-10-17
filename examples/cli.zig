@@ -409,6 +409,12 @@ pub fn main(init: std.process.Init) !void {
         try wim_cli.extractEncryptedRawData(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-wim-pipable-stream-path")) {
         try wim_cli.extractPipablePathIncremental(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-wim-encrypted-esd")) {
+        try wim_cli.inspectEncryptedEsd(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decrypt-wim-encrypted-esd")) {
+        try wim_cli.decryptEncryptedEsd(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "decrypt-wim-encrypted-esd-key")) {
+        try wim_cli.decryptEncryptedEsdWithKey(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "list-wim-parts-image")) {
         try wim_cli.listSetImage(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-wim-parts-path")) {
@@ -2822,6 +2828,9 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  extract-wim-reparse <image> <image_index> <entry> <out> [max_output]
         \\  extract-wim-encrypted-raw <image> <image_index> <entry> <out> [max_output]
         \\  extract-wim-pipable-stream-path <image> <image_index> <entry> <out> <max_output> [input_step] [output_step] [default|reparse|encrypted-raw|stream:name]
+        \\  inspect-wim-encrypted-esd <image> [max_xml] [max_ranges]
+        \\  decrypt-wim-encrypted-esd <image> <private_key_blob> <out> <max_output>
+        \\  decrypt-wim-encrypted-esd-key <image> <aes256_key_hex> <out> <max_output>
         \\  list-wim-parts-image <image_index> <part>...
         \\  extract-wim-parts-path <image_index> <entry> <out> <max_output> <part>...
         \\  encode-bgzf-file <in> <out> [block_size]

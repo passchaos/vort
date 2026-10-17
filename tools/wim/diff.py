@@ -159,6 +159,7 @@ def main() -> None:
     reparse_cases = 0
     pipable_stream_cases = 0
     encrypted_raw_cases = 0
+    encrypted_esd_cases = 0
     stream_error_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-wim-") as temp_text:
@@ -277,6 +278,85 @@ def main() -> None:
             raise AssertionError("checked-in solid LZMS ESD fixture mismatch")
         fixture_cases += 1
 
+        encrypted_esd = temp / "encrypted-segments.esd"
+        encrypted_esd.write_bytes(
+            base64.b64decode(
+                Path("src/wim/testdata/encrypted-esd-small.esd.b64").read_text()
+            )
+        )
+        encrypted_esd_private = temp / "encrypted-esd-private.blob"
+        encrypted_esd_private.write_bytes(
+            base64.b64decode(
+                Path(
+                    "src/wim/testdata/encrypted-esd-test-private.blob.b64"
+                ).read_text()
+            )
+        )
+        encrypted_esd_info = run(
+            args.cli, "inspect-wim-encrypted-esd", encrypted_esd
+        ).stdout
+        if b"wrapped_key_bytes=256 ranges=1" not in encrypted_esd_info:
+            raise AssertionError("encrypted ESD info mismatch")
+        decrypted_esd = temp / "decrypted-private.esd"
+        run(
+            args.cli,
+            "decrypt-wim-encrypted-esd",
+            encrypted_esd,
+            encrypted_esd_private,
+            decrypted_esd,
+            encrypted_esd.stat().st_size,
+        )
+        decrypted_esd_key = temp / "decrypted-key.esd"
+        run(
+            args.cli,
+            "decrypt-wim-encrypted-esd-key",
+            encrypted_esd,
+            "000102030405060708090a0b0c0d0e0f"
+            "101112131415161718191a1b1c1d1e1f",
+            decrypted_esd_key,
+            encrypted_esd.stat().st_size,
+        )
+        if decrypted_esd.read_bytes() != decrypted_esd_key.read_bytes():
+            raise AssertionError("private-key and direct-key ESD outputs differ")
+        decrypted_payload = temp / "decrypted-esd-payload.out"
+        run(
+            args.cli,
+            "extract-wim-resource",
+            decrypted_esd,
+            "0613af950acadbb268fb9b7d1b58f3ec5ca57101",
+            decrypted_payload,
+            32,
+        )
+        expected_decrypted_payload = bytes.fromhex(
+            "6bc1bee22e409f96e93d7e117393172a"
+            "ae2d8a571e03ac9c9eb76fac45af8e51"
+        )
+        if decrypted_payload.read_bytes() != expected_decrypted_payload:
+            raise AssertionError("encrypted ESD decrypted payload mismatch")
+        expect_failure(
+            args.cli,
+            "decrypt-wim-encrypted-esd",
+            encrypted_esd,
+            encrypted_esd_private,
+            temp / "encrypted-esd-limited.out",
+            decrypted_esd.stat().st_size - 1,
+            error_name="OutputLimitExceeded",
+        )
+        invalid_private = bytearray(encrypted_esd_private.read_bytes())
+        invalid_private[8] ^= 1
+        invalid_private_path = temp / "invalid-private.blob"
+        invalid_private_path.write_bytes(invalid_private)
+        expect_failure(
+            args.cli,
+            "decrypt-wim-encrypted-esd",
+            encrypted_esd,
+            invalid_private_path,
+            temp / "encrypted-esd-invalid-key.out",
+            encrypted_esd.stat().st_size,
+            error_name="InvalidPrivateKeyBlob",
+        )
+        encrypted_esd_cases += 3
+
         pipable_fixture = temp / "fixture-pipable.wim"
         pipable_fixture.write_bytes(
             base64.b64decode(
@@ -340,6 +420,15 @@ def main() -> None:
         source = temp / "tree"
         payloads = write_tree(source)
         if wimlib is not None:
+            encrypted_result = run(wimlib, "info", encrypted_esd, check=False)
+            if encrypted_result.returncode == 0 or b"encrypted" not in encrypted_result.stderr.lower():
+                raise AssertionError(
+                    "wimlib did not reject encrypted ESD segments: "
+                    f"returncode={encrypted_result.returncode} "
+                    f"stdout={encrypted_result.stdout!r} stderr={encrypted_result.stderr!r}"
+                )
+            run(wimlib, "verify", decrypted_esd)
+            encrypted_esd_cases += 2
             run(wimlib, "verify", encrypted_image)
             encrypted_details = run(
                 wimlib, "dir", encrypted_image, 1, "--detailed"
@@ -808,7 +897,7 @@ def main() -> None:
         f"codecs={codec_cases} images={image_cases} solid={solid_cases} "
         f"split={split_cases} reparse={reparse_cases} "
         f"pipable_stream={pipable_stream_cases} encrypted_raw={encrypted_raw_cases} "
-        f"stream_errors={stream_error_cases} "
+        f"encrypted_esd={encrypted_esd_cases} stream_errors={stream_error_cases} "
         f"malformed={malformed}"
     )
 

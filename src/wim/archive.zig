@@ -3,10 +3,11 @@ const core = @import("../core.zig");
 const format = @import("format.zig");
 const codec = @import("codec.zig");
 const image_metadata = @import("metadata.zig");
+const encrypted_esd = @import("encrypted_esd.zig");
 const pipable = @import("pipable.zig");
 const solid = @import("solid.zig");
 
-pub const Error = core.Error || format.Error || codec.Error || image_metadata.Error || pipable.Error || solid.Error ||
+pub const Error = core.Error || format.Error || codec.Error || image_metadata.Error || encrypted_esd.Error || pipable.Error || solid.Error ||
     std.mem.Allocator.Error || error{
     InvalidWim,
     WimImageNotFound,
@@ -114,6 +115,63 @@ pub const Archive = struct {
         return self.readResourceAllocLimited(
             allocator,
             self.header.xml_data,
+            max_output_len,
+        );
+    }
+
+    pub fn readEncryptedEsdInfoAlloc(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        limits: encrypted_esd.Limits,
+    ) Error!encrypted_esd.Info {
+        const xml = try self.readXmlAllocLimited(allocator, limits.max_xml_bytes);
+        defer allocator.free(xml);
+        var info = try encrypted_esd.parseXmlAlloc(allocator, xml, limits);
+        errdefer info.deinit();
+        try encrypted_esd.validateInfo(self.bytes, self.header, info);
+        return info;
+    }
+
+    pub fn decryptEncryptedEsdAllocLimited(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        private_key_blob: []const u8,
+        max_output_len: usize,
+        limits: encrypted_esd.Limits,
+    ) Error![]u8 {
+        const xml = try self.readXmlAllocLimited(allocator, limits.max_xml_bytes);
+        defer allocator.free(xml);
+        var info = try encrypted_esd.parseXmlAlloc(allocator, xml, limits);
+        defer info.deinit();
+        return encrypted_esd.decryptWithPrivateKeyAllocLimited(
+            allocator,
+            self.bytes,
+            self.header,
+            xml,
+            info,
+            private_key_blob,
+            max_output_len,
+        );
+    }
+
+    pub fn decryptEncryptedEsdWithAesKeyAllocLimited(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        key: *const [32]u8,
+        max_output_len: usize,
+        limits: encrypted_esd.Limits,
+    ) Error![]u8 {
+        const xml = try self.readXmlAllocLimited(allocator, limits.max_xml_bytes);
+        defer allocator.free(xml);
+        var info = try encrypted_esd.parseXmlAlloc(allocator, xml, limits);
+        defer info.deinit();
+        return encrypted_esd.decryptWithAesKeyAllocLimited(
+            allocator,
+            self.bytes,
+            self.header,
+            xml,
+            info,
+            key,
             max_output_len,
         );
     }

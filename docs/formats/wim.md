@@ -72,6 +72,25 @@ or reparse combinations. Decryption requires the user's EFS certificate/private
 key and Windows EFS semantics, not an archive password or a standalone AES
 operation, so there is no applicable Vail primitive to compose at this layer.
 
+Container-level encrypted ESD segments are a separate supported mechanism.
+`readEncryptedEsdInfoAlloc` parses the UTF-16LE `<ESD>` block, RSA-wrapped
+session key, and ordered absolute byte ranges under explicit XML/key/range
+limits. `decryptEncryptedEsdAllocLimited` accepts a caller-supplied 2048- or
+4096-bit CryptoAPI RSA PRIVATEKEYBLOB; Vail performs best-effort constant-time
+finite-field private exponentiation, RSA-OAEP-SHA1 validation, and AES-256-CBC range
+decryption with the CryptoAPI zero-IV semantics. Callers that already possess
+the 32-byte session key can use `decryptEncryptedEsdWithAesKeyAllocLimited`.
+Vort never bundles Microsoft release keys and never overwrites the source: it
+returns a caller-owned decrypted image after checking range alignment, order,
+overlap, XML/integrity exclusion, and output limits.
+
+The decrypted image is fully reconstructed rather than merely having its
+payload ranges changed. Vort removes the `<ESD>` block, reaches a fixed point
+for the UTF-16LE `TOTALBYTES` value, updates XML/integrity resource descriptors,
+recomputes every integrity-table SHA-1 chunk through the lookup table, relocates
+the integrity table, and truncates the result. This makes the result consumable
+by ordinary WIM/ESD tools.
+
 Incremental pipable extraction borrows the requested path and optional named
 stream, retains only the selected image metadata plus one encoded and decoded
 compression chunk, and writes selected file bytes into caller buffers. It skips
@@ -161,6 +180,9 @@ zig build run -- extract-wim-stream install.wim 1 /file.txt Zone.Identifier zone
 zig build run -- extract-wim-reparse install.wim 1 /link reparse.bin 1048576
 zig build run -- extract-wim-encrypted-raw install.wim 1 /secret.dat secret.efsrpc 1073741824
 zig build run -- extract-wim-pipable-stream-path pipable.wim 1 /large.bin output.bin 2147483648 4096 32768
+zig build run -- inspect-wim-encrypted-esd encrypted.esd
+zig build run -- decrypt-wim-encrypted-esd encrypted.esd release-private.blob decrypted.esd 8589934592
+zig build run -- decrypt-wim-encrypted-esd-key encrypted.esd AES256_KEY_HEX decrypted.esd 8589934592
 zig build run -- list-wim-parts-image 1 install.swm install2.swm
 zig build run -- extract-wim-parts-path 1 /large.bin output.bin 2147483648 install.swm install2.swm
 zig build run-wim-diff
@@ -180,10 +202,10 @@ Metadata, default data, ADS, reparse buffers, SHA-1, output, lookup and solid
 chunk limits are identical to the single-archive APIs; EFSRPC raw resources use
 the same owning-part routing.
 
-EFS certificate/private-key decryption, container-level encrypted ESD segments,
-and filesystem application of EFSRPC/reparse/alternate-stream semantics remain
-follow-up work. The library exposes and verifies raw content without invoking
-Windows filesystem mutation implicitly.
+EFS certificate/private-key decryption and filesystem application of
+EFSRPC/reparse/alternate-stream semantics remain follow-up work. The library
+exposes and verifies raw content without invoking Windows filesystem mutation
+implicitly.
 
 The differential gate creates stored, XPRESS, and LZX multi-chunk WIMs with
 pinned wimlib, verifies them with `wimlib-imagex`, compares metadata tree paths,
@@ -207,4 +229,7 @@ also requires two-part `WimArchiveSet` listing and byte-exact cross-part path
 extraction, plus missing and reversed set rejection. A synthetic wire-valid
 encrypted dentry pins opaque EFSRPC export and plaintext-selector rejection;
 wimlib independently verifies and labels the same entry as a raw encrypted data
-stream.
+stream. A separate deterministic encrypted-ESD fixture pins CryptoAPI RSA-OAEP
+key unwrapping, direct AES equivalence, range decryption, XML/header/integrity
+reconstruction, wrong-key and limit failures. wimlib rejects the encrypted
+input and verifies the Vort-decrypted output (`encrypted_esd=5`).
