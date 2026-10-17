@@ -99,11 +99,39 @@ pub fn writeHeader(
     boot_index: u32,
     integrity_resource: format.ResourceHeader,
 ) void {
+    writeHeaderWithFlags(
+        header,
+        version,
+        compressionFlags(compression),
+        chunk_size,
+        guid,
+        image_count,
+        lookup_resource,
+        xml_resource,
+        boot_metadata,
+        boot_index,
+        integrity_resource,
+    );
+}
+
+pub fn writeHeaderWithFlags(
+    header: []u8,
+    version: u32,
+    flags: u32,
+    chunk_size: usize,
+    guid: *const [16]u8,
+    image_count: u32,
+    lookup_resource: format.ResourceHeader,
+    xml_resource: format.ResourceHeader,
+    boot_metadata: format.ResourceHeader,
+    boot_index: u32,
+    integrity_resource: format.ResourceHeader,
+) void {
     @memset(header, 0);
     @memcpy(header[0..8], &format.magic);
     writeU32(header, 8, format.header_size);
     writeU32(header, 12, version);
-    writeU32(header, 16, compressionFlags(compression));
+    writeU32(header, 16, flags);
     writeU32(header, 20, @as(u32, @intCast(chunk_size)));
     @memcpy(header[24..40], guid);
     writeU16(header, 40, 1);

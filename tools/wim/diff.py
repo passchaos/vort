@@ -182,6 +182,12 @@ def main() -> None:
     writer_multi_wimlib_cases = 0
     writer_solid_cases = 0
     writer_solid_wimlib_cases = 0
+    writer_append_cases = 0
+    writer_append_wimlib_cases = 0
+    writer_solid_append_cases = 0
+    writer_solid_append_wimlib_cases = 0
+    writer_reference_append_cases = 0
+    writer_reference_append_wimlib_cases = 0
     writer_split_cases = 0
     writer_split_wimlib_cases = 0
     writer_pipable_cases = 0
@@ -834,6 +840,129 @@ def main() -> None:
                 ):
                     raise AssertionError("wimlib solid LZMS extraction mismatch")
             writer_solid_wimlib_cases += 1
+
+        append_shared = b"shared appended WIM payload\n" * 1024
+        append_old = b"old image payload\n" * 2048
+        append_new = b"new image payload\n" * 2048
+        for append_mode, expected_compression in (
+            ("append", "xpress"),
+            ("solid-append", "lzms"),
+        ):
+            append_image = temp / f"vort-writer-{append_mode}.wim"
+            run(args.writer, append_image, expected_compression, append_mode)
+            listing = run(args.cli, "list-wim-file", append_image).stdout
+            for marker in (
+                f"compression={expected_compression}".encode(),
+                b"images=2",
+            ):
+                if marker not in listing:
+                    raise AssertionError(
+                        f"Vort appended WIM header missing {marker!r}"
+                    )
+            for image_index, path, expected in (
+                (1, "/old.bin", append_old),
+                (1, "/shared.bin", append_shared),
+                (2, "/new.bin", append_new),
+                (2, "/shared.bin", append_shared),
+            ):
+                output = temp / (
+                    f"writer-{append_mode}-{image_index}-"
+                    f"{path[1:].replace('/', '-')}"
+                )
+                run(
+                    args.cli,
+                    "extract-wim-path",
+                    append_image,
+                    image_index,
+                    path,
+                    output,
+                    len(expected),
+                )
+                if output.read_bytes() != expected:
+                    raise AssertionError("Vort appended WIM extraction mismatch")
+            if append_mode == "append":
+                writer_append_cases += 1
+            else:
+                writer_solid_append_cases += 1
+
+            if wimlib is not None:
+                run(wimlib, "verify", append_image)
+                for image_index, unique_name, expected in (
+                    (1, "old.bin", append_old),
+                    (2, "new.bin", append_new),
+                ):
+                    destination = temp / (
+                        f"writer-{append_mode}-wimlib-{image_index}"
+                    )
+                    run(
+                        wimlib,
+                        "extract",
+                        append_image,
+                        image_index,
+                        f"--dest-dir={destination}",
+                        "--no-acls",
+                    )
+                    if (
+                        (destination / unique_name).read_bytes() != expected
+                        or (destination / "shared.bin").read_bytes()
+                        != append_shared
+                    ):
+                        raise AssertionError(
+                            "wimlib appended WIM extraction mismatch"
+                        )
+                if append_mode == "append":
+                    writer_append_wimlib_cases += 1
+                else:
+                    writer_solid_append_wimlib_cases += 1
+
+        reference_append = temp / "vort-writer-reference-append.wim"
+        run(
+            args.writer,
+            reference_append,
+            "xpress",
+            "append-existing",
+            fixture,
+        )
+        reference_old = temp / "writer-reference-append-old.out"
+        run(
+            args.cli,
+            "extract-wim-path",
+            reference_append,
+            1,
+            "/nested/file.txt",
+            reference_old,
+            1024,
+        )
+        if reference_old.read_bytes() != b"hello WIM XPRESS payload\n":
+            raise AssertionError("Vort reference append lost the old image")
+        reference_new = temp / "writer-reference-append-new.out"
+        reference_new_bytes = b"Vort appended to a wimlib archive\n"
+        run(
+            args.cli,
+            "extract-wim-path",
+            reference_append,
+            2,
+            "/added.txt",
+            reference_new,
+            len(reference_new_bytes),
+        )
+        if reference_new.read_bytes() != reference_new_bytes:
+            raise AssertionError("Vort reference append new image mismatch")
+        writer_reference_append_cases += 1
+        if wimlib is not None:
+            run(wimlib, "verify", reference_append)
+            destination = temp / "writer-reference-append-wimlib"
+            run(
+                wimlib,
+                "extract",
+                reference_append,
+                2,
+                f"--dest-dir={destination}",
+                "--no-acls",
+            )
+            if (destination / "added.txt").read_bytes() != reference_new_bytes:
+                raise AssertionError("wimlib reference append mismatch")
+            writer_reference_append_wimlib_cases += 1
 
         split_expected = {
             (1, "/first.bin"): xorshift_bytes(0x1111_1111, 70_000),
@@ -1611,6 +1740,12 @@ def main() -> None:
         f"writer_multi_wimlib={writer_multi_wimlib_cases} "
         f"writer_solid={writer_solid_cases} "
         f"writer_solid_wimlib={writer_solid_wimlib_cases} "
+        f"writer_append={writer_append_cases} "
+        f"writer_append_wimlib={writer_append_wimlib_cases} "
+        f"writer_solid_append={writer_solid_append_cases} "
+        f"writer_solid_append_wimlib={writer_solid_append_wimlib_cases} "
+        f"writer_reference_append={writer_reference_append_cases} "
+        f"writer_reference_append_wimlib={writer_reference_append_wimlib_cases} "
         f"writer_split={writer_split_cases} "
         f"writer_split_wimlib={writer_split_wimlib_cases} "
         f"writer_pipable={writer_pipable_cases} "

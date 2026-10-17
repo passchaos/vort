@@ -21444,3 +21444,25 @@ reuse, so production keeps the simpler independently owned plans.
   now 120 tests. Solid SWM/pipable output is intentionally not exposed because
   those layouts do not support packed resources; in-place image update remains
   the next WIM functionality slice.
+
+- Added transactional image append for existing ordinary and solid single-part
+  WIM archives. The Alloc/Append/Into APIs preserve old bytes, GUID and header
+  policy; append the new data/metadata; and rebuild lookup, XML, integrity and
+  boot descriptors. SHA-1 matches reuse an existing blob only after bounded
+  extraction and byte equality, then add exact new stream references to its
+  refcount. Ordinary archives retain their codec/chunk geometry, while solid
+  archives append a second packed resource and bias its logical offsets by all
+  preceding decoded resource sizes. Existing image XML stays byte-equivalent
+  except for the inserted consecutive image element and top-level `TOTALBYTES`.
+  Tests cover deterministic ordinary/solid append, old/new path extraction,
+  cross-image reuse, two-resource solid routing, boot preservation/override,
+  integrity regeneration, transactional buffers, duplicate names, pipable and
+  split rejection, explicit limits and exhaustive OOM. wimlib 1.14.5 verifies
+  and byte-compares both images for ordinary and solid updates
+  (`writer_append=1`, `writer_append_wimlib=1`, `writer_solid_append=1`,
+  `writer_solid_append_wimlib=1`). The same path appends directly to a
+  checked-in wimlib-authored XPRESS archive, which both implementations extract
+  before wimlib reverifies it (`writer_reference_append=1`,
+  `writer_reference_append_wimlib=1`). Focused WIM coverage is now 124 tests.
+  Image deletion/replacement and physical compaction remain the next update
+  slices.

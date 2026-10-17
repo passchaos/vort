@@ -261,7 +261,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   the whole solid stream. Pipable sequential extraction, caller-ordered SWM
   sets, encrypted/reparse/ADS path selectors, encrypted-ESD reconstruction,
   and deterministic stored/XPRESS/LZX/LZMS one-/multi-image, packed LZMS/ESD,
-  SWM, pipable and pipable-SWM writing are also available;
+  SWM, pipable and pipable-SWM writing plus ordinary/solid image append are also
+  available;
 - raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode,
   with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
   Zig-native incremental encoders provide `blockFlush()`/`partialFlush()` with

@@ -8,6 +8,7 @@ pub fn main(init: std.process.Init) !void {
     const output_path = args.next() orelse return error.MissingOutputPath;
     const compression_name = args.next() orelse "xpress";
     const mode = args.next() orelse "basic";
+    const source_path = args.next();
     const compression = parseCompression(compression_name) orelse
         return error.InvalidBlockPlan;
 
@@ -19,6 +20,16 @@ pub fn main(init: std.process.Init) !void {
         return writeMultiImage(init, output_path, compression);
     if (std.mem.eql(u8, mode, "solid"))
         return writeSolid(init, output_path);
+    if (std.mem.eql(u8, mode, "append"))
+        return writeAppended(init, output_path, false);
+    if (std.mem.eql(u8, mode, "solid-append"))
+        return writeAppended(init, output_path, true);
+    if (std.mem.eql(u8, mode, "append-existing"))
+        return writeAppendedExisting(
+            init,
+            output_path,
+            source_path orelse return error.MissingCorpusPath,
+        );
     if (std.mem.eql(u8, mode, "split"))
         return writeSplit(init, output_path, compression, false);
     if (std.mem.eql(u8, mode, "pipable-split"))
@@ -202,6 +213,77 @@ fn writeSolid(
     try std.Io.Dir.cwd().writeFile(init.io, .{
         .sub_path = output_path,
         .data = encoded,
+    });
+}
+
+fn writeAppended(
+    init: std.process.Init,
+    output_path: []const u8,
+    solid: bool,
+) !void {
+    const shared = "shared appended WIM payload\n" ** 1024;
+    const old_payload = "old image payload\n" ** 2048;
+    const new_payload = "new image payload\n" ** 2048;
+    const base_entries = [_]vort.WimEncodeEntry{
+        .{ .path = "old.bin", .data = old_payload },
+        .{ .path = "shared.bin", .data = shared },
+    };
+    const base = if (solid)
+        try vort.encodeWimSolidAlloc(init.gpa, &base_entries, .{
+            .metadata_chunk_size = 32 * 1024,
+            .solid_chunk_size = 32 * 1024,
+            .image_name = "base",
+            .bootable = true,
+        })
+    else
+        try vort.encodeWimAlloc(init.gpa, &base_entries, .{
+            .compression = .xpress,
+            .image_name = "base",
+            .bootable = true,
+        });
+    defer init.gpa.free(base);
+    const new_entries = [_]vort.WimEncodeEntry{
+        .{ .path = "new.bin", .data = new_payload },
+        .{ .path = "shared.bin", .data = shared },
+    };
+    const updated = try vort.appendWimImageAlloc(init.gpa, base, .{
+        .name = "appended",
+        .entries = &new_entries,
+    }, .{
+        .bootable = true,
+        .solid_chunk_size = if (solid) 32 * 1024 else null,
+    });
+    defer init.gpa.free(updated);
+    try std.Io.Dir.cwd().writeFile(init.io, .{
+        .sub_path = output_path,
+        .data = updated,
+    });
+}
+
+fn writeAppendedExisting(
+    init: std.process.Init,
+    output_path: []const u8,
+    source_path: []const u8,
+) !void {
+    const source = try std.Io.Dir.cwd().readFileAlloc(
+        init.io,
+        source_path,
+        init.gpa,
+        .limited(256 * 1024 * 1024),
+    );
+    defer init.gpa.free(source);
+    const entries = [_]vort.WimEncodeEntry{.{
+        .path = "added.txt",
+        .data = "Vort appended to a wimlib archive\n",
+    }};
+    const updated = try vort.appendWimImageAlloc(init.gpa, source, .{
+        .name = "vort-appended",
+        .entries = &entries,
+    }, .{});
+    defer init.gpa.free(updated);
+    try std.Io.Dir.cwd().writeFile(init.io, .{
+        .sub_path = output_path,
+        .data = updated,
     });
 }
 

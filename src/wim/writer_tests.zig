@@ -401,6 +401,227 @@ test "WIM solid writer defaults to ESD chunk geometry" {
     try std.testing.expectEqualStrings(payload, extracted);
 }
 
+test "WIM image append reuses ordinary blobs and rebuilds archive metadata" {
+    const allocator = std.testing.allocator;
+    const shared = "ordinary append shared payload\n" ** 128;
+    const base_entries = [_]writer.Entry{
+        .{ .path = "old.txt", .data = "old image only\n" },
+        .{ .path = "shared.bin", .data = shared },
+    };
+    const base = try writer.encodeAlloc(allocator, &base_entries, .{
+        .compression = .xpress,
+        .image_name = "base",
+        .bootable = true,
+    });
+    defer allocator.free(base);
+    const new_entries = [_]writer.Entry{
+        .{ .path = "new.txt", .data = "new image only\n" },
+        .{ .path = "shared.bin", .data = shared },
+    };
+    const new_image: writer.Image = .{
+        .name = "appended & second",
+        .entries = &new_entries,
+        .creation_time = 42,
+    };
+    const updated = try writer.appendImageAlloc(allocator, base, new_image, .{
+        .bootable = true,
+    });
+    defer allocator.free(updated);
+    const repeated = try writer.appendImageAlloc(allocator, base, new_image, .{
+        .bootable = true,
+    });
+    defer allocator.free(repeated);
+    try std.testing.expectEqualSlices(u8, updated, repeated);
+    try std.testing.expectEqualSlices(u8, base[format.header_size..], updated[format.header_size..base.len]);
+
+    const base_archive = try archive_mod.Archive.init(base);
+    const archive = try archive_mod.Archive.init(updated);
+    try std.testing.expectEqualSlices(u8, &base_archive.header.guid, &archive.header.guid);
+    try std.testing.expectEqual(@as(u32, 2), archive.header.image_count);
+    try std.testing.expectEqual(@as(u32, 2), archive.header.boot_index);
+    var base_lookup = try base_archive.readLookupTableAlloc(allocator, 16, 4096);
+    defer base_lookup.deinit();
+    var lookup = try archive.readLookupTableAlloc(allocator, 32, 4096);
+    defer lookup.deinit();
+    var shared_hash: [20]u8 = undefined;
+    std.crypto.hash.Sha1.hash(shared, &shared_hash, .{});
+    const base_shared = base_lookup.findData(&shared_hash).?;
+    const updated_shared = lookup.findData(&shared_hash).?;
+    try expectResourceEqual(base_shared.resource, updated_shared.resource);
+    try std.testing.expectEqual(@as(u32, 2), updated_shared.reference_count);
+
+    const old_bytes = try archive.extractByPathAllocLimited(
+        allocator,
+        1,
+        "old.txt",
+        1024,
+        limits,
+    );
+    defer allocator.free(old_bytes);
+    try std.testing.expectEqualStrings("old image only\n", old_bytes);
+    const new_bytes = try archive.extractByPathAllocLimited(
+        allocator,
+        2,
+        "new.txt",
+        1024,
+        limits,
+    );
+    defer allocator.free(new_bytes);
+    try std.testing.expectEqualStrings("new image only\n", new_bytes);
+    const shared_bytes = try archive.extractByPathAllocLimited(
+        allocator,
+        2,
+        "shared.bin",
+        shared.len,
+        limits,
+    );
+    defer allocator.free(shared_bytes);
+    try std.testing.expectEqualStrings(shared, shared_bytes);
+    const xml = try archive.readXmlAllocLimited(allocator, 32 * 1024);
+    defer allocator.free(xml);
+    try std.testing.expect(utf16ContainsAscii(xml, "appended &amp; second"));
+    try std.testing.expect(utf16ContainsAscii(xml, "IMAGE INDEX=\"2\""));
+    try verifyIntegrity(updated, archive.header);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(allocator);
+    try appended.appendSlice(allocator, "prefix");
+    const appended_len = try writer.appendImageAppend(
+        allocator,
+        &appended,
+        base,
+        new_image,
+        .{},
+    );
+    try std.testing.expect(appended_len > base.len);
+    try std.testing.expectEqualStrings("prefix", appended.items[0..6]);
+    const too_small = try allocator.alloc(u8, updated.len - 1);
+    defer allocator.free(too_small);
+    @memset(too_small, 0xa5);
+    try std.testing.expectError(
+        error.OutputTooSmall,
+        writer.appendImageInto(allocator, base, new_image, too_small, .{
+            .bootable = true,
+        }),
+    );
+    try std.testing.expect(std.mem.allEqual(u8, too_small, 0xa5));
+}
+
+test "WIM image append extends solid runs with a packed resource" {
+    const allocator = std.testing.allocator;
+    const shared = "solid append shared payload\n" ** 256;
+    const base_entries = [_]writer.Entry{
+        .{ .path = "base.bin", .data = "base solid bytes\n" ** 1024 },
+        .{ .path = "shared.bin", .data = shared },
+    };
+    const base = try writer.encodeSolidAlloc(allocator, &base_entries, .{
+        .metadata_chunk_size = 32 * 1024,
+        .solid_chunk_size = 32 * 1024,
+        .bootable = true,
+    });
+    defer allocator.free(base);
+    var random: [40_000]u8 = undefined;
+    var prng = std.Random.DefaultPrng.init(0x4150_5045_4e44);
+    prng.random().bytes(&random);
+    const new_entries = [_]writer.Entry{
+        .{ .path = "random.bin", .data = &random },
+        .{ .path = "shared.bin", .data = shared },
+    };
+    const updated = try writer.appendImageAlloc(allocator, base, .{
+        .name = "solid-second",
+        .entries = &new_entries,
+    }, .{
+        .solid_chunk_size = 32 * 1024,
+    });
+    defer allocator.free(updated);
+    const archive = try archive_mod.Archive.init(updated);
+    try std.testing.expectEqual(format.solid_version, archive.header.version);
+    try std.testing.expectEqual(@as(u32, 2), archive.header.image_count);
+    try std.testing.expectEqual(@as(u32, 1), archive.header.boot_index);
+    var lookup = try archive.readLookupTableAlloc(allocator, 32, 4096);
+    defer lookup.deinit();
+    var resource_count: usize = 0;
+    for (lookup.entries) |entry|
+        resource_count += @intFromBool(entry.kind == .solid_resource);
+    try std.testing.expectEqual(@as(usize, 2), resource_count);
+    var shared_hash: [20]u8 = undefined;
+    std.crypto.hash.Sha1.hash(shared, &shared_hash, .{});
+    try std.testing.expectEqual(@as(u32, 2), lookup.findData(&shared_hash).?.reference_count);
+    var random_hash: [20]u8 = undefined;
+    std.crypto.hash.Sha1.hash(&random, &random_hash, .{});
+    const random_entry = lookup.findData(&random_hash).?;
+    try std.testing.expectEqual(archive_mod.LookupKind.solid_blob, random_entry.kind);
+    var first_resource_size: u64 = 0;
+    for (lookup.entries) |entry| {
+        if (entry.kind == .solid_resource) {
+            first_resource_size = entry.solid_resource.?.uncompressed_size;
+            break;
+        }
+    }
+    try std.testing.expect(random_entry.resource.offset_in_wim >= first_resource_size);
+    const extracted = try archive.extractByPathAllocLimited(
+        allocator,
+        2,
+        "random.bin",
+        random.len,
+        limits,
+    );
+    defer allocator.free(extracted);
+    try std.testing.expectEqualSlices(u8, &random, extracted);
+    try verifyIntegrity(updated, archive.header);
+}
+
+test "WIM image append rejects duplicate names and unsupported layouts" {
+    const allocator = std.testing.allocator;
+    const entries = [_]writer.Entry{.{ .path = "base", .data = "base" }};
+    const base = try writer.encodeAlloc(allocator, &entries, .{
+        .compression = .stored,
+        .image_name = "base-image",
+        .integrity = false,
+    });
+    defer allocator.free(base);
+    try std.testing.expectError(
+        error.InvalidWimWriterOptions,
+        writer.appendImageAlloc(allocator, base, .{
+            .name = "base-image",
+            .entries = &.{},
+        }, .{}),
+    );
+    try std.testing.expectError(
+        error.InvalidWimWriterOptions,
+        writer.appendImageAlloc(allocator, base, .{
+            .name = "second",
+            .entries = &.{},
+        }, .{ .max_xml_bytes = 0 }),
+    );
+
+    const pipable_bytes = try writer.encodePipableAlloc(
+        allocator,
+        &entries,
+        .{ .compression = .stored },
+        .{},
+    );
+    defer allocator.free(pipable_bytes);
+    try std.testing.expectError(
+        error.UnsupportedWimUpdateInput,
+        writer.appendImageAlloc(allocator, pipable_bytes, .{
+            .name = "second",
+            .entries = &.{},
+        }, .{}),
+    );
+
+    const split_header = try allocator.dupe(u8, base);
+    defer allocator.free(split_header);
+    std.mem.writeInt(u16, split_header[42..44], 2, .little);
+    try std.testing.expectError(
+        error.UnsupportedWimUpdateInput,
+        writer.appendImageAlloc(allocator, split_header, .{
+            .name = "second",
+            .entries = &.{},
+        }, .{}),
+    );
+}
+
 test "WIM writer preserves named reparse and encrypted raw streams" {
     const allocator = std.testing.allocator;
     const file_streams = [_]writer.NamedStream{
@@ -1350,6 +1571,50 @@ test "WIM solid LZMS writer is allocation failure safe" {
         std.testing.allocator,
         AllocationTest.run,
         .{},
+    );
+}
+
+test "WIM solid image append is allocation failure safe" {
+    const allocator = std.testing.allocator;
+    const shared = "append OOM shared stream\n" ** 32;
+    const base_entries = [_]writer.Entry{
+        .{ .path = "base", .data = "base solid stream\n" ** 32 },
+        .{ .path = "shared", .data = shared },
+    };
+    const base = try writer.encodeSolidAlloc(allocator, &base_entries, .{
+        .metadata_chunk_size = 32 * 1024,
+        .solid_chunk_size = 32 * 1024,
+        .integrity = false,
+    });
+    defer allocator.free(base);
+    const AllocationTest = struct {
+        fn run(failing_allocator: std.mem.Allocator, source: []const u8) !void {
+            const new_entries = [_]writer.Entry{
+                .{ .path = "new", .data = "new solid stream\n" ** 32 },
+                .{ .path = "shared", .data = shared },
+            };
+            const updated = try writer.appendImageAlloc(
+                failing_allocator,
+                source,
+                .{ .name = "second", .entries = &new_entries },
+                .{ .solid_chunk_size = 32 * 1024 },
+            );
+            defer failing_allocator.free(updated);
+            const archive = try archive_mod.Archive.init(updated);
+            const extracted = try archive.extractByPathAllocLimited(
+                failing_allocator,
+                2,
+                "new",
+                4096,
+                limits,
+            );
+            defer failing_allocator.free(extracted);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        allocator,
+        AllocationTest.run,
+        .{base},
     );
 }
 

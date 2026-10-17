@@ -206,6 +206,23 @@ LZMS geometry: 128 KiB metadata chunks and 64 MiB solid chunks; both are
 caller-selectable power-of-two sizes. Solid output supports boot metadata and
 integrity, but is a standard seekable archive rather than SWM or pipable output.
 
+`appendWimImageAlloc`/Append/Into add one borrowed `WimEncodeImage` to an
+existing caller-supplied single-part seekable WIM. The operation is
+transactional and returns a rewritten owned archive: all old physical bytes and
+the GUID/header policy are retained, new resources are appended, and fresh
+lookup/XML/integrity/header records become authoritative. New stream hashes are
+matched against existing data entries only after bounded extraction and exact
+byte comparison; successful reuse increments the old lookup refcount without
+writing another blob. Ordinary WIMs append independent resources using their
+existing codec and chunk geometry. Solid archives append a new packed resource
+and bias its logical blob offsets by the decoded sizes of previous resources,
+so WIMGAPI/wimlib's single logical solid run remains valid. Existing image XML
+is preserved verbatim apart from inserting the consecutive new `IMAGE` element
+and replacing top-level `TOTALBYTES`. Integrity presence is preserved by
+default or may be explicitly overridden; `bootable` moves the boot descriptor
+to the appended image. Lookup/XML/solid-chunk limits are explicit. Pipable and
+split inputs are rejected before mutation.
+
 `splitWimAlloc` converts any supported standalone, non-solid standard WIM into
 caller-owned SWM parts. `encodeWimSplitAlloc` and
 `encodeWimImagesSplitAlloc` compose this with the one- or multi-image writers.
@@ -246,8 +263,8 @@ creates the exact stream consumed by `WimPipableStreamPathExtractor`, including
 cross-part target blobs. The returned `WimEncodedSplitArchive` owns every part
 as with the standard split API.
 
-The current writer remains whole-archive and caller-buffer based. In-place image
-append/update, wire-spanned individual resources, automatic
+The current writer remains whole-archive and caller-buffer based. Image
+deletion/replacement, physical compaction, wire-spanned individual resources, automatic
 host-filesystem security capture, short names, and tagged metadata remain
 follow-up slices. Filesystem capture/application and construction of EFSRPC or
 reparse payloads from OS objects stay outside the wire serializer.
@@ -350,6 +367,14 @@ const solid_esd = try vort.encodeWimImagesSolidAlloc(allocator, &images, .{
     .boot_index = 1,
 });
 defer allocator.free(solid_esd);
+
+const appended = try vort.appendWimImageAlloc(
+    allocator,
+    existing_wim,
+    .{ .name = "new-image", .entries = new_entries },
+    .{ .bootable = true },
+);
+defer allocator.free(appended);
 
 var swm = try vort.encodeWimImagesSplitAlloc(
     allocator,
@@ -456,6 +481,14 @@ into one four-chunk LZMS resource behind two independently compressed metadata
 resources. Vort validates the marker/logical offsets and extracts every path;
 wimlib verifies the archive and byte-compares both images
 (`writer_solid=1`, `writer_solid_wimlib=1`).
+Separate ordinary-XPRESS and solid-LZMS append gates retain the first image,
+reuse a shared blob with an incremented reference count, add the second image,
+and move the boot index. Vort extracts all old/new paths and wimlib independently
+verifies and byte-compares both updated archives (`writer_append=1`,
+`writer_append_wimlib=1`, `writer_solid_append=1`,
+`writer_solid_append_wimlib=1`). A checked-in wimlib-authored XPRESS archive is
+also updated directly, then reverified by wimlib
+(`writer_reference_append=1`, `writer_reference_append_wimlib=1`).
 The SWM writer matrix then emits multi-image stored, XPRESS, LZX, and LZMS sets with three
 indivisible 70,000-byte blobs and a cross-image shared resource. Vort validates
 every local lookup and extracts all paths through `WimArchiveSet`; wimlib joins
