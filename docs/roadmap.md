@@ -21229,3 +21229,18 @@ reuse, so production keeps the simpler independently owned plans.
   lookup assembly: real split parts own local, not global-part-1, tables.
   Nonseekable incremental application from a concatenated pipable stream and
   encrypted WIM file data remain follow-up work.
+
+- Added caller-driven nonseekable pipable-WIM path extraction. The incremental
+  state machine consumes the preliminary header, leading XML, ordered image
+  metadata, file blob headers, compressed chunks and tail tables across
+  arbitrary input cuts while emitting selected bytes under output backpressure.
+  It resolves default, named or reparse hashes as soon as the chosen metadata
+  arrives, stops early for empty files, verifies selected metadata/data SHA-1,
+  and exposes exact `StepResult` progress plus EOF truncation/not-found
+  semantics. Concatenated pipable SWM streams validate trailing/leading part
+  header transitions without sibling discovery. One-byte input, 3-byte output,
+  output/metadata/chunk limits, corrupt chunk headers, missing target blobs and
+  exhaustive OOM are pinned locally. The wimlib 1.14.5 differential now passes
+  11 incremental cases across stored/XPRESS/LZX multi-chunk files, empty files,
+  reparse buffers and a two-part 1.3 MB SWM stream; missing and reversed parts
+  fail explicitly. Encrypted WIM file data remains the next core format gap.

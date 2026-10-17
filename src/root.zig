@@ -1629,6 +1629,9 @@ pub const parseErofsSuperblock = erofs.parseSuperblock;
 
 pub const WimArchive = wim.Archive;
 pub const WimArchiveSet = wim.ArchiveSet;
+pub const WimPipableStreamLimits = wim.PipableStreamLimits;
+pub const WimPipableStreamOptions = wim.PipableStreamOptions;
+pub const WimPipableStreamPathExtractor = wim.PipableStreamPathExtractor;
 pub const WimError = wim.Error;
 pub const WimCompression = wim.Compression;
 pub const WimDentry = wim.Dentry;

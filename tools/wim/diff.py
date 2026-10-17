@@ -107,6 +107,7 @@ def main() -> None:
     solid_cases = 0
     split_cases = 0
     reparse_cases = 0
+    pipable_stream_cases = 0
     stream_error_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-wim-") as temp_text:
@@ -177,6 +178,21 @@ def main() -> None:
         )
         if pipable_out.read_bytes() != lzms_expected:
             raise AssertionError("checked-in pipable WIM path mismatch")
+        pipable_stream_out = temp / "fixture-pipable-stream.out"
+        run(
+            args.cli,
+            "extract-wim-pipable-stream-path",
+            pipable_fixture,
+            1,
+            "/nested/payload.txt",
+            pipable_stream_out,
+            len(lzms_expected),
+            1,
+            3,
+        )
+        if pipable_stream_out.read_bytes() != lzms_expected:
+            raise AssertionError("checked-in pipable stream path mismatch")
+        pipable_stream_cases += 1
         fixture_cases += 1
         bad_pipable_tail = bytearray(pipable_fixture.read_bytes())
         bad_pipable_tail[-208] ^= 1
@@ -271,6 +287,58 @@ def main() -> None:
                     temp,
                     layout="pipable",
                 )
+                pipable_stream_out = temp / f"pipable-stream-{expected_name}.out"
+                run(
+                    args.cli,
+                    "extract-wim-pipable-stream-path",
+                    pipable_image,
+                    1,
+                    "/large.bin",
+                    pipable_stream_out,
+                    len(payloads["large.bin"]),
+                    7,
+                    11,
+                )
+                if pipable_stream_out.read_bytes() != payloads["large.bin"]:
+                    raise AssertionError(
+                        f"pipable stream extraction mismatch for {expected_name}"
+                    )
+                pipable_stream_cases += 1
+                pipable_empty_out = temp / f"pipable-stream-empty-{expected_name}.out"
+                run(
+                    args.cli,
+                    "extract-wim-pipable-stream-path",
+                    pipable_image,
+                    1,
+                    "/empty.bin",
+                    pipable_empty_out,
+                    0,
+                    5,
+                    7,
+                )
+                if pipable_empty_out.read_bytes() != b"":
+                    raise AssertionError(
+                        f"pipable empty stream mismatch for {expected_name}"
+                    )
+                pipable_stream_cases += 1
+                pipable_reparse_out = temp / f"pipable-stream-reparse-{expected_name}.out"
+                run(
+                    args.cli,
+                    "extract-wim-pipable-stream-path",
+                    pipable_image,
+                    1,
+                    "/nested/config-link",
+                    pipable_reparse_out,
+                    4096,
+                    9,
+                    13,
+                    "reparse",
+                )
+                if pipable_reparse_out.read_bytes() != reparse_bytes:
+                    raise AssertionError(
+                        f"pipable reparse stream mismatch for {expected_name}"
+                    )
+                pipable_stream_cases += 1
                 codec_cases += 1
 
             first_source = temp / "first-image"
@@ -449,6 +517,54 @@ def main() -> None:
             )
             if pipable_set_output.read_bytes() != split_payload:
                 raise AssertionError("pipable SWM set cross-part extraction mismatch")
+            pipable_concat = temp / "pipable-split-concatenated.wim"
+            pipable_concat.write_bytes(
+                pipable_first.read_bytes() + pipable_second.read_bytes()
+            )
+            pipable_stream_output = temp / "pipable-split-stream-path.out"
+            run(
+                args.cli,
+                "extract-wim-pipable-stream-path",
+                pipable_concat,
+                1,
+                "/large.bin",
+                pipable_stream_output,
+                len(split_payload),
+                13,
+                17,
+            )
+            if pipable_stream_output.read_bytes() != split_payload:
+                raise AssertionError("pipable concatenated stream extraction mismatch")
+            pipable_stream_cases += 1
+            expect_failure(
+                args.cli,
+                "extract-wim-pipable-stream-path",
+                pipable_first,
+                1,
+                "/large.bin",
+                temp / "pipable-missing-part.out",
+                len(split_payload),
+                13,
+                17,
+                error_name="TruncatedFrame",
+            )
+            pipable_reversed = temp / "pipable-split-reversed.wim"
+            pipable_reversed.write_bytes(
+                pipable_second.read_bytes() + pipable_first.read_bytes()
+            )
+            expect_failure(
+                args.cli,
+                "extract-wim-pipable-stream-path",
+                pipable_reversed,
+                1,
+                "/large.bin",
+                temp / "pipable-reversed-part.out",
+                len(split_payload),
+                13,
+                17,
+                error_name="InvalidWim",
+            )
+            malformed += 2
             split_cases += 1
 
         original = fixture.read_bytes()
@@ -563,7 +679,8 @@ def main() -> None:
     print(
         f"fixture={fixture_cases} wimlib={wimlib is not None} "
         f"codecs={codec_cases} images={image_cases} solid={solid_cases} "
-        f"split={split_cases} reparse={reparse_cases} stream_errors={stream_error_cases} "
+        f"split={split_cases} reparse={reparse_cases} "
+        f"pipable_stream={pipable_stream_cases} stream_errors={stream_error_cases} "
         f"malformed={malformed}"
     )
 

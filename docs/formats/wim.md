@@ -4,6 +4,8 @@ Vort provides a dependency-free pure Zig reader for Microsoft's Windows Imaging
 Format family. Standard WIM headers, solid-version ESD headers, and split SWM
 part headers are recognized. Seekable byte slices using wimlib's pipable WIM
 extension are recognized through their `WLPWM` leading and trailing headers.
+`WimPipableStreamPathExtractor` also consumes this layout incrementally without
+requiring the trailing header or a seekable source.
 
 The parser validates the fixed 208-byte header, version, compression flags,
 power-of-two chunk geometry, GUID and part fields, image and boot indexes, and
@@ -58,6 +60,25 @@ the lookup table can use `extractDentryStreamAllocLimited` with `.default`,
 `.named`, or `.reparse` without repeating path traversal. Every selected hash
 still uses the normal output, solid-chunk, part-number, and SHA-1 checks.
 Encrypted files remain explicitly unsupported.
+
+Incremental pipable extraction borrows the requested path and optional named
+stream, retains only the selected image metadata plus one encoded and decoded
+compression chunk, and writes selected file bytes into caller buffers. It skips
+the leading XML resource, decodes the selected metadata resource, resolves the
+path before file blobs arrive, then scans blob headers until the selected SHA-1
+appears. Empty files finish immediately after metadata. Stored, XPRESS, LZX,
+default, named, and reparse streams share the same state machine and SHA-1
+verification. `step` reports exact input/output progress and `need_input`,
+`need_output`, or `done`; `finish` distinguishes truncation from a complete
+stream that lacks the selected blob. Caller limits bound metadata, output,
+directory traversal, path depth, and chunk scratch.
+
+Concatenated pipable SWM parts are accepted only in exact order. The extractor
+consumes the prior part's trailing header and the next part's preliminary
+header, cross-checks GUID/version/compression/chunk/image geometry, and rejects
+missing, reversed, skipped, or repeated transitions. Per-chunk size headers are
+authoritative during pipe decoding; the seek-only cumulative table at each
+resource tail is consumed without buffering it.
 
 Extra-stream validation rejects separator-bearing or duplicate names and
 impossible unnamed-stream multiplicity. A regular file may have at most one
@@ -127,6 +148,7 @@ zig build run -- list-wim-image install.wim 1
 zig build run -- extract-wim-path install.wim 1 /Windows/System32/example.dll output.bin 1073741824
 zig build run -- extract-wim-stream install.wim 1 /file.txt Zone.Identifier zone.bin 1048576
 zig build run -- extract-wim-reparse install.wim 1 /link reparse.bin 1048576
+zig build run -- extract-wim-pipable-stream-path pipable.wim 1 /large.bin output.bin 2147483648 4096 32768
 zig build run -- list-wim-parts-image 1 install.swm install2.swm
 zig build run -- extract-wim-parts-path 1 /large.bin output.bin 2147483648 install.swm install2.swm
 zig build run-wim-diff
@@ -145,8 +167,7 @@ reordered, duplicate-position, or mismatched sets fail before extraction.
 Metadata, default data, ADS, reparse buffers, SHA-1, output, lookup and solid
 chunk limits are identical to the single-archive APIs.
 
-Nonseekable incremental application directly from a pipable WIM byte stream,
-encrypted file data, and filesystem application of reparse/alternate-stream
+Encrypted file data and filesystem application of reparse/alternate-stream
 semantics remain follow-up work. The library exposes and verifies raw content
 without creating links or host filesystem ADS implicitly.
 
@@ -159,7 +180,9 @@ multi-chunk solid LZMS ESD through both Vort and wimlib, covers two split SWM
 part headers and cross-part errors, and keeps checked-in XPRESS/LZX/LZMS plus
 pipable XPRESS fixtures. The external matrix rebuilds none/XPRESS/LZX pipable
 WIMs, exercises multi-chunk extraction, and byte-compares a two-part pipable
-SWM set. Negative coverage includes output limits, missing images/paths/hashes,
+SWM set. The same generated images are fed through bounded incremental cuts for
+stored/XPRESS/LZX, empty, reparse, and concatenated split paths. Negative
+coverage includes output limits, missing images/paths/hashes,
 directory extraction rejection, missing named streams, non-reparse selection,
 malformed headers, security lengths, UTF-16 name lengths, child offsets, stream
 counts, duplicate/unsafe stream names, alternate chunk headers, and directory

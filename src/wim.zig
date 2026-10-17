@@ -4,6 +4,7 @@ const codec = @import("wim/codec.zig");
 const metadata = @import("wim/metadata.zig");
 const archive = @import("wim/archive.zig");
 const pipable = @import("wim/pipable.zig");
+const pipable_stream = @import("wim/pipable_stream.zig");
 const set = @import("wim/set.zig");
 
 pub const Error = format.Error || codec.Error || metadata.Error || archive.Error || set.Error ||
@@ -21,6 +22,9 @@ pub const LookupEntry = archive.LookupEntry;
 pub const LookupKind = archive.LookupKind;
 pub const LookupTable = archive.LookupTable;
 pub const PathLimits = archive.PathLimits;
+pub const PipableStreamLimits = pipable_stream.Limits;
+pub const PipableStreamOptions = pipable_stream.Options;
+pub const PipableStreamPathExtractor = pipable_stream.PathExtractor;
 pub const ResourceHeader = format.ResourceHeader;
 pub const SecurityData = metadata.SecurityData;
 pub const SolidResource = archive.SolidResource;
@@ -36,5 +40,7 @@ test {
     _ = metadata;
     _ = archive;
     _ = pipable;
+    _ = pipable_stream;
+    _ = @import("wim/pipable_stream_tests.zig");
     _ = set;
 }

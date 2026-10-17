@@ -30,6 +30,24 @@ pub const StreamSelector = union(enum) {
     reparse,
 };
 
+pub fn selectDentryStreamSha1Alloc(
+    allocator: std.mem.Allocator,
+    dentry: image_metadata.Dentry,
+    stream: StreamSelector,
+) Error![20]u8 {
+    if (dentry.isDirectory()) return error.WimNotRegularFile;
+    if (dentry.isEncrypted()) return error.UnsupportedWimFile;
+    return switch (stream) {
+        .default => blk: {
+            if (dentry.isReparsePoint()) return error.WimNotRegularFile;
+            break :blk try dentry.defaultDataSha1() orelse
+                return error.WimNotRegularFile;
+        },
+        .named => |name| try dentry.namedStreamSha1(allocator, name),
+        .reparse => try dentry.reparseDataSha1(),
+    };
+}
+
 pub const solid_resource_magic = solid.resource_magic;
 pub const LookupKind = solid.LookupKind;
 pub const SolidResource = solid.Resource;
@@ -311,17 +329,7 @@ pub const Archive = struct {
         max_output_len: usize,
         max_solid_chunk_bytes: usize,
     ) Error![]u8 {
-        if (dentry.isDirectory()) return error.WimNotRegularFile;
-        if (dentry.isEncrypted()) return error.UnsupportedWimFile;
-        const hash = switch (stream) {
-            .default => blk: {
-                if (dentry.isReparsePoint()) return error.WimNotRegularFile;
-                break :blk try dentry.defaultDataSha1() orelse
-                    return error.WimNotRegularFile;
-            },
-            .named => |name| try dentry.namedStreamSha1(allocator, name),
-            .reparse => try dentry.reparseDataSha1(),
-        };
+        const hash = try selectDentryStreamSha1Alloc(allocator, dentry, stream);
         if (std.mem.allEqual(u8, &hash, 0)) return allocator.alloc(u8, 0);
         const entry = lookup.findData(&hash) orelse {
             if (self.header.total_parts > 1) return error.WimResourceInOtherPart;

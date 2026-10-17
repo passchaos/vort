@@ -313,6 +313,95 @@ pub fn extractReparseData(
     });
 }
 
+pub fn extractPipablePathIncremental(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const image_index = try std.fmt.parseInt(
+        u32,
+        args.next() orelse return error.MissingCorpusPath,
+        10,
+    );
+    const entry_path = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const limit = try std.fmt.parseInt(
+        usize,
+        args.next() orelse return error.MissingCorpusPath,
+        10,
+    );
+    const input_step = if (args.next()) |text|
+        try std.fmt.parseInt(usize, text, 10)
+    else
+        4096;
+    const output_step = if (args.next()) |text|
+        try std.fmt.parseInt(usize, text, 10)
+    else
+        32 * 1024;
+    const stream: vort.WimStreamSelector = if (args.next()) |text|
+        if (std.mem.eql(u8, text, "default"))
+            .default
+        else if (std.mem.eql(u8, text, "reparse"))
+            .reparse
+        else if (std.mem.startsWith(u8, text, "stream:"))
+            .{ .named = text["stream:".len..] }
+        else
+            return error.InvalidBlockPlan
+    else
+        .default;
+    if (input_step == 0 or output_step == 0 or output_step > max_file_size)
+        return error.InvalidBlockPlan;
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    const scratch = try init.gpa.alloc(u8, output_step);
+    defer init.gpa.free(scratch);
+    var decoded: std.ArrayList(u8) = .empty;
+    defer decoded.deinit(init.gpa);
+    var extractor = vort.WimPipableStreamPathExtractor.init(init.gpa, .{
+        .image_index = image_index,
+        .path = entry_path,
+        .stream = stream,
+        .max_output_len = limit,
+        .limits = .{
+            .max_metadata_bytes = max_metadata_bytes,
+            .max_directory_entries = max_directory_entries,
+            .max_path_depth = max_path_depth,
+        },
+    });
+    defer extractor.deinit();
+    var input_offset: usize = 0;
+    while (true) {
+        const input_end = @min(input.len, input_offset + input_step);
+        const stepped = try extractor.step(input[input_offset..input_end], scratch);
+        input_offset += stepped.progress.input_read;
+        try decoded.appendSlice(init.gpa, scratch[0..stepped.progress.output_written]);
+        if (stepped.status == .done) break;
+        if (stepped.status == .need_input and input_offset == input.len) {
+            try extractor.finish();
+            return error.SizeMismatch;
+        }
+        if (stepped.progress.input_read == 0 and stepped.progress.output_written == 0)
+            return error.InvalidBlockPlan;
+    }
+    try std.Io.Dir.cwd().writeFile(init.io, .{
+        .sub_path = output_path,
+        .data = decoded.items,
+    });
+    try stdout.print(
+        "image={d} entry={s} decoded_bytes={d} input_read={d} input_step={d} output_step={d} path={s}\n",
+        .{
+            image_index,
+            entry_path,
+            decoded.items.len,
+            input_offset,
+            input_step,
+            output_step,
+            output_path,
+        },
+    );
+}
+
 pub fn listSetImage(
     init: std.process.Init,
     args: *std.process.Args.Iterator,

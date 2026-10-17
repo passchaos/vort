@@ -77,10 +77,7 @@ pub fn parseHeader(input: []const u8) Error!Header {
     if (!std.mem.eql(u8, input[0..8], &pipable_magic)) return error.InvalidMagic;
     if (input.len < 2 * header_size) return error.TruncatedFrame;
 
-    const leading = try parseHeaderFields(input[0..header_size], true);
-    if (!leading.lookup_table.isZero() or !leading.xml_data.isZero() or
-        !leading.boot_metadata.isZero() or !leading.integrity_table.isZero())
-        return error.InvalidWim;
+    const leading = try parsePipableLeadingHeader(input[0..header_size]);
     const trailing_offset = input.len - header_size;
     const trailing_bytes = input[trailing_offset..];
     if (!std.mem.eql(u8, trailing_bytes[0..8], &pipable_magic))
@@ -89,6 +86,18 @@ pub fn parseHeader(input: []const u8) Error!Header {
     if (!headersDescribeSameArchive(leading, trailing)) return error.InvalidWim;
     try validateHeaderResources(trailing, trailing_offset);
     return trailing;
+}
+
+pub fn parsePipableLeadingHeader(input: []const u8) Error!Header {
+    const header = try parsePipableStreamHeader(input);
+    if (!header.lookup_table.isZero() or !header.xml_data.isZero() or
+        !header.boot_metadata.isZero() or !header.integrity_table.isZero())
+        return error.InvalidWim;
+    return header;
+}
+
+pub fn parsePipableStreamHeader(input: []const u8) Error!Header {
+    return parseHeaderFields(input, true);
 }
 
 fn parseHeaderFields(input: []const u8, pipable: bool) Error!Header {
