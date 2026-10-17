@@ -21388,3 +21388,21 @@ reuse, so production keeps the simpler independently owned plans.
   Stored and XPRESS probes use 13-byte input/17-byte output cuts; wimlib joins
   the Vort parts with `--check`, verifies, and extracts both shared and unique
   content (`writer_pipable_split=2`, `writer_pipable_split_wimlib=2`).
+
+- Added deterministic LZX writing across every existing WIM composition API.
+  The shared position-slot geometry now has one decoder/encoder definition, and
+  the reference encoder emits canonical verbatim blocks with explicit-offset
+  3...8-byte matches, fixed WIM E8 preprocessing and all 15...21-bit window
+  sizes (32 KiB Microsoft-compatible by default, larger windows as the wimlib
+  extension). Each resource chunk independently keeps the LZX representation only
+  when it is smaller, otherwise retaining the original raw bytes and cumulative
+  table semantics. Direct unit coverage proves E8 reversibility, 64 KiB extended
+  block lengths, mixed compressed/raw chunks, deterministic output, invalid
+  geometry and exhaustive allocation cleanup. Ordinary, Windows-stream, inode,
+  multi-image, SWM, pipable, integrity-pipable and pipable-SWM probes now include
+  LZX; Vort extracts every generated archive and wimlib 1.14.5 independently
+  verifies and extracts all writer variants (each writer and writer-wimlib
+  counter is now `3`). Focused WIM/LZX coverage is 113 tests. Secondary lengths,
+  aligned blocks, deeper match search, LZMS writing and in-place update remain
+  follow-ups; these are ratio/performance or separate codec/API work rather than
+  missing LZX wire compatibility.

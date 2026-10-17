@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("../core.zig");
 const bit_reader = @import("lzx/bit_reader.zig");
 const lzx_huffman = @import("lzx/huffman.zig");
+const lzx_tables = @import("lzx/tables.zig");
 
 pub const Error = core.Error || error{ InvalidLzxStream, UnsupportedCabinetFeature };
 
@@ -10,15 +11,14 @@ pub const StreamFormat = enum {
     wim,
 };
 
-const min_window_bits: u5 = 15;
-const max_window_bits: u5 = 21;
+const min_window_bits = lzx_tables.min_window_bits;
+const max_window_bits = lzx_tables.max_window_bits;
 const frame_size: usize = 32 * 1024;
 const min_match: usize = 2;
 const primary_length_count: usize = 7;
 const secondary_length_count: usize = 249;
 const aligned_symbol_count: usize = 8;
 const max_main_symbols: usize = 256 + 50 * 8;
-const position_slots = [_]u8{ 30, 32, 34, 36, 38, 42, 50 };
 const WordBitReader = bit_reader.Reader;
 const CanonicalHuffman = lzx_huffman.Canonical;
 const readLengths = lzx_huffman.readLengths;
@@ -109,7 +109,7 @@ const Decoder = struct {
             .stream_format = stream_format,
             .window_bits = window_bits,
             .window_size = @as(usize, 1) << @intCast(window_bits),
-            .main_symbol_count = 256 + @as(usize, position_slots[window_bits - min_window_bits]) * 8,
+            .main_symbol_count = 256 + lzx_tables.positionSlotCount(window_bits) * 8,
         };
     }
 
@@ -274,8 +274,8 @@ const Decoder = struct {
         }
         if (slot >= (self.main_symbol_count - 256) / 8)
             return error.InvalidLzxStream;
-        const extra = positionExtraBits(slot);
-        var offset = positionBase(slot) - 2;
+        const extra = lzx_tables.positionExtraBits(slot);
+        var offset = lzx_tables.positionBase(slot);
         if (extra >= 3 and self.block_type == .aligned) {
             if (extra > 3)
                 offset += @as(usize, try self.reader.readBits(@intCast(extra - 3))) << 3;
@@ -294,19 +294,6 @@ const Decoder = struct {
         self.written += run_len;
     }
 };
-
-fn positionExtraBits(slot: usize) usize {
-    if (slot < 4) return 0;
-    if (slot < 36) return slot / 2 - 1;
-    return 17;
-}
-
-fn positionBase(slot: usize) usize {
-    var base: usize = 0;
-    for (0..slot) |index|
-        base += @as(usize, 1) << @intCast(positionExtraBits(index));
-    return base;
-}
 
 fn applyIntelE8(bytes: []u8, file_size: i32, start_frame: usize) void {
     var frame_index = start_frame;

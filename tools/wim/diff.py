@@ -465,6 +465,7 @@ def main() -> None:
         for writer_compression, expected_compression in (
             ("stored", "none"),
             ("xpress", "xpress"),
+            ("lzx", "lzx"),
         ):
             writer_image = temp / f"vort-writer-{writer_compression}.wim"
             run(args.writer, writer_image, writer_compression)
@@ -500,6 +501,7 @@ def main() -> None:
         for writer_compression, expected_compression in (
             ("stored", "none"),
             ("xpress", "xpress"),
+            ("lzx", "lzx"),
         ):
             stream_image = temp / f"vort-writer-streams-{writer_compression}.wim"
             run(args.writer, stream_image, writer_compression, "streams")
@@ -612,6 +614,7 @@ def main() -> None:
         for writer_compression, expected_compression in (
             ("stored", "none"),
             ("xpress", "xpress"),
+            ("lzx", "lzx"),
         ):
             inode_image = temp / f"vort-writer-inode-{writer_compression}.wim"
             run(args.writer, inode_image, writer_compression, "inode")
@@ -675,6 +678,7 @@ def main() -> None:
         for writer_compression, expected_compression in (
             ("stored", "none"),
             ("xpress", "xpress"),
+            ("lzx", "lzx"),
         ):
             multi_image = temp / f"vort-writer-multi-{writer_compression}.wim"
             run(args.writer, multi_image, writer_compression, "multi")
@@ -776,6 +780,7 @@ def main() -> None:
         for writer_compression, expected_compression in (
             ("stored", "none"),
             ("xpress", "xpress"),
+            ("lzx", "lzx"),
         ):
             split_prefix = temp / f"vort-writer-split-{writer_compression}"
             run(args.writer, split_prefix, writer_compression, "split")
@@ -844,6 +849,7 @@ def main() -> None:
         for writer_compression, expected_compression in (
             ("stored", "none"),
             ("xpress", "xpress"),
+            ("lzx", "lzx"),
         ):
             pipable_image = temp / f"vort-writer-pipable-{writer_compression}.wim"
             run(args.writer, pipable_image, writer_compression, "pipable")
@@ -966,6 +972,7 @@ def main() -> None:
         for writer_compression, expected_compression in (
             ("stored", "none"),
             ("xpress", "xpress"),
+            ("lzx", "lzx"),
         ):
             split_prefix = temp / (
                 f"vort-writer-pipable-split-{writer_compression}"

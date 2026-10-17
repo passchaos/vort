@@ -266,6 +266,7 @@ fn writeArchive(
 ) !void {
     const encoded = try vort.encodeWimAlloc(init.gpa, entries, .{
         .compression = compression,
+        .chunk_size = if (compression == .lzx) 64 * 1024 else null,
         .image_name = "Vort writer & interoperability",
         .root_security_descriptor = root_security_descriptor,
     });
@@ -279,6 +280,7 @@ fn writeArchive(
 fn parseCompression(name: []const u8) ?vort.WimEncodeCompression {
     if (std.mem.eql(u8, name, "stored")) return .stored;
     if (std.mem.eql(u8, name, "xpress")) return .xpress;
+    if (std.mem.eql(u8, name, "lzx")) return .lzx;
     return null;
 }
 

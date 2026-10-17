@@ -1,9 +1,10 @@
 const std = @import("std");
 const core = @import("../core.zig");
+const lzx_encoder = @import("../cab/lzx/encoder.zig");
 const xpress = @import("../xpress.zig");
 const format = @import("format.zig");
 
-pub const Error = core.Error || xpress.Error || std.mem.Allocator.Error || error{
+pub const Error = core.Error || lzx_encoder.Error || xpress.Error || std.mem.Allocator.Error || error{
     InvalidWimWriterOptions,
     WimResourceTooLarge,
 };
@@ -11,6 +12,7 @@ pub const Error = core.Error || xpress.Error || std.mem.Allocator.Error || error
 pub const Compression = enum {
     stored,
     xpress,
+    lzx,
 };
 
 pub fn validate(compression: Compression, chunk_size: usize) Error!void {
@@ -22,6 +24,8 @@ pub fn validate(compression: Compression, chunk_size: usize) Error!void {
             if (chunk_size > xpress.huffmanMaxBlockSize)
                 return error.InvalidWimWriterOptions;
         },
+        .lzx => format.validateChunkSize(.lzx, chunk_size) catch
+            return error.InvalidWimWriterOptions,
     }
 }
 
@@ -36,26 +40,28 @@ pub fn append(
     const offset = output.items.len;
     switch (compression) {
         .stored => try output.appendSlice(allocator, input),
-        .xpress => try appendXpress(allocator, output, input, chunk_size),
+        .xpress, .lzx => try appendChunked(allocator, output, input, compression, chunk_size),
     }
     const stored_size = output.items.len - offset;
     if (stored_size >= @as(u64, 1) << 56)
         return error.WimResourceTooLarge;
     return .{
         .size_in_wim = stored_size,
-        .flags = base_flags | if (compression == .xpress) @as(u8, 0x04) else 0,
+        .flags = base_flags | if (compression != .stored) @as(u8, 0x04) else 0,
         .offset_in_wim = offset,
         .uncompressed_size = input.len,
     };
 }
 
-fn appendXpress(
+fn appendChunked(
     allocator: std.mem.Allocator,
     output: *std.ArrayList(u8),
     input: []const u8,
+    compression: Compression,
     chunk_size: usize,
 ) Error!void {
-    try validate(.xpress, chunk_size);
+    if (compression == .stored) return error.InvalidWimWriterOptions;
+    try validate(compression, chunk_size);
     if (input.len == 0) return;
     const chunk_count = 1 + (input.len - 1) / chunk_size;
     const entry_size: usize = if (input.len <= std.math.maxInt(u32)) 4 else 8;
@@ -70,7 +76,15 @@ fn appendXpress(
     while (input_offset < input.len) : (chunk_index += 1) {
         const input_end = @min(input.len, input_offset + chunk_size);
         const chunk = input[input_offset..input_end];
-        const encoded = try xpress.encodeHuffmanAlloc(allocator, chunk, .{});
+        const encoded = switch (compression) {
+            .stored => unreachable,
+            .xpress => try xpress.encodeHuffmanAlloc(allocator, chunk, .{}),
+            .lzx => try lzx_encoder.encodeWimChunkAlloc(
+                allocator,
+                chunk,
+                @intCast(std.math.log2_int(usize, chunk_size)),
+            ),
+        };
         defer allocator.free(encoded);
         if (encoded.len < chunk.len) {
             try output.appendSlice(allocator, encoded);
@@ -123,4 +137,32 @@ test "WIM XPRESS resource writes chunk offsets and raw fallback" {
     try std.testing.expect(resource.size_in_wim < input.len);
     try std.testing.expect(format.readU32(encoded.items, 0) > 0);
     try std.testing.expect(format.readU32(encoded.items, 4) > format.readU32(encoded.items, 0));
+}
+
+test "WIM LZX resource mixes compressed and raw chunks" {
+    const allocator = std.testing.allocator;
+    var input: [64 * 1024]u8 = undefined;
+    const phrase = "WIM LZX reference encoder payload\n";
+    for (input[0 .. 32 * 1024], 0..) |*byte, index|
+        byte.* = phrase[index % phrase.len];
+    var prng = std.Random.DefaultPrng.init(0x4c5a_5821);
+    prng.random().bytes(input[32 * 1024 ..]);
+
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(allocator);
+    const resource = try append(
+        allocator,
+        &encoded,
+        &input,
+        .lzx,
+        32 * 1024,
+        0,
+    );
+    try std.testing.expect(resource.isCompressed());
+    const first_end = format.readU32(encoded.items, 0);
+    try std.testing.expect(first_end < 32 * 1024);
+    try std.testing.expectEqual(
+        @as(usize, 4) + first_end + 32 * 1024,
+        encoded.items.len,
+    );
 }
