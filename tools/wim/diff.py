@@ -41,6 +41,7 @@ def write_tree(root: Path) -> dict[str, bytes]:
     }
     for name, data in payloads.items():
         (root / name).write_bytes(data)
+    (root / "nested/config-link").symlink_to("config.txt")
     return payloads
 
 
@@ -95,6 +96,8 @@ def main() -> None:
     image_cases = 0
     solid_cases = 0
     split_cases = 0
+    reparse_cases = 0
+    stream_error_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-wim-") as temp_text:
         temp = Path(temp_text)
@@ -164,6 +167,23 @@ def main() -> None:
                 )
                 run(wimlib, "verify", image)
                 verify_vort(args.cli, image, expected_name, payloads, temp)
+                image_tree = run(args.cli, "list-wim-image", image, 1).stdout
+                if b"reparse\t/nested/config-link" not in image_tree:
+                    raise AssertionError("WIM symlink reparse entry was not listed")
+                reparse_output = temp / f"{expected_name}-reparse.bin"
+                run(
+                    args.cli,
+                    "extract-wim-reparse",
+                    image,
+                    1,
+                    "/nested/config-link",
+                    reparse_output,
+                    4096,
+                )
+                reparse_bytes = reparse_output.read_bytes()
+                if not reparse_bytes or "config.txt".encode("utf-16le") not in reparse_bytes:
+                    raise AssertionError("WIM symlink reparse payload mismatch")
+                reparse_cases += 1
                 reference = temp / f"wimlib-{expected_name}"
                 run(wimlib, "extract", image, 1, f"--dest-dir={reference}")
                 for name, expected in payloads.items():
@@ -171,6 +191,9 @@ def main() -> None:
                         raise AssertionError(
                             f"wimlib path extraction mismatch for {expected_name}/{name}"
                         )
+                link = reference / "nested/config-link"
+                if not link.is_symlink() or link.readlink() != Path("config.txt"):
+                    raise AssertionError("wimlib symlink restoration mismatch")
                 codec_cases += 1
 
             first_source = temp / "first-image"
@@ -315,6 +338,29 @@ def main() -> None:
         malformed += 1
         expect_failure(
             args.cli,
+            "extract-wim-stream",
+            fixture,
+            1,
+            "/nested/file.txt",
+            "missing",
+            temp / "missing-stream.out",
+            1024,
+            error_name="WimStreamNotFound",
+        )
+        stream_error_cases += 1
+        expect_failure(
+            args.cli,
+            "extract-wim-reparse",
+            fixture,
+            1,
+            "/nested/file.txt",
+            temp / "not-reparse.out",
+            1024,
+            error_name="WimNotReparsePoint",
+        )
+        stream_error_cases += 1
+        expect_failure(
+            args.cli,
             "extract-wim-path",
             fixture,
             1,
@@ -371,7 +417,7 @@ def main() -> None:
     print(
         f"fixture={fixture_cases} wimlib={wimlib is not None} "
         f"codecs={codec_cases} images={image_cases} solid={solid_cases} "
-        f"split={split_cases} "
+        f"split={split_cases} reparse={reparse_cases} stream_errors={stream_error_cases} "
         f"malformed={malformed}"
     )
 

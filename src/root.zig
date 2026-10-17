@@ -1643,6 +1643,7 @@ pub const WimPathLimits = wim.PathLimits;
 pub const WimResourceHeader = wim.ResourceHeader;
 pub const WimSecurityData = wim.SecurityData;
 pub const WimSolidResource = wim.SolidResource;
+pub const WimStreamSelector = wim.StreamSelector;
 pub const parseWim = wim.parse;
 pub const parseWimHeader = wim.parseHeader;
 pub const parseWimImageMetadataOwned = wim.parseImageMetadataOwned;

@@ -23,6 +23,12 @@ pub const PathLimits = struct {
     max_path_depth: usize = 256,
 };
 
+pub const StreamSelector = union(enum) {
+    default,
+    named: []const u8,
+    reparse,
+};
+
 pub const solid_resource_magic = solid.resource_magic;
 pub const LookupKind = solid.LookupKind;
 pub const SolidResource = solid.Resource;
@@ -186,6 +192,62 @@ pub const Archive = struct {
         max_output_len: usize,
         limits: PathLimits,
     ) Error![]u8 {
+        return self.extractPathStreamAllocLimited(
+            allocator,
+            image_index,
+            path,
+            .default,
+            max_output_len,
+            limits,
+        );
+    }
+
+    pub fn extractNamedStreamByPathAllocLimited(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        image_index: u32,
+        path: []const u8,
+        stream_name: []const u8,
+        max_output_len: usize,
+        limits: PathLimits,
+    ) Error![]u8 {
+        return self.extractPathStreamAllocLimited(
+            allocator,
+            image_index,
+            path,
+            .{ .named = stream_name },
+            max_output_len,
+            limits,
+        );
+    }
+
+    pub fn extractReparseDataByPathAllocLimited(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        image_index: u32,
+        path: []const u8,
+        max_output_len: usize,
+        limits: PathLimits,
+    ) Error![]u8 {
+        return self.extractPathStreamAllocLimited(
+            allocator,
+            image_index,
+            path,
+            .reparse,
+            max_output_len,
+            limits,
+        );
+    }
+
+    fn extractPathStreamAllocLimited(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        image_index: u32,
+        path: []const u8,
+        stream: StreamSelector,
+        max_output_len: usize,
+        limits: PathLimits,
+    ) Error![]u8 {
         var lookup = try self.readLookupTableAlloc(
             allocator,
             limits.max_lookup_entries,
@@ -209,12 +271,36 @@ pub const Archive = struct {
             limits.max_directory_entries,
             limits.max_path_depth,
         );
+        return self.extractDentryStreamAllocLimited(
+            allocator,
+            lookup,
+            dentry,
+            stream,
+            max_output_len,
+            limits.max_solid_chunk_bytes,
+        );
+    }
+
+    pub fn extractDentryStreamAllocLimited(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        lookup: LookupTable,
+        dentry: image_metadata.Dentry,
+        stream: StreamSelector,
+        max_output_len: usize,
+        max_solid_chunk_bytes: usize,
+    ) Error![]u8 {
         if (dentry.isDirectory()) return error.WimNotRegularFile;
-        if (dentry.isEncrypted() or dentry.isReparsePoint() or
-            try dentry.hasNamedStreams())
-            return error.UnsupportedWimFile;
-        const hash = try dentry.defaultDataSha1() orelse
-            return error.WimNotRegularFile;
+        if (dentry.isEncrypted()) return error.UnsupportedWimFile;
+        const hash = switch (stream) {
+            .default => blk: {
+                if (dentry.isReparsePoint()) return error.WimNotRegularFile;
+                break :blk try dentry.defaultDataSha1() orelse
+                    return error.WimNotRegularFile;
+            },
+            .named => |name| try dentry.namedStreamSha1(allocator, name),
+            .reparse => try dentry.reparseDataSha1(),
+        };
         if (std.mem.allEqual(u8, &hash, 0)) return allocator.alloc(u8, 0);
         const entry = lookup.findData(&hash) orelse {
             if (self.header.total_parts > 1) return error.WimResourceInOtherPart;
@@ -224,7 +310,7 @@ pub const Archive = struct {
             allocator,
             entry,
             max_output_len,
-            limits.max_solid_chunk_bytes,
+            max_solid_chunk_bytes,
         );
     }
 
@@ -485,6 +571,82 @@ test "WIM reads XPRESS lookup XML metadata and stored blobs" {
     );
     defer allocator.free(by_path);
     try std.testing.expectEqualStrings("hello WIM XPRESS payload\n", by_path);
+
+    var stream_record: [48]u8 = @splat(0);
+    std.mem.writeInt(u64, stream_record[0..8], stream_record.len, .little);
+    @memcpy(stream_record[16..36], &file_hash);
+    std.mem.writeInt(u16, stream_record[36..38], 2, .little);
+    stream_record[38] = 'x';
+    var with_named_stream = nested_file;
+    with_named_stream.metadata_bytes = &stream_record;
+    with_named_stream.extra_stream_count = 1;
+    with_named_stream.extra_stream_offset = 0;
+    const named = try archive.extractDentryStreamAllocLimited(
+        allocator,
+        lookup,
+        with_named_stream,
+        .{ .named = "x" },
+        1024,
+        1024,
+    );
+    defer allocator.free(named);
+    try std.testing.expectEqualStrings("hello WIM XPRESS payload\n", named);
+    const NamedFailureTest = struct {
+        fn run(
+            failure_allocator: std.mem.Allocator,
+            test_archive: Archive,
+            test_lookup: LookupTable,
+            test_dentry: image_metadata.Dentry,
+        ) !void {
+            const output = try test_archive.extractDentryStreamAllocLimited(
+                failure_allocator,
+                test_lookup,
+                test_dentry,
+                .{ .named = "x" },
+                1024,
+                1024,
+            );
+            defer failure_allocator.free(output);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        allocator,
+        NamedFailureTest.run,
+        .{ archive, lookup, with_named_stream },
+    );
+    const default_with_ads = try archive.extractDentryStreamAllocLimited(
+        allocator,
+        lookup,
+        with_named_stream,
+        .default,
+        1024,
+        1024,
+    );
+    defer allocator.free(default_with_ads);
+    try std.testing.expectEqualStrings("hello WIM XPRESS payload\n", default_with_ads);
+    try std.testing.expectError(
+        error.WimStreamNotFound,
+        archive.extractDentryStreamAllocLimited(
+            allocator,
+            lookup,
+            with_named_stream,
+            .{ .named = "missing" },
+            1024,
+            1024,
+        ),
+    );
+    var reparse = nested_file;
+    reparse.attributes |= image_metadata.file_attribute_reparse_point;
+    const reparse_data = try archive.extractDentryStreamAllocLimited(
+        allocator,
+        lookup,
+        reparse,
+        .reparse,
+        1024,
+        1024,
+    );
+    defer allocator.free(reparse_data);
+    try std.testing.expectEqualStrings("hello WIM XPRESS payload\n", reparse_data);
     try std.testing.expectError(
         error.WimPathNotFound,
         archive.extractByPathAllocLimited(

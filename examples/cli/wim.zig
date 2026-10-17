@@ -169,8 +169,12 @@ fn listImageDirectory(
                 entry.attributes,
             });
         } else if (entry.isReparsePoint()) {
-            try stdout.print("reparse\t{s}\tattributes=0x{x}\n", .{
+            const hash = try entry.reparseDataSha1();
+            const hash_text = std.fmt.bytesToHex(hash, .lower);
+            try stdout.print("reparse\t{s}\ttag=0x{x}\tsha1={s}\tattributes=0x{x}\n", .{
                 path,
+                entry.reparseTag().?,
+                &hash_text,
                 entry.attributes,
             });
         } else {
@@ -180,6 +184,18 @@ fn listImageDirectory(
                 path,
                 &hash_text,
                 entry.attributes,
+            });
+        }
+        var streams = entry.extraStreams();
+        while (try streams.next()) |stream| {
+            if (!stream.isNamed()) continue;
+            const stream_name = try stream.nameUtf8Alloc(init.gpa);
+            defer init.gpa.free(stream_name);
+            const hash_text = std.fmt.bytesToHex(stream.hash, .lower);
+            try stdout.print("stream\t{s}:{s}\tsha1={s}\n", .{
+                path,
+                stream_name,
+                &hash_text,
             });
         }
     }
@@ -212,6 +228,83 @@ pub fn extractPath(
     defer init.gpa.free(decoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
     try stdout.print("image={d} entry={s} decoded_bytes={d} path={s}\n", .{
+        image_index,
+        entry_path,
+        decoded.len,
+        output_path,
+    });
+}
+
+pub fn extractNamedStream(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const image_index = try std.fmt.parseInt(
+        u32,
+        args.next() orelse return error.MissingCorpusPath,
+        10,
+    );
+    const entry_path = args.next() orelse return error.MissingCorpusPath;
+    const stream_name = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const limit = if (args.next()) |text|
+        try std.fmt.parseInt(usize, text, 10)
+    else
+        max_file_size;
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    const archive = try vort.parseWim(input);
+    const decoded = try archive.extractNamedStreamByPathAllocLimited(
+        init.gpa,
+        image_index,
+        entry_path,
+        stream_name,
+        limit,
+        path_limits,
+    );
+    defer init.gpa.free(decoded);
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+    try stdout.print("image={d} entry={s} stream={s} decoded_bytes={d} path={s}\n", .{
+        image_index,
+        entry_path,
+        stream_name,
+        decoded.len,
+        output_path,
+    });
+}
+
+pub fn extractReparseData(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const image_index = try std.fmt.parseInt(
+        u32,
+        args.next() orelse return error.MissingCorpusPath,
+        10,
+    );
+    const entry_path = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const limit = if (args.next()) |text|
+        try std.fmt.parseInt(usize, text, 10)
+    else
+        max_file_size;
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    const archive = try vort.parseWim(input);
+    const decoded = try archive.extractReparseDataByPathAllocLimited(
+        init.gpa,
+        image_index,
+        entry_path,
+        limit,
+        path_limits,
+    );
+    defer init.gpa.free(decoded);
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+    try stdout.print("image={d} entry={s} reparse_bytes={d} path={s}\n", .{
         image_index,
         entry_path,
         decoded.len,

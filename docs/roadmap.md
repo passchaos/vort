@@ -21187,3 +21187,18 @@ reuse, so production keeps the simpler independently owned plans.
   and exhaustive codec/PKWARE allocation failures. The ZIP black-box
   differential adds 108 ZIP32/ZIP64 random-access entry cases across the full
   method and encryption matrix.
+
+- Completed WIM metadata-stream extraction without flattening Windows file
+  semantics. `Dentry` now exposes reparse tags, hard-link IDs, exact named-stream
+  lookup and reparse-data hashes; default file extraction remains available when
+  ADS records exist. Archive APIs select `.default`, `.named`, or `.reparse`
+  streams either by path or an already parsed dentry/lookup pair, then reuse the
+  established part, solid-chunk, output and SHA-1 validation. Metadata parsing
+  rejects duplicate or separator-bearing ADS names and impossible unnamed-stream
+  counts. Synthetic XPRESS-backed positive tests extract named/default/reparse
+  selections from the same verified resource and cover every allocation
+  failure; default CLI differentials pin missing-stream/non-reparse errors.
+  When wimlib is installed, stored/XPRESS/LZX capture additionally requires a
+  Unix symlink to round-trip as a listed raw reparse buffer and a restored link.
+  Pipable layout, cross-part SWM assembly, encrypted data, and filesystem
+  application remain explicit future work.

@@ -21,6 +21,7 @@ pub const PathLimits = archive.PathLimits;
 pub const ResourceHeader = format.ResourceHeader;
 pub const SecurityData = metadata.SecurityData;
 pub const SolidResource = archive.SolidResource;
+pub const StreamSelector = archive.StreamSelector;
 pub const parse = archive.Archive.init;
 pub const parseHeader = format.parseHeader;
 pub const parseImageMetadataOwned = metadata.ImageMetadata.fromOwnedBytes;
