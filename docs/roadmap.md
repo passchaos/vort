@@ -21206,13 +21206,26 @@ reuse, so production keeps the simpler independently owned plans.
 - Added an explicit caller-ordered `WimArchiveSet` for WIM/SWM multi-part
   images. The borrowed set validates exact 1-based order, total count, GUID,
   version, compression, chunk geometry, image count and boot index without
-  implicit filesystem discovery. Part 1 supplies the global lookup and image
-  metadata; ordinary, ADS and reparse resources route to the lookup entry's
-  owning part. Solid lookup runs now parse each resource marker from that part
-  and retain correct per-part chunk offsets. Synthetic XPRESS tests prove
+  implicit filesystem discovery. Each part supplies its local lookup table;
+  the set merges them within aggregate limits, while ordinary, ADS and reparse
+  resources route to the lookup entry's owning part. Solid lookup runs now
+  parse each resource marker from that part and retain correct per-part chunk
+  offsets. Synthetic XPRESS tests prove
   cross-part routing, missing/reversed/GUID mismatch rejection and exhaustive
   allocation cleanup; a duplicated LZMS ESD fixture proves solid-blob routing
   from part 2. When wimlib is available, its real two-part SWM fixture must now
   list and extract the 1.3 MB cross-part file byte-exactly and reject missing or
-  reversed part lists. Pipable layout and encrypted file data remain the main
-  WIM format gaps.
+  reversed part lists. Encrypted file data remains a core WIM format gap.
+
+- Added seekable wimlib pipable-WIM reading. Parsing now selects the complete
+  trailing `WLPWM` header, cross-checks it against the preliminary header, and
+  bounds header-owned resources before the trailing header. A dedicated module
+  validates 40-byte blob headers and decodes compressed resources with per-chunk
+  size headers plus the tail-position cumulative table, including redundant
+  offset checks. A checked-in wimlib 1.14.5 XPRESS fixture covers lookup, XML,
+  metadata, file extraction, corruption, limits and exhaustive OOM. The pinned
+  external differential passes stored/XPRESS/LZX multi-chunk pipable WIMs and a
+  two-part pipable SWM byte-exactly. Running that evidence also corrected SWM
+  lookup assembly: real split parts own local, not global-part-1, tables.
+  Nonseekable incremental application from a concatenated pipable stream and
+  encrypted WIM file data remain follow-up work.

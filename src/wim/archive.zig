@@ -3,9 +3,10 @@ const core = @import("../core.zig");
 const format = @import("format.zig");
 const codec = @import("codec.zig");
 const image_metadata = @import("metadata.zig");
+const pipable = @import("pipable.zig");
 const solid = @import("solid.zig");
 
-pub const Error = core.Error || format.Error || codec.Error || image_metadata.Error || solid.Error ||
+pub const Error = core.Error || format.Error || codec.Error || image_metadata.Error || pipable.Error || solid.Error ||
     std.mem.Allocator.Error || error{
     InvalidWim,
     WimImageNotFound,
@@ -105,6 +106,11 @@ pub const Archive = struct {
             max_table_bytes,
         );
         errdefer lookup.deinit();
+        if (self.header.pipable) {
+            for (lookup.entries) |entry| {
+                if (entry.resource.isSolid()) return error.InvalidWim;
+            }
+        }
         try solid.resolveEntries(
             allocator,
             self.bytes,
@@ -353,11 +359,20 @@ pub const Archive = struct {
         if (entry.part_number != self.header.part_number)
             return error.WimResourceInOtherPart;
         const output = switch (entry.kind) {
-            .standalone => try self.readResourceAllocLimited(
-                allocator,
-                entry.resource,
-                max_output_len,
-            ),
+            .standalone => blk: {
+                if (self.header.pipable) {
+                    try pipable.validateBlobHeader(
+                        self.bytes,
+                        entry.resource,
+                        &entry.sha1,
+                    );
+                }
+                break :blk try self.readResourceAllocLimited(
+                    allocator,
+                    entry.resource,
+                    max_output_len,
+                );
+            },
             .solid_resource => return error.UnsupportedWimFeature,
             .solid_blob => try solid.readBlobAllocLimited(
                 allocator,
@@ -384,6 +399,19 @@ pub const Archive = struct {
     ) Error![]u8 {
         if (resource.isSolid() or resource.isSpanned())
             return error.UnsupportedWimFeature;
+        if (self.header.pipable) {
+            try pipable.validateBlobHeader(self.bytes, resource, null);
+            if (resource.isCompressed()) {
+                return pipable.readCompressedAllocLimited(
+                    allocator,
+                    self.bytes,
+                    resource,
+                    self.header.compression,
+                    self.header.chunk_size,
+                    max_output_len,
+                );
+            }
+        }
         const output_len = std.math.cast(usize, resource.uncompressed_size) orelse
             return error.IntegerOverflow;
         if (output_len > max_output_len) return error.OutputLimitExceeded;
@@ -693,6 +721,111 @@ test "WIM reads XPRESS lookup XML metadata and stored blobs" {
                 .max_path_depth = 8,
             },
         ),
+    );
+}
+
+test "WIM reads seekable pipable XPRESS resources" {
+    const allocator = std.testing.allocator;
+    const bytes = try fixtureAlloc(
+        allocator,
+        @embedFile("testdata/pipable-xpress.wim.b64"),
+    );
+    defer allocator.free(bytes);
+    const archive = try Archive.init(bytes);
+    try std.testing.expect(archive.header.pipable);
+    try std.testing.expectEqual(format.Compression.xpress, archive.header.compression);
+    var lookup = try archive.readLookupTableAlloc(allocator, 16, 4096);
+    defer lookup.deinit();
+    try std.testing.expectEqual(@as(usize, 2), lookup.entries.len);
+    const expected = @embedFile("../lzms/testdata/lzms-small.txt");
+    const file_hash = try parseSha1("d5929858ebffe1963ca1e26dd189cc32c6ce2914");
+    const by_hash = try archive.extractBySha1AllocLimited(
+        allocator,
+        &file_hash,
+        expected.len,
+        16,
+        4096,
+    );
+    defer allocator.free(by_hash);
+    try std.testing.expectEqualStrings(expected, by_hash);
+    const by_path = try archive.extractByPathAllocLimited(
+        allocator,
+        1,
+        "/nested/payload.txt",
+        expected.len,
+        .{
+            .max_metadata_bytes = 4096,
+            .max_lookup_entries = 16,
+            .max_lookup_bytes = 4096,
+            .max_directory_entries = 16,
+            .max_path_depth = 8,
+        },
+    );
+    defer allocator.free(by_path);
+    try std.testing.expectEqualStrings(expected, by_path);
+    const xml = try archive.readXmlAllocLimited(allocator, 4096);
+    defer allocator.free(xml);
+    try std.testing.expect(std.mem.indexOf(u8, xml, &.{ '<', 0, 'W', 0, 'I', 0, 'M', 0 }) != null);
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        archive.extractBySha1AllocLimited(
+            allocator,
+            &file_hash,
+            expected.len - 1,
+            16,
+            4096,
+        ),
+    );
+
+    const FailureTest = struct {
+        fn run(
+            failure_allocator: std.mem.Allocator,
+            test_archive: Archive,
+            expected_len: usize,
+        ) !void {
+            const output = try test_archive.extractByPathAllocLimited(
+                failure_allocator,
+                1,
+                "/nested/payload.txt",
+                expected_len,
+                .{
+                    .max_metadata_bytes = 4096,
+                    .max_lookup_entries = 16,
+                    .max_lookup_bytes = 4096,
+                    .max_directory_entries = 16,
+                    .max_path_depth = 8,
+                },
+            );
+            defer failure_allocator.free(output);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        allocator,
+        FailureTest.run,
+        .{ archive, expected.len },
+    );
+
+    const entry = lookup.find(&file_hash).?;
+    const blob_header_offset = @as(usize, @intCast(entry.resource.offset_in_wim)) -
+        pipable.blob_header_size;
+    bytes[blob_header_offset] ^= 1;
+    try std.testing.expectError(
+        error.InvalidWim,
+        archive.extractEntryAllocLimited(allocator, entry, expected.len),
+    );
+    bytes[blob_header_offset] ^= 1;
+    const chunk_header_offset: usize = @intCast(entry.resource.offset_in_wim);
+    const saved_chunk_size = format.readU32(bytes, chunk_header_offset);
+    std.mem.writeInt(u32, bytes[chunk_header_offset..][0..4], 0, .little);
+    try std.testing.expectError(
+        error.InvalidWim,
+        archive.extractEntryAllocLimited(allocator, entry, expected.len),
+    );
+    std.mem.writeInt(
+        u32,
+        bytes[chunk_header_offset..][0..4],
+        saved_chunk_size,
+        .little,
     );
 }
 

@@ -11,12 +11,19 @@ from pathlib import Path
 
 
 def run(*args: object, check: bool = True) -> subprocess.CompletedProcess[bytes]:
-    return subprocess.run(
+    result = subprocess.run(
         [str(arg) for arg in args],
-        check=check,
+        check=False,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
+    if check and result.returncode != 0:
+        raise AssertionError(
+            f"command failed ({result.returncode}): {args}\n"
+            f"stdout: {result.stdout.decode(errors='replace')}\n"
+            f"stderr: {result.stderr.decode(errors='replace')}"
+        )
+    return result
 
 
 def expect_failure(*args: object, error_name: str) -> None:
@@ -52,10 +59,13 @@ def verify_vort(
     payloads: dict[str, bytes],
     temp: Path,
     verify_resources: bool = True,
+    layout: str = "standard",
 ) -> None:
     listing = run(cli, "list-wim-file", image).stdout
     if f"compression={compression}".encode() not in listing:
         raise AssertionError(f"WIM compression mismatch: {listing!r}")
+    if f"layout={layout}".encode() not in listing:
+        raise AssertionError(f"WIM layout mismatch: {listing!r}")
     image_listing = run(cli, "list-wim-image", image, 1).stdout
     for name, expected in payloads.items():
         digest = hashlib.sha1(expected).hexdigest()
@@ -146,6 +156,51 @@ def main() -> None:
             raise AssertionError("checked-in solid LZMS ESD fixture mismatch")
         fixture_cases += 1
 
+        pipable_fixture = temp / "fixture-pipable.wim"
+        pipable_fixture.write_bytes(
+            base64.b64decode(
+                Path("src/wim/testdata/pipable-xpress.wim.b64").read_text()
+            )
+        )
+        pipable_listing = run(args.cli, "list-wim-file", pipable_fixture).stdout
+        if b"layout=pipable compression=xpress" not in pipable_listing:
+            raise AssertionError("checked-in pipable WIM header mismatch")
+        pipable_out = temp / "fixture-pipable.out"
+        run(
+            args.cli,
+            "extract-wim-path",
+            pipable_fixture,
+            1,
+            "/nested/payload.txt",
+            pipable_out,
+            len(lzms_expected),
+        )
+        if pipable_out.read_bytes() != lzms_expected:
+            raise AssertionError("checked-in pipable WIM path mismatch")
+        fixture_cases += 1
+        bad_pipable_tail = bytearray(pipable_fixture.read_bytes())
+        bad_pipable_tail[-208] ^= 1
+        bad_pipable_tail_path = temp / "bad-pipable-tail.wim"
+        bad_pipable_tail_path.write_bytes(bad_pipable_tail)
+        expect_failure(
+            args.cli,
+            "list-wim-file",
+            bad_pipable_tail_path,
+            error_name="InvalidWim",
+        )
+        malformed += 1
+        bad_pipable_lead = bytearray(pipable_fixture.read_bytes())
+        bad_pipable_lead[48] = 1
+        bad_pipable_lead_path = temp / "bad-pipable-lead.wim"
+        bad_pipable_lead_path.write_bytes(bad_pipable_lead)
+        expect_failure(
+            args.cli,
+            "list-wim-file",
+            bad_pipable_lead_path,
+            error_name="InvalidWim",
+        )
+        malformed += 1
+
         source = temp / "tree"
         payloads = write_tree(source)
         if wimlib is not None:
@@ -194,6 +249,28 @@ def main() -> None:
                 link = reference / "nested/config-link"
                 if not link.is_symlink() or link.readlink() != Path("config.txt"):
                     raise AssertionError("wimlib symlink restoration mismatch")
+                codec_cases += 1
+
+                pipable_image = temp / f"pipable-{expected_name}.wim"
+                run(
+                    wimlib,
+                    "capture",
+                    source,
+                    pipable_image,
+                    "test",
+                    f"--compress={cli_name}",
+                    "--pipable",
+                    "--no-acls",
+                )
+                run(wimlib, "verify", pipable_image)
+                verify_vort(
+                    args.cli,
+                    pipable_image,
+                    expected_name,
+                    payloads,
+                    temp,
+                    layout="pipable",
+                )
                 codec_cases += 1
 
             first_source = temp / "first-image"
@@ -245,7 +322,10 @@ def main() -> None:
                 "--no-acls",
             )
             solid_listing = run(args.cli, "list-wim-file", solid).stdout
-            if b"wim_version=0xe00 compression=lzms" not in solid_listing:
+            if (
+                b"wim_version=0xe00" not in solid_listing
+                or b"layout=standard compression=lzms" not in solid_listing
+            ):
                 raise AssertionError("solid ESD header mismatch")
             verify_vort(
                 args.cli,
@@ -341,6 +421,35 @@ def main() -> None:
                 error_name="InvalidWimSet",
             )
             split_cases += 6
+
+            pipable_split_input = temp / "pipable-split-input.wim"
+            run(
+                wimlib,
+                "capture",
+                split_source,
+                pipable_split_input,
+                "split",
+                "--compress=XPRESS",
+                "--pipable",
+                "--no-acls",
+            )
+            pipable_first = temp / "pipable-split.swm"
+            run(wimlib, "split", pipable_split_input, pipable_first, 1)
+            pipable_second = temp / "pipable-split2.swm"
+            pipable_set_output = temp / "pipable-split-set-path.out"
+            run(
+                args.cli,
+                "extract-wim-parts-path",
+                1,
+                "/large.bin",
+                pipable_set_output,
+                len(split_payload),
+                pipable_first,
+                pipable_second,
+            )
+            if pipable_set_output.read_bytes() != split_payload:
+                raise AssertionError("pipable SWM set cross-part extraction mismatch")
+            split_cases += 1
 
         original = fixture.read_bytes()
         malformed_cases = []

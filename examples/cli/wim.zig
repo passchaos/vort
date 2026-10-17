@@ -26,9 +26,10 @@ pub fn list(
     defer init.gpa.free(input);
     const archive = try vort.parseWim(input);
     try stdout.print(
-        "wim_version=0x{x} compression={s} chunk_size={d} images={d} part={d}/{d}\n",
+        "wim_version=0x{x} layout={s} compression={s} chunk_size={d} images={d} part={d}/{d}\n",
         .{
             archive.header.version,
+            if (archive.header.pipable) "pipable" else "standard",
             @tagName(archive.header.compression),
             archive.header.chunk_size,
             archive.header.image_count,

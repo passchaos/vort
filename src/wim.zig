@@ -3,6 +3,7 @@ const format = @import("wim/format.zig");
 const codec = @import("wim/codec.zig");
 const metadata = @import("wim/metadata.zig");
 const archive = @import("wim/archive.zig");
+const pipable = @import("wim/pipable.zig");
 const set = @import("wim/set.zig");
 
 pub const Error = format.Error || codec.Error || metadata.Error || archive.Error || set.Error ||
@@ -34,5 +35,6 @@ test {
     _ = codec;
     _ = metadata;
     _ = archive;
+    _ = pipable;
     _ = set;
 }

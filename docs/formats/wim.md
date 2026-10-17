@@ -2,14 +2,17 @@
 
 Vort provides a dependency-free pure Zig reader for Microsoft's Windows Imaging
 Format family. Standard WIM headers, solid-version ESD headers, and split SWM
-part headers are recognized.
+part headers are recognized. Seekable byte slices using wimlib's pipable WIM
+extension are recognized through their `WLPWM` leading and trailing headers.
 
 The parser validates the fixed 208-byte header, version, compression flags,
 power-of-two chunk geometry, GUID and part fields, image and boot indexes, and
-the bounds of header-owned resources. It exposes lookup entries with their
-SHA-1, reference count, part number, flags, stored size, decoded size, and
-physical offset. XML data is returned in its original WIM representation,
-normally UTF-16LE.
+the bounds of header-owned resources. Pipable parsing requires matching archive
+identity in both 208-byte headers, zero preliminary resource descriptors, and
+keeps final-header resources out of the trailing header. It exposes lookup
+entries with their SHA-1, reference count, part number, flags, stored size,
+decoded size, and physical offset. XML data is returned in its original WIM
+representation, normally UTF-16LE.
 
 Resource extraction supports:
 
@@ -20,6 +23,8 @@ Resource extraction supports:
 - WIM LZX compressed chunks from 32 KiB through 2 MiB;
 - LZMS compressed chunks from 32 KiB through 1 GiB;
 - multi-chunk resources and a partial final chunk;
+- pipable 40-byte blob headers, per-chunk size headers, and trailing cumulative
+  chunk tables with redundant-offset validation;
 - SHA-1 verification for lookup-table resources;
 - explicit caller output, lookup-entry, and lookup-table byte limits.
 
@@ -130,18 +135,20 @@ zig build run-wim-diff
 `WimArchiveSet` borrows an explicitly ordered caller-provided archive slice; it
 never guesses sibling filenames. Initialization requires every part exactly
 once in `1...total_parts` order and cross-checks GUID, version, compression,
-chunk geometry, image count, and boot index. Part 1 owns the global lookup and
-metadata mapping, while standalone and solid resources are routed by each
-lookup entry's part number. Solid resource markers are parsed from their owning
-part rather than interpreting the same physical offset in part 1. Missing,
+chunk geometry, layout, image count, and boot index. Each part owns a local
+lookup table; the set merges them under the caller's aggregate entry/byte limits
+and requires every entry to name its containing part. Standalone and solid
+resources are then routed by part number. Solid resource markers are parsed
+from their owning part rather than interpreting the same physical offset in
+part 1. Missing,
 reordered, duplicate-position, or mismatched sets fail before extraction.
 Metadata, default data, ADS, reparse buffers, SHA-1, output, lookup and solid
 chunk limits are identical to the single-archive APIs.
 
-Pipable WIM layout, encrypted file data, and filesystem application of
-reparse/alternate-stream semantics remain follow-up work. The library exposes
-and verifies raw content without creating links or host filesystem ADS
-implicitly.
+Nonseekable incremental application directly from a pipable WIM byte stream,
+encrypted file data, and filesystem application of reparse/alternate-stream
+semantics remain follow-up work. The library exposes and verifies raw content
+without creating links or host filesystem ADS implicitly.
 
 The differential gate creates stored, XPRESS, and LZX multi-chunk WIMs with
 pinned wimlib, verifies them with `wimlib-imagex`, compares metadata tree paths,
@@ -149,8 +156,10 @@ extracts every file through both Vort and wimlib, and compares SHA-1 and bytes.
 The generated trees include empty and non-ASCII filenames, while a two-image
 archive checks lookup-table metadata ordering. It also fully extracts a
 multi-chunk solid LZMS ESD through both Vort and wimlib, covers two split SWM
-part headers and cross-part errors, and keeps checked-in XPRESS/LZX/LZMS
-fixtures. Negative coverage includes output limits, missing images/paths/hashes,
+part headers and cross-part errors, and keeps checked-in XPRESS/LZX/LZMS plus
+pipable XPRESS fixtures. The external matrix rebuilds none/XPRESS/LZX pipable
+WIMs, exercises multi-chunk extraction, and byte-compares a two-part pipable
+SWM set. Negative coverage includes output limits, missing images/paths/hashes,
 directory extraction rejection, missing named streams, non-reparse selection,
 malformed headers, security lengths, UTF-16 name lengths, child offsets, stream
 counts, duplicate/unsafe stream names, alternate chunk headers, and directory

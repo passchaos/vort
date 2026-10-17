@@ -2,6 +2,7 @@
 
 const std = @import("std");
 const archive_mod = @import("archive.zig");
+const format = @import("format.zig");
 const metadata = @import("metadata.zig");
 const solid = @import("solid.zig");
 
@@ -23,6 +24,7 @@ pub const ArchiveSet = struct {
             const header = part.header;
             if (header.part_number != index + 1 or
                 header.total_parts != first.total_parts or
+                header.pipable != first.pipable or
                 !std.mem.eql(u8, &header.guid, &first.guid) or
                 header.version != first.version or
                 header.compression != first.compression or
@@ -52,23 +54,53 @@ pub const ArchiveSet = struct {
         max_entries: usize,
         max_table_bytes: usize,
     ) Error!archive_mod.LookupTable {
-        var lookup = try self.primary().readLookupTableRawAlloc(
+        const lookup = try self.readLookupTablesAlloc(
             allocator,
             max_entries,
             max_table_bytes,
         );
-        errdefer lookup.deinit();
-        var context = PartContext{ .set = self };
-        try solid.resolveEntriesFromParts(
-            allocator,
-            self.primary().header.version,
-            lookup.entries,
-            .{
-                .context = &context,
-                .bytes_for_part = PartContext.bytesForPart,
-            },
-        );
         return lookup;
+    }
+
+    fn readLookupTablesAlloc(
+        self: ArchiveSet,
+        allocator: std.mem.Allocator,
+        max_entries: usize,
+        max_table_bytes: usize,
+    ) Error!archive_mod.LookupTable {
+        var bytes: std.ArrayList(u8) = .empty;
+        defer bytes.deinit(allocator);
+        var entries: std.ArrayList(archive_mod.LookupEntry) = .empty;
+        defer entries.deinit(allocator);
+        for (self.parts) |part| {
+            var part_lookup = try part.readLookupTableRawAlloc(
+                allocator,
+                max_entries - entries.items.len,
+                max_table_bytes - bytes.items.len,
+            );
+            defer part_lookup.deinit();
+            for (part_lookup.entries) |entry| {
+                if (entry.part_number != part.header.part_number)
+                    return error.InvalidWim;
+                if (part.header.pipable and entry.resource.isSolid())
+                    return error.InvalidWim;
+            }
+            try solid.resolveEntries(
+                allocator,
+                part.bytes,
+                part.header.version,
+                part_lookup.entries,
+            );
+            try bytes.appendSlice(allocator, part_lookup.bytes);
+            try entries.appendSlice(allocator, part_lookup.entries);
+        }
+        const owned_bytes = try bytes.toOwnedSlice(allocator);
+        errdefer allocator.free(owned_bytes);
+        return .{
+            .allocator = allocator,
+            .bytes = owned_bytes,
+            .entries = try entries.toOwnedSlice(allocator),
+        };
     }
 
     pub fn extractBySha1AllocLimited(
@@ -302,6 +334,12 @@ test "WIM archive set validates order and routes cross-part resources" {
     var second = try archive_mod.Archive.init(bytes);
     second.header.part_number = 2;
     second.header.total_parts = 2;
+    second.header.lookup_table = .{
+        .size_in_wim = 0,
+        .flags = 0,
+        .offset_in_wim = 0,
+        .uncompressed_size = 0,
+    };
     const parts = [_]archive_mod.Archive{ first, second };
     const set = try ArchiveSet.init(&parts);
     var lookup = try set.readLookupTableAlloc(allocator, 16, 4096);
@@ -347,6 +385,61 @@ test "WIM archive set validates order and routes cross-part resources" {
     try std.testing.expectError(error.InvalidWimSet, ArchiveSet.init(&mismatched));
 }
 
+test "WIM archive set merges per-part pipable lookup tables" {
+    const allocator = std.testing.allocator;
+    const first_bytes = try fixtureAlloc(
+        allocator,
+        @embedFile("testdata/pipable-xpress.wim.b64"),
+    );
+    defer allocator.free(first_bytes);
+    const second_bytes = try fixtureAlloc(
+        allocator,
+        @embedFile("testdata/pipable-xpress.wim.b64"),
+    );
+    defer allocator.free(second_bytes);
+    var first = try archive_mod.Archive.init(first_bytes);
+    first.header.total_parts = 2;
+    first.header.lookup_table = .{
+        .size_in_wim = 0,
+        .flags = 0,
+        .offset_in_wim = 0,
+        .uncompressed_size = 0,
+    };
+    var second = try archive_mod.Archive.init(second_bytes);
+    second.header.part_number = 2;
+    second.header.total_parts = 2;
+    const lookup_start: usize = @intCast(second.header.lookup_table.offset_in_wim);
+    const lookup_len: usize = @intCast(second.header.lookup_table.uncompressed_size);
+    try std.testing.expectEqual(@as(usize, 0), lookup_len % format.lookup_entry_size);
+    for (0..lookup_len / format.lookup_entry_size) |index| {
+        const part_offset = lookup_start + index * format.lookup_entry_size + 24;
+        std.mem.writeInt(u16, second_bytes[part_offset..][0..2], 2, .little);
+    }
+    const parts = [_]archive_mod.Archive{ first, second };
+    const set = try ArchiveSet.init(&parts);
+    var lookup = try set.readLookupTableAlloc(allocator, 16, 4096);
+    defer lookup.deinit();
+    try std.testing.expectEqual(@as(usize, 2), lookup.entries.len);
+    for (lookup.entries) |entry|
+        try std.testing.expectEqual(@as(u16, 2), entry.part_number);
+    const expected = @embedFile("../lzms/testdata/lzms-small.txt");
+    const output = try set.extractByPathAllocLimited(
+        allocator,
+        1,
+        "/nested/payload.txt",
+        expected.len,
+        .{
+            .max_metadata_bytes = 4096,
+            .max_lookup_entries = 16,
+            .max_lookup_bytes = 4096,
+            .max_directory_entries = 16,
+            .max_path_depth = 8,
+        },
+    );
+    defer allocator.free(output);
+    try std.testing.expectEqualStrings(expected, output);
+}
+
 test "WIM archive set releases lookup and routed extraction failures" {
     const bytes = try fixtureAlloc(
         std.testing.allocator,
@@ -359,6 +452,12 @@ test "WIM archive set releases lookup and routed extraction failures" {
     var second = try archive_mod.Archive.init(bytes);
     second.header.part_number = 2;
     second.header.total_parts = 2;
+    second.header.lookup_table = .{
+        .size_in_wim = 0,
+        .flags = 0,
+        .offset_in_wim = 0,
+        .uncompressed_size = 0,
+    };
     const parts = [_]archive_mod.Archive{ first, second };
 
     const FailureTest = struct {
@@ -400,6 +499,12 @@ test "WIM archive set resolves solid resources from their owning part" {
     var second = try archive_mod.Archive.init(bytes);
     second.header.part_number = 2;
     second.header.total_parts = 2;
+    second.header.lookup_table = .{
+        .size_in_wim = 0,
+        .flags = 0,
+        .offset_in_wim = 0,
+        .uncompressed_size = 0,
+    };
     const parts = [_]archive_mod.Archive{ first, second };
     const set = try ArchiveSet.init(&parts);
     var lookup = try first.readLookupTableRawAlloc(allocator, 16, 4096);
@@ -432,4 +537,58 @@ test "WIM archive set resolves solid resources from their owning part" {
         @embedFile("../lzms/testdata/lzms-small.txt"),
         output,
     );
+}
+
+test "WIM archive set keeps adjacent solid runs partitioned by part" {
+    const allocator = std.testing.allocator;
+    const first_bytes = try fixtureAlloc(
+        allocator,
+        @embedFile("testdata/lzms-small.esd.b64"),
+    );
+    defer allocator.free(first_bytes);
+    const second_bytes = try fixtureAlloc(
+        allocator,
+        @embedFile("testdata/lzms-small.esd.b64"),
+    );
+    defer allocator.free(second_bytes);
+    var first = try archive_mod.Archive.init(first_bytes);
+    first.header.total_parts = 2;
+    var second = try archive_mod.Archive.init(second_bytes);
+    second.header.part_number = 2;
+    second.header.total_parts = 2;
+    try std.testing.expect(!second.header.lookup_table.isCompressed());
+    const lookup_start: usize = @intCast(second.header.lookup_table.offset_in_wim);
+    const lookup_len: usize = @intCast(second.header.lookup_table.uncompressed_size);
+    try std.testing.expectEqual(@as(usize, 0), lookup_len % format.lookup_entry_size);
+    for (0..lookup_len / format.lookup_entry_size) |index| {
+        const part_offset = lookup_start + index * format.lookup_entry_size + 24;
+        std.mem.writeInt(u16, second_bytes[part_offset..][0..2], 2, .little);
+    }
+    const parts = [_]archive_mod.Archive{ first, second };
+    const set = try ArchiveSet.init(&parts);
+    var lookup = try set.readLookupTableAlloc(allocator, 16, 4096);
+    defer lookup.deinit();
+    try std.testing.expectEqual(@as(usize, 6), lookup.entries.len);
+    var marker_count: usize = 0;
+    var blob_count: usize = 0;
+    var second_blob: ?archive_mod.LookupEntry = null;
+    for (lookup.entries) |entry| switch (entry.kind) {
+        .standalone => {},
+        .solid_resource => marker_count += 1,
+        .solid_blob => {
+            blob_count += 1;
+            if (entry.part_number == 2) second_blob = entry;
+        },
+    };
+    try std.testing.expectEqual(@as(usize, 2), marker_count);
+    try std.testing.expectEqual(@as(usize, 2), blob_count);
+    const expected = @embedFile("../lzms/testdata/lzms-small.txt");
+    const output = try set.extractEntryAllocLimitedWithSolidLimit(
+        allocator,
+        second_blob orelse return error.TestUnexpectedResult,
+        expected.len,
+        4096,
+    );
+    defer allocator.free(output);
+    try std.testing.expectEqualSlices(u8, expected, output);
 }
