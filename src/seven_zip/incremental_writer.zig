@@ -6,23 +6,30 @@ const file_properties = @import("file_properties.zig");
 const types = @import("types.zig");
 const writer_metadata = @import("writer_metadata.zig");
 const wire = @import("writer_wire.zig");
+const bcj2_spool = @import("incremental_writer/bcj2_spool.zig");
 const codecs = @import("incremental_writer/codecs.zig");
 
 pub const Compression = coders.Compression;
 pub const EncodeOptions = coders.Options;
+pub const SecondarySpool = bcj2_spool.Spool;
 
-pub const Error = core.Error || coders.Error || codecs.Error || std.mem.Allocator.Error || error{
+pub const Error = core.Error || coders.Error || codecs.Error || bcj2_spool.Error ||
+    std.mem.Allocator.Error || error{
     Invalid7zEntry,
     Invalid7zIncrementalOptions,
     Invalid7zWriterState,
     SevenZipWriterPoisoned,
     StartHeaderPatchUnavailable,
+    SecondarySpoolRequired,
 };
 
 pub const Options = struct {
     encode: EncodeOptions = .{},
     max_entries: u64 = std.math.maxInt(u64),
     max_metadata_size: usize = 64 * 1024 * 1024,
+    bcj2_spool: ?SecondarySpool = null,
+    max_bcj2_spool_size: u64 = 64 * 1024 * 1024,
+    bcj2_spool_read_buffer_size: usize = 64 * 1024,
 };
 
 pub const EntryOptions = struct {
@@ -40,6 +47,7 @@ pub const Phase = enum {
     ready,
     entry_data,
     solid_finish,
+    bcj2_replay,
     terminal_packed,
     next_header,
     done,
@@ -70,6 +78,7 @@ const CurrentEntry = struct {
     modification_time: ?u64,
     attributes: ?u32,
     codec: ?codecs.Encoder = null,
+    bcj2: ?bcj2_spool.Stream = null,
     encode_options: EncodeOptions,
     crc: checksum.Crc32Best = .{},
     uncompressed_size: u64 = 0,
@@ -79,6 +88,7 @@ const CurrentEntry = struct {
 
     fn deinit(self: *CurrentEntry, allocator: std.mem.Allocator) void {
         if (self.codec) |*codec| codec.deinit();
+        if (self.bcj2) |*state| state.deinit();
         allocator.free(self.name);
         self.* = undefined;
     }
@@ -106,6 +116,7 @@ pub const Writer = struct {
     total_input: u64 = 0,
     next_encryption_stream_index: u64,
     solid_codec: ?codecs.Encoder = null,
+    solid_bcj2: ?bcj2_spool.Stream = null,
     solid_options: EncodeOptions,
     solid_crc: checksum.Crc32Best = .{},
     solid_uncompressed_size: u64 = 0,
@@ -117,11 +128,14 @@ pub const Writer = struct {
     pub fn init(allocator: std.mem.Allocator, options: Options) Error!Self {
         try coders.validate(options.encode);
         try codecs.State.validate(options.encode);
-        if (options.max_entries == 0 or options.max_metadata_size == 0 or
-            options.encode.bcj2)
-        {
+        if (options.max_entries == 0 or options.max_metadata_size == 0) {
             return error.Invalid7zIncrementalOptions;
         }
+        if (options.encode.bcj2 and options.bcj2_spool == null)
+            return error.SecondarySpoolRequired;
+        if (options.encode.bcj2 and
+            (options.max_bcj2_spool_size < 5 or options.bcj2_spool_read_buffer_size == 0))
+            return error.Invalid7zIncrementalOptions;
         const owned_filters = try allocator.dupe(coders.Filter, options.encode.filters);
         errdefer allocator.free(owned_filters);
         const owned_password = try allocator.dupe(
@@ -146,6 +160,7 @@ pub const Writer = struct {
     pub fn deinit(self: *Self) void {
         if (self.current) |*current| current.deinit(self.allocator);
         if (self.solid_codec) |*codec| codec.deinit();
+        if (self.solid_bcj2) |*state| state.deinit();
         for (self.entries.items) |entry| self.allocator.free(@constCast(entry.name));
         self.entries.deinit(self.allocator);
         self.folders.deinit(self.allocator);
@@ -390,37 +405,31 @@ pub const Writer = struct {
                     try self.checkExpectedOffer(current, input.len - input_read);
                     if (solid) {
                         if (self.solid_codec == null) {
-                            self.solid_options = self.options.encode;
-                            if (self.solid_options.encryption != null) {
-                                self.solid_options.encryption_stream_index = self.next_encryption_stream_index;
-                                self.next_encryption_stream_index = std.math.add(
-                                    u64,
-                                    self.next_encryption_stream_index,
-                                    1,
-                                ) catch return error.IntegerOverflow;
-                            }
+                            self.solid_options = try writer_metadata.optionsForNextEncryptedStream(
+                                self.options.encode,
+                                &self.next_encryption_stream_index,
+                            );
                             self.solid_codec = try codecs.Encoder.init(
                                 self.allocator,
-                                self.solid_options,
+                                primaryCodecOptions(self.solid_options),
                                 null,
                             );
+                            if (self.solid_options.bcj2)
+                                self.solid_bcj2 = try self.initBcj2Stream(self.solid_options);
                         }
                         current.encode_options = self.solid_options;
                     } else {
-                        current.encode_options = self.options.encode;
-                        if (current.encode_options.encryption != null) {
-                            current.encode_options.encryption_stream_index = self.next_encryption_stream_index;
-                            self.next_encryption_stream_index = std.math.add(
-                                u64,
-                                self.next_encryption_stream_index,
-                                1,
-                            ) catch return error.IntegerOverflow;
-                        }
+                        current.encode_options = try writer_metadata.optionsForNextEncryptedStream(
+                            self.options.encode,
+                            &self.next_encryption_stream_index,
+                        );
                         current.codec = try codecs.Encoder.init(
                             self.allocator,
-                            current.encode_options,
+                            primaryCodecOptions(current.encode_options),
                             current.expected_size,
                         );
+                        if (current.encode_options.bcj2)
+                            current.bcj2 = try self.initBcj2Stream(current.encode_options);
                     }
                     current.has_stream = true;
                 }
@@ -431,14 +440,24 @@ pub const Writer = struct {
                 if (output_written == output.len)
                     return result(input_read, output_written, .need_output);
 
-                const encoded = if (solid)
-                    try self.solid_codec.?.step(input[input_read..], output[output_written..])
+                const input_end = if (current.encode_options.bcj2)
+                    @min(input.len, input_read + 64 * 1024)
                 else
-                    try current.codec.?.step(input[input_read..], output[output_written..]);
-                if (encoded.progress.input_read > input.len - input_read or
+                    input.len;
+                const encoded = if (solid)
+                    try self.solid_codec.?.step(input[input_read..input_end], output[output_written..])
+                else
+                    try current.codec.?.step(input[input_read..input_end], output[output_written..]);
+                if (encoded.progress.input_read > input_end - input_read or
                     encoded.progress.output_written > output.len - output_written)
                     return error.InvalidBlockPlan;
                 const consumed = input[input_read..][0..encoded.progress.input_read];
+                if (current.encode_options.bcj2) {
+                    if (solid)
+                        try self.solid_bcj2.?.accept(consumed)
+                    else
+                        try current.bcj2.?.accept(consumed);
+                }
                 current.crc.update(consumed);
                 if (solid) self.solid_crc.update(consumed);
                 current.uncompressed_size = std.math.add(
@@ -477,6 +496,13 @@ pub const Writer = struct {
                 if (encoded.status == .done) {
                     if (solid) return error.InvalidBlockPlan;
                     if (!current.finish_requested) return error.InvalidBlockPlan;
+                    if (current.encode_options.bcj2) {
+                        try current.bcj2.?.finishInput();
+                        self.phase = .bcj2_replay;
+                        if (output_written == output.len)
+                            return result(input_read, output_written, .need_output);
+                        continue;
+                    }
                     try self.finalizeCurrent(true);
                     if (output_written == output.len)
                         return result(input_read, output_written, .need_output);
@@ -509,6 +535,13 @@ pub const Writer = struct {
                 try self.addArchiveOutput(encoded.progress.output_written);
                 output_written += encoded.progress.output_written;
                 if (encoded.status == .done) {
+                    if (self.solid_options.bcj2) {
+                        try self.solid_bcj2.?.finishInput();
+                        self.phase = .bcj2_replay;
+                        if (output_written == output.len)
+                            return result(input_read, output_written, .need_output);
+                        continue;
+                    }
                     try self.finalizeSolidFolder();
                     try self.prepareNextHeader();
                     if (output_written == output.len)
@@ -516,6 +549,37 @@ pub const Writer = struct {
                     continue;
                 }
                 if (encoded.status != .need_output) return error.InvalidBlockPlan;
+                return result(input_read, output_written, .need_output);
+            },
+            .bcj2_replay => {
+                if (input_read != input.len) return error.TrailingData;
+                const solid = self.options.encode.solid;
+                const replayed = if (solid)
+                    try self.solid_bcj2.?.stepReplay(output[output_written..])
+                else
+                    try self.current.?.bcj2.?.stepReplay(output[output_written..]);
+                if (replayed.progress.input_read != 0 or
+                    replayed.progress.output_written > output.len - output_written)
+                    return error.InvalidBlockPlan;
+                self.packed_output = std.math.add(
+                    u64,
+                    self.packed_output,
+                    @intCast(replayed.progress.output_written),
+                ) catch return error.IntegerOverflow;
+                try self.addArchiveOutput(replayed.progress.output_written);
+                output_written += replayed.progress.output_written;
+                if (replayed.status == .done) {
+                    if (solid) {
+                        try self.finalizeSolidFolder();
+                        try self.prepareNextHeader();
+                    } else {
+                        try self.finalizeCurrent(true);
+                    }
+                    if (output_written == output.len)
+                        return result(input_read, output_written, .need_output);
+                    continue;
+                }
+                if (replayed.status != .need_output) return error.InvalidBlockPlan;
                 return result(input_read, output_written, .need_output);
             },
             .terminal_packed => {
@@ -577,15 +641,31 @@ pub const Writer = struct {
             if (self.options.encode.solid) {
                 self.solid_substream_count += 1;
             } else {
+                const is_bcj2 = current.encode_options.bcj2;
+                const packed_sizes: [4]u64 = if (is_bcj2)
+                    .{
+                        current.compressed_size,
+                        0,
+                        0,
+                        current.bcj2.?.packedSize(),
+                    }
+                else
+                    .{ current.compressed_size, 0, 0, 0 };
+                const aes_unpack_sizes: [4]?u64 = if (is_bcj2 and
+                    current.encode_options.encryption != null)
+                    .{
+                        current.codec.?.aesUnpackSize() orelse return error.InvalidBlockPlan,
+                        0,
+                        0,
+                        current.bcj2.?.plainSize(),
+                    }
+                else
+                    .{ current.codec.?.aesUnpackSize(), null, null, null };
                 self.folders.appendAssumeCapacity(.{
-                    .packed_sizes = .{ current.compressed_size, 0, 0, 0 },
+                    .packed_sizes = packed_sizes,
+                    .pack_stream_count = if (is_bcj2) 4 else 1,
                     .unpacked_size = current.uncompressed_size,
-                    .aes_unpack_sizes = .{
-                        current.codec.?.aesUnpackSize(),
-                        null,
-                        null,
-                        null,
-                    },
+                    .aes_unpack_sizes = aes_unpack_sizes,
                     .crc32 = digest,
                     .first_substream = substream_index,
                     .substream_count = 1,
@@ -598,6 +678,7 @@ pub const Writer = struct {
             });
         }
         if (current.codec) |*codec| codec.deinit();
+        if (current.bcj2) |*state| state.deinit();
         self.entries.appendAssumeCapacity(entry);
         self.current = null;
         self.phase = if (self.start_header_offset == wire.start_header_len) .ready else .start_header;
@@ -607,15 +688,31 @@ pub const Writer = struct {
         std.debug.assert(self.solid_codec != null and self.solid_substream_count != 0);
         try self.folders.ensureUnusedCapacity(self.allocator, 1);
         try self.folder_options.ensureUnusedCapacity(self.allocator, 1);
+        const is_bcj2 = self.solid_options.bcj2;
+        const packed_sizes: [4]u64 = if (is_bcj2)
+            .{
+                self.solid_packed_size,
+                0,
+                0,
+                self.solid_bcj2.?.packedSize(),
+            }
+        else
+            .{ self.solid_packed_size, 0, 0, 0 };
+        const aes_unpack_sizes: [4]?u64 = if (is_bcj2 and
+            self.solid_options.encryption != null)
+            .{
+                self.solid_codec.?.aesUnpackSize() orelse return error.InvalidBlockPlan,
+                0,
+                0,
+                self.solid_bcj2.?.plainSize(),
+            }
+        else
+            .{ self.solid_codec.?.aesUnpackSize(), null, null, null };
         self.folders.appendAssumeCapacity(.{
-            .packed_sizes = .{ self.solid_packed_size, 0, 0, 0 },
+            .packed_sizes = packed_sizes,
+            .pack_stream_count = if (is_bcj2) 4 else 1,
             .unpacked_size = self.solid_uncompressed_size,
-            .aes_unpack_sizes = .{
-                self.solid_codec.?.aesUnpackSize(),
-                null,
-                null,
-                null,
-            },
+            .aes_unpack_sizes = aes_unpack_sizes,
             .crc32 = self.solid_crc.digest(),
             .first_substream = 0,
             .substream_count = self.solid_substream_count,
@@ -623,6 +720,19 @@ pub const Writer = struct {
         self.folder_options.appendAssumeCapacity(self.solid_options);
         self.solid_codec.?.deinit();
         self.solid_codec = null;
+        if (self.solid_bcj2) |*state| state.deinit();
+        self.solid_bcj2 = null;
+    }
+
+    fn initBcj2Stream(self: *Self, options: EncodeOptions) Error!bcj2_spool.Stream {
+        return bcj2_spool.Stream.init(
+            self.allocator,
+            self.options.bcj2_spool orelse return error.SecondarySpoolRequired,
+            options.encryption,
+            options.encryption_stream_index,
+            self.options.max_bcj2_spool_size,
+            self.options.bcj2_spool_read_buffer_size,
+        );
     }
 
     fn checkExpectedOffer(self: *const Self, current: *const CurrentEntry, offered: usize) Error!void {
@@ -668,6 +778,20 @@ fn validateEntry(entry: EntryOptions) Error!void {
         return error.Invalid7zEntry;
 }
 
+fn primaryCodecOptions(folder_options: EncodeOptions) EncodeOptions {
+    if (!folder_options.bcj2) return folder_options;
+    var options = folder_options;
+    options.solid = false;
+    options.header_compression = null;
+    options.external_names = null;
+    options.external_metadata = null;
+    options.encrypt_header = false;
+    options.bcj2 = false;
+    options.bcj2_start_ip = 0;
+    options.filters = &.{};
+    return options;
+}
+
 fn result(
     input_read: usize,
     output_written: usize,
@@ -678,6 +802,51 @@ fn result(
         .status = status,
     };
 }
+
+const TestSecondarySpool = struct {
+    allocator: std.mem.Allocator,
+    bytes: std.ArrayList(u8) = .empty,
+    fail_write: bool = false,
+    truncate_reads: bool = false,
+
+    fn init(allocator: std.mem.Allocator) TestSecondarySpool {
+        return .{ .allocator = allocator };
+    }
+
+    fn deinit(self: *TestSecondarySpool) void {
+        self.bytes.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    fn descriptor(self: *TestSecondarySpool) SecondarySpool {
+        return .{
+            .context = self,
+            .reset = reset,
+            .write = write,
+            .read_at = readAt,
+        };
+    }
+
+    fn reset(context: *anyopaque) !void {
+        const self: *TestSecondarySpool = @ptrCast(@alignCast(context));
+        self.bytes.clearRetainingCapacity();
+    }
+
+    fn write(context: *anyopaque, bytes: []const u8) !void {
+        const self: *TestSecondarySpool = @ptrCast(@alignCast(context));
+        if (self.fail_write) return error.InjectedSpoolFailure;
+        try self.bytes.appendSlice(self.allocator, bytes);
+    }
+
+    fn readAt(context: *anyopaque, offset: u64, output: []u8) !usize {
+        const self: *TestSecondarySpool = @ptrCast(@alignCast(context));
+        const start = std.math.cast(usize, offset) orelse return error.InjectedSpoolFailure;
+        if (self.truncate_reads or start >= self.bytes.items.len) return 0;
+        const amount = @min(output.len, self.bytes.items.len - start);
+        @memcpy(output[0..amount], self.bytes.items[start..][0..amount]);
+        return amount;
+    }
+};
 
 test "7z incremental writer streams copy entries and exposes a final patch" {
     const archive = @import("archive.zig");
@@ -843,6 +1012,176 @@ test "7z incremental writer retains one solid codec across entries" {
     }
 }
 
+test "7z incremental writer replays BCJ2 range spools for every main codec" {
+    const archive = @import("archive.zig");
+    const payload = ("\x90\xe8\x10\x00\x00\x00\xe9\xf0\xff\xff\xff" ++
+        "\x0f\x85\x08\x00\x00\x00tail") ** 97;
+    const expected = [_]struct { EntryOptions, []const u8 }{
+        .{ .{ .name = "branch-heavy.bin", .expected_size = payload.len }, payload },
+    };
+    inline for (.{
+        Compression.copy,
+        Compression.deflate,
+        Compression.bzip2,
+        Compression.lzma,
+        Compression.lzma2,
+        Compression.lzma2_stored,
+        Compression.ppmd7,
+    }) |compression| {
+        var spool = TestSecondarySpool.init(std.testing.allocator);
+        defer spool.deinit();
+        const encoded = try encodeTestArchive(
+            std.testing.allocator,
+            .{
+                .encode = .{
+                    .compression = compression,
+                    .bcj2 = true,
+                    .bcj2_start_ip = 0x1000,
+                },
+                .bcj2_spool = spool.descriptor(),
+                .bcj2_spool_read_buffer_size = 3,
+            },
+            &expected,
+            5,
+            1,
+        );
+        defer std.testing.allocator.free(encoded);
+        const parsed = try archive.parseAlloc(std.testing.allocator, encoded);
+        defer parsed.deinit();
+        try std.testing.expect(parsed.streams.folders[0].bcj2_coder_index != null);
+        const decoded = try parsed.extractByNameAlloc(
+            std.testing.allocator,
+            "branch-heavy.bin",
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
+}
+
+test "7z incremental writer composes solid BCJ2 AES and hidden metadata" {
+    const archive = @import("archive.zig");
+    const aes = @import("aes.zig");
+    const password = "BCJ2 spool 密码";
+    const encryption = coders.EncryptionOptions{
+        .password = password,
+        .iv = [_]u8{0x63} ** 16,
+        .salt = [_]u8{0x36} ** 16,
+        .salt_len = 8,
+        .num_cycles_power = aes.direct_key_power,
+    };
+    const first = "\x90\xe8\x10\x00\x00\x00first" ** 53;
+    const second = "\x0f\x85\x08\x00\x00\x00second" ** 47;
+    const expected = [_]struct { EntryOptions, []const u8 }{
+        .{ .{ .name = "first.bin", .expected_size = first.len }, first },
+        .{ .{ .name = "empty.txt", .expected_size = 0 }, "" },
+        .{ .{
+            .name = "目录/second.bin",
+            .expected_size = second.len,
+            .modification_time = 116_444_736_080_000_000,
+        }, second },
+    };
+    var spool = TestSecondarySpool.init(std.testing.allocator);
+    defer spool.deinit();
+    const encoded = try encodeTestArchive(
+        std.testing.allocator,
+        .{
+            .encode = .{
+                .compression = .lzma2,
+                .solid = true,
+                .header_compression = .lzma2,
+                .external_names = .deflate,
+                .external_metadata = .copy,
+                .encryption = encryption,
+                .encrypt_header = true,
+                .bcj2 = true,
+            },
+            .bcj2_spool = spool.descriptor(),
+            .bcj2_spool_read_buffer_size = 2,
+        },
+        &expected,
+        7,
+        1,
+    );
+    defer std.testing.allocator.free(encoded);
+    const parsed = try archive.parseAllocWithOptions(
+        std.testing.allocator,
+        encoded,
+        .{ .password = password },
+    );
+    defer parsed.deinit();
+    try std.testing.expectEqual(@as(usize, 1), parsed.streams.folders.len);
+    try std.testing.expectEqual(@as(usize, 2), parsed.streams.folders[0].substream_count);
+    for (expected, parsed.entries) |item, entry| {
+        if (item[1].len == 0) continue;
+        const decoded = try parsed.decodeEntryAllocWithOptions(
+            std.testing.allocator,
+            entry,
+            .{ .password = password },
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, item[1], decoded);
+    }
+}
+
+test "7z incremental writer bounds and validates BCJ2 secondary spools" {
+    const payload = "\xe8\x00\x00\x00\x00" ** 4096;
+    const expected = [_]struct { EntryOptions, []const u8 }{
+        .{ .{ .name = "markers.bin", .expected_size = payload.len }, payload },
+    };
+
+    var limited_spool = TestSecondarySpool.init(std.testing.allocator);
+    defer limited_spool.deinit();
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        encodeTestArchive(
+            std.testing.allocator,
+            .{
+                .encode = .{ .compression = .copy, .bcj2 = true },
+                .bcj2_spool = limited_spool.descriptor(),
+                .max_bcj2_spool_size = 5,
+            },
+            &expected,
+            127,
+            17,
+        ),
+    );
+
+    var failing_spool = TestSecondarySpool.init(std.testing.allocator);
+    defer failing_spool.deinit();
+    failing_spool.fail_write = true;
+    try std.testing.expectError(
+        error.SecondarySpoolFailure,
+        encodeTestArchive(
+            std.testing.allocator,
+            .{
+                .encode = .{ .compression = .copy, .bcj2 = true },
+                .bcj2_spool = failing_spool.descriptor(),
+            },
+            &expected,
+            127,
+            17,
+        ),
+    );
+
+    var truncated_spool = TestSecondarySpool.init(std.testing.allocator);
+    defer truncated_spool.deinit();
+    truncated_spool.truncate_reads = true;
+    try std.testing.expectError(
+        error.TruncatedSecondarySpool,
+        encodeTestArchive(
+            std.testing.allocator,
+            .{
+                .encode = .{ .compression = .copy, .bcj2 = true },
+                .bcj2_spool = truncated_spool.descriptor(),
+                .bcj2_spool_read_buffer_size = 3,
+            },
+            &expected,
+            127,
+            17,
+        ),
+    );
+}
+
 test "7z incremental writer emits external metadata and encoded headers" {
     const archive = @import("archive.zig");
     const filetime_epoch: u64 = 116_444_736_000_000_000;
@@ -960,7 +1299,7 @@ test "7z incremental writer encrypts terminal metadata with distinct IVs" {
 
 test "7z incremental writer enforces lifecycle and metadata limits" {
     try std.testing.expectError(
-        error.Invalid7zIncrementalOptions,
+        error.SecondarySpoolRequired,
         Writer.init(std.testing.allocator, .{ .encode = .{ .bcj2 = true } }),
     );
     var tiny_metadata = try Writer.init(std.testing.allocator, .{ .max_metadata_size = 8 });
@@ -1034,6 +1373,34 @@ test "7z incremental writer releases every allocation failure" {
     try std.testing.checkAllAllocationFailures(
         std.testing.allocator,
         FailureTest.run,
+        .{},
+    );
+
+    const Bcj2FailureTest = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const payload = "\x90\xe8\x10\x00\x00\x00branch" ** 41;
+            const expected = [_]struct { EntryOptions, []const u8 }{
+                .{ .{ .name = "branch.bin", .expected_size = payload.len }, payload },
+            };
+            var spool = TestSecondarySpool.init(std.heap.page_allocator);
+            defer spool.deinit();
+            const encoded = try encodeTestArchive(
+                allocator,
+                .{
+                    .encode = .{ .compression = .copy, .bcj2 = true },
+                    .bcj2_spool = spool.descriptor(),
+                    .bcj2_spool_read_buffer_size = 3,
+                },
+                &expected,
+                11,
+                2,
+            );
+            defer allocator.free(encoded);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Bcj2FailureTest.run,
         .{},
     );
 }

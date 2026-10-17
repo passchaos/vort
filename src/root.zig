@@ -778,6 +778,7 @@ pub const SevenZipIncrementalEntryOptions = seven_zip.IncrementalEntryOptions;
 pub const SevenZipIncrementalWriterPhase = seven_zip.IncrementalWriterPhase;
 pub const SevenZipIncrementalWriterSnapshot = seven_zip.IncrementalWriterSnapshot;
 pub const SevenZipIncrementalWriterError = seven_zip.IncrementalWriterError;
+pub const SevenZipIncrementalSecondarySpool = seven_zip.IncrementalSecondarySpool;
 pub const parseSevenZipArchiveAlloc = seven_zip.parseAlloc;
 pub const parseSevenZipArchiveAllocWithOptions = seven_zip.parseAllocWithOptions;
 pub const parseSevenZipSourceArchiveAlloc = seven_zip.parseSourceAlloc;

@@ -32,6 +32,7 @@ pub const IncrementalEntryOptions = incremental_writer.EntryOptions;
 pub const IncrementalWriterPhase = incremental_writer.Phase;
 pub const IncrementalWriterSnapshot = incremental_writer.Snapshot;
 pub const IncrementalWriterError = incremental_writer.Error;
+pub const IncrementalSecondarySpool = incremental_writer.SecondarySpool;
 pub const parseAlloc = archive.parseAlloc;
 pub const parseAllocWithOptions = archive.parseAllocWithOptions;
 pub const parseSourceAlloc = source_archive.parseAlloc;

@@ -18075,12 +18075,20 @@ reuse, so production keeps the simpler independently owned plans.
   headers with all seven codecs while continuing the archive-wide Vail AES IV
   sequence. One-shot and incremental writers share the same auxiliary-folder
   and encoded-header builder. 7-Zip 21.07 and 26.04 validate twenty-eight
-  incremental output variants: all seven main codecs in independent/plain and
-  solid/encrypted modes plus all seven terminal codecs in plain and encrypted
-  external/encoded-header configurations. Vort also verifies metadata values,
-  self-decoding, determinism, tiny output buffers, limits, and OOM cleanup.
-  BCJ2 incremental output intentionally waits for an explicit branch spool or
-  replay contract rather than buffering a complete side stream invisibly.
+  incremental output variants for the linear data and terminal-metadata matrix.
+  BCJ2 now accepts an explicit caller-owned reset/write/read-at spool: MAIN is
+  compressed directly to archive output while no-conversion range decisions are
+  written incrementally and replayed after MAIN, with bounded replay memory and
+  a caller-selected spool-size ceiling. It supports all seven MAIN codecs,
+  independent and solid folders, four-stream Vail AES sequencing, external
+  metadata, and encrypted hidden headers. Short reads, callback failures,
+  truncation, limits, tiny buffers, and allocation failures are covered. The
+  complete 7-Zip 21.07/26.04 matrix now validates forty-two incremental output
+  variants: fourteen linear main-codec variants, fourteen terminal-codec
+  variants, and fourteen BCJ2 variants, alongside metadata values,
+  self-decoding, and determinism. Moving converted branch targets into non-empty
+  CALL/JUMP streams remains a ratio optimization rather than a compatibility
+  gap.
   Deeper LZMA parsing, other branching or multi-packed-stream graphs,
   comments, and start-position properties remain follow-up work. See
   `docs/formats/7z.md`.

@@ -6,6 +6,44 @@ const Entry = struct {
     data: []const u8,
 };
 
+const MemorySpool = struct {
+    allocator: std.mem.Allocator,
+    bytes: std.ArrayList(u8) = .empty,
+
+    fn deinit(self: *MemorySpool) void {
+        self.bytes.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    fn descriptor(self: *MemorySpool) vort.SevenZipIncrementalSecondarySpool {
+        return .{
+            .context = self,
+            .reset = reset,
+            .write = write,
+            .read_at = readAt,
+        };
+    }
+
+    fn reset(context: *anyopaque) !void {
+        const self: *MemorySpool = @ptrCast(@alignCast(context));
+        self.bytes.clearRetainingCapacity();
+    }
+
+    fn write(context: *anyopaque, bytes: []const u8) !void {
+        const self: *MemorySpool = @ptrCast(@alignCast(context));
+        try self.bytes.appendSlice(self.allocator, bytes);
+    }
+
+    fn readAt(context: *anyopaque, offset: u64, output: []u8) !usize {
+        const self: *MemorySpool = @ptrCast(@alignCast(context));
+        const start = std.math.cast(usize, offset) orelse return error.InvalidSpoolOffset;
+        if (start >= self.bytes.items.len) return 0;
+        const amount = @min(output.len, self.bytes.items.len - start);
+        @memcpy(output[0..amount], self.bytes.items[start..][0..amount]);
+        return amount;
+    }
+};
+
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
     defer args.deinit();
@@ -24,6 +62,10 @@ pub fn main(init: std.process.Init) !void {
         if (std.mem.eql(u8, value, "inline")) null else try parseCompression(value)
     else
         null;
+    const bcj2 = if (args.next()) |value|
+        if (std.mem.eql(u8, value, "bcj2")) true else if (std.mem.eql(u8, value, "linear")) false else return error.InvalidMode
+    else
+        false;
     if (args.next() != null) return error.UnexpectedArgument;
 
     const filetime_epoch: u64 = 116_444_736_000_000_000;
@@ -77,6 +119,8 @@ pub fn main(init: std.process.Init) !void {
         .salt_len = 8,
         .num_cycles_power = 0x3f,
     } else null;
+    var spool = MemorySpool{ .allocator = init.gpa };
+    defer spool.deinit();
     var writer = try vort.SevenZipIncrementalWriter.init(init.gpa, .{
         .encode = .{
             .compression = compression,
@@ -86,7 +130,11 @@ pub fn main(init: std.process.Init) !void {
             .external_metadata = terminal_compression,
             .encryption = encryption,
             .encrypt_header = encrypted and terminal_compression != null,
+            .bcj2 = bcj2,
+            .bcj2_start_ip = if (bcj2 and !encrypted) 0x1000 else 0,
         },
+        .bcj2_spool = if (bcj2) spool.descriptor() else null,
+        .bcj2_spool_read_buffer_size = 3,
     });
     defer writer.deinit();
     var archive: std.ArrayList(u8) = .empty;

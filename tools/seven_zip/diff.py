@@ -427,6 +427,61 @@ def main() -> None:
                     )
                     incremental_writer_variants += 1
 
+            for compression in (
+                "copy",
+                "deflate",
+                "bzip2",
+                "lzma",
+                "lzma2",
+                "lzma2-stored",
+                "ppmd7",
+            ):
+                for mode, encryption_mode, terminal_mode, password in (
+                    ("independent", "plain", "inline", None),
+                    ("solid", "encrypted", "lzma2", "vort-password-密码"),
+                ):
+                    archive = temp / (
+                        f"vort-incremental-bcj2-{compression}-{mode}-{encryption_mode}.7z"
+                    )
+                    duplicate = temp / (
+                        "vort-incremental-bcj2-"
+                        f"{compression}-{mode}-{encryption_mode}-repeat.7z"
+                    )
+                    writer_args = (
+                        compression,
+                        mode,
+                        encryption_mode,
+                        terminal_mode,
+                        "bcj2",
+                    )
+                    run(args.incremental_writer, str(archive), *writer_args)
+                    run(args.incremental_writer, str(duplicate), *writer_args)
+                    if archive.read_bytes() != duplicate.read_bytes():
+                        raise AssertionError(
+                            "Vort incremental BCJ2 output is not deterministic: "
+                            f"{compression}/{mode}/{encryption_mode}"
+                        )
+                    verify_with_vort(args.cli, archive, expected_vort, password)
+                    verify_with_seven_zip(
+                        seven_zip_tool,
+                        archive,
+                        expected_vort,
+                        password,
+                    )
+                    verify_vort_metadata(
+                        args.cli,
+                        archive,
+                        "plain.txt",
+                        {
+                            "creation": filetime_epoch + 10_000_000,
+                            "access": filetime_epoch + 20_000_000,
+                            "modification": filetime_epoch + 30_000_000,
+                            "attributes": 0x81A4_0020,
+                        },
+                        password=password,
+                    )
+                    incremental_writer_variants += 1
+
             for compression in ("copy", "deflate", "bzip2", "lzma", "lzma2", "ppmd7"):
                 archive = temp / f"vort-{compression}-solid.7z"
                 duplicate = temp / f"vort-{compression}-solid-repeat.7z"
