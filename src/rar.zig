@@ -10,6 +10,7 @@ const writer = @import("rar/writer.zig");
 pub const Error = archive.Error || writer.Error || volume_set.Error;
 pub const Version = archive.Version;
 pub const Encryption = archive.Encryption;
+pub const Rar4Encryption = archive.Rar4Encryption;
 pub const HeaderEncryption = archive.HeaderEncryption;
 pub const ParseOptions = archive.ParseOptions;
 pub const DecodeOptions = archive.DecodeOptions;
@@ -25,6 +26,8 @@ pub const EncodeKind = writer.Kind;
 pub const EncodeCompression = writer.Compression;
 pub const EncodeFilter = writer.Filter;
 pub const EncodeEncryptionOptions = writer.EncryptionOptions;
+pub const EncodeRar4EncryptionOptions = writer.Rar4EncryptionOptions;
+pub const EncodeRar4HeaderEncryptionOptions = writer.Rar4HeaderEncryptionOptions;
 pub const EncodeHeaderEncryptionOptions = writer.HeaderEncryptionOptions;
 pub const EncodeEntry = writer.EncodeEntry;
 pub const EncodeOptions = writer.EncodeOptions;
@@ -76,4 +79,5 @@ test {
     _ = volume_set;
     _ = writer;
     _ = @import("rar/encrypted_header_tests.zig");
+    _ = @import("rar/rar4_encryption_tests.zig");
 }

@@ -15,26 +15,33 @@ pub fn createFile(
     const compression = try parseCompression(args.next());
     const filter = try parseFilter(args.next());
     const solid = try parseSolid(args.next());
-    const encryption = try parseEncryption(
-        args.next(),
-        args.next(),
-        args.next(),
-        args.next(),
-    );
+    const encryption = if (version == .rar5)
+        try parseEncryption(args.next(), args.next(), args.next(), args.next())
+    else
+        null;
+    const rar4_encryption = if (version == .rar4)
+        try parseRar4Encryption(args.next(), args.next())
+    else
+        null;
     var header_ivs: [3][16]u8 = undefined;
     const header_encryption = try parseHeaderEncryption(
-        args.next(),
-        args.next(),
-        args.next(),
-        args.next(),
+        if (version == .rar5) args.next() else null,
+        if (version == .rar5) args.next() else null,
+        if (version == .rar5) args.next() else null,
+        if (version == .rar5) args.next() else null,
         &header_ivs,
     );
+    const rar4_header_encryption = if (version == .rar4)
+        try parseRar4HeaderEncryption(args.next(), args.next())
+    else
+        null;
     const input = try readFile(init, input_path);
     defer init.gpa.free(input);
     const entries = [_]vort.RarEncodeEntry{.{
         .name = entry_name,
         .data = input,
         .encryption = encryption,
+        .rar4_encryption = rar4_encryption,
     }};
     const encoded = try vort.encodeRarAlloc(init.gpa, &entries, .{
         .version = version,
@@ -42,6 +49,7 @@ pub fn createFile(
         .filter = filter,
         .solid = solid,
         .header_encryption = header_encryption,
+        .rar4_header_encryption = rar4_header_encryption,
     });
     defer init.gpa.free(encoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
@@ -50,8 +58,8 @@ pub fn createFile(
         @tagName(compression),
         if (filter) |value| @tagName(value) else "none",
         solid,
-        encryption != null,
-        header_encryption != null,
+        encryption != null or rar4_encryption != null,
+        header_encryption != null or rar4_header_encryption != null,
         input.len,
         encoded.len,
         output_path,
@@ -132,7 +140,7 @@ pub fn listFile(
         archive.has_next_volume,
         archive.solid,
         archive.locked,
-        archive.header_encryption != null,
+        archive.header_encryption != null or archive.rar4_encrypted_headers,
         if (archive.header_encryption) |encryption| encryption.kdf_count else null,
     });
     var iterator = archive.iterator();
@@ -328,6 +336,28 @@ fn parseEncryption(
         else
             15,
     };
+}
+
+fn parseRar4Encryption(
+    password_text: ?[]const u8,
+    salt_text: ?[]const u8,
+) !?vort.RarEncodeRar4EncryptionOptions {
+    const password = password_text orelse return null;
+    if (std.mem.eql(u8, password, "-")) return null;
+    const salt_hex = salt_text orelse return error.MissingRarEncryptionSalt;
+    var salt: [8]u8 = undefined;
+    _ = std.fmt.hexToBytes(&salt, salt_hex) catch
+        return error.InvalidRarEncryptionSalt;
+    if (salt_hex.len != 2 * salt.len) return error.InvalidRarEncryptionSalt;
+    return .{ .password = password, .salt = salt };
+}
+
+fn parseRar4HeaderEncryption(
+    password_text: ?[]const u8,
+    salt_text: ?[]const u8,
+) !?vort.RarEncodeRar4HeaderEncryptionOptions {
+    const encryption = try parseRar4Encryption(password_text, salt_text) orelse return null;
+    return .{ .password = encryption.password, .salt = encryption.salt.? };
 }
 
 fn parseHeaderEncryption(

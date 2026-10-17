@@ -46,6 +46,7 @@ version, sizes, CRC, host OS, attributes, timestamp, directory/encryption/solid
 flags, split-before/split-after state, unknown-size state, redirection presence,
 and path-safety classification. RAR5 encrypted entries additionally expose the
 version, flags, KDF count, salt, IV, and optional password-check record.
+RAR4 AES entries expose their optional 8-byte salt separately.
 
 Regular files use caller-owned or explicitly bounded allocation APIs. PPMd and
 RAR VM filters and RAR5 compression require an allocator, so callers use
@@ -58,7 +59,7 @@ independent from the PPMd model-memory limit and per-invocation VM instruction
 budget. These default to 256 MiB and 25 million instructions, respectively. The
 independent RAR5 dictionary-size ceiling defaults to `usize`'s maximum; the
 declared dictionary bounds match validation but the dictionary is not allocated
-eagerly. `password` enables RAR5 file-data decryption and
+eagerly. `password` enables RAR4/RAR5 file-data decryption and
 `max_rar5_kdf_count` independently bounds its binary-log PBKDF2 work before
 derivation or output allocation. The default ceiling is 24.
 
@@ -69,13 +70,22 @@ primitives come from `../vail/archive_crypto`; Vort owns only the RAR extra
 record, limits, padding, checksum policy, and codec composition. Missing,
 wrong, malformed, and over-budget passwords/KDF records have distinct errors.
 
-RAR5 encrypted headers use `parseRarOwnedHeadersAllocWithOptions`. The returned
+RAR 2.9/3.x/4.x Stored, RAR29 LZ and RAR29 PPMd members support the historical
+AES-128-CBC mode with salted or unsalted headers. Vail owns UTF-16LE password
+conversion, the fixed 0x40000-round SHA-1 derivation, its long-password RAR29
+in-place block quirk, and AES. RAR4 has no reliable password-check record, so a
+wrong password is reported through header, codec, or final CRC failure.
+
+RAR4 and RAR5 encrypted headers use `parseRarOwnedHeadersAllocWithOptions`. The returned
 `RarOwnedHeaderArchive` borrows the original archive data but owns decrypted
 entry metadata and names, so those views remain valid until `deinit`. The
 ordinary borrowed parser continues to return `EncryptedRarHeaders` rather than
 hiding temporary allocation. The owned parser validates the clear type-4
-encryption header, derives its key once, then processes each following header
-as an independent 16-byte IV plus block-aligned AES-CBC payload. Entry count and
+RAR5 encryption header, derives its key once, then processes each following
+header as an independent 16-byte IV plus block-aligned AES-CBC payload. RAR4
+keeps its main header clear, prefixes later headers with an 8-byte salt, and
+resets AES-CBC to the salt-derived IV for each block. Repeated salts reuse the
+derived key. Entry count and
 copied-name bytes have independent limits in addition to KDF and output limits.
 `Archive.extractSession` exposes explicit sequential decoding and returns owned
 entry data from `nextAlloc`. `extractByNameAllocLimited` and
@@ -84,17 +94,17 @@ members when the requested entry is a solid continuation. Direct random-access
 `extractAlloc` remains an explicit `UnsupportedRarFeature` for such an entry,
 because it has no preceding state.
 `parseRarVolumeSetAlloc` accepts an ordered slice of borrowed volume bytes. It
-validates RAR5 volume numbers and next-volume flags, groups contiguous
+validates RAR4/RAR5 next-volume flags and RAR5 volume numbers, groups contiguous
 split-before/split-after fragments into logical entries, and rejects missing,
 reversed, interrupted, or metadata-changing fragment chains. Its extraction
-session concatenates packed fragments before decoding and carries RAR50 solid
-state across logical entries and volume boundaries.
+session concatenates packed fragments before decoding and carries RAR29/RAR50
+solid state across logical entries and volume boundaries.
 `parseRarVolumeSetAllocWithOptions` applies the same owned-header/password
 policy independently to every volume. Encrypted member ciphertext is joined
 across arbitrary fragment cuts before one CBC decode, matching RAR's reuse of
 the same file salt/IV record in every fragment.
-Directories, unsupported compressed data, RAR4 encrypted entries, encrypted
-RAR5 redirections, unknown-size members, incomplete split-volume members, and
+Directories, unsupported compressed data, encrypted RAR5 redirections,
+unknown-size members, incomplete split-volume members, and
 unsupported RAR20 solid
 continuations return specific errors. This prevents an unsupported or
 incomplete member from being copied as if it were stored data.
@@ -123,6 +133,10 @@ supported. The current writer intentionally omits PPMd-to-LZ match escape
 selection; this affects ratio, not wire compatibility or decoded content.
 `encodeRar29PpmdAlloc` and reusable `Rar29PpmdEncoder` expose the same raw
 member codec beneath the archive writer.
+`RarEncodeEntry.rar4_encryption` applies optional-salt AES-128 after Stored,
+RAR29 LZ, or RAR29 PPMd compression. `rar4_header_encryption` sets the clear
+main password flag and emits every later header as salt plus block-aligned
+ciphertext; all regular entries must use the same password and salt.
 `.solid = true` on RAR29 retains the 4 MiB-or-smaller LZ window and match state
 across consecutive compressed members, sets the RAR4 main/file solid flags,
 and supports sequential extraction plus by-name replay. Stored members and
@@ -155,7 +169,7 @@ single-archive writer), rejects duplicates, and requires every regular entry to 
 file-data encryption with the same password. Header and file salts, IVs, and
 KDF counts remain independent. This composes with Stored, RAR50, directories,
 and solid RAR50 history without exposing names in the wire.
-`encodeRarVolumesAlloc` splits logical RAR5 members at an explicit maximum
+`encodeRarVolumesAlloc` splits logical RAR4/RAR5 members at an explicit maximum
 payload-per-volume budget and returns an owned `EncodedVolumes` collection. It
 writes numbered volume main headers, per-fragment split flags and CRCs, and
 next-volume end flags; stored, compressed, and solid compressed members can all
@@ -172,8 +186,8 @@ separator. RAR5 output accepts validated UTF-8 names. Both writers reject NUL,
 absolute, empty-component, dot, and parent-component paths. RAR29 compression
 rejects unsupported filter/codec combinations instead of relabeling them.
 RAR50 dictionary sizes must be power-of-two
-multiples of 128 KiB. RAR4 encryption, recovery records, comments, and
-redirections remain future writer work.
+multiples of 128 KiB. Pre-RAR29 RAR 1.3/1.5/2.0 encryption, recovery records,
+comments, and redirections remain future writer work.
 
 ## CLI
 
@@ -183,6 +197,8 @@ zig build run -- create-rar-file output.rar payload.bin input.bin rar4 rar29
 zig build run -- create-rar-file output.rar payload.bin input.bin rar4 rar29 e8e9
 zig build run -- create-rar-file output.rar payload.bin input.bin rar4 rar29 rgb:1920:0
 zig build run -- create-rar-file output.rar payload.bin input.bin rar4 rar29-ppmd
+zig build run -- create-rar-file secret-rar4.rar payload.bin input.bin rar4 rar29 none non-solid password 0102030405060708
+zig build run -- create-rar-file hidden-rar4.rar payload.bin input.bin rar4 rar29 none non-solid password 0102030405060708 password 0102030405060708
 zig build run -- create-rar-file output.rar payload.bin input.bin rar5 rar50
 zig build run -- create-rar-file output.rar payload.bin input.bin rar5 rar50 e8e9
 zig build run -- create-rar-file output.rar payload.bin input.bin rar5 rar50 none solid
@@ -211,6 +227,7 @@ multiblock RAR29 LZ, ordinary/solid RAR29 PPMd, and multiblock RAR50 writer
 output plus all six RAR29 and four RAR50 writer filters with 7-Zip, reads stored
 RAR4/RAR5 output from an optional rars-based
 reference helper, verifies file-data and encrypted-header Stored/RAR50 output
+plus RAR4 Stored/RAR29/PPMd, long-password and multi-volume encryption
 bidirectionally with RAR and 7-Zip, verifies that real compressed reference
 entries are classified correctly, checks SFX parsing and both CRC layers, exercises RAR2
 and RAR5 split-volume fixtures, and compares RAR15/RAR20 text, multiblock,
@@ -230,6 +247,7 @@ their explicit unsupported error:
 zig build run-rar-diff -- \
   --7zz path/to/7zz \
   --rar path/to/rar \
+  --rar4 path/to/rar-6.21 \
   --rars path/to/reference-writer \
   --fixtures path/to/unarc-rs/crates/unarc-rs/tests/rar/multi \
   --legacy-fixtures path/to/rars/tests/fixtures/rar15_40
@@ -242,6 +260,6 @@ zig build run -- extract-rar-volumes entry.bin output.bin 1048576 --password=pas
   archive.part1.rar archive.part2.rar archive.part3.rar
 ```
 
-RAR4 payload encryption remains the next encryption stage. The next RAR4
-writer stages also include PPMd-attached VM filters and multi-volume output.
-PPMd hybrid match escapes remain a later compression-ratio optimization.
+Pre-RAR29 legacy encryption remains a compatibility follow-up. The next RAR4
+writer stages include PPMd-attached VM filters. PPMd hybrid match escapes
+remain a later compression-ratio optimization.

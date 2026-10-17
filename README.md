@@ -445,9 +445,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   sessions with pre-filter history, bounded extraction, RAR5 AES-256-CBC
   Stored/RAR50 file-data encryption through Vail with explicit PBKDF2 limits,
   password checks and keyed CRCs, owned RAR5 encrypted-header parsing and
-  deterministic writing with independent per-header IVs, explicit RAR4/
-  redirection/unknown-size and unsupported RAR15/RAR20-solid errors, ordered RAR5
-  multi-volume reconstruction for stored/compressed/solid split entries, and
+  deterministic writing with independent per-header IVs, plus RAR4 salted or
+  unsalted AES-128 data/header encryption with historical long-password KDF
+  behavior, explicit redirection/unknown-size and unsupported RAR15/RAR20-solid
+  errors, ordered RAR4/RAR5 multi-volume reconstruction for
+  stored/compressed/solid split entries, and
   deterministic RAR29 compatibility LZ writing with canonical tables,
   table-length RLE, multiblock output, 64 KiB through 4 MiB declared
   dictionaries and cross-member solid history, pure Zig RAR29 PPMd Variant H

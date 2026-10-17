@@ -9,6 +9,41 @@ pub fn main(init: std.process.Init) !void {
     const version_text = args.next() orelse "rar5";
     const version: vort.RarVersion = if (std.mem.eql(u8, version_text, "rar4")) .rar4 else .rar5;
     const mode = args.next() orelse "stored";
+    if (std.mem.eql(u8, mode, "rar4-encrypted-volumes-stored") or
+        std.mem.eql(u8, mode, "rar4-encrypted-volumes-rar29"))
+    {
+        if (version != .rar4) return error.UnsupportedRarVersion;
+        var payload: [4096]u8 = undefined;
+        var state: u64 = 0x7261_7234_766f_6c73;
+        for (&payload) |*byte| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            byte.* = @truncate(state);
+        }
+        const password = "rar4-volume-password";
+        const salt = [_]u8{0x44} ** 8;
+        const entries = [_]vort.RarEncodeEntry{.{
+            .name = "payload.bin",
+            .data = &payload,
+            .rar4_encryption = .{ .password = password, .salt = salt },
+        }};
+        var volumes = try vort.encodeRarVolumesAlloc(init.gpa, &entries, .{
+            .version = .rar4,
+            .compression = if (std.mem.endsWith(u8, mode, "rar29")) .rar29 else .stored,
+            .rar4_header_encryption = .{ .password = password, .salt = salt },
+        }, 700);
+        defer volumes.deinit();
+        for (volumes.volumes, 1..) |volume, number| {
+            const path = try std.fmt.allocPrint(init.gpa, "{s}.part{d}.rar", .{
+                output_path,
+                number,
+            });
+            defer init.gpa.free(path);
+            try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = volume });
+        }
+        return;
+    }
     if (std.mem.eql(u8, mode, "encrypted-volumes-stored") or
         std.mem.eql(u8, mode, "encrypted-volumes-rar50"))
     {

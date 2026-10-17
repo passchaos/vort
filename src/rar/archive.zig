@@ -5,10 +5,11 @@ const rar15 = @import("rar15.zig");
 const rar20 = @import("rar20.zig");
 const rar29 = @import("rar29.zig");
 const rar50 = @import("rar50.zig");
+const rar4_encryption = @import("rar4_encryption.zig");
 const rar5_encryption = @import("rar5_encryption.zig");
 
 pub const Error = core.Error || rar15.Error || rar20.Error || rar29.Error || rar50.Error ||
-    rar5_encryption.Error || error{
+    rar4_encryption.Error || rar5_encryption.Error || error{
     InvalidRarArchive,
     UnsupportedRarCompression,
     UnsupportedRarEntry,
@@ -26,6 +27,7 @@ pub const Error = core.Error || rar15.Error || rar20.Error || rar29.Error || rar
 
 pub const Version = enum { rar4, rar5 };
 pub const Encryption = rar5_encryption.Metadata;
+pub const Rar4Encryption = rar4_encryption.Metadata;
 pub const HeaderEncryption = rar5_encryption.HeaderMetadata;
 
 pub const ParseOptions = struct {
@@ -91,8 +93,8 @@ pub const Entry = struct {
     crc32: ?u32,
     compressed_size: usize,
     uncompressed_size: usize,
-    /// For encrypted-header archives this starts at the per-header IV and the
-    /// size includes that IV plus encrypted block padding.
+    /// For encrypted-header archives this starts at the per-header RAR5 IV or
+    /// RAR4 salt and includes that prefix plus encrypted block padding.
     header_offset: usize,
     header_size: usize,
     data_offset: usize,
@@ -103,6 +105,7 @@ pub const Entry = struct {
     directory: bool,
     encrypted: bool,
     encryption: ?Encryption,
+    rar4_encryption: ?Rar4Encryption,
     solid: bool,
     split_before: bool,
     split_after: bool,
@@ -129,6 +132,7 @@ pub const Archive = struct {
     solid: bool,
     locked: bool,
     header_encryption: ?HeaderEncryption = null,
+    rar4_encrypted_headers: bool = false,
     cached_entries: ?[]const Entry = null,
 
     pub fn iterator(self: Archive) Iterator {
@@ -228,7 +232,23 @@ pub const Archive = struct {
             );
         } else null;
         defer if (decrypted) |*value| value.deinit();
-        const data = if (decrypted) |*value| value.bytes else wire_data;
+        var rar4_decrypted: ?rar4_encryption.Decrypted = if (canonical.rar4_encryption) |metadata| blk: {
+            const scratch = allocator orelse return error.RarEntryRequiresAllocator;
+            const password = options.password orelse return error.RarPasswordRequired;
+            break :blk try rar4_encryption.decryptAlloc(
+                scratch,
+                wire_data,
+                password,
+                metadata,
+            );
+        } else null;
+        defer if (rar4_decrypted) |*value| value.deinit();
+        const data = if (decrypted) |*value|
+            value.bytes
+        else if (rar4_decrypted) |*value|
+            value.bytes
+        else
+            wire_data;
         const target = output[0..canonical.uncompressed_size];
         switch (canonical.method) {
             .stored => {
@@ -505,7 +525,8 @@ fn validateExtractable(
     allow_directory: bool,
 ) Error!void {
     if (canonical.directory and !allow_directory) return error.UnsupportedRarEntry;
-    if (canonical.encrypted and canonical.encryption == null)
+    if (canonical.encrypted and canonical.encryption == null and
+        canonical.rar4_encryption == null)
         return error.EncryptedRarEntry;
     if (canonical.split_before or canonical.split_after) return error.SplitRarEntry;
     if (canonical.redirection or canonical.unknown_size) return error.UnsupportedRarFeature;
@@ -522,6 +543,8 @@ fn validateExtractable(
 }
 
 fn validateEncryptionAccess(canonical: Entry, options: DecodeOptions) Error!void {
+    if (canonical.rar4_encryption != null and options.password == null)
+        return error.RarPasswordRequired;
     const metadata = canonical.encryption orelse return;
     if (options.password == null) return error.RarPasswordRequired;
     try rar5_encryption.validateMetadata(metadata, options.max_rar5_kdf_count);
@@ -572,6 +595,18 @@ pub fn parseOwnedHeadersAllocWithOptions(
     options: ParseOptions,
 ) Error!OwnedHeaderArchive {
     const signature = try findSignature(bytes);
+    if (signature.version == .rar4) {
+        const main_offset = try checkedAdd(signature.offset, rar4_signature.len);
+        const main = try parseRar4RawBlock(bytes, main_offset);
+        if (main.header_type == rar4_main_header and main.flags & rar4_main_password != 0)
+            return parseEncryptedRar4HeadersAlloc(
+                allocator,
+                bytes,
+                signature.offset,
+                main,
+                options,
+            );
+    }
     if (signature.version == .rar5) {
         const first_offset = try checkedAdd(signature.offset, rar5_signature.len);
         const first = try parseRar5RawBlock(bytes, first_offset);
@@ -684,11 +719,15 @@ fn parseRar4Archive(bytes: []const u8, prefix: usize) Error!Archive {
     var offset = main.next_offset;
     var count: usize = 0;
     var end_offset: ?usize = null;
+    var has_next_volume = false;
     while (offset < bytes.len) {
+        const block_offset = offset;
         const block = try parseRar4Block(bytes, offset);
         if (block.entry != null) count += 1;
         offset = block.next_offset;
         if (block.end_archive) {
+            const end = try parseRar4RawBlock(bytes, block_offset);
+            has_next_volume = end.flags & 1 != 0;
             end_offset = offset;
             break;
         }
@@ -709,9 +748,162 @@ fn parseRar4Archive(bytes: []const u8, prefix: usize) Error!Archive {
         .trailer_size = bytes.len - archive_end,
         .multi_volume = main.flags & rar4_main_volume != 0,
         .volume_number = null,
-        .has_next_volume = false,
+        .has_next_volume = has_next_volume,
         .solid = main.flags & rar4_main_solid != 0,
         .locked = main.flags & rar4_main_locked != 0,
+    };
+}
+
+fn parseEncryptedRar4HeadersAlloc(
+    allocator: std.mem.Allocator,
+    bytes: []const u8,
+    prefix: usize,
+    main: Rar4RawBlock,
+    options: ParseOptions,
+) Error!OwnedHeaderArchive {
+    if (main.header_type != rar4_main_header or main.header_size < 13 or
+        main.data_size != 0 or main.flags & rar4_main_password == 0)
+        return error.InvalidRarArchive;
+    const password = options.password orelse return error.RarPasswordRequired;
+    var cache = Rar4HeaderCipherCache{
+        .allocator = allocator,
+        .password = password,
+    };
+    defer cache.deinit();
+    var entries: std.ArrayList(Entry) = .empty;
+    defer entries.deinit(allocator);
+    var names: std.ArrayList([]u8) = .empty;
+    defer names.deinit(allocator);
+    errdefer freeNames(allocator, names.items);
+    var metadata_size: usize = 0;
+    var offset = main.next_offset;
+    const entries_offset = offset;
+    var end_offset: ?usize = null;
+    var has_next_volume = false;
+    while (offset < bytes.len) {
+        var decrypted = try decryptRar4HeaderAlloc(allocator, bytes, offset, &cache);
+        defer decrypted.deinit();
+        const clear = decrypted.bytes[0..decrypted.header_size];
+        const raw = try parseRar4RawBlockInternal(clear, 0, false);
+        const data_offset = try checkedAdd(offset, decrypted.physical_size);
+        const next_offset = try checkedEnd(data_offset, raw.data_size, bytes.len);
+        const block = try parseRar4Header(clear);
+        if (block.entry) |parsed_entry| {
+            var entry = parsed_entry;
+            entry.header_offset = offset;
+            entry.header_size = decrypted.physical_size;
+            entry.data_offset = data_offset;
+            entry.next_offset = next_offset;
+            try appendOwnedEntry(
+                allocator,
+                &entries,
+                &names,
+                &metadata_size,
+                options,
+                entry,
+            );
+        }
+        offset = next_offset;
+        if (block.end_archive) {
+            has_next_volume = raw.flags & 1 != 0;
+            end_offset = offset;
+            break;
+        }
+    }
+    const archive_end = end_offset orelse if (offset == bytes.len)
+        offset
+    else
+        return error.TruncatedFrame;
+    const borrowed = Archive{
+        .bytes = bytes,
+        .version = .rar4,
+        .entry_count = entries.items.len,
+        .prefix_size = prefix,
+        .entries_offset = entries_offset,
+        .archive_end = archive_end,
+        .trailer_size = bytes.len - archive_end,
+        .multi_volume = main.flags & rar4_main_volume != 0 or has_next_volume,
+        .volume_number = null,
+        .has_next_volume = has_next_volume,
+        .solid = main.flags & rar4_main_solid != 0,
+        .locked = main.flags & rar4_main_locked != 0,
+        .rar4_encrypted_headers = true,
+    };
+    return finishOwnedHeaderArchive(allocator, borrowed, &entries, &names);
+}
+
+const Rar4HeaderCipherCache = struct {
+    allocator: std.mem.Allocator,
+    password: []const u8,
+    salt: ?[rar4_encryption.salt_len]u8 = null,
+    cipher: ?rar4_encryption.Cipher = null,
+
+    fn get(
+        self: *Rar4HeaderCipherCache,
+        salt: [rar4_encryption.salt_len]u8,
+    ) Error!*const rar4_encryption.Cipher {
+        if (self.cipher == null or self.salt == null or
+            !std.mem.eql(u8, &self.salt.?, &salt))
+        {
+            if (self.cipher) |*value| value.deinit();
+            self.cipher = try rar4_encryption.Cipher.init(
+                self.allocator,
+                self.password,
+                .{ .salt = salt },
+            );
+            self.salt = salt;
+        }
+        return &self.cipher.?;
+    }
+
+    fn deinit(self: *Rar4HeaderCipherCache) void {
+        if (self.cipher) |*value| value.deinit();
+        self.* = undefined;
+    }
+};
+
+const DecryptedRar4Header = struct {
+    allocator: std.mem.Allocator,
+    bytes: []u8,
+    header_size: usize,
+    physical_size: usize,
+
+    fn deinit(self: *DecryptedRar4Header) void {
+        std.crypto.secureZero(u8, self.bytes);
+        self.allocator.free(self.bytes);
+        self.* = undefined;
+    }
+};
+
+fn decryptRar4HeaderAlloc(
+    allocator: std.mem.Allocator,
+    bytes: []const u8,
+    offset: usize,
+    cache: *Rar4HeaderCipherCache,
+) Error!DecryptedRar4Header {
+    const salt_end = try checkedEnd(offset, rar4_encryption.salt_len, bytes.len);
+    const first_end = try checkedEnd(salt_end, rar4_encryption.block_len, bytes.len);
+    const salt = bytes[offset..salt_end][0..rar4_encryption.salt_len].*;
+    const cipher = try cache.get(salt);
+    var first_plain: [rar4_encryption.block_len]u8 = undefined;
+    defer std.crypto.secureZero(u8, &first_plain);
+    try cipher.decryptBlocks(bytes[salt_end..first_end], &first_plain);
+    const header_size: usize = readLe16(&first_plain, 5);
+    if (header_size < 7) return error.InvalidRarArchive;
+    const padding = (rar4_encryption.block_len - header_size % rar4_encryption.block_len) %
+        rar4_encryption.block_len;
+    const encrypted_size = try checkedAdd(header_size, padding);
+    const encrypted_end = try checkedEnd(salt_end, encrypted_size, bytes.len);
+    const plaintext = try cipher.decryptAlloc(allocator, bytes[salt_end..encrypted_end]);
+    errdefer {
+        std.crypto.secureZero(u8, plaintext);
+        allocator.free(plaintext);
+    }
+    return .{
+        .allocator = allocator,
+        .bytes = plaintext,
+        .header_size = header_size,
+        .physical_size = try checkedAdd(rar4_encryption.salt_len, encrypted_size),
     };
 }
 
@@ -978,6 +1170,14 @@ const Rar4RawBlock = struct {
 };
 
 fn parseRar4RawBlock(bytes: []const u8, offset: usize) Error!Rar4RawBlock {
+    return parseRar4RawBlockInternal(bytes, offset, true);
+}
+
+fn parseRar4RawBlockInternal(
+    bytes: []const u8,
+    offset: usize,
+    require_data: bool,
+) Error!Rar4RawBlock {
     _ = try checkedEnd(offset, 7, bytes.len);
     const expected_crc = readLe16(bytes, offset);
     const header_type = bytes[offset + 2];
@@ -999,7 +1199,10 @@ fn parseRar4RawBlock(bytes: []const u8, offset: usize) Error!Rar4RawBlock {
         .header_size = header_size,
         .header_end = header_end,
         .data_size = data_size,
-        .next_offset = try checkedEnd(header_end, data_size, bytes.len),
+        .next_offset = if (require_data)
+            try checkedEnd(header_end, data_size, bytes.len)
+        else
+            try checkedAdd(header_end, data_size),
     };
 }
 
@@ -1025,7 +1228,19 @@ fn rar4HeaderCrcEnd(
 }
 
 fn parseRar4Block(bytes: []const u8, offset: usize) Error!ParsedBlock {
-    const raw = try parseRar4RawBlock(bytes, offset);
+    return parseRar4BlockInternal(bytes, offset, true);
+}
+
+fn parseRar4Header(bytes: []const u8) Error!ParsedBlock {
+    return parseRar4BlockInternal(bytes, 0, false);
+}
+
+fn parseRar4BlockInternal(
+    bytes: []const u8,
+    offset: usize,
+    require_data: bool,
+) Error!ParsedBlock {
+    const raw = try parseRar4RawBlockInternal(bytes, offset, require_data);
     if (raw.header_type == rar4_end_header) {
         if (raw.data_size != 0) return error.InvalidRarArchive;
         return .{ .entry = null, .next_offset = raw.next_offset, .end_archive = true };
@@ -1052,17 +1267,26 @@ fn parseRar4Block(bytes: []const u8, offset: usize) Error!ParsedBlock {
             name_bytes = name_bytes[0..ansi_end];
     }
     if (name_bytes.len == 0) return error.InvalidRarArchive;
+    const salt = if (raw.flags & rar4_file_salt != 0) blk: {
+        const salt_end = try checkedEnd(name_end, rar4_encryption.salt_len, raw.header_end);
+        break :blk bytes[name_end..salt_end][0..rar4_encryption.salt_len].*;
+    } else null;
     const packed_size = std.math.cast(usize, packed_size_u64) orelse return error.IntegerOverflow;
     const unpacked_size = std.math.cast(usize, unpacked) orelse return error.IntegerOverflow;
     const data_offset = raw.header_end;
-    const next_offset = try checkedEnd(data_offset, packed_size, bytes.len);
+    const next_offset = if (require_data)
+        try checkedEnd(data_offset, packed_size, bytes.len)
+    else
+        try checkedAdd(data_offset, packed_size);
     const compression_version = bytes[offset + 24];
     const method_id = bytes[offset + 25];
     const directory = raw.flags & rar4_directory_mask == rar4_directory_mask or
         ((bytes[offset + 15] == 0 or bytes[offset + 15] == 2) and readLe32(bytes, offset + 28) & 0x10 != 0);
     if (directory and (packed_size != 0 or unpacked_size != 0)) return error.InvalidRarArchive;
     const method = rar4Method(method_id, compression_version);
-    if (method == .stored and raw.flags & rar4_file_password == 0 and packed_size != unpacked_size)
+    if (method == .stored and raw.flags & rar4_file_password == 0 and
+        raw.flags & (rar4_file_split_before | rar4_file_split_after) == 0 and
+        packed_size != unpacked_size)
         return error.InvalidRarArchive;
     const dictionary_size: ?usize = if (directory)
         null
@@ -1092,6 +1316,10 @@ fn parseRar4Block(bytes: []const u8, offset: usize) Error!ParsedBlock {
             .directory = directory,
             .encrypted = raw.flags & rar4_file_password != 0,
             .encryption = null,
+            .rar4_encryption = if (raw.flags & rar4_file_password != 0)
+                .{ .salt = salt }
+            else
+                null,
             .solid = raw.flags & rar4_file_solid != 0,
             .split_before = raw.flags & rar4_file_split_before != 0,
             .split_after = raw.flags & rar4_file_split_after != 0,
@@ -1271,6 +1499,7 @@ fn parseRar5BlockInternal(
             .directory = directory,
             .encrypted = encrypted,
             .encryption = encryption,
+            .rar4_encryption = null,
             .solid = compression_info & 0x40 != 0,
             .split_before = raw.flags & rar5_header_split_before != 0,
             .split_after = raw.flags & rar5_header_split_after != 0,
@@ -1418,6 +1647,7 @@ fn sameEntry(a: Entry, b: Entry) bool {
         a.host_os == b.host_os and a.attributes == b.attributes and a.mtime == b.mtime and
         a.directory == b.directory and a.encrypted == b.encrypted and a.solid == b.solid and
         std.meta.eql(a.encryption, b.encryption) and
+        std.meta.eql(a.rar4_encryption, b.rar4_encryption) and
         a.split_before == b.split_before and a.split_after == b.split_after and
         a.unknown_size == b.unknown_size and a.redirection == b.redirection and
         a.safe_path == b.safe_path and std.mem.eql(u8, a.name.bytes, b.name.bytes);

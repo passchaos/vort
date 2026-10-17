@@ -4,10 +4,11 @@ const checksum = @import("../checksum.zig");
 const ppmd_h = @import("ppmd_h.zig");
 const rar29_encoder = @import("rar29_encoder.zig");
 const rar50_encoder = @import("rar50_encoder.zig");
+const rar4_encryption = @import("rar4_encryption.zig");
 const rar5_encryption = @import("rar5_encryption.zig");
 
 pub const Error = archive.Error || rar29_encoder.Error || rar50_encoder.Error ||
-    rar5_encryption.Error || std.mem.Allocator.Error || error{
+    rar4_encryption.Error || rar5_encryption.Error || std.mem.Allocator.Error || error{
     InvalidRarEntryName,
     RarFileTooLarge,
     RarHeaderTooLarge,
@@ -28,6 +29,11 @@ pub const Filter = union(enum) {
     audio: u8,
 };
 pub const EncryptionOptions = rar5_encryption.Options;
+pub const Rar4EncryptionOptions = rar4_encryption.Options;
+pub const Rar4HeaderEncryptionOptions = struct {
+    password: []const u8,
+    salt: [rar4_encryption.salt_len]u8,
+};
 pub const HeaderEncryptionOptions = struct {
     password: []const u8,
     salt: [rar5_encryption.salt_len]u8,
@@ -58,6 +64,8 @@ pub const EncodeEntry = struct {
     /// RAR5 file-data encryption. Salt and IV must be unique and unpredictable
     /// for each regular entry; generation remains explicitly caller-owned.
     encryption: ?EncryptionOptions = null,
+    /// RAR 3.x/4.x AES-128 file-data encryption.
+    rar4_encryption: ?Rar4EncryptionOptions = null,
 };
 
 pub const EncodeOptions = struct {
@@ -70,6 +78,7 @@ pub const EncodeOptions = struct {
     ppmd_order: u8 = 8,
     ppmd_memory_size: usize = 25 * 1024 * 1024,
     header_encryption: ?HeaderEncryptionOptions = null,
+    rar4_header_encryption: ?Rar4HeaderEncryptionOptions = null,
 };
 
 pub fn encodeAlloc(
@@ -132,9 +141,16 @@ pub fn encodeVolumesAlloc(
     options: EncodeOptions,
     max_payload_per_volume: usize,
 ) Error!EncodedVolumes {
-    if (options.version != .rar5) return error.UnsupportedRarEncodeOptions;
     if (max_payload_per_volume == 0) return error.InvalidRarVolumeSize;
     try validateEntries(entries, options, true);
+    if (options.version == .rar4)
+        return encodeRar4VolumesAlloc(
+            allocator,
+            entries,
+            options,
+            max_payload_per_volume,
+        );
+    if (options.version != .rar5) return error.UnsupportedRarEncodeOptions;
 
     var volumes: std.ArrayList([]u8) = .empty;
     errdefer {
@@ -260,6 +276,177 @@ pub fn encodeVolumesAlloc(
     };
 }
 
+fn encodeRar4VolumesAlloc(
+    allocator: std.mem.Allocator,
+    entries: []const EncodeEntry,
+    options: EncodeOptions,
+    max_payload_per_volume: usize,
+) Error!EncodedVolumes {
+    var volumes: std.ArrayList([]u8) = .empty;
+    errdefer {
+        for (volumes.items) |volume| allocator.free(volume);
+        volumes.deinit(allocator);
+    }
+    var current: std.ArrayList(u8) = .empty;
+    defer current.deinit(allocator);
+    var header_writer: ?Rar4HeaderWriter = if (options.rar4_header_encryption) |encryption|
+        try Rar4HeaderWriter.init(allocator, encryption)
+    else
+        null;
+    defer if (header_writer) |*value| value.deinit();
+    const header_writer_ptr: ?*Rar4HeaderWriter = if (header_writer) |*value| value else null;
+    var volume_index: usize = 0;
+    var payload_in_volume: usize = 0;
+    try startRar4Volume(
+        allocator,
+        &current,
+        volume_index,
+        options.solid,
+        header_writer_ptr,
+    );
+    var encoder = rar29_encoder.Encoder.init(allocator, .{
+        .dictionary_size = options.dictionary_size,
+        .block_size = options.block_size,
+    });
+    defer encoder.deinit();
+    var ppmd_encoder = ppmd_h.Encoder.init(allocator, .{
+        .order = options.ppmd_order,
+        .memory_size = options.ppmd_memory_size,
+    });
+    defer ppmd_encoder.deinit();
+
+    for (entries) |entry| {
+        const use_lz = entry.kind == .regular and options.compression == .rar29;
+        const use_ppmd = entry.kind == .regular and options.compression == .rar29_ppmd;
+        const use_compression = use_lz or use_ppmd;
+        if (!use_lz) encoder.reset();
+        if (!use_ppmd) ppmd_encoder.reset();
+        const solid_continuation = options.solid and if (use_lz)
+            encoder.canContinue()
+        else if (use_ppmd)
+            ppmd_encoder.canContinue()
+        else
+            false;
+        const compressed: ?[]u8 = if (use_lz)
+            if (options.filter) |filter|
+                try encoder.encodeFilteredMemberAlloc(
+                    entry.data,
+                    try rar29Filter(filter),
+                    solid_continuation,
+                )
+            else
+                try encoder.encodeMemberAlloc(entry.data, solid_continuation)
+        else if (use_ppmd)
+            try ppmd_encoder.encodeMemberAlloc(entry.data, solid_continuation)
+        else
+            null;
+        defer if (compressed) |bytes| allocator.free(bytes);
+        const plain_payload = compressed orelse entry.data;
+        var encrypted: ?rar4_encryption.Encrypted = if (entry.rar4_encryption) |encryption|
+            try rar4_encryption.encryptAlloc(allocator, plain_payload, encryption)
+        else
+            null;
+        defer if (encrypted) |*value| value.deinit();
+        const payload = if (encrypted) |value| value.bytes else plain_payload;
+        const final_crc = checksum.crc32(entry.data);
+
+        var offset: usize = 0;
+        var split_before = false;
+        while (offset < payload.len or (!split_before and payload.len == 0)) {
+            if (payload_in_volume == max_payload_per_volume) {
+                try finishRar4Volume(allocator, &current, true, header_writer_ptr);
+                const owned_volume = try current.toOwnedSlice(allocator);
+                volumes.append(allocator, owned_volume) catch |err| {
+                    allocator.free(owned_volume);
+                    return err;
+                };
+                volume_index = std.math.add(usize, volume_index, 1) catch
+                    return error.IntegerOverflow;
+                payload_in_volume = 0;
+                try startRar4Volume(
+                    allocator,
+                    &current,
+                    volume_index,
+                    options.solid,
+                    header_writer_ptr,
+                );
+            }
+            const room = max_payload_per_volume - payload_in_volume;
+            const fragment_len = @min(room, payload.len - offset);
+            const split_after = offset + fragment_len < payload.len;
+            const fragment = payload[offset .. offset + fragment_len];
+            const fragment_crc = if (split_after)
+                checksum.crc32(fragment)
+            else
+                final_crc;
+            var general_flags: u16 = 0;
+            if (split_before) general_flags |= 0x0001;
+            if (split_after) general_flags |= 0x0002;
+            try appendRar4FileFragment(
+                allocator,
+                &current,
+                entry,
+                fragment,
+                use_compression,
+                options.dictionary_size,
+                solid_continuation,
+                fragment_crc,
+                general_flags,
+                header_writer_ptr,
+            );
+            payload_in_volume += fragment_len;
+            offset += fragment_len;
+            if (!split_after) break;
+            split_before = true;
+        }
+    }
+
+    try finishRar4Volume(allocator, &current, false, header_writer_ptr);
+    const owned_volume = try current.toOwnedSlice(allocator);
+    volumes.append(allocator, owned_volume) catch |err| {
+        allocator.free(owned_volume);
+        return err;
+    };
+    return .{
+        .allocator = allocator,
+        .volumes = try volumes.toOwnedSlice(allocator),
+    };
+}
+
+fn startRar4Volume(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    volume_index: usize,
+    solid: bool,
+    header_writer: ?*Rar4HeaderWriter,
+) !void {
+    try output.appendSlice(allocator, archive.rar4_signature);
+    const volume_flags: u16 = 0x0001 | 0x0010 |
+        if (volume_index == 0) @as(u16, 0x0100) else 0;
+    try appendRar4Main(
+        allocator,
+        output,
+        solid,
+        header_writer != null,
+        volume_flags,
+    );
+}
+
+fn finishRar4Volume(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    has_next_volume: bool,
+    header_writer: ?*Rar4HeaderWriter,
+) !void {
+    try appendRar4ShortHeader(
+        allocator,
+        output,
+        0x7b,
+        0x4000 | @as(u16, @intFromBool(has_next_volume)),
+        header_writer,
+    );
+}
+
 fn validateEntries(
     entries: []const EncodeEntry,
     options: EncodeOptions,
@@ -322,6 +509,20 @@ fn validateEntries(
                 return error.InvalidRarHeaderEncryption;
         }
     }
+    if (options.rar4_header_encryption) |header_encryption| {
+        if (options.version != .rar4 or options.header_encryption != null or
+            !std.unicode.utf8ValidateSlice(header_encryption.password))
+            return error.InvalidRarHeaderEncryption;
+        for (entries) |entry| {
+            if (entry.kind == .directory) continue;
+            const encryption = entry.rar4_encryption orelse
+                return error.InvalidRarHeaderEncryption;
+            if (!std.mem.eql(u8, encryption.password, header_encryption.password) or
+                encryption.salt == null or
+                !std.mem.eql(u8, &encryption.salt.?, &header_encryption.salt))
+                return error.InvalidRarHeaderEncryption;
+        }
+    }
     for (entries) |entry| {
         if (!archive.isSafePath(entry.name) or std.mem.indexOfScalar(u8, entry.name, 0) != null)
             return error.InvalidRarEntryName;
@@ -337,6 +538,11 @@ fn validateEntries(
                 return error.UnsupportedRarEncodeOptions;
             try rar5_encryption.validateOptions(encryption);
         }
+        if (entry.rar4_encryption) |encryption| {
+            if (options.version != .rar4 or entry.kind != .regular or
+                entry.encryption != null or !std.unicode.utf8ValidateSlice(encryption.password))
+                return error.UnsupportedRarEncodeOptions;
+        }
     }
 }
 
@@ -347,7 +553,19 @@ fn encodeRar4(
     options: EncodeOptions,
 ) !void {
     try output.appendSlice(allocator, archive.rar4_signature);
-    try appendRar4Main(allocator, output, options.solid);
+    var header_writer: ?Rar4HeaderWriter = if (options.rar4_header_encryption) |encryption|
+        try Rar4HeaderWriter.init(allocator, encryption)
+    else
+        null;
+    defer if (header_writer) |*value| value.deinit();
+    const header_writer_ptr: ?*Rar4HeaderWriter = if (header_writer) |*value| value else null;
+    try appendRar4Main(
+        allocator,
+        output,
+        options.solid,
+        header_writer != null,
+        0,
+    );
     var encoder = rar29_encoder.Encoder.init(allocator, .{
         .dictionary_size = options.dictionary_size,
         .block_size = options.block_size,
@@ -365,19 +583,69 @@ fn encodeRar4(
         options,
         &encoder,
         &ppmd_encoder,
+        header_writer_ptr,
     );
-    try appendRar4ShortHeader(allocator, output, 0x7b, 0x4000);
+    try appendRar4ShortHeader(
+        allocator,
+        output,
+        0x7b,
+        0x4000,
+        header_writer_ptr,
+    );
 }
+
+const Rar4HeaderWriter = struct {
+    salt: [rar4_encryption.salt_len]u8,
+    cipher: rar4_encryption.Cipher,
+
+    fn init(
+        allocator: std.mem.Allocator,
+        options: Rar4HeaderEncryptionOptions,
+    ) Error!Rar4HeaderWriter {
+        return .{
+            .salt = options.salt,
+            .cipher = try rar4_encryption.Cipher.init(
+                allocator,
+                options.password,
+                .{ .salt = options.salt },
+            ),
+        };
+    }
+
+    fn append(
+        self: *const Rar4HeaderWriter,
+        allocator: std.mem.Allocator,
+        output: *std.ArrayList(u8),
+        clear_header: []const u8,
+    ) !void {
+        const encrypted = try self.cipher.encryptAlloc(allocator, clear_header);
+        defer allocator.free(encrypted);
+        try output.appendSlice(allocator, &self.salt);
+        try output.appendSlice(allocator, encrypted);
+    }
+
+    fn deinit(self: *Rar4HeaderWriter) void {
+        self.cipher.deinit();
+        self.* = undefined;
+    }
+};
 
 fn appendRar4Main(
     allocator: std.mem.Allocator,
     output: *std.ArrayList(u8),
     solid: bool,
+    encrypted_headers: bool,
+    extra_flags: u16,
 ) !void {
     const start = output.items.len;
     try output.appendNTimes(allocator, 0, 2);
     try output.append(allocator, 0x73);
-    try appendLe16(allocator, output, if (solid) 0x0008 else 0);
+    try appendLe16(
+        allocator,
+        output,
+        extra_flags | (if (solid) @as(u16, 0x0008) else 0) |
+            (if (encrypted_headers) @as(u16, 0x0080) else 0),
+    );
     try appendLe16(allocator, output, 13);
     try appendLe16(allocator, output, 0);
     try appendLe32(allocator, output, 0);
@@ -389,13 +657,19 @@ fn appendRar4ShortHeader(
     output: *std.ArrayList(u8),
     header_type: u8,
     flags: u16,
+    header_writer: ?*Rar4HeaderWriter,
 ) !void {
-    const start = output.items.len;
-    try output.appendNTimes(allocator, 0, 2);
-    try output.append(allocator, header_type);
-    try appendLe16(allocator, output, flags);
-    try appendLe16(allocator, output, 7);
-    writeRar4HeaderCrc(output.items, start, output.items.len);
+    var header: std.ArrayList(u8) = .empty;
+    defer header.deinit(allocator);
+    try header.appendNTimes(allocator, 0, 2);
+    try header.append(allocator, header_type);
+    try appendLe16(allocator, &header, flags);
+    try appendLe16(allocator, &header, 7);
+    writeRar4HeaderCrc(header.items, 0, header.items.len);
+    if (header_writer) |writer|
+        try writer.append(allocator, output, header.items)
+    else
+        try output.appendSlice(allocator, header.items);
 }
 
 fn appendRar4File(
@@ -405,6 +679,7 @@ fn appendRar4File(
     options: EncodeOptions,
     encoder: *rar29_encoder.Encoder,
     ppmd_encoder: *ppmd_h.Encoder,
+    header_writer: ?*Rar4HeaderWriter,
 ) !void {
     const use_lz = entry.kind == .regular and options.compression == .rar29;
     const use_ppmd = entry.kind == .regular and options.compression == .rar29_ppmd;
@@ -431,37 +706,88 @@ fn appendRar4File(
     else
         null;
     defer if (compressed) |bytes| allocator.free(bytes);
-    const payload = compressed orelse entry.data;
+    const plain_payload = compressed orelse entry.data;
+    var encrypted: ?rar4_encryption.Encrypted = if (entry.rar4_encryption) |encryption|
+        try rar4_encryption.encryptAlloc(allocator, plain_payload, encryption)
+    else
+        null;
+    defer if (encrypted) |*value| value.deinit();
+    const payload = if (encrypted) |value| value.bytes else plain_payload;
+    try appendRar4FileFragment(
+        allocator,
+        output,
+        entry,
+        payload,
+        use_compression,
+        options.dictionary_size,
+        solid_continuation,
+        checksum.crc32(entry.data),
+        0,
+        header_writer,
+    );
+}
+
+fn appendRar4FileFragment(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    entry: EncodeEntry,
+    payload: []const u8,
+    use_compression: bool,
+    dictionary_size: usize,
+    solid_continuation: bool,
+    data_crc32: u32,
+    general_flags: u16,
+    header_writer: ?*Rar4HeaderWriter,
+) !void {
     const packed_size = std.math.cast(u32, payload.len) orelse return error.RarFileTooLarge;
     const unpacked_size = std.math.cast(u32, entry.data.len) orelse return error.RarFileTooLarge;
     const name_size = std.math.cast(u16, entry.name.len) orelse return error.RarHeaderTooLarge;
-    const header_size_usize = std.math.add(usize, 32, entry.name.len) catch
+    const header_size_usize = std.math.add(
+        usize,
+        32 + (if (entry.rar4_encryption) |value|
+            if (value.salt == null) @as(usize, 0) else rar4_encryption.salt_len
+        else
+            0),
+        entry.name.len,
+    ) catch
         return error.IntegerOverflow;
     const header_size = std.math.cast(u16, header_size_usize) orelse return error.RarHeaderTooLarge;
-    const start = output.items.len;
-    try output.appendNTimes(allocator, 0, 2);
-    try output.append(allocator, 0x74);
-    const flags: u16 = 0x8000 | (if (solid_continuation) @as(u16, 0x0010) else 0) |
-        if (entry.kind == .directory)
+    var header: std.ArrayList(u8) = .empty;
+    defer header.deinit(allocator);
+    try header.appendNTimes(allocator, 0, 2);
+    try header.append(allocator, 0x74);
+    var flags: u16 = 0x8000 | general_flags |
+        (if (solid_continuation) @as(u16, 0x0010) else 0) |
+        (if (entry.kind == .directory)
             @as(u16, 0x00e0)
         else if (use_compression)
-            try rar29DictionaryFlags(options.dictionary_size)
+            try rar29DictionaryFlags(dictionary_size)
         else
-            0;
-    try appendLe16(allocator, output, flags);
-    try appendLe16(allocator, output, header_size);
-    try appendLe32(allocator, output, packed_size);
-    try appendLe32(allocator, output, unpacked_size);
-    try output.append(allocator, 3); // Unix host.
-    try appendLe32(allocator, output, checksum.crc32(entry.data));
-    try appendLe32(allocator, output, entry.mtime orelse 0);
-    try output.append(allocator, 29);
-    try output.append(allocator, if (use_compression) 0x33 else 0x30);
-    try appendLe16(allocator, output, name_size);
+            0);
+    if (entry.rar4_encryption) |encryption| {
+        flags |= 0x0004;
+        if (encryption.salt != null) flags |= 0x0400;
+    }
+    try appendLe16(allocator, &header, flags);
+    try appendLe16(allocator, &header, header_size);
+    try appendLe32(allocator, &header, packed_size);
+    try appendLe32(allocator, &header, unpacked_size);
+    try header.append(allocator, 3); // Unix host.
+    try appendLe32(allocator, &header, data_crc32);
+    try appendLe32(allocator, &header, entry.mtime orelse 0);
+    try header.append(allocator, 29);
+    try header.append(allocator, if (use_compression) 0x33 else 0x30);
+    try appendLe16(allocator, &header, name_size);
     const default_mode: u32 = if (entry.kind == .directory) 0o040755 else 0o100644;
-    try appendLe32(allocator, output, entry.mode orelse default_mode);
-    for (entry.name) |byte| try output.append(allocator, if (byte == '/') '\\' else byte);
-    writeRar4HeaderCrc(output.items, start, output.items.len);
+    try appendLe32(allocator, &header, entry.mode orelse default_mode);
+    for (entry.name) |byte| try header.append(allocator, if (byte == '/') '\\' else byte);
+    if (entry.rar4_encryption) |encryption|
+        if (encryption.salt) |salt| try header.appendSlice(allocator, &salt);
+    writeRar4HeaderCrc(header.items, 0, header.items.len);
+    if (header_writer) |writer|
+        try writer.append(allocator, output, header.items)
+    else
+        try output.appendSlice(allocator, header.items);
     try output.appendSlice(allocator, payload);
 }
 
@@ -1728,15 +2054,22 @@ test "RAR5 volume writer round trips stored compressed and solid entries" {
         error.InvalidRarVolumeSize,
         encodeVolumesAlloc(allocator, &stored_entries, .{}, 0),
     );
-    try std.testing.expectError(
-        error.UnsupportedRarEncodeOptions,
-        encodeVolumesAlloc(
-            allocator,
-            &stored_entries,
-            .{ .version = .rar4 },
-            1500,
-        ),
+    var rar4_volumes = try encodeVolumesAlloc(
+        allocator,
+        &stored_entries,
+        .{ .version = .rar4 },
+        1500,
     );
+    defer rar4_volumes.deinit();
+    var rar4_set = try volume_set.VolumeSet.parseAlloc(allocator, rar4_volumes.volumes);
+    defer rar4_set.deinit();
+    const rar4_stored = try rar4_set.extractByNameAllocLimited(
+        allocator,
+        "stored.bin",
+        random.len,
+    );
+    defer allocator.free(rar4_stored);
+    try std.testing.expectEqualSlices(u8, random[0..4096], rar4_stored);
 }
 
 test "RAR parser accepts SFX prefixes and validates header and data CRCs" {
@@ -1804,7 +2137,7 @@ test "RAR extraction rejects encrypted entries before allocating output" {
     const encrypted_entry = try encrypted.entryAt(0);
     try std.testing.expect(encrypted_entry.encrypted);
     try std.testing.expectError(
-        error.EncryptedRarEntry,
+        error.RarPasswordRequired,
         encrypted.extractAllocLimited(allocator, encrypted_entry, 0),
     );
 

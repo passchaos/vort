@@ -1,7 +1,9 @@
 const std = @import("std");
 const archive_mod = @import("archive.zig");
 const checksum = @import("../checksum.zig");
+const rar29 = @import("rar29.zig");
 const rar50 = @import("rar50.zig");
+const rar4_encryption = @import("rar4_encryption.zig");
 const rar5_encryption = @import("rar5_encryption.zig");
 
 pub const Error = archive_mod.Error || error{
@@ -28,6 +30,7 @@ pub const Entry = struct {
     directory: bool,
     encrypted: bool,
     encryption: ?archive_mod.Encryption,
+    rar4_encryption: ?archive_mod.Rar4Encryption,
     redirection: bool,
     unknown_size: bool,
     safe_path: bool,
@@ -125,6 +128,7 @@ pub const VolumeSet = struct {
                         .directory = first.directory,
                         .encrypted = first.encrypted,
                         .encryption = first.encryption,
+                        .rar4_encryption = first.rar4_encryption,
                         .redirection = first.redirection,
                         .unknown_size = first.unknown_size,
                         .safe_path = first.safe_path,
@@ -226,6 +230,7 @@ pub const ExtractSession = struct {
     set: *const VolumeSet,
     options: archive_mod.DecodeOptions,
     index: usize = 0,
+    rar29_session: rar29.Session,
     rar50_decoder: rar50.Decoder,
     poisoned: bool = false,
 
@@ -238,11 +243,17 @@ pub const ExtractSession = struct {
             .allocator = allocator,
             .set = set,
             .options = options,
+            .rar29_session = rar29.Session.init(allocator, .{
+                .max_output_len = options.max_output_len,
+                .max_ppmd_memory = options.max_ppmd_memory,
+                .max_vm_instructions = options.max_vm_instructions,
+            }),
             .rar50_decoder = rar50.Decoder.init(allocator),
         };
     }
 
     pub fn deinit(self: *ExtractSession) void {
+        self.rar29_session.deinit();
         self.rar50_decoder.deinit();
         self.* = undefined;
     }
@@ -252,7 +263,7 @@ pub const ExtractSession = struct {
         if (self.index == self.set.entries.len) return null;
         const entry = self.set.entries[self.index];
         self.index += 1;
-        if (entry.encrypted and entry.encryption == null)
+        if (entry.encrypted and entry.encryption == null and entry.rar4_encryption == null)
             return self.fail(error.EncryptedRarEntry);
         if (entry.redirection or entry.unknown_size)
             return self.fail(error.UnsupportedRarFeature);
@@ -302,7 +313,23 @@ pub const ExtractSession = struct {
             ) catch |err| return self.fail(err);
         } else null;
         defer if (decrypted) |*value| value.deinit();
-        const packed_bytes = if (decrypted) |*value| value.bytes else packed_data.items;
+        var rar4_decrypted: ?rar4_encryption.Decrypted = if (entry.rar4_encryption) |metadata| blk: {
+            const password = self.options.password orelse
+                return self.fail(error.RarPasswordRequired);
+            break :blk rar4_encryption.decryptAlloc(
+                self.allocator,
+                packed_data.items,
+                password,
+                metadata,
+            ) catch |err| return self.fail(err);
+        } else null;
+        defer if (rar4_decrypted) |*value| value.deinit();
+        const packed_bytes = if (decrypted) |*value|
+            value.bytes
+        else if (rar4_decrypted) |*value|
+            value.bytes
+        else
+            packed_data.items;
 
         const output = self.allocator.alloc(u8, entry.uncompressed_size) catch |err|
             return self.fail(err);
@@ -313,6 +340,12 @@ pub const ExtractSession = struct {
                     return self.fail(error.SizeMismatch);
                 @memcpy(output, packed_bytes[0..output.len]);
             },
+            .rar29 => self.rar29_session.decodeMemberInto(
+                packed_bytes,
+                output,
+                entry.dictionary_size orelse return self.fail(error.InvalidRarVolumeSet),
+                entry.solid,
+            ) catch |err| return self.fail(err),
             .rar50 => self.rar50_decoder.decodeMemberInto(
                 packed_bytes,
                 output,
@@ -342,12 +375,15 @@ pub const ExtractSession = struct {
 
 fn validateVolumes(archives: []const archive_mod.OwnedHeaderArchive) Error!void {
     const solid = archives[0].archive.solid;
+    const version = archives[0].archive.version;
     const header_encryption = archives[0].archive.header_encryption;
+    const rar4_encrypted_headers = archives[0].archive.rar4_encrypted_headers;
     for (archives, 0..) |owned_archive, index| {
         const rar_archive = owned_archive.archive;
-        if (rar_archive.version != .rar5 or !rar_archive.multi_volume or
+        if (rar_archive.version != version or !rar_archive.multi_volume or
             rar_archive.solid != solid or
-            !std.meta.eql(rar_archive.header_encryption, header_encryption))
+            !std.meta.eql(rar_archive.header_encryption, header_encryption) or
+            rar_archive.rar4_encrypted_headers != rar4_encrypted_headers)
             return error.InvalidRarVolumeSet;
         const expected_next = index + 1 < archives.len;
         if (rar_archive.has_next_volume != expected_next)
@@ -367,6 +403,7 @@ fn compatibleFragments(first: archive_mod.Entry, next: archive_mod.Entry) bool {
         first.solid == next.solid and first.directory == next.directory and
         first.encrypted == next.encrypted and first.redirection == next.redirection and
         std.meta.eql(first.encryption, next.encryption) and
+        std.meta.eql(first.rar4_encryption, next.rar4_encryption) and
         first.unknown_size == next.unknown_size;
 }
 

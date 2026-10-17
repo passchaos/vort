@@ -21064,3 +21064,17 @@ reuse, so production keeps the simpler independently owned plans.
   Stored/RAR50 volumes (`writer_encrypted_volumes=2`,
   `writer_encrypted_volumes_external=2`, `reference_encrypted_volumes=2`).
   RAR4 payload encryption is now the remaining core RAR encryption gap.
+
+- Added RAR 2.9/3.x/4.x AES-128-CBC in Vail and composed it across Vort's
+  Stored, RAR29 LZ and RAR29 PPMd paths. The fixed 0x40000-round SHA-1 KDF
+  converts UTF-8 passwords to UTF-16LE, derives the historical IV/key layout,
+  and reproduces RAR29's long-password in-place SHA-1 block mutation. Vort
+  parses and writes optional 8-byte file salts, clear-main encrypted-header
+  archives, solid streams, and arbitrary ciphertext fragment cuts across
+  RAR4 volumes. Repeated header salts reuse one derived key while CBC resets
+  per header. Fixed RAR 6.21 fixtures, unsalted data, long passwords,
+  wrong-password CRC failure, corrupt/truncated headers and exhaustive OOM are
+  covered. The differential adds four Vort-to-7-Zip data cases, three
+  RAR-to-Vort data cases, two directions each for encrypted headers, and two
+  directions each for encrypted Stored/RAR29 volumes. Pre-RAR29 legacy
+  encryption remains a compatibility follow-up.
