@@ -50,6 +50,16 @@ pub fn main(init: std.process.Init) !void {
             output_path,
             source_path orelse return error.MissingCorpusPath,
         );
+    if (std.mem.eql(u8, mode, "compact"))
+        return writeCompacted(init, output_path, false);
+    if (std.mem.eql(u8, mode, "solid-compact"))
+        return writeCompacted(init, output_path, true);
+    if (std.mem.eql(u8, mode, "compact-existing"))
+        return writeCompactedExisting(
+            init,
+            output_path,
+            source_path orelse return error.MissingCorpusPath,
+        );
     if (std.mem.eql(u8, mode, "split"))
         return writeSplit(init, output_path, compression, false);
     if (std.mem.eql(u8, mode, "pipable-split"))
@@ -455,6 +465,81 @@ fn writeReplacedExisting(
     try std.Io.Dir.cwd().writeFile(init.io, .{
         .sub_path = output_path,
         .data = updated,
+    });
+}
+
+fn writeCompacted(
+    init: std.process.Init,
+    output_path: []const u8,
+    solid: bool,
+) !void {
+    const first_entries = [_]vort.WimEncodeEntry{.{
+        .path = "first.bin",
+        .data = "first survives compaction\n" ** 1024,
+    }};
+    const base = if (solid)
+        try vort.encodeWimSolidAlloc(init.gpa, &first_entries, .{
+            .metadata_chunk_size = 32 * 1024,
+            .solid_chunk_size = 32 * 1024,
+            .image_name = "first",
+        })
+    else
+        try vort.encodeWimAlloc(init.gpa, &first_entries, .{
+            .compression = .xpress,
+            .image_name = "first",
+        });
+    defer init.gpa.free(base);
+    const dead_entries = [_]vort.WimEncodeEntry{.{
+        .path = "dead.bin",
+        .data = "dead compacted image payload\n" ** 1024,
+    }};
+    const with_dead = try vort.appendWimImageAlloc(init.gpa, base, .{
+        .name = "dead",
+        .entries = &dead_entries,
+    }, .{
+        .solid_chunk_size = if (solid) 32 * 1024 else null,
+    });
+    defer init.gpa.free(with_dead);
+    const third_entries = [_]vort.WimEncodeEntry{.{
+        .path = "third.bin",
+        .data = "third survives compaction\n" ** 1024,
+    }};
+    const with_third = try vort.appendWimImageAlloc(init.gpa, with_dead, .{
+        .name = "third",
+        .entries = &third_entries,
+    }, .{
+        .bootable = true,
+        .solid_chunk_size = if (solid) 32 * 1024 else null,
+    });
+    defer init.gpa.free(with_third);
+    const deleted = try vort.deleteWimImageAlloc(init.gpa, with_third, 2, .{});
+    defer init.gpa.free(deleted);
+    const compacted = try vort.compactWimAlloc(init.gpa, deleted, .{});
+    defer init.gpa.free(compacted);
+    if (compacted.len >= deleted.len) return error.InvalidBlockPlan;
+    try std.Io.Dir.cwd().writeFile(init.io, .{
+        .sub_path = output_path,
+        .data = compacted,
+    });
+}
+
+fn writeCompactedExisting(
+    init: std.process.Init,
+    output_path: []const u8,
+    source_path: []const u8,
+) !void {
+    const source = try std.Io.Dir.cwd().readFileAlloc(
+        init.io,
+        source_path,
+        init.gpa,
+        .limited(256 * 1024 * 1024),
+    );
+    defer init.gpa.free(source);
+    const compacted = try vort.compactWimAlloc(init.gpa, source, .{});
+    defer init.gpa.free(compacted);
+    try std.Io.Dir.cwd().writeFile(init.io, .{
+        .sub_path = output_path,
+        .data = compacted,
     });
 }
 

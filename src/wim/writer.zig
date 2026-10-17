@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("../core.zig");
 const format = @import("format.zig");
 const append_image_writer = @import("writer_append_image.zig");
+const compact_writer = @import("writer_compact.zig");
 const delete_image_writer = @import("writer_delete_image.zig");
 const replace_image_writer = @import("writer_replace_image.zig");
 const pipable_writer = @import("writer_pipable.zig");
@@ -14,7 +15,7 @@ const tree_mod = @import("writer_tree.zig");
 const wire = @import("writer_wire.zig");
 const xml_writer = @import("writer_xml.zig");
 
-pub const Error = core.Error || format.Error || append_image_writer.Error || delete_image_writer.Error || replace_image_writer.Error || pipable_writer.Error || plan_mod.Error ||
+pub const Error = core.Error || format.Error || append_image_writer.Error || compact_writer.Error || delete_image_writer.Error || replace_image_writer.Error || pipable_writer.Error || plan_mod.Error ||
     resource_writer.Error || solid_writer.Error || split_writer.Error || tree_mod.Error || wire.Error ||
     std.mem.Allocator.Error || error{
     InvalidWimWriterOptions,
@@ -35,6 +36,10 @@ pub const AppendImageOptions = append_image_writer.Options;
 pub const appendImageAlloc = append_image_writer.appendAlloc;
 pub const appendImageAppend = append_image_writer.appendAppend;
 pub const appendImageInto = append_image_writer.appendInto;
+pub const CompactOptions = compact_writer.Options;
+pub const compactAlloc = compact_writer.compactAlloc;
+pub const compactAppend = compact_writer.compactAppend;
+pub const compactInto = compact_writer.compactInto;
 pub const DeleteImageOptions = delete_image_writer.Options;
 pub const deleteImageAlloc = delete_image_writer.deleteAlloc;
 pub const deleteImageAppend = delete_image_writer.deleteAppend;

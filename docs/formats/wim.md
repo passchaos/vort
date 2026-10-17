@@ -251,6 +251,21 @@ append/delete, prior physical resource and authority records remain until a
 later compaction pass, and pipable, split, resource-only, metadata-only and
 write-in-progress inputs are rejected.
 
+`compactWimAlloc`/Append/Into rebuild a supported seekable archive from its
+current authoritative lookup. Live standalone metadata and data resources are
+copied byte-for-byte behind a fresh header, then lookup, XML and optional
+integrity records are regenerated; obsolete authority records, holes and data
+resources no longer present in lookup are omitted. Identical physical ranges
+are copied once, partial overlap with another live resource or current
+lookup/XML/integrity is rejected, and boot metadata is rebound to the rewritten
+metadata descriptor. The operation is deterministic and idempotent. Solid
+archives additionally remove packed resources with no live blobs and subtract
+their decoded sizes from later global logical offsets. A packed resource that
+still contains any live blob is copied whole without implicit decompression or
+recompression, so unreachable subranges inside that resource remain until an
+explicit recompressing optimizer exists. Integrity presence is inherited by
+default or may be overridden; input lookup/XML limits remain explicit.
+
 `splitWimAlloc` converts any supported standalone, non-solid standard WIM into
 caller-owned SWM parts. `encodeWimSplitAlloc` and
 `encodeWimImagesSplitAlloc` compose this with the one- or multi-image writers.
@@ -291,8 +306,8 @@ creates the exact stream consumed by `WimPipableStreamPathExtractor`, including
 cross-part target blobs. The returned `WimEncodedSplitArchive` owns every part
 as with the standard split API.
 
-The current writer remains whole-archive and caller-buffer based. Physical
-compaction, wire-spanned individual resources, automatic
+The current writer remains whole-archive and caller-buffer based. Recompressing
+solid compaction, wire-spanned individual resources, automatic
 host-filesystem security capture, short names, and tagged metadata remain
 follow-up slices. Filesystem capture/application and construction of EFSRPC or
 reparse payloads from OS objects stay outside the wire serializer.
@@ -420,6 +435,9 @@ const replaced = try vort.replaceWimImageAlloc(
     .{ .bootable = null },
 );
 defer allocator.free(replaced);
+
+const compacted = try vort.compactWimAlloc(allocator, replaced, .{});
+defer allocator.free(compacted);
 
 var swm = try vort.encodeWimImagesSplitAlloc(
     allocator,
@@ -549,6 +567,13 @@ and wimlib verify and byte-compare every replacement
 (`writer_replace=1`, `writer_replace_wimlib=1`,
 `writer_solid_replace=1`, `writer_solid_replace_wimlib=1`,
 `writer_reference_replace=1`, `writer_reference_replace_wimlib=1`).
+Ordinary-XPRESS and three-resource solid-LZMS compaction gates delete a middle
+image, discard stale authority and dead physical resources, rebase the later
+solid blob, and preserve the shifted boot image. A checked-in wimlib-authored
+XPRESS archive is compacted directly. Vort and wimlib verify and byte-compare
+all live paths (`writer_compact=1`, `writer_compact_wimlib=1`,
+`writer_solid_compact=1`, `writer_solid_compact_wimlib=1`,
+`writer_reference_compact=1`, `writer_reference_compact_wimlib=1`).
 The SWM writer matrix then emits multi-image stored, XPRESS, LZX, and LZMS sets with three
 indivisible 70,000-byte blobs and a cross-image shared resource. Vort validates
 every local lookup and extracts all paths through `WimArchiveSet`; wimlib joins

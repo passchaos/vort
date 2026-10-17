@@ -152,30 +152,13 @@ pub fn deleteImageAlloc(
     }
     try writeAll(&removed.writer, existing[cursor..]);
 
-    const without_image = removed.written();
-    const root_end = std.mem.lastIndexOf(u8, without_image, "</WIM>") orelse
-        return error.InvalidWimWriterOptions;
-    const total_open = "<TOTALBYTES>";
-    const total_close = "</TOTALBYTES>";
-    const total_start = std.mem.lastIndexOf(u8, without_image[0..root_end], total_open) orelse
-        return error.InvalidWimWriterOptions;
-    const value_start = total_start + total_open.len;
-    const value_end = std.mem.indexOfPos(u8, without_image, value_start, total_close) orelse
-        return error.InvalidWimWriterOptions;
-    if (value_end > root_end or value_end == value_start)
-        return error.InvalidWimWriterOptions;
-    _ = std.fmt.parseInt(u64, without_image[value_start..value_end], 10) catch
-        return error.InvalidWimWriterOptions;
-
-    var updated = std.Io.Writer.Allocating.init(allocator);
-    defer updated.deinit();
-    try writeAll(&updated.writer, without_image[0..total_start]);
-    try print(&updated.writer, "<TOTALBYTES>{d}</TOTALBYTES>", .{total_bytes});
-    try writeAll(
-        &updated.writer,
-        without_image[value_end + total_close.len ..],
+    const updated = try updateTotalBytesUtf8Alloc(
+        allocator,
+        removed.written(),
+        total_bytes,
     );
-    return utf8ToXmlAlloc(allocator, updated.written());
+    defer allocator.free(updated);
+    return utf8ToXmlAlloc(allocator, updated);
 }
 
 pub fn replaceImageAlloc(
@@ -202,27 +185,56 @@ pub fn replaceImageAlloc(
     try writeImage(&replaced.writer, image, image_index);
     try writeAll(&replaced.writer, existing[replaced_span.end..]);
 
-    const with_image = replaced.written();
-    const root_end = std.mem.lastIndexOf(u8, with_image, "</WIM>") orelse
+    const updated = try updateTotalBytesUtf8Alloc(
+        allocator,
+        replaced.written(),
+        total_bytes,
+    );
+    defer allocator.free(updated);
+    return utf8ToXmlAlloc(allocator, updated);
+}
+
+pub fn updateTotalBytesAlloc(
+    allocator: std.mem.Allocator,
+    existing_xml: []const u8,
+    total_bytes: usize,
+) Error![]u8 {
+    const existing = try xmlToUtf8Alloc(allocator, existing_xml);
+    defer allocator.free(existing);
+    const updated = try updateTotalBytesUtf8Alloc(
+        allocator,
+        existing,
+        total_bytes,
+    );
+    defer allocator.free(updated);
+    return utf8ToXmlAlloc(allocator, updated);
+}
+
+fn updateTotalBytesUtf8Alloc(
+    allocator: std.mem.Allocator,
+    existing: []const u8,
+    total_bytes: usize,
+) Error![]u8 {
+    const root_end = std.mem.lastIndexOf(u8, existing, "</WIM>") orelse
         return error.InvalidWimWriterOptions;
     const total_open = "<TOTALBYTES>";
     const total_close = "</TOTALBYTES>";
-    const total_start = std.mem.lastIndexOf(u8, with_image[0..root_end], total_open) orelse
+    const total_start = std.mem.lastIndexOf(u8, existing[0..root_end], total_open) orelse
         return error.InvalidWimWriterOptions;
     const value_start = total_start + total_open.len;
-    const value_end = std.mem.indexOfPos(u8, with_image, value_start, total_close) orelse
+    const value_end = std.mem.indexOfPos(u8, existing, value_start, total_close) orelse
         return error.InvalidWimWriterOptions;
     if (value_end > root_end or value_end == value_start)
         return error.InvalidWimWriterOptions;
-    _ = std.fmt.parseInt(u64, with_image[value_start..value_end], 10) catch
+    _ = std.fmt.parseInt(u64, existing[value_start..value_end], 10) catch
         return error.InvalidWimWriterOptions;
 
     var updated = std.Io.Writer.Allocating.init(allocator);
-    defer updated.deinit();
-    try writeAll(&updated.writer, with_image[0..total_start]);
+    errdefer updated.deinit();
+    try writeAll(&updated.writer, existing[0..total_start]);
     try print(&updated.writer, "<TOTALBYTES>{d}</TOTALBYTES>", .{total_bytes});
-    try writeAll(&updated.writer, with_image[value_end + total_close.len ..]);
-    return utf8ToXmlAlloc(allocator, updated.written());
+    try writeAll(&updated.writer, existing[value_end + total_close.len ..]);
+    return updated.toOwnedSlice();
 }
 
 fn imageSpansAlloc(

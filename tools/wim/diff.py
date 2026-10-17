@@ -200,6 +200,12 @@ def main() -> None:
     writer_solid_replace_wimlib_cases = 0
     writer_reference_replace_cases = 0
     writer_reference_replace_wimlib_cases = 0
+    writer_compact_cases = 0
+    writer_compact_wimlib_cases = 0
+    writer_solid_compact_cases = 0
+    writer_solid_compact_wimlib_cases = 0
+    writer_reference_compact_cases = 0
+    writer_reference_compact_wimlib_cases = 0
     writer_split_cases = 0
     writer_split_wimlib_cases = 0
     writer_pipable_cases = 0
@@ -1238,6 +1244,122 @@ def main() -> None:
                 raise AssertionError("wimlib reference replacement mismatch")
             writer_reference_replace_wimlib_cases += 1
 
+        compact_first = b"first survives compaction\n" * 1024
+        compact_third = b"third survives compaction\n" * 1024
+        for compact_mode, expected_compression in (
+            ("compact", "xpress"),
+            ("solid-compact", "lzms"),
+        ):
+            compact_image = temp / f"vort-writer-{compact_mode}.wim"
+            run(args.writer, compact_image, expected_compression, compact_mode)
+            listing = run(args.cli, "list-wim-file", compact_image).stdout
+            for marker in (
+                f"compression={expected_compression}".encode(),
+                b"images=2",
+            ):
+                if marker not in listing:
+                    raise AssertionError(
+                        f"Vort compacted WIM header missing {marker!r}"
+                    )
+            for image_index, path, expected in (
+                (1, "/first.bin", compact_first),
+                (2, "/third.bin", compact_third),
+            ):
+                output = temp / (
+                    f"writer-{compact_mode}-{image_index}-"
+                    f"{path[1:].replace('/', '-')}"
+                )
+                run(
+                    args.cli,
+                    "extract-wim-path",
+                    compact_image,
+                    image_index,
+                    path,
+                    output,
+                    len(expected),
+                )
+                if output.read_bytes() != expected:
+                    raise AssertionError("Vort compacted WIM extraction mismatch")
+            expect_failure(
+                args.cli,
+                "extract-wim-path",
+                compact_image,
+                2,
+                "/dead.bin",
+                temp / f"writer-{compact_mode}-dead.out",
+                64 * 1024,
+                error_name="WimPathNotFound",
+            )
+            if compact_mode == "compact":
+                writer_compact_cases += 1
+            else:
+                writer_solid_compact_cases += 1
+
+            if wimlib is not None:
+                run(wimlib, "verify", compact_image)
+                for image_index, unique_name, expected in (
+                    (1, "first.bin", compact_first),
+                    (2, "third.bin", compact_third),
+                ):
+                    destination = temp / (
+                        f"writer-{compact_mode}-wimlib-{image_index}"
+                    )
+                    run(
+                        wimlib,
+                        "extract",
+                        compact_image,
+                        image_index,
+                        f"--dest-dir={destination}",
+                        "--no-acls",
+                    )
+                    if (destination / unique_name).read_bytes() != expected:
+                        raise AssertionError(
+                            "wimlib compacted WIM extraction mismatch"
+                        )
+                if compact_mode == "compact":
+                    writer_compact_wimlib_cases += 1
+                else:
+                    writer_solid_compact_wimlib_cases += 1
+
+        reference_compact = temp / "vort-writer-reference-compact.wim"
+        run(
+            args.writer,
+            reference_compact,
+            "xpress",
+            "compact-existing",
+            fixture,
+        )
+        reference_compact_output = temp / "writer-reference-compact.out"
+        run(
+            args.cli,
+            "extract-wim-path",
+            reference_compact,
+            1,
+            "/nested/file.txt",
+            reference_compact_output,
+            1024,
+        )
+        if reference_compact_output.read_bytes() != b"hello WIM XPRESS payload\n":
+            raise AssertionError("Vort reference compaction mismatch")
+        writer_reference_compact_cases += 1
+        if wimlib is not None:
+            run(wimlib, "verify", reference_compact)
+            destination = temp / "writer-reference-compact-wimlib"
+            run(
+                wimlib,
+                "extract",
+                reference_compact,
+                1,
+                f"--dest-dir={destination}",
+                "--no-acls",
+            )
+            if (
+                (destination / "nested/file.txt").read_bytes()
+                != b"hello WIM XPRESS payload\n"
+            ):
+                raise AssertionError("wimlib reference compaction mismatch")
+            writer_reference_compact_wimlib_cases += 1
+
         split_expected = {
             (1, "/first.bin"): xorshift_bytes(0x1111_1111, 70_000),
             (1, "/shared.bin"): xorshift_bytes(0x3333_3333, 70_000),
@@ -2032,6 +2154,12 @@ def main() -> None:
         f"writer_solid_replace_wimlib={writer_solid_replace_wimlib_cases} "
         f"writer_reference_replace={writer_reference_replace_cases} "
         f"writer_reference_replace_wimlib={writer_reference_replace_wimlib_cases} "
+        f"writer_compact={writer_compact_cases} "
+        f"writer_compact_wimlib={writer_compact_wimlib_cases} "
+        f"writer_solid_compact={writer_solid_compact_cases} "
+        f"writer_solid_compact_wimlib={writer_solid_compact_wimlib_cases} "
+        f"writer_reference_compact={writer_reference_compact_cases} "
+        f"writer_reference_compact_wimlib={writer_reference_compact_wimlib_cases} "
         f"writer_split={writer_split_cases} "
         f"writer_split_wimlib={writer_split_wimlib_cases} "
         f"writer_pipable={writer_pipable_cases} "

@@ -21506,3 +21506,24 @@ reuse, so production keeps the simpler independently owned plans.
   `writer_solid_replace=1`, `writer_solid_replace_wimlib=1`,
   `writer_reference_replace=1`, `writer_reference_replace_wimlib=1`). Physical
   compaction remains the next update slice.
+
+- Added deterministic physical compaction for ordinary and solid WIM archives.
+  Alloc/Append/Into APIs copy only physical resources reachable from the current
+  authoritative lookup, preserve their encoded bytes, coalesce identical
+  ranges, and rebuild lookup, XML `TOTALBYTES`, boot descriptors, integrity and
+  the header from offset 208. This drops stale append/delete/replace authority,
+  holes and ordinary resources whose references reached zero without silently
+  recompressing live data. Solid compaction removes an entire packed resource
+  only when it has no live blobs, then subtracts its decoded size from later
+  global logical offsets; a resource with any live blob remains byte-identical.
+  Partial physical overlap and authority overlap are rejected. Five independent
+  focused tests cover stale ordinary bytes, deterministic/idempotent output,
+  exact shared refs, boot/integrity rebinding, empty solid archives, a deleted
+  middle packed resource followed by a rebased live resource, caller buffers,
+  unsupported layouts and exhaustive allocation failure cleanup; focused WIM
+  coverage is now 138 tests. Vort and wimlib verify and byte-compare ordinary,
+  solid and checked-in wimlib-authored compaction (`writer_compact=1`,
+  `writer_compact_wimlib=1`, `writer_solid_compact=1`,
+  `writer_solid_compact_wimlib=1`, `writer_reference_compact=1`,
+  `writer_reference_compact_wimlib=1`). Recompressing partially dead packed
+  resources remains a separate optimization slice.
