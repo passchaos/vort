@@ -6,10 +6,11 @@ const rar20 = @import("rar20.zig");
 const rar29 = @import("rar29.zig");
 const rar50 = @import("rar50.zig");
 const rar4_encryption = @import("rar4_encryption.zig");
+const rar4_name = @import("rar4_name.zig");
 const rar5_encryption = @import("rar5_encryption.zig");
 
 pub const Error = core.Error || rar15.Error || rar20.Error || rar29.Error || rar50.Error ||
-    rar4_encryption.Error || rar5_encryption.Error || error{
+    rar4_encryption.Error || rar4_name.Error || rar5_encryption.Error || error{
     InvalidRarArchive,
     UnsupportedRarCompression,
     UnsupportedRarEntry,
@@ -85,6 +86,8 @@ pub const Name = struct {
 
 pub const Entry = struct {
     name: Name,
+    rar4_ansi_name: ?Name,
+    rar4_unicode_data: ?[]const u8,
     version: Version,
     method: Method,
     method_id: u8,
@@ -655,16 +658,33 @@ fn appendOwnedEntry(
     entry: Entry,
 ) Error!void {
     if (entries.items.len >= options.max_entries) return error.RarEntryLimitExceeded;
-    const new_metadata_size = std.math.add(usize, metadata_size.*, entry.name.bytes.len) catch
+    const preferred = if (entry.rar4_unicode_data) |encoded|
+        try rar4_name.decodeAlloc(allocator, entry.name.bytes, encoded)
+    else
+        try allocator.dupe(u8, entry.name.bytes);
+    errdefer allocator.free(preferred);
+    const fallback: ?[]u8 = if (entry.rar4_unicode_data != null)
+        try allocator.dupe(u8, entry.name.bytes)
+    else
+        null;
+    errdefer if (fallback) |value| allocator.free(value);
+    const owned_name_size = std.math.add(
+        usize,
+        preferred.len,
+        if (fallback) |value| value.len else 0,
+    ) catch return error.IntegerOverflow;
+    const new_metadata_size = std.math.add(usize, metadata_size.*, owned_name_size) catch
         return error.IntegerOverflow;
     if (new_metadata_size > options.max_metadata_size)
         return error.RarMetadataLimitExceeded;
-    const name = try allocator.dupe(u8, entry.name.bytes);
-    errdefer allocator.free(name);
-    try names.append(allocator, name);
-    errdefer _ = names.pop();
+    const names_start = names.items.len;
+    errdefer names.items.len = names_start;
+    try names.append(allocator, preferred);
+    if (fallback) |value| try names.append(allocator, value);
     var owned = entry;
-    owned.name.bytes = name;
+    owned.name.bytes = preferred;
+    owned.rar4_ansi_name = if (fallback) |value| .{ .bytes = value } else null;
+    owned.rar4_unicode_data = null;
     try entries.append(allocator, owned);
     metadata_size.* = new_metadata_size;
 }
@@ -1262,9 +1282,13 @@ fn parseRar4BlockInternal(
     const name_size: usize = readLe16(bytes, offset + 26);
     const name_end = try checkedEnd(cursor, name_size, raw.header_end);
     var name_bytes = bytes[cursor..name_end];
+    var rar4_unicode_data: ?[]const u8 = null;
     if (raw.flags & rar4_file_unicode != 0) {
-        if (std.mem.indexOfScalar(u8, name_bytes, 0)) |ansi_end|
+        if (std.mem.indexOfScalar(u8, name_bytes, 0)) |ansi_end| {
+            if (ansi_end + 1 < name_bytes.len)
+                rar4_unicode_data = name_bytes[ansi_end + 1 ..];
             name_bytes = name_bytes[0..ansi_end];
+        }
     }
     if (name_bytes.len == 0) return error.InvalidRarArchive;
     const salt = if (raw.flags & rar4_file_salt != 0) blk: {
@@ -1298,6 +1322,8 @@ fn parseRar4BlockInternal(
     return .{
         .entry = .{
             .name = .{ .bytes = name_bytes },
+            .rar4_ansi_name = if (rar4_unicode_data != null) .{ .bytes = name_bytes } else null,
+            .rar4_unicode_data = rar4_unicode_data,
             .version = .rar4,
             .method = method,
             .method_id = method_id,
@@ -1481,6 +1507,8 @@ fn parseRar5BlockInternal(
     return .{
         .entry = .{
             .name = .{ .bytes = name_bytes },
+            .rar4_ansi_name = null,
+            .rar4_unicode_data = null,
             .version = .rar5,
             .method = method,
             .method_id = method_id,

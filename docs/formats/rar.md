@@ -47,6 +47,10 @@ flags, split-before/split-after state, unknown-size state, redirection presence,
 and path-safety classification. RAR5 encrypted entries additionally expose the
 version, flags, KDF count, salt, IV, and optional password-check record.
 RAR4 AES entries expose their optional 8-byte salt separately.
+Borrowed RAR4 entries retain their ANSI fallback and encoded Unicode bytecode.
+The owned-header parser strictly decodes that bytecode to UTF-8, makes it the
+preferred `Entry.name` used by lookup, and preserves a separately owned
+`rar4_ansi_name` view.
 
 Regular files use caller-owned or explicitly bounded allocation APIs. PPMd and
 RAR VM filters and RAR5 compression require an allocator, so callers use
@@ -109,9 +113,9 @@ unsupported RAR20 solid
 continuations return specific errors. This prevents an unsupported or
 incomplete member from being copied as if it were stored data.
 
-RAR4 Unicode names use a historical custom encoding. The current borrowed
-parser exposes their ANSI fallback name; RAR5 names are the archive's UTF-8
-bytes. Adding an allocator-backed RAR4 Unicode-name view remains future work.
+RAR4 Unicode names use a historical high-byte/UTF-16/copy-run instruction
+stream after a NUL-terminated ANSI fallback. Truncation, invalid runs and
+unpaired surrogates fail explicitly. RAR5 names are the archive's UTF-8 bytes.
 
 ## Writer
 
@@ -137,6 +141,9 @@ member codec beneath the archive writer.
 RAR29 LZ, or RAR29 PPMd compression. `rar4_header_encryption` sets the clear
 main password flag and emits every later header as salt plus block-aligned
 ciphertext; all regular entries must use the same password and salt.
+RAR4 non-ASCII names emit a deterministic ASCII fallback plus a complete
+code-2 UTF-16 instruction stream. This favors simple, fully interoperable wire
+over heuristic name-stream compression and supports surrogate pairs.
 `.solid = true` on RAR29 retains the 4 MiB-or-smaller LZ window and match state
 across consecutive compressed members, sets the RAR4 main/file solid flags,
 and supports sequential extraction plus by-name replay. Stored members and
@@ -181,8 +188,9 @@ The writers emit standard header/data CRCs, Unix attributes, optional
 generation-native timestamps (DOS date/time for RAR4, Unix seconds for RAR5),
 RAR4 end blocks, and RAR5 end headers.
 
-RAR4 output accepts safe ASCII names and converts `/` to the traditional `\`
-separator. RAR5 output accepts validated UTF-8 names. Both writers reject NUL,
+RAR4 output accepts validated UTF-8 names, adds the custom Unicode field when
+needed, and converts `/` to the traditional `\` separator. RAR5 output accepts
+validated UTF-8 names. Both writers reject NUL,
 absolute, empty-component, dot, and parent-component paths. RAR29 compression
 rejects unsupported filter/codec combinations instead of relabeling them.
 RAR50 dictionary sizes must be power-of-two
@@ -197,6 +205,7 @@ zig build run -- create-rar-file output.rar payload.bin input.bin rar4 rar29
 zig build run -- create-rar-file output.rar payload.bin input.bin rar4 rar29 e8e9
 zig build run -- create-rar-file output.rar payload.bin input.bin rar4 rar29 rgb:1920:0
 zig build run -- create-rar-file output.rar payload.bin input.bin rar4 rar29-ppmd
+zig build run -- create-rar-file unicode.rar '目录/данные.txt' input.bin rar4 stored none non-solid
 zig build run -- create-rar-file secret-rar4.rar payload.bin input.bin rar4 rar29 none non-solid password 0102030405060708
 zig build run -- create-rar-file hidden-rar4.rar payload.bin input.bin rar4 rar29 none non-solid password 0102030405060708 password 0102030405060708
 zig build run -- create-rar-file output.rar payload.bin input.bin rar5 rar50
@@ -228,7 +237,7 @@ output plus all six RAR29 and four RAR50 writer filters with 7-Zip, reads stored
 RAR4/RAR5 output from an optional rars-based
 reference helper, verifies file-data and encrypted-header Stored/RAR50 output
 plus RAR4 Stored/RAR29/PPMd, long-password and multi-volume encryption
-bidirectionally with RAR and 7-Zip, verifies that real compressed reference
+and custom Unicode names bidirectionally with RAR and 7-Zip, verifies that real compressed reference
 entries are classified correctly, checks SFX parsing and both CRC layers, exercises RAR2
 and RAR5 split-volume fixtures, and compares RAR15/RAR20 text, multiblock,
 keep-table, long-history and audio plus ordinary RAR29 LZ and PPMd literal,

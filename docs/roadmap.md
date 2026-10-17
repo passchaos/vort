@@ -21078,3 +21078,16 @@ reuse, so production keeps the simpler independently owned plans.
   RAR-to-Vort data cases, two directions each for encrypted headers, and two
   directions each for encrypted Stored/RAR29 volumes. Pre-RAR29 legacy
   encryption remains a compatibility follow-up.
+
+- Added complete RAR4 custom Unicode file-name handling. Borrowed entries keep
+  the ANSI fallback and encoded instruction bytes; the owned parse surface
+  strictly interprets literal-low, shared-high, direct UTF-16 and fallback-run
+  opcodes, converts valid surrogate pairs to UTF-8, owns both preferred and
+  fallback names, and uses the preferred view for lookup/extraction. Malformed
+  runs, truncation and unpaired surrogates fail rather than falling back
+  silently. The writer accepts validated UTF-8, emits a deterministic safe
+  ASCII fallback plus simple complete code-2 UTF-16 units, and normalizes RAR4
+  path separators. OOM coverage spans writer plus owned metadata. 7-Zip reads
+  Vort's `目录/данные.txt`, while Vort reads the equivalent RAR 6.21 archive
+  (`writer_rar4_unicode=1`, `writer_rar4_unicode_external=1`,
+  `reference_rar4_unicode=1`).

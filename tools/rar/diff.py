@@ -160,6 +160,9 @@ def main() -> None:
     writer_rar4_encrypted_volumes = 0
     writer_rar4_encrypted_volumes_external = 0
     reference_rar4_encrypted_volumes = 0
+    writer_rar4_unicode = 0
+    writer_rar4_unicode_external = 0
+    reference_rar4_unicode = 0
     reference_stored = 0
     reference_compressed = 0
     reference_compressed_decoded = 0
@@ -519,6 +522,42 @@ def main() -> None:
                     )
                 writer_rar4_encrypted_headers_external += 1
 
+        unicode_name = "目录/данные.txt"
+        unicode_archive = temp / "vort-rar4-unicode.rar"
+        unicode_output = temp / "vort-rar4-unicode.out"
+        run(
+            args.cli,
+            "create-rar-file",
+            str(unicode_archive),
+            unicode_name,
+            str(source),
+            "rar4",
+            "stored",
+            "none",
+            "non-solid",
+        )
+        unicode_listing = run(args.cli, "list-rar-file", str(unicode_archive)).stdout
+        if f"name={unicode_name}" not in unicode_listing:
+            raise AssertionError(f"Vort lost its RAR4 Unicode name: {unicode_listing}")
+        run(
+            args.cli,
+            "extract-rar-file",
+            str(unicode_archive),
+            unicode_name,
+            str(unicode_output),
+            str(len(payload)),
+        )
+        if unicode_output.read_bytes() != payload:
+            raise AssertionError("Vort failed RAR4 Unicode self extraction")
+        writer_rar4_unicode += 1
+        if seven_zip is not None:
+            reference = temp / "vort-rar4-unicode-reference"
+            reference.mkdir()
+            run(seven_zip, "x", "-y", f"-o{reference}", str(unicode_archive))
+            if reference.joinpath(*unicode_name.split("/")).read_bytes() != payload:
+                raise AssertionError("7-Zip rejected Vort RAR4 Unicode name")
+            writer_rar4_unicode_external += 1
+
         if rar_tool is not None:
             reference_root = temp / "rar5-encrypted-reference"
             reference_root.mkdir()
@@ -744,6 +783,36 @@ def main() -> None:
             if long_output.read_bytes() != payload:
                 raise AssertionError("Vort rejected RAR4 long-password reference")
             reference_rar4_encrypted += 1
+
+            unicode_name = "目录-данные.txt"
+            unicode_source = reference_root / unicode_name
+            unicode_source.write_bytes(payload)
+            unicode_archive = temp / "reference-rar4-unicode.rar"
+            unicode_output = temp / "reference-rar4-unicode.out"
+            run(
+                rar4_tool,
+                "a",
+                "-idq",
+                "-ma4",
+                "-m0",
+                "-ep",
+                str(unicode_archive),
+                str(unicode_source),
+            )
+            listing = run(args.cli, "list-rar-file", str(unicode_archive)).stdout
+            if f"name={unicode_name}" not in listing:
+                raise AssertionError(f"Vort misdecoded RAR4 Unicode name: {listing}")
+            run(
+                args.cli,
+                "extract-rar-file",
+                str(unicode_archive),
+                unicode_name,
+                str(unicode_output),
+                str(len(payload)),
+            )
+            if unicode_output.read_bytes() != payload:
+                raise AssertionError("Vort rejected RAR4 Unicode reference")
+            reference_rar4_unicode += 1
 
         ppmd_first = temp / "vort-rar29-ppmd-first.rar"
         ppmd_second = temp / "vort-rar29-ppmd-second.rar"
@@ -1529,6 +1598,9 @@ def main() -> None:
         f"writer_rar4_encrypted_volumes={writer_rar4_encrypted_volumes} "
         f"writer_rar4_encrypted_volumes_external={writer_rar4_encrypted_volumes_external} "
         f"reference_rar4_encrypted_volumes={reference_rar4_encrypted_volumes} "
+        f"writer_rar4_unicode={writer_rar4_unicode} "
+        f"writer_rar4_unicode_external={writer_rar4_unicode_external} "
+        f"reference_rar4_unicode={reference_rar4_unicode} "
         f"reference_stored={reference_stored} reference_compressed={reference_compressed} "
         f"reference_compressed_decoded={reference_compressed_decoded} "
         f"fixture_cases={fixture_cases} rar15_entries={rar15_entries} "

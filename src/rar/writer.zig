@@ -5,10 +5,12 @@ const ppmd_h = @import("ppmd_h.zig");
 const rar29_encoder = @import("rar29_encoder.zig");
 const rar50_encoder = @import("rar50_encoder.zig");
 const rar4_encryption = @import("rar4_encryption.zig");
+const rar4_name = @import("rar4_name.zig");
 const rar5_encryption = @import("rar5_encryption.zig");
 
 pub const Error = archive.Error || rar29_encoder.Error || rar50_encoder.Error ||
-    rar4_encryption.Error || rar5_encryption.Error || std.mem.Allocator.Error || error{
+    rar4_encryption.Error || rar4_name.Error || rar5_encryption.Error ||
+    std.mem.Allocator.Error || error{
     InvalidRarEntryName,
     RarFileTooLarge,
     RarHeaderTooLarge,
@@ -527,10 +529,7 @@ fn validateEntries(
         if (!archive.isSafePath(entry.name) or std.mem.indexOfScalar(u8, entry.name, 0) != null)
             return error.InvalidRarEntryName;
         if (entry.kind == .directory and entry.data.len != 0) return error.UnsupportedRarEntry;
-        if (options.version == .rar4) {
-            for (entry.name) |byte|
-                if (byte >= 0x80) return error.InvalidRarEntryName;
-        } else if (!std.unicode.utf8ValidateSlice(entry.name)) {
+        if (!std.unicode.utf8ValidateSlice(entry.name)) {
             return error.InvalidRarEntryName;
         }
         if (entry.encryption) |encryption| {
@@ -739,16 +738,25 @@ fn appendRar4FileFragment(
     general_flags: u16,
     header_writer: ?*Rar4HeaderWriter,
 ) !void {
+    const needs_unicode = for (entry.name) |byte| {
+        if (byte >= 0x80) break true;
+    } else false;
+    var encoded_name: ?rar4_name.Encoded = if (needs_unicode)
+        try rar4_name.encodeAlloc(allocator, entry.name)
+    else
+        null;
+    defer if (encoded_name) |*value| value.deinit();
+    const name_field = if (encoded_name) |value| value.field else entry.name;
     const packed_size = std.math.cast(u32, payload.len) orelse return error.RarFileTooLarge;
     const unpacked_size = std.math.cast(u32, entry.data.len) orelse return error.RarFileTooLarge;
-    const name_size = std.math.cast(u16, entry.name.len) orelse return error.RarHeaderTooLarge;
+    const name_size = std.math.cast(u16, name_field.len) orelse return error.RarHeaderTooLarge;
     const header_size_usize = std.math.add(
         usize,
         32 + (if (entry.rar4_encryption) |value|
             if (value.salt == null) @as(usize, 0) else rar4_encryption.salt_len
         else
             0),
-        entry.name.len,
+        name_field.len,
     ) catch
         return error.IntegerOverflow;
     const header_size = std.math.cast(u16, header_size_usize) orelse return error.RarHeaderTooLarge;
@@ -768,6 +776,7 @@ fn appendRar4FileFragment(
         flags |= 0x0004;
         if (encryption.salt != null) flags |= 0x0400;
     }
+    if (encoded_name != null) flags |= 0x0200;
     try appendLe16(allocator, &header, flags);
     try appendLe16(allocator, &header, header_size);
     try appendLe32(allocator, &header, packed_size);
@@ -780,7 +789,9 @@ fn appendRar4FileFragment(
     try appendLe16(allocator, &header, name_size);
     const default_mode: u32 = if (entry.kind == .directory) 0o040755 else 0o100644;
     try appendLe32(allocator, &header, entry.mode orelse default_mode);
-    for (entry.name) |byte| try header.append(allocator, if (byte == '/') '\\' else byte);
+    if (encoded_name != null)
+        try header.appendSlice(allocator, name_field)
+    else for (name_field) |byte| try header.append(allocator, if (byte == '/') '\\' else byte);
     if (entry.rar4_encryption) |encryption|
         if (encryption.salt) |salt| try header.appendSlice(allocator, &salt);
     writeRar4HeaderCrc(header.items, 0, header.items.len);
@@ -2107,7 +2118,7 @@ test "RAR parser accepts SFX prefixes and validates header and data CRCs" {
     }
 }
 
-test "RAR writer rejects unsafe and non-ASCII RAR4 names" {
+test "RAR writer rejects unsafe and invalid UTF-8 names" {
     const invalid = [_][]const u8{ "", "/absolute", "../escape", "a/../b", "a//b" };
     for (invalid) |name| {
         const entries = [_]EncodeEntry{.{ .name = name }};
@@ -2116,10 +2127,10 @@ test "RAR writer rejects unsafe and non-ASCII RAR4 names" {
             encodeAlloc(std.testing.allocator, &entries, .{}),
         );
     }
-    const unicode = [_]EncodeEntry{.{ .name = "目录/数据.txt" }};
+    const invalid_utf8 = [_]EncodeEntry{.{ .name = &.{0xff} }};
     try std.testing.expectError(
         error.InvalidRarEntryName,
-        encodeAlloc(std.testing.allocator, &unicode, .{ .version = .rar4 }),
+        encodeAlloc(std.testing.allocator, &invalid_utf8, .{ .version = .rar4 }),
     );
 }
 

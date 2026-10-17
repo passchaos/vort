@@ -447,7 +447,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   password checks and keyed CRCs, owned RAR5 encrypted-header parsing and
   deterministic writing with independent per-header IVs, plus RAR4 salted or
   unsalted AES-128 data/header encryption with historical long-password KDF
-  behavior, explicit redirection/unknown-size and unsupported RAR15/RAR20-solid
+  behavior and allocator-owned custom Unicode preferred names with deterministic
+  UTF-16 writer fields, explicit redirection/unknown-size and unsupported RAR15/RAR20-solid
   errors, ordered RAR4/RAR5 multi-volume reconstruction for
   stored/compressed/solid split entries, and
   deterministic RAR29 compatibility LZ writing with canonical tables,
