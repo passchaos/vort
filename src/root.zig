@@ -1653,6 +1653,8 @@ pub const WimSolidResource = wim.SolidResource;
 pub const WimStreamSelector = wim.StreamSelector;
 pub const WimEncodeEntry = wim.EncodeEntry;
 pub const WimEncodeEntryKind = wim.EncodeEntryKind;
+pub const WimEncodeNamedStream = wim.EncodeNamedStream;
+pub const WimEncodeReparseData = wim.EncodeReparseData;
 pub const WimEncodeCompression = wim.EncodeCompression;
 pub const WimEncodeOptions = wim.EncodeOptions;
 pub const parseWim = wim.parse;
@@ -3616,6 +3618,7 @@ test {
     _ = wux;
     _ = android_sparse;
     _ = android_ota;
+    _ = wim;
 }
 
 test "root 7z exports create list and extract Copy archives" {

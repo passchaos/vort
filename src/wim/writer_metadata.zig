@@ -1,6 +1,7 @@
 const std = @import("std");
 const core = @import("../core.zig");
 const metadata = @import("metadata.zig");
+const streams = @import("writer_streams.zig");
 const tree_mod = @import("writer_tree.zig");
 
 pub const Error = core.Error || tree_mod.Error || std.mem.Allocator.Error || error{
@@ -30,7 +31,7 @@ pub fn encodeAlloc(
             if (child_index == directory_index or child.parent != directory_index)
                 continue;
             child_count += 1;
-            list_size = try checkedAdd(list_size, try dentryLength(child));
+            list_size = try checkedAdd(list_size, try dentryTotalLength(child));
         }
         if (child_count == 0) {
             directory.subdir_offset = 0;
@@ -71,6 +72,14 @@ fn dentryLength(node: tree_mod.Node) Error!usize {
     return align8(length);
 }
 
+fn dentryTotalLength(node: tree_mod.Node) Error!usize {
+    var length = try dentryLength(node);
+    var iterator = node.streamSet().extraStreams();
+    while (iterator.next()) |stream|
+        length = try checkedAdd(length, try extraStreamLength(stream.name));
+    return length;
+}
+
 fn writeDentry(
     output: []u8,
     offset: usize,
@@ -78,8 +87,9 @@ fn writeDentry(
 ) Error!usize {
     if (offset & 7 != 0) return error.InvalidWimEntry;
     const length = try dentryLength(node);
-    const end = try checkedAdd(offset, length);
-    if (end > output.len) return error.InvalidWimEntry;
+    const dentry_end = try checkedAdd(offset, length);
+    const total_end = try checkedAdd(offset, try dentryTotalLength(node));
+    if (total_end > output.len) return error.InvalidWimEntry;
     const name_bytes = std.math.mul(usize, node.name_utf16le.len, 2) catch
         return error.IntegerOverflow;
     if (name_bytes > std.math.maxInt(u16)) return error.InvalidWimEntry;
@@ -91,12 +101,60 @@ fn writeDentry(
     writeU64(output, offset + 40, node.creation_time);
     writeU64(output, offset + 48, node.last_access_time);
     writeU64(output, offset + 56, node.last_write_time);
-    @memcpy(output[offset + 64 .. offset + 84], &node.sha1);
-    writeU16(output, offset + 96, 0);
+    const stream_set = node.streamSet();
+    const main_hash = if (stream_set.mainData()) |data| streams.hash(data) else @as([20]u8, @splat(0));
+    @memcpy(output[offset + 64 .. offset + 84], &main_hash);
+    if (node.reparse) |reparse| {
+        writeU32(output, offset + 88, reparse.tag);
+        writeU16(output, offset + 92, reparse.reserved);
+        writeU16(output, offset + 94, reparse.flags);
+    }
+    writeU16(output, offset + 96, @intCast(stream_set.extraCount()));
     writeU16(output, offset + 98, 0);
     writeU16(output, offset + 100, @intCast(name_bytes));
     for (node.name_utf16le, 0..) |unit, index|
         writeU16(output, offset + metadata.dentry_fixed_size + index * 2, unit);
+    var stream_offset = dentry_end;
+    var iterator = stream_set.extraStreams();
+    while (iterator.next()) |stream|
+        stream_offset = try writeExtraStream(output, stream_offset, stream);
+    if (stream_offset != total_end) return error.InvalidWimEntry;
+    return total_end;
+}
+
+fn extraStreamLength(name: ?[]const u8) Error!usize {
+    var length: usize = metadata.extra_stream_fixed_size;
+    if (name) |text| {
+        length = try checkedAdd(length, try streams.utf16ByteLength(text));
+        length = try checkedAdd(length, 2);
+    }
+    return align8(length);
+}
+
+fn writeExtraStream(
+    output: []u8,
+    offset: usize,
+    stream: streams.Stream,
+) Error!usize {
+    if (offset & 7 != 0) return error.InvalidWimEntry;
+    const length = try extraStreamLength(stream.name);
+    const end = try checkedAdd(offset, length);
+    if (end > output.len) return error.InvalidWimEntry;
+    writeU64(output, offset, length);
+    const hash = streams.hash(stream.data);
+    @memcpy(output[offset + 16 .. offset + 36], &hash);
+    if (stream.name) |name| {
+        const name_bytes = try streams.utf16ByteLength(name);
+        if (name_bytes > std.math.maxInt(u16)) return error.InvalidWimEntry;
+        writeU16(output, offset + 36, @intCast(name_bytes));
+        const name_end = try streams.writeUtf16Le(
+            output,
+            offset + metadata.extra_stream_fixed_size,
+            name,
+        );
+        if (name_end != offset + metadata.extra_stream_fixed_size + name_bytes)
+            return error.InvalidWimEntry;
+    }
     return end;
 }
 

@@ -220,12 +220,19 @@ test "WIM encrypted ESD enforces limits malformed ranges and OOM cleanup" {
         error.OutputLimitExceeded,
         archive.readEncryptedEsdInfoAlloc(allocator, .{ .max_ranges = 0 }),
     );
+    const complete = try archive.decryptEncryptedEsdWithAesKeyAllocLimited(
+        allocator,
+        &test_key,
+        bytes.len,
+        .{},
+    );
+    defer allocator.free(complete);
     try std.testing.expectError(
         error.OutputLimitExceeded,
         archive.decryptEncryptedEsdWithAesKeyAllocLimited(
             allocator,
             &test_key,
-            bytes.len - 1,
+            complete.len - 1,
             .{},
         ),
     );

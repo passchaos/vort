@@ -163,6 +163,8 @@ def main() -> None:
     encrypted_esd_cases = 0
     writer_cases = 0
     writer_wimlib_cases = 0
+    writer_stream_cases = 0
+    writer_stream_wimlib_cases = 0
     stream_error_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-wim-") as temp_text:
@@ -468,6 +470,121 @@ def main() -> None:
                             f"Vort writer {writer_compression}/{name}"
                         )
                 writer_wimlib_cases += 1
+
+        symlink_payload = struct.pack("<HHHHI", 0, 20, 22, 20, 1) + (
+            "config.txt\0config.txt\0".encode("utf-16le")
+        )
+        for writer_compression, expected_compression in (
+            ("stored", "none"),
+            ("xpress", "xpress"),
+        ):
+            stream_image = temp / f"vort-writer-streams-{writer_compression}.wim"
+            run(args.writer, stream_image, writer_compression, "streams")
+            stream_listing = run(args.cli, "list-wim-file", stream_image).stdout
+            if f"compression={expected_compression}".encode() not in stream_listing:
+                raise AssertionError("Vort writer stream compression mismatch")
+
+            stream_default = temp / f"writer-stream-default-{writer_compression}.out"
+            run(
+                args.cli,
+                "extract-wim-path",
+                stream_image,
+                1,
+                "/streamed.txt",
+                stream_default,
+                1024,
+            )
+            if stream_default.read_bytes() != b"ordinary stream\n":
+                raise AssertionError("Vort writer default stream mismatch")
+            zone = temp / f"writer-stream-zone-{writer_compression}.out"
+            run(
+                args.cli,
+                "extract-wim-stream",
+                stream_image,
+                1,
+                "/streamed.txt",
+                "Zone.Identifier",
+                zone,
+                1024,
+            )
+            if zone.read_bytes() != b"[ZoneTransfer]\r\nZoneId=3\r\n":
+                raise AssertionError("Vort writer named stream mismatch")
+            directory_ads = temp / f"writer-stream-directory-{writer_compression}.out"
+            run(
+                args.cli,
+                "extract-wim-stream",
+                stream_image,
+                1,
+                "/ads-dir",
+                "directory.meta",
+                directory_ads,
+                1024,
+            )
+            if directory_ads.read_bytes() != b"directory alternate data":
+                raise AssertionError("Vort writer directory ADS mismatch")
+            reparse = temp / f"writer-stream-reparse-{writer_compression}.out"
+            run(
+                args.cli,
+                "extract-wim-reparse",
+                stream_image,
+                1,
+                "/link",
+                reparse,
+                1024,
+            )
+            if reparse.read_bytes() != symlink_payload:
+                raise AssertionError("Vort writer reparse stream mismatch")
+            encrypted_raw = temp / f"writer-stream-efs-{writer_compression}.out"
+            run(
+                args.cli,
+                "extract-wim-encrypted-raw",
+                stream_image,
+                1,
+                "/secret.dat",
+                encrypted_raw,
+                1024,
+            )
+            if encrypted_raw.read_bytes() != b"opaque EFSRPC raw file data":
+                raise AssertionError("Vort writer EFSRPC stream mismatch")
+            encrypted_directory = temp / f"writer-stream-efs-dir-{writer_compression}.out"
+            run(
+                args.cli,
+                "extract-wim-encrypted-raw",
+                stream_image,
+                1,
+                "/encrypted-dir",
+                encrypted_directory,
+                1024,
+            )
+            if encrypted_directory.read_bytes() != b"opaque EFSRPC raw directory data":
+                raise AssertionError("Vort writer directory EFSRPC stream mismatch")
+            writer_stream_cases += 1
+
+            if wimlib is not None:
+                run(wimlib, "verify", stream_image)
+                details = run(wimlib, "dir", stream_image, 1, "--detailed").stdout
+                for marker in (
+                    b'Named data stream "Zone.Identifier"',
+                    b"Reparse point stream:",
+                    b"Raw encrypted data stream:",
+                ):
+                    if marker not in details:
+                        raise AssertionError(
+                            f"wimlib did not recognize Vort writer stream {marker!r}"
+                        )
+                link_extract = temp / f"writer-stream-link-{writer_compression}"
+                run(
+                    wimlib,
+                    "extract",
+                    stream_image,
+                    1,
+                    "/link",
+                    f"--dest-dir={link_extract}",
+                )
+                link = link_extract / "link"
+                if not link.is_symlink() or link.readlink() != Path("config.txt"):
+                    raise AssertionError("wimlib did not restore Vort writer symlink")
+                writer_stream_wimlib_cases += 1
         if wimlib is not None:
             encrypted_result = run(wimlib, "info", encrypted_esd, check=False)
             if encrypted_result.returncode == 0 or b"encrypted" not in encrypted_result.stderr.lower():
@@ -948,6 +1065,8 @@ def main() -> None:
         f"pipable_stream={pipable_stream_cases} encrypted_raw={encrypted_raw_cases} "
         f"encrypted_esd={encrypted_esd_cases} stream_errors={stream_error_cases} "
         f"writer={writer_cases} writer_wimlib={writer_wimlib_cases} "
+        f"writer_stream={writer_stream_cases} "
+        f"writer_stream_wimlib={writer_stream_wimlib_cases} "
         f"malformed={malformed}"
     )
 

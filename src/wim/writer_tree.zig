@@ -1,6 +1,7 @@
 const std = @import("std");
 const core = @import("../core.zig");
 const metadata = @import("metadata.zig");
+const streams = @import("writer_streams.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error || error{
     InvalidWimEntry,
@@ -11,12 +12,18 @@ pub const EntryKind = enum {
     directory,
 };
 
+pub const NamedStream = streams.NamedStream;
+pub const ReparseData = streams.ReparseData;
+
 /// A borrowed entry description.  The writer never takes ownership of `path`
 /// or `data`; both only need to remain valid for the duration of encode*().
 pub const Entry = struct {
     path: []const u8,
     kind: EntryKind = .file,
     data: []const u8 = &.{},
+    named_streams: []const NamedStream = &.{},
+    reparse: ?ReparseData = null,
+    encrypted_raw: ?[]const u8 = null,
     attributes: u32 = 0,
     creation_time: u64 = 0,
     last_access_time: u64 = 0,
@@ -34,6 +41,9 @@ pub const Node = struct {
     name_utf16le: []u16,
     kind: EntryKind,
     data: []const u8 = &.{},
+    named_streams: []const NamedStream = &.{},
+    reparse: ?ReparseData = null,
+    encrypted_raw: ?[]const u8 = null,
     attributes: u32,
     creation_time: u64 = 0,
     last_access_time: u64 = 0,
@@ -41,12 +51,21 @@ pub const Node = struct {
     explicit: bool = false,
     parent: usize = 0,
     subdir_offset: usize = 0,
-    sha1: [std.crypto.hash.Sha1.digest_length]u8 = @splat(0),
 
     pub fn name(self: Node) []const u8 {
         const slash = std.mem.lastIndexOfScalar(u8, self.path, '/') orelse
             return self.path;
         return self.path[slash + 1 ..];
+    }
+
+    pub fn streamSet(self: Node) streams.Set {
+        return .{
+            .directory = self.kind == .directory,
+            .default_data = self.data,
+            .named = self.named_streams,
+            .reparse = self.reparse,
+            .encrypted_raw = self.encrypted_raw,
+        };
     }
 };
 
@@ -73,11 +92,10 @@ pub const Tree = struct {
         return self.nodes.len - self.directoryCount();
     }
 
-    pub fn totalFileBytes(self: Tree) Error!u64 {
+    pub fn totalStreamBytes(self: Tree) Error!u64 {
         var total: u64 = 0;
         for (self.nodes) |node| {
-            if (node.kind != .file) continue;
-            total = std.math.add(u64, total, node.data.len) catch
+            total = std.math.add(u64, total, try node.streamSet().totalBytes()) catch
                 return error.IntegerOverflow;
         }
         return total;
@@ -170,14 +188,25 @@ fn appendNode(
 fn applyEntry(node: *Node, entry: Entry) void {
     node.kind = entry.kind;
     node.data = entry.data;
-    node.attributes = entry.attributes | defaultAttributes(entry.kind);
+    node.named_streams = entry.named_streams;
+    node.reparse = entry.reparse;
+    node.encrypted_raw = entry.encrypted_raw;
+    node.attributes = entry.attributes;
+    if (entry.kind == .directory) {
+        node.attributes |= metadata.file_attribute_directory;
+    } else if (node.attributes == 0 and entry.reparse == null and
+        entry.encrypted_raw == null)
+    {
+        node.attributes = 0x0000_0080;
+    }
+    if (entry.reparse != null)
+        node.attributes |= metadata.file_attribute_reparse_point;
+    if (entry.encrypted_raw != null)
+        node.attributes |= metadata.file_attribute_encrypted;
     node.creation_time = entry.creation_time;
     node.last_access_time = entry.last_access_time;
     node.last_write_time = entry.last_write_time;
     node.explicit = true;
-    node.sha1 = @splat(0);
-    if (entry.kind == .file and entry.data.len != 0)
-        std.crypto.hash.Sha1.hash(entry.data, &node.sha1, .{});
 }
 
 fn ensureParents(
@@ -225,14 +254,19 @@ fn validateEntry(entry: Entry) Error!void {
         entry.path[entry.path.len - 1] == '/' or
         !std.unicode.utf8ValidateSlice(entry.path))
         return error.InvalidWimEntry;
-    if (entry.kind == .directory and entry.data.len != 0)
-        return error.InvalidWimEntry;
     if (entry.kind == .file and
         entry.attributes & metadata.file_attribute_directory != 0)
         return error.InvalidWimEntry;
     if (entry.attributes &
         (metadata.file_attribute_reparse_point | metadata.file_attribute_encrypted) != 0)
         return error.InvalidWimEntry;
+    try (streams.Set{
+        .directory = entry.kind == .directory,
+        .default_data = entry.data,
+        .named = entry.named_streams,
+        .reparse = entry.reparse,
+        .encrypted_raw = entry.encrypted_raw,
+    }).validate();
     var components = std.mem.splitScalar(u8, entry.path, '/');
     while (components.next()) |component| {
         if (component.len == 0 or std.mem.eql(u8, component, ".") or

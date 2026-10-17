@@ -120,12 +120,29 @@ extraction are covered by exhaustive allocation-failure tests.
 The shared LZX core preserves its CAB mode and adds WIM block headers and WIM's
 fixed-12,000,000-byte Intel E8 postprocessing semantics.
 
-The writer accepts borrowed relative UTF-8 paths and file data through
-`WimEncodeEntry`. It inserts missing parent directories, sorts the complete tree
-deterministically, rejects duplicate and ASCII-case-ambiguous sibling names,
-and writes real security-prefix/dentry/child-list metadata rather than a flat
-resource bundle. Empty files use WIM's zero SHA-1 convention; identical
-nonempty data is stored once with an accumulated lookup reference count.
+The writer accepts borrowed relative UTF-8 paths, ordinary file data, named
+streams, reparse data, and opaque EFSRPC raw streams through `WimEncodeEntry`.
+It inserts missing parent directories, sorts the complete tree deterministically,
+rejects duplicate and ASCII-case-ambiguous sibling and stream names, and writes
+real security-prefix/dentry/child-list metadata rather than a flat resource
+bundle. Empty streams use WIM's zero SHA-1 convention; identical nonempty data
+is stored once with an accumulated lookup reference count across every stream.
+
+Named streams use `WimEncodeNamedStream`. `WimEncodeReparseData` carries the
+dentry tag/reserved/fixup fields separately from the reparse stream bytes, which
+match the reader contract and exclude the common eight-byte
+`REPARSE_DATA_BUFFER` header. `encrypted_raw` accepts the already-packed opaque
+stream produced by Windows `ReadEncryptedFileRaw()`; it must be nonempty and is
+mutually exclusive with plaintext, named, and reparse streams. Vort sets the
+corresponding file attributes rather than accepting contradictory caller bits.
+No Vail operation is applicable because this API preserves ciphertext and EFS
+metadata rather than decrypting or constructing them.
+
+Serialization follows the DISM-compatible stream rules: one ordinary,
+reparse, or EFS raw stream occupies `main_hash`; the presence of a named stream
+or both reparse and ordinary data clears `main_hash` and writes extra-stream
+records in reparse, ordinary, then named order. Named and reparse streams on
+directories are selectable through the same archive APIs as file streams.
 
 `encodeWimAlloc`, `encodeWimAppend`, and `encodeWimInto` produce a standard
 single-part, single-image WIM using either stored resources or 32 KiB XPRESS
@@ -140,11 +157,11 @@ content-derived GUID is used unless supplied, and all ordering is stable.
 so invalid input, allocation failure, and `OutputTooSmall` leave caller output
 unchanged.
 
-The current writer intentionally limits its public surface to ordinary files
-and directories. Multi-image append/update, WIM/SWM splitting, pipable output,
-LZX/LZMS encoding, security descriptors, hard links, named streams, reparse
-points, and EFSRPC raw-stream authoring remain follow-up slices. The reader
-already supports many of those representations.
+The current writer remains single-image and caller-buffer based. Multi-image
+append/update, WIM/SWM splitting, pipable output, LZX/LZMS encoding, security
+descriptors, hard-link groups, short names, and tagged metadata remain follow-up
+slices. Filesystem capture/application and construction of EFSRPC or reparse
+payloads from OS objects stay outside the wire serializer.
 
 ```zig
 const archive = try vort.parseWim(image_bytes);
@@ -196,8 +213,21 @@ const split_file = try set.extractByPathAllocLimited(
 );
 defer allocator.free(split_file);
 
+const ads = [_]vort.WimEncodeNamedStream{.{
+    .name = "Zone.Identifier",
+    .data = zone_identifier,
+}};
 const input = [_]vort.WimEncodeEntry{
-    .{ .path = "Windows/System32/example.dll", .data = dll_bytes },
+    .{
+        .path = "Windows/System32/example.dll",
+        .data = dll_bytes,
+        .named_streams = &ads,
+    },
+    .{
+        .path = "link",
+        .reparse = .{ .tag = reparse_tag, .data = reparse_payload },
+    },
+    .{ .path = "secret.dat", .encrypted_raw = efsrpc_raw_bytes },
     .{ .path = "empty.txt" },
 };
 const encoded_wim = try vort.encodeWimAlloc(allocator, &input, .{
@@ -274,3 +304,9 @@ It also generates stored and multichunk XPRESS images through Vort's public
 writer, reopens and extracts every path through Vort, then requires wimlib to
 verify and byte-exactly extract both archives (`writer=2`,
 `writer_wimlib=2`).
+Separate stored and XPRESS stream images cover default and Unicode/empty named
+streams, directory ADS, single and dual unnamed reparse layouts, file and
+directory EFSRPC raw streams, and a relative symbolic-link buffer. Vort extracts
+each selector byte-exactly; wimlib verifies both images, labels all three stream
+kinds, and restores the Vort-written link (`writer_stream=2`,
+`writer_stream_wimlib=2`).

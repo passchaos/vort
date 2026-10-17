@@ -146,6 +146,175 @@ test "WIM writer emits multichunk XPRESS and transactional buffer APIs" {
     try std.testing.expectEqualSlices(u8, encoded, into);
 }
 
+test "WIM writer preserves named reparse and encrypted raw streams" {
+    const allocator = std.testing.allocator;
+    const file_streams = [_]writer.NamedStream{
+        .{ .name = "Zone.Identifier", .data = "shared stream bytes" },
+        .{ .name = "空", .data = "" },
+    };
+    const directory_streams = [_]writer.NamedStream{.{
+        .name = "directory.meta",
+        .data = "directory ADS",
+    }};
+    const entries = [_]writer.Entry{
+        .{
+            .path = "multi.txt",
+            .data = "shared stream bytes",
+            .named_streams = &file_streams,
+        },
+        .{
+            .path = "link",
+            .reparse = .{
+                .tag = 0xa000_000c,
+                .data = "reparse payload",
+                .reserved = 3,
+                .flags = 4,
+            },
+        },
+        .{
+            .path = "dual.bin",
+            .data = "ordinary reparse data",
+            .reparse = .{ .tag = 0x8000_001b, .data = "dual reparse payload" },
+        },
+        .{
+            .path = "junction",
+            .kind = .directory,
+            .reparse = .{ .tag = 0xa000_0003, .data = "directory reparse" },
+        },
+        .{
+            .path = "ads-dir",
+            .kind = .directory,
+            .named_streams = &directory_streams,
+        },
+        .{ .path = "secret.dat", .encrypted_raw = "opaque EFSRPC bytes" },
+        .{
+            .path = "encrypted-dir",
+            .kind = .directory,
+            .encrypted_raw = "opaque directory EFSRPC bytes",
+        },
+    };
+    const encoded = try writer.encodeAlloc(allocator, &entries, .{});
+    defer allocator.free(encoded);
+    const archive = try archive_mod.Archive.init(encoded);
+    var lookup = try archive.readLookupTableAlloc(allocator, 64, 4096);
+    defer lookup.deinit();
+    var image = try archive.readImageMetadataAlloc(allocator, 1, limits);
+    defer image.deinit();
+
+    const multi = try image.lookup(allocator, "multi.txt", 64, 16);
+    try std.testing.expectEqual(@as(u16, 3), multi.extra_stream_count);
+    try std.testing.expect(std.mem.allEqual(u8, &multi.main_hash, 0));
+    const default_data = try archive.extractByPathAllocLimited(
+        allocator,
+        1,
+        "multi.txt",
+        1024,
+        limits,
+    );
+    defer allocator.free(default_data);
+    try std.testing.expectEqualStrings("shared stream bytes", default_data);
+    const zone = try archive.extractNamedStreamByPathAllocLimited(
+        allocator,
+        1,
+        "multi.txt",
+        "Zone.Identifier",
+        1024,
+        limits,
+    );
+    defer allocator.free(zone);
+    try std.testing.expectEqualStrings("shared stream bytes", zone);
+    const empty_named = try archive.extractNamedStreamByPathAllocLimited(
+        allocator,
+        1,
+        "multi.txt",
+        "空",
+        0,
+        limits,
+    );
+    defer allocator.free(empty_named);
+    try std.testing.expectEqual(@as(usize, 0), empty_named.len);
+    var shared_hash: [20]u8 = undefined;
+    std.crypto.hash.Sha1.hash("shared stream bytes", &shared_hash, .{});
+    try std.testing.expectEqual(@as(u32, 2), lookup.findData(&shared_hash).?.reference_count);
+
+    const ads_dir = try archive.extractNamedStreamByPathAllocLimited(
+        allocator,
+        1,
+        "ads-dir",
+        "directory.meta",
+        1024,
+        limits,
+    );
+    defer allocator.free(ads_dir);
+    try std.testing.expectEqualStrings("directory ADS", ads_dir);
+
+    const link = try image.lookup(allocator, "link", 64, 16);
+    try std.testing.expect(link.isReparsePoint());
+    try std.testing.expectEqual(@as(?u32, 0xa000_000c), link.reparseTag());
+    try std.testing.expectEqual(@as(u64, 0x0004_0003_a000_000c), link.reparse_or_hard_link);
+    const link_data = try archive.extractReparseDataByPathAllocLimited(
+        allocator,
+        1,
+        "link",
+        1024,
+        limits,
+    );
+    defer allocator.free(link_data);
+    try std.testing.expectEqualStrings("reparse payload", link_data);
+
+    const dual = try image.lookup(allocator, "dual.bin", 64, 16);
+    try std.testing.expectEqual(@as(u16, 2), dual.extra_stream_count);
+    try std.testing.expect(std.mem.allEqual(u8, &dual.main_hash, 0));
+    const dual_reparse = try archive.extractReparseDataByPathAllocLimited(
+        allocator,
+        1,
+        "dual.bin",
+        1024,
+        limits,
+    );
+    defer allocator.free(dual_reparse);
+    try std.testing.expectEqualStrings("dual reparse payload", dual_reparse);
+    const dual_default_hash = (try dual.defaultDataSha1()).?;
+    const dual_default = try archive.extractBySha1AllocLimited(
+        allocator,
+        &dual_default_hash,
+        1024,
+        64,
+        4096,
+    );
+    defer allocator.free(dual_default);
+    try std.testing.expectEqualStrings("ordinary reparse data", dual_default);
+
+    const junction_data = try archive.extractReparseDataByPathAllocLimited(
+        allocator,
+        1,
+        "junction",
+        1024,
+        limits,
+    );
+    defer allocator.free(junction_data);
+    try std.testing.expectEqualStrings("directory reparse", junction_data);
+
+    const encrypted = try archive.extractEncryptedRawByPathAllocLimited(
+        allocator,
+        1,
+        "secret.dat",
+        1024,
+        limits,
+    );
+    defer allocator.free(encrypted);
+    try std.testing.expectEqualStrings("opaque EFSRPC bytes", encrypted);
+    const encrypted_dir = try archive.extractEncryptedRawByPathAllocLimited(
+        allocator,
+        1,
+        "encrypted-dir",
+        1024,
+        limits,
+    );
+    defer allocator.free(encrypted_dir);
+    try std.testing.expectEqualStrings("opaque directory EFSRPC bytes", encrypted_dir);
+}
+
 test "WIM writer validates paths, XML and compression geometry" {
     const bad_path = [_]writer.Entry{.{ .path = "a//b" }};
     try std.testing.expectError(
@@ -190,6 +359,52 @@ test "WIM writer validates paths, XML and compression geometry" {
         error.InvalidWimEntry,
         writer.encodeAlloc(std.testing.allocator, &unsupported_attributes, .{}),
     );
+    const duplicate_streams = [_]writer.NamedStream{
+        .{ .name = "Name" },
+        .{ .name = "name" },
+    };
+    const duplicate_named = [_]writer.Entry{.{
+        .path = "named",
+        .named_streams = &duplicate_streams,
+    }};
+    try std.testing.expectError(
+        error.InvalidWimEntry,
+        writer.encodeAlloc(std.testing.allocator, &duplicate_named, .{}),
+    );
+    const invalid_named_stream = [_]writer.NamedStream{.{ .name = "bad/name" }};
+    const invalid_named = [_]writer.Entry{.{
+        .path = "named",
+        .named_streams = &invalid_named_stream,
+    }};
+    try std.testing.expectError(
+        error.InvalidWimEntry,
+        writer.encodeAlloc(std.testing.allocator, &invalid_named, .{}),
+    );
+    const invalid_encrypted = [_]writer.Entry{.{
+        .path = "encrypted",
+        .data = "plaintext",
+        .encrypted_raw = "raw",
+    }};
+    try std.testing.expectError(
+        error.InvalidWimEntry,
+        writer.encodeAlloc(std.testing.allocator, &invalid_encrypted, .{}),
+    );
+    const empty_encrypted = [_]writer.Entry{.{
+        .path = "encrypted",
+        .encrypted_raw = "",
+    }};
+    try std.testing.expectError(
+        error.InvalidWimEntry,
+        writer.encodeAlloc(std.testing.allocator, &empty_encrypted, .{}),
+    );
+    const invalid_reparse = [_]writer.Entry{.{
+        .path = "reparse",
+        .reparse = .{ .tag = 0, .data = "raw" },
+    }};
+    try std.testing.expectError(
+        error.InvalidWimEntry,
+        writer.encodeAlloc(std.testing.allocator, &invalid_reparse, .{}),
+    );
 
     var existing: std.ArrayList(u8) = .empty;
     defer existing.deinit(std.testing.allocator);
@@ -205,7 +420,19 @@ test "WIM writer is allocation failure safe" {
     const AllocationTest = struct {
         fn run(allocator: std.mem.Allocator) !void {
             const entries = [_]writer.Entry{
-                .{ .path = "nested/data.txt", .data = "allocation failure coverage" },
+                .{
+                    .path = "nested/data.txt",
+                    .data = "allocation failure coverage",
+                    .named_streams = &.{.{
+                        .name = "Zone.Identifier",
+                        .data = "zone",
+                    }},
+                },
+                .{
+                    .path = "link",
+                    .reparse = .{ .tag = 1, .data = "reparse" },
+                },
+                .{ .path = "encrypted", .encrypted_raw = "opaque" },
                 .{ .path = "empty" },
             };
             const encoded = try writer.encodeAlloc(allocator, &entries, .{

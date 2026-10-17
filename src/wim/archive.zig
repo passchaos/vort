@@ -41,11 +41,11 @@ pub fn selectDentryStreamSha1Alloc(
         .encrypted_raw => return dentry.encryptedRawDataSha1(),
         else => {},
     }
-    if (dentry.isDirectory()) return error.WimNotRegularFile;
     if (dentry.isEncrypted()) return error.UnsupportedWimFile;
     return switch (stream) {
         .default => blk: {
-            if (dentry.isReparsePoint()) return error.WimNotRegularFile;
+            if (dentry.isDirectory() or dentry.isReparsePoint())
+                return error.WimNotRegularFile;
             break :blk try dentry.defaultDataSha1() orelse
                 return error.WimNotRegularFile;
         },

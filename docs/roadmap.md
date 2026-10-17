@@ -21292,5 +21292,23 @@ reuse, so production keeps the simpler independently owned plans.
   tests. The black-box gate reopens both writer modes through Vort, then requires
   wimlib 1.14.5 to verify and byte-exactly extract them (`writer=2`,
   `writer_wimlib=2`). Multi-image update, split/pipable output, LZX/LZMS,
-  security descriptors, hard links, ADS, reparse and EFSRPC authoring remain
+  security descriptors, hard links, short names and tagged metadata remain
   writer follow-ups.
+
+- Extended the WIM writer from ordinary data to Windows stream semantics.
+  Borrowed entries now carry named ADS, raw reparse payloads with separate
+  dentry tag/reserved/fixup fields, or one opaque EFSRPC raw stream for an
+  encrypted file or directory. Serialization mirrors DISM: a sole unnamed
+  stream uses `main_hash`, while ADS or reparse-plus-data layouts clear it and
+  emit reparse, ordinary, then named extra-stream records. Empty stream hashes,
+  cross-stream blob deduplication/refcounts, UTF-16LE names, duplicate/unsafe
+  names, mutually exclusive EFS combinations, and directory ADS/reparse/EFS
+  selection have direct tests. The focused build now actually instantiates the
+  WIM module (fixing a pre-existing false-green `test-wim` entrypoint) and runs
+  95 WIM/LZX tests; this exposed and corrected an encrypted-ESD output-limit
+  test that had bounded the smaller reconstructed output with the encrypted
+  input size. The black-box matrix verifies stored and XPRESS stream images
+  through both implementations; wimlib recognizes named, reparse and encrypted
+  raw streams and restores Vort's relative symlink (`writer_stream=2`,
+  `writer_stream_wimlib=2`). EFSRPC bytes remain opaque by design, so no Vail
+  cipher primitive is invoked.

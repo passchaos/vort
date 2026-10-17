@@ -3,6 +3,7 @@ const core = @import("../core.zig");
 const format = @import("format.zig");
 const metadata_writer = @import("writer_metadata.zig");
 const resource_writer = @import("writer_resource.zig");
+const streams = @import("writer_streams.zig");
 const tree_mod = @import("writer_tree.zig");
 
 pub const Error = core.Error || format.Error || metadata_writer.Error ||
@@ -14,6 +15,8 @@ pub const Error = core.Error || format.Error || metadata_writer.Error ||
 
 pub const Entry = tree_mod.Entry;
 pub const EntryKind = tree_mod.EntryKind;
+pub const NamedStream = streams.NamedStream;
+pub const ReparseData = streams.ReparseData;
 pub const Compression = resource_writer.Compression;
 
 pub const Options = struct {
@@ -103,7 +106,7 @@ pub fn encodeAlloc(
         options,
         tree.directoryCount(),
         tree.fileCount(),
-        try tree.totalFileBytes(),
+        try tree.totalStreamBytes(),
         xml_offset,
     );
     defer allocator.free(xml);
@@ -182,29 +185,33 @@ fn collectBlobs(
     nodes: []const tree_mod.Node,
 ) Error!void {
     for (nodes) |node| {
-        if (node.kind != .file or node.data.len == 0) continue;
-        var found: ?usize = null;
-        for (blobs.items, 0..) |blob, index| {
-            if (!std.mem.eql(u8, &blob.sha1, &node.sha1)) continue;
-            if (!std.mem.eql(u8, blob.data, node.data))
-                return error.InvalidWimEntry;
-            found = index;
-            break;
-        }
-        if (found) |index| {
-            blobs.items[index].reference_count = std.math.add(
-                u32,
-                blobs.items[index].reference_count,
-                1,
-            ) catch return error.IntegerOverflow;
-        } else {
-            try blobs.append(allocator, .{
-                .sha1 = node.sha1,
-                .data = node.data,
-                .reference_count = 1,
-            });
-        }
+        const stream_set = node.streamSet();
+        if (stream_set.mainData()) |data| try collectBlob(allocator, blobs, data);
+        var iterator = stream_set.extraStreams();
+        while (iterator.next()) |stream|
+            try collectBlob(allocator, blobs, stream.data);
     }
+}
+
+fn collectBlob(
+    allocator: std.mem.Allocator,
+    blobs: *std.ArrayList(Blob),
+    data: []const u8,
+) Error!void {
+    if (data.len == 0) return;
+    const sha1 = streams.hash(data);
+    for (blobs.items) |*blob| {
+        if (!std.mem.eql(u8, &blob.sha1, &sha1)) continue;
+        if (!std.mem.eql(u8, blob.data, data)) return error.InvalidWimEntry;
+        blob.reference_count = std.math.add(u32, blob.reference_count, 1) catch
+            return error.IntegerOverflow;
+        return;
+    }
+    try blobs.append(allocator, .{
+        .sha1 = sha1,
+        .data = data,
+        .reference_count = 1,
+    });
 }
 
 fn appendLookupEntry(
