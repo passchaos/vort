@@ -171,6 +171,57 @@ def verify_with_vort_source_stream(
             raise AssertionError(f"Vort source stream mismatch for {name!r}")
 
 
+def split_bytes(archive: Path, temp: Path, prefix: str, part_size: int) -> list[Path]:
+    raw = archive.read_bytes()
+    parts: list[Path] = []
+    for index, offset in enumerate(range(0, len(raw), part_size), 1):
+        part = temp / f"{prefix}.{index:03d}"
+        part.write_bytes(raw[offset : offset + part_size])
+        parts.append(part)
+    if len(parts) < 2:
+        raise AssertionError("7z split differential requires at least two parts")
+    return parts
+
+
+def verify_with_vort_volumes(
+    cli: Path,
+    parts: list[Path],
+    payloads: dict[str, bytes],
+    password: str | None = None,
+) -> None:
+    if len(parts) < 2:
+        raise AssertionError("7z volume differential requires at least two parts")
+    password_arg = password if password is not None else "-"
+    listing = run(
+        cli,
+        "list-7z-volumes",
+        password_arg,
+        *(str(part) for part in parts),
+    ).stdout
+    if f"seven_zip_volume_parts={len(parts)}" not in listing:
+        raise AssertionError("7z volume listing omitted part diagnostics")
+    for name in payloads:
+        if f"name={name}" not in listing:
+            raise AssertionError(f"7z volume listing omitted {name!r}")
+    for index, (name, payload) in enumerate(payloads.items()):
+        output = parts[0].with_name(f"{parts[0].stem}-volume-{index}.out")
+        result = run(
+            cli,
+            "extract-7z-volumes",
+            name,
+            str(output),
+            str(len(payload)),
+            "536870912",
+            "536870912",
+            password_arg,
+            *(str(part) for part in parts),
+        ).stdout
+        if f"seven_zip_volume_parts={len(parts)}" not in result:
+            raise AssertionError("7z volume extraction omitted part diagnostics")
+        if output.read_bytes() != payload:
+            raise AssertionError(f"Vort volume extraction mismatch for {name!r}")
+
+
 def verify_vort_metadata(
     cli: Path,
     archive: Path,
@@ -220,6 +271,7 @@ def main() -> None:
     vort_writer_variants = 1
     source_variants = 1
     stream_variants = 1
+    volume_variants = 1
 
     with tempfile.TemporaryDirectory(prefix="vort-seven-zip-diff-") as temp_text:
         temp = Path(temp_text)
@@ -237,6 +289,28 @@ def main() -> None:
         verify_with_vort(args.cli, first, expected_vort)
         verify_with_vort_source(args.cli, first, expected_vort)
         verify_with_vort_source_stream(args.cli, first, expected_vort)
+        first_parts = split_bytes(first, temp, "vort-first.7z", 31)
+        verify_with_vort_volumes(args.cli, first_parts, expected_vort)
+        missing = run(
+            args.cli,
+            "list-7z-volumes",
+            "-",
+            *(str(part) for part in first_parts[1:]),
+            check=False,
+        )
+        if missing.returncode == 0:
+            raise AssertionError("7z volume reader accepted a missing first part")
+        reordered = run(
+            args.cli,
+            "list-7z-volumes",
+            "-",
+            str(first_parts[1]),
+            str(first_parts[0]),
+            *(str(part) for part in first_parts[2:]),
+            check=False,
+        )
+        if reordered.returncode == 0:
+            raise AssertionError("7z volume reader accepted reordered parts")
         filetime_epoch = 116_444_736_000_000_000
         verify_vort_metadata(
             args.cli,
@@ -403,6 +477,19 @@ def main() -> None:
                 encryption_password,
             )
             stream_variants += 1
+            combined_parts = split_bytes(
+                combined_encrypted,
+                temp,
+                "vort-encrypted-volumes.7z",
+                127,
+            )
+            verify_with_vort_volumes(
+                args.cli,
+                combined_parts,
+                expected_vort,
+                encryption_password,
+            )
+            volume_variants += 1
             vort_writer_variants += 1
 
             for name_compression in (
@@ -817,6 +904,58 @@ def main() -> None:
             )
             stream_variants += 1
 
+            volume_payload = bytes(range(256)) * 64
+            system_volume_base = temp / "system-volumes.7z"
+            create_reference_payload(
+                seven_zip_tool,
+                filter_tree,
+                system_volume_base,
+                volume_payload,
+                ["-mx=0", "-mhc=off", "-v1k"],
+            )
+            system_parts = sorted(temp.glob("system-volumes.7z.*"))
+            verify_with_vort_volumes(
+                args.cli,
+                system_parts,
+                {"payload.bin": volume_payload},
+            )
+            verify_with_seven_zip(
+                seven_zip_tool,
+                system_parts[0],
+                {"payload.bin": volume_payload},
+            )
+            volume_variants += 1
+
+            encrypted_volume_base = temp / "system-encrypted-volumes.7z"
+            create_reference_payload(
+                seven_zip_tool,
+                filter_tree,
+                encrypted_volume_base,
+                volume_payload,
+                [
+                    "-mx=0",
+                    "-mhe=on",
+                    "-pseven-zip-password",
+                    "-v1k",
+                ],
+            )
+            encrypted_system_parts = sorted(
+                temp.glob("system-encrypted-volumes.7z.*")
+            )
+            verify_with_vort_volumes(
+                args.cli,
+                encrypted_system_parts,
+                {"payload.bin": volume_payload},
+                "seven-zip-password",
+            )
+            verify_with_seven_zip(
+                seven_zip_tool,
+                encrypted_system_parts[0],
+                {"payload.bin": volume_payload},
+                "seven-zip-password",
+            )
+            volume_variants += 1
+
             wrong_password = run(
                 args.cli,
                 "list-7z-file",
@@ -1048,6 +1187,7 @@ def main() -> None:
         f"vort_writer_variants={vort_writer_variants} "
         f"source_variants={source_variants} "
         f"stream_variants={stream_variants} "
+        f"volume_variants={volume_variants} "
         f"system_7zip={seven_zip_tool is not None} "
         f"modern_7zip={modern_seven_zip_tool is not None} "
         f"modern_branch_filters={modern_branch_filters}"

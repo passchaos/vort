@@ -3,6 +3,7 @@ const vort = @import("vort");
 
 pub fn fuzzOne(allocator: std.mem.Allocator, data: []const u8) !void {
     try fuzzSevenZipSource(allocator, data);
+    try fuzzSevenZipSplitSource(allocator, data);
     _ = vort.store.parseHeader(data) catch |err| switch (err) {
         error.TruncatedFrame, error.InvalidMagic, error.UnsupportedVersion, error.CorruptFrame => {},
         else => return err,
@@ -1468,9 +1469,32 @@ const SevenZipFuzzSource = struct {
 
 fn fuzzSevenZipSource(allocator: std.mem.Allocator, data: []const u8) !void {
     var context = SevenZipFuzzSource{ .bytes = data };
+    return fuzzSevenZipSourceValue(allocator, .{
+        .context = &context,
+        .len = data.len,
+        .read_at = SevenZipFuzzSource.readAt,
+    });
+}
+
+fn fuzzSevenZipSplitSource(allocator: std.mem.Allocator, data: []const u8) !void {
+    if (data.len < 6 or !std.mem.eql(u8, data[0..6], "7z\xbc\xaf\x27\x1c")) return;
+    const first_len = (data.len + 1) / 2;
+    const parts = [_][]const u8{ data[0..first_len], data[first_len..] };
+    var split = vort.SevenZipSplitSliceSource.initAlloc(allocator, &parts, .{}) catch |err| switch (err) {
+        error.OutOfMemory => return error.OutOfMemory,
+        else => return,
+    };
+    defer split.deinit();
+    try fuzzSevenZipSourceValue(allocator, split.source());
+}
+
+fn fuzzSevenZipSourceValue(
+    allocator: std.mem.Allocator,
+    source: vort.SevenZipSource,
+) !void {
     if (vort.parseSevenZipSourceArchiveAllocWithOptions(
         allocator,
-        .{ .context = &context, .len = data.len, .read_at = SevenZipFuzzSource.readAt },
+        source,
         .{
             .max_next_header_size = 1 << 20,
             .max_encoded_header_size = 1 << 20,

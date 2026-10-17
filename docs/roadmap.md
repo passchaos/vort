@@ -18054,6 +18054,14 @@ reuse, so production keeps the simpler independently owned plans.
   CALL/JUMP targets and range decisions on demand, merges converted addresses
   under caller backpressure, and validates exact branch exhaustion. Real
   converted and four-AES archives plus all seven Vort primary codecs pass.
+  Ordered standard 7z volumes now expose both borrowed-slice and on-demand
+  callback sources. The adapters retain only copied descriptors, 64-bit prefix
+  bases, and ordinary bounded reader state; logical reads cross any number of
+  part boundaries without joining payload bytes. Default geometry validation
+  requires equal non-final parts and a no-larger tail. Four required volume
+  differentials cover tiny Vort splits, system `-v1k` Copy output, encrypted
+  hidden headers, symbol-progressive extraction, and missing/reordered-volume
+  rejection.
   Deeper LZMA parsing, other branching or multi-packed-stream graphs,
   comments, and start-position properties remain follow-up work. See
   `docs/formats/7z.md`.

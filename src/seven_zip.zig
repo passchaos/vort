@@ -4,6 +4,7 @@ const core = @import("core.zig");
 const archive = @import("seven_zip/archive.zig");
 const source_archive = @import("seven_zip/source_archive.zig");
 const source_entry_decoder = @import("seven_zip/source_entry_decoder.zig");
+const split_source = @import("seven_zip/split_source.zig");
 const writer = @import("seven_zip/writer.zig");
 
 pub const Error = archive.Error || source_archive.Error || writer.Error;
@@ -13,6 +14,10 @@ pub const Archive = archive.Archive;
 pub const Source = source_archive.Source;
 pub const SourceArchive = source_archive.Archive;
 pub const SourceEntryDecoder = source_entry_decoder.Decoder;
+pub const SplitSourceOptions = split_source.Options;
+pub const SplitPartSource = split_source.PartSource;
+pub const SplitSliceSource = split_source.SliceStream;
+pub const SplitCallbackSource = split_source.SourceStream;
 pub const DecodeOptions = archive.DecodeOptions;
 pub const ParseOptions = archive.ParseOptions;
 pub const EncodeEntry = writer.EncodeEntry;
@@ -55,6 +60,7 @@ test {
     _ = @import("seven_zip/ppmd7.zig");
     _ = source_archive;
     _ = source_entry_decoder;
+    _ = split_source;
     _ = writer;
 }
 
@@ -1350,4 +1356,113 @@ test "7z source entry decoder reports terminal folder CRC corruption" {
     var output: [payload.len]u8 = undefined;
     try std.testing.expectError(error.ChecksumMismatch, decoder.step(&output));
     try std.testing.expect(!std.mem.eql(u8, payload, &output));
+}
+
+test "7z split sources parse and stream encrypted solid entries" {
+    const first = "\x90\xe8\x10\x00\x00\x00 split prefix\n" ** 97;
+    const second = "selected split-volume payload\n" ** 257;
+    const entries = [_]EncodeEntry{
+        .{ .name = "first.bin", .data = first },
+        .{ .name = "second.bin", .data = second },
+    };
+    const filters = [_]Filter{Filter.x86(0x1000)};
+    const encryption = EncryptionOptions{
+        .password = "split-password-密码",
+        .iv = [_]u8{0x42} ** 16,
+        .salt = [_]u8{0x24} ** 16,
+        .salt_len = 8,
+        .num_cycles_power = @import("seven_zip/aes.zig").direct_key_power,
+    };
+    const encoded = try encodeAlloc(std.testing.allocator, &entries, .{
+        .compression = .lzma2,
+        .solid = true,
+        .header_compression = .copy,
+        .filters = &filters,
+        .encryption = encryption,
+        .encrypt_header = true,
+    });
+    defer std.testing.allocator.free(encoded);
+    const part_len: usize = 127;
+    const part_count = (encoded.len + part_len - 1) / part_len;
+    const parts = try std.testing.allocator.alloc([]const u8, part_count);
+    defer std.testing.allocator.free(parts);
+    const lengths = try std.testing.allocator.alloc(u64, part_count);
+    defer std.testing.allocator.free(lengths);
+    for (parts, lengths, 0..) |*part, *length, index| {
+        const start = index * part_len;
+        const end = @min(encoded.len, start + part_len);
+        part.* = encoded[start..end];
+        length.* = part.len;
+    }
+
+    var slices = try SplitSliceSource.initAlloc(std.testing.allocator, parts, .{});
+    defer slices.deinit();
+    const parsed_slices = try parseSourceAllocWithOptions(
+        std.testing.allocator,
+        slices.source(),
+        .{ .password = encryption.password },
+    );
+    defer parsed_slices.deinit();
+    const slice_decoded = try decodeSourceEntryFragmented(
+        std.testing.allocator,
+        &parsed_slices,
+        parsed_slices.entries[1],
+        .{
+            .password = encryption.password,
+            .max_output_len = second.len,
+            .max_folder_output_len = first.len + second.len,
+            .input_buffer_size = 64,
+            .decoded_buffer_size = 17,
+        },
+        7,
+    );
+    defer std.testing.allocator.free(slice_decoded);
+    try std.testing.expectEqualSlices(u8, second, slice_decoded);
+
+    const PartContext = struct {
+        parts: []const []const u8,
+
+        fn readAt(
+            raw_context: *anyopaque,
+            part_index: usize,
+            offset: u64,
+            output: []u8,
+        ) error{PartSourceReadFailed}!usize {
+            const self: *@This() = @ptrCast(@alignCast(raw_context));
+            if (part_index >= self.parts.len) return error.PartSourceReadFailed;
+            const start = std.math.cast(usize, offset) orelse return error.PartSourceReadFailed;
+            if (start >= self.parts[part_index].len) return 0;
+            const count = @min(output.len, @min(@as(usize, 3), self.parts[part_index].len - start));
+            @memcpy(output[0..count], self.parts[part_index][start..][0..count]);
+            return count;
+        }
+    };
+    var context = PartContext{ .parts = parts };
+    var callback = try SplitCallbackSource.initAlloc(std.testing.allocator, .{
+        .context = &context,
+        .part_lengths = lengths,
+        .read_at = PartContext.readAt,
+    }, .{});
+    defer callback.deinit();
+    const parsed_callback = try parseSourceAllocWithOptions(
+        std.testing.allocator,
+        callback.source(),
+        .{ .password = encryption.password },
+    );
+    defer parsed_callback.deinit();
+    const callback_decoded = try decodeSourceEntryFragmented(
+        std.testing.allocator,
+        &parsed_callback,
+        parsed_callback.entries[1],
+        .{
+            .password = encryption.password,
+            .max_output_len = second.len,
+            .max_folder_output_len = first.len + second.len,
+            .input_buffer_size = 64,
+            .decoded_buffer_size = 17,
+        },
+        7,
+    );
+    defer std.testing.allocator.free(callback_decoded);
+    try std.testing.expectEqualSlices(u8, second, callback_decoded);
 }

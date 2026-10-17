@@ -623,6 +623,10 @@ pub fn main(init: std.process.Init) !void {
         try seven_zip_cli.extractSourceFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-7z-source-stream-file")) {
         try seven_zip_cli.extractSourceStreamFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "list-7z-volumes")) {
+        try seven_zip_cli.listVolumes(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-7z-volumes")) {
+        try seven_zip_cli.extractVolumes(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-lzma-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -2905,6 +2909,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  extract-7z-file <7z> <entry> <out> [max_output] [max_dictionary] [max_folder] [password|-]
         \\  extract-7z-source-file <7z> <entry> <out> [max_output] [max_dictionary] [max_folder] [password|-]
         \\  extract-7z-source-stream-file <7z> <entry> <out> [max_output] [max_dictionary] [max_folder] [password|-]
+        \\  list-7z-volumes <password|-> <ordered-part>...
+        \\  extract-7z-volumes <entry> <out> [max_output] [max_dictionary] [max_folder] <password|-> <ordered-part>...
         \\                              Extract a common-codec, Delta, or BCJ-filtered 7z entry
         \\  encode-lzma-file <in> <out> [end-marker|known]
         \\                              Encode deterministic LZMA-Alone data
