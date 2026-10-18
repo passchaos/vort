@@ -454,6 +454,7 @@ pub fn main(init: std.process.Init) !void {
     var extended_header_owned_cases: usize = 0;
     var complete_static_transform_cases: usize = 0;
     var incremental_static_transform_cases: usize = 0;
+    var incremental_static_multiblock_cases: usize = 0;
     var operation_schedule_cases: usize = 0;
     var allocating_summary_history_cases: usize = 0;
     var high_tree_truncation_cases: usize = 0;
@@ -797,20 +798,44 @@ pub fn main(init: std.process.Init) !void {
     );
     complete_static_transform_cases += 1;
 
-    const omit_first_incremental = try encodeIncrementalStaticDictionary(
-        init.gpa,
-        omit_first_payload,
-        .{},
-        1,
-        1,
-    );
-    defer init.gpa.free(omit_first_incremental);
-    if (!std.mem.eql(u8, omit_first, omit_first_incremental))
-        return error.ReferenceEncodeFailed;
-    try reference.decode(omit_first_incremental, &omit_first_reference_output);
-    if (!std.mem.eql(u8, omit_first_payload, &omit_first_reference_output))
-        return error.ReferenceDecodeFailed;
-    incremental_static_transform_cases += 1;
+    var transform_storage: [64]u8 = undefined;
+    var transform_reference_output: [64]u8 = undefined;
+    for (0..vort.br.IncrementalTestSupport.complete_static_dictionary_transform_count) |transform_index| {
+        const payload = try vort.br.IncrementalTestSupport.completeStaticDictionaryTransformCase(
+            transform_index,
+            &transform_storage,
+        );
+        const one_shot = try vort.brEncodePlannedStreamStaticDictionaryAlloc(
+            init.gpa,
+            payload,
+        );
+        defer init.gpa.free(one_shot);
+        const incremental = try encodeIncrementalStaticDictionary(
+            init.gpa,
+            payload,
+            .{},
+            1,
+            1,
+        );
+        defer init.gpa.free(incremental);
+        if (!std.mem.eql(u8, one_shot, incremental))
+            return error.ReferenceEncodeFailed;
+        const summary = try vort.brSummarizeStream(incremental);
+        if (summary.static_dictionary_copy_count == 0 or
+            summary.static_dictionary_bytes == 0)
+            return error.ReferenceEncodeFailed;
+        try reference.decode(
+            incremental,
+            transform_reference_output[0..payload.len],
+        );
+        if (!std.mem.eql(
+            u8,
+            payload,
+            transform_reference_output[0..payload.len],
+        )) return error.ReferenceDecodeFailed;
+        try decodeProgressChunks(init.gpa, incremental, payload, 16, 1, 1);
+        incremental_static_transform_cases += 1;
+    }
 
     const multi_block_static_payload = "quot;" ** 2;
     const multi_block_static = try encodeIncrementalStaticDictionary(
@@ -838,7 +863,7 @@ pub fn main(init: std.process.Init) !void {
         1,
         1,
     );
-    incremental_static_transform_cases += 1;
+    incremental_static_multiblock_cases += 1;
 
     const large_header = try vort.br.IncrementalTestSupport.encodeLargeCompressedHeader(init.gpa);
     defer init.gpa.free(large_header);
@@ -1793,8 +1818,8 @@ pub fn main(init: std.process.Init) !void {
         .{ cases_run, one_shot_cases, large_window_decode_cases, broad_generated_cases, broad_progressive_cases, real_file_cases, real_progressive_cases, real_options.len, real_quality_mask, real_mode_mask, real_window_mask },
     );
     try stdout.interface.print(
-        "planned_window_cases={d} planned_literal_split_cases={d} planned_command_split_cases={d} planned_distance_split_cases={d} planned_distance_parameter_cases={d} planned_chunked_window_cases={d} planned_quality_block_size_cases={d} planned_stream_segmentation_cases={d} planned_large_window_cases={d} planned_large_quality_cases={d} planned_metadata_cases={d} planned_extended_dictionary_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} high_tree_truncation_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} complete_static_transform_cases={d} incremental_static_transform_cases={d} extended_header_cases={d} extended_header_owned_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
-        .{ planned_window_cases, planned_literal_split_cases, planned_command_split_cases, planned_distance_split_cases, planned_distance_parameter_cases, planned_chunked_window_cases, planned_quality_block_size_cases, planned_stream_segmentation_cases, planned_large_window_cases, planned_large_quality_cases, planned_metadata_cases, planned_extended_dictionary_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, high_tree_truncation_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, complete_static_transform_cases, incremental_static_transform_cases, extended_header_cases, extended_header_owned_cases, operation_schedule_cases, reference.version() },
+        "planned_window_cases={d} planned_literal_split_cases={d} planned_command_split_cases={d} planned_distance_split_cases={d} planned_distance_parameter_cases={d} planned_chunked_window_cases={d} planned_quality_block_size_cases={d} planned_stream_segmentation_cases={d} planned_large_window_cases={d} planned_large_quality_cases={d} planned_metadata_cases={d} planned_extended_dictionary_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} high_tree_truncation_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} complete_static_transform_cases={d} incremental_static_transform_cases={d} incremental_static_multiblock_cases={d} extended_header_cases={d} extended_header_owned_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
+        .{ planned_window_cases, planned_literal_split_cases, planned_command_split_cases, planned_distance_split_cases, planned_distance_parameter_cases, planned_chunked_window_cases, planned_quality_block_size_cases, planned_stream_segmentation_cases, planned_large_window_cases, planned_large_quality_cases, planned_metadata_cases, planned_extended_dictionary_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, high_tree_truncation_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, complete_static_transform_cases, incremental_static_transform_cases, incremental_static_multiblock_cases, extended_header_cases, extended_header_owned_cases, operation_schedule_cases, reference.version() },
     );
     try stdout.interface.flush();
 }

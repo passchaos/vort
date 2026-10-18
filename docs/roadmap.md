@@ -21749,3 +21749,19 @@ reuse, so production keeps the simpler independently owned plans.
   stream (`incremental_static_transform_cases=2`). The default block is 65,520
   bytes; explicit `block_len` remains bounded by Brotli's 16 MiB meta-block
   limit, while `max_input_len` separately caps the complete stream.
+
+- Completed the convenience surface around the incremental complete static-
+  dictionary encoder. Strict one-shot encoding now has transactional Append and
+  caller-buffer Into variants; chunked default/option-aware Alloc, Append and
+  Into variants preserve every non-empty chunk as a meta-block boundary and
+  emit the last chunk directly as final. Append rolls back on every error and
+  Into leaves undersized output untouched by encoding into temporary storage;
+  explicit incremental state remains the retained-scratch path. Focused Brotli
+  coverage rises from 789 to 792 tests with single-chunk one-shot wire parity,
+  three-boundary decoding, max-input/invalid-option preflight, caller-buffer
+  atomicity and exhaustive wrapper OOM injection. The libbrotli 1.0.9 matrix
+  now generates one valid input for every RFC transform family: all 121
+  one-shot/incremental pairs are byte-identical and independently decoded, plus
+  one multi-meta-block omit-first stream
+  (`incremental_static_transform_cases=121`,
+  `incremental_static_multiblock_cases=1`).

@@ -574,6 +574,212 @@ test "incremental static dictionary encoder resumes after metadata" {
     try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
+test "static dictionary convenience APIs preserve wire and chunk boundaries" {
+    const payload = "quot;";
+    const one_shot = try br.encodePlannedStreamStaticDictionaryAlloc(
+        std.testing.allocator,
+        payload,
+    );
+    defer std.testing.allocator.free(one_shot);
+    const single_chunks = [_][]const u8{payload};
+    const single_chunk = try br.encodePlannedStreamStaticDictionaryChunksAlloc(
+        std.testing.allocator,
+        &single_chunks,
+    );
+    defer std.testing.allocator.free(single_chunk);
+    try std.testing.expectEqualSlices(u8, one_shot, single_chunk);
+
+    var strict_append: std.ArrayList(u8) = .empty;
+    defer strict_append.deinit(std.testing.allocator);
+    try strict_append.appendSlice(std.testing.allocator, "prefix:");
+    try br.encodePlannedStreamStaticDictionaryAppend(
+        std.testing.allocator,
+        &strict_append,
+        payload,
+    );
+    try std.testing.expectEqualSlices(u8, one_shot, strict_append.items[7..]);
+    var strict_into: [64]u8 = undefined;
+    const strict_written = try br.encodePlannedStreamStaticDictionaryInto(
+        payload,
+        &strict_into,
+    );
+    try std.testing.expectEqualSlices(u8, one_shot, strict_into[0..strict_written]);
+    var strict_too_small: [64]u8 = @splat(0xaa);
+    try std.testing.expect(one_shot.len > 1 and one_shot.len <= strict_too_small.len);
+    try std.testing.expectError(
+        error.OutOfMemory,
+        br.encodePlannedStreamStaticDictionaryInto(
+            payload,
+            strict_too_small[0 .. one_shot.len - 1],
+        ),
+    );
+    try std.testing.expectEqualSlices(
+        u8,
+        &([_]u8{0xaa} ** strict_too_small.len),
+        &strict_too_small,
+    );
+
+    const chunks = [_][]const u8{ "", payload, payload, "", payload };
+    const encoded = try br.encodePlannedStreamStaticDictionaryChunksAlloc(
+        std.testing.allocator,
+        &chunks,
+    );
+    defer std.testing.allocator.free(encoded);
+    const summary = try br.summarizeStream(encoded);
+    try std.testing.expectEqual(@as(usize, 3), summary.compressed_meta_block_count);
+    try std.testing.expectEqual(@as(usize, 3), summary.static_dictionary_copy_count);
+    const expected = payload ** 3;
+    const decoded = try br.decodeStreamAllocExactSize(
+        std.testing.allocator,
+        encoded,
+        expected.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try br.encodePlannedStreamStaticDictionaryChunksAppend(
+        std.testing.allocator,
+        &appended,
+        &chunks,
+    );
+    try std.testing.expectEqualSlices(u8, encoded, appended.items[7..]);
+    var into: [256]u8 = undefined;
+    const written = try br.encodePlannedStreamStaticDictionaryChunksInto(
+        &chunks,
+        &into,
+    );
+    try std.testing.expectEqualSlices(u8, encoded, into[0..written]);
+
+    const options: br.StaticDictionaryStreamOptions = .{
+        .stream = .{ .window_bits = 18, .metadata = "chunk options" },
+        .block_len = 5,
+        .max_input_len = expected.len,
+    };
+    const with_options = try br.encodePlannedStreamStaticDictionaryChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        options,
+    );
+    defer std.testing.allocator.free(with_options);
+    const options_summary = try br.summarizeStream(with_options);
+    try std.testing.expectEqual(@as(u5, 18), options_summary.window_bits);
+    try std.testing.expectEqual(@as(usize, 1), options_summary.metadata_meta_block_count);
+    try std.testing.expectEqual(@as(usize, 3), options_summary.compressed_meta_block_count);
+    var options_append: std.ArrayList(u8) = .empty;
+    defer options_append.deinit(std.testing.allocator);
+    try br.encodePlannedStreamStaticDictionaryChunksWithOptionsAppend(
+        std.testing.allocator,
+        &options_append,
+        &chunks,
+        options,
+    );
+    try std.testing.expectEqualSlices(u8, with_options, options_append.items);
+    var options_into: [256]u8 = undefined;
+    const options_written = try br.encodePlannedStreamStaticDictionaryChunksWithOptionsInto(
+        &chunks,
+        &options_into,
+        options,
+    );
+    try std.testing.expectEqualSlices(
+        u8,
+        with_options,
+        options_into[0..options_written],
+    );
+
+    var too_small: [256]u8 = @splat(0xaa);
+    try std.testing.expect(encoded.len > 1 and encoded.len <= too_small.len);
+    try std.testing.expectError(
+        error.OutOfMemory,
+        br.encodePlannedStreamStaticDictionaryChunksInto(
+            &chunks,
+            too_small[0 .. encoded.len - 1],
+        ),
+    );
+    try std.testing.expectEqualSlices(
+        u8,
+        &([_]u8{0xaa} ** too_small.len),
+        &too_small,
+    );
+}
+
+test "static dictionary chunk conveniences preflight and roll back" {
+    const chunks = [_][]const u8{ "quo", "t;" };
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(std.testing.allocator);
+    try out.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        br.encodePlannedStreamStaticDictionaryChunksWithOptionsAppend(
+            std.testing.allocator,
+            &out,
+            &chunks,
+            .{ .max_input_len = 4 },
+        ),
+    );
+    try std.testing.expectEqualSlices(u8, "prefix:", out.items);
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        br.encodePlannedStreamStaticDictionaryChunksWithOptionsAppend(
+            std.testing.allocator,
+            &out,
+            &chunks,
+            .{ .block_len = 0 },
+        ),
+    );
+    try std.testing.expectEqualSlices(u8, "prefix:", out.items);
+
+    const empty_chunks = [_][]const u8{ "", "" };
+    const empty = try br.encodePlannedStreamStaticDictionaryChunksAlloc(
+        std.testing.allocator,
+        &empty_chunks,
+    );
+    defer std.testing.allocator.free(empty);
+    const decoded = try br.decodeStreamAllocExactSize(
+        std.testing.allocator,
+        empty,
+        0,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqual(@as(usize, 0), decoded.len);
+}
+
+test "static dictionary chunk append releases every allocation failure" {
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const chunks = [_][]const u8{ "quot;", "quot;" };
+            var out: std.ArrayList(u8) = .empty;
+            defer out.deinit(allocator);
+            try out.appendSlice(allocator, "prefix:");
+            br.encodePlannedStreamStaticDictionaryChunksAppend(
+                allocator,
+                &out,
+                &chunks,
+            ) catch |err| {
+                try std.testing.expectEqualSlices(u8, "prefix:", out.items);
+                return err;
+            };
+            var decoded: [10]u8 = undefined;
+            try std.testing.expectEqual(
+                decoded.len,
+                try br.decodeStreamIntoExactSize(
+                    out.items[7..],
+                    &decoded,
+                    decoded.len,
+                ),
+            );
+            try std.testing.expectEqualSlices(u8, "quot;quot;", &decoded);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{},
+    );
+}
+
 test "incremental static dictionary encoder covers tiny streams and preflight errors" {
     const cases = [_][]const u8{ "", "a", "ab", "abc", "abcd" };
     for (cases) |payload| {

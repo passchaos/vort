@@ -134,6 +134,14 @@ accepted input independently. This API deliberately always evaluates the
 complete dictionary plan and therefore remains separate from preset throughput
 claims and stored-size arbitration.
 
+The matching chunked convenience APIs preserve every non-empty caller chunk as
+a meta-block boundary and share the incremental implementation; they do not
+flatten input or rebuild earlier output. Alloc and transactional Append use the
+caller allocator. Into first materializes a temporary encoded stream to keep an
+undersized caller buffer unchanged, so throughput-sensitive repeated callers
+should retain an incremental encoder instead. These wrappers add no candidate
+search to default presets and are excluded from q0...q11 performance claims.
+
 ## RAW shared-prefix encode/decode boundary
 
 `BrotliSharedDictionary` is a borrowed descriptor for zero through fifteen

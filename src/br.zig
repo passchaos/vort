@@ -29,6 +29,7 @@ const encoder_stats = @import("br/encoder/stats.zig");
 const quality_schedule = @import("br/encoder/quality_schedule.zig");
 const stream_block_split = @import("br/encoder/stream_block_split.zig");
 const static_dictionary_matcher = @import("br/encoder/static_dictionary_matcher.zig");
+const static_dictionary_stream = @import("br/encoder/static_dictionary_stream.zig");
 const literal_block_split = @import("br/encoder/literal_block_split.zig");
 const command_block_split = @import("br/encoder/command_block_split.zig");
 const distance_block_split = @import("br/encoder/distance_block_split.zig");
@@ -815,6 +816,7 @@ const IncrementalStaticDictionaryEncoderCodec = struct {
 
 pub const IncrementalStaticDictionaryStreamEncoder =
     incremental_stored_encoder.Encoder(IncrementalStaticDictionaryEncoderCodec);
+pub const StaticDictionaryStreamOptions = IncrementalStaticDictionaryStreamEncoder.Options;
 
 test {
     _ = incremental_tests;
@@ -848,6 +850,31 @@ test {
 }
 
 pub const IncrementalTestSupport = struct {
+    pub const complete_static_dictionary_transform_count =
+        static_dictionary.transform_count;
+
+    pub fn completeStaticDictionaryTransformCase(
+        transform_index: usize,
+        storage: *[64]u8,
+    ) Error![]const u8 {
+        if (transform_index >= static_dictionary.transform_count)
+            return error.InvalidBlockPlan;
+        for (4..25) |copy_len| {
+            const word_count = @as(usize, 1) <<
+                static_dictionary.sizeBits(copy_len).?;
+            for (0..word_count) |word_index| {
+                const word = static_dictionary.baseWord(copy_len, word_index).?;
+                const transformed = static_dictionary.transformWord(
+                    transform_index,
+                    word,
+                    storage,
+                ).?;
+                if (transformed.len >= 5) return transformed;
+            }
+        }
+        return error.InvalidBlockPlan;
+    }
+
     pub fn encodeStored(allocator: std.mem.Allocator, payload: []const u8) Error![]u8 {
         return encodeStoredStreamAlloc(allocator, payload);
     }
@@ -5223,6 +5250,32 @@ pub fn encodePlannedStreamStaticDictionaryAlloc(allocator: std.mem.Allocator, in
     return encodePlannedStreamStaticDictionaryPlanAlloc(allocator, input, false);
 }
 
+pub fn encodePlannedStreamStaticDictionaryAppend(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    input: []const u8,
+) Error!void {
+    const start = out.items.len;
+    errdefer out.shrinkRetainingCapacity(start);
+    const encoded = try encodePlannedStreamStaticDictionaryAlloc(allocator, input);
+    defer allocator.free(encoded);
+    try out.appendSlice(allocator, encoded);
+}
+
+pub fn encodePlannedStreamStaticDictionaryInto(
+    input: []const u8,
+    output: []u8,
+) Error!usize {
+    const encoded = try encodePlannedStreamStaticDictionaryAlloc(
+        std.heap.smp_allocator,
+        input,
+    );
+    defer std.heap.smp_allocator.free(encoded);
+    if (output.len < encoded.len) return error.OutOfMemory;
+    @memcpy(output[0..encoded.len], encoded);
+    return encoded.len;
+}
+
 /// Slow correctness oracle for reproducible matcher benchmarks. Applications
 /// should use `encodePlannedStreamStaticDictionaryAlloc`.
 pub fn encodePlannedStreamStaticDictionaryReferenceAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
@@ -5244,6 +5297,85 @@ fn encodePlannedStreamStaticDictionaryPlanAlloc(
     if (plan.match_count == 0) return error.InvalidBlockPlan;
     var stats: encoder_stats.PlannedEncodeStats = .{};
     return encodeCommandPlanAlloc(allocator, input, plan.commands, null, &stats);
+}
+
+pub fn encodePlannedStreamStaticDictionaryChunksAlloc(
+    allocator: std.mem.Allocator,
+    chunks: []const []const u8,
+) Error![]u8 {
+    return encodePlannedStreamStaticDictionaryChunksWithOptionsAlloc(
+        allocator,
+        chunks,
+        .{},
+    );
+}
+
+pub fn encodePlannedStreamStaticDictionaryChunksWithOptionsAlloc(
+    allocator: std.mem.Allocator,
+    chunks: []const []const u8,
+    options: StaticDictionaryStreamOptions,
+) Error![]u8 {
+    return static_dictionary_stream.encodeChunksWithOptionsAlloc(
+        IncrementalStaticDictionaryStreamEncoder,
+        max_uncompressed_meta_block_len,
+        allocator,
+        chunks,
+        options,
+    );
+}
+
+pub fn encodePlannedStreamStaticDictionaryChunksAppend(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    chunks: []const []const u8,
+) Error!void {
+    return encodePlannedStreamStaticDictionaryChunksWithOptionsAppend(
+        allocator,
+        out,
+        chunks,
+        .{},
+    );
+}
+
+pub fn encodePlannedStreamStaticDictionaryChunksWithOptionsAppend(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    chunks: []const []const u8,
+    options: StaticDictionaryStreamOptions,
+) Error!void {
+    return static_dictionary_stream.encodeChunksWithOptionsAppend(
+        IncrementalStaticDictionaryStreamEncoder,
+        max_uncompressed_meta_block_len,
+        allocator,
+        out,
+        chunks,
+        options,
+    );
+}
+
+pub fn encodePlannedStreamStaticDictionaryChunksInto(
+    chunks: []const []const u8,
+    output: []u8,
+) Error!usize {
+    return encodePlannedStreamStaticDictionaryChunksWithOptionsInto(
+        chunks,
+        output,
+        .{},
+    );
+}
+
+pub fn encodePlannedStreamStaticDictionaryChunksWithOptionsInto(
+    chunks: []const []const u8,
+    output: []u8,
+    options: StaticDictionaryStreamOptions,
+) Error!usize {
+    return static_dictionary_stream.encodeChunksWithOptionsInto(
+        IncrementalStaticDictionaryStreamEncoder,
+        max_uncompressed_meta_block_len,
+        chunks,
+        output,
+        options,
+    );
 }
 
 pub fn plannedStaticDictionaryIndexBytes() usize {

@@ -870,6 +870,14 @@ pub const brEncodePlannedStreamChunksInto = br.encodePlannedStreamChunksInto;
 pub const brEncodePlannedStreamChunksWithOptionsInto = br.encodePlannedStreamChunksWithOptionsInto;
 pub const brEncodePlannedStreamLazyWithOptionsAlloc = br.encodePlannedStreamLazyWithOptionsAlloc;
 pub const brEncodePlannedStreamStaticDictionaryAlloc = br.encodePlannedStreamStaticDictionaryAlloc;
+pub const brEncodePlannedStreamStaticDictionaryAppend = br.encodePlannedStreamStaticDictionaryAppend;
+pub const brEncodePlannedStreamStaticDictionaryInto = br.encodePlannedStreamStaticDictionaryInto;
+pub const brEncodePlannedStreamStaticDictionaryChunksAlloc = br.encodePlannedStreamStaticDictionaryChunksAlloc;
+pub const brEncodePlannedStreamStaticDictionaryChunksWithOptionsAlloc = br.encodePlannedStreamStaticDictionaryChunksWithOptionsAlloc;
+pub const brEncodePlannedStreamStaticDictionaryChunksAppend = br.encodePlannedStreamStaticDictionaryChunksAppend;
+pub const brEncodePlannedStreamStaticDictionaryChunksWithOptionsAppend = br.encodePlannedStreamStaticDictionaryChunksWithOptionsAppend;
+pub const brEncodePlannedStreamStaticDictionaryChunksInto = br.encodePlannedStreamStaticDictionaryChunksInto;
+pub const brEncodePlannedStreamStaticDictionaryChunksWithOptionsInto = br.encodePlannedStreamStaticDictionaryChunksWithOptionsInto;
 pub const brPlannedStaticDictionaryIndexBytes = br.plannedStaticDictionaryIndexBytes;
 pub const brPlannedCompleteStaticDictionaryIndexBytes = br.plannedCompleteStaticDictionaryIndexBytes;
 pub const brPlannedCompleteStaticDictionaryIndexEntries = br.plannedCompleteStaticDictionaryIndexEntries;
@@ -908,6 +916,7 @@ pub const BrotliIncrementalStoredStreamEncoder = br.IncrementalStoredStreamEncod
 pub const BrotliIncrementalPlannedStreamEncoder = br.IncrementalPlannedStreamEncoder;
 pub const BrotliIncrementalStaticDictionaryStreamEncoder =
     br.IncrementalStaticDictionaryStreamEncoder;
+pub const BrotliStaticDictionaryStreamOptions = br.StaticDictionaryStreamOptions;
 
 test "root Brotli planned mode is part of the public options API" {
     inline for (.{
@@ -4029,6 +4038,15 @@ test "root exports lz4 and zstd codec helpers" {
     _ = brEncodePlannedStreamChunksAlloc;
     _ = brEncodePlannedStreamChunksAppend;
     _ = brEncodePlannedStreamChunksInto;
+    _ = brEncodePlannedStreamStaticDictionaryAlloc;
+    _ = brEncodePlannedStreamStaticDictionaryAppend;
+    _ = brEncodePlannedStreamStaticDictionaryInto;
+    _ = brEncodePlannedStreamStaticDictionaryChunksAlloc;
+    _ = brEncodePlannedStreamStaticDictionaryChunksWithOptionsAlloc;
+    _ = brEncodePlannedStreamStaticDictionaryChunksAppend;
+    _ = brEncodePlannedStreamStaticDictionaryChunksWithOptionsAppend;
+    _ = brEncodePlannedStreamStaticDictionaryChunksInto;
+    _ = brEncodePlannedStreamStaticDictionaryChunksWithOptionsInto;
     _ = BrotliStoredStreamOptions;
     _ = BrotliStreamSummary;
     _ = BrotliStreamSummaryDiagnostics;
@@ -4040,6 +4058,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = BrotliStoredStreamEncoder;
     _ = BrotliIncrementalPlannedStreamEncoder;
     _ = BrotliIncrementalStaticDictionaryStreamEncoder;
+    _ = BrotliStaticDictionaryStreamOptions;
     _ = BrotliStreamDecoder;
     _ = brCompressedSupportLimits;
     _ = brMinimalStaticDictionaryCoverage;

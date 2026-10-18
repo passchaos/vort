@@ -2126,6 +2126,21 @@ q0...q11 compressed-versus-stored size arbitration. Use the ordinary planned
 encoders when automatic size/speed policy is more important than guaranteed
 complete-transform search.
 
+One-shot callers can use
+`brEncodePlannedStreamStaticDictionaryAppend`/`Into` with the same strict
+5...65,520-byte, at-least-one-match contract as the original `Alloc` API.
+For multiple blocks, the
+`brEncodePlannedStreamStaticDictionaryChunks{Alloc,Append,Into}` family and its
+`WithOptions` variants drive the same incremental core. Every non-empty chunk
+is a meta-block boundary, empty chunks are ignored, and the final non-empty
+chunk is emitted directly as the final block. Options use
+`BrotliStaticDictionaryStreamOptions`, the same nested `stream`, `block_len`,
+and `max_input_len` layout exposed by the incremental encoder. Append calls are
+transactional on error. Into calls encode to internal temporary storage before
+checking capacity, so `OutOfMemory` leaves the complete caller buffer
+unchanged; callers that require retained scratch should use the incremental
+encoder directly.
+
 Upstream still marks serialized shared dictionaries as
 `BROTLI_EXPERIMENTAL`/`DO NOT USE`; Vort does not claim that unstable wire.
 Caller-supplied custom static dictionaries likewise remain unsupported. RAW
