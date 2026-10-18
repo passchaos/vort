@@ -452,6 +452,7 @@ pub fn main(init: std.process.Init) !void {
     var maximum_command_type_cases: usize = 0;
     var extended_header_cases: usize = 0;
     var extended_header_owned_cases: usize = 0;
+    var complete_static_transform_cases: usize = 0;
     var operation_schedule_cases: usize = 0;
     var allocating_summary_history_cases: usize = 0;
     var high_tree_truncation_cases: usize = 0;
@@ -770,6 +771,30 @@ pub fn main(init: std.process.Init) !void {
     progress_matrix_runs += progressChunkMatrixCaseCount();
     progress_matrix_streams += 1;
     maximum_command_type_cases += 1;
+
+    const omit_first_payload = "quot;";
+    const omit_first = try vort.brEncodePlannedStreamStaticDictionaryAlloc(
+        init.gpa,
+        omit_first_payload,
+    );
+    defer init.gpa.free(omit_first);
+    const omit_first_summary = try vort.brSummarizeStream(omit_first);
+    if (omit_first_summary.static_dictionary_copy_count != 1 or
+        omit_first_summary.static_dictionary_bytes != omit_first_payload.len)
+        return error.ReferenceEncodeFailed;
+    var omit_first_reference_output: [omit_first_payload.len]u8 = undefined;
+    try reference.decode(omit_first, &omit_first_reference_output);
+    if (!std.mem.eql(u8, omit_first_payload, &omit_first_reference_output))
+        return error.ReferenceDecodeFailed;
+    try decodeProgressChunks(
+        init.gpa,
+        omit_first,
+        omit_first_payload,
+        16,
+        1,
+        1,
+    );
+    complete_static_transform_cases += 1;
 
     const large_header = try vort.br.IncrementalTestSupport.encodeLargeCompressedHeader(init.gpa);
     defer init.gpa.free(large_header);
@@ -1724,8 +1749,8 @@ pub fn main(init: std.process.Init) !void {
         .{ cases_run, one_shot_cases, large_window_decode_cases, broad_generated_cases, broad_progressive_cases, real_file_cases, real_progressive_cases, real_options.len, real_quality_mask, real_mode_mask, real_window_mask },
     );
     try stdout.interface.print(
-        "planned_window_cases={d} planned_literal_split_cases={d} planned_command_split_cases={d} planned_distance_split_cases={d} planned_distance_parameter_cases={d} planned_chunked_window_cases={d} planned_quality_block_size_cases={d} planned_stream_segmentation_cases={d} planned_large_window_cases={d} planned_large_quality_cases={d} planned_metadata_cases={d} planned_extended_dictionary_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} high_tree_truncation_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} extended_header_owned_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
-        .{ planned_window_cases, planned_literal_split_cases, planned_command_split_cases, planned_distance_split_cases, planned_distance_parameter_cases, planned_chunked_window_cases, planned_quality_block_size_cases, planned_stream_segmentation_cases, planned_large_window_cases, planned_large_quality_cases, planned_metadata_cases, planned_extended_dictionary_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, high_tree_truncation_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, extended_header_owned_cases, operation_schedule_cases, reference.version() },
+        "planned_window_cases={d} planned_literal_split_cases={d} planned_command_split_cases={d} planned_distance_split_cases={d} planned_distance_parameter_cases={d} planned_chunked_window_cases={d} planned_quality_block_size_cases={d} planned_stream_segmentation_cases={d} planned_large_window_cases={d} planned_large_quality_cases={d} planned_metadata_cases={d} planned_extended_dictionary_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} high_tree_truncation_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} complete_static_transform_cases={d} extended_header_cases={d} extended_header_owned_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
+        .{ planned_window_cases, planned_literal_split_cases, planned_command_split_cases, planned_distance_split_cases, planned_distance_parameter_cases, planned_chunked_window_cases, planned_quality_block_size_cases, planned_stream_segmentation_cases, planned_large_window_cases, planned_large_quality_cases, planned_metadata_cases, planned_extended_dictionary_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, high_tree_truncation_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, complete_static_transform_cases, extended_header_cases, extended_header_owned_cases, operation_schedule_cases, reference.version() },
     );
     try stdout.interface.flush();
 }

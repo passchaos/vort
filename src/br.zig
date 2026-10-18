@@ -5082,13 +5082,9 @@ fn encodeLazyCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, c
 /// dictionary. It establishes complete command/wire support with an exhaustive
 /// reference matcher; stable compression levels remain on the faster LZ path.
 pub fn encodePlannedStreamStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
-    return encodePlannedStreamStaticDictionaryWithCacheAlloc(allocator, input, null);
-}
-
-fn encodePlannedStreamStaticDictionaryWithCacheAlloc(allocator: std.mem.Allocator, input: []const u8, cache: ?*command_plan.StaticDictionaryMatchCache) Error![]u8 {
     const max_backward_distance = (@as(usize, 1) << default_window_bits) - 16;
     if (input.len < 5 or input.len > max_backward_distance) return error.InvalidBlockPlan;
-    const plan = try command_plan.buildStaticDictionaryWithCacheAlloc(allocator, input, cache);
+    const plan = try command_plan.buildStaticDictionaryExhaustiveAlloc(allocator, input);
     defer plan.deinit(allocator);
     if (plan.match_count == 0) return error.InvalidBlockPlan;
     var stats: encoder_stats.PlannedEncodeStats = .{};
@@ -20633,6 +20629,46 @@ test "br planner emits built-in static dictionary commands" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
     try std.testing.expect(encoded.len < payload.len);
+}
+
+test "br exhaustive static dictionary encoder emits omit-first transforms" {
+    const payload = "quot;";
+    const encoded = try encodePlannedStreamStaticDictionaryAlloc(
+        std.testing.allocator,
+        payload,
+    );
+    defer std.testing.allocator.free(encoded);
+    const summary = try summarizeStream(encoded);
+    try std.testing.expectEqual(@as(usize, 1), summary.static_dictionary_copy_count);
+    try std.testing.expectEqual(payload.len, summary.static_dictionary_bytes);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "br exhaustive static dictionary encoder releases allocation failures" {
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const payload = "quot;";
+            const encoded = try encodePlannedStreamStaticDictionaryAlloc(
+                allocator,
+                payload,
+            );
+            defer allocator.free(encoded);
+            const decoded = try decodeStreamAllocExactSize(
+                allocator,
+                encoded,
+                payload.len,
+            );
+            defer allocator.free(decoded);
+            try std.testing.expectEqualSlices(u8, payload, decoded);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{},
+    );
 }
 
 test "br ratio planner selects short static dictionary streams by final size" {

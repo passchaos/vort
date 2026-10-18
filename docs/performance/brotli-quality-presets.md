@@ -113,9 +113,12 @@ only when its complete encoded byte length is smaller.
 
 Static-dictionary candidates are considered through 256 bytes. When extended
 search is enabled, the bounded indexed search applies through 4 KiB. This is a
-vetted subset of the RFC built-in dictionary transforms; it is not support for
-caller-supplied/custom static dictionaries. RAW shared-prefix matching is the
-separate option described below.
+vetted subset of the RFC built-in dictionary transforms. The dedicated
+`brEncodePlannedStreamStaticDictionaryAlloc` API instead uses the exhaustive
+reference matcher and covers all 121 standard transform families; it is kept
+separate because exhaustive search is intentionally ratio-oriented. Neither
+path is support for caller-supplied/custom static dictionaries. RAW
+shared-prefix matching is the separate option described below.
 
 ## RAW shared-prefix encode/decode boundary
 
@@ -171,9 +174,11 @@ retain them from initialization through completion and reset reuse; the
 allocator-owned decoder can replace them only through `nextFrame` after
 completing the current frame.
 
-Serialized shared dictionaries and caller-supplied/custom static dictionaries
-are unsupported; RAW attachment support does not promise future API or wire
-compatibility for either unsupported form.
+Latest upstream still marks serialized shared dictionaries as
+`BROTLI_EXPERIMENTAL` and `DO NOT USE`, so Vort does not expose that unstable
+wire. Caller-supplied/custom static dictionaries are unsupported; RAW
+attachment support does not promise future API or wire compatibility for
+either unsupported form.
 
 ## Large-input and API boundaries
 

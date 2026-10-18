@@ -2072,9 +2072,18 @@ const summary = try vort.brSummarizeStreamWithOptions(
 _ = summary.shared_dictionary_copy_count;
 ```
 
-Serialized shared dictionaries and caller-supplied/custom static dictionaries
-remain unsupported. RAW support makes no promise of future API or wire
-compatibility for either unsupported form.
+The stable built-in RFC 7932 dictionary is also available through
+`brEncodePlannedStreamStaticDictionaryAlloc`. This dedicated, ratio-oriented
+surface now uses the exhaustive reference matcher and can emit every one of the
+121 standard transform families, including omit-first and short-core-plus-
+suffix shapes that the latency-oriented q0...q11 compact index may skip. The
+default presets retain the compact index until a complete supplemental index
+meets their memory and throughput floors.
+
+Upstream still marks serialized shared dictionaries as
+`BROTLI_EXPERIMENTAL`/`DO NOT USE`; Vort does not claim that unstable wire.
+Caller-supplied custom static dictionaries likewise remain unsupported. RAW
+support makes no future API or wire-compatibility promise for either form.
 
 The `run-br-compound-dictionary-diff` gate passes in Debug and ReleaseFast
 against local libbrotli 1.2.0. It covers libbrotli encode to Vort decode for

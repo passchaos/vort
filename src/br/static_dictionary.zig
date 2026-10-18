@@ -446,6 +446,32 @@ test "static dictionary reference matcher returns copy length and address" {
     try std.testing.expectEqualSlices(u8, " information ", transformed);
 }
 
+test "static dictionary reference matcher covers every transform family" {
+    var transformed_storage: [64]u8 = undefined;
+    for (0..transform_count) |transform_index| {
+        var covered = false;
+        find_case: for (4..25) |copy_len| {
+            const word_count = @as(usize, 1) << sizeBits(copy_len).?;
+            for (0..word_count) |word_index| {
+                const word = baseWord(copy_len, word_index).?;
+                const transformed = transformWord(
+                    transform_index,
+                    word,
+                    &transformed_storage,
+                ).?;
+                if (transformed.len < 5) continue;
+                const match = findLongestMatch(transformed) orelse
+                    return error.TestUnexpectedResult;
+                if (match.output_len < transformed.len)
+                    return error.TestUnexpectedResult;
+                covered = true;
+                break :find_case;
+            }
+        }
+        try std.testing.expect(covered);
+    }
+}
+
 test "static dictionary transform metadata agrees with materialization" {
     var transformed: [64]u8 = undefined;
     for (4..25) |word_len| {

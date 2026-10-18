@@ -384,6 +384,22 @@ pub fn buildStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u
 }
 
 pub fn buildStaticDictionaryWithCacheAlloc(allocator: std.mem.Allocator, input: []const u8, cache: ?*StaticDictionaryMatchCache) !Plan {
+    return buildStaticDictionaryInternal(allocator, input, cache, false);
+}
+
+/// Complete RFC 7932 reference planner. Unlike the compact production index,
+/// this enumerates every word/transform address at each queried position, so
+/// omit-first and short-core-plus-suffix transforms cannot be missed.
+pub fn buildStaticDictionaryExhaustiveAlloc(allocator: std.mem.Allocator, input: []const u8) !Plan {
+    return buildStaticDictionaryInternal(allocator, input, null, true);
+}
+
+fn buildStaticDictionaryInternal(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    cache: ?*StaticDictionaryMatchCache,
+    exhaustive: bool,
+) !Plan {
     const matcher = try static_dictionary_matcher.Index.sharedIndex();
     var commands: std.ArrayList(Command) = .empty;
     errdefer commands.deinit(allocator);
@@ -393,7 +409,12 @@ pub fn buildStaticDictionaryWithCacheAlloc(allocator: std.mem.Allocator, input: 
     var match_count: usize = 0;
 
     while (position < input.len) {
-        const match = if (cache) |active| active.findLongest(matcher, input, position) else matcher.findLongest(input[position..]);
+        const match = if (exhaustive)
+            static_dictionary.findLongestMatch(input[position..])
+        else if (cache) |active|
+            active.findLongest(matcher, input, position)
+        else
+            matcher.findLongest(input[position..]);
         const selected = match orelse {
             position += 1;
             insert_len += 1;
@@ -1036,6 +1057,56 @@ test "static dictionary cache preserves mixed and dictionary-only plans" {
     const actual_boundary = try mixStaticDictionaryWithCacheAlloc(std.testing.allocator, boundary_input, &boundary_baseline, &boundary_cache);
     defer actual_boundary.deinit(std.testing.allocator);
     try std.testing.expectEqualSlices(Command, expected_boundary.commands, actual_boundary.commands);
+}
+
+test "exhaustive static dictionary planner reaches omit-first transforms" {
+    const transform_index: usize = 3;
+    var transformed_storage: [64]u8 = undefined;
+    const compact = try static_dictionary_matcher.Index.sharedIndex();
+    var chosen_storage: [64]u8 = undefined;
+    var chosen_len: usize = 0;
+    search: for (6..25) |copy_len| {
+        const word_count = @as(usize, 1) << static_dictionary.sizeBits(copy_len).?;
+        for (0..word_count) |word_index| {
+            const word = static_dictionary.baseWord(copy_len, word_index).?;
+            const transformed = static_dictionary.transformWord(
+                transform_index,
+                word,
+                &transformed_storage,
+            ).?;
+            if (transformed.len < 5) continue;
+            const compact_match = compact.findLongest(transformed);
+            if (compact_match != null and compact_match.?.output_len >= transformed.len)
+                continue;
+            @memcpy(chosen_storage[0..transformed.len], transformed);
+            chosen_len = transformed.len;
+            break :search;
+        }
+    }
+    try std.testing.expect(chosen_len != 0);
+    const transformed = chosen_storage[0..chosen_len];
+    const compact_match = compact.findLongest(transformed);
+    const exhaustive_match = static_dictionary.findLongestMatch(transformed).?;
+    try std.testing.expect(compact_match == null or
+        compact_match.?.output_len < exhaustive_match.output_len);
+    try std.testing.expectEqual(transformed.len, exhaustive_match.output_len);
+
+    const plan = try buildStaticDictionaryExhaustiveAlloc(
+        std.testing.allocator,
+        transformed,
+    );
+    defer plan.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 1), plan.match_count);
+    try std.testing.expectEqual(@as(usize, 1), plan.commands.len);
+    try std.testing.expect(plan.commands[0].isStatic());
+    try std.testing.expectEqual(transformed.len, plan.commands[0].outputLen());
+    var decoded_storage: [64]u8 = undefined;
+    const decoded = static_dictionary.transform(
+        plan.commands[0].dictionary_address,
+        plan.commands[0].copy_len,
+        &decoded_storage,
+    ).?;
+    try std.testing.expectEqualSlices(u8, transformed, decoded);
 }
 
 test "simple alphabet orders hot symbols first" {

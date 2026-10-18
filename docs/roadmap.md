@@ -21696,3 +21696,19 @@ reuse, so production keeps the simpler independently owned plans.
   progressive and 1,401 fragmentation cases, with the 17,261-byte header now
   required through both caller-scratch and automatic-owned paths
   (`extended_header_cases=1`, `extended_header_owned_cases=1`).
+
+- Made the dedicated Brotli static-dictionary encoder honor its documented
+  exhaustive contract. `encodePlannedStreamStaticDictionaryAlloc` now uses the
+  complete RFC reference matcher rather than the latency-oriented compact
+  index, covering all 121 built-in transform families without changing default
+  q0...q11 wires or their retained performance policy. A fixed `quot;` fixture
+  exercises transform 3 (omit the leading `&` from `&quot;`), which the compact
+  matcher demonstrably misses; the exhaustive planner emits one static command,
+  Vort one-shot/progressive decoders reproduce it, and libbrotli 1.0.9 decodes
+  it independently (`complete_static_transform_cases=1`). A family oracle
+  materializes and rematches a valid word for every transform, while exhaustive
+  allocation-failure injection covers planner, wire, and decode cleanup.
+  Focused Brotli coverage rises from 778 to 782 tests. Serialized shared
+  dictionaries were deliberately not implemented: upstream master still gates
+  them behind `BROTLI_EXPERIMENTAL` and labels the public enum value `DO NOT
+  USE`, with no published RFC compatibility contract.
