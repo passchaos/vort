@@ -21731,3 +21731,21 @@ reuse, so production keeps the simpler independently owned plans.
   --iterations 10` to reproduce the comparison. A three-row CI smoke gate pins
   the exact entry/byte counts and identical encoded sizes, and requires at least
   a conservative 100x indexed/reference speedup.
+
+- Added `BrotliIncrementalStaticDictionaryStreamEncoder`, a caller-owned,
+  resumable encoder for the complete 121-family RFC 7932 dictionary surface.
+  It reuses the existing progress/backpressure core but has an isolated codec,
+  so default q0...q11 state, lookup, and wire remain untouched. A reusable
+  command-plan builder retains capacity across blocks and `nextStream`; each
+  meta-block carries the actual output position and recent-distance ring, and a
+  deferred last full block can be emitted directly as final. Consequently,
+  default single-block inputs accepted by the one-shot API are byte-identical
+  under one-byte input/output fragmentation. Focused coverage rises from 784 to
+  789 tests and includes exact wire, three forced 5-byte meta-blocks, metadata
+  resumption, empty and tiny streams, deterministic preflight errors,
+  retained-capacity reuse, and exhaustive allocation failure. The full
+  libbrotli 1.0.9 matrix independently
+  decodes both the fragmented exact-wire case and a two-meta-block omit-first
+  stream (`incremental_static_transform_cases=2`). The default block is 65,520
+  bytes; explicit `block_len` remains bounded by Brotli's 16 MiB meta-block
+  limit, while `max_input_len` separately caps the complete stream.

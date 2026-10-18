@@ -2084,6 +2084,48 @@ helpers expose its entry and byte counts. The retained exhaustive reference
 matcher remains available internally to the reproducible A/B benchmark and its
 three-row gate.
 
+`BrotliIncrementalStaticDictionaryStreamEncoder` exposes the same complete
+121-family matcher through caller-owned resumable state. It accepts arbitrary
+input and output fragmentation, retains command/output capacity across
+`nextStream`, supports `flush` and in-stream metadata, and preserves Brotli
+output position plus the recent-distance ring across meta-blocks. The default
+block size is 65,520 bytes; callers can select any non-zero `block_len` through
+the encoder's nested `Options`, up to Brotli's 16 MiB meta-block limit, and can
+bound total accepted input with `max_input_len`. Default stream options and one
+block of 5...65,520 bytes produce exactly the same wire as
+`brEncodePlannedStreamStaticDictionaryAlloc`, including omit-first transforms.
+
+```zig
+var encoder = vort.BrotliIncrementalStaticDictionaryStreamEncoder.initWithOptions(
+    allocator,
+    .{ .block_len = 32 * 1024, .max_input_len = 8 * 1024 * 1024 },
+);
+defer encoder.deinit();
+
+var encoded: std.ArrayList(u8) = .empty;
+defer encoded.deinit(allocator);
+var scratch: [256]u8 = undefined;
+var input_offset: usize = 0;
+while (input_offset < input.len) {
+    const result = try encoder.step(input[input_offset..], &scratch);
+    input_offset += result.progress.input_read;
+    try encoded.appendSlice(allocator, scratch[0..result.progress.output_written]);
+}
+try encoder.finish();
+while (true) {
+    const result = try encoder.step("", &scratch);
+    try encoded.appendSlice(allocator, scratch[0..result.progress.output_written]);
+    if (result.status == .done) break;
+}
+const output = encoded.items;
+```
+
+This dedicated coverage surface emits a complete-planner compressed block even
+when that block has no dictionary match; it does not perform the normal
+q0...q11 compressed-versus-stored size arbitration. Use the ordinary planned
+encoders when automatic size/speed policy is more important than guaranteed
+complete-transform search.
+
 Upstream still marks serialized shared dictionaries as
 `BROTLI_EXPERIMENTAL`/`DO NOT USE`; Vort does not claim that unstable wire.
 Caller-supplied custom static dictionaries likewise remain unsupported. RAW

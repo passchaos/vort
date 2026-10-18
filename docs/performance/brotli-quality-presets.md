@@ -123,6 +123,17 @@ benchmark gate requires identical wire metadata and at least a conservative
 path is support for caller-supplied/custom static dictionaries. RAW
 shared-prefix matching is the separate option described below.
 
+`BrotliIncrementalStaticDictionaryStreamEncoder` is the bounded-memory,
+caller-owned form of the dedicated complete surface. Its default 65,520-byte
+block retains enough input to make a single-block finish byte-identical to the
+one-shot API, while earlier full blocks carry output position and recent
+distances into later meta-blocks. Input/output backpressure does not change the
+wire. The encoder retains command and pending-output capacity across streams;
+its `block_len` and `max_input_len` options bound block working memory and total
+accepted input independently. This API deliberately always evaluates the
+complete dictionary plan and therefore remains separate from preset throughput
+claims and stored-size arbitration.
+
 ## RAW shared-prefix encode/decode boundary
 
 `BrotliSharedDictionary` is a borrowed descriptor for zero through fifteen

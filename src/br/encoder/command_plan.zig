@@ -407,13 +407,51 @@ fn buildStaticDictionaryInternal(
     cache: ?*StaticDictionaryMatchCache,
     search: StaticDictionarySearch,
 ) !Plan {
+    var commands: std.ArrayList(Command) = .empty;
+    errdefer commands.deinit(allocator);
+    const match_count = try buildStaticDictionaryReuseInternal(
+        &commands,
+        allocator,
+        input,
+        cache,
+        search,
+    );
+    return .{
+        .commands = try commands.toOwnedSlice(allocator),
+        .match_count = match_count,
+    };
+}
+
+/// Rebuild a complete RFC 7932 dictionary plan in caller-owned storage.
+/// Capacity is retained across blocks and streams; errors leave the list empty.
+pub fn buildStaticDictionaryCompleteReuse(
+    commands: *std.ArrayList(Command),
+    allocator: std.mem.Allocator,
+    input: []const u8,
+) !usize {
+    return buildStaticDictionaryReuseInternal(
+        commands,
+        allocator,
+        input,
+        null,
+        .complete,
+    );
+}
+
+fn buildStaticDictionaryReuseInternal(
+    commands: *std.ArrayList(Command),
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    cache: ?*StaticDictionaryMatchCache,
+    search: StaticDictionarySearch,
+) !usize {
+    commands.clearRetainingCapacity();
+    errdefer commands.clearRetainingCapacity();
     const matcher = try static_dictionary_matcher.Index.sharedIndex();
     const complete_matcher = if (search == .complete)
         try static_dictionary_matcher.CompleteIndex.sharedIndex()
     else
         null;
-    var commands: std.ArrayList(Command) = .empty;
-    errdefer commands.deinit(allocator);
     var position: usize = 0;
     var insert_start: usize = 0;
     var insert_len: usize = 0;
@@ -452,7 +490,7 @@ fn buildStaticDictionaryInternal(
         .insert_start = insert_start,
         .insert_len = insert_len,
     });
-    return .{ .commands = try commands.toOwnedSlice(allocator), .match_count = match_count };
+    return match_count;
 }
 
 /// Replace portions of an existing plan's literal inserts with static-

@@ -490,7 +490,161 @@ test "oversized planned input applies quality policy to every meta block" {
     }
 }
 
-fn encodeIncremental(encoder: *br.IncrementalPlannedStreamEncoder, input: []const u8, input_chunk_len: usize, output_chunk_len: usize) ![]u8 {
+test "incremental static dictionary encoder matches one-shot across fragments" {
+    const payload = "quot;";
+    const expected = try br.encodePlannedStreamStaticDictionaryAlloc(
+        std.testing.allocator,
+        payload,
+    );
+    defer std.testing.allocator.free(expected);
+
+    var encoder = br.IncrementalStaticDictionaryStreamEncoder.init(
+        std.testing.allocator,
+    );
+    defer encoder.deinit();
+    const fragmented = try encodeIncremental(&encoder, payload, 1, 1);
+    defer std.testing.allocator.free(fragmented);
+    try std.testing.expectEqualSlices(u8, expected, fragmented);
+    const summary = try br.summarizeStream(fragmented);
+    try std.testing.expectEqual(@as(usize, 1), summary.static_dictionary_copy_count);
+    try std.testing.expectEqual(payload.len, summary.static_dictionary_bytes);
+    const retained = encoder.retainedCapacity();
+    const snapshot = encoder.snapshot();
+    try std.testing.expect(snapshot.done);
+    try std.testing.expectEqual(payload.len, snapshot.stream_input);
+    try std.testing.expectEqual(fragmented.len, snapshot.stream_output);
+
+    try encoder.nextStream(.{});
+    const second = try encodeIncremental(&encoder, payload, 2, 3);
+    defer std.testing.allocator.free(second);
+    try std.testing.expectEqualSlices(u8, expected, second);
+    try std.testing.expectEqual(retained, encoder.retainedCapacity());
+}
+
+test "incremental static dictionary encoder preserves addresses across blocks" {
+    const payload = "quot;" ** 3;
+    var encoder = br.IncrementalStaticDictionaryStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{ .block_len = 5 },
+    );
+    defer encoder.deinit();
+    const encoded = try encodeIncremental(&encoder, payload, 2, 1);
+    defer std.testing.allocator.free(encoded);
+
+    const summary = try br.summarizeStream(encoded);
+    try std.testing.expectEqual(@as(usize, 3), summary.compressed_meta_block_count);
+    try std.testing.expectEqual(@as(usize, 3), summary.static_dictionary_copy_count);
+    try std.testing.expectEqual(payload.len, summary.static_dictionary_bytes);
+    const decoded = try br.decodeStreamAllocExactSize(
+        std.testing.allocator,
+        encoded,
+        payload.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "incremental static dictionary encoder resumes after metadata" {
+    const payload = "quot;quot;";
+    var encoder = br.IncrementalStaticDictionaryStreamEncoder.init(
+        std.testing.allocator,
+    );
+    defer encoder.deinit();
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var scratch: [1]u8 = undefined;
+
+    try feed(&encoder, &encoded, payload[0..5], &scratch);
+    try encoder.writeMetadata("complete dictionary metadata");
+    try drainFlush(&encoder, &encoded, &scratch);
+    try feed(&encoder, &encoded, payload[5..], &scratch);
+    try encoder.finish();
+    try drainFinish(&encoder, &encoded, &scratch);
+
+    const summary = try br.summarizeStream(encoded.items);
+    try std.testing.expectEqual(@as(usize, 2), summary.compressed_meta_block_count);
+    try std.testing.expectEqual(@as(usize, 1), summary.metadata_meta_block_count);
+    try std.testing.expectEqual(@as(usize, 2), summary.static_dictionary_copy_count);
+    const decoded = try br.decodeStreamAllocExactSize(
+        std.testing.allocator,
+        encoded.items,
+        payload.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "incremental static dictionary encoder covers tiny streams and preflight errors" {
+    const cases = [_][]const u8{ "", "a", "ab", "abc", "abcd" };
+    for (cases) |payload| {
+        var encoder = br.IncrementalStaticDictionaryStreamEncoder.init(
+            std.testing.allocator,
+        );
+        defer encoder.deinit();
+        const encoded = try encodeIncremental(&encoder, payload, 1, 1);
+        defer std.testing.allocator.free(encoded);
+        const decoded = try br.decodeStreamAllocExactSize(
+            std.testing.allocator,
+            encoded,
+            payload.len,
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
+
+    var invalid_window = br.IncrementalStaticDictionaryStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{ .stream = .{ .window_bits = 9 } },
+    );
+    defer invalid_window.deinit();
+    var output: [16]u8 = @splat(0xaa);
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        invalid_window.step("quot;", &output),
+    );
+    try std.testing.expectEqualSlices(u8, &([_]u8{0xaa} ** output.len), &output);
+    try std.testing.expectEqual(@as(usize, 0), invalid_window.snapshot().input_read);
+
+    var limited = br.IncrementalStaticDictionaryStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{ .max_input_len = 4 },
+    );
+    defer limited.deinit();
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        limited.step("quot;", &output),
+    );
+    try std.testing.expectEqual(@as(usize, 0), limited.snapshot().input_read);
+}
+
+test "incremental static dictionary encoder releases allocation failures" {
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const payload = "quot;";
+            var encoder = br.IncrementalStaticDictionaryStreamEncoder.init(allocator);
+            defer encoder.deinit();
+            var wire: [64]u8 = undefined;
+            const written = try encodeIncrementalInto(&encoder, payload, &wire);
+            var decoded: [payload.len]u8 = undefined;
+            try std.testing.expectEqual(
+                payload.len,
+                try br.decodeStreamIntoExactSize(
+                    wire[0..written],
+                    &decoded,
+                    payload.len,
+                ),
+            );
+            try std.testing.expectEqualSlices(u8, payload, &decoded);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{},
+    );
+}
+
+fn encodeIncremental(encoder: anytype, input: []const u8, input_chunk_len: usize, output_chunk_len: usize) ![]u8 {
     var encoded: std.ArrayList(u8) = .empty;
     errdefer encoded.deinit(std.testing.allocator);
     const scratch = try std.testing.allocator.alloc(u8, output_chunk_len);
@@ -507,7 +661,7 @@ fn encodeIncremental(encoder: *br.IncrementalPlannedStreamEncoder, input: []cons
     return encoded.toOwnedSlice(std.testing.allocator);
 }
 
-fn feed(encoder: *br.IncrementalPlannedStreamEncoder, encoded: *std.ArrayList(u8), input: []const u8, scratch: []u8) !void {
+fn feed(encoder: anytype, encoded: *std.ArrayList(u8), input: []const u8, scratch: []u8) !void {
     var offset: usize = 0;
     while (offset < input.len) {
         const result = try encoder.step(input[offset..], scratch);
@@ -516,7 +670,7 @@ fn feed(encoder: *br.IncrementalPlannedStreamEncoder, encoded: *std.ArrayList(u8
     }
 }
 
-fn drainFlush(encoder: *br.IncrementalPlannedStreamEncoder, encoded: *std.ArrayList(u8), scratch: []u8) !void {
+fn drainFlush(encoder: anytype, encoded: *std.ArrayList(u8), scratch: []u8) !void {
     while (true) {
         const result = try encoder.step("", scratch);
         try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
@@ -525,7 +679,7 @@ fn drainFlush(encoder: *br.IncrementalPlannedStreamEncoder, encoded: *std.ArrayL
     }
 }
 
-fn drainFinish(encoder: *br.IncrementalPlannedStreamEncoder, encoded: *std.ArrayList(u8), scratch: []u8) !void {
+fn drainFinish(encoder: anytype, encoded: *std.ArrayList(u8), scratch: []u8) !void {
     while (true) {
         const result = try encoder.step("", scratch);
         try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
@@ -534,7 +688,7 @@ fn drainFinish(encoder: *br.IncrementalPlannedStreamEncoder, encoded: *std.Array
     }
 }
 
-fn encodeIncrementalInto(encoder: *br.IncrementalPlannedStreamEncoder, input: []const u8, output: []u8) !usize {
+fn encodeIncrementalInto(encoder: anytype, input: []const u8, output: []u8) !usize {
     var input_offset: usize = 0;
     var output_offset: usize = 0;
     while (input_offset < input.len) {

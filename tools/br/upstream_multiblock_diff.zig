@@ -453,6 +453,7 @@ pub fn main(init: std.process.Init) !void {
     var extended_header_cases: usize = 0;
     var extended_header_owned_cases: usize = 0;
     var complete_static_transform_cases: usize = 0;
+    var incremental_static_transform_cases: usize = 0;
     var operation_schedule_cases: usize = 0;
     var allocating_summary_history_cases: usize = 0;
     var high_tree_truncation_cases: usize = 0;
@@ -795,6 +796,49 @@ pub fn main(init: std.process.Init) !void {
         1,
     );
     complete_static_transform_cases += 1;
+
+    const omit_first_incremental = try encodeIncrementalStaticDictionary(
+        init.gpa,
+        omit_first_payload,
+        .{},
+        1,
+        1,
+    );
+    defer init.gpa.free(omit_first_incremental);
+    if (!std.mem.eql(u8, omit_first, omit_first_incremental))
+        return error.ReferenceEncodeFailed;
+    try reference.decode(omit_first_incremental, &omit_first_reference_output);
+    if (!std.mem.eql(u8, omit_first_payload, &omit_first_reference_output))
+        return error.ReferenceDecodeFailed;
+    incremental_static_transform_cases += 1;
+
+    const multi_block_static_payload = "quot;" ** 2;
+    const multi_block_static = try encodeIncrementalStaticDictionary(
+        init.gpa,
+        multi_block_static_payload,
+        .{ .block_len = 5 },
+        2,
+        1,
+    );
+    defer init.gpa.free(multi_block_static);
+    const multi_block_static_summary = try vort.brSummarizeStream(multi_block_static);
+    if (multi_block_static_summary.compressed_meta_block_count != 2 or
+        multi_block_static_summary.static_dictionary_copy_count != 2 or
+        multi_block_static_summary.static_dictionary_bytes != multi_block_static_payload.len)
+        return error.ReferenceEncodeFailed;
+    var multi_block_reference_output: [multi_block_static_payload.len]u8 = undefined;
+    try reference.decode(multi_block_static, &multi_block_reference_output);
+    if (!std.mem.eql(u8, multi_block_static_payload, &multi_block_reference_output))
+        return error.ReferenceDecodeFailed;
+    try decodeProgressChunks(
+        init.gpa,
+        multi_block_static,
+        multi_block_static_payload,
+        16,
+        1,
+        1,
+    );
+    incremental_static_transform_cases += 1;
 
     const large_header = try vort.br.IncrementalTestSupport.encodeLargeCompressedHeader(init.gpa);
     defer init.gpa.free(large_header);
@@ -1749,10 +1793,45 @@ pub fn main(init: std.process.Init) !void {
         .{ cases_run, one_shot_cases, large_window_decode_cases, broad_generated_cases, broad_progressive_cases, real_file_cases, real_progressive_cases, real_options.len, real_quality_mask, real_mode_mask, real_window_mask },
     );
     try stdout.interface.print(
-        "planned_window_cases={d} planned_literal_split_cases={d} planned_command_split_cases={d} planned_distance_split_cases={d} planned_distance_parameter_cases={d} planned_chunked_window_cases={d} planned_quality_block_size_cases={d} planned_stream_segmentation_cases={d} planned_large_window_cases={d} planned_large_quality_cases={d} planned_metadata_cases={d} planned_extended_dictionary_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} high_tree_truncation_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} complete_static_transform_cases={d} extended_header_cases={d} extended_header_owned_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
-        .{ planned_window_cases, planned_literal_split_cases, planned_command_split_cases, planned_distance_split_cases, planned_distance_parameter_cases, planned_chunked_window_cases, planned_quality_block_size_cases, planned_stream_segmentation_cases, planned_large_window_cases, planned_large_quality_cases, planned_metadata_cases, planned_extended_dictionary_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, high_tree_truncation_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, complete_static_transform_cases, extended_header_cases, extended_header_owned_cases, operation_schedule_cases, reference.version() },
+        "planned_window_cases={d} planned_literal_split_cases={d} planned_command_split_cases={d} planned_distance_split_cases={d} planned_distance_parameter_cases={d} planned_chunked_window_cases={d} planned_quality_block_size_cases={d} planned_stream_segmentation_cases={d} planned_large_window_cases={d} planned_large_quality_cases={d} planned_metadata_cases={d} planned_extended_dictionary_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} high_tree_truncation_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} complete_static_transform_cases={d} incremental_static_transform_cases={d} extended_header_cases={d} extended_header_owned_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
+        .{ planned_window_cases, planned_literal_split_cases, planned_command_split_cases, planned_distance_split_cases, planned_distance_parameter_cases, planned_chunked_window_cases, planned_quality_block_size_cases, planned_stream_segmentation_cases, planned_large_window_cases, planned_large_quality_cases, planned_metadata_cases, planned_extended_dictionary_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, high_tree_truncation_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, complete_static_transform_cases, incremental_static_transform_cases, extended_header_cases, extended_header_owned_cases, operation_schedule_cases, reference.version() },
     );
     try stdout.interface.flush();
+}
+
+fn encodeIncrementalStaticDictionary(
+    allocator: std.mem.Allocator,
+    payload: []const u8,
+    options: vort.BrotliIncrementalStaticDictionaryStreamEncoder.Options,
+    input_chunk_len: usize,
+    output_chunk_len: usize,
+) ![]u8 {
+    var encoder = vort.BrotliIncrementalStaticDictionaryStreamEncoder.initWithOptions(
+        allocator,
+        options,
+    );
+    defer encoder.deinit();
+    var encoded: std.ArrayList(u8) = .empty;
+    errdefer encoded.deinit(allocator);
+    const scratch = try allocator.alloc(u8, output_chunk_len);
+    defer allocator.free(scratch);
+    var input_offset: usize = 0;
+    while (input_offset < payload.len) {
+        const input_end = @min(payload.len, input_offset + input_chunk_len);
+        const result = try encoder.step(payload[input_offset..input_end], scratch);
+        if (result.progress.input_read == 0 and result.progress.output_written == 0)
+            return error.ReferenceEncodeFailed;
+        input_offset += result.progress.input_read;
+        try encoded.appendSlice(allocator, scratch[0..result.progress.output_written]);
+    }
+    try encoder.finish();
+    while (true) {
+        const result = try encoder.step("", scratch);
+        try encoded.appendSlice(allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+        if (result.progress.output_written == 0) return error.ReferenceEncodeFailed;
+    }
+    return encoded.toOwnedSlice(allocator);
 }
 
 fn validatePlannedLiteralFixture(

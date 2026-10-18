@@ -906,6 +906,8 @@ pub const BrotliIncrementalRleStreamDecoder = br.IncrementalRleStreamDecoder;
 pub const BrotliIncrementalStoredStreamDecoder = br.IncrementalStoredStreamDecoder;
 pub const BrotliIncrementalStoredStreamEncoder = br.IncrementalStoredStreamEncoder;
 pub const BrotliIncrementalPlannedStreamEncoder = br.IncrementalPlannedStreamEncoder;
+pub const BrotliIncrementalStaticDictionaryStreamEncoder =
+    br.IncrementalStaticDictionaryStreamEncoder;
 
 test "root Brotli planned mode is part of the public options API" {
     inline for (.{
@@ -4037,6 +4039,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = BrotliPrefixCode;
     _ = BrotliStoredStreamEncoder;
     _ = BrotliIncrementalPlannedStreamEncoder;
+    _ = BrotliIncrementalStaticDictionaryStreamEncoder;
     _ = BrotliStreamDecoder;
     _ = brCompressedSupportLimits;
     _ = brMinimalStaticDictionaryCoverage;

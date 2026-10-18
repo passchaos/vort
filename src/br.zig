@@ -678,6 +678,144 @@ const IncrementalPlannedEncoderCodec = struct {
 
 pub const IncrementalPlannedStreamEncoder = incremental_stored_encoder.Encoder(IncrementalPlannedEncoderCodec);
 
+/// Dedicated complete RFC 7932 static-dictionary stream encoder. It retains
+/// command and output capacity in caller-owned state, while the shared generic
+/// incremental core supplies resumable input/output progress and stream reuse.
+const IncrementalStaticDictionaryEncoderCodec = struct {
+    pub const Error = br.Error;
+    pub const StreamOptions = br.StoredStreamOptions;
+    pub const max_block_len = br.max_uncompressed_meta_block_len;
+    pub const default_block_len = planner_max_backward_distance;
+    pub const defer_full_block_until_more_input = true;
+    pub const State = struct {
+        bit_index: u3 = 0,
+        window_bits: u5 = default_window_bits,
+        commands: std.ArrayList(command_plan.Command) = .empty,
+        wire_state: PlannedWireState = .{},
+    };
+
+    pub fn deinitState(state: *State, allocator: std.mem.Allocator) void {
+        state.commands.deinit(allocator);
+    }
+
+    pub fn resetState(state: *State) void {
+        state.bit_index = 0;
+        state.window_bits = default_window_bits;
+        state.commands.clearRetainingCapacity();
+        state.wire_state = .{};
+    }
+
+    pub fn stateRetainedCapacity(state: *const State) usize {
+        return state.commands.capacity * @sizeOf(command_plan.Command);
+    }
+
+    pub fn readyOutputLen(
+        state: *const State,
+        pending_len: usize,
+        final_written: bool,
+    ) usize {
+        if (!final_written and state.bit_index != 0) {
+            std.debug.assert(pending_len != 0);
+            return pending_len - 1;
+        }
+        return pending_len;
+    }
+
+    pub fn writePrefix(
+        allocator: std.mem.Allocator,
+        out: *std.ArrayList(u8),
+        state: *State,
+        options: StreamOptions,
+    ) br.Error!void {
+        if (options.window_bits < 10 or options.window_bits > 24)
+            return error.InvalidBlockPlan;
+        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+        try writeWindowBits(allocator, &writer, options.window_bits);
+        if (options.metadata.len != 0)
+            try writeMetadataMetaBlock(allocator, &writer, options.metadata);
+        state.bit_index = writer.bit_index;
+        state.window_bits = options.window_bits;
+    }
+
+    pub fn writeBlock(
+        allocator: std.mem.Allocator,
+        out: *std.ArrayList(u8),
+        state: *State,
+        block: []const u8,
+    ) br.Error!void {
+        try writeDataBlock(allocator, out, state, block, false);
+    }
+
+    pub fn writeFinalBlock(
+        allocator: std.mem.Allocator,
+        out: *std.ArrayList(u8),
+        state: *State,
+        block: []const u8,
+    ) br.Error!void {
+        try writeDataBlock(allocator, out, state, block, true);
+    }
+
+    fn writeDataBlock(
+        allocator: std.mem.Allocator,
+        out: *std.ArrayList(u8),
+        state: *State,
+        block: []const u8,
+        final: bool,
+    ) br.Error!void {
+        if (block.len == 0 or block.len > max_block_len)
+            return error.InvalidBlockPlan;
+        _ = try command_plan.buildStaticDictionaryCompleteReuse(
+            &state.commands,
+            allocator,
+            block,
+        );
+        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        try encodeCommandPlanWithOptionsWrite(
+            allocator,
+            &writer,
+            block,
+            state.commands.items,
+            null,
+            &stats,
+            .{
+                .window_bits = state.window_bits,
+                .write_stream_prefix = false,
+                .final_meta_block = final,
+                .initial_output_pos = state.wire_state.output_pos,
+                .starting_last_distances = state.wire_state.last_distances,
+                .final_wire_state = &state.wire_state,
+            },
+        );
+        state.bit_index = writer.bit_index;
+    }
+
+    pub fn writeMetadata(
+        allocator: std.mem.Allocator,
+        out: *std.ArrayList(u8),
+        state: *State,
+        metadata: []const u8,
+    ) br.Error!void {
+        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+        try writeMetadataMetaBlock(allocator, &writer, metadata);
+        state.bit_index = writer.bit_index;
+    }
+
+    pub fn writeFinal(
+        allocator: std.mem.Allocator,
+        out: *std.ArrayList(u8),
+        state: *State,
+    ) br.Error!void {
+        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+        try writer.writeBits(allocator, 1, 1);
+        try writer.writeBits(allocator, 1, 1);
+        state.bit_index = writer.bit_index;
+    }
+};
+
+pub const IncrementalStaticDictionaryStreamEncoder =
+    incremental_stored_encoder.Encoder(IncrementalStaticDictionaryEncoderCodec);
+
 test {
     _ = incremental_tests;
     _ = incremental_literal_tests;

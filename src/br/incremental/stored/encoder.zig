@@ -188,9 +188,29 @@ pub fn Encoder(comptime Codec: type) type {
                     self.total_input = total;
                     self.stream_input += n;
                 }
-                if (self.plain.items.len == block_len or
+                const defer_full_block = if (@hasDecl(Codec, "defer_full_block_until_more_input"))
+                    Codec.defer_full_block_until_more_input
+                else
+                    false;
+                const full_block_ready = self.plain.items.len == block_len and
+                    (!defer_full_block or self.finishing or self.flush_requested or
+                        input_read != input.len);
+                if (full_block_ready or
                     ((self.finishing or self.flush_requested) and self.plain.items.len != 0))
                 {
+                    if (self.finishing) {
+                        if (comptime @hasDecl(Codec, "writeFinalBlock")) {
+                            try Codec.writeFinalBlock(
+                                self.allocator,
+                                &self.pending,
+                                &self.codec_state,
+                                self.plain.items,
+                            );
+                            self.plain.clearRetainingCapacity();
+                            self.final_written = true;
+                            continue;
+                        }
+                    }
                     try self.writeBlock();
                     continue;
                 }
