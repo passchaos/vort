@@ -464,8 +464,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   deterministic writing with independent per-header IVs, plus RAR4 salted or
   unsalted AES-128 data/header encryption with historical long-password KDF
   behavior and allocator-owned custom Unicode preferred names with deterministic
-  UTF-16 writer fields, explicit redirection/unknown-size and unsupported RAR15/RAR20-solid
-  errors, ordered RAR4/RAR5 multi-volume reconstruction for
+  UTF-16 writer fields, explicit redirection/unknown-size errors, sequential
+  same-generation RAR15/RAR20 solid continuation, ordered RAR4/RAR5 multi-volume reconstruction for
   stored/compressed/solid split entries, and
   deterministic RAR29 compatibility LZ writing with canonical tables,
   table-length RLE, multiblock output, 64 KiB through 4 MiB declared

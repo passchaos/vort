@@ -1,7 +1,13 @@
 const std = @import("std");
 const core = @import("../core.zig");
 
-pub const Error = core.Error || error{InvalidRar15Stream};
+pub const Error = core.Error || error{
+    InvalidRar15Stream,
+    MissingRar15SolidState,
+    Rar15DecoderPoisoned,
+};
+
+const max_history_size: usize = 64 * 1024;
 
 const dec_l1 = [_]u16{ 0x8000, 0xa000, 0xc000, 0xd000, 0xe000, 0xea00, 0xee00, 0xf000, 0xf200, 0xf200, 0xffff };
 const pos_l1 = [_]u16{ 0, 0, 0, 2, 3, 5, 7, 11, 16, 20, 24, 32, 32 };
@@ -426,6 +432,89 @@ pub fn decodeInto(input: []const u8, output: []u8) Error!void {
     var decoder = Decoder.init(input, output);
     try decoder.decode();
 }
+
+pub const Session = struct {
+    allocator: std.mem.Allocator,
+    decoder: Decoder,
+    history: std.ArrayList(u8) = .empty,
+    initialized: bool = false,
+    poisoned: bool = false,
+
+    pub fn init(allocator: std.mem.Allocator) Session {
+        return .{
+            .allocator = allocator,
+            .decoder = Decoder.init("", undefined),
+        };
+    }
+
+    pub fn deinit(self: *Session) void {
+        self.history.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn reset(self: *Session) void {
+        self.decoder = Decoder.init("", undefined);
+        self.history.clearRetainingCapacity();
+        self.initialized = false;
+        self.poisoned = false;
+    }
+
+    pub fn canContinue(self: *const Session) bool {
+        return self.initialized and !self.poisoned;
+    }
+
+    pub fn decodeMemberInto(
+        self: *Session,
+        input: []const u8,
+        output: []u8,
+        solid: bool,
+    ) (Error || std.mem.Allocator.Error)!void {
+        if (!solid)
+            self.reset()
+        else {
+            if (self.poisoned) return error.Rar15DecoderPoisoned;
+            if (!self.initialized) return error.MissingRar15SolidState;
+        }
+        errdefer self.poisoned = true;
+        self.trimHistory();
+        const combined_len = std.math.add(usize, self.history.items.len, output.len) catch
+            return error.IntegerOverflow;
+        const combined = try self.allocator.alloc(u8, combined_len);
+        defer self.allocator.free(combined);
+        @memcpy(combined[0..self.history.items.len], self.history.items);
+        const member_start = self.history.items.len;
+
+        self.decoder.bits = .{ .input = input };
+        self.decoder.output = combined;
+        self.decoder.output_offset = member_start;
+        self.decoder.flag_buf = 0;
+        self.decoder.flags_count = -2;
+        self.decoder.st_mode = false;
+        self.decoder.l_count = 0;
+        defer {
+            self.decoder.bits = .{ .input = "" };
+            self.decoder.output = undefined;
+            self.decoder.output_offset = 0;
+        }
+        try self.decoder.decode();
+        if (self.decoder.output_offset != combined.len) return error.SizeMismatch;
+        @memcpy(output, combined[member_start..]);
+        try self.history.appendSlice(self.allocator, output);
+        self.trimHistory();
+        if (input.len != 0) self.initialized = true;
+        self.poisoned = false;
+    }
+
+    fn trimHistory(self: *Session) void {
+        if (self.history.items.len <= max_history_size) return;
+        const discard = self.history.items.len - max_history_size;
+        @memmove(
+            self.history.items[0..max_history_size],
+            self.history.items[discard..],
+        );
+        self.history.items.len = max_history_size;
+    }
+};
 
 pub fn decodeAlloc(
     allocator: std.mem.Allocator,

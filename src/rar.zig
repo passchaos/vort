@@ -42,9 +42,11 @@ pub const isSafePath = archive.isSafePath;
 pub const decodeRar15Into = rar15.decodeInto;
 pub const decodeRar15Alloc = rar15.decodeAlloc;
 pub const decodeRar15AllocLimited = rar15.decodeAllocLimited;
+pub const Rar15Session = rar15.Session;
 pub const decodeRar20Into = rar20.decodeInto;
 pub const decodeRar20Alloc = rar20.decodeAlloc;
 pub const decodeRar20AllocLimited = rar20.decodeAllocLimited;
+pub const Rar20Session = rar20.Session;
 pub const decodeRar29Into = rar29.decodeInto;
 pub const decodeRar29Alloc = rar29.decodeAlloc;
 pub const decodeRar29AllocLimited = rar29.decodeAllocLimited;
@@ -79,6 +81,7 @@ test {
     _ = volume_set;
     _ = writer;
     _ = @import("rar/encrypted_header_tests.zig");
+    _ = @import("rar/legacy_solid_tests.zig");
     _ = @import("rar/rar4_encryption_tests.zig");
     _ = @import("rar/rar4_name_tests.zig");
 }

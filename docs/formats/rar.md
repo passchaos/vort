@@ -7,8 +7,9 @@ encountered today:
 - the `Rar!\x1a\x07\x00` family used by RAR 1.5 through 4.x;
 - the VINT-based `Rar!\x1a\x07\x01\x00` family used by RAR 5 and later.
 
-In addition to stored data, Vort decodes non-solid RAR 1.5 and RAR 2.0/2.6,
-plus ordinary and solid RAR 2.9/3.x LZ and PPMd Variant H compressed members.
+In addition to stored data, Vort decodes ordinary and same-generation solid
+RAR 1.5 and RAR 2.0/2.6 members, plus ordinary and solid RAR 2.9/3.x LZ and
+PPMd Variant H compressed members.
 The RAR15 path
 implements the historical adaptive
 literal/short/long/old-distance state machine and ST mode over a 64 KiB
@@ -93,10 +94,16 @@ derived key. Entry count and
 copied-name bytes have independent limits in addition to KDF and output limits.
 `Archive.extractSession` exposes explicit sequential decoding and returns owned
 entry data from `nextAlloc`. `extractByNameAllocLimited` and
-`extractByNameAllocWithOptions` automatically replays preceding RAR29 or RAR50
-members when the requested entry is a solid continuation. Direct random-access
-`extractAlloc` remains an explicit `UnsupportedRarFeature` for such an entry,
-because it has no preceding state.
+`extractByNameAllocWithOptions` automatically replays preceding compressed
+members when the requested entry is a solid continuation. The session retains
+RAR15 adaptive Huffman/distance state and 64 KiB history, or RAR20
+Huffman/table-reuse, audio predictor, repeat-distance and 1 MiB history state.
+RAR20 consumes the prior member's trailing new-table record before switching
+input. RAR15 also honors old archives that declare solid mode only in the main
+header while clearing the per-file bit. Direct random-access `extractAlloc`
+remains an explicit `UnsupportedRarFeature` for any continuation because it has
+no preceding state. A rare solid transition between RAR15 and RAR20 is still
+rejected rather than attempting to translate their different adaptive states.
 `parseRarVolumeSetAlloc` accepts an ordered slice of borrowed volume bytes. It
 validates RAR4/RAR5 next-volume flags and RAR5 volume numbers, groups contiguous
 split-before/split-after fragments into logical entries, and rejects missing,
@@ -108,10 +115,10 @@ policy independently to every volume. Encrypted member ciphertext is joined
 across arbitrary fragment cuts before one CBC decode, matching RAR's reuse of
 the same file salt/IV record in every fragment.
 Directories, unsupported compressed data, encrypted RAR5 redirections,
-unknown-size members, incomplete split-volume members, and
-unsupported RAR20 solid
-continuations return specific errors. This prevents an unsupported or
-incomplete member from being copied as if it were stored data.
+unknown-size members, incomplete split-volume members, and unsupported
+cross-generation legacy solid transitions return specific errors. This
+prevents an unsupported or incomplete member from being copied as if it were
+stored data.
 
 RAR4 Unicode names use a historical high-byte/UTF-16/copy-run instruction
 stream after a NUL-terminated ANSI fallback. Truncation, invalid runs and
@@ -248,9 +255,12 @@ checksum-valid generic-program mutation is compared with its canonical
 standard-program output. RAR5 checks cover compression methods 1, 3, and 5,
 all four native filters, generated multi-block input, malformed first-block
 table reuse, and the legacy out-of-window zero-fill behavior. Solid
-coverage includes five archives and nineteen members, including Quick Open
-metadata and a seven-member history chain. RAR20 solid continuations retain
-their explicit unsupported error:
+coverage includes five RAR50 archives and nineteen members, including Quick
+Open metadata and a seven-member history chain. Pinned RAR15 and RAR20 solid
+archives add two members each, including archive-only RAR15 solid signaling and
+RAR20 next-file table carry. All four members compare byte-for-byte with both
+7-Zip and unrar (`rar15_solid_entries=2`, `rar20_solid_entries=2`,
+`legacy_solid_unrar_entries=4`):
 
 ```sh
 zig build run-rar-diff -- \
@@ -269,6 +279,7 @@ zig build run -- extract-rar-volumes entry.bin output.bin 1048576 --password=pas
   archive.part1.rar archive.part2.rar archive.part3.rar
 ```
 
-Pre-RAR29 legacy encryption remains a compatibility follow-up. The next RAR4
+Pre-RAR29 legacy encryption and mixed RAR15/RAR20 solid transitions remain
+compatibility follow-ups. The next RAR4
 writer stages include PPMd-attached VM filters. PPMd hybrid match escapes
 remain a later compression-ratio optimization.

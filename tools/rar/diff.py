@@ -82,6 +82,38 @@ def compare_archive_entries(
     return len(names)
 
 
+def compare_unrar_entries(
+    cli: Path,
+    unrar: Path,
+    archive: Path,
+    root: Path,
+    label: str,
+) -> int:
+    listing = run(cli, "list-rar-file", str(archive)).stdout
+    names = [
+        line.split(" name=", 1)[1]
+        for line in listing.splitlines()
+        if line.startswith("index=") and "directory=false" in line
+    ]
+    reference = root / f"unrar-reference-{label}"
+    reference.mkdir()
+    run(unrar, "x", "-o+", "-idq", str(archive), f"{reference}/")
+    for index, name in enumerate(names):
+        output = root / f"unrar-decoded-{label}-{index}.out"
+        run(
+            cli,
+            "extract-rar-file",
+            str(archive),
+            name,
+            str(output),
+            str(256 * 1024 * 1024),
+        )
+        expected = reference.joinpath(*name.replace("\\", "/").split("/"))
+        if output.read_bytes() != expected.read_bytes():
+            raise AssertionError(f"Vort/unrar mismatch for {archive.name}:{name}")
+    return len(names)
+
+
 def compare_volume_entries(
     cli: Path,
     seven_zip: Path,
@@ -116,6 +148,7 @@ def main() -> None:
     parser.add_argument("--7zz", dest="seven_zip", type=Path)
     parser.add_argument("--rar", dest="rar_tool", type=Path)
     parser.add_argument("--rar4", dest="rar4_tool", type=Path)
+    parser.add_argument("--unrar", dest="unrar_tool", type=Path)
     parser.add_argument("--rars", type=Path)
     parser.add_argument("--fixtures", type=Path)
     parser.add_argument("--legacy-fixtures", type=Path)
@@ -129,6 +162,10 @@ def main() -> None:
         found = shutil.which("rar")
         rar_tool = Path(found) if found else None
     rar4_tool = args.rar4_tool
+    unrar_tool = args.unrar_tool
+    if unrar_tool is None:
+        found = shutil.which("unrar")
+        unrar_tool = Path(found) if found else None
     versions = ("rar4", "rar5")
     payload = make_payload()
     writer_external = 0
@@ -169,6 +206,9 @@ def main() -> None:
     fixture_cases = 0
     rar15_entries = 0
     rar20_entries = 0
+    rar15_solid_entries = 0
+    rar20_solid_entries = 0
+    legacy_solid_unrar_entries = 0
     rar29_entries = 0
     rar29_ppmd_entries = 0
     rar29_vm_entries = 0
@@ -1246,6 +1286,40 @@ def main() -> None:
                     f"rar20-{index}",
                 )
 
+            rar15_solid = args.legacy_fixtures / "solid_flag_cleared_rar15.rar"
+            rar15_solid_entries += compare_archive_entries(
+                args.cli,
+                seven_zip,
+                rar15_solid,
+                temp,
+                "rar15-solid",
+                method="rar15",
+            )
+            rar20_solid = args.legacy_fixtures / "rar250" / "SOLID.RAR"
+            rar20_solid_entries += compare_archive_entries(
+                args.cli,
+                seven_zip,
+                rar20_solid,
+                temp,
+                "rar20-solid",
+                method="rar20",
+            )
+            if unrar_tool is not None:
+                legacy_solid_unrar_entries += compare_unrar_entries(
+                    args.cli,
+                    unrar_tool,
+                    rar15_solid,
+                    temp,
+                    "rar15-solid",
+                )
+                legacy_solid_unrar_entries += compare_unrar_entries(
+                    args.cli,
+                    unrar_tool,
+                    rar20_solid,
+                    temp,
+                    "rar20-solid",
+                )
+
             rar29_archives = (
                 args.legacy_fixtures / "rar300" / "compressed_text_rar300.rar",
                 args.legacy_fixtures / "rars_generated" / "compressed.rar",
@@ -1514,26 +1588,11 @@ def main() -> None:
                 str(temp / "encrypted.out"),
                 check=False,
             )
-            if failed.returncode == 0 or "EncryptedRarEntry" not in failed.stderr:
+            if failed.returncode == 0 or not (
+                "EncryptedRarEntry" in failed.stderr
+                or "RarPasswordRequired" in failed.stderr
+            ):
                 raise AssertionError("Vort accepted encrypted RAR15 data")
-
-            solid = args.legacy_fixtures / "rar250" / "SOLID.RAR"
-            solid_listing = run(args.cli, "list-rar-file", str(solid)).stdout
-            solid_name = next(
-                line.split(" name=", 1)[1]
-                for line in solid_listing.splitlines()
-                if line.startswith("index=") and "solid=true" in line
-            )
-            failed = run(
-                args.cli,
-                "extract-rar-file",
-                str(solid),
-                solid_name,
-                str(temp / "solid.out"),
-                check=False,
-            )
-            if failed.returncode == 0 or "UnsupportedRarFeature" not in failed.stderr:
-                raise AssertionError("Vort accepted a solid RAR20 continuation without session state")
 
         original = temp / "vort-rar5-first.rar"
         sfx = temp / "sfx.rar"
@@ -1605,6 +1664,9 @@ def main() -> None:
         f"reference_compressed_decoded={reference_compressed_decoded} "
         f"fixture_cases={fixture_cases} rar15_entries={rar15_entries} "
         f"rar20_entries={rar20_entries} rar29_entries={rar29_entries} "
+        f"rar15_solid_entries={rar15_solid_entries} "
+        f"rar20_solid_entries={rar20_solid_entries} "
+        f"legacy_solid_unrar_entries={legacy_solid_unrar_entries} "
         f"rar29_ppmd_entries={rar29_ppmd_entries} "
         f"rar29_vm_entries={rar29_vm_entries} "
         f"rar50_entries={rar50_entries} "

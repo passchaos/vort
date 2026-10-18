@@ -21564,3 +21564,20 @@ reuse, so production keeps the simpler independently owned plans.
   resource across SWM parts, so DISM/ImageX, wimlib and Vort all permit an
   indivisible resource to exceed the soft part target rather than inventing a
   private wire format.
+
+- Added sequential RAR15 and RAR20/26 solid continuation decoding. Reusable
+  `Rar15Session` retains adaptive symbol sets, averages, recent distances and
+  64 KiB history while resetting per-member flag/ST state. `Rar20Session`
+  retains canonical tables, old code lengths, repeat distances, audio
+  predictors and 1 MiB history, and consumes a member-tail table record that
+  seeds the next file. Archive and volume sessions replay these states for
+  by-name extraction; direct continuation extraction remains rejected. Legacy
+  RAR15 archives whose file solid bit is clear but main-header solid is set are
+  handled explicitly. Two checked-in Base64 fixtures pin RAR15 and RAR20 solid
+  output hashes, missing-state errors, malformed-member poisoning and exhaustive
+  OOM cleanup; focused RAR coverage is now 127 tests. The full external matrix
+  byte-compares two members per format with 7-Zip and all four with unrar
+  (`rar15_solid_entries=2`, `rar20_solid_entries=2`,
+  `legacy_solid_unrar_entries=4`). Mixed RAR15↔RAR20 solid algorithm changes
+  remain explicitly unsupported until shared cross-decoder state translation
+  is implemented.
