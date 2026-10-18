@@ -223,7 +223,11 @@ pub fn build(b: *std.Build) void {
     const zstd_far_window_tests = b.addTest(.{
         .name = "vort-zstd-far-window-tests",
         .root_module = zstd_tests_mod,
-        .filters = &.{"zstd explicit 24-bit window"},
+        .filters = &.{
+            "zstd explicit 24-bit window",
+            "zstd explicit 25-bit window",
+            "zstd explicit 26-bit window",
+        },
     });
     const run_zstd_far_window_tests = b.addRunArtifact(zstd_far_window_tests);
     const zstd_far_window_test_step = b.step(

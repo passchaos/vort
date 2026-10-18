@@ -52,9 +52,9 @@ major gaps before Vort can claim broad industry-best parity:
   dictionary, dictionary-set, and seekable writers share the same window-aware
   path. Null/default encoding retains its historical 8 MiB match/history
   policy; explicit logs 24+ now opt into a separate sparse long-distance index
-  and 16 MiB history, while farther-than-16-MiB matching remains open. This
-  completed slice does not establish general Zstd compatibility, ratio, or
-  performance parity.
+  with a 16 MiB default and caller-controlled history through 64 MiB. Matching
+  beyond 64 MiB remains open. This completed slice does not establish general
+  Zstd compatibility, ratio, or performance parity.
 - Cross-platform optimized kernels and reproducible competitor measurements are
   not yet comprehensive enough for a blanket performance-leadership claim.
 
@@ -21796,7 +21796,21 @@ reuse, so production keeps the simpler independently owned plans.
   existing null-window wire oracle remains green. The required runtime
   libzstd matrix independently decodes the Vort far-window frame and rises from
   276 to 277 cases with `far_window_encode_cases=1`, `unsupported=0`. The public
-  `zstdNativeExplicitWindowMatchLenMax` pins the 16 MiB implementation ceiling;
-  advertised windows above 24 remain legal but do not yet emit farther matches.
+  `zstdNativeExplicitWindowMatchLenDefault` pins the 16 MiB default.
   `zig build test-zstd` now provides a permanent focused Zstandard suite, while
   `test-zstd-far-window` isolates this large fixture for fast iteration.
+
+- Made explicit Zstd match memory caller-budgeted rather than fixing the LDM
+  ceiling at 16 MiB. `FrameOptions` and `NativeFrameOptions` now carry
+  `max_match_history_len`; it requires a non-null `window_log`, accepts 1 KiB
+  through `zstdNativeExplicitWindowMatchLenMax` (64 MiB), and defaults to 16 MiB
+  when omitted. The effective history remains the minimum of the advertised
+  window and budget, so memory cannot silently exceed either contract. A
+  window-25 fixture holds the advertised window constant while comparing the
+  16 MiB default against an explicit 32 MiB budget; only the latter reaches a
+  repeated 128 KiB tail at distance `16 MiB + 128 KiB`. A window-26 fixture
+  similarly proves the 64 MiB maximum reaches beyond a 32 MiB budget. One-shot
+  and incremental wires remain identical and libzstd independently decodes the
+  8, 16 and 32 MiB boundary frames, raising the matrix to 279 cases with
+  `far_window_encode_cases=3`, `unsupported=0`. Invalid no-window, sub-1-KiB and
+  over-64-MiB budgets are rejected before encoding.

@@ -128,50 +128,30 @@ pub fn main(init: std.process.Init) !void {
         checked += 1;
         advanced_cases += 1;
     }
-    const far_window_block_len = std.compress.zstd.block_size_max;
-    const far_window_distance = vort.zstdNativeDictionaryWindowLen +
-        far_window_block_len;
-    const far_window_payload = try init.gpa.alloc(
-        u8,
-        far_window_distance + far_window_block_len,
-    );
-    defer init.gpa.free(far_window_payload);
-    var far_window_state: u32 = 0x6a09_e667;
-    for (far_window_payload[0..far_window_distance]) |*byte| {
-        far_window_state = far_window_state *% 1_664_525 +% 1_013_904_223;
-        byte.* = @truncate(far_window_state >> 24);
-    }
-    @memcpy(
-        far_window_payload[far_window_distance..],
-        far_window_payload[0..far_window_block_len],
-    );
-    const far_window_frame = try vort.zstdEncodeNativeFrameWithOptionsAlloc(
+    try validateFarWindowEncode(
         init.gpa,
-        far_window_payload,
-        .{
-            .content_checksum = true,
-            .include_content_size = false,
-            .window_log = 24,
-            .selection = .literal_only,
-            .match_search_budget = 0,
-        },
+        &runtime,
+        24,
+        null,
+        vort.zstdNativeDictionaryWindowLen + std.compress.zstd.block_size_max,
     );
-    defer init.gpa.free(far_window_frame.frame);
-    const far_window_header = try vort.zstdInspectNativeFrameHeader(
-        far_window_frame.frame,
+    try validateFarWindowEncode(
+        init.gpa,
+        &runtime,
+        25,
+        @as(usize, 1) << 25,
+        vort.zstdNativeExplicitWindowMatchLenDefault +
+            std.compress.zstd.block_size_max,
     );
-    if (far_window_header.window_size != @as(u64, 1) << 24)
-        return error.ReferenceEncodeFailed;
-    const far_window_reference_output = try init.gpa.alloc(
-        u8,
-        far_window_payload.len,
+    try validateFarWindowEncode(
+        init.gpa,
+        &runtime,
+        26,
+        vort.zstdNativeExplicitWindowMatchLenMax,
+        (@as(usize, 1) << 25) + std.compress.zstd.block_size_max,
     );
-    defer init.gpa.free(far_window_reference_output);
-    try runtime.decode(far_window_frame.frame, far_window_reference_output);
-    if (!std.mem.eql(u8, far_window_payload, far_window_reference_output))
-        return error.SizeMismatch;
-    checked += 1;
-    far_window_encode_cases += 1;
+    checked += 3;
+    far_window_encode_cases += 3;
     var raw_dictionary: [32 * 1024]u8 = undefined;
     var raw_dictionary_state: u32 = 0x243f_6a88;
     for (&raw_dictionary) |*byte| {
@@ -601,6 +581,44 @@ pub fn main(init: std.process.Init) !void {
         "decodecorpus_max_sequence_count={d} decodecorpus_max_block_count={d} decodecorpus_sequence_count_tiers=0x{x} decodecorpus_sequence_mode_combinations={d} decodecorpus_sequence_mode_mask=0x{x} decodecorpus_combined_mode_combinations={d} decodecorpus_combined_mode_mask=0x{x} max_sequence_count={d} max_block_count={d} sequence_count_tiers=0x{x} sequence_mode_combinations={d} sequence_mode_mask=0x{x} combined_mode_combinations={d} combined_mode_mask=0x{x} version={s}\n",
         .{ decodecorpus_coverage.max_sequence_count, decodecorpus_coverage.max_block_count, decodecorpus_coverage.sequence_count_tiers, @popCount(decodecorpus_coverage.sequence_mode_combinations), decodecorpus_coverage.sequence_mode_combinations, @popCount(decodecorpus_combined_mode_mask), decodecorpus_combined_mode_mask, coverage.max_sequence_count, coverage.max_block_count, coverage.sequence_count_tiers, @popCount(coverage.sequence_mode_combinations), coverage.sequence_mode_combinations, @popCount(combined_mode_mask), combined_mode_mask, runtime.version() },
     );
+}
+
+fn validateFarWindowEncode(
+    allocator: std.mem.Allocator,
+    runtime: *libzstd.Runtime,
+    window_log: u6,
+    max_match_history_len: ?usize,
+    far_distance: usize,
+) !void {
+    const block_len = std.compress.zstd.block_size_max;
+    const payload = try allocator.alloc(u8, far_distance + block_len);
+    defer allocator.free(payload);
+    var state: u32 = 0x6a09_e667;
+    for (payload[0..far_distance]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(payload[far_distance..], payload[0..block_len]);
+    const frame = try vort.zstdEncodeNativeFrameWithOptionsAlloc(
+        allocator,
+        payload,
+        .{
+            .content_checksum = true,
+            .include_content_size = false,
+            .window_log = window_log,
+            .max_match_history_len = max_match_history_len,
+            .selection = .literal_only,
+            .match_search_budget = 0,
+        },
+    );
+    defer allocator.free(frame.frame);
+    const header = try vort.zstdInspectNativeFrameHeader(frame.frame);
+    if (header.window_size != @as(u64, 1) << window_log)
+        return error.ReferenceEncodeFailed;
+    const reference_output = try allocator.alloc(u8, payload.len);
+    defer allocator.free(reference_output);
+    try runtime.decode(frame.frame, reference_output);
+    if (!std.mem.eql(u8, payload, reference_output)) return error.SizeMismatch;
 }
 
 fn reusableDecodeCorpusCase(allocator: std.mem.Allocator, decoder: *vort.ZstdNativeFrameDecoder, encoded: []const u8, expected: []const u8) !void {

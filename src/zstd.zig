@@ -379,7 +379,8 @@ const max_direct_huffman_symbol = 128;
 pub const native_max_match_search_budget: usize = mixed_match_path_search_budget;
 pub const native_max_direct_huffman_symbol: u8 = max_direct_huffman_symbol;
 pub const native_dictionary_window_len: usize = std.compress.zstd.default_window_len;
-pub const native_explicit_window_match_len_max: usize = 16 * 1024 * 1024;
+pub const native_explicit_window_match_len_default: usize = 16 * 1024 * 1024;
+pub const native_explicit_window_match_len_max: usize = 64 * 1024 * 1024;
 
 const ll_base = [_]usize{
     0,      1,      2,      3,       4,     5,     6,     7,
@@ -468,6 +469,9 @@ pub const FrameOptions = struct {
     /// both Window_Descriptor and Frame_Content_Size. Null preserves the
     /// historical header and encoder policy.
     window_log: ?u6 = null,
+    /// Optional encode-side history budget in bytes. Requires `window_log` and
+    /// accepts 1 KiB...64 MiB; null selects the explicit-window 16 MiB default.
+    max_match_history_len: ?usize = null,
 };
 
 pub const NativeFrameSelection = enum {
@@ -482,9 +486,12 @@ pub const NativeFrameOptions = struct {
     include_content_size: bool = true,
     /// Optional standard Zstd Window_Log (10...41). It caps block size,
     /// cross-block matches, and visible preset history in addition to changing
-    /// the frame header. Explicit logs 24+ enable the bounded 16 MiB sparse-LDM
-    /// history; null preserves the historical 8 MiB encoder wire and policy.
+    /// the frame header. Explicit logs 24+ enable sparse-LDM history; null
+    /// preserves the historical 8 MiB encoder wire and policy.
     window_log: ?u6 = null,
+    /// Optional encode-side history budget in bytes. Requires `window_log` and
+    /// accepts 1 KiB...64 MiB; null selects the explicit-window 16 MiB default.
+    max_match_history_len: ?usize = null,
     selection: NativeFrameSelection = .auto,
     block_size_max: usize = std.compress.zstd.block_size_max,
     dictionary_id: u32 = 0,
@@ -1979,9 +1986,16 @@ fn nativeExplicitWindowSize(options: NativeFrameOptions) Error!?u64 {
 }
 
 fn nativeEncoderWindowLen(options: NativeFrameOptions) Error!usize {
-    const advertised = try nativeExplicitWindowSize(options) orelse
+    const advertised = try nativeExplicitWindowSize(options) orelse {
+        if (options.max_match_history_len != null) return error.InvalidBlockPlan;
         return native_dictionary_window_len;
-    return @intCast(@min(advertised, native_explicit_window_match_len_max));
+    };
+    const budget = options.max_match_history_len orelse
+        native_explicit_window_match_len_default;
+    if (budget < (@as(usize, 1) << native_window_log_min) or
+        budget > native_explicit_window_match_len_max)
+        return error.InvalidBlockPlan;
+    return @intCast(@min(advertised, budget));
 }
 
 fn nativeMatchWindowLen(options: NativeFrameOptions) Error!?usize {
@@ -6389,6 +6403,7 @@ fn nativeFrameOptionsForLevel(level: c_int, options: FrameOptions) Error!NativeF
         .content_checksum = options.content_checksum,
         .include_content_size = options.include_content_size,
         .window_log = options.window_log,
+        .max_match_history_len = options.max_match_history_len,
     };
     if (level <= 0) {
         native_options.selection = .raw_or_rle;
@@ -29683,7 +29698,7 @@ test "zstd explicit window uses non-single FCS widths and validates logs" {
     try std.testing.expectError(error.InvalidBlockPlan, encodedNativeFrameBoundWithOptions(1, .{ .window_log = 42 }));
     try std.testing.expectError(error.IntegerOverflow, encodedNativeFrameBoundWithOptions(std.math.maxInt(usize), .{ .window_log = 10 }));
     try std.testing.expectEqual(
-        native_explicit_window_match_len_max,
+        native_explicit_window_match_len_default,
         try nativeEncoderWindowLen(.{ .window_log = 41 }),
     );
     try std.testing.expectEqual(
@@ -29693,6 +29708,53 @@ test "zstd explicit window uses non-single FCS widths and validates logs" {
     try std.testing.expectEqual(
         native_dictionary_window_len,
         try nativeEncoderWindowLen(.{}),
+    );
+    try std.testing.expectEqual(
+        @as(usize, 1) << 25,
+        try nativeEncoderWindowLen(.{
+            .window_log = 25,
+            .max_match_history_len = @as(usize, 1) << 25,
+        }),
+    );
+    try std.testing.expectEqual(
+        native_explicit_window_match_len_max,
+        try nativeEncoderWindowLen(.{
+            .window_log = 26,
+            .max_match_history_len = native_explicit_window_match_len_max,
+        }),
+    );
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        nativeEncoderWindowLen(.{ .max_match_history_len = 1024 }),
+    );
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        encodedNativeFrameBoundWithOptions(1, .{
+            .max_match_history_len = 1024,
+        }),
+    );
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        nativeEncoderWindowLen(.{
+            .window_log = 24,
+            .max_match_history_len = 1023,
+        }),
+    );
+    const level_options = try nativeFrameOptionsForLevel(3, .{
+        .window_log = 25,
+        .max_match_history_len = @as(usize, 1) << 25,
+    });
+    try std.testing.expectEqual(@as(?u6, 25), level_options.window_log);
+    try std.testing.expectEqual(
+        @as(?usize, @as(usize, 1) << 25),
+        level_options.max_match_history_len,
+    );
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        nativeEncoderWindowLen(.{
+            .window_log = 26,
+            .max_match_history_len = native_explicit_window_match_len_max + 1,
+        }),
     );
 
     var invalid_header: std.ArrayList(u8) = .empty;
@@ -29765,8 +29827,43 @@ test "zstd null window preserves legacy wire and explicit bounds cover every mod
 }
 
 test "zstd explicit 24-bit window emits matches beyond legacy history" {
+    try expectExplicitFarWindow(
+        23,
+        null,
+        24,
+        null,
+        native_dictionary_window_len + std.compress.zstd.block_size_max,
+    );
+}
+
+test "zstd explicit 25-bit window honors 32 MiB history budget" {
+    try expectExplicitFarWindow(
+        25,
+        native_explicit_window_match_len_default,
+        25,
+        @as(usize, 1) << 25,
+        native_explicit_window_match_len_default + std.compress.zstd.block_size_max,
+    );
+}
+
+test "zstd explicit 26-bit window honors 64 MiB history budget" {
+    try expectExplicitFarWindow(
+        26,
+        @as(usize, 1) << 25,
+        26,
+        native_explicit_window_match_len_max,
+        (@as(usize, 1) << 25) + std.compress.zstd.block_size_max,
+    );
+}
+
+fn expectExplicitFarWindow(
+    near_window_log: u6,
+    near_budget: ?usize,
+    far_window_log: u6,
+    far_budget: ?usize,
+    far_distance: usize,
+) !void {
     const block_len = std.compress.zstd.block_size_max;
-    const far_distance = native_dictionary_window_len + block_len;
     const payload_len = far_distance + block_len;
     const payload = try std.testing.allocator.alloc(u8, payload_len);
     defer std.testing.allocator.free(payload);
@@ -29784,7 +29881,8 @@ test "zstd explicit 24-bit window emits matches beyond legacy history" {
         .match_search_budget = 0,
     };
     var near_options = common;
-    near_options.window_log = 23;
+    near_options.window_log = near_window_log;
+    near_options.max_match_history_len = near_budget;
     const near = try encodeNativeFrameWithOptionsAlloc(
         std.testing.allocator,
         payload,
@@ -29792,7 +29890,8 @@ test "zstd explicit 24-bit window emits matches beyond legacy history" {
     );
     defer std.testing.allocator.free(near.frame);
     var far_options = common;
-    far_options.window_log = 24;
+    far_options.window_log = far_window_log;
+    far_options.max_match_history_len = far_budget;
     const far = try encodeNativeFrameWithOptionsAlloc(
         std.testing.allocator,
         payload,
@@ -29802,7 +29901,7 @@ test "zstd explicit 24-bit window emits matches beyond legacy history" {
 
     try std.testing.expect(far.frame.len + block_len / 2 < near.frame.len);
     const header = try inspectNativeFrameHeader(far.frame);
-    try std.testing.expectEqual(@as(u64, 1) << 24, header.window_size);
+    try std.testing.expectEqual(@as(u64, 1) << far_window_log, header.window_size);
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, far.frame);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);

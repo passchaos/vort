@@ -2446,6 +2446,7 @@ pub const ZstdNativeFrameOptions = zstd.NativeFrameOptions;
 pub const zstdNativeMaxMatchSearchBudget = zstd.native_max_match_search_budget;
 pub const zstdNativeMaxDirectHuffmanSymbol = zstd.native_max_direct_huffman_symbol;
 pub const zstdNativeDictionaryWindowLen = zstd.native_dictionary_window_len;
+pub const zstdNativeExplicitWindowMatchLenDefault = zstd.native_explicit_window_match_len_default;
 pub const zstdNativeExplicitWindowMatchLenMax = zstd.native_explicit_window_match_len_max;
 pub const ZstdNativeFrameSelection = zstd.NativeFrameSelection;
 pub const ZstdNativeFrameMode = zstd.NativeFrameMode;
@@ -4806,6 +4807,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdNativeMaxMatchSearchBudget;
     _ = zstdNativeMaxDirectHuffmanSymbol;
     _ = zstdNativeDictionaryWindowLen;
+    _ = zstdNativeExplicitWindowMatchLenDefault;
     _ = zstdNativeExplicitWindowMatchLenMax;
     _ = ZstdNativeFrameSelection;
     _ = ZstdNativeFrameMode;
