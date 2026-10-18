@@ -2138,8 +2138,25 @@ chunk is emitted directly as the final block. Options use
 and `max_input_len` layout exposed by the incremental encoder. Append calls are
 transactional on error. Into calls encode to internal temporary storage before
 checking capacity, so `OutOfMemory` leaves the complete caller buffer
-unchanged; callers that require retained scratch should use the incremental
-encoder directly.
+unchanged; callers that require retained scratch should use the reusable facade
+below or drive the incremental encoder directly.
+
+`BrotliStaticDictionaryStreamEncoder` is the reusable convenience layer for
+callers that want atomic Alloc/Append/Into operations without manually driving
+`step`. It retains both the incremental plain/pending/command state and the
+complete encoded scratch result across calls. `encodeChunksScratch*` returns a
+borrow invalidated by the next call; `encodeChunksInto*` copies only after a
+complete successful encode, so undersized output remains unchanged. A warmed
+three-meta-block regression succeeds with an allocator configured to fail its
+first new allocation, proving that stable repeated shapes reuse all retained
+capacity. Options may change between calls because each operation resets the
+stream state while keeping capacity.
+
+There is intentionally no guessed compressed-wire multiplier exposed as a
+bound: the complete planner writes dynamically constructed Huffman trees, and a
+strict general upper bound has not yet been derived. The stateless Into wrappers
+therefore retain their internal temporary result for atomicity; use the reusable
+encoder when repeated-call allocation behavior matters.
 
 Upstream still marks serialized shared dictionaries as
 `BROTLI_EXPERIMENTAL`/`DO NOT USE`; Vort does not claim that unstable wire.

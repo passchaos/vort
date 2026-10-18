@@ -21765,3 +21765,18 @@ reuse, so production keeps the simpler independently owned plans.
   one multi-meta-block omit-first stream
   (`incremental_static_transform_cases=121`,
   `incremental_static_multiblock_cases=1`).
+
+- Added `BrotliStaticDictionaryStreamEncoder`, a reusable atomic facade over
+  the incremental complete-dictionary core. It retains plain, pending, command,
+  and final encoded buffers across operations; Scratch returns a borrowed
+  result, while Alloc/Append/Into preserve their ownership and rollback
+  contracts. Reconfiguration resets stream state but not capacity. A warmed
+  three-meta-block Into succeeds under a fail-first allocator and retains the
+  exact capacity, proving that stable repeated shapes allocate nothing new.
+  Thirty-two deterministic random schedules span WBITS 10/16/24, 5--64-byte
+  blocks, alternating flush/metadata boundaries, 1--17-byte input fragments,
+  and 1--13-byte output buffers; each fragmented wire equals its large-buffer
+  oracle and decodes exactly. Focused Brotli coverage rises from 792 to 794
+  tests. A fabricated compressed-wire multiplier was deliberately rejected:
+  dynamic Huffman output still lacks a formally derived general bound, so the
+  stateless Into path keeps its temporary result to preserve atomicity.

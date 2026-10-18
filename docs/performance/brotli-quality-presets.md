@@ -142,6 +142,16 @@ undersized caller buffer unchanged, so throughput-sensitive repeated callers
 should retain an incremental encoder instead. These wrappers add no candidate
 search to default presets and are excluded from q0...q11 performance claims.
 
+`BrotliStaticDictionaryStreamEncoder` packages that retained state behind
+atomic Scratch/Alloc/Append/Into methods. It clears lengths but retains
+plain/pending/command/output capacities between operations. A fail-first
+allocator regression proves zero new allocations for a warmed representative
+three-block shape; this is an invariant for that retained shape, not a claim
+that unseen larger inputs can never grow capacity. Thirty-two deterministic
+random schedules vary block length, WBITS 10/16/24, flush versus metadata,
+input fragmentation, and output backpressure, and require fragmentation-
+independent wire plus successful decode.
+
 ## RAW shared-prefix encode/decode boundary
 
 `BrotliSharedDictionary` is a borrowed descriptor for zero through fifteen

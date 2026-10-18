@@ -33,22 +33,44 @@ pub fn encodeChunksWithOptionsAppend(
     chunks: []const []const u8,
     options: Encoder.Options,
 ) Encoder.Error!void {
+    var encoder = Encoder.init(allocator);
+    defer encoder.deinit();
+    return encodeChunksWithOptionsAppendReuse(
+        Encoder,
+        max_block_len,
+        &encoder,
+        allocator,
+        out,
+        chunks,
+        options,
+    );
+}
+
+pub fn encodeChunksWithOptionsAppendReuse(
+    comptime Encoder: type,
+    comptime max_block_len: usize,
+    encoder: *Encoder,
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    chunks: []const []const u8,
+    options: Encoder.Options,
+) Encoder.Error!void {
     const info = try preflightChunks(Encoder, max_block_len, chunks, options);
     const start = out.items.len;
     errdefer out.shrinkRetainingCapacity(start);
-    var encoder = Encoder.initWithOptions(allocator, options);
-    defer encoder.deinit();
+    encoder.reset();
+    encoder.options = options;
     var scratch: [4096]u8 = undefined;
     for (chunks, 0..) |chunk, chunk_index| {
         if (chunk.len == 0) continue;
-        try feed(Encoder, &encoder, out, allocator, chunk, &scratch);
+        try feed(Encoder, encoder, out, allocator, chunk, &scratch);
         if (chunk_index != info.last_non_empty.?) {
             encoder.flush();
-            try drainFlush(Encoder, &encoder, out, allocator, &scratch);
+            try drainFlush(Encoder, encoder, out, allocator, &scratch);
         }
     }
     try encoder.finish();
-    try drainFinish(Encoder, &encoder, out, allocator, &scratch);
+    try drainFinish(Encoder, encoder, out, allocator, &scratch);
 }
 
 pub fn encodeChunksWithOptionsInto(

@@ -818,6 +818,117 @@ pub const IncrementalStaticDictionaryStreamEncoder =
     incremental_stored_encoder.Encoder(IncrementalStaticDictionaryEncoderCodec);
 pub const StaticDictionaryStreamOptions = IncrementalStaticDictionaryStreamEncoder.Options;
 
+/// Reusable complete static-dictionary encoder. Scratch results are borrowed
+/// until the next method call; allocating results are independent.
+pub const StaticDictionaryStreamEncoder = struct {
+    allocator: std.mem.Allocator,
+    incremental: IncrementalStaticDictionaryStreamEncoder,
+    output: std.ArrayList(u8) = .empty,
+
+    pub fn init(allocator: std.mem.Allocator) StaticDictionaryStreamEncoder {
+        return .{
+            .allocator = allocator,
+            .incremental = IncrementalStaticDictionaryStreamEncoder.init(allocator),
+        };
+    }
+
+    pub fn deinit(self: *StaticDictionaryStreamEncoder) void {
+        self.incremental.deinit();
+        self.output.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn retainedCapacity(self: *const StaticDictionaryStreamEncoder) usize {
+        return self.output.capacity + self.incremental.retainedCapacity();
+    }
+
+    pub fn encodeChunksScratch(
+        self: *StaticDictionaryStreamEncoder,
+        chunks: []const []const u8,
+    ) Error![]const u8 {
+        return self.encodeChunksScratchWithOptions(chunks, .{});
+    }
+
+    pub fn encodeChunksScratchWithOptions(
+        self: *StaticDictionaryStreamEncoder,
+        chunks: []const []const u8,
+        options: StaticDictionaryStreamOptions,
+    ) Error![]const u8 {
+        self.output.clearRetainingCapacity();
+        try static_dictionary_stream.encodeChunksWithOptionsAppendReuse(
+            IncrementalStaticDictionaryStreamEncoder,
+            max_uncompressed_meta_block_len,
+            &self.incremental,
+            self.allocator,
+            &self.output,
+            chunks,
+            options,
+        );
+        return self.output.items;
+    }
+
+    pub fn encodeChunksAlloc(
+        self: *StaticDictionaryStreamEncoder,
+        allocator: std.mem.Allocator,
+        chunks: []const []const u8,
+    ) Error![]u8 {
+        return self.encodeChunksWithOptionsAlloc(allocator, chunks, .{});
+    }
+
+    pub fn encodeChunksWithOptionsAlloc(
+        self: *StaticDictionaryStreamEncoder,
+        allocator: std.mem.Allocator,
+        chunks: []const []const u8,
+        options: StaticDictionaryStreamOptions,
+    ) Error![]u8 {
+        return allocator.dupe(
+            u8,
+            try self.encodeChunksScratchWithOptions(chunks, options),
+        );
+    }
+
+    pub fn encodeChunksAppend(
+        self: *StaticDictionaryStreamEncoder,
+        out: *std.ArrayList(u8),
+        chunks: []const []const u8,
+    ) Error!void {
+        return self.encodeChunksWithOptionsAppend(out, chunks, .{});
+    }
+
+    pub fn encodeChunksWithOptionsAppend(
+        self: *StaticDictionaryStreamEncoder,
+        out: *std.ArrayList(u8),
+        chunks: []const []const u8,
+        options: StaticDictionaryStreamOptions,
+    ) Error!void {
+        if (out == &self.output) return error.InvalidBlockPlan;
+        const encoded = try self.encodeChunksScratchWithOptions(chunks, options);
+        const start = out.items.len;
+        errdefer out.shrinkRetainingCapacity(start);
+        try out.appendSlice(self.allocator, encoded);
+    }
+
+    pub fn encodeChunksInto(
+        self: *StaticDictionaryStreamEncoder,
+        chunks: []const []const u8,
+        output: []u8,
+    ) Error!usize {
+        return self.encodeChunksWithOptionsInto(chunks, output, .{});
+    }
+
+    pub fn encodeChunksWithOptionsInto(
+        self: *StaticDictionaryStreamEncoder,
+        chunks: []const []const u8,
+        output: []u8,
+        options: StaticDictionaryStreamOptions,
+    ) Error!usize {
+        const encoded = try self.encodeChunksScratchWithOptions(chunks, options);
+        if (output.len < encoded.len) return error.OutOfMemory;
+        @memcpy(output[0..encoded.len], encoded);
+        return encoded.len;
+    }
+};
+
 test {
     _ = incremental_tests;
     _ = incremental_literal_tests;
