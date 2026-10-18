@@ -3,6 +3,7 @@ const checksum = @import("../checksum.zig");
 const core = @import("../core.zig");
 const rar15 = @import("rar15.zig");
 const rar20 = @import("rar20.zig");
+const legacy_solid = @import("legacy_solid.zig");
 const rar29 = @import("rar29.zig");
 const rar50 = @import("rar50.zig");
 const rar4_encryption = @import("rar4_encryption.zig");
@@ -10,7 +11,7 @@ const rar4_name = @import("rar4_name.zig");
 const rar5_encryption = @import("rar5_encryption.zig");
 
 pub const Error = core.Error || rar15.Error || rar20.Error || rar29.Error || rar50.Error ||
-    rar4_encryption.Error || rar4_name.Error || rar5_encryption.Error || error{
+    legacy_solid.Error || rar4_encryption.Error || rar4_name.Error || rar5_encryption.Error || error{
     InvalidRarArchive,
     UnsupportedRarCompression,
     UnsupportedRarEntry,
@@ -210,7 +211,6 @@ pub const Archive = struct {
             null,
             null,
             null,
-            null,
         );
     }
 
@@ -220,8 +220,7 @@ pub const Archive = struct {
         canonical: Entry,
         output: []u8,
         options: DecodeOptions,
-        rar15_session: ?*rar15.Session,
-        rar20_session: ?*rar20.Session,
+        legacy_session: ?*legacy_solid.Session,
         rar29_session: ?*rar29.Session,
         rar50_decoder: ?*rar50.Decoder,
     ) Error!usize {
@@ -270,12 +269,19 @@ pub const Archive = struct {
                     return error.SizeMismatch;
                 @memcpy(target, data[0..target.len]);
             },
-            .rar15 => if (rar15_session) |session|
-                try session.decodeMemberInto(data, target, canonical.solid)
+            .rar15 => if (legacy_session) |session|
+                try session.decodeMemberInto(
+                    .rar15,
+                    data,
+                    target,
+                    canonical.dictionary_size orelse return error.InvalidRarArchive,
+                    canonical.solid,
+                )
             else
                 try rar15.decodeInto(data, target),
-            .rar20 => if (rar20_session) |session|
+            .rar20 => if (legacy_session) |session|
                 try session.decodeMemberInto(
+                    .rar20,
                     data,
                     target,
                     canonical.dictionary_size orelse return error.InvalidRarArchive,
@@ -478,11 +484,9 @@ pub const ExtractSession = struct {
     archive: Archive,
     options: DecodeOptions,
     iterator: Iterator,
-    rar15_session: rar15.Session,
-    rar20_session: rar20.Session,
+    legacy_session: legacy_solid.Session,
     rar29_session: rar29.Session,
     rar50_decoder: rar50.Decoder,
-    legacy_method: ?Method = null,
     poisoned: bool = false,
 
     fn init(
@@ -495,8 +499,7 @@ pub const ExtractSession = struct {
             .archive = archive,
             .options = options,
             .iterator = archive.iterator(),
-            .rar15_session = rar15.Session.init(allocator),
-            .rar20_session = rar20.Session.init(allocator),
+            .legacy_session = legacy_solid.Session.init(allocator),
             .rar29_session = rar29.Session.init(allocator, .{
                 .max_output_len = options.max_output_len,
                 .max_ppmd_memory = options.max_ppmd_memory,
@@ -507,8 +510,7 @@ pub const ExtractSession = struct {
     }
 
     pub fn deinit(self: *ExtractSession) void {
-        self.rar15_session.deinit();
-        self.rar20_session.deinit();
+        self.legacy_session.deinit();
         self.rar29_session.deinit();
         self.rar50_decoder.deinit();
         self.* = undefined;
@@ -534,18 +536,10 @@ pub const ExtractSession = struct {
         };
         const legacy = canonical.method == .rar15 or canonical.method == .rar20;
         const archive_legacy_continuation = self.archive.solid and
-            self.legacy_method != null and legacy;
-        if ((canonical.solid or archive_legacy_continuation) and
-            self.legacy_method != null and self.legacy_method.? != canonical.method)
-        {
-            self.poisoned = true;
-            return error.UnsupportedRarFeature;
-        }
-        if (canonical.method != .rar15) self.rar15_session.reset();
-        if (canonical.method != .rar20) self.rar20_session.reset();
+            self.legacy_session.canContinue() and legacy;
+        if (!legacy) self.legacy_session.reset();
         if (canonical.method != .rar29) self.rar29_session.reset();
         if (canonical.directory) {
-            self.legacy_method = null;
             return .{ .entry = canonical, .data = try self.allocator.alloc(u8, 0) };
         }
         if (canonical.uncompressed_size > self.options.max_output_len) {
@@ -568,24 +562,19 @@ pub const ExtractSession = struct {
         };
         errdefer self.allocator.free(output);
         var decode_entry = canonical;
-        if (canonical.method == .rar15 and archive_legacy_continuation)
-            decode_entry.solid = true;
-        if (canonical.method == .rar20 and archive_legacy_continuation)
-            decode_entry.solid = true;
+        if (legacy and archive_legacy_continuation) decode_entry.solid = true;
         _ = self.archive.decodeCanonicalInto(
             self.allocator,
             decode_entry,
             output,
             self.options,
-            &self.rar15_session,
-            &self.rar20_session,
+            &self.legacy_session,
             &self.rar29_session,
             &self.rar50_decoder,
         ) catch |err| {
             self.poisoned = true;
             return err;
         };
-        self.legacy_method = if (legacy) canonical.method else null;
         return .{ .entry = canonical, .data = output };
     }
 };

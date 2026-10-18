@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("../core.zig");
+const legacy_common = @import("legacy_common.zig");
 
 pub const Error = core.Error || error{
     InvalidRar15Stream,
@@ -463,6 +464,35 @@ pub const Session = struct {
         return self.initialized and !self.poisoned;
     }
 
+    pub fn synchronizeSolid(
+        self: *Session,
+        history: []const u8,
+        common: legacy_common.CommonState,
+    ) (Error || std.mem.Allocator.Error)!void {
+        if (self.poisoned) return error.Rar15DecoderPoisoned;
+        errdefer self.poisoned = true;
+        self.history.clearRetainingCapacity();
+        const keep = @min(history.len, max_history_size);
+        try self.history.appendSlice(self.allocator, history[history.len - keep ..]);
+        self.decoder.old_dist_index = 0;
+        for (common.recent_distances, 0..) |distance, index|
+            self.decoder.old_dist[(3 - index) & 3] = distanceToU32(distance);
+        self.decoder.last_dist = distanceToU32(common.last_distance);
+        self.decoder.last_length = distanceToU32(common.last_length);
+        self.initialized = true;
+        self.poisoned = false;
+    }
+
+    pub fn commonState(self: *const Session) legacy_common.CommonState {
+        var common = legacy_common.CommonState{
+            .last_distance = self.decoder.last_dist,
+            .last_length = self.decoder.last_length,
+        };
+        for (&common.recent_distances, 0..) |*distance, index|
+            distance.* = self.decoder.old_dist[(self.decoder.old_dist_index -% index -% 1) & 3];
+        return common;
+    }
+
     pub fn decodeMemberInto(
         self: *Session,
         input: []const u8,
@@ -515,6 +545,10 @@ pub const Session = struct {
         self.history.items.len = max_history_size;
     }
 };
+
+fn distanceToU32(value: usize) u32 {
+    return std.math.cast(u32, value) orelse std.math.maxInt(u32);
+}
 
 pub fn decodeAlloc(
     allocator: std.mem.Allocator,

@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("../core.zig");
+const legacy_common = @import("legacy_common.zig");
 
 pub const Error = core.Error || error{
     InvalidRar20Stream,
@@ -395,6 +396,33 @@ pub const Session = struct {
 
     pub fn canContinue(self: *const Session) bool {
         return self.initialized and !self.poisoned;
+    }
+
+    pub fn synchronizeSolid(
+        self: *Session,
+        history: []const u8,
+        common: legacy_common.CommonState,
+        dictionary_size: usize,
+    ) (Error || std.mem.Allocator.Error)!void {
+        if (!validDictionarySize(dictionary_size)) return error.InvalidRar20Stream;
+        if (self.poisoned) return error.Rar20DecoderPoisoned;
+        errdefer self.poisoned = true;
+        self.history.clearRetainingCapacity();
+        const keep = @min(history.len, @min(dictionary_size, max_history_size));
+        try self.history.appendSlice(self.allocator, history[history.len - keep ..]);
+        self.decoder.old_offsets = common.recent_distances;
+        self.decoder.last_offset = common.last_distance;
+        self.decoder.last_length = common.last_length;
+        self.initialized = true;
+        self.poisoned = false;
+    }
+
+    pub fn commonState(self: *const Session) legacy_common.CommonState {
+        return .{
+            .recent_distances = self.decoder.old_offsets,
+            .last_distance = self.decoder.last_offset,
+            .last_length = self.decoder.last_length,
+        };
     }
 
     pub fn decodeMemberInto(

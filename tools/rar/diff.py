@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import random
 import shutil
 import subprocess
@@ -255,6 +256,7 @@ def main() -> None:
     rar15_solid_entries = 0
     rar20_solid_entries = 0
     legacy_solid_unrar_entries = 0
+    legacy_mixed_solid_unrar_entries = 0
     rar15_encrypted_entries = 0
     rar20_encrypted_entries = 0
     legacy_encrypted_unrar_entries = 0
@@ -1439,6 +1441,19 @@ def main() -> None:
                     password="password",
                     accepted_exit_codes=(0, 3),
                 )
+                mixed_solid = temp / "rar15-rar20-mixed-solid.rar"
+                encoded_fixture = (
+                    Path(__file__).resolve().parents[2]
+                    / "src/rar/testdata/rar15-rar20-mixed-solid.rar.b64"
+                )
+                mixed_solid.write_bytes(base64.b64decode(encoded_fixture.read_bytes()))
+                legacy_mixed_solid_unrar_entries += compare_unrar_entries(
+                    args.cli,
+                    unrar_tool,
+                    mixed_solid,
+                    temp,
+                    "rar15-rar20-mixed-solid",
+                )
 
             rar29_archives = (
                 args.legacy_fixtures / "rar300" / "compressed_text_rar300.rar",
@@ -1798,6 +1813,7 @@ def main() -> None:
         f"rar15_solid_entries={rar15_solid_entries} "
         f"rar20_solid_entries={rar20_solid_entries} "
         f"legacy_solid_unrar_entries={legacy_solid_unrar_entries} "
+        f"legacy_mixed_solid_unrar_entries={legacy_mixed_solid_unrar_entries} "
         f"rar15_encrypted_entries={rar15_encrypted_entries} "
         f"rar20_encrypted_entries={rar20_encrypted_entries} "
         f"legacy_encrypted_unrar_entries={legacy_encrypted_unrar_entries} "

@@ -1,8 +1,7 @@
 const std = @import("std");
 const archive_mod = @import("archive.zig");
 const checksum = @import("../checksum.zig");
-const rar15 = @import("rar15.zig");
-const rar20 = @import("rar20.zig");
+const legacy_solid = @import("legacy_solid.zig");
 const rar29 = @import("rar29.zig");
 const rar50 = @import("rar50.zig");
 const rar4_encryption = @import("rar4_encryption.zig");
@@ -232,11 +231,9 @@ pub const ExtractSession = struct {
     set: *const VolumeSet,
     options: archive_mod.DecodeOptions,
     index: usize = 0,
-    rar15_session: rar15.Session,
-    rar20_session: rar20.Session,
+    legacy_session: legacy_solid.Session,
     rar29_session: rar29.Session,
     rar50_decoder: rar50.Decoder,
-    legacy_method: ?archive_mod.Method = null,
     poisoned: bool = false,
 
     fn init(
@@ -248,8 +245,7 @@ pub const ExtractSession = struct {
             .allocator = allocator,
             .set = set,
             .options = options,
-            .rar15_session = rar15.Session.init(allocator),
-            .rar20_session = rar20.Session.init(allocator),
+            .legacy_session = legacy_solid.Session.init(allocator),
             .rar29_session = rar29.Session.init(allocator, .{
                 .max_output_len = options.max_output_len,
                 .max_ppmd_memory = options.max_ppmd_memory,
@@ -260,8 +256,7 @@ pub const ExtractSession = struct {
     }
 
     pub fn deinit(self: *ExtractSession) void {
-        self.rar15_session.deinit();
-        self.rar20_session.deinit();
+        self.legacy_session.deinit();
         self.rar29_session.deinit();
         self.rar50_decoder.deinit();
         self.* = undefined;
@@ -278,15 +273,10 @@ pub const ExtractSession = struct {
             return self.fail(error.UnsupportedRarFeature);
         const legacy = entry.method == .rar15 or entry.method == .rar20;
         const archive_legacy_continuation = self.set.archives[0].archive.solid and
-            self.legacy_method != null and legacy;
-        if ((entry.solid or archive_legacy_continuation) and
-            self.legacy_method != null and self.legacy_method.? != entry.method)
-            return self.fail(error.UnsupportedRarFeature);
-        if (entry.method != .rar15) self.rar15_session.reset();
-        if (entry.method != .rar20) self.rar20_session.reset();
+            self.legacy_session.canContinue() and legacy;
+        if (!legacy) self.legacy_session.reset();
         if (entry.method != .rar29) self.rar29_session.reset();
         if (entry.directory) {
-            self.legacy_method = null;
             const data = self.allocator.alloc(u8, 0) catch |err| return self.fail(err);
             return .{ .entry = entry, .data = data };
         }
@@ -353,24 +343,26 @@ pub const ExtractSession = struct {
         const output = self.allocator.alloc(u8, entry.uncompressed_size) catch |err|
             return self.fail(err);
         errdefer self.allocator.free(output);
-        const rar15_solid = entry.solid or archive_legacy_continuation;
-        const rar20_solid = entry.solid or archive_legacy_continuation;
+        const legacy_solid_continuation = entry.solid or archive_legacy_continuation;
         switch (entry.method) {
             .stored => {
                 if (packed_bytes.len < output.len or packed_bytes.len - output.len >= 16)
                     return self.fail(error.SizeMismatch);
                 @memcpy(output, packed_bytes[0..output.len]);
             },
-            .rar15 => self.rar15_session.decodeMemberInto(
-                packed_bytes,
-                output,
-                rar15_solid,
-            ) catch |err| return self.fail(err),
-            .rar20 => self.rar20_session.decodeMemberInto(
+            .rar15 => self.legacy_session.decodeMemberInto(
+                .rar15,
                 packed_bytes,
                 output,
                 entry.dictionary_size orelse return self.fail(error.InvalidRarVolumeSet),
-                rar20_solid,
+                legacy_solid_continuation,
+            ) catch |err| return self.fail(err),
+            .rar20 => self.legacy_session.decodeMemberInto(
+                .rar20,
+                packed_bytes,
+                output,
+                entry.dictionary_size orelse return self.fail(error.InvalidRarVolumeSet),
+                legacy_solid_continuation,
             ) catch |err| return self.fail(err),
             .rar29 => self.rar29_session.decodeMemberInto(
                 packed_bytes,
@@ -396,7 +388,6 @@ pub const ExtractSession = struct {
                 actual == expected;
             if (!matches) return self.fail(error.ChecksumMismatch);
         }
-        self.legacy_method = if (legacy) entry.method else null;
         return .{ .entry = entry, .data = output };
     }
 

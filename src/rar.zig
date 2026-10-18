@@ -1,4 +1,5 @@
 const archive = @import("rar/archive.zig");
+const legacy_solid = @import("rar/legacy_solid.zig");
 const rar15 = @import("rar/rar15.zig");
 const rar20 = @import("rar/rar20.zig");
 const rar29 = @import("rar/rar29.zig");
@@ -47,6 +48,8 @@ pub const decodeRar20Into = rar20.decodeInto;
 pub const decodeRar20Alloc = rar20.decodeAlloc;
 pub const decodeRar20AllocLimited = rar20.decodeAllocLimited;
 pub const Rar20Session = rar20.Session;
+pub const RarLegacyMethod = legacy_solid.Method;
+pub const RarLegacySession = legacy_solid.Session;
 pub const decodeRar29Into = rar29.decodeInto;
 pub const decodeRar29Alloc = rar29.decodeAlloc;
 pub const decodeRar29AllocLimited = rar29.decodeAllocLimited;
@@ -75,6 +78,7 @@ pub const parseVolumeSetAllocWithOptions = volume_set.VolumeSet.parseAllocWithOp
 
 test {
     _ = archive;
+    _ = legacy_solid;
     _ = rar15;
     _ = rar20;
     _ = rar29;

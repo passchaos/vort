@@ -21620,3 +21620,15 @@ reuse, so production keeps the simpler independently owned plans.
   and unrar independently extract both clear and AES-encrypted filtered solid
   writer output (`writer_rar29_filtered_solid_external=1`,
   `writer_rar29_filtered_solid_encrypted_external=1`).
+
+- Added mixed-generation RAR15↔RAR20 solid decoding. A new `RarLegacySession`
+  preserves algorithm-private RAR15 adaptive and RAR20 table/audio state while
+  sharing unrar-compatible window, recent-distance and last-match registers.
+  The coordinator retains unrar's 256 KiB minimum window, rejects growth within
+  a solid chain, and drives archive, by-name replay and volume extraction.
+  A checked-in RAR15→RAR20→RAR15 archive uses independent rars 0.9.4 literal
+  encoders and is verified by unrar 6.21; 7-Zip 26.04 exposes its own separate-
+  decoder limitation on the RAR20 member. Archive, raw-session, cross-volume,
+  dictionary-growth and exhaustive OOM tests raise focused RAR coverage to 142
+  tests, while the external matrix byte-compares all three members
+  (`legacy_mixed_solid_unrar_entries=3`).

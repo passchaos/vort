@@ -111,8 +111,11 @@ RAR20 consumes the prior member's trailing new-table record before switching
 input. RAR15 also honors old archives that declare solid mode only in the main
 header while clearing the per-file bit. Direct random-access `extractAlloc`
 remains an explicit `UnsupportedRarFeature` for any continuation because it has
-no preceding state. A rare solid transition between RAR15 and RAR20 is still
-rejected rather than attempting to translate their different adaptive states.
+no preceding state. `RarLegacySession` also supports RAR15↔RAR20 transitions:
+the two decoders retain their own adaptive Huffman/table/audio state, while a
+coordinator shares the sliding history plus four recent distances and the last
+match. Its minimum 256 KiB shared window matches unrar's legacy allocation rule,
+and a solid member cannot grow the established window.
 `parseRarVolumeSetAlloc` accepts an ordered slice of borrowed volume bytes. It
 validates RAR4/RAR5 next-volume flags and RAR5 volume numbers, groups contiguous
 split-before/split-after fragments into logical entries, and rejects missing,
@@ -124,10 +127,9 @@ policy independently to every volume. Encrypted member ciphertext is joined
 across arbitrary fragment cuts before one version-selected stateful decrypt,
 matching RAR's reuse of one member cipher state across its fragments.
 Directories, unsupported compressed data, encrypted RAR5 redirections,
-unknown-size members, incomplete split-volume members, and unsupported
-cross-generation legacy solid transitions return specific errors. This
-prevents an unsupported or incomplete member from being copied as if it were
-stored data.
+unknown-size members and incomplete split-volume members return specific
+errors. This prevents an unsupported or incomplete member from being copied as
+if it were stored data.
 
 RAR4 Unicode names use a historical high-byte/UTF-16/copy-run instruction
 stream after a NUL-terminated ANSI fallback. Truncation, invalid runs and
@@ -285,7 +287,10 @@ Open metadata and a seven-member history chain. Pinned RAR15 and RAR20 solid
 archives add two members each, including archive-only RAR15 solid signaling and
 RAR20 next-file table carry. All four members compare byte-for-byte with both
 7-Zip and unrar (`rar15_solid_entries=2`, `rar20_solid_entries=2`,
-`legacy_solid_unrar_entries=4`):
+`legacy_solid_unrar_entries=4`). An independently encoded
+RAR15→RAR20→RAR15 chain adds three unrar-verified transitions
+(`legacy_mixed_solid_unrar_entries=3`); 7-Zip 26.04 reports Data Error at its
+first RAR20 member because it uses separate generation decoders:
 
 ```sh
 zig build run-rar-diff -- \
@@ -308,6 +313,5 @@ zig build run -- extract-rar-volumes entry.bin output.bin 1048576 --password=pas
 Filtered solid RAR29 LZ output is additionally extracted by both 7-Zip and
 unrar in clear and AES-encrypted forms
 (`writer_rar29_filtered_solid_external=1`,
-`writer_rar29_filtered_solid_encrypted_external=1`). Mixed RAR15/RAR20 solid
-transitions remain a compatibility follow-up. PPMd hybrid match escapes remain
-a later compression-ratio optimization.
+`writer_rar29_filtered_solid_encrypted_external=1`). PPMd hybrid match escapes
+remain a later compression-ratio optimization.
