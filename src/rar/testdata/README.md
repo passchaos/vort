@@ -12,3 +12,14 @@ tables.
 Both are stored as Base64 so repository diffs remain reviewable. Tests decode
 them in memory and pin their existing CRC-32 fields; the external RAR matrix
 also compares extraction with 7-Zip/unrar when those tools are available.
+
+`rar15-encrypted.rar.b64` is the 2,129-byte RAR 1.54
+`rar154/readme_154_password.rar` fixture from the same corpus. Its packed
+RAR15 stream is encrypted with password `password`; the 4,198-byte output is
+the corpus `README.md` with SHA-256
+`f3d51f2d627fdb20b876e61f9e7772d7b8bf869ca03aeea49d8a9b3153de6eff`.
+
+`rar20-encrypted.rar.b64` is WinRAR 2.02's 254-byte
+`rar202/comment_psw.rar`, password `password`. It contains two encrypted RAR20
+members, `file1\r\n` and `file2\r\n`. Modern unrar reports three unrelated
+legacy-comment header warnings but tests both encrypted members successfully.

@@ -1,20 +1,30 @@
-//! RAR 3.x/4.x AES file/header encryption composition.
+//! RAR 1.5 through 4.x file/header encryption composition.
 //!
-//! Vail owns the historical SHA-1 KDF and AES-128-CBC. This module owns RAR
-//! policy: optional 8-byte salts, zero padding, UTF-8 password input, and
-//! allocator-backed sensitive buffers.
+//! Vail owns the RAR15 byte cipher, RAR20/26 block cipher, and the RAR3/4
+//! SHA-1 KDF with AES-128-CBC. This module owns archive policy: version
+//! selection, optional RAR3/4 salts, AES zero padding, and allocator-backed
+//! sensitive buffers.
 
 const std = @import("std");
 const crypto = @import("vail_archive_crypto").rar4;
+const legacy = @import("vail_archive_crypto").rar_legacy;
 
 pub const salt_len: usize = crypto.salt_len;
 pub const block_len: usize = crypto.block_len;
 
-pub const Error = crypto.Error || error{
+pub const Error = crypto.Error || legacy.Error || error{
     InvalidRar4Ciphertext,
+    InvalidRar4EncryptionMetadata,
+};
+
+pub const Method = enum {
+    rar15,
+    rar20,
+    rar30,
 };
 
 pub const Metadata = struct {
+    method: Method = .rar30,
     salt: ?[salt_len]u8,
 };
 
@@ -31,6 +41,7 @@ pub const Cipher = struct {
         password: []const u8,
         metadata: Metadata,
     ) Error!Cipher {
+        if (metadata.method != .rar30) return error.InvalidRar4EncryptionMetadata;
         return .{ .keys = try crypto.deriveKeys(allocator, password, metadata.salt) };
     }
 
@@ -127,7 +138,7 @@ pub fn encryptAlloc(
     return .{
         .allocator = allocator,
         .bytes = try cipher.encryptAlloc(allocator, payload),
-        .metadata = .{ .salt = options.salt },
+        .metadata = .{ .method = .rar30, .salt = options.salt },
     };
 }
 
@@ -137,12 +148,84 @@ pub fn decryptAlloc(
     password: []const u8,
     metadata: Metadata,
 ) Error!Decrypted {
+    if (metadata.method != .rar30) {
+        if (metadata.salt != null) return error.InvalidRar4EncryptionMetadata;
+        const plaintext = try allocator.dupe(u8, ciphertext);
+        errdefer {
+            std.crypto.secureZero(u8, plaintext);
+            allocator.free(plaintext);
+        }
+        switch (metadata.method) {
+            .rar15 => {
+                var cipher = legacy.Rar15.init(password);
+                defer cipher.deinit();
+                cipher.crypt(plaintext);
+            },
+            .rar20 => {
+                var cipher = legacy.Rar20.init(password);
+                defer cipher.deinit();
+                cipher.decryptBlocks(plaintext) catch return error.InvalidRar4Ciphertext;
+            },
+            .rar30 => unreachable,
+        }
+        return .{ .allocator = allocator, .bytes = plaintext };
+    }
     var cipher = try Cipher.init(allocator, password, metadata);
     defer cipher.deinit();
     return .{
         .allocator = allocator,
         .bytes = try cipher.decryptAlloc(allocator, ciphertext),
     };
+}
+
+test "RAR15 and RAR20 composition dispatches to Vail" {
+    const allocator = std.testing.allocator;
+    const rar15_bytes = [_]u8{ 0x43, 0xdd, 0x9d, 0xf3, 0x2a, 0x83, 0xdb, 0x8f };
+    var rar15_plain = try decryptAlloc(
+        allocator,
+        &rar15_bytes,
+        "password",
+        .{ .method = .rar15, .salt = null },
+    );
+    defer rar15_plain.deinit();
+    try std.testing.expectEqualSlices(u8, &.{ 0, 1, 2, 3, 4, 5, 6, 7 }, rar15_plain.bytes);
+    try std.testing.expectError(
+        error.InvalidRar4EncryptionMetadata,
+        decryptAlloc(
+            allocator,
+            &rar15_bytes,
+            "password",
+            .{ .method = .rar15, .salt = [_]u8{0} ** salt_len },
+        ),
+    );
+
+    const rar20_bytes = [_]u8{
+        0x84, 0x0c, 0x88, 0x90, 0x05, 0x93, 0x3a, 0x4e,
+        0x0d, 0xa7, 0xf0, 0x86, 0x87, 0x5a, 0xd8, 0x28,
+    };
+    var rar20_plain = try decryptAlloc(
+        allocator,
+        &rar20_bytes,
+        "password",
+        .{ .method = .rar20, .salt = null },
+    );
+    defer rar20_plain.deinit();
+    try std.testing.expectEqualSlices(
+        u8,
+        &.{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 },
+        rar20_plain.bytes,
+    );
+
+    var partial: [15]u8 = undefined;
+    try std.testing.expectError(
+        error.InvalidRar4Ciphertext,
+        decryptAlloc(
+            allocator,
+            &partial,
+            "password",
+            .{ .method = .rar20, .salt = null },
+        ),
+    );
 }
 
 test "RAR4 encryption composition pads and decrypts" {

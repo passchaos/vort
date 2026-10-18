@@ -47,7 +47,8 @@ version, sizes, CRC, host OS, attributes, timestamp, directory/encryption/solid
 flags, split-before/split-after state, unknown-size state, redirection presence,
 and path-safety classification. RAR5 encrypted entries additionally expose the
 version, flags, KDF count, salt, IV, and optional password-check record.
-RAR4 AES entries expose their optional 8-byte salt separately.
+RAR 1.5-4.x encrypted entries expose their selected RAR15, RAR20, or RAR30
+cipher generation and, for RAR30 AES, the optional 8-byte salt.
 Borrowed RAR4 entries retain their ANSI fallback and encoded Unicode bytecode.
 The owned-header parser strictly decodes that bytecode to UTF-8, makes it the
 preferred `Entry.name` used by lookup, and preserves a separately owned
@@ -64,7 +65,7 @@ independent from the PPMd model-memory limit and per-invocation VM instruction
 budget. These default to 256 MiB and 25 million instructions, respectively. The
 independent RAR5 dictionary-size ceiling defaults to `usize`'s maximum; the
 declared dictionary bounds match validation but the dictionary is not allocated
-eagerly. `password` enables RAR4/RAR5 file-data decryption and
+eagerly. `password` enables RAR15/RAR20/RAR4/RAR5 file-data decryption and
 `max_rar5_kdf_count` independently bounds its binary-log PBKDF2 work before
 derivation or output allocation. The default ceiling is 24.
 
@@ -74,6 +75,14 @@ blocks, and password-dependent CRC-32 verification. The cryptographic
 primitives come from `../vail/archive_crypto`; Vort owns only the RAR extra
 record, limits, padding, checksum policy, and codec composition. Missing,
 wrong, malformed, and over-budget passwords/KDF records have distinct errors.
+
+RAR 1.5 members use the historical symmetric byte-stream cipher; RAR 2.0/2.6
+members use the state-updating 16-byte RAR20 block cipher. Both reset their
+password state for every member, have neither salt nor a password-check record,
+and rely on codec validation plus the final member CRC to reject a wrong
+password. The primitives, password truncation and embedded-NUL compatibility
+come from `../vail/archive_crypto`. Sequential solid extraction composes member-
+local cipher reset with cross-member RAR15/RAR20 codec history and table state.
 
 RAR 2.9/3.x/4.x Stored, RAR29 LZ and RAR29 PPMd members support the historical
 AES-128-CBC mode with salted or unsalted headers. Vail owns UTF-16LE password
@@ -112,8 +121,8 @@ session concatenates packed fragments before decoding and carries RAR29/RAR50
 solid state across logical entries and volume boundaries.
 `parseRarVolumeSetAllocWithOptions` applies the same owned-header/password
 policy independently to every volume. Encrypted member ciphertext is joined
-across arbitrary fragment cuts before one CBC decode, matching RAR's reuse of
-the same file salt/IV record in every fragment.
+across arbitrary fragment cuts before one version-selected stateful decrypt,
+matching RAR's reuse of one member cipher state across its fragments.
 Directories, unsupported compressed data, encrypted RAR5 redirections,
 unknown-size members, incomplete split-volume members, and unsupported
 cross-generation legacy solid transitions return specific errors. This
@@ -249,8 +258,12 @@ entries are classified correctly, checks SFX parsing and both CRC layers, exerci
 and RAR5 split-volume fixtures, and compares RAR15/RAR20 text, multiblock,
 keep-table, long-history and audio plus ordinary RAR29 LZ and PPMd literal,
 escape, match, mixed-member, and solid-member outputs byte-for-byte with
-7-Zip. It also covers all six standard RAR VM filters, LZ and PPMd filter
-records, 64-channel Delta, program reuse and unusual encoded integers. A
+7-Zip. Authentic RAR 1.54 and WinRAR 2.02 encrypted fixtures add one RAR15 and
+two RAR20 members; RAR20 is compared with 7-Zip, and all three are compared
+with unrar (`rar15_encrypted_entries=1`, `rar20_encrypted_entries=2`,
+`legacy_encrypted_unrar_entries=3`). It also covers all six standard RAR VM
+filters, LZ and PPMd filter records, 64-channel Delta, program reuse and
+unusual encoded integers. A
 checksum-valid generic-program mutation is compared with its canonical
 standard-program output. RAR5 checks cover compression methods 1, 3, and 5,
 all four native filters, generated multi-block input, malformed first-block
@@ -267,6 +280,7 @@ zig build run-rar-diff -- \
   --7zz path/to/7zz \
   --rar path/to/rar \
   --rar4 path/to/rar-6.21 \
+  --unrar path/to/unrar \
   --rars path/to/reference-writer \
   --fixtures path/to/unarc-rs/crates/unarc-rs/tests/rar/multi \
   --legacy-fixtures path/to/rars/tests/fixtures/rar15_40
@@ -279,7 +293,6 @@ zig build run -- extract-rar-volumes entry.bin output.bin 1048576 --password=pas
   archive.part1.rar archive.part2.rar archive.part3.rar
 ```
 
-Pre-RAR29 legacy encryption and mixed RAR15/RAR20 solid transitions remain
-compatibility follow-ups. The next RAR4
-writer stages include PPMd-attached VM filters. PPMd hybrid match escapes
+Mixed RAR15/RAR20 solid transitions remain a compatibility follow-up. The next
+RAR4 writer stages include PPMd-attached VM filters. PPMd hybrid match escapes
 remain a later compression-ratio optimization.

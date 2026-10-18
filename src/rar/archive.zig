@@ -1410,7 +1410,12 @@ fn parseRar4BlockInternal(
             .encrypted = raw.flags & rar4_file_password != 0,
             .encryption = null,
             .rar4_encryption = if (raw.flags & rar4_file_password != 0)
-                .{ .salt = salt }
+                switch (compression_version) {
+                    15 => .{ .method = .rar15, .salt = salt },
+                    20, 26 => .{ .method = .rar20, .salt = salt },
+                    29...std.math.maxInt(u8) => .{ .method = .rar30, .salt = salt },
+                    else => null,
+                }
             else
                 null,
             .solid = raw.flags & rar4_file_solid != 0,

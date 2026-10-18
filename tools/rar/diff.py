@@ -61,6 +61,7 @@ def compare_archive_entries(
     label: str,
     method: str | None = None,
     solid: bool | None = None,
+    password: str | None = None,
 ) -> int:
     listing = run(cli, "list-rar-file", str(archive)).stdout
     names = [
@@ -72,10 +73,20 @@ def compare_archive_entries(
     ]
     reference = root / f"reference-{label}"
     reference.mkdir()
-    run(seven_zip, "x", "-y", f"-o{reference}", str(archive))
+    password_arg = (f"-p{password}",) if password is not None else ()
+    run(seven_zip, "x", "-y", *password_arg, f"-o{reference}", str(archive))
     for index, name in enumerate(names):
         output = root / f"decoded-{label}-{index}.out"
-        run(cli, "extract-rar-file", str(archive), name, str(output), str(256 * 1024 * 1024))
+        cli_password = (password,) if password is not None else ()
+        run(
+            cli,
+            "extract-rar-file",
+            str(archive),
+            name,
+            str(output),
+            str(256 * 1024 * 1024),
+            *cli_password,
+        )
         expected = reference.joinpath(*name.replace("\\", "/").split("/"))
         if output.read_bytes() != expected.read_bytes():
             raise AssertionError(f"Vort mismatch for {archive.name}:{name}")
@@ -88,6 +99,8 @@ def compare_unrar_entries(
     archive: Path,
     root: Path,
     label: str,
+    password: str | None = None,
+    accepted_exit_codes: tuple[int, ...] = (0,),
 ) -> int:
     listing = run(cli, "list-rar-file", str(archive)).stdout
     names = [
@@ -97,9 +110,24 @@ def compare_unrar_entries(
     ]
     reference = root / f"unrar-reference-{label}"
     reference.mkdir()
-    run(unrar, "x", "-o+", "-idq", str(archive), f"{reference}/")
+    password_arg = f"-p{password}" if password is not None else "-p-"
+    extracted = run(
+        unrar,
+        "x",
+        "-o+",
+        "-idq",
+        password_arg,
+        str(archive),
+        f"{reference}/",
+        check=False,
+    )
+    if extracted.returncode not in accepted_exit_codes:
+        raise AssertionError(
+            f"unrar failed for {archive.name}: {extracted.returncode}: {extracted.stderr}"
+        )
     for index, name in enumerate(names):
         output = root / f"unrar-decoded-{label}-{index}.out"
+        cli_password = (password,) if password is not None else ()
         run(
             cli,
             "extract-rar-file",
@@ -107,6 +135,7 @@ def compare_unrar_entries(
             name,
             str(output),
             str(256 * 1024 * 1024),
+            *cli_password,
         )
         expected = reference.joinpath(*name.replace("\\", "/").split("/"))
         if output.read_bytes() != expected.read_bytes():
@@ -209,6 +238,9 @@ def main() -> None:
     rar15_solid_entries = 0
     rar20_solid_entries = 0
     legacy_solid_unrar_entries = 0
+    rar15_encrypted_entries = 0
+    rar20_encrypted_entries = 0
+    legacy_encrypted_unrar_entries = 0
     rar29_entries = 0
     rar29_ppmd_entries = 0
     rar29_vm_entries = 0
@@ -1304,6 +1336,18 @@ def main() -> None:
                 "rar20-solid",
                 method="rar20",
             )
+
+            rar15_encrypted = args.legacy_fixtures / "rar154" / "readme_154_password.rar"
+            rar20_encrypted = args.legacy_fixtures / "rar202" / "comment_psw.rar"
+            rar20_encrypted_entries += compare_archive_entries(
+                args.cli,
+                seven_zip,
+                rar20_encrypted,
+                temp,
+                "rar20-encrypted",
+                method="rar20",
+                password="password",
+            )
             if unrar_tool is not None:
                 legacy_solid_unrar_entries += compare_unrar_entries(
                     args.cli,
@@ -1318,6 +1362,25 @@ def main() -> None:
                     rar20_solid,
                     temp,
                     "rar20-solid",
+                )
+                rar15_unrar_entries = compare_unrar_entries(
+                    args.cli,
+                    unrar_tool,
+                    rar15_encrypted,
+                    temp,
+                    "rar15-encrypted",
+                    password="password",
+                )
+                rar15_encrypted_entries += rar15_unrar_entries
+                legacy_encrypted_unrar_entries += rar15_unrar_entries
+                legacy_encrypted_unrar_entries += compare_unrar_entries(
+                    args.cli,
+                    unrar_tool,
+                    rar20_encrypted,
+                    temp,
+                    "rar20-encrypted",
+                    password="password",
+                    accepted_exit_codes=(0, 3),
                 )
 
             rar29_archives = (
@@ -1579,20 +1642,16 @@ def main() -> None:
             if failed.returncode == 0 or "InvalidRar50Stream" not in failed.stderr:
                 raise AssertionError("Vort accepted a first RAR50 block without tables")
 
-            encrypted = args.legacy_fixtures / "rar154" / "readme_154_password.rar"
             failed = run(
                 args.cli,
                 "extract-rar-file",
-                str(encrypted),
+                str(rar15_encrypted),
                 "README.md",
                 str(temp / "encrypted.out"),
                 check=False,
             )
-            if failed.returncode == 0 or not (
-                "EncryptedRarEntry" in failed.stderr
-                or "RarPasswordRequired" in failed.stderr
-            ):
-                raise AssertionError("Vort accepted encrypted RAR15 data")
+            if failed.returncode == 0 or "RarPasswordRequired" not in failed.stderr:
+                raise AssertionError("Vort accepted encrypted RAR15 data without a password")
 
         original = temp / "vort-rar5-first.rar"
         sfx = temp / "sfx.rar"
@@ -1667,6 +1726,9 @@ def main() -> None:
         f"rar15_solid_entries={rar15_solid_entries} "
         f"rar20_solid_entries={rar20_solid_entries} "
         f"legacy_solid_unrar_entries={legacy_solid_unrar_entries} "
+        f"rar15_encrypted_entries={rar15_encrypted_entries} "
+        f"rar20_encrypted_entries={rar20_encrypted_entries} "
+        f"legacy_encrypted_unrar_entries={legacy_encrypted_unrar_entries} "
         f"rar29_ppmd_entries={rar29_ppmd_entries} "
         f"rar29_vm_entries={rar29_vm_entries} "
         f"rar50_entries={rar50_entries} "

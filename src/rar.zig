@@ -81,6 +81,7 @@ test {
     _ = volume_set;
     _ = writer;
     _ = @import("rar/encrypted_header_tests.zig");
+    _ = @import("rar/legacy_encryption_tests.zig");
     _ = @import("rar/legacy_solid_tests.zig");
     _ = @import("rar/rar4_encryption_tests.zig");
     _ = @import("rar/rar4_name_tests.zig");

@@ -21581,3 +21581,16 @@ reuse, so production keeps the simpler independently owned plans.
   `legacy_solid_unrar_entries=4`). Mixed RAR15↔RAR20 solid algorithm changes
   remain explicitly unsupported until shared cross-decoder state translation
   is implemented.
+
+- Added pre-RAR29 encrypted-member decoding. `../vail/archive_crypto` now owns
+  the RAR15 symmetric byte cipher and the RAR20/26 state-updating 16-byte block
+  cipher, including historical C-string password truncation, secure state
+  cleanup and fixed vectors. Vort selects the cipher from `UNP_VER`, rejects
+  illegal legacy salt/block layouts, resets password state per member, and
+  composes decryption with archive/volume extraction plus cross-member solid
+  codec state. Checked-in RAR 1.54 and WinRAR 2.02 Base64 fixtures pin one
+  RAR15 and two RAR20 outputs, missing/wrong passwords and exhaustive OOM
+  cleanup; derived encrypted-solid archives cover both generations. Focused
+  RAR coverage is now 132 tests. The external matrix compares RAR20 with 7-Zip
+  and all three members with unrar (`rar15_encrypted_entries=1`,
+  `rar20_encrypted_entries=2`, `legacy_encrypted_unrar_entries=3`).
