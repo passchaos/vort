@@ -59,6 +59,7 @@ pub fn Decoder(comptime Codec: type) type {
 
         const Self = @This();
         pub const Error = Codec.Error;
+        pub const embedded_compressed_header_capacity: usize = Codec.max_stream_header_bytes;
         pub const Options = struct {
             max_output_len: usize = std.math.maxInt(usize),
             expected_output_len: ?usize = null,
@@ -89,6 +90,7 @@ pub fn Decoder(comptime Codec: type) type {
             copy_distance: usize,
             last_distances: [4]usize,
             retained_input_bytes: usize,
+            compressed_header_capacity: usize,
             history_bytes: usize,
             metadata_written: usize,
             metadata_total: usize,
@@ -134,6 +136,7 @@ pub fn Decoder(comptime Codec: type) type {
                 .copy_distance = self.copy_distance,
                 .last_distances = self.last_distances,
                 .retained_input_bytes = self.header_len,
+                .compressed_header_capacity = self.headerStorageConst().len,
                 .history_bytes = @min(self.total_output, self.history.len),
                 .metadata_written = self.metadata_written,
                 .metadata_total = self.metadata_total,
@@ -168,6 +171,18 @@ pub fn Decoder(comptime Codec: type) type {
             if (self.phase != .done or !self.options.allow_trailing_data)
                 return &.{};
             return self.trailing_bytes[0..self.trailing_len];
+        }
+
+        /// Replace compressed-header storage without resetting the progressive
+        /// state. The new slice must not alias decoder input, output, history,
+        /// or the previous scratch and must remain valid for the decoder's
+        /// lifetime (or until another successful replacement).
+        pub fn replaceCompressedHeaderScratch(self: *Self, scratch: []u8) Error!void {
+            const current = self.headerStorageConst();
+            if (scratch.len <= current.len or scratch.len < self.header_len)
+                return error.OutputTooSmall;
+            @memcpy(scratch[0..self.header_len], current[0..self.header_len]);
+            self.options.compressed_header_scratch = scratch;
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
@@ -747,6 +762,11 @@ pub fn Decoder(comptime Codec: type) type {
             self.phase = .command;
         }
         fn headerStorage(self: *Self) []u8 {
+            if (self.options.compressed_header_scratch.len > self.header_bytes.len)
+                return self.options.compressed_header_scratch;
+            return &self.header_bytes;
+        }
+        fn headerStorageConst(self: *const Self) []const u8 {
             if (self.options.compressed_header_scratch.len > self.header_bytes.len)
                 return self.options.compressed_header_scratch;
             return &self.header_bytes;

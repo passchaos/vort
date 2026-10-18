@@ -451,6 +451,7 @@ pub fn main(init: std.process.Init) !void {
     var maximum_literal_type_cases: usize = 0;
     var maximum_command_type_cases: usize = 0;
     var extended_header_cases: usize = 0;
+    var extended_header_owned_cases: usize = 0;
     var operation_schedule_cases: usize = 0;
     var allocating_summary_history_cases: usize = 0;
     var high_tree_truncation_cases: usize = 0;
@@ -779,9 +780,11 @@ pub fn main(init: std.process.Init) !void {
     const large_header_scratch = try init.gpa.alloc(u8, large_header.len);
     defer init.gpa.free(large_header_scratch);
     try decodeProgressChunksWithHeaderScratch(init.gpa, large_header, "x", 16, 257, 1, large_header_scratch);
+    try decodeOwnedLargeHeader(init.gpa, large_header, "x", large_header.len, 1);
     progress_matrix_runs += 1;
     progress_matrix_streams += 1;
     extended_header_cases += 1;
+    extended_header_owned_cases += 1;
 
     const metadata = "vort/libbrotli metadata boundary";
     const metadata_operations = [_]libbrotli.Runtime.StreamingOperation{
@@ -1721,8 +1724,8 @@ pub fn main(init: std.process.Init) !void {
         .{ cases_run, one_shot_cases, large_window_decode_cases, broad_generated_cases, broad_progressive_cases, real_file_cases, real_progressive_cases, real_options.len, real_quality_mask, real_mode_mask, real_window_mask },
     );
     try stdout.interface.print(
-        "planned_window_cases={d} planned_literal_split_cases={d} planned_command_split_cases={d} planned_distance_split_cases={d} planned_distance_parameter_cases={d} planned_chunked_window_cases={d} planned_quality_block_size_cases={d} planned_stream_segmentation_cases={d} planned_large_window_cases={d} planned_large_quality_cases={d} planned_metadata_cases={d} planned_extended_dictionary_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} high_tree_truncation_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
-        .{ planned_window_cases, planned_literal_split_cases, planned_command_split_cases, planned_distance_split_cases, planned_distance_parameter_cases, planned_chunked_window_cases, planned_quality_block_size_cases, planned_stream_segmentation_cases, planned_large_window_cases, planned_large_quality_cases, planned_metadata_cases, planned_extended_dictionary_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, high_tree_truncation_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, operation_schedule_cases, reference.version() },
+        "planned_window_cases={d} planned_literal_split_cases={d} planned_command_split_cases={d} planned_distance_split_cases={d} planned_distance_parameter_cases={d} planned_chunked_window_cases={d} planned_quality_block_size_cases={d} planned_stream_segmentation_cases={d} planned_large_window_cases={d} planned_large_quality_cases={d} planned_metadata_cases={d} planned_extended_dictionary_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} allocating_summary_history_cases={d} high_tree_truncation_cases={d} wide_literal_type_cases={d} maximum_literal_type_cases={d} maximum_command_type_cases={d} extended_header_cases={d} extended_header_owned_cases={d} operation_schedule_cases={d} invalid_operation_schedule_cases=2 reference_version={x}\n",
+        .{ planned_window_cases, planned_literal_split_cases, planned_command_split_cases, planned_distance_split_cases, planned_distance_parameter_cases, planned_chunked_window_cases, planned_quality_block_size_cases, planned_stream_segmentation_cases, planned_large_window_cases, planned_large_quality_cases, planned_metadata_cases, planned_extended_dictionary_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, allocating_summary_history_cases, high_tree_truncation_cases, wide_literal_type_cases, maximum_literal_type_cases, maximum_command_type_cases, extended_header_cases, extended_header_owned_cases, operation_schedule_cases, reference.version() },
     );
     try stdout.interface.flush();
 }
@@ -2022,6 +2025,44 @@ fn decodeProgressChunksWithHeaderScratch(allocator: std.mem.Allocator, encoded: 
 
     const one_shot_written = try vort.brDecodeStreamInto(encoded, output);
     if (one_shot_written != expected.len or !std.mem.eql(u8, output, expected))
+        return error.SizeMismatch;
+}
+
+fn decodeOwnedLargeHeader(
+    allocator: std.mem.Allocator,
+    encoded: []const u8,
+    expected: []const u8,
+    input_chunk_len: usize,
+    output_chunk_len: usize,
+) !void {
+    var decoder = vort.BrotliIncrementalStreamDecoder.initExactCompressedSize(
+        allocator,
+        .{ .expected_output_len = expected.len },
+        encoded.len,
+    );
+    defer decoder.deinit();
+    const output = try allocator.alloc(u8, expected.len);
+    defer allocator.free(output);
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(encoded.len, input_offset + input_chunk_len);
+        const output_end = @min(output.len, output_offset + output_chunk_len);
+        const step = try decoder.step(
+            encoded[input_offset..input_end],
+            output[output_offset..output_end],
+        );
+        if (step.progress.input_read == 0 and step.progress.output_written == 0)
+            return error.ReferenceDecodeFailed;
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+    }
+    const snapshot = decoder.snapshot();
+    if (snapshot.owned_compressed_header_capacity <=
+        vort.brotliDefaultIncrementalCompressedHeaderBytes)
+        return error.ReferenceDecodeFailed;
+    if (input_offset != encoded.len or output_offset != expected.len or
+        !std.mem.eql(u8, output, expected))
         return error.SizeMismatch;
 }
 

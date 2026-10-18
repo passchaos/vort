@@ -28,8 +28,9 @@ major gaps before Vort can claim broad industry-best parity:
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
   entropy block switching, static dictionaries, consecutive compressed
   meta-blocks, and the full 256 literal/command/distance block-type ranges.
-  Arbitrary upstream Brotli streams still need broader corpus coverage, and the
-  general fallback facade buffers a bounded complete payload.
+  The allocator-owned general decoder now wraps that state machine without a
+  complete compressed or decoded payload buffer; arbitrary upstream streams
+  still need broader real-corpus and cross-platform coverage.
 - Incremental DEFLATE source and JSON throughput now reach or exceed the local
   zlib-ng level-6 comparison on the locked 256 KiB fixtures, while broader
   real-corpus, ratio, memory, and cross-platform parity still needs evidence.
@@ -21678,3 +21679,20 @@ reuse, so production keeps the simpler independently owned plans.
   members through all four maps (`bsd_symbol_read=2`, `bsd_symbol_write=4`,
   `bsd_symbol_extract=4`, `bsd_symbol_link=4`). Focused ar/deb coverage rises
   from 134 to 138 tests.
+
+- Removed the remaining external-scratch requirement from the allocator-owned
+  general Brotli incremental decoder for unusually large legal entropy headers.
+  It retains the 16 KiB embedded fast path, feeds the allocation-free core in
+  bounded chunks, and geometrically grows reusable owned header storage only
+  when necessary. `max_compressed_header_len` bounds automatic storage (1 MiB
+  by default); a legal header beyond the selected bound reports
+  `OutputLimitExceeded`, while explicit caller scratch still avoids allocation
+  and the caller-history decoder remains allocation-free. Scratch replacement
+  copies live partial header bits before releasing old storage, supports reset
+  and `nextFrame` reuse, and exposes embedded/effective/owned capacities in
+  snapshots. Focused tests cover one-call input, exact external scratch,
+  explicit limits, cross-frame reuse and exhaustive allocation failure. The
+  complete libbrotli 1.0.9 matrix passes 98 core, 7,056 one-shot, 7,056
+  progressive and 1,401 fragmentation cases, with the 17,261-byte header now
+  required through both caller-scratch and automatic-owned paths
+  (`extended_header_cases=1`, `extended_header_owned_cases=1`).

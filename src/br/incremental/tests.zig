@@ -328,4 +328,87 @@ test "Brotli incremental decoder forwards metadata and external header scratch" 
         output_offset += step.progress.output_written;
     }
     try std.testing.expectEqualSlices(u8, "x", &large_output);
+    try std.testing.expectEqual(@as(usize, 0), decoder.snapshot().owned_compressed_header_capacity);
+    try std.testing.expectEqual(header_scratch.len, decoder.snapshot().compressed_header_capacity);
+}
+
+test "Brotli incremental decoder owns large headers on demand" {
+    const encoded = try br.IncrementalTestSupport.encodeLargeCompressedHeader(std.testing.allocator);
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expect(encoded.len > br.default_incremental_compressed_header_bytes);
+
+    var decoder = br.IncrementalStreamDecoder.initExactCompressedSize(
+        std.testing.allocator,
+        .{ .expected_output_len = 1 },
+        encoded.len,
+    );
+    defer decoder.deinit();
+    var output: [1]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const step = try decoder.step(encoded[input_offset..], output[output_offset..]);
+        try std.testing.expect(step.progress.input_read != 0 or step.progress.output_written != 0);
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+    }
+    try std.testing.expectEqualSlices(u8, "x", &output);
+    try std.testing.expectEqual(encoded.len, input_offset);
+    const snapshot = decoder.snapshot();
+    try std.testing.expect(snapshot.compressed_header_capacity > br.default_incremental_compressed_header_bytes);
+    try std.testing.expectEqual(snapshot.compressed_header_capacity, snapshot.owned_compressed_header_capacity);
+
+    const retained_capacity = snapshot.owned_compressed_header_capacity;
+    try decoder.nextFrameExactCompressedSize(.{ .expected_output_len = 1 }, encoded.len);
+    input_offset = 0;
+    output_offset = 0;
+    while (decoder.snapshot().phase != .done) {
+        const step = try decoder.step(encoded[input_offset..], output[output_offset..]);
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+    }
+    try std.testing.expectEqual(retained_capacity, decoder.snapshot().owned_compressed_header_capacity);
+    try std.testing.expectEqualSlices(u8, "x", &output);
+}
+
+test "Brotli incremental decoder bounds owned large headers" {
+    const encoded = try br.IncrementalTestSupport.encodeLargeCompressedHeader(std.testing.allocator);
+    defer std.testing.allocator.free(encoded);
+    var decoder = br.IncrementalStreamDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = 1,
+        .max_compressed_header_len = br.default_incremental_compressed_header_bytes,
+    });
+    defer decoder.deinit();
+    var output: [1]u8 = undefined;
+    try std.testing.expectError(error.OutputLimitExceeded, decoder.step(encoded, &output));
+    try std.testing.expectEqualStrings("OutputLimitExceeded", decoder.snapshot().last_error_name);
+}
+
+test "Brotli incremental decoder releases owned large header allocation failures" {
+    const encoded = try br.IncrementalTestSupport.encodeLargeCompressedHeader(std.testing.allocator);
+    defer std.testing.allocator.free(encoded);
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator, stream: []const u8) !void {
+            var decoder = br.IncrementalStreamDecoder.initExactCompressedSize(
+                allocator,
+                .{ .expected_output_len = 1 },
+                stream.len,
+            );
+            defer decoder.deinit();
+            var output: [1]u8 = undefined;
+            var input_offset: usize = 0;
+            var output_offset: usize = 0;
+            while (decoder.snapshot().phase != .done) {
+                const step = try decoder.step(stream[input_offset..], output[output_offset..]);
+                input_offset += step.progress.input_read;
+                output_offset += step.progress.output_written;
+            }
+            try std.testing.expectEqualSlices(u8, "x", &output);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{encoded},
+    );
 }

@@ -2,13 +2,15 @@ const std = @import("std");
 const core = @import("../../core.zig");
 
 /// Allocator-owning facade for the true symbol-progressive Brotli decoder.
-/// Only the bounded history ring is owned here; compressed input and decoded
-/// output remain caller-provided on every step.
+/// It owns the bounded history ring and, only for an entropy header larger than
+/// the embedded capacity, bounded grow-on-demand header scratch. Compressed
+/// input and decoded output remain caller-provided on every step.
 pub fn Decoder(comptime Codec: type) type {
     return struct {
         allocator: std.mem.Allocator,
         options: Options,
         history: std.ArrayList(u8) = .empty,
+        compressed_header: std.ArrayList(u8) = .empty,
         progressive: ?Codec.ProgressiveDecoder = null,
         window_prefix: [2]u8 = undefined,
         window_prefix_len: u2 = 0,
@@ -36,6 +38,10 @@ pub fn Decoder(comptime Codec: type) type {
             /// Maximum owned history. The default covers every RFC 7932
             /// window; Large Window streams may opt into a larger bound.
             max_history_len: usize = (@as(usize, 1) << 24) - 16,
+            /// Maximum header bytes the owned facade may allocate on demand.
+            /// The embedded 16 KiB remains available even when this is lower;
+            /// raise the bound for unusually large but legal entropy headers.
+            max_compressed_header_len: usize = 1024 * 1024,
             decode: Codec.DecodeOptions = .{},
             compressed_header_scratch: []u8 = &.{},
             metadata_output: []u8 = &.{},
@@ -51,6 +57,8 @@ pub fn Decoder(comptime Codec: type) type {
             expected_output_len: ?usize,
             payload_remaining: usize,
             retained_input_bytes: usize,
+            compressed_header_capacity: usize,
+            owned_compressed_header_capacity: usize,
             history_bytes: usize,
             history_capacity: usize,
             total_compressed: usize,
@@ -78,6 +86,7 @@ pub fn Decoder(comptime Codec: type) type {
 
         pub fn deinit(self: *Self) void {
             self.history.deinit(self.allocator);
+            self.compressed_header.deinit(self.allocator);
             self.* = undefined;
         }
 
@@ -92,6 +101,7 @@ pub fn Decoder(comptime Codec: type) type {
             const allocator = self.allocator;
             var history = self.history;
             history.clearRetainingCapacity();
+            const compressed_header = self.compressed_header;
             const total_compressed = self.total_compressed;
             const total_output = self.total_output;
             const frame_count = self.frame_count;
@@ -99,6 +109,7 @@ pub fn Decoder(comptime Codec: type) type {
                 .allocator = allocator,
                 .options = options,
                 .history = history,
+                .compressed_header = compressed_header,
                 .total_compressed = total_compressed,
                 .total_output = total_output,
                 .frame_count = frame_count,
@@ -126,6 +137,11 @@ pub fn Decoder(comptime Codec: type) type {
                 .expected_output_len = self.options.expected_output_len,
                 .payload_remaining = if (inner) |snap| snap.payload_remaining else self.options.expected_output_len orelse 0,
                 .retained_input_bytes = if (inner) |snap| snap.retained_input_bytes else 0,
+                .compressed_header_capacity = if (inner) |snap|
+                    snap.compressed_header_capacity
+                else
+                    Codec.ProgressiveDecoder.embedded_compressed_header_capacity,
+                .owned_compressed_header_capacity = self.compressed_header.items.len,
                 .history_bytes = if (inner) |snap| snap.history_bytes else 0,
                 .history_capacity = self.history.items.len,
                 .total_compressed = self.total_compressed + if (self.phase == .done) 0 else self.frame_input_read,
@@ -209,8 +225,14 @@ pub fn Decoder(comptime Codec: type) type {
 
                 if (input_read == input.len and self.last_status != .need_output and !self.input_finished)
                     return self.completeStep(input_read, output_written, .need_input);
+                self.ensureCompressedHeaderCapacity(input.len - input_read) catch |err|
+                    return self.failWithProgress(.input, err, input_read, output_written);
+                const input_end = input_read + @min(
+                    input.len - input_read,
+                    progressive_input_chunk_len,
+                );
                 const inner = self.progressive.?.step(
-                    input[input_read..],
+                    input[input_read..input_end],
                     output[output_written..],
                 ) catch |err| return self.failWithProgress(self.phase, self.mapHistoryError(err), input_read, output_written);
                 input_read += inner.progress.input_read;
@@ -270,16 +292,68 @@ pub fn Decoder(comptime Codec: type) type {
             )) orelse return false;
             try self.history.resize(self.allocator, plan.allocation_len);
             self.history_capped = plan.capped;
+            const header_limit = self.compressedHeaderLimit();
+            const header_scratch: []u8 = if (self.options.compressed_header_scratch.len >
+                Codec.ProgressiveDecoder.embedded_compressed_header_capacity)
+                self.options.compressed_header_scratch[0..@min(
+                    self.options.compressed_header_scratch.len,
+                    header_limit,
+                )]
+            else if (self.compressed_header.items.len >
+                Codec.ProgressiveDecoder.embedded_compressed_header_capacity)
+                self.compressed_header.items[0..@min(
+                    self.compressed_header.items.len,
+                    header_limit,
+                )]
+            else
+                self.history.items[0..0];
             self.progressive = Codec.ProgressiveDecoder.initWithOptions(self.history.items, .{
                 .max_output_len = self.options.max_output_len,
                 .expected_output_len = self.options.expected_output_len,
                 .decode = self.options.decode,
-                .compressed_header_scratch = self.options.compressed_header_scratch,
+                .compressed_header_scratch = header_scratch,
                 .metadata_output = self.options.metadata_output,
                 .metadata_block_lengths = self.options.metadata_block_lengths,
                 .allow_trailing_data = self.options.allow_trailing_data,
             });
             return true;
+        }
+
+        const progressive_input_chunk_len: usize = 4096;
+
+        fn compressedHeaderLimit(self: *const Self) usize {
+            return @max(
+                Codec.ProgressiveDecoder.embedded_compressed_header_capacity,
+                self.options.max_compressed_header_len,
+            );
+        }
+
+        fn ensureCompressedHeaderCapacity(self: *Self, available_input: usize) Error!void {
+            const decoder = if (self.progressive) |*value| value else return;
+            const inner_snapshot = decoder.snapshot();
+            if (inner_snapshot.phase != .compressed_header) return;
+            const additional = @min(available_input, progressive_input_chunk_len);
+            const needed = std.math.add(
+                usize,
+                inner_snapshot.retained_input_bytes,
+                additional,
+            ) catch return error.IntegerOverflow;
+            const limit = self.compressedHeaderLimit();
+            if (needed > limit) return error.OutputLimitExceeded;
+            if (inner_snapshot.compressed_header_capacity >= needed) return;
+
+            const doubled = std.math.mul(
+                usize,
+                inner_snapshot.compressed_header_capacity,
+                2,
+            ) catch limit;
+            const target = @min(limit, @max(needed, doubled));
+            var replacement: std.ArrayList(u8) = .empty;
+            errdefer replacement.deinit(self.allocator);
+            try replacement.resize(self.allocator, target);
+            try decoder.replaceCompressedHeaderScratch(replacement.items);
+            self.compressed_header.deinit(self.allocator);
+            self.compressed_header = replacement;
         }
 
         fn mapHistoryError(self: *const Self, err: Error) Error {
