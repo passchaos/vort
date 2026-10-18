@@ -17,6 +17,11 @@ pub const Error = core.Error || std.mem.Allocator.Error || error{
 pub const dentry_fixed_size: usize = 102;
 pub const extra_stream_fixed_size: usize = 38;
 
+pub const tagged_item_object_id: u32 = 0x0000_0001;
+pub const tagged_item_xattrs: u32 = 0x0000_0002;
+pub const tagged_item_wimlib_unix_data: u32 = 0x337d_d873;
+pub const tagged_item_wimlib_linux_xattrs: u32 = 0x337d_d874;
+
 pub const file_attribute_directory: u32 = 0x0000_0010;
 pub const file_attribute_reparse_point: u32 = 0x0000_0400;
 pub const file_attribute_encrypted: u32 = 0x0000_4000;
@@ -99,6 +104,31 @@ pub const ExtraStreamIterator = struct {
     }
 };
 
+pub const TaggedItem = struct {
+    tag: u32,
+    data: []const u8,
+};
+
+pub const TaggedItemIterator = struct {
+    bytes: []const u8,
+    offset: usize,
+    end: usize,
+
+    pub fn next(self: *TaggedItemIterator) Error!?TaggedItem {
+        if (self.offset == self.end) return null;
+        const parsed = try parseTaggedItem(self.bytes, self.offset, self.end);
+        self.offset = parsed.next_offset;
+        return parsed.item;
+    }
+};
+
+pub const UnixMetadata = struct {
+    uid: u32,
+    gid: u32,
+    mode: u32,
+    rdev: u32,
+};
+
 pub const Dentry = struct {
     metadata_bytes: []const u8,
     offset: usize,
@@ -114,6 +144,8 @@ pub const Dentry = struct {
     reparse_or_hard_link: u64,
     extra_stream_count: u16,
     extra_stream_offset: usize,
+    tagged_items_offset: usize,
+    tagged_items_end: usize,
     name_utf16le: []const u8,
     short_name_utf16le: []const u8,
 
@@ -159,6 +191,44 @@ pub const Dentry = struct {
             .bytes = self.metadata_bytes,
             .offset = self.extra_stream_offset,
             .remaining = self.extra_stream_count,
+        };
+    }
+
+    pub fn taggedItems(self: Dentry) TaggedItemIterator {
+        return .{
+            .bytes = self.metadata_bytes,
+            .offset = self.tagged_items_offset,
+            .end = self.tagged_items_end,
+        };
+    }
+
+    pub fn findTaggedItem(
+        self: Dentry,
+        tag: u32,
+        min_length: usize,
+    ) Error!?TaggedItem {
+        var items = self.taggedItems();
+        while (try items.next()) |item|
+            if (item.tag == tag and item.data.len >= min_length) return item;
+        return null;
+    }
+
+    pub fn objectId(self: Dentry) Error!?[]const u8 {
+        const item = try self.findTaggedItem(tagged_item_object_id, 16) orelse
+            return null;
+        return item.data;
+    }
+
+    pub fn unixMetadata(self: Dentry) Error!?UnixMetadata {
+        const item = try self.findTaggedItem(
+            tagged_item_wimlib_unix_data,
+            16,
+        ) orelse return null;
+        return .{
+            .uid = readU32(item.data, 0),
+            .gid = readU32(item.data, 4),
+            .mode = readU32(item.data, 8),
+            .rdev = readU32(item.data, 12),
         };
     }
 
@@ -273,7 +343,10 @@ pub const Directory = struct {
         };
         defer allocator.free(units);
         for (self.entries) |entry|
-            if (utf16LeBytesEqualUnits(entry.name_utf16le, units)) return entry;
+            if (utf16LeBytesEqualUnits(entry.name_utf16le, units) or
+                (entry.short_name_utf16le.len != 0 and
+                    utf16LeBytesEqualUnits(entry.short_name_utf16le, units)))
+                return entry;
         return null;
     }
 };
@@ -363,6 +436,16 @@ pub const ImageMetadata = struct {
                 return error.InvalidWimMetadata;
             const name_result = try seen_names.getOrPut(allocator, entry.name_utf16le);
             if (name_result.found_existing) return error.InvalidWimMetadata;
+            if (entry.short_name_utf16le.len != 0) {
+                if (!validDentryName(entry.short_name_utf16le))
+                    return error.InvalidWimMetadata;
+                const short_result = try seen_names.getOrPut(
+                    allocator,
+                    entry.short_name_utf16le,
+                );
+                if (short_result.found_existing)
+                    return error.InvalidWimMetadata;
+            }
             try entries.append(allocator, entry);
             offset = parsed.next_offset;
         }
@@ -484,12 +567,16 @@ fn parseDentry(
     }
     const short_name_end = try checkedEnd(name_offset, short_name_bytes, dentry_end);
     const short_name = bytes[name_offset..short_name_end];
+    var variable_end = short_name_end;
     if (short_name_bytes != 0) {
-        _ = try checkedEnd(short_name_end, 2, dentry_end);
+        variable_end = try checkedEnd(short_name_end, 2, dentry_end);
         if (readU16(bytes, short_name_end) != 0) return error.InvalidWimMetadata;
     }
     if (containsUtf16Unit(name, 0) or containsUtf16Unit(short_name, 0))
         return error.InvalidWimMetadata;
+    const tagged_items_offset = try align8(variable_end);
+    if (tagged_items_offset > dentry_end) return error.InvalidWimMetadata;
+    try validateTaggedItems(bytes, tagged_items_offset, dentry_end);
 
     const extra_stream_count = readU16(bytes, offset + 96);
     var next_offset = dentry_end;
@@ -524,11 +611,52 @@ fn parseDentry(
             .reparse_or_hard_link = readU64(bytes, offset + 88),
             .extra_stream_count = extra_stream_count,
             .extra_stream_offset = dentry_end,
+            .tagged_items_offset = tagged_items_offset,
+            .tagged_items_end = dentry_end,
             .name_utf16le = name,
             .short_name_utf16le = short_name,
         },
         .next_offset = next_offset,
     };
+}
+
+const ParsedTaggedItem = struct {
+    item: TaggedItem,
+    next_offset: usize,
+};
+
+fn parseTaggedItem(
+    bytes: []const u8,
+    offset: usize,
+    end: usize,
+) Error!ParsedTaggedItem {
+    if (offset & 7 != 0 or end > bytes.len or offset > end)
+        return error.InvalidWimMetadata;
+    const data_offset = try checkedEnd(offset, 8, end);
+    const data_length: usize = readU32(bytes, offset + 4);
+    const data_end = try checkedEnd(data_offset, data_length, end);
+    const next_offset = try checkedEnd(
+        data_offset,
+        try align8(data_length),
+        end,
+    );
+    return .{
+        .item = .{
+            .tag = readU32(bytes, offset),
+            .data = bytes[data_offset..data_end],
+        },
+        .next_offset = next_offset,
+    };
+}
+
+fn validateTaggedItems(bytes: []const u8, start: usize, end: usize) Error!void {
+    var offset = start;
+    while (offset < end) {
+        const parsed = try parseTaggedItem(bytes, offset, end);
+        if (parsed.next_offset <= offset) return error.InvalidWimMetadata;
+        offset = parsed.next_offset;
+    }
+    if (offset != end) return error.InvalidWimMetadata;
 }
 
 const ParsedExtraStream = struct {

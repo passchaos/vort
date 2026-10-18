@@ -156,27 +156,54 @@ fn writeInodeMetadata(
         .name = "link.ads",
         .data = "hard link alternate stream",
     }};
+    var unix_data: [16]u8 = undefined;
+    std.mem.writeInt(u32, unix_data[0..4], 1000, .little);
+    std.mem.writeInt(u32, unix_data[4..8], 1001, .little);
+    std.mem.writeInt(u32, unix_data[8..12], 0o100640, .little);
+    std.mem.writeInt(u32, unix_data[12..16], 7, .little);
+    const object_id = [_]u8{
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+    } ++ [_]u8{0x55} ** 48;
+    const hard_tags = [_]vort.WimEncodeTaggedItem{.{
+        .tag = vort.wimTaggedItemWimlibUnixData,
+        .data = &unix_data,
+    }};
+    const object_tags = [_]vort.WimEncodeTaggedItem{.{
+        .tag = vort.wimTaggedItemObjectId,
+        .data = &object_id,
+    }};
     const entries = [_]vort.WimEncodeEntry{
         .{
             .path = "hard/a.txt",
+            .short_name = "HARDLI~1.TXT",
             .data = "hard linked writer payload\n",
             .named_streams = &link_streams,
             .security_descriptor = &null_dacl,
+            .tagged_items = &hard_tags,
             .hard_link_id = 0x4242,
         },
         .{
             .path = "hard/b.txt",
+            .short_name = "HARDLI~2.TXT",
             .data = "hard linked writer payload\n",
             .named_streams = &link_streams,
             .security_descriptor = &null_dacl,
+            .tagged_items = &hard_tags,
             .hard_link_id = 0x4242,
         },
         .{
             .path = "independent.txt",
+            .short_name = "INDEPE~1.TXT",
             .data = "independent security descriptor\n",
             .security_descriptor = &world_owner,
+            .tagged_items = &object_tags,
         },
-        .{ .path = "no-security.txt", .data = "no security descriptor\n" },
+        .{
+            .path = "no-security.txt",
+            .short_name = "NO-SEC~1.TXT",
+            .data = "no security descriptor\n",
+        },
     };
     try writeArchive(init, output_path, compression, &entries, &null_dacl);
 }

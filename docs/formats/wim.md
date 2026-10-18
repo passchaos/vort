@@ -41,13 +41,17 @@ separate caller limits.
 
 Image metadata support validates the security-descriptor prefix, root dentry,
 aligned variable-length dentries, UTF-16LE long and short names, extra stream
-entries, directory-list terminators, security IDs, child offsets, duplicate
-names, and unsafe `.`/`..` or separator-bearing names. `ImageMetadata` owns the
-decompressed metadata resource while `Dentry`, names, and stream entries are
-borrowed views. Directory arrays are caller-owned and independently bounded.
+entries, aligned tagged metadata items, directory-list terminators, security
+IDs, child offsets, duplicate names, and unsafe `.`/`..` or separator-bearing
+names. `ImageMetadata` owns the decompressed metadata resource while `Dentry`,
+names, stream entries and tagged items are borrowed views. `taggedItems()` and
+`findTaggedItem()` preserve known and unknown tags; `objectId()` and
+`unixMetadata()` provide typed views for the standard object-ID and wimlib Unix
+records. Directory arrays are caller-owned and independently bounded.
 
-Path lookup accepts an optional leading `/`, performs exact UTF-16 name
-matching, and has caller-selected directory-entry and depth limits. Ordinary
+Path lookup accepts an optional leading `/`, performs exact UTF-16 matching
+against either the long or DOS short name, and has caller-selected
+directory-entry and depth limits. Ordinary
 file extraction applies WIM's stream ordering rules: the main hash is the first
 unnamed stream, a zero main hash is skipped when unnamed extra streams exist,
 and a reparse stream precedes ordinary unnamed data. A zero data hash produces
@@ -128,6 +132,15 @@ real security-prefix/dentry/child-list metadata rather than a flat resource
 bundle. Empty streams use WIM's zero SHA-1 convention; identical nonempty data
 is stored once with an accumulated lookup reference count across every stream.
 
+Entries may supply an optional `short_name` of at most 12 UTF-16 code units.
+Long and short names share one sibling alias namespace, so case-ambiguous
+long/long, long/short and short/short combinations are rejected. Exact short
+names participate in normal path lookup and extraction. `tagged_items` accepts
+ordered generic `{ tag, data }` records; each record is length-checked,
+8-byte-aligned and zero-padded without interpreting unknown payloads. The root
+uses `root_tagged_items`. Known tag constants cover Windows object IDs,
+extended attributes, wimlib Unix metadata and the deprecated Linux-xattr tag.
+
 Named streams use `WimEncodeNamedStream`. `WimEncodeReparseData` carries the
 dentry tag/reserved/fixup fields separately from the reparse stream bytes, which
 match the reader contract and exclude the common eight-byte
@@ -155,7 +168,9 @@ as a borrowed view.
 Nonzero `hard_link_id` values group two or more regular, non-reparse,
 non-encrypted entries into one inode. Every alias must provide identical
 attributes, timestamps, security descriptor, default data and named streams;
-inconsistent or singleton groups are rejected. Lookup reference counts and XML
+tagged metadata must also match because it belongs to the inode, while each
+alias may retain its own short name. Inconsistent or singleton groups are
+rejected. Lookup reference counts and XML
 `TOTALBYTES` count every alias as required by WIM, while `HARDLINKBYTES` counts
 only the duplicate inode bytes. This preserves both extraction progress
 semantics and hard-link space reporting.
@@ -308,9 +323,10 @@ as with the standard split API.
 
 The current writer remains whole-archive and caller-buffer based. Recompressing
 solid compaction, wire-spanned individual resources, automatic
-host-filesystem security capture, short names, and tagged metadata remain
-follow-up slices. Filesystem capture/application and construction of EFSRPC or
-reparse payloads from OS objects stay outside the wire serializer.
+host-filesystem security capture and typed construction of xattr/object-ID
+payloads remain follow-up slices. Filesystem capture/application and
+construction of EFSRPC or reparse payloads from OS objects stay outside the
+wire serializer.
 
 ```zig
 const archive = try vort.parseWim(image_bytes);
@@ -373,6 +389,8 @@ const input = [_]vort.WimEncodeEntry{
         .data = dll_bytes,
         .named_streams = &ads,
         .security_descriptor = security_descriptor,
+        .short_name = "EXAMPL~1.DLL",
+        .tagged_items = &tagged_items,
         .hard_link_id = 42,
     },
     .{
@@ -531,9 +549,11 @@ kinds, and restores the Vort-written link (`writer_stream=4`,
 `writer_stream_wimlib=4`).
 The per-codec inode writer images cover descriptor validation/deduplication,
 root and per-entry security IDs, hard-link lookup reference counts and XML
-accounting. wimlib reports the exact descriptor bytes and two-link group, then
-extracts both aliases to the same inode (`writer_inode=4`,
-`writer_inode_wimlib=4`).
+accounting, distinct DOS names on hard-link aliases, wimlib Unix metadata and a
+64-byte Windows object ID. Vort resolves the short paths; wimlib reports every
+short name and typed tagged value, then extracts both aliases to the same inode
+(`writer_inode=4`, `writer_inode_wimlib=4`). A wimlib `--unix-data` archive is
+also parsed and extracted through Vort (`tagged_reader=1`).
 The multi-image writer gate generates four-image stored, XPRESS, LZX, and LZMS archives,
 including a cross-image shared blob, distinct trees, two byte-identical empty
 metadata resources, consecutive XML indexes and boot image 2. Both readers map

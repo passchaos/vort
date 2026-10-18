@@ -132,6 +132,7 @@ pub fn listImage(
         image_index,
         image.security.descriptor_count,
     });
+    try listDentryMetadata(init, image.root, "/", stdout);
     try listImageDirectory(init, image, image.root, "", 0, stdout);
 }
 
@@ -158,6 +159,7 @@ fn listImageDirectory(
         else
             try std.fmt.allocPrint(init.gpa, "{s}/{s}", .{ prefix, name });
         defer init.gpa.free(path);
+        try listDentryMetadata(init, entry, path, stdout);
         if (entry.isDirectory()) {
             try stdout.print("directory\t{s}\tattributes=0x{x}\n", .{
                 path,
@@ -200,6 +202,34 @@ fn listImageDirectory(
             });
         }
     }
+}
+
+fn listDentryMetadata(
+    init: std.process.Init,
+    entry: vort.WimDentry,
+    path: []const u8,
+    stdout: *std.Io.Writer,
+) !void {
+    if (entry.short_name_utf16le.len != 0) {
+        const short_name = try entry.shortNameUtf8Alloc(init.gpa);
+        defer init.gpa.free(short_name);
+        try stdout.print("short\t{s}\tname={s}\n", .{ path, short_name });
+    }
+    var items = entry.taggedItems();
+    while (try items.next()) |item|
+        try stdout.print("tag\t{s}\tid=0x{x}\tbytes={d}\n", .{
+            path,
+            item.tag,
+            item.data.len,
+        });
+    if (try entry.unixMetadata()) |unix|
+        try stdout.print("unix\t{s}\tuid={d}\tgid={d}\tmode=0{o}\trdev=0x{x}\n", .{
+            path,
+            unix.uid,
+            unix.gid,
+            unix.mode,
+            unix.rdev,
+        });
 }
 
 pub fn extractPath(

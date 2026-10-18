@@ -21527,3 +21527,22 @@ reuse, so production keeps the simpler independently owned plans.
   `writer_solid_compact_wimlib=1`, `writer_reference_compact=1`,
   `writer_reference_compact_wimlib=1`). Recompressing partially dead packed
   resources remains a separate optimization slice.
+
+- Added WIM DOS short-name and generic tagged-metadata writing. Borrowed
+  `WimEncodeEntry` values now carry an optional at-most-12-unit short name and
+  ordered `{tag,data}` records; the root accepts tagged items as well. The tree
+  rejects long/short sibling aliases, while hard-link aliases may use distinct
+  short names but must share byte-identical inode tags. Metadata serialization
+  writes both terminated UTF-16 names, aligns the tag area, and emits checked
+  little-endian tag/length headers with padded opaque data. The reader validates
+  the complete item sequence, exposes borrowed generic iteration/search plus
+  typed object-ID and wimlib-Unix helpers, and resolves either long or short
+  components during normal path extraction. Five focused tests cover ordinary
+  and solid round trips, unknown and zero-length tags, root tags, typed values,
+  short-path extraction, sibling conflicts, hard-link consistency, malformed
+  lengths and exhaustive allocation failures; focused WIM coverage is now 143
+  tests. All four stored/XPRESS/LZX/LZMS inode images remain wimlib-verifiable;
+  wimlib reports the exact DOS names, uid/gid/mode/rdev and 64-byte object ID,
+  while restoring the hard-link pair. Vort also parses and extracts a
+  wimlib-authored `--unix-data` archive (`tagged_reader=1`). Automatic
+  filesystem capture and typed xattr construction remain separate follow-ups.

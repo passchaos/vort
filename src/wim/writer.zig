@@ -27,6 +27,7 @@ pub const Entry = tree_mod.Entry;
 pub const EntryKind = tree_mod.EntryKind;
 pub const NamedStream = streams.NamedStream;
 pub const ReparseData = streams.ReparseData;
+pub const TaggedItem = tree_mod.TaggedItem;
 pub const Compression = resource_writer.Compression;
 pub const SplitOptions = split_writer.Options;
 pub const SplitPart = split_writer.Part;
@@ -70,6 +71,7 @@ pub const Options = struct {
     xml_creation_time: u64 = 0,
     xml_last_modification_time: u64 = 0,
     root_security_descriptor: ?[]const u8 = null,
+    root_tagged_items: []const TaggedItem = &.{},
     bootable: bool = false,
 };
 
@@ -96,6 +98,7 @@ pub fn encodeAlloc(
         .root_last_access_time = options.root_last_access_time,
         .root_last_write_time = options.root_last_write_time,
         .root_security_descriptor = options.root_security_descriptor,
+        .root_tagged_items = options.root_tagged_items,
         .creation_time = options.xml_creation_time,
         .last_modification_time = options.xml_last_modification_time,
     }};

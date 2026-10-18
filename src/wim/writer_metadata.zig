@@ -71,9 +71,19 @@ pub fn encodeAlloc(
 fn dentryLength(node: tree_mod.Node) Error!usize {
     const name_bytes = std.math.mul(usize, node.name_utf16le.len, 2) catch
         return error.IntegerOverflow;
+    const short_name_bytes = if (node.short_name_utf16le) |short_name|
+        std.math.mul(usize, short_name.len, 2) catch
+            return error.IntegerOverflow
+    else
+        0;
     var length = try checkedAdd(metadata.dentry_fixed_size, name_bytes);
     if (name_bytes != 0) length = try checkedAdd(length, 2);
-    return align8(length);
+    length = try checkedAdd(length, short_name_bytes);
+    if (short_name_bytes != 0) length = try checkedAdd(length, 2);
+    length = try align8(length);
+    for (node.tagged_items) |item|
+        length = try checkedAdd(length, try taggedItemLength(item));
+    return length;
 }
 
 fn dentryTotalLength(node: tree_mod.Node) Error!usize {
@@ -96,7 +106,14 @@ fn writeDentry(
     if (total_end > output.len) return error.InvalidWimEntry;
     const name_bytes = std.math.mul(usize, node.name_utf16le.len, 2) catch
         return error.IntegerOverflow;
-    if (name_bytes > std.math.maxInt(u16)) return error.InvalidWimEntry;
+    const short_name_bytes = if (node.short_name_utf16le) |short_name|
+        std.math.mul(usize, short_name.len, 2) catch
+            return error.IntegerOverflow
+    else
+        0;
+    if (name_bytes > std.math.maxInt(u16) or
+        short_name_bytes > std.math.maxInt(u16))
+        return error.InvalidWimEntry;
 
     writeU64(output, offset, length);
     writeU32(output, offset + 8, node.attributes);
@@ -116,16 +133,41 @@ fn writeDentry(
         writeU64(output, offset + 88, node.hard_link_id);
     }
     writeU16(output, offset + 96, @intCast(stream_set.extraCount()));
-    writeU16(output, offset + 98, 0);
+    writeU16(output, offset + 98, @intCast(short_name_bytes));
     writeU16(output, offset + 100, @intCast(name_bytes));
-    for (node.name_utf16le, 0..) |unit, index|
-        writeU16(output, offset + metadata.dentry_fixed_size + index * 2, unit);
+    var metadata_offset = offset + metadata.dentry_fixed_size;
+    for (node.name_utf16le) |unit| {
+        writeU16(output, metadata_offset, unit);
+        metadata_offset += 2;
+    }
+    if (name_bytes != 0) metadata_offset += 2;
+    if (node.short_name_utf16le) |short_name| {
+        for (short_name) |unit| {
+            writeU16(output, metadata_offset, unit);
+            metadata_offset += 2;
+        }
+        metadata_offset += 2;
+    }
+    metadata_offset = try align8(metadata_offset);
+    for (node.tagged_items) |item| {
+        const item_length = try taggedItemLength(item);
+        writeU32(output, metadata_offset, item.tag);
+        writeU32(output, metadata_offset + 4, @intCast(item.data.len));
+        @memcpy(output[metadata_offset + 8 ..][0..item.data.len], item.data);
+        metadata_offset += item_length;
+    }
+    if (metadata_offset != dentry_end) return error.InvalidWimEntry;
     var stream_offset = dentry_end;
     var iterator = stream_set.extraStreams();
     while (iterator.next()) |stream|
         stream_offset = try writeExtraStream(output, stream_offset, stream);
     if (stream_offset != total_end) return error.InvalidWimEntry;
     return total_end;
+}
+
+fn taggedItemLength(item: tree_mod.TaggedItem) Error!usize {
+    if (item.data.len > std.math.maxInt(u32)) return error.InvalidWimEntry;
+    return checkedAdd(8, try align8(item.data.len));
 }
 
 fn extraStreamLength(name: ?[]const u8) Error!usize {

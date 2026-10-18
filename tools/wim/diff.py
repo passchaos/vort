@@ -2,6 +2,7 @@
 import argparse
 import base64
 import hashlib
+import os
 import random
 import shutil
 import struct
@@ -172,6 +173,7 @@ def main() -> None:
     pipable_stream_cases = 0
     encrypted_raw_cases = 0
     encrypted_esd_cases = 0
+    tagged_reader_cases = 0
     writer_cases = 0
     writer_wimlib_cases = 0
     writer_stream_cases = 0
@@ -243,6 +245,54 @@ def main() -> None:
         if fixture_path_out.read_bytes() != b"hello WIM XPRESS payload\n":
             raise AssertionError("checked-in WIM path extraction mismatch")
         fixture_cases += 1
+
+        if wimlib is not None:
+            unix_source = temp / "wimlib-unix-source"
+            unix_source.mkdir()
+            unix_payload = b"wimlib tagged Unix metadata\n"
+            unix_file = unix_source / "tagged.txt"
+            unix_file.write_bytes(unix_payload)
+            unix_file.chmod(0o640)
+            unix_image = temp / "wimlib-unix-data.wim"
+            run(
+                wimlib,
+                "capture",
+                unix_source,
+                unix_image,
+                "unix-data",
+                "--compress=none",
+                "--unix-data",
+                "--no-acls",
+            )
+            unix_listing = run(
+                args.cli,
+                "list-wim-image",
+                unix_image,
+                1,
+            ).stdout
+            for marker in (
+                b"tag\t/tagged.txt\tid=0x337dd873\tbytes=16",
+                f"unix\t/tagged.txt\tuid={os.getuid()}\tgid={os.getgid()}"
+                .encode(),
+                b"mode=0100640",
+            ):
+                if marker not in unix_listing:
+                    raise AssertionError(
+                        f"Vort did not read wimlib tagged metadata {marker!r}"
+                    )
+            unix_output = temp / "wimlib-unix-data.out"
+            run(
+                args.cli,
+                "extract-wim-path",
+                unix_image,
+                1,
+                "/tagged.txt",
+                unix_output,
+                len(unix_payload),
+            )
+            if unix_output.read_bytes() != unix_payload:
+                raise AssertionError("wimlib tagged metadata payload mismatch")
+            tagged_reader_cases += 1
 
         metadata_out = temp / "fixture-metadata.bin"
         run(
@@ -654,6 +704,17 @@ def main() -> None:
             for required in (b"/hard/a.txt", b"/hard/b.txt", b"/independent.txt"):
                 if required not in image_tree:
                     raise AssertionError(f"Vort writer inode tree missing {required!r}")
+            for required in (
+                b"short\t/hard/a.txt\tname=HARDLI~1.TXT",
+                b"short\t/hard/b.txt\tname=HARDLI~2.TXT",
+                b"tag\t/hard/a.txt\tid=0x337dd873\tbytes=16",
+                b"unix\t/hard/a.txt\tuid=1000\tgid=1001\tmode=0100640\trdev=0x7",
+                b"tag\t/independent.txt\tid=0x1\tbytes=64",
+            ):
+                if required not in image_tree:
+                    raise AssertionError(
+                        f"Vort writer metadata listing missing {required!r}"
+                    )
             for link_name in ("a.txt", "b.txt"):
                 output = temp / f"writer-inode-{writer_compression}-{link_name}"
                 run(
@@ -667,6 +728,21 @@ def main() -> None:
                 )
                 if output.read_bytes() != b"hard linked writer payload\n":
                     raise AssertionError("Vort writer hard-link payload mismatch")
+            for short_name in ("HARDLI~1.TXT", "HARDLI~2.TXT"):
+                output = temp / (
+                    f"writer-inode-{writer_compression}-{short_name}"
+                )
+                run(
+                    args.cli,
+                    "extract-wim-path",
+                    inode_image,
+                    1,
+                    f"/hard/{short_name}",
+                    output,
+                    1024,
+                )
+                if output.read_bytes() != b"hard linked writer payload\n":
+                    raise AssertionError("Vort writer short-name lookup mismatch")
             writer_inode_cases += 1
 
             if wimlib is not None:
@@ -677,6 +753,12 @@ def main() -> None:
                     b"Link Count          = 2",
                     b"Security Descriptor = 01000480",
                     b"Security Descriptor = 01000080",
+                    b'Short Name          = "HARDLI~1.TXT"',
+                    b'Short Name          = "HARDLI~2.TXT"',
+                    b'Short Name          = "INDEPE~1.TXT"',
+                    b"UNIX Data           = uid:1000 gid:1001 mode:0100640 rdev:0x7",
+                    b"Object ID           = 0x000102030405060708090a0b0c0d0e0f",
+                    b"Birth Volume ID     = 0x55555555555555555555555555555555",
                 ):
                     if marker not in details:
                         raise AssertionError(
@@ -2126,7 +2208,8 @@ def main() -> None:
         f"codecs={codec_cases} images={image_cases} solid={solid_cases} "
         f"split={split_cases} reparse={reparse_cases} "
         f"pipable_stream={pipable_stream_cases} encrypted_raw={encrypted_raw_cases} "
-        f"encrypted_esd={encrypted_esd_cases} stream_errors={stream_error_cases} "
+        f"encrypted_esd={encrypted_esd_cases} tagged_reader={tagged_reader_cases} "
+        f"stream_errors={stream_error_cases} "
         f"writer={writer_cases} writer_wimlib={writer_wimlib_cases} "
         f"writer_stream={writer_stream_cases} "
         f"writer_stream_wimlib={writer_stream_wimlib_cases} "

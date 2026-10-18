@@ -15,6 +15,11 @@ pub const EntryKind = enum {
 pub const NamedStream = streams.NamedStream;
 pub const ReparseData = streams.ReparseData;
 
+pub const TaggedItem = struct {
+    tag: u32,
+    data: []const u8,
+};
+
 /// A borrowed entry description.  The writer never takes ownership of `path`
 /// or `data`; both only need to remain valid for the duration of encode*().
 pub const Entry = struct {
@@ -25,6 +30,8 @@ pub const Entry = struct {
     reparse: ?ReparseData = null,
     encrypted_raw: ?[]const u8 = null,
     security_descriptor: ?[]const u8 = null,
+    short_name: ?[]const u8 = null,
+    tagged_items: []const TaggedItem = &.{},
     hard_link_id: u64 = 0,
     attributes: u32 = 0,
     creation_time: u64 = 0,
@@ -37,6 +44,7 @@ pub const RootInfo = struct {
     last_access_time: u64 = 0,
     last_write_time: u64 = 0,
     security_descriptor: ?[]const u8 = null,
+    tagged_items: []const TaggedItem = &.{},
 };
 
 pub const Node = struct {
@@ -48,6 +56,9 @@ pub const Node = struct {
     reparse: ?ReparseData = null,
     encrypted_raw: ?[]const u8 = null,
     security_descriptor: ?[]const u8 = null,
+    short_name: ?[]const u8 = null,
+    short_name_utf16le: ?[]u16 = null,
+    tagged_items: []const TaggedItem = &.{},
     security_id: ?u32 = null,
     hard_link_id: u64 = 0,
     attributes: u32,
@@ -81,6 +92,8 @@ pub const Tree = struct {
 
     pub fn deinit(self: *Tree) void {
         for (self.nodes) |node| {
+            if (node.short_name_utf16le) |short_name|
+                self.allocator.free(short_name);
             self.allocator.free(node.name_utf16le);
             self.allocator.free(node.path);
         }
@@ -147,6 +160,8 @@ pub fn build(
     nodes.items[0].last_access_time = root_info.last_access_time;
     nodes.items[0].last_write_time = root_info.last_write_time;
     nodes.items[0].security_descriptor = root_info.security_descriptor;
+    try validateTaggedItems(root_info.tagged_items);
+    nodes.items[0].tagged_items = root_info.tagged_items;
 
     for (entries) |entry| {
         try validateEntry(entry);
@@ -154,10 +169,10 @@ pub fn build(
         if (findNode(nodes.items, entry.path)) |index| {
             if (nodes.items[index].explicit or entry.kind != .directory)
                 return error.InvalidWimEntry;
-            applyEntry(&nodes.items[index], entry);
+            try applyEntry(allocator, &nodes.items[index], entry);
         } else {
             try appendNode(allocator, &nodes, entry.path, entry.kind, true);
-            applyEntry(&nodes.items[nodes.items.len - 1], entry);
+            try applyEntry(allocator, &nodes.items[nodes.items.len - 1], entry);
         }
     }
 
@@ -174,7 +189,7 @@ pub fn build(
         if (nodes.items[node.parent].kind != .directory)
             return error.InvalidWimEntry;
     }
-    try rejectAsciiCaseAliases(nodes.items);
+    try rejectNameAliases(nodes.items);
     try validateHardLinkGroups(nodes.items);
 
     return .{
@@ -185,6 +200,8 @@ pub fn build(
 
 fn deinitNodes(allocator: std.mem.Allocator, nodes: *std.ArrayList(Node)) void {
     for (nodes.items) |node| {
+        if (node.short_name_utf16le) |short_name|
+            allocator.free(short_name);
         allocator.free(node.name_utf16le);
         allocator.free(node.path);
     }
@@ -218,13 +235,35 @@ fn appendNode(
     });
 }
 
-fn applyEntry(node: *Node, entry: Entry) void {
+fn applyEntry(
+    allocator: std.mem.Allocator,
+    node: *Node,
+    entry: Entry,
+) Error!void {
+    var short_name_utf16le: ?[]u16 = null;
+    if (entry.short_name) |short_name| {
+        if (short_name.len == 0 or std.mem.eql(u8, short_name, ".") or
+            std.mem.eql(u8, short_name, "..") or
+            std.mem.indexOfAny(u8, short_name, "/\\\x00") != null)
+            return error.InvalidWimEntry;
+        const units = std.unicode.utf8ToUtf16LeAlloc(allocator, short_name) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.InvalidUtf8 => return error.InvalidWimEntry,
+        };
+        errdefer allocator.free(units);
+        if (units.len == 0 or units.len > 12)
+            return error.InvalidWimEntry;
+        short_name_utf16le = units;
+    }
     node.kind = entry.kind;
     node.data = entry.data;
     node.named_streams = entry.named_streams;
     node.reparse = entry.reparse;
     node.encrypted_raw = entry.encrypted_raw;
     node.security_descriptor = entry.security_descriptor;
+    node.short_name = entry.short_name;
+    node.short_name_utf16le = short_name_utf16le;
+    node.tagged_items = entry.tagged_items;
     node.hard_link_id = entry.hard_link_id;
     node.attributes = entry.attributes;
     if (entry.kind == .directory) {
@@ -262,15 +301,27 @@ fn findNode(nodes: []const Node, path: []const u8) ?usize {
     return null;
 }
 
-fn rejectAsciiCaseAliases(nodes: []const Node) Error!void {
+fn rejectNameAliases(nodes: []const Node) Error!void {
     for (nodes, 0..) |left, left_index| {
         if (left_index == 0) continue;
         for (nodes[left_index + 1 ..]) |right| {
-            if (left.parent == right.parent and
-                std.ascii.eqlIgnoreCase(left.name(), right.name()))
+            if (left.parent != right.parent) continue;
+            if (std.ascii.eqlIgnoreCase(left.name(), right.name()) or
+                optionalNameEqual(left.short_name, right.short_name) or
+                optionalNameEquals(left.short_name, right.name()) or
+                optionalNameEquals(right.short_name, left.name()))
                 return error.InvalidWimEntry;
         }
     }
+}
+
+fn optionalNameEqual(left: ?[]const u8, right: ?[]const u8) bool {
+    if (left == null or right == null) return false;
+    return std.ascii.eqlIgnoreCase(left.?, right.?);
+}
+
+fn optionalNameEquals(left: ?[]const u8, right: []const u8) bool {
+    return if (left) |name| std.ascii.eqlIgnoreCase(name, right) else false;
 }
 
 fn lessThan(_: void, left: Node, right: Node) bool {
@@ -295,6 +346,7 @@ fn validateEntry(entry: Entry) Error!void {
     if (entry.attributes &
         (metadata.file_attribute_reparse_point | metadata.file_attribute_encrypted) != 0)
         return error.InvalidWimEntry;
+    try validateTaggedItems(entry.tagged_items);
     try (streams.Set{
         .directory = entry.kind == .directory,
         .default_data = entry.data,
@@ -312,6 +364,12 @@ fn validateEntry(entry: Entry) Error!void {
             std.mem.indexOfAny(u8, component, "\\\x00") != null)
             return error.InvalidWimEntry;
     }
+}
+
+fn validateTaggedItems(items: []const TaggedItem) Error!void {
+    for (items) |item|
+        if (item.data.len > std.math.maxInt(u32))
+            return error.InvalidWimEntry;
 }
 
 fn validateHardLinkGroups(nodes: []const Node) Error!void {
@@ -343,13 +401,23 @@ fn sameInode(left: Node, right: Node) bool {
         left.last_write_time != right.last_write_time or
         !optionalBytesEqual(left.security_descriptor, right.security_descriptor) or
         !std.mem.eql(u8, left.data, right.data) or
-        left.named_streams.len != right.named_streams.len)
+        left.named_streams.len != right.named_streams.len or
+        !taggedItemsEqual(left.tagged_items, right.tagged_items))
         return false;
     for (left.named_streams, right.named_streams) |left_stream, right_stream| {
         if (!std.mem.eql(u8, left_stream.name, right_stream.name) or
             !std.mem.eql(u8, left_stream.data, right_stream.data))
             return false;
     }
+    return true;
+}
+
+fn taggedItemsEqual(left: []const TaggedItem, right: []const TaggedItem) bool {
+    if (left.len != right.len) return false;
+    for (left, right) |left_item, right_item|
+        if (left_item.tag != right_item.tag or
+            !std.mem.eql(u8, left_item.data, right_item.data))
+            return false;
     return true;
 }
 

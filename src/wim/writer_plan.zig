@@ -10,6 +10,7 @@ pub const Error = core.Error || metadata_writer.Error || security.Error ||
     tree_mod.Error || std.mem.Allocator.Error || error{InvalidWimEntry};
 
 pub const Entry = tree_mod.Entry;
+pub const TaggedItem = tree_mod.TaggedItem;
 
 pub const Image = struct {
     name: []const u8 = "Vort Image",
@@ -18,6 +19,7 @@ pub const Image = struct {
     root_last_access_time: u64 = 0,
     root_last_write_time: u64 = 0,
     root_security_descriptor: ?[]const u8 = null,
+    root_tagged_items: []const tree_mod.TaggedItem = &.{},
     creation_time: u64 = 0,
     last_modification_time: u64 = 0,
 };
@@ -53,6 +55,7 @@ pub const Plan = struct {
                 .last_access_time = image.root_last_access_time,
                 .last_write_time = image.root_last_write_time,
                 .security_descriptor = image.root_security_descriptor,
+                .tagged_items = image.root_tagged_items,
             });
             errdefer tree.deinit();
             var security_table = try security.plan(allocator, &tree);
