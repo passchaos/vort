@@ -1,10 +1,13 @@
 const std = @import("std");
 const archive = @import("archive.zig");
 const core = @import("../core.zig");
+const symbol_table = @import("symbol_table.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error || error{
     InvalidArEntryName,
+    InvalidArSymbolName,
     ArHeaderFieldOverflow,
+    ArSymbolIndexOverflow,
 };
 
 pub const EncodeEntry = struct {
@@ -19,10 +22,21 @@ pub const EncodeEntry = struct {
 pub const ThinEncodeEntry = struct {
     name: []const u8,
     size: usize,
+    symbols: []const []const u8 = &.{},
     timestamp: u64 = 0,
     owner: u32 = 0,
     group: u32 = 0,
     mode: u32 = 0o100644,
+};
+
+pub const ThinSymbolIndexFormat = enum {
+    auto,
+    gnu32,
+    gnu64,
+};
+
+pub const ThinEncodeOptions = struct {
+    symbol_index_format: ThinSymbolIndexFormat = .auto,
 };
 
 pub fn encodeAlloc(allocator: std.mem.Allocator, entries: []const EncodeEntry) Error![]u8 {
@@ -60,9 +74,17 @@ pub fn encodeThinAlloc(
     allocator: std.mem.Allocator,
     entries: []const ThinEncodeEntry,
 ) Error![]u8 {
+    return encodeThinAllocWithOptions(allocator, entries, .{});
+}
+
+pub fn encodeThinAllocWithOptions(
+    allocator: std.mem.Allocator,
+    entries: []const ThinEncodeEntry,
+    options: ThinEncodeOptions,
+) Error![]u8 {
     var output: std.ArrayList(u8) = .empty;
     errdefer output.deinit(allocator);
-    _ = try encodeThinAppend(allocator, &output, entries);
+    _ = try encodeThinAppendWithOptions(allocator, &output, entries, options);
     return output.toOwnedSlice(allocator);
 }
 
@@ -71,26 +93,61 @@ pub fn encodeThinAppend(
     output: *std.ArrayList(u8),
     entries: []const ThinEncodeEntry,
 ) Error!usize {
+    return encodeThinAppendWithOptions(allocator, output, entries, .{});
+}
+
+pub fn encodeThinAppendWithOptions(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    entries: []const ThinEncodeEntry,
+    options: ThinEncodeOptions,
+) Error!usize {
     const start = output.items.len;
     errdefer output.items.len = start;
+    const layout = try planThin(entries, options);
     try output.appendSlice(allocator, archive.thin_signature);
     if (entries.len == 0) return output.items.len - start;
 
-    var table: std.ArrayList(u8) = .empty;
-    defer table.deinit(allocator);
-    const offsets = try allocator.alloc(usize, entries.len);
-    defer allocator.free(offsets);
-    for (entries, offsets) |entry, *offset| {
-        try validateName(entry.name);
-        offset.* = table.items.len;
-        try table.appendSlice(allocator, entry.name);
-        try table.appendSlice(allocator, "/\n");
+    if (layout.symbol_format) |format| {
+        try appendHeader(
+            allocator,
+            output,
+            format.memberName(),
+            0,
+            0,
+            0,
+            0,
+            layout.symbol_payload_len,
+        );
+        const payload_start = output.items.len;
+        try appendSymbolWord(allocator, output, format, layout.symbol_count);
+        for (entries, 0..) |entry, entry_index| {
+            const member_offset = layout.first_member_offset + entry_index * archive.header_size;
+            for (entry.symbols) |_| try appendSymbolWord(
+                allocator,
+                output,
+                format,
+                member_offset,
+            );
+        }
+        for (entries) |entry| for (entry.symbols) |symbol| {
+            try output.appendSlice(allocator, symbol);
+            try output.append(allocator, 0);
+        };
+        if ((output.items.len - payload_start) & 1 != 0)
+            try output.append(allocator, 0);
+        std.debug.assert(output.items.len - payload_start == layout.symbol_payload_len);
     }
-    try appendHeader(allocator, output, "//", 0, 0, 0, 0, table.items.len);
-    try output.appendSlice(allocator, table.items);
-    if (table.items.len & 1 != 0) try output.append(allocator, '\n');
 
-    for (entries, offsets) |entry, name_offset| {
+    try appendHeader(allocator, output, "//", 0, 0, 0, 0, layout.string_table_len);
+    for (entries) |entry| {
+        try output.appendSlice(allocator, entry.name);
+        try output.appendSlice(allocator, "/\n");
+    }
+    if (layout.string_table_len & 1 != 0) try output.append(allocator, '\n');
+
+    var name_offset: usize = 0;
+    for (entries) |entry| {
         var name_buffer: [16]u8 = undefined;
         const name = std.fmt.bufPrint(&name_buffer, "/{d}", .{name_offset}) catch
             return error.ArHeaderFieldOverflow;
@@ -104,6 +161,7 @@ pub fn encodeThinAppend(
             entry.mode,
             entry.size,
         );
+        name_offset += entry.name.len + 2;
     }
     return output.items.len - start;
 }
@@ -113,11 +171,152 @@ pub fn encodeThinInto(
     entries: []const ThinEncodeEntry,
     output: []u8,
 ) Error!usize {
-    const encoded = try encodeThinAlloc(allocator, entries);
+    return encodeThinIntoWithOptions(allocator, entries, .{}, output);
+}
+
+pub fn encodeThinIntoWithOptions(
+    allocator: std.mem.Allocator,
+    entries: []const ThinEncodeEntry,
+    options: ThinEncodeOptions,
+    output: []u8,
+) Error!usize {
+    const encoded = try encodeThinAllocWithOptions(allocator, entries, options);
     defer allocator.free(encoded);
     if (output.len < encoded.len) return error.OutputTooSmall;
     @memcpy(output[0..encoded.len], encoded);
     return encoded.len;
+}
+
+const ThinLayout = struct {
+    string_table_len: usize,
+    symbol_count: usize,
+    symbol_format: ?symbol_table.Format,
+    symbol_payload_len: usize,
+    first_member_offset: usize,
+};
+
+fn planThin(entries: []const ThinEncodeEntry, options: ThinEncodeOptions) Error!ThinLayout {
+    var string_table_len: usize = 0;
+    var symbol_count: usize = 0;
+    var symbol_names_len: usize = 0;
+    for (entries) |entry| {
+        try validateName(entry.name);
+        const table_name_len = std.math.add(usize, entry.name.len, 2) catch
+            return error.IntegerOverflow;
+        string_table_len = std.math.add(usize, string_table_len, table_name_len) catch
+            return error.IntegerOverflow;
+        symbol_count = std.math.add(usize, symbol_count, entry.symbols.len) catch
+            return error.IntegerOverflow;
+        for (entry.symbols) |symbol| {
+            try validateSymbolName(symbol);
+            const terminated_len = std.math.add(usize, symbol.len, 1) catch
+                return error.IntegerOverflow;
+            symbol_names_len = std.math.add(usize, symbol_names_len, terminated_len) catch
+                return error.IntegerOverflow;
+        }
+    }
+
+    const string_member_len = try paddedMemberLen(string_table_len);
+    if (symbol_count == 0) return .{
+        .string_table_len = string_table_len,
+        .symbol_count = 0,
+        .symbol_format = null,
+        .symbol_payload_len = 0,
+        .first_member_offset = std.math.add(
+            usize,
+            archive.thin_signature.len,
+            string_member_len,
+        ) catch return error.IntegerOverflow,
+    };
+
+    const gnu32_payload_len = try symbolPayloadLen(symbol_count, symbol_names_len, .gnu32);
+    const gnu32_first_member = try firstThinMemberOffset(gnu32_payload_len, string_member_len);
+    const gnu32_fits = symbol_count <= std.math.maxInt(u32) and
+        memberOffsetsFit(entries.len, gnu32_first_member, std.math.maxInt(u32));
+    const format: symbol_table.Format = switch (options.symbol_index_format) {
+        .auto => if (gnu32_fits) .gnu32 else .gnu64,
+        .gnu32 => if (gnu32_fits) .gnu32 else return error.ArSymbolIndexOverflow,
+        .gnu64 => .gnu64,
+    };
+    const symbol_payload_len = if (format == .gnu32)
+        gnu32_payload_len
+    else
+        try symbolPayloadLen(symbol_count, symbol_names_len, .gnu64);
+    const first_member_offset = if (format == .gnu32)
+        gnu32_first_member
+    else
+        try firstThinMemberOffset(symbol_payload_len, string_member_len);
+    if (!memberOffsetsFit(entries.len, first_member_offset, std.math.maxInt(u64)))
+        return error.ArSymbolIndexOverflow;
+    return .{
+        .string_table_len = string_table_len,
+        .symbol_count = symbol_count,
+        .symbol_format = format,
+        .symbol_payload_len = symbol_payload_len,
+        .first_member_offset = first_member_offset,
+    };
+}
+
+fn symbolPayloadLen(
+    symbol_count: usize,
+    symbol_names_len: usize,
+    format: symbol_table.Format,
+) Error!usize {
+    const word_count = std.math.add(usize, symbol_count, 1) catch
+        return error.IntegerOverflow;
+    const words_len = std.math.mul(usize, word_count, format.wordLen()) catch
+        return error.IntegerOverflow;
+    const unpadded = std.math.add(usize, words_len, symbol_names_len) catch
+        return error.IntegerOverflow;
+    return std.math.add(usize, unpadded, unpadded & 1) catch
+        return error.IntegerOverflow;
+}
+
+fn paddedMemberLen(payload_len: usize) Error!usize {
+    const padded_payload_len = std.math.add(usize, payload_len, payload_len & 1) catch
+        return error.IntegerOverflow;
+    return std.math.add(usize, archive.header_size, padded_payload_len) catch
+        return error.IntegerOverflow;
+}
+
+fn firstThinMemberOffset(symbol_payload_len: usize, string_member_len: usize) Error!usize {
+    const symbol_member_len = try paddedMemberLen(symbol_payload_len);
+    const metadata_len = std.math.add(usize, symbol_member_len, string_member_len) catch
+        return error.IntegerOverflow;
+    return std.math.add(usize, archive.thin_signature.len, metadata_len) catch
+        return error.IntegerOverflow;
+}
+
+fn memberOffsetsFit(entry_count: usize, first: usize, maximum: u64) bool {
+    if (entry_count == 0) return @as(u64, @intCast(first)) <= maximum;
+    const delta = std.math.mul(usize, entry_count - 1, archive.header_size) catch
+        return false;
+    const last = std.math.add(usize, first, delta) catch return false;
+    return @as(u64, @intCast(last)) <= maximum;
+}
+
+fn appendSymbolWord(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    format: symbol_table.Format,
+    value: usize,
+) Error!void {
+    switch (format) {
+        .gnu32 => {
+            const narrowed = std.math.cast(u32, value) orelse
+                return error.ArSymbolIndexOverflow;
+            var bytes: [4]u8 = undefined;
+            std.mem.writeInt(u32, &bytes, narrowed, .big);
+            try output.appendSlice(allocator, &bytes);
+        },
+        .gnu64 => {
+            const narrowed = std.math.cast(u64, value) orelse
+                return error.ArSymbolIndexOverflow;
+            var bytes: [8]u8 = undefined;
+            std.mem.writeInt(u64, &bytes, narrowed, .big);
+            try output.appendSlice(allocator, &bytes);
+        },
+    }
 }
 
 fn appendHeader(
@@ -179,6 +378,11 @@ fn validateName(name: []const u8) Error!void {
     if (name.len == 0 or std.mem.indexOfScalar(u8, name, 0) != null or
         std.mem.indexOfScalar(u8, name, '\n') != null)
         return error.InvalidArEntryName;
+}
+
+fn validateSymbolName(name: []const u8) Error!void {
+    if (name.len == 0 or std.mem.indexOfScalar(u8, name, 0) != null)
+        return error.InvalidArSymbolName;
 }
 
 fn simpleName(name: []const u8) bool {

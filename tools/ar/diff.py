@@ -28,6 +28,7 @@ def main() -> None:
         found = shutil.which("ar")
         ar_tool = Path(found) if found else None
     cc_tool = shutil.which("cc")
+    nm_tool = shutil.which("nm")
 
     expected = {
         "short.txt": b"short ar payload\n",
@@ -37,9 +38,13 @@ def main() -> None:
     self_cases = 0
     external_read = 0
     external_write = 0
+    symbol_read = 0
     thin_self = 0
     thin_external_read = 0
     thin_external_write = 0
+    thin_symbol_read = 0
+    thin_symbol_write = 0
+    thin_symbol_link = 0
     malformed = 0
 
     with tempfile.TemporaryDirectory(prefix="vort-ar-diff-") as temp_text:
@@ -117,7 +122,11 @@ def main() -> None:
             if cc_tool is not None:
                 object_source = thin_source / "object.c"
                 object_path = thin_source / "very-long-object-member-name.o"
-                object_source.write_text("int vort_thin_symbol(void) { return 42; }\n")
+                object_source.write_text(
+                    "int vort_thin_symbol(void) { return 42; }\n"
+                    "int vort_thin_data = 7;\n"
+                    "int vort_thin_alias(void) { return vort_thin_symbol(); }\n"
+                )
                 run(cc_tool, "-c", object_source.name, "-o", object_path.name, cwd=thin_source)
                 object_archive = thin_source / "gnu-thin-object.a"
                 run(
@@ -128,10 +137,19 @@ def main() -> None:
                     cwd=thin_source,
                 )
                 object_listing = run(args.cli, "list-ar-file", object_archive).stdout
-                if "ar_entries=1" not in object_listing or "thin=true" not in object_listing:
+                if (
+                    "ar_entries=1" not in object_listing
+                    or "ar_symbols=3" not in object_listing
+                    or "thin=true" not in object_listing
+                    or "name=vort_thin_symbol" not in object_listing
+                    or "name=vort_thin_data" not in object_listing
+                    or "name=vort_thin_alias" not in object_listing
+                    or f"member={object_path.name}" not in object_listing
+                ):
                     raise AssertionError(
                         f"Vort rejected GNU thin symbol table: {object_listing}"
                     )
+                thin_symbol_read += 1
                 object_output = temp / "gnu-thin-object.out"
                 run(
                     args.cli,
@@ -145,6 +163,34 @@ def main() -> None:
                 if object_output.read_bytes() != object_path.read_bytes():
                     raise AssertionError("Vort rejected a GNU thin object member")
                 thin_external_write += 1
+
+                regular_object_archive = thin_source / "gnu-object.a"
+                run(
+                    ar_tool,
+                    "rcs",
+                    regular_object_archive.name,
+                    object_path.name,
+                    cwd=thin_source,
+                )
+                regular_object_listing = run(
+                    args.cli,
+                    "list-ar-file",
+                    regular_object_archive,
+                ).stdout
+                if (
+                    "ar_entries=1" not in regular_object_listing
+                    or "ar_symbols=3" not in regular_object_listing
+                    or "thin=false" not in regular_object_listing
+                    or "name=vort_thin_symbol" not in regular_object_listing
+                    or "name=vort_thin_data" not in regular_object_listing
+                    or "name=vort_thin_alias" not in regular_object_listing
+                    or f"member={object_path.name}" not in regular_object_listing
+                ):
+                    raise AssertionError(
+                        "Vort rejected GNU regular ar symbol table: "
+                        f"{regular_object_listing}"
+                    )
+                symbol_read += 1
 
             (thin_source / "short.txt").write_bytes(b"x")
             failed = run(
@@ -211,6 +257,96 @@ def main() -> None:
                     raise AssertionError(f"GNU ar rejected Vort thin member: {name}")
                 thin_external_read += 1
 
+            if cc_tool is not None:
+                first_source = temp / "thin-first.c"
+                first_object = temp / "thin-first.o"
+                second_source = temp / "thin-second.c"
+                second_object = temp / "thin" / "very-long-symbol-member.o"
+                first_source.write_text(
+                    "int alpha(void) { return 11; }\n"
+                    "int shared_a = 3;\n"
+                    "static int hidden(void) { return 1; }\n"
+                )
+                second_source.write_text(
+                    "int beta(void) { return 22; }\n"
+                    "int shared_b = 5;\n"
+                    "extern int alpha(void);\n"
+                    "int calls_alpha(void) { return alpha(); }\n"
+                )
+                run(cc_tool, "-c", first_source, "-o", first_object)
+                run(cc_tool, "-c", second_source, "-o", second_object)
+                main_source = temp / "thin-main.c"
+                main_object = temp / "thin-main.o"
+                main_source.write_text(
+                    "extern int beta(void);\n"
+                    "extern int calls_alpha(void);\n"
+                    "extern int shared_a;\n"
+                    "extern int shared_b;\n"
+                    "int main(void) {\n"
+                    "  return beta() == 22 && calls_alpha() == 11 && "
+                    "shared_a == 3 && shared_b == 5 ? 0 : 1;\n"
+                    "}\n"
+                )
+                run(cc_tool, "-c", main_source, "-o", main_object)
+
+                for symbol_mode in ("thin-symbols", "thin-symbols64"):
+                    symbol_archive = temp / f"vort-{symbol_mode}.a"
+                    run(args.writer, symbol_archive, symbol_mode)
+                    symbol_listing = run(args.cli, "list-ar-file", symbol_archive).stdout
+                    required = (
+                        "ar_entries=2",
+                        "ar_symbols=5",
+                        "member=thin-first.o name=alpha",
+                        "member=thin/very-long-symbol-member.o name=beta",
+                        "member=thin/very-long-symbol-member.o name=calls_alpha",
+                    )
+                    if any(value not in symbol_listing for value in required):
+                        raise AssertionError(
+                            f"Vort thin symbol metadata mismatch ({symbol_mode}): "
+                            f"{symbol_listing}"
+                        )
+                    symbol_names = tuple(
+                        line
+                        for line in run(
+                            ar_tool,
+                            "t",
+                            symbol_archive.name,
+                            cwd=temp,
+                        ).stdout.splitlines()
+                        if line
+                    )
+                    if symbol_names != (
+                        "thin-first.o",
+                        "thin/very-long-symbol-member.o",
+                    ):
+                        raise AssertionError(
+                            f"GNU ar rejected Vort symbol members ({symbol_mode}): "
+                            f"{symbol_names}"
+                        )
+                    if nm_tool is not None:
+                        armap = run(
+                            nm_tool,
+                            "--print-armap",
+                            symbol_archive.name,
+                            cwd=temp,
+                        ).stdout
+                        for expected_line in (
+                            "alpha in thin-first.o",
+                            "shared_a in thin-first.o",
+                            "beta in thin/very-long-symbol-member.o",
+                            "shared_b in thin/very-long-symbol-member.o",
+                            "calls_alpha in thin/very-long-symbol-member.o",
+                        ):
+                            if expected_line not in armap:
+                                raise AssertionError(
+                                    f"GNU nm rejected Vort armap ({symbol_mode}): {armap}"
+                                )
+                        thin_symbol_write += 1
+                    executable = temp / f"vort-{symbol_mode}-linked"
+                    run(cc_tool, main_object, symbol_archive, "-o", executable, cwd=temp)
+                    run(executable, cwd=temp)
+                    thin_symbol_link += 1
+
         corrupt = bytearray(vort_archive.read_bytes())
         corrupt[8 + 58] ^= 1
         corrupt_path = temp / "corrupt.a"
@@ -221,9 +357,13 @@ def main() -> None:
 
     print(
         f"self_cases={self_cases} ar_tool={ar_tool is not None} cc={cc_tool is not None} "
+        f"nm={nm_tool is not None} "
         f"external_read={external_read} external_write={external_write} "
+        f"symbol_read={symbol_read} "
         f"thin_self={thin_self} thin_external_read={thin_external_read} "
         f"thin_external_write={thin_external_write} "
+        f"thin_symbol_read={thin_symbol_read} thin_symbol_write={thin_symbol_write} "
+        f"thin_symbol_link={thin_symbol_link} "
         f"malformed={malformed}"
     )
 

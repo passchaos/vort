@@ -51,8 +51,9 @@ pub fn listFile(
     const bytes = try readFile(init, input_path);
     defer init.gpa.free(bytes);
     const archive = try vort.parseArArchive(bytes);
-    try stdout.print("ar_entries={d} thin={} archive_bytes={d}\n", .{
+    try stdout.print("ar_entries={d} ar_symbols={d} thin={} archive_bytes={d}\n", .{
         archive.entry_count,
+        archive.symbolCount(),
         archive.thin,
         bytes.len,
     });
@@ -72,6 +73,15 @@ pub fn listFile(
                 entry.safe_path,
                 entry.name,
             },
+        );
+    }
+    var symbol_iterator = archive.symbolIterator();
+    index = 0;
+    while (symbol_iterator.next()) |symbol| : (index += 1) {
+        const entry = try archive.entryForSymbol(symbol);
+        try stdout.print(
+            "symbol_index={d} member_offset={d} member={s} name={s}\n",
+            .{ index, symbol.member_header_offset, entry.name, symbol.name },
         );
     }
 }

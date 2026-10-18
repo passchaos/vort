@@ -21645,3 +21645,19 @@ reuse, so production keeps the simpler independently owned plans.
   GNU ar 2.38 reads both Vort thin writer members; Vort reads GNU short/long
   text members plus an object archive with an inline symbol table
   (`thin_self=2`, `thin_external_read=2`, `thin_external_write=3`).
+
+- Completed GNU armap support for regular and thin `ar` archives. The
+  allocation-free reader validates and exposes `/` and `/SYM64/` count, offset,
+  name and padding layouts, provides symbol iteration/lookup plus verified
+  symbol-to-member resolution, and continues to recognize BSD symbol metadata
+  without presenting it as a file. Thin writer entries accept explicit borrowed
+  symbol lists and deterministic alloc/append/into option variants select GNU32
+  automatically or emit caller-forced GNU32/GNU64 indexes without opening any
+  external object. Malformed count/name/offset, forged symbol, output-size and
+  exhaustive allocation-failure tests cover the new paths. GNU ar 2.38 supplies
+  both regular and thin object indexes to Vort; GNU nm 2.38 reads Vort's 32- and
+  64-bit maps, and the system C linker uses each to pull two external object
+  members successfully (`symbol_read=1`, `thin_symbol_read=1`,
+  `thin_symbol_write=2`, `thin_symbol_link=2`). The focused ar/deb gate now
+  explicitly imports both modules and runs 134 tests instead of silently
+  compiling only root-level matches.

@@ -7,6 +7,46 @@ pub fn main(init: std.process.Init) !void {
     _ = args.next();
     const output_path = args.next() orelse return error.MissingOutputPath;
     const mode = args.next() orelse "regular";
+    if (std.mem.eql(u8, mode, "thin-symbols") or
+        std.mem.eql(u8, mode, "thin-symbols64"))
+    {
+        const names = [_][]const u8{
+            "thin-first.o",
+            "thin/very-long-symbol-member.o",
+        };
+        const first_symbols = [_][]const u8{ "alpha", "shared_a" };
+        const second_symbols = [_][]const u8{ "beta", "shared_b", "calls_alpha" };
+        const parent = std.fs.path.dirname(output_path) orelse ".";
+        var sizes: [names.len]usize = undefined;
+        for (names, &sizes) |name, *size| {
+            const path = try std.fs.path.join(init.gpa, &.{ parent, name });
+            defer init.gpa.free(path);
+            const stat = try std.Io.Dir.cwd().statFile(init.io, path, .{});
+            size.* = std.math.cast(usize, stat.size) orelse return error.FileTooBig;
+        }
+        const entries = [_]vort.ArThinEncodeEntry{
+            .{
+                .name = names[0],
+                .size = sizes[0],
+                .symbols = &first_symbols,
+                .mode = 0o100600,
+            },
+            .{
+                .name = names[1],
+                .size = sizes[1],
+                .symbols = &second_symbols,
+            },
+        };
+        const encoded = try vort.encodeThinArAllocWithOptions(init.gpa, &entries, .{
+            .symbol_index_format = if (std.mem.eql(u8, mode, "thin-symbols64"))
+                .gnu64
+            else
+                .gnu32,
+        });
+        defer init.gpa.free(encoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+        return;
+    }
     if (std.mem.eql(u8, mode, "thin")) {
         const payloads = [_][]const u8{ "thin short payload\n", "thin long payload\n" };
         const names = [_][]const u8{

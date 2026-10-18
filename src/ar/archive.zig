@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("../core.zig");
+const symbol_table = @import("symbol_table.zig");
 
 pub const Error = core.Error || error{
     InvalidArArchive,
@@ -12,6 +13,9 @@ pub const Error = core.Error || error{
 pub const signature = "!<arch>\n";
 pub const thin_signature = "!<thin>\n";
 pub const header_size: usize = 60;
+pub const Symbol = symbol_table.Symbol;
+pub const SymbolTable = symbol_table.Table;
+pub const SymbolTableFormat = symbol_table.Format;
 
 pub const Entry = struct {
     name: []const u8,
@@ -32,6 +36,7 @@ pub const Archive = struct {
     bytes: []const u8,
     entry_count: usize,
     string_table: ?[]const u8,
+    symbol_table: ?SymbolTable,
     thin: bool,
 
     pub fn iterator(self: Archive) Iterator {
@@ -52,6 +57,52 @@ pub const Archive = struct {
         while (try iterator_value.next()) |entry|
             if (std.mem.eql(u8, entry.name, name)) return entry;
         return null;
+    }
+
+    pub fn symbolCount(self: Archive) usize {
+        return if (self.symbol_table) |table| table.count else 0;
+    }
+
+    pub fn symbolIterator(self: Archive) SymbolIterator {
+        return .{
+            .inner = if (self.symbol_table) |table| table.iterator() else null,
+        };
+    }
+
+    pub fn symbolAt(self: Archive, wanted: usize) Error!Symbol {
+        const table = self.symbol_table orelse return error.RangeOutOfBounds;
+        return table.symbolAt(wanted);
+    }
+
+    pub fn findSymbol(self: Archive, name: []const u8) ?Symbol {
+        const table = self.symbol_table orelse return null;
+        return table.find(name);
+    }
+
+    pub fn entryForSymbol(self: Archive, symbol: Symbol) Error!Entry {
+        const table = self.symbol_table orelse return error.InvalidArArchive;
+        var symbol_iterator = table.iterator();
+        var canonical = false;
+        while (symbol_iterator.next()) |candidate| {
+            if (candidate.member_header_offset == symbol.member_header_offset and
+                std.mem.eql(u8, candidate.name, symbol.name))
+            {
+                canonical = true;
+                break;
+            }
+        }
+        if (!canonical) return error.InvalidArArchive;
+
+        var entry_iterator = self.iterator();
+        while (try entry_iterator.next()) |entry|
+            if (entry.header_offset == symbol.member_header_offset) return entry;
+        return error.InvalidArArchive;
+    }
+
+    pub fn findEntryBySymbol(self: Archive, name: []const u8) Error!?Entry {
+        const symbol = self.findSymbol(name) orelse return null;
+        const entry = try self.entryForSymbol(symbol);
+        return entry;
     }
 
     pub fn extractInto(self: Archive, entry: Entry, output: []u8) Error!usize {
@@ -163,6 +214,15 @@ pub const Archive = struct {
     }
 };
 
+pub const SymbolIterator = struct {
+    inner: ?symbol_table.Iterator,
+
+    pub fn next(self: *SymbolIterator) ?Symbol {
+        if (self.inner) |*iterator_value| return iterator_value.next();
+        return null;
+    }
+};
+
 pub const Iterator = struct {
     archive: Archive,
     offset: usize,
@@ -186,6 +246,7 @@ const ParsedMember = struct {
     entry: ?Entry,
     next_offset: usize,
     string_table: ?[]const u8 = null,
+    symbol_table: ?SymbolTable = null,
 };
 
 pub fn parse(bytes: []const u8) Error!Archive {
@@ -197,18 +258,32 @@ pub fn parse(bytes: []const u8) Error!Archive {
     var offset: usize = signature.len;
     var entry_count: usize = 0;
     var string_table: ?[]const u8 = null;
+    var parsed_symbol_table: ?SymbolTable = null;
     while (offset < bytes.len) {
         const member = try parseMember(bytes, offset, string_table, thin);
         if (member.string_table) |table| string_table = table;
+        if (member.symbol_table) |table| {
+            if (parsed_symbol_table != null) return error.InvalidArArchive;
+            parsed_symbol_table = table;
+        }
         if (member.entry != null) entry_count = std.math.add(usize, entry_count, 1) catch
             return error.IntegerOverflow;
         offset = member.next_offset;
     }
     if (offset != bytes.len) return error.InvalidArArchive;
+    if (parsed_symbol_table) |table| {
+        var iterator_value = table.iterator();
+        while (iterator_value.next()) |symbol| {
+            if (symbol.member_header_offset < signature.len or
+                symbol.member_header_offset > bytes.len -| header_size)
+                return error.InvalidArArchive;
+        }
+    }
     return .{
         .bytes = bytes,
         .entry_count = entry_count,
         .string_table = string_table,
+        .symbol_table = parsed_symbol_table,
         .thin = thin,
     };
 }
@@ -243,6 +318,11 @@ fn parseMember(
         .entry = null,
         .next_offset = next_offset,
         .string_table = bytes[header_end..stored_end],
+    };
+    if (symbol_table.formatFromMemberName(raw_name)) |format| return .{
+        .entry = null,
+        .next_offset = next_offset,
+        .symbol_table = try symbol_table.parse(bytes[header_end..stored_end], format),
     };
     if (isSymbolTable(raw_name)) return .{ .entry = null, .next_offset = next_offset };
 
@@ -296,7 +376,7 @@ fn parseMember(
 }
 
 fn isSymbolTable(name: []const u8) bool {
-    return std.mem.eql(u8, name, "/") or std.mem.eql(u8, name, "/SYM64/") or
+    return symbol_table.formatFromMemberName(name) != null or
         std.mem.eql(u8, name, "__.SYMDEF") or
         std.mem.eql(u8, name, "__.SYMDEF SORTED");
 }

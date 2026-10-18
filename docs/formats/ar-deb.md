@@ -7,8 +7,13 @@ Unix `ar` archives and Debian binary packages.
 
 `parseArArchive` validates the global signature, every fixed-width member
 header, decimal/octal metadata, checked payload extents, and odd-size newline
-padding. Iteration skips GNU/BSD symbol-table metadata and exposes ordinary
-members with borrowed names and payloads.
+padding. Entry iteration skips symbol-table metadata and exposes ordinary
+members with borrowed names and payloads. GNU `/` and `/SYM64/` symbol indexes
+are parsed as allocation-free big-endian 32/64-bit views; `symbolCount`,
+`symbolIterator`, `symbolAt`, and `findSymbol` expose symbols, while
+`entryForSymbol` and `findEntryBySymbol` require the indexed offset to resolve
+to an actual member. BSD `__.SYMDEF` metadata remains recognized and skipped,
+not misreported as a file.
 
 Name handling includes:
 
@@ -33,6 +38,11 @@ use BSD inline names. Extraction has caller-owned and explicitly bounded
 allocation variants. `encodeThinArAlloc`, `encodeThinArAppend`, and
 `encodeThinArInto` write deterministic GNU thin archives with one `//` path
 table and header-only external members; sizes and metadata remain caller-owned.
+Each `ArThinEncodeEntry` can provide an explicit borrowed `symbols` slice, so
+the writer emits a linker-usable armap without opening the external object.
+`ArThinEncodeOptions.symbol_index_format` defaults to `auto` (GNU32 when every
+member header offset fits, otherwise GNU64) and can force `.gnu32` or `.gnu64`;
+the `*WithOptions` alloc/append/into variants share the same deterministic wire.
 
 ## Debian binary packages
 
@@ -70,10 +80,15 @@ Thin CLI extraction requires an explicit final `thin_source` path argument;
 neither the library nor CLI automatically opens an archive-controlled path.
 `safe_path` remains available to callers that deliberately implement a rooted,
 symlink-aware resolver.
+`list-ar-file` also reports `ar_symbols` and maps every indexed symbol to its
+member without reading the external payload.
 
 `run-ar-diff` validates GNU long-name input and Vort BSD long-name output,
 reads GNU thin archives with short/long/object members and symbol tables, and
 has GNU `ar` read Vort-authored thin archives. It also pins shortened external
 sources and unsafe paths (`thin_self=2`, `thin_external_read=2`,
-`thin_external_write=3`). `run-deb-diff` validates Vort output with `dpkg-deb`
-and reads packages produced by `dpkg-deb --build`.
+`thin_external_write=3`). GNU `nm` reads both Vort GNU32 and GNU64 armap wires,
+and the system C linker selects both external objects through each index
+(`symbol_read=1`, `thin_symbol_read=1`, `thin_symbol_write=2`,
+`thin_symbol_link=2`). `run-deb-diff` validates Vort output with `dpkg-deb` and
+reads packages produced by `dpkg-deb --build`.
