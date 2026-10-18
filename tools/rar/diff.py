@@ -213,6 +213,12 @@ def main() -> None:
     writer_ppmd_filtered_encrypted = 0
     writer_ppmd_filtered_encrypted_external = 0
     writer_ppmd_filtered_encrypted_unrar = 0
+    writer_rar29_filtered_solid = 0
+    writer_rar29_filtered_solid_external = 0
+    writer_rar29_filtered_solid_unrar = 0
+    writer_rar29_filtered_solid_encrypted = 0
+    writer_rar29_filtered_solid_encrypted_external = 0
+    writer_rar29_filtered_solid_encrypted_unrar = 0
     writer_filtered = 0
     writer_filtered_external = 0
     writer_solid = 0
@@ -1003,6 +1009,21 @@ def main() -> None:
         writer_ppmd_filtered_encrypted += ppmd_filter_counts.encrypted
         writer_ppmd_filtered_encrypted_external += ppmd_filter_counts.encrypted_7zip
         writer_ppmd_filtered_encrypted_unrar += ppmd_filter_counts.encrypted_unrar
+        writer_rar29_filtered_solid += ppmd_filter_counts.lz_solid
+        writer_rar29_filtered_solid_external += ppmd_filter_counts.lz_solid_7zip
+        writer_rar29_filtered_solid_unrar += ppmd_filter_counts.lz_solid_unrar
+        writer_rar29_filtered_solid_encrypted += ppmd_filter_counts.lz_solid_encrypted
+        writer_rar29_filtered_solid_encrypted_external += (
+            ppmd_filter_counts.lz_solid_encrypted_7zip
+        )
+        writer_rar29_filtered_solid_encrypted_unrar += (
+            ppmd_filter_counts.lz_solid_encrypted_unrar
+        )
+        writer_solid += ppmd_filter_counts.lz_solid + ppmd_filter_counts.lz_solid_encrypted
+        writer_solid_external += (
+            ppmd_filter_counts.lz_solid_7zip
+            + ppmd_filter_counts.lz_solid_encrypted_7zip
+        )
 
         if args.writer is not None:
             for version in versions:
@@ -1737,6 +1758,12 @@ def main() -> None:
         f"writer_ppmd_filtered_encrypted={writer_ppmd_filtered_encrypted} "
         f"writer_ppmd_filtered_encrypted_external={writer_ppmd_filtered_encrypted_external} "
         f"writer_ppmd_filtered_encrypted_unrar={writer_ppmd_filtered_encrypted_unrar} "
+        f"writer_rar29_filtered_solid={writer_rar29_filtered_solid} "
+        f"writer_rar29_filtered_solid_external={writer_rar29_filtered_solid_external} "
+        f"writer_rar29_filtered_solid_unrar={writer_rar29_filtered_solid_unrar} "
+        f"writer_rar29_filtered_solid_encrypted={writer_rar29_filtered_solid_encrypted} "
+        f"writer_rar29_filtered_solid_encrypted_external={writer_rar29_filtered_solid_encrypted_external} "
+        f"writer_rar29_filtered_solid_encrypted_unrar={writer_rar29_filtered_solid_encrypted_unrar} "
         f"writer_filtered={writer_filtered} "
         f"writer_filtered_external={writer_filtered_external} "
         f"writer_solid={writer_solid} "

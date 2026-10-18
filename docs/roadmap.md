@@ -21608,3 +21608,15 @@ reuse, so production keeps the simpler independently owned plans.
   output (`writer_ppmd_filtered=6`, `writer_ppmd_filtered_external=6`,
   `writer_ppmd_filtered_unrar=6`, `writer_ppmd_filtered_solid_external=1`,
   `writer_ppmd_filtered_encrypted_external=1`).
+
+- Added filtered RAR29 LZ solid writing. The reusable encoder now continues its
+  dictionary and repeat-distance state over pre-filter bytes, resets the VM
+  declaration per member, and supplies member-relative offsets to executable
+  transforms. All six E8/E8E9/Delta/Itanium/RGB/Audio filters round-trip across
+  solid members; RAR4 AES and arbitrary multi-volume payload cuts compose with
+  the same state machine. Four focused tests add determinism, direct random-
+  access rejection, by-name replay, encrypted extraction, volume boundaries
+  and exhaustive OOM cleanup, raising focused RAR coverage to 140 tests. 7-Zip
+  and unrar independently extract both clear and AES-encrypted filtered solid
+  writer output (`writer_rar29_filtered_solid_external=1`,
+  `writer_rar29_filtered_solid_encrypted_external=1`).

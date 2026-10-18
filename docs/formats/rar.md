@@ -172,9 +172,10 @@ RAR29 LZ output can apply E8, E8E9, Delta, Itanium, RGB, or Audio filters.
 The writer emits canonical RAR VM program bytecode, declares/reuses programs
 across blocks, and bounds filter blocks to the VM-compatible 120–128 KiB
 range. RGB and Audio parameters are explicit. Filtered RAR29 LZ solid writing
-remains rejected until its cross-member dictionary/filter semantics are exposed
-by the public API; filtered PPMd solid writing is supported because the model
-and member-local VM schedule have independent explicit state.
+retains the pre-filter bytes in dictionary history and carries repeat distances,
+while each member restarts its VM schedule and file-relative transform offset.
+Filtered PPMd solid writing similarly preserves its model independently from
+the member-local VM schedule.
 RAR50 output can additionally select a whole-member Delta, E8, E8E9, or ARM
 filter. The writer applies the forward transform independently to each legal
 filter-sized block, writes native filter records, and uses absolute member
@@ -304,6 +305,9 @@ zig build run -- extract-rar-volumes entry.bin output.bin 1048576 --password=pas
   archive.part1.rar archive.part2.rar archive.part3.rar
 ```
 
-Mixed RAR15/RAR20 solid transitions and filtered RAR29 LZ solid writing remain
-compatibility follow-ups. PPMd hybrid match escapes remain a later
-compression-ratio optimization.
+Filtered solid RAR29 LZ output is additionally extracted by both 7-Zip and
+unrar in clear and AES-encrypted forms
+(`writer_rar29_filtered_solid_external=1`,
+`writer_rar29_filtered_solid_encrypted_external=1`). Mixed RAR15/RAR20 solid
+transitions remain a compatibility follow-up. PPMd hybrid match escapes remain
+a later compression-ratio optimization.

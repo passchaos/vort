@@ -114,6 +114,34 @@ pub fn main(init: std.process.Init) !void {
         }
         return;
     }
+    if (std.mem.eql(u8, mode, "rar29-filtered-solid") or
+        std.mem.eql(u8, mode, "rar29-filtered-solid-encrypted"))
+    {
+        if (version != .rar4) return error.UnsupportedRarVersion;
+        const payload = "solid history payload alpha beta gamma\n" ** 128;
+        const encryption: ?vort.RarEncodeRar4EncryptionOptions =
+            if (std.mem.endsWith(u8, mode, "encrypted"))
+                .{
+                    .password = "rar29-filtered-solid-secret",
+                    .salt = [_]u8{0x73} ** 8,
+                }
+            else
+                null;
+        const entries = [_]vort.RarEncodeEntry{
+            .{ .name = "first.txt", .data = payload, .rar4_encryption = encryption },
+            .{ .name = "second.txt", .data = payload, .rar4_encryption = encryption },
+        };
+        const bytes = try vort.encodeRarAlloc(init.gpa, &entries, .{
+            .version = .rar4,
+            .compression = .rar29,
+            .block_size = 257,
+            .filter = .{ .delta = 2 },
+            .solid = true,
+        });
+        defer init.gpa.free(bytes);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = bytes });
+        return;
+    }
     if (std.mem.eql(u8, mode, "ppmd-solid") or
         std.mem.eql(u8, mode, "ppmd-filtered-solid"))
     {

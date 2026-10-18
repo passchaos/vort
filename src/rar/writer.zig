@@ -466,7 +466,7 @@ fn validateEntries(
         .stored => if (options.filter != null or options.solid)
             return error.UnsupportedRarEncodeOptions,
         .rar29 => {
-            if (options.version != .rar4 or (options.solid and options.filter != null))
+            if (options.version != .rar4)
                 return error.UnsupportedRarEncodeOptions;
             try rar29_encoder.validateOptions(.{
                 .dictionary_size = options.dictionary_size,
@@ -1558,15 +1558,6 @@ test "RAR29 writer emits all six standard VM filters" {
             .version = .rar4,
             .compression = .rar29,
             .filter = .arm,
-        }),
-    );
-    try std.testing.expectError(
-        error.UnsupportedRarEncodeOptions,
-        encodeAlloc(allocator, &entries, .{
-            .version = .rar4,
-            .compression = .rar29,
-            .filter = .e8,
-            .solid = true,
         }),
     );
     try std.testing.expectError(

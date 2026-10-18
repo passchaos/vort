@@ -1,4 +1,4 @@
-"""Focused interoperability matrix for Vort-authored RAR29 PPMd VM filters."""
+"""Focused interoperability matrix for Vort-authored RAR29 VM filter combinations."""
 
 from __future__ import annotations
 
@@ -18,6 +18,12 @@ class Counts:
     encrypted: int = 0
     encrypted_7zip: int = 0
     encrypted_unrar: int = 0
+    lz_solid: int = 0
+    lz_solid_7zip: int = 0
+    lz_solid_unrar: int = 0
+    lz_solid_encrypted: int = 0
+    lz_solid_encrypted_7zip: int = 0
+    lz_solid_encrypted_unrar: int = 0
 
 
 def run_matrix(
@@ -108,6 +114,8 @@ def run_matrix(
         encrypted_unrar = 1
 
     solid = solid_7zip = solid_unrar = 0
+    lz_solid = lz_solid_7zip = lz_solid_unrar = 0
+    lz_solid_encrypted = lz_solid_encrypted_7zip = lz_solid_encrypted_unrar = 0
     if writer is not None:
         solid_expected = b"solid history payload alpha beta gamma\n" * 128
         solid_archive = root / "vort-rar29-ppmd-filtered-solid.rar"
@@ -139,6 +147,51 @@ def run_matrix(
             )
             solid_unrar = 1
 
+        for mode, case_password in (
+            ("rar29-filtered-solid", None),
+            ("rar29-filtered-solid-encrypted", "rar29-filtered-solid-secret"),
+        ):
+            archive = root / f"vort-{mode}.rar"
+            _run(writer, str(archive), "rar4", mode)
+            _expect_cli(
+                cli,
+                archive,
+                solid_expected,
+                root / f"{mode}.out",
+                case_password,
+                entry="second.txt",
+            )
+            if case_password is None:
+                lz_solid = 1
+            else:
+                lz_solid_encrypted = 1
+            if seven_zip is not None:
+                _expect_7zip(
+                    seven_zip,
+                    archive,
+                    solid_expected,
+                    root / f"{mode}-7z",
+                    case_password,
+                    entry="second.txt",
+                )
+                if case_password is None:
+                    lz_solid_7zip = 1
+                else:
+                    lz_solid_encrypted_7zip = 1
+            if unrar is not None:
+                _expect_unrar(
+                    unrar,
+                    archive,
+                    solid_expected,
+                    root / f"{mode}-unrar",
+                    case_password,
+                    entry="second.txt",
+                )
+                if case_password is None:
+                    lz_solid_unrar = 1
+                else:
+                    lz_solid_encrypted_unrar = 1
+
     return Counts(
         ordinary=ordinary,
         ordinary_7zip=ordinary_7zip,
@@ -149,6 +202,12 @@ def run_matrix(
         encrypted=encrypted,
         encrypted_7zip=encrypted_7zip,
         encrypted_unrar=encrypted_unrar,
+        lz_solid=lz_solid,
+        lz_solid_7zip=lz_solid_7zip,
+        lz_solid_unrar=lz_solid_unrar,
+        lz_solid_encrypted=lz_solid_encrypted,
+        lz_solid_encrypted_7zip=lz_solid_encrypted_7zip,
+        lz_solid_encrypted_unrar=lz_solid_encrypted_unrar,
     )
 
 
