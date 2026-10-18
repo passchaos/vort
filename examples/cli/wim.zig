@@ -230,6 +230,16 @@ fn listDentryMetadata(
             unix.mode,
             unix.rdev,
         });
+    if (try entry.xattrs()) |initial| {
+        var xattrs = initial;
+        while (try xattrs.next()) |xattr|
+            try stdout.print("xattr\t{s}\tname={s}\tbytes={d}\tneed_ea={}\n", .{
+                path,
+                xattr.name,
+                xattr.value.len,
+                xattr.need_ea,
+            });
+    }
 }
 
 pub fn extractPath(

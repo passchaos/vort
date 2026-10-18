@@ -156,23 +156,40 @@ fn writeInodeMetadata(
         .name = "link.ads",
         .data = "hard link alternate stream",
     }};
-    var unix_data: [16]u8 = undefined;
-    std.mem.writeInt(u32, unix_data[0..4], 1000, .little);
-    std.mem.writeInt(u32, unix_data[4..8], 1001, .little);
-    std.mem.writeInt(u32, unix_data[8..12], 0o100640, .little);
-    std.mem.writeInt(u32, unix_data[12..16], 7, .little);
-    const object_id = [_]u8{
-        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-    } ++ [_]u8{0x55} ** 48;
+    const unix_data = vort.encodeWimUnixMetadata(.{
+        .uid = 1000,
+        .gid = 1001,
+        .mode = 0o100640,
+        .rdev = 7,
+    });
+    const object_id = vort.encodeWimObjectId(.{
+        .object_id = .{
+            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+            0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+        },
+        .birth_volume_id = @splat(0x55),
+        .birth_object_id = @splat(0x55),
+        .domain_id = @splat(0x55),
+    });
+    const xattr_bytes = try vort.encodeWimXattrsAlloc(init.gpa, &.{.{
+        .name = "user.vort",
+        .value = "Vort WIM xattr",
+    }});
+    defer init.gpa.free(xattr_bytes);
     const hard_tags = [_]vort.WimEncodeTaggedItem{.{
         .tag = vort.wimTaggedItemWimlibUnixData,
         .data = &unix_data,
     }};
-    const object_tags = [_]vort.WimEncodeTaggedItem{.{
-        .tag = vort.wimTaggedItemObjectId,
-        .data = &object_id,
-    }};
+    const object_tags = [_]vort.WimEncodeTaggedItem{
+        .{
+            .tag = vort.wimTaggedItemObjectId,
+            .data = &object_id,
+        },
+        .{
+            .tag = vort.wimTaggedItemXattrs,
+            .data = xattr_bytes,
+        },
+    };
     const entries = [_]vort.WimEncodeEntry{
         .{
             .path = "hard/a.txt",

@@ -21356,8 +21356,10 @@ reuse, so production keeps the simpler independently owned plans.
   boot behavior, integrity override, invalid sizes and OOM. Stored and XPRESS
   probes distribute three 70,000-byte resources across parts; Vort extracts the
   sets byte-exactly, and wimlib joins with `--check`, verifies, and extracts both
-  images (`writer_split=2`, `writer_split_wimlib=2`). Individual resource
-  spanning, pipable output, in-place update, and additional codecs remain open.
+  images (`writer_split=2`, `writer_split_wimlib=2`). The WIM format cannot
+  divide one file resource across SWM parts; like DISM/ImageX and wimlib, an
+  indivisible resource may exceed the soft part target. Pipable output,
+  in-place update, and additional codecs remain open.
 
 - Added deterministic pipable WIM writing and standard-to-pipable conversion.
   Alloc/append/into APIs cover one or many images and emit the complete `WLPWM`
@@ -21545,4 +21547,20 @@ reuse, so production keeps the simpler independently owned plans.
   wimlib reports the exact DOS names, uid/gid/mode/rdev and 64-byte object ID,
   while restoring the hard-link pair. Vort also parses and extracts a
   wimlib-authored `--unix-data` archive (`tagged_reader=1`). Automatic
-  filesystem capture and typed xattr construction remain separate follow-ups.
+  filesystem capture remains a separate follow-up.
+
+- Added typed WIM tagged-metadata construction and parsing. Fixed-size helpers
+  encode/decode wimlib Unix uid/gid/mode/rdev and 16...64-byte Windows Object
+  IDs, including zero-filling partial optional GUID fields. The WIMGAPI/DISM
+  xattr codec writes and validates packed value-length/name-length/NEED_EA/name
+  terminator/value entries, rejects empty/NUL/oversize or duplicate names, and
+  exposes a zero-allocation borrowed iterator. CLI image listings now surface
+  typed Unix and xattr records. Unit coverage adds helper, xattr round-trip,
+  malformed flags, duplicate names, partial Object ID and OOM cases; focused
+  WIM coverage is now 145 tests. The external gate captures a real
+  `user.vort` xattr with wimlib `--unix-data` for Vort to parse, then requires
+  wimlib to restore a Vort-authored xattr for all four writer codecs. The same
+  audit corrected an impossible roadmap item: WIM cannot split one file
+  resource across SWM parts, so DISM/ImageX, wimlib and Vort all permit an
+  indivisible resource to exceed the soft part target rather than inventing a
+  private wire format.

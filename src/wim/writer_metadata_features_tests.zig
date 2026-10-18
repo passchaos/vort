@@ -15,15 +15,26 @@ const limits: archive_mod.PathLimits = .{
 
 test "WIM writer round trips short names and generic tagged metadata" {
     const allocator = std.testing.allocator;
-    const object_id = [_]u8{
-        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-    } ++ [_]u8{0x55} ** 48;
-    var unix_data: [16]u8 = undefined;
-    std.mem.writeInt(u32, unix_data[0..4], 1000, .little);
-    std.mem.writeInt(u32, unix_data[4..8], 1001, .little);
-    std.mem.writeInt(u32, unix_data[8..12], 0o100640, .little);
-    std.mem.writeInt(u32, unix_data[12..16], 7, .little);
+    const object_id = writer.encodeObjectId(.{
+        .object_id = .{
+            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+            0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+        },
+        .birth_volume_id = @splat(0x55),
+        .birth_object_id = @splat(0x55),
+        .domain_id = @splat(0x55),
+    });
+    const unix_data = writer.encodeUnixMetadata(.{
+        .uid = 1000,
+        .gid = 1001,
+        .mode = 0o100640,
+        .rdev = 7,
+    });
+    const xattr_bytes = try writer.encodeXattrsAlloc(allocator, &.{
+        .{ .name = "user.vort", .value = "xattr-value" },
+        .{ .name = "user.empty", .value = &.{}, .need_ea = true },
+    });
+    defer allocator.free(xattr_bytes);
     const root_tags = [_]writer.TaggedItem{.{
         .tag = 0xaabb_ccdd,
         .data = "root-tag",
@@ -35,6 +46,7 @@ test "WIM writer round trips short names and generic tagged metadata" {
     const file_tags = [_]writer.TaggedItem{
         .{ .tag = metadata.tagged_item_object_id, .data = &object_id },
         .{ .tag = metadata.tagged_item_wimlib_unix_data, .data = &unix_data },
+        .{ .tag = metadata.tagged_item_xattrs, .data = xattr_bytes },
         .{ .tag = 0x1020_3040, .data = "opaque tagged bytes" },
         .{ .tag = 0x5060_7080, .data = &.{} },
     };
@@ -94,6 +106,8 @@ test "WIM writer round trips short names and generic tagged metadata" {
     defer allocator.free(short_name);
     try std.testing.expectEqualStrings("README~1.TXT", short_name);
     try std.testing.expectEqualSlices(u8, &object_id, (try file.objectId()).?);
+    const object_info = (try file.objectIdInfo()).?;
+    try std.testing.expectEqualSlices(u8, object_id[0..16], &object_info.object_id);
     const unix = (try file.unixMetadata()).?;
     try std.testing.expectEqual(@as(u32, 1000), unix.uid);
     try std.testing.expectEqual(@as(u32, 1001), unix.gid);
@@ -107,10 +121,19 @@ test "WIM writer round trips short names and generic tagged metadata" {
         0x5060_7080,
         0,
     )).?.data.len);
+    var xattrs = (try file.xattrs()).?;
+    const first_xattr = (try xattrs.next()).?;
+    try std.testing.expectEqualStrings("user.vort", first_xattr.name);
+    try std.testing.expectEqualStrings("xattr-value", first_xattr.value);
+    const second_xattr = (try xattrs.next()).?;
+    try std.testing.expectEqualStrings("user.empty", second_xattr.name);
+    try std.testing.expectEqual(@as(usize, 0), second_xattr.value.len);
+    try std.testing.expect(second_xattr.need_ea);
+    try std.testing.expect((try xattrs.next()) == null);
     var item_count: usize = 0;
     var items = file.taggedItems();
     while (try items.next()) |_| item_count += 1;
-    try std.testing.expectEqual(@as(usize, 4), item_count);
+    try std.testing.expectEqual(@as(usize, 5), item_count);
 
     const extracted = try archive.extractByPathAllocLimited(
         allocator,
@@ -174,6 +197,13 @@ test "WIM writer validates short-name aliases and hard-link tagged metadata" {
             .path = "file",
             .short_name = "BAD/NAME",
         }}, .{}),
+    );
+    try std.testing.expectError(
+        error.InvalidWimEntry,
+        writer.encodeXattrsAlloc(allocator, &.{.{
+            .name = "",
+            .value = "invalid",
+        }}),
     );
     const conflicting_long = [_]writer.Entry{
         .{ .path = "FIRST~1.TXT" },
@@ -255,16 +285,65 @@ test "WIM metadata rejects truncated tagged items" {
     );
 }
 
+test "WIM metadata rejects malformed typed xattrs" {
+    const allocator = std.testing.allocator;
+    const xattr_bytes = try writer.encodeXattrsAlloc(allocator, &.{.{
+        .name = "user.invalid",
+        .value = "value",
+    }});
+    defer allocator.free(xattr_bytes);
+    const tags = [_]writer.TaggedItem{.{
+        .tag = metadata.tagged_item_xattrs,
+        .data = xattr_bytes,
+    }};
+    const source = try writer.encodeAlloc(allocator, &.{.{
+        .path = "tagged",
+        .tagged_items = &tags,
+    }}, .{
+        .compression = .stored,
+        .integrity = false,
+    });
+    defer allocator.free(source);
+    const archive = try archive_mod.Archive.init(source);
+    var image = try archive.readImageMetadataAlloc(allocator, 1, limits);
+    defer image.deinit();
+    const dentry = try image.lookup(allocator, "tagged", 8, 8);
+    const item = (try dentry.findTaggedItem(metadata.tagged_item_xattrs, 0)).?;
+    const data_offset = @intFromPtr(item.data.ptr) - @intFromPtr(image.bytes.ptr);
+    const corrupted_bytes = try allocator.dupe(u8, image.bytes);
+    corrupted_bytes[data_offset + 3] = 1;
+    var corrupted = try metadata.ImageMetadata.fromOwnedBytes(
+        allocator,
+        corrupted_bytes,
+    );
+    defer corrupted.deinit();
+    const corrupted_dentry = try corrupted.lookup(allocator, "tagged", 8, 8);
+    try std.testing.expectError(
+        error.InvalidWimMetadata,
+        corrupted_dentry.xattrs(),
+    );
+}
+
 test "WIM short-name and tagged metadata writing is allocation failure safe" {
     const AllocationTest = struct {
         fn run(allocator: std.mem.Allocator) !void {
-            var unix_data: [16]u8 = @splat(0);
-            std.mem.writeInt(u32, unix_data[0..4], 42, .little);
+            const unix_data = writer.encodeUnixMetadata(.{
+                .uid = 42,
+                .gid = 43,
+                .mode = 0o100600,
+                .rdev = 0,
+            });
+            const xattr_bytes = try writer.encodeXattrsAlloc(allocator, &.{.{
+                .name = "user.oom",
+                .value = "xattr OOM value",
+            }});
+            defer allocator.free(xattr_bytes);
             const tags = [_]writer.TaggedItem{
                 .{
                     .tag = metadata.tagged_item_wimlib_unix_data,
                     .data = &unix_data,
                 },
+                .{ .tag = metadata.tagged_item_xattrs, .data = xattr_bytes },
                 .{ .tag = 0x1234_5678, .data = "opaque" },
             };
             const entries = [_]writer.Entry{.{
@@ -283,6 +362,8 @@ test "WIM short-name and tagged metadata writing is allocation failure safe" {
             defer image.deinit();
             const dentry = try image.lookup(allocator, "LONGFI~1.TXT", 8, 8);
             try std.testing.expectEqual(@as(u32, 42), (try dentry.unixMetadata()).?.uid);
+            var xattrs = (try dentry.xattrs()).?;
+            try std.testing.expectEqualStrings("user.oom", (try xattrs.next()).?.name);
         }
     };
     try std.testing.checkAllAllocationFailures(

@@ -46,8 +46,9 @@ IDs, child offsets, duplicate names, and unsafe `.`/`..` or separator-bearing
 names. `ImageMetadata` owns the decompressed metadata resource while `Dentry`,
 names, stream entries and tagged items are borrowed views. `taggedItems()` and
 `findTaggedItem()` preserve known and unknown tags; `objectId()` and
-`unixMetadata()` provide typed views for the standard object-ID and wimlib Unix
-records. Directory arrays are caller-owned and independently bounded.
+`objectIdInfo()`, `unixMetadata()` and `xattrs()` provide typed views for
+object-ID, wimlib Unix and WIMGAPI/DISM extended-attribute records. Directory
+arrays are caller-owned and independently bounded.
 
 Path lookup accepts an optional leading `/`, performs exact UTF-16 matching
 against either the long or DOS short name, and has caller-selected
@@ -140,6 +141,11 @@ ordered generic `{ tag, data }` records; each record is length-checked,
 8-byte-aligned and zero-padded without interpreting unknown payloads. The root
 uses `root_tagged_items`. Known tag constants cover Windows object IDs,
 extended attributes, wimlib Unix metadata and the deprecated Linux-xattr tag.
+`encodeWimObjectId`, `encodeWimUnixMetadata` and `encodeWimXattrsAlloc` construct
+their canonical little-endian payloads. Xattr names are 1...255 non-NUL bytes,
+values are at most 65,535 bytes, flags are restricted to ordinary or
+`FILE_NEED_EA`, and duplicate names are rejected; the borrowed reader applies
+the same validation.
 
 Named streams use `WimEncodeNamedStream`. `WimEncodeReparseData` carries the
 dentry tag/reserved/fixup fields separately from the reparse stream bytes, which
@@ -322,9 +328,8 @@ cross-part target blobs. The returned `WimEncodedSplitArchive` owns every part
 as with the standard split API.
 
 The current writer remains whole-archive and caller-buffer based. Recompressing
-solid compaction, wire-spanned individual resources, automatic
-host-filesystem security capture and typed construction of xattr/object-ID
-payloads remain follow-up slices. Filesystem capture/application and
+solid compaction and automatic host-filesystem security capture remain
+follow-up slices. Filesystem capture/application and
 construction of EFSRPC or reparse payloads from OS objects stay outside the
 wire serializer.
 
@@ -383,6 +388,21 @@ const ads = [_]vort.WimEncodeNamedStream{.{
     .data = zone_identifier,
 }};
 const security_descriptor = windows_self_relative_descriptor;
+const unix_data = vort.encodeWimUnixMetadata(.{
+    .uid = 1000,
+    .gid = 1000,
+    .mode = 0o100640,
+    .rdev = 0,
+});
+const xattr_data = try vort.encodeWimXattrsAlloc(allocator, &.{.{
+    .name = "user.example",
+    .value = "metadata",
+}});
+defer allocator.free(xattr_data);
+const tagged_items = [_]vort.WimEncodeTaggedItem{
+    .{ .tag = vort.wimTaggedItemWimlibUnixData, .data = &unix_data },
+    .{ .tag = vort.wimTaggedItemXattrs, .data = xattr_data },
+};
 const input = [_]vort.WimEncodeEntry{
     .{
         .path = "Windows/System32/example.dll",
@@ -550,10 +570,12 @@ kinds, and restores the Vort-written link (`writer_stream=4`,
 The per-codec inode writer images cover descriptor validation/deduplication,
 root and per-entry security IDs, hard-link lookup reference counts and XML
 accounting, distinct DOS names on hard-link aliases, wimlib Unix metadata and a
-64-byte Windows object ID. Vort resolves the short paths; wimlib reports every
-short name and typed tagged value, then extracts both aliases to the same inode
+64-byte Windows object ID, plus a `user.vort` xattr. Vort resolves the short
+paths; wimlib reports every short name and typed tagged value, restores the
+xattr, then extracts both aliases to the same inode
 (`writer_inode=4`, `writer_inode_wimlib=4`). A wimlib `--unix-data` archive is
-also parsed and extracted through Vort (`tagged_reader=1`).
+also parsed with its Unix record and real xattr, then extracted through Vort
+(`tagged_reader=1`).
 The multi-image writer gate generates four-image stored, XPRESS, LZX, and LZMS archives,
 including a cross-image shared blob, distinct trees, two byte-identical empty
 metadata resources, consecutive XML indexes and boot image 2. Both readers map

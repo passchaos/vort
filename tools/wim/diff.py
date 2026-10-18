@@ -253,6 +253,7 @@ def main() -> None:
             unix_file = unix_source / "tagged.txt"
             unix_file.write_bytes(unix_payload)
             unix_file.chmod(0o640)
+            os.setxattr(unix_file, b"user.vort", b"wimlib-xattr")
             unix_image = temp / "wimlib-unix-data.wim"
             run(
                 wimlib,
@@ -275,6 +276,8 @@ def main() -> None:
                 f"unix\t/tagged.txt\tuid={os.getuid()}\tgid={os.getgid()}"
                 .encode(),
                 b"mode=0100640",
+                b"tag\t/tagged.txt\tid=0x2",
+                b"xattr\t/tagged.txt\tname=user.vort\tbytes=12\tneed_ea=false",
             ):
                 if marker not in unix_listing:
                     raise AssertionError(
@@ -710,6 +713,8 @@ def main() -> None:
                 b"tag\t/hard/a.txt\tid=0x337dd873\tbytes=16",
                 b"unix\t/hard/a.txt\tuid=1000\tgid=1001\tmode=0100640\trdev=0x7",
                 b"tag\t/independent.txt\tid=0x1\tbytes=64",
+                b"tag\t/independent.txt\tid=0x2",
+                b"xattr\t/independent.txt\tname=user.vort\tbytes=14\tneed_ea=false",
             ):
                 if required not in image_tree:
                     raise AssertionError(
@@ -772,6 +777,7 @@ def main() -> None:
                     1,
                     f"--dest-dir={inode_extract}",
                     "--no-acls",
+                    "--unix-data",
                 )
                 first = inode_extract / "hard/a.txt"
                 second = inode_extract / "hard/b.txt"
@@ -784,6 +790,11 @@ def main() -> None:
                     or first_stat.st_nlink < 2
                 ):
                     raise AssertionError("wimlib did not restore Vort hard links")
+                if (
+                    os.getxattr(inode_extract / "independent.txt", b"user.vort")
+                    != b"Vort WIM xattr"
+                ):
+                    raise AssertionError("wimlib did not restore Vort xattr")
                 writer_inode_wimlib_cases += 1
 
         for writer_compression, expected_compression in (

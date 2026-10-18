@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("../core.zig");
 const metadata = @import("metadata.zig");
 const streams = @import("writer_streams.zig");
+const tagged = @import("tagged.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error || error{
     InvalidWimEntry,
@@ -15,10 +16,7 @@ pub const EntryKind = enum {
 pub const NamedStream = streams.NamedStream;
 pub const ReparseData = streams.ReparseData;
 
-pub const TaggedItem = struct {
-    tag: u32,
-    data: []const u8,
-};
+pub const TaggedItem = tagged.Item;
 
 /// A borrowed entry description.  The writer never takes ownership of `path`
 /// or `data`; both only need to remain valid for the duration of encode*().
