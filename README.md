@@ -373,9 +373,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   bounded extraction, adaptive/fixed Huffman models, and legacy LArc histories;
 - dependency-free Unix `ar` reading/writing with traditional, GNU string-table,
   and BSD inline long names, bounded extraction, GNU/LLVM thin archive metadata,
-  explicit external-member resolution, allocation-free GNU 32/64-bit symbol
-  index lookup, and deterministic thin writing with linker-usable armap output,
-  plus
+  explicit external-member resolution, allocation-free GNU and BSD/Darwin
+  32/64-bit symbol-index lookup, deterministic regular BSD armap writing, and
+  deterministic thin writing with linker-usable GNU armap output, plus
   Debian binary package parsing/writing with validated
   `debian-binary`, control/data TAR members, and none/gzip/Bzip2/LZMA/XZ/Zstd
   compression, validated bidirectionally with GNU `ar` and `dpkg-deb`, plus

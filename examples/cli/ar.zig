@@ -51,9 +51,10 @@ pub fn listFile(
     const bytes = try readFile(init, input_path);
     defer init.gpa.free(bytes);
     const archive = try vort.parseArArchive(bytes);
-    try stdout.print("ar_entries={d} ar_symbols={d} thin={} archive_bytes={d}\n", .{
+    try stdout.print("ar_entries={d} ar_symbols={d} ar_symbol_format={s} thin={} archive_bytes={d}\n", .{
         archive.entry_count,
         archive.symbolCount(),
+        if (archive.symbol_table) |table| @tagName(table.format) else "none",
         archive.thin,
         bytes.len,
     });

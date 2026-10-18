@@ -21661,3 +21661,20 @@ reuse, so production keeps the simpler independently owned plans.
   `thin_symbol_write=2`, `thin_symbol_link=2`). The focused ar/deb gate now
   explicitly imports both modules and runs 134 tests instead of silently
   compiling only root-level matches.
+
+- Added BSD/Darwin armap reading and deterministic writing. The parser now
+  accepts LLVM-compatible zero-padded extended member names plus little-endian
+  `__.SYMDEF`, `__.SYMDEF SORTED`, `__.SYMDEF_64`, and
+  `__.SYMDEF_64 SORTED` ranlib tables, exposing them through the same
+  allocation-free symbol APIs as GNU indexes. Regular writer entries accept
+  borrowed symbol lists; the default automatically selects BSD32 only when
+  symbols exist, preserving the legacy no-symbol wire, while option variants
+  force 32/64-bit original or lexical symbol order. The implementation lives in
+  a separate BSD writer module and never parses object payloads implicitly.
+  Tests cover all four formats, padded short/long names, auto/forced modes,
+  alloc/append/into parity, malformed ranlib/string/name padding and exhaustive
+  OOM cleanup. LLVM ar 14 supplies BSD and Darwin archives to Vort; LLVM ar/nm
+  extracts and indexes every Vort variant, and clang/lld selects both object
+  members through all four maps (`bsd_symbol_read=2`, `bsd_symbol_write=4`,
+  `bsd_symbol_extract=4`, `bsd_symbol_link=4`). Focused ar/deb coverage rises
+  from 134 to 138 tests.

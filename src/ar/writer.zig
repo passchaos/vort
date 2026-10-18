@@ -1,23 +1,19 @@
 const std = @import("std");
 const archive = @import("archive.zig");
+const bsd_writer = @import("bsd_writer.zig");
 const core = @import("../core.zig");
 const symbol_table = @import("symbol_table.zig");
 
-pub const Error = core.Error || std.mem.Allocator.Error || error{
+pub const Error = core.Error || std.mem.Allocator.Error || bsd_writer.Error || error{
     InvalidArEntryName,
     InvalidArSymbolName,
     ArHeaderFieldOverflow,
     ArSymbolIndexOverflow,
 };
 
-pub const EncodeEntry = struct {
-    name: []const u8,
-    data: []const u8 = "",
-    timestamp: u64 = 0,
-    owner: u32 = 0,
-    group: u32 = 0,
-    mode: u32 = 0o100644,
-};
+pub const EncodeEntry = bsd_writer.Entry;
+pub const EncodeOptions = bsd_writer.Options;
+pub const BsdSymbolIndexFormat = bsd_writer.SymbolIndexFormat;
 
 pub const ThinEncodeEntry = struct {
     name: []const u8,
@@ -40,9 +36,17 @@ pub const ThinEncodeOptions = struct {
 };
 
 pub fn encodeAlloc(allocator: std.mem.Allocator, entries: []const EncodeEntry) Error![]u8 {
+    return encodeAllocWithOptions(allocator, entries, .{});
+}
+
+pub fn encodeAllocWithOptions(
+    allocator: std.mem.Allocator,
+    entries: []const EncodeEntry,
+    options: EncodeOptions,
+) Error![]u8 {
     var output: std.ArrayList(u8) = .empty;
     errdefer output.deinit(allocator);
-    _ = try encodeAppend(allocator, &output, entries);
+    _ = try encodeAppendWithOptions(allocator, &output, entries, options);
     return output.toOwnedSlice(allocator);
 }
 
@@ -51,6 +55,17 @@ pub fn encodeAppend(
     output: *std.ArrayList(u8),
     entries: []const EncodeEntry,
 ) Error!usize {
+    return encodeAppendWithOptions(allocator, output, entries, .{});
+}
+
+pub fn encodeAppendWithOptions(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    entries: []const EncodeEntry,
+    options: EncodeOptions,
+) Error!usize {
+    if (bsd_writer.shouldUse(entries, options))
+        return bsd_writer.encodeAppend(allocator, output, entries, options);
     const start = output.items.len;
     errdefer output.items.len = start;
     try output.appendSlice(allocator, archive.signature);
@@ -63,7 +78,16 @@ pub fn encodeInto(
     entries: []const EncodeEntry,
     output: []u8,
 ) Error!usize {
-    const encoded = try encodeAlloc(allocator, entries);
+    return encodeIntoWithOptions(allocator, entries, .{}, output);
+}
+
+pub fn encodeIntoWithOptions(
+    allocator: std.mem.Allocator,
+    entries: []const EncodeEntry,
+    options: EncodeOptions,
+    output: []u8,
+) Error!usize {
+    const encoded = try encodeAllocWithOptions(allocator, entries, options);
     defer allocator.free(encoded);
     if (output.len < encoded.len) return error.OutputTooSmall;
     @memcpy(output[0..encoded.len], encoded);
@@ -316,6 +340,7 @@ fn appendSymbolWord(
             std.mem.writeInt(u64, &bytes, narrowed, .big);
             try output.appendSlice(allocator, &bytes);
         },
+        else => unreachable,
     }
 }
 

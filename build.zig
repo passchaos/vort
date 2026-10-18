@@ -1840,7 +1840,7 @@ pub fn build(b: *std.Build) void {
     ar_diff.addArg("--writer");
     ar_diff.addArtifactArg(ar_writer_probe_exe);
     if (b.args) |args| ar_diff.addArgs(args);
-    const ar_diff_step = b.step("run-ar-diff", "Validate GNU/BSD ar and thin symbol indexes against optional GNU tools");
+    const ar_diff_step = b.step("run-ar-diff", "Validate GNU/BSD ar and thin symbol indexes against optional GNU/LLVM tools");
     ar_diff_step.dependOn(&ar_diff.step);
 
     const deb_diff = b.addSystemCommand(&.{ "python3", "tools/deb/diff.py", "--cli" });

@@ -22,13 +22,34 @@ def main() -> None:
     parser.add_argument("--cli", required=True, type=Path)
     parser.add_argument("--writer", required=True, type=Path)
     parser.add_argument("--ar", dest="ar_tool", type=Path)
+    parser.add_argument("--llvm-ar", dest="llvm_ar_tool", type=Path)
+    parser.add_argument("--llvm-nm", dest="llvm_nm_tool", type=Path)
+    parser.add_argument("--clang", dest="clang_tool", type=Path)
     args = parser.parse_args()
     ar_tool = args.ar_tool
     if ar_tool is None:
         found = shutil.which("ar")
         ar_tool = Path(found) if found else None
+    llvm_ar_tool = args.llvm_ar_tool
+    if llvm_ar_tool is None:
+        for name in ("llvm-ar", "llvm-ar-20", "llvm-ar-19", "llvm-ar-18", "llvm-ar-17", "llvm-ar-14"):
+            found = shutil.which(name)
+            if found is not None:
+                llvm_ar_tool = Path(found)
+                break
+    llvm_nm_tool = args.llvm_nm_tool
+    if llvm_nm_tool is None:
+        for name in ("llvm-nm", "llvm-nm-20", "llvm-nm-19", "llvm-nm-18", "llvm-nm-17", "llvm-nm-14"):
+            found = shutil.which(name)
+            if found is not None:
+                llvm_nm_tool = Path(found)
+                break
     cc_tool = shutil.which("cc")
     nm_tool = shutil.which("nm")
+    clang_tool = args.clang_tool
+    if clang_tool is None:
+        found = shutil.which("clang") or shutil.which("clang-14")
+        clang_tool = Path(found) if found else None
 
     expected = {
         "short.txt": b"short ar payload\n",
@@ -45,6 +66,10 @@ def main() -> None:
     thin_symbol_read = 0
     thin_symbol_write = 0
     thin_symbol_link = 0
+    bsd_symbol_read = 0
+    bsd_symbol_write = 0
+    bsd_symbol_extract = 0
+    bsd_symbol_link = 0
     malformed = 0
 
     with tempfile.TemporaryDirectory(prefix="vort-ar-diff-") as temp_text:
@@ -263,6 +288,7 @@ def main() -> None:
                 second_source = temp / "thin-second.c"
                 second_object = temp / "thin" / "very-long-symbol-member.o"
                 first_source.write_text(
+                    "int zeta(void) { return 7; }\n"
                     "int alpha(void) { return 11; }\n"
                     "int shared_a = 3;\n"
                     "static int hidden(void) { return 1; }\n"
@@ -347,6 +373,187 @@ def main() -> None:
                     run(executable, cwd=temp)
                     thin_symbol_link += 1
 
+                bsd_first = temp / "bsd-first.o"
+                bsd_dir = temp / "bsd"
+                bsd_dir.mkdir()
+                bsd_second = bsd_dir / "very-long-symbol-member.o"
+                shutil.copyfile(first_object, bsd_first)
+                shutil.copyfile(second_object, bsd_second)
+                bsd_member_names = (
+                    bsd_first.name,
+                    f"{bsd_dir.name}/{bsd_second.name}",
+                )
+                llvm_member_names = (bsd_first.name, bsd_second.name)
+
+                if llvm_ar_tool is not None:
+                    for llvm_format in ("bsd", "darwin"):
+                        llvm_archive = temp / f"llvm-{llvm_format}.a"
+                        run(
+                            llvm_ar_tool,
+                            f"--format={llvm_format}",
+                            "rcs",
+                            llvm_archive.name,
+                            *bsd_member_names,
+                            cwd=temp,
+                        )
+                        llvm_listing = run(
+                            args.cli,
+                            "list-ar-file",
+                            llvm_archive,
+                        ).stdout
+                        required = (
+                            "ar_entries=2",
+                            "ar_symbols=6",
+                            "ar_symbol_format=bsd32",
+                            "member=bsd-first.o name=zeta",
+                            "member=bsd-first.o name=alpha",
+                            "member=very-long-symbol-member.o name=beta",
+                            "member=very-long-symbol-member.o name=calls_alpha",
+                        )
+                        if any(value not in llvm_listing for value in required):
+                            raise AssertionError(
+                                f"Vort rejected LLVM {llvm_format} armap: "
+                                f"{llvm_listing}"
+                            )
+                        for index, (name, expected_path) in enumerate(
+                            zip(llvm_member_names, (bsd_first, bsd_second))
+                        ):
+                            output = temp / f"llvm-{llvm_format}-{index}.out"
+                            run(
+                                args.cli,
+                                "extract-ar-file",
+                                llvm_archive,
+                                name,
+                                output,
+                                expected_path.stat().st_size,
+                            )
+                            if output.read_bytes() != expected_path.read_bytes():
+                                raise AssertionError(
+                                    f"Vort rejected LLVM {llvm_format} member {name}"
+                                )
+                        bsd_symbol_read += 1
+
+                bsd_modes = (
+                    ("bsd-symbols", "bsd32", False),
+                    ("bsd-symbols-sorted", "bsd32_sorted", True),
+                    ("bsd-symbols64", "bsd64", False),
+                    ("bsd-symbols64-sorted", "bsd64_sorted", True),
+                )
+                unsorted_names = (
+                    "zeta",
+                    "alpha",
+                    "shared_a",
+                    "beta",
+                    "shared_b",
+                    "calls_alpha",
+                )
+                sorted_names = tuple(sorted(unsorted_names))
+                for bsd_mode, expected_format, sorted_index in bsd_modes:
+                    bsd_archive = temp / f"vort-{bsd_mode}.a"
+                    run(args.writer, bsd_archive, bsd_mode)
+                    bsd_listing = run(args.cli, "list-ar-file", bsd_archive).stdout
+                    required = (
+                        "ar_entries=2",
+                        "ar_symbols=6",
+                        f"ar_symbol_format={expected_format}",
+                        "member=bsd-first.o name=alpha",
+                        "member=bsd/very-long-symbol-member.o name=beta",
+                    )
+                    if any(value not in bsd_listing for value in required):
+                        raise AssertionError(
+                            f"Vort BSD symbol metadata mismatch ({bsd_mode}): "
+                            f"{bsd_listing}"
+                        )
+                    listed_symbols = tuple(
+                        line.rsplit("name=", 1)[1]
+                        for line in bsd_listing.splitlines()
+                        if line.startswith("symbol_index=")
+                    )
+                    expected_symbols = sorted_names if sorted_index else unsorted_names
+                    if listed_symbols != expected_symbols:
+                        raise AssertionError(
+                            f"Vort BSD symbol order mismatch ({bsd_mode}): "
+                            f"{listed_symbols}"
+                        )
+
+                    if clang_tool is not None:
+                        executable = temp / f"vort-{bsd_mode}-linked"
+                        linked = run(
+                            clang_tool,
+                            "-fuse-ld=lld",
+                            main_object,
+                            bsd_archive,
+                            "-o",
+                            executable,
+                            cwd=temp,
+                            check=False,
+                        )
+                        if linked.returncode != 0:
+                            raise AssertionError(
+                                f"LLVM linker rejected Vort BSD armap ({bsd_mode}): "
+                                f"{linked.stderr}"
+                            )
+                        run(executable, cwd=temp)
+                        bsd_symbol_link += 1
+
+                    if llvm_ar_tool is not None:
+                        member_names = tuple(
+                            line
+                            for line in run(
+                                llvm_ar_tool,
+                                "t",
+                                bsd_archive.name,
+                                cwd=temp,
+                            ).stdout.splitlines()
+                            if line
+                        )
+                        if member_names != bsd_member_names:
+                            raise AssertionError(
+                                f"LLVM ar rejected Vort BSD members ({bsd_mode}): "
+                                f"{member_names}"
+                            )
+                        for name, expected_path in zip(
+                            bsd_member_names,
+                            (bsd_first, bsd_second),
+                        ):
+                            extracted = subprocess.run(
+                                [str(llvm_ar_tool), "p", bsd_archive.name, name],
+                                cwd=temp,
+                                check=True,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
+                            ).stdout
+                            if extracted != expected_path.read_bytes():
+                                raise AssertionError(
+                                    f"LLVM ar rejected Vort BSD data ({bsd_mode}, {name})"
+                                )
+                        bsd_symbol_extract += 1
+
+                    if llvm_nm_tool is not None:
+                        armap = run(
+                            llvm_nm_tool,
+                            "--print-armap",
+                            bsd_archive.name,
+                            cwd=temp,
+                        ).stdout
+                        expected_lines = tuple(
+                            f"{name} in "
+                            + (
+                                "bsd-first.o"
+                                if name in ("zeta", "alpha", "shared_a")
+                                else "bsd/very-long-symbol-member.o"
+                            )
+                            for name in expected_symbols
+                        )
+                        positions = tuple(armap.find(line) for line in expected_lines)
+                        if any(position < 0 for position in positions) or positions != tuple(
+                            sorted(positions)
+                        ):
+                            raise AssertionError(
+                                f"LLVM nm rejected Vort BSD armap ({bsd_mode}): {armap}"
+                            )
+                        bsd_symbol_write += 1
+
         corrupt = bytearray(vort_archive.read_bytes())
         corrupt[8 + 58] ^= 1
         corrupt_path = temp / "corrupt.a"
@@ -357,13 +564,16 @@ def main() -> None:
 
     print(
         f"self_cases={self_cases} ar_tool={ar_tool is not None} cc={cc_tool is not None} "
-        f"nm={nm_tool is not None} "
+        f"nm={nm_tool is not None} llvm_ar={llvm_ar_tool is not None} "
+        f"llvm_nm={llvm_nm_tool is not None} clang={clang_tool is not None} "
         f"external_read={external_read} external_write={external_write} "
         f"symbol_read={symbol_read} "
         f"thin_self={thin_self} thin_external_read={thin_external_read} "
         f"thin_external_write={thin_external_write} "
         f"thin_symbol_read={thin_symbol_read} thin_symbol_write={thin_symbol_write} "
         f"thin_symbol_link={thin_symbol_link} "
+        f"bsd_symbol_read={bsd_symbol_read} bsd_symbol_write={bsd_symbol_write} "
+        f"bsd_symbol_extract={bsd_symbol_extract} bsd_symbol_link={bsd_symbol_link} "
         f"malformed={malformed}"
     )
 

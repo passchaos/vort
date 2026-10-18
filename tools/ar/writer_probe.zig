@@ -7,6 +7,63 @@ pub fn main(init: std.process.Init) !void {
     _ = args.next();
     const output_path = args.next() orelse return error.MissingOutputPath;
     const mode = args.next() orelse "regular";
+    const bsd_modes = [_][]const u8{
+        "bsd-symbols",
+        "bsd-symbols-sorted",
+        "bsd-symbols64",
+        "bsd-symbols64-sorted",
+    };
+    var bsd_mode: ?vort.ArBsdSymbolIndexFormat = null;
+    for (bsd_modes, [_]vort.ArBsdSymbolIndexFormat{
+        .bsd32,
+        .bsd32_sorted,
+        .bsd64,
+        .bsd64_sorted,
+    }) |name, format| {
+        if (std.mem.eql(u8, mode, name)) bsd_mode = format;
+    }
+    if (bsd_mode) |symbol_index_format| {
+        const names = [_][]const u8{
+            "bsd-first.o",
+            "bsd/very-long-symbol-member.o",
+        };
+        const first_symbols = [_][]const u8{ "zeta", "alpha", "shared_a" };
+        const second_symbols = [_][]const u8{ "beta", "shared_b", "calls_alpha" };
+        const parent = std.fs.path.dirname(output_path) orelse ".";
+        var payloads: [names.len][]u8 = undefined;
+        var payload_count: usize = 0;
+        defer for (payloads[0..payload_count]) |payload| init.gpa.free(payload);
+        for (names, &payloads) |name, *payload| {
+            const path = try std.fs.path.join(init.gpa, &.{ parent, name });
+            defer init.gpa.free(path);
+            payload.* = try std.Io.Dir.cwd().readFileAlloc(
+                init.io,
+                path,
+                init.gpa,
+                .limited(16 * 1024 * 1024),
+            );
+            payload_count += 1;
+        }
+        const entries = [_]vort.ArEncodeEntry{
+            .{
+                .name = names[0],
+                .data = payloads[0],
+                .symbols = &first_symbols,
+                .mode = 0o100600,
+            },
+            .{
+                .name = names[1],
+                .data = payloads[1],
+                .symbols = &second_symbols,
+            },
+        };
+        const encoded = try vort.encodeArAllocWithOptions(init.gpa, &entries, .{
+            .symbol_index_format = symbol_index_format,
+        });
+        defer init.gpa.free(encoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+        return;
+    }
     if (std.mem.eql(u8, mode, "thin-symbols") or
         std.mem.eql(u8, mode, "thin-symbols64"))
     {

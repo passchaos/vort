@@ -319,7 +319,7 @@ fn parseMember(
         .next_offset = next_offset,
         .string_table = bytes[header_end..stored_end],
     };
-    if (symbol_table.formatFromMemberName(raw_name)) |format| return .{
+    if (symbolFormatFromRawName(raw_name)) |format| return .{
         .entry = null,
         .next_offset = next_offset,
         .symbol_table = try symbol_table.parse(bytes[header_end..stored_end], format),
@@ -332,10 +332,16 @@ fn parseMember(
     if (std.mem.startsWith(u8, raw_name, "#1/")) {
         const name_len = try parseDecimalSlice(usize, raw_name[3..]);
         if (name_len == 0 or name_len > stored_size) return error.InvalidArArchive;
-        name = bytes[header_end..][0..name_len];
-        if (std.mem.indexOfScalar(u8, name, 0) != null or
-            std.mem.indexOfScalar(u8, name, '\n') != null)
-            return error.InvalidArArchive;
+        const stored_name = bytes[header_end..][0..name_len];
+        if (std.mem.indexOfScalar(u8, stored_name, 0)) |terminator| {
+            if (terminator == 0) return error.InvalidArArchive;
+            for (stored_name[terminator..]) |byte|
+                if (byte != 0) return error.InvalidArArchive;
+            name = stored_name[0..terminator];
+        } else {
+            name = stored_name;
+        }
+        if (std.mem.indexOfScalar(u8, name, '\n') != null) return error.InvalidArArchive;
         data_offset += name_len;
         data_size -= name_len;
     } else if (raw_name[0] == '/' and raw_name.len > 1 and
@@ -356,6 +362,11 @@ fn parseMember(
             raw_name;
     }
     if (name.len == 0) return error.InvalidArArchive;
+    if (symbol_table.formatFromMemberName(name)) |format| return .{
+        .entry = null,
+        .next_offset = next_offset,
+        .symbol_table = try symbol_table.parse(bytes[data_offset..stored_end], format),
+    };
     return .{
         .entry = .{
             .name = name,
@@ -376,9 +387,14 @@ fn parseMember(
 }
 
 fn isSymbolTable(name: []const u8) bool {
-    return symbol_table.formatFromMemberName(name) != null or
-        std.mem.eql(u8, name, "__.SYMDEF") or
-        std.mem.eql(u8, name, "__.SYMDEF SORTED");
+    return symbolFormatFromRawName(name) != null;
+}
+
+fn symbolFormatFromRawName(name: []const u8) ?symbol_table.Format {
+    if (symbol_table.formatFromMemberName(name)) |format| return format;
+    if (name.len > 1 and name[name.len - 1] == '/')
+        return symbol_table.formatFromMemberName(name[0 .. name.len - 1]);
+    return null;
 }
 
 fn parseNumber(comptime T: type, field: []const u8, base: u8) Error!T {

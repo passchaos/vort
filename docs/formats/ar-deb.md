@@ -9,17 +9,19 @@ Unix `ar` archives and Debian binary packages.
 header, decimal/octal metadata, checked payload extents, and odd-size newline
 padding. Entry iteration skips symbol-table metadata and exposes ordinary
 members with borrowed names and payloads. GNU `/` and `/SYM64/` symbol indexes
-are parsed as allocation-free big-endian 32/64-bit views; `symbolCount`,
-`symbolIterator`, `symbolAt`, and `findSymbol` expose symbols, while
-`entryForSymbol` and `findEntryBySymbol` require the indexed offset to resolve
-to an actual member. BSD `__.SYMDEF` metadata remains recognized and skipped,
-not misreported as a file.
+are parsed as allocation-free big-endian 32/64-bit views. BSD/Darwin
+`__.SYMDEF`, `__.SYMDEF SORTED`, `__.SYMDEF_64`, and
+`__.SYMDEF_64 SORTED` use LLVM-compatible little-endian 32/64-bit ranlib views.
+`symbolCount`, `symbolIterator`, `symbolAt`, and `findSymbol` expose either
+family, while `entryForSymbol` and `findEntryBySymbol` require the indexed
+offset to resolve to an actual member.
 
 Name handling includes:
 
 - traditional `name/` fields;
 - GNU `//` string tables plus `/offset` references;
-- BSD `#1/length` inline names.
+- BSD `#1/length` inline names, including LLVM's zero-padded 8-byte data
+  alignment.
 
 GNU/LLVM thin archives use `!<thin>\n` and retain symbol/string tables inline,
 while ordinary member headers refer to external files. Parsed
@@ -35,7 +37,13 @@ because the GNU thin wire requires its `//` path table.
 `encodeArAlloc`, `encodeArAppend`, and `encodeArInto` write deterministic
 archives. Short names use the traditional representation and long/path names
 use BSD inline names. Extraction has caller-owned and explicitly bounded
-allocation variants. `encodeThinArAlloc`, `encodeThinArAppend`, and
+allocation variants. `ArEncodeEntry.symbols` opts the default writer into a
+BSD32 armap while preserving the exact legacy wire when every symbol slice is
+empty. `ArEncodeOptions.symbol_index_format` can force BSD32, BSD32 SORTED,
+BSD64, or BSD64 SORTED; the regular `*WithOptions` alloc/append/into APIs emit
+LLVM-compatible extended names and deterministic symbol ordering.
+
+`encodeThinArAlloc`, `encodeThinArAppend`, and
 `encodeThinArInto` write deterministic GNU thin archives with one `//` path
 table and header-only external members; sizes and metadata remain caller-owned.
 Each `ArThinEncodeEntry` can provide an explicit borrowed `symbols` slice, so
@@ -80,8 +88,8 @@ Thin CLI extraction requires an explicit final `thin_source` path argument;
 neither the library nor CLI automatically opens an archive-controlled path.
 `safe_path` remains available to callers that deliberately implement a rooted,
 symlink-aware resolver.
-`list-ar-file` also reports `ar_symbols` and maps every indexed symbol to its
-member without reading the external payload.
+`list-ar-file` also reports `ar_symbols`, `ar_symbol_format`, and maps every
+indexed symbol to its member without reading an external payload.
 
 `run-ar-diff` validates GNU long-name input and Vort BSD long-name output,
 reads GNU thin archives with short/long/object members and symbol tables, and
@@ -90,5 +98,9 @@ sources and unsafe paths (`thin_self=2`, `thin_external_read=2`,
 `thin_external_write=3`). GNU `nm` reads both Vort GNU32 and GNU64 armap wires,
 and the system C linker selects both external objects through each index
 (`symbol_read=1`, `thin_symbol_read=1`, `thin_symbol_write=2`,
-`thin_symbol_link=2`). `run-deb-diff` validates Vort output with `dpkg-deb` and
+`thin_symbol_link=2`). LLVM 14 BSD and Darwin writers feed two regular armap
+archives into Vort. LLVM ar/nm extract and enumerate all four Vort BSD32/64 and
+SORTED variants, while clang/lld links through each
+(`bsd_symbol_read=2`, `bsd_symbol_write=4`, `bsd_symbol_extract=4`,
+`bsd_symbol_link=4`). `run-deb-diff` validates Vort output with `dpkg-deb` and
 reads packages produced by `dpkg-deb --build`.

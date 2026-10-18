@@ -13,6 +13,8 @@ pub const SymbolIterator = archive.SymbolIterator;
 pub const SymbolTable = archive.SymbolTable;
 pub const SymbolTableFormat = archive.SymbolTableFormat;
 pub const EncodeEntry = writer.EncodeEntry;
+pub const EncodeOptions = writer.EncodeOptions;
+pub const BsdSymbolIndexFormat = writer.BsdSymbolIndexFormat;
 pub const ThinEncodeEntry = writer.ThinEncodeEntry;
 pub const ThinEncodeOptions = writer.ThinEncodeOptions;
 pub const ThinSymbolIndexFormat = writer.ThinSymbolIndexFormat;
@@ -20,6 +22,9 @@ pub const parse = archive.parse;
 pub const encodeAlloc = writer.encodeAlloc;
 pub const encodeAppend = writer.encodeAppend;
 pub const encodeInto = writer.encodeInto;
+pub const encodeAllocWithOptions = writer.encodeAllocWithOptions;
+pub const encodeAppendWithOptions = writer.encodeAppendWithOptions;
+pub const encodeIntoWithOptions = writer.encodeIntoWithOptions;
 pub const encodeThinAlloc = writer.encodeThinAlloc;
 pub const encodeThinAppend = writer.encodeThinAppend;
 pub const encodeThinInto = writer.encodeThinInto;
@@ -32,5 +37,6 @@ test {
     _ = archive;
     _ = @import("ar/symbol_table.zig");
     _ = writer;
+    _ = @import("ar/bsd_tests.zig");
     _ = @import("ar/thin_tests.zig");
 }
