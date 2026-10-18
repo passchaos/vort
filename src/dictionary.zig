@@ -1,6 +1,13 @@
 const std = @import("std");
 const checksum = @import("checksum.zig");
 
+pub const cover = @import("dictionary/cover.zig");
+pub const CoverTrainOptions = cover.TrainOptions;
+
+test {
+    _ = cover;
+}
+
 const patch_magic = [_]u8{ 'V', 'D', 'C', 'T' };
 const patch_version: u8 = 0;
 const patch_header_len: usize = 17;
@@ -216,6 +223,17 @@ pub const TrainOptions = struct {
     max_phrase_len: usize = 16,
     max_phrases: usize = 256,
 };
+
+/// Train caller-owned history with the deterministic, sample-boundary-safe
+/// COVER-class selector. This exposes the COVER selection model without
+/// claiming byte-identical output with libzstd's COVER or FastCover trainers.
+pub fn trainCoverAlloc(
+    allocator: std.mem.Allocator,
+    samples: []const []const u8,
+    options: CoverTrainOptions,
+) ![]u8 {
+    return cover.trainAlloc(allocator, samples, options);
+}
 
 const Phrase = struct {
     bytes: []const u8,
