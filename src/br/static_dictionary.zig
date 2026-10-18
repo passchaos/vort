@@ -160,6 +160,8 @@ pub const TransformMetadata = struct {
     prefix_len: u3,
     suffix_len: u4,
     suffix_bytes: u64,
+    omit_first: u4,
+    omit_last: u4,
     keeps_whole_word: bool,
     case_kind: TransformCaseKind,
 };
@@ -171,6 +173,8 @@ const transform_metadata = blk: {
             .prefix_len = @intCast(cStringLength(spec.prefix)),
             .suffix_len = @intCast(cStringLength(spec.suffix)),
             .suffix_bytes = cStringBits(spec.suffix),
+            .omit_first = if (spec.kind >= 12) @intCast(spec.kind - 11) else 0,
+            .omit_last = if (spec.kind <= 9) @intCast(spec.kind) else 0,
             .keeps_whole_word = spec.kind == 0 or spec.kind == 10 or spec.kind == 11,
             .case_kind = switch (spec.kind) {
                 10 => .first,

@@ -384,23 +384,34 @@ pub fn buildStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u
 }
 
 pub fn buildStaticDictionaryWithCacheAlloc(allocator: std.mem.Allocator, input: []const u8, cache: ?*StaticDictionaryMatchCache) !Plan {
-    return buildStaticDictionaryInternal(allocator, input, cache, false);
+    return buildStaticDictionaryInternal(allocator, input, cache, .compact);
 }
 
-/// Complete RFC 7932 reference planner. Unlike the compact production index,
-/// this enumerates every word/transform address at each queried position, so
-/// omit-first and short-core-plus-suffix transforms cannot be missed.
-pub fn buildStaticDictionaryExhaustiveAlloc(allocator: std.mem.Allocator, input: []const u8) !Plan {
-    return buildStaticDictionaryInternal(allocator, input, null, true);
+/// Complete RFC 7932 planner. A lazy supplemental index covers omit-first and
+/// short-core-plus-suffix transforms that the compact index cannot reach.
+pub fn buildStaticDictionaryCompleteAlloc(allocator: std.mem.Allocator, input: []const u8) !Plan {
+    return buildStaticDictionaryInternal(allocator, input, null, .complete);
 }
+
+/// Slow oracle retained for differential benchmarks and matcher validation.
+/// Production encoder surfaces use either the compact or supplemental index.
+pub fn buildStaticDictionaryReferenceAlloc(allocator: std.mem.Allocator, input: []const u8) !Plan {
+    return buildStaticDictionaryInternal(allocator, input, null, .reference);
+}
+
+const StaticDictionarySearch = enum { compact, complete, reference };
 
 fn buildStaticDictionaryInternal(
     allocator: std.mem.Allocator,
     input: []const u8,
     cache: ?*StaticDictionaryMatchCache,
-    exhaustive: bool,
+    search: StaticDictionarySearch,
 ) !Plan {
     const matcher = try static_dictionary_matcher.Index.sharedIndex();
+    const complete_matcher = if (search == .complete)
+        try static_dictionary_matcher.CompleteIndex.sharedIndex()
+    else
+        null;
     var commands: std.ArrayList(Command) = .empty;
     errdefer commands.deinit(allocator);
     var position: usize = 0;
@@ -409,12 +420,14 @@ fn buildStaticDictionaryInternal(
     var match_count: usize = 0;
 
     while (position < input.len) {
-        const match = if (exhaustive)
-            static_dictionary.findLongestMatch(input[position..])
-        else if (cache) |active|
-            active.findLongest(matcher, input, position)
-        else
-            matcher.findLongest(input[position..]);
+        const match = switch (search) {
+            .complete => complete_matcher.?.findLongest(matcher, input[position..]),
+            .reference => static_dictionary.findLongestMatch(input[position..]),
+            .compact => if (cache) |active|
+                active.findLongest(matcher, input, position)
+            else
+                matcher.findLongest(input[position..]),
+        };
         const selected = match orelse {
             position += 1;
             insert_len += 1;
@@ -1059,7 +1072,7 @@ test "static dictionary cache preserves mixed and dictionary-only plans" {
     try std.testing.expectEqualSlices(Command, expected_boundary.commands, actual_boundary.commands);
 }
 
-test "exhaustive static dictionary planner reaches omit-first transforms" {
+test "complete static dictionary planner reaches omit-first transforms" {
     const transform_index: usize = 3;
     var transformed_storage: [64]u8 = undefined;
     const compact = try static_dictionary_matcher.Index.sharedIndex();
@@ -1086,12 +1099,12 @@ test "exhaustive static dictionary planner reaches omit-first transforms" {
     try std.testing.expect(chosen_len != 0);
     const transformed = chosen_storage[0..chosen_len];
     const compact_match = compact.findLongest(transformed);
-    const exhaustive_match = static_dictionary.findLongestMatch(transformed).?;
+    const reference_match = static_dictionary.findLongestMatch(transformed).?;
     try std.testing.expect(compact_match == null or
-        compact_match.?.output_len < exhaustive_match.output_len);
-    try std.testing.expectEqual(transformed.len, exhaustive_match.output_len);
+        compact_match.?.output_len < reference_match.output_len);
+    try std.testing.expectEqual(transformed.len, reference_match.output_len);
 
-    const plan = try buildStaticDictionaryExhaustiveAlloc(
+    const plan = try buildStaticDictionaryCompleteAlloc(
         std.testing.allocator,
         transformed,
     );

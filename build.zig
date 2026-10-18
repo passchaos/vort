@@ -2151,6 +2151,40 @@ pub fn build(b: *std.Build) void {
     br_planned_encode_bench_gate.step.dependOn(&run_br_planned_encode_bench_csv.step);
     const br_planned_encode_bench_gate_step = b.step("run-br-planned-encode-bench-gate", "Validate planner-backed Brotli encode A/B CSV");
     br_planned_encode_bench_gate_step.dependOn(&br_planned_encode_bench_gate.step);
+
+    const br_complete_dictionary_bench_exe = b.addExecutable(.{
+        .name = "vort-br-complete-dictionary-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/complete_dictionary_bench.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "br_internal", .module = br_tests_mod }},
+        }),
+    });
+    const run_br_complete_dictionary_bench = b.addRunArtifact(br_complete_dictionary_bench_exe);
+    if (b.args) |args| run_br_complete_dictionary_bench.addArgs(args);
+    const br_complete_dictionary_bench_step = b.step(
+        "run-br-complete-dictionary-bench",
+        "Compare indexed and exhaustive-reference Brotli static dictionary encoding",
+    );
+    br_complete_dictionary_bench_step.dependOn(&run_br_complete_dictionary_bench.step);
+    const run_br_complete_dictionary_bench_csv = b.addRunArtifact(br_complete_dictionary_bench_exe);
+    run_br_complete_dictionary_bench_csv.addArgs(&.{ "--iterations", "2" });
+    const br_complete_dictionary_bench_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/br/complete_dictionary_bench_gate.py",
+        "--csv",
+    });
+    br_complete_dictionary_bench_gate.addFileArg(
+        run_br_complete_dictionary_bench_csv.captureStdOut(.{}),
+    );
+    const br_complete_dictionary_bench_gate_step = b.step(
+        "run-br-complete-dictionary-bench-gate",
+        "Validate complete Brotli static dictionary indexed/reference evidence",
+    );
+    br_complete_dictionary_bench_gate_step.dependOn(
+        &br_complete_dictionary_bench_gate.step,
+    );
     const br_context_tree_report_exe = b.addExecutable(.{
         .name = "vort-br-context-tree-report",
         .root_module = b.createModule(.{
@@ -5732,6 +5766,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&br_planned_corpus_exe.step);
     check_step.dependOn(&br_planned_probe_exe.step);
     check_step.dependOn(&br_planned_encode_bench_exe.step);
+    check_step.dependOn(&br_complete_dictionary_bench_exe.step);
     check_step.dependOn(&br_context_tree_report_exe.step);
     check_step.dependOn(&br_planned_chunks_bench_exe.step);
     check_step.dependOn(&br_planned_stage_profile_exe.step);
@@ -5858,6 +5893,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(br_record_optimal_audit_step);
     ci_smoke_step.dependOn(br_record_optimal_shape_gate_step);
     ci_smoke_step.dependOn(br_planned_chunks_bench_gate_step);
+    ci_smoke_step.dependOn(br_complete_dictionary_bench_gate_step);
     ci_smoke_step.dependOn(br_upstream_multiblock_diff_step);
     ci_smoke_step.dependOn(br_compound_dictionary_diff_step);
     ci_smoke_step.dependOn(br_context_tree_report_gate_step);

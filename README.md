@@ -617,6 +617,8 @@ zig build run-br-stored-corpus
 zig build run-br-literal-cli-diff
 zig build run-br-planned-node-diff
 zig build -Doptimize=ReleaseFast run-br-planned-encode-bench-gate
+zig build -Doptimize=ReleaseFast run-br-complete-dictionary-bench -- --iterations 10
+zig build -Doptimize=ReleaseFast run-br-complete-dictionary-bench-gate
 zig build -Doptimize=ReleaseFast run-br-context-tree-report
 zig build -Doptimize=ReleaseFast run-br-context-tree-report-gate
 zig build run-br-context-tree-report-dir-smoke
@@ -2074,11 +2076,13 @@ _ = summary.shared_dictionary_copy_count;
 
 The stable built-in RFC 7932 dictionary is also available through
 `brEncodePlannedStreamStaticDictionaryAlloc`. This dedicated, ratio-oriented
-surface now uses the exhaustive reference matcher and can emit every one of the
-121 standard transform families, including omit-first and short-core-plus-
-suffix shapes that the latency-oriented q0...q11 compact index may skip. The
-default presets retain the compact index until a complete supplemental index
-meets their memory and throughput floors.
+surface combines the default canonical index with a lazy 59,904-entry
+supplement for omit-first and short-core-plus-suffix shapes, and can emit every
+one of the 121 standard transform families. The supplement occupies exactly
+370,692 bytes and is never constructed by default q0...q11 presets. Diagnostic
+helpers expose its entry and byte counts. The retained exhaustive reference
+matcher remains available internally to the reproducible A/B benchmark and its
+three-row gate.
 
 Upstream still marks serialized shared dictionaries as
 `BROTLI_EXPERIMENTAL`/`DO NOT USE`; Vort does not claim that unstable wire.

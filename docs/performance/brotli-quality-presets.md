@@ -114,9 +114,12 @@ only when its complete encoded byte length is smaller.
 Static-dictionary candidates are considered through 256 bytes. When extended
 search is enabled, the bounded indexed search applies through 4 KiB. This is a
 vetted subset of the RFC built-in dictionary transforms. The dedicated
-`brEncodePlannedStreamStaticDictionaryAlloc` API instead uses the exhaustive
-reference matcher and covers all 121 standard transform families; it is kept
-separate because exhaustive search is intentionally ratio-oriented. Neither
+`brEncodePlannedStreamStaticDictionaryAlloc` API instead adds a lazy
+59,904-entry/370,692-byte supplemental index and covers all 121 standard
+transform families. Default q0...q11 encoders never construct that index, so
+their memory, hot lookup, and wire remain unchanged. The indexed/reference
+benchmark gate requires identical wire metadata and at least a conservative
+100x speedup on omit-first, literal-prefix, and dictionary-phrase rows. Neither
 path is support for caller-supplied/custom static dictionaries. RAW
 shared-prefix matching is the separate option described below.
 

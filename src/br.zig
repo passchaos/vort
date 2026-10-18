@@ -5079,12 +5079,29 @@ fn encodeLazyCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, c
 }
 
 /// Experimental planner-backed encoder for the built-in RFC 7932 static
-/// dictionary. It establishes complete command/wire support with an exhaustive
-/// reference matcher; stable compression levels remain on the faster LZ path.
+/// dictionary. It establishes complete command/wire support with a lazy
+/// supplemental index; stable compression levels remain on the faster LZ path.
 pub fn encodePlannedStreamStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    return encodePlannedStreamStaticDictionaryPlanAlloc(allocator, input, false);
+}
+
+/// Slow correctness oracle for reproducible matcher benchmarks. Applications
+/// should use `encodePlannedStreamStaticDictionaryAlloc`.
+pub fn encodePlannedStreamStaticDictionaryReferenceAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    return encodePlannedStreamStaticDictionaryPlanAlloc(allocator, input, true);
+}
+
+fn encodePlannedStreamStaticDictionaryPlanAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    reference: bool,
+) Error![]u8 {
     const max_backward_distance = (@as(usize, 1) << default_window_bits) - 16;
     if (input.len < 5 or input.len > max_backward_distance) return error.InvalidBlockPlan;
-    const plan = try command_plan.buildStaticDictionaryExhaustiveAlloc(allocator, input);
+    const plan = if (reference)
+        try command_plan.buildStaticDictionaryReferenceAlloc(allocator, input)
+    else
+        try command_plan.buildStaticDictionaryCompleteAlloc(allocator, input);
     defer plan.deinit(allocator);
     if (plan.match_count == 0) return error.InvalidBlockPlan;
     var stats: encoder_stats.PlannedEncodeStats = .{};
@@ -5093,6 +5110,14 @@ pub fn encodePlannedStreamStaticDictionaryAlloc(allocator: std.mem.Allocator, in
 
 pub fn plannedStaticDictionaryIndexBytes() usize {
     return command_plan.staticDictionaryIndexBytes();
+}
+
+pub fn plannedCompleteStaticDictionaryIndexBytes() Error!usize {
+    return (try static_dictionary_matcher.CompleteIndex.sharedIndex()).byteSize();
+}
+
+pub fn plannedCompleteStaticDictionaryIndexEntries() Error!usize {
+    return (try static_dictionary_matcher.CompleteIndex.sharedIndex()).entryCount();
 }
 
 pub fn encodePlannedStreamAllocWithStats(allocator: std.mem.Allocator, input: []const u8, stats: *encoder_stats.PlannedEncodeStats) Error![]u8 {

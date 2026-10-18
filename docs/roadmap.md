@@ -21712,3 +21712,22 @@ reuse, so production keeps the simpler independently owned plans.
   dictionaries were deliberately not implemented: upstream master still gates
   them behind `BROTLI_EXPERIMENTAL` and labels the public enum value `DO NOT
   USE`, with no published RFC compatibility contract.
+
+- Replaced the dedicated complete static-dictionary encoder's per-position
+  121-transform enumeration with a lazy supplemental Hash15 index. The retained
+  31,704-entry canonical index still owns identity/uppercase and ordinary
+  affix/omit-last lookup; the supplement stores only shapes it cannot prove:
+  omit-first and retained cores shorter than four hash bytes. The exact table
+  contains 59,904 packed entries and occupies 370,692 bytes, below the earlier
+  rejected 0.5--0.7 MiB prototypes. It is constructed only by the dedicated
+  complete API; default q0...q11 paths retain their old memory, hot code, and
+  deterministic wire. A 121-family oracle matches the exhaustive reference,
+  exact entry/byte counts and allocation rollback are pinned, and the complete
+  libbrotli matrix remains green. On an Intel i7-10700K fixed to CPU 8,
+  `ReleaseFast`, ten iterations per row, indexed/reference wires are identical
+  and steady-state speedups are 5,857x for `quot;`, 25,416x for a four-literal
+  prefix plus `quot;`, and 2,529x for the 36-byte dictionary phrase. Run
+  `zig build -Doptimize=ReleaseFast run-br-complete-dictionary-bench --
+  --iterations 10` to reproduce the comparison. A three-row CI smoke gate pins
+  the exact entry/byte counts and identical encoded sizes, and requires at least
+  a conservative 100x indexed/reference speedup.
