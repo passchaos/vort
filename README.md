@@ -372,8 +372,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   entries, chained filename/path and common-CRC extended headers, payload CRC-16,
   bounded extraction, adaptive/fixed Huffman models, and legacy LArc histories;
 - dependency-free Unix `ar` reading/writing with traditional, GNU string-table,
-  and BSD inline long names, bounded extraction, explicit thin-archive
-  rejection, plus Debian binary package parsing/writing with validated
+  and BSD inline long names, bounded extraction, GNU/LLVM thin archive metadata,
+  explicit external-member resolution and deterministic thin writing, plus
+  Debian binary package parsing/writing with validated
   `debian-binary`, control/data TAR members, and none/gzip/Bzip2/LZMA/XZ/Zstd
   compression, validated bidirectionally with GNU `ar` and `dpkg-deb`, plus
   bounded RPM lead/signature/main-header parsing, MD5/SHA1/SHA256 integrity

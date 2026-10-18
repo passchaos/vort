@@ -613,10 +613,14 @@ pub const ArEntry = ar.Entry;
 pub const ArArchive = ar.Archive;
 pub const ArIterator = ar.Iterator;
 pub const ArEncodeEntry = ar.EncodeEntry;
+pub const ArThinEncodeEntry = ar.ThinEncodeEntry;
 pub const parseArArchive = ar.parse;
 pub const encodeArAlloc = ar.encodeAlloc;
 pub const encodeArAppend = ar.encodeAppend;
 pub const encodeArInto = ar.encodeInto;
+pub const encodeThinArAlloc = ar.encodeThinAlloc;
+pub const encodeThinArAppend = ar.encodeThinAppend;
+pub const encodeThinArInto = ar.encodeThinInto;
 pub const isSafeArPath = ar.isSafePath;
 
 pub const DebError = deb.Error;

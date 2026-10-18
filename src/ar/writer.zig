@@ -16,6 +16,15 @@ pub const EncodeEntry = struct {
     mode: u32 = 0o100644,
 };
 
+pub const ThinEncodeEntry = struct {
+    name: []const u8,
+    size: usize,
+    timestamp: u64 = 0,
+    owner: u32 = 0,
+    group: u32 = 0,
+    mode: u32 = 0o100644,
+};
+
 pub fn encodeAlloc(allocator: std.mem.Allocator, entries: []const EncodeEntry) Error![]u8 {
     var output: std.ArrayList(u8) = .empty;
     errdefer output.deinit(allocator);
@@ -45,6 +54,91 @@ pub fn encodeInto(
     if (output.len < encoded.len) return error.OutputTooSmall;
     @memcpy(output[0..encoded.len], encoded);
     return encoded.len;
+}
+
+pub fn encodeThinAlloc(
+    allocator: std.mem.Allocator,
+    entries: []const ThinEncodeEntry,
+) Error![]u8 {
+    var output: std.ArrayList(u8) = .empty;
+    errdefer output.deinit(allocator);
+    _ = try encodeThinAppend(allocator, &output, entries);
+    return output.toOwnedSlice(allocator);
+}
+
+pub fn encodeThinAppend(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    entries: []const ThinEncodeEntry,
+) Error!usize {
+    const start = output.items.len;
+    errdefer output.items.len = start;
+    try output.appendSlice(allocator, archive.thin_signature);
+    if (entries.len == 0) return output.items.len - start;
+
+    var table: std.ArrayList(u8) = .empty;
+    defer table.deinit(allocator);
+    const offsets = try allocator.alloc(usize, entries.len);
+    defer allocator.free(offsets);
+    for (entries, offsets) |entry, *offset| {
+        try validateName(entry.name);
+        offset.* = table.items.len;
+        try table.appendSlice(allocator, entry.name);
+        try table.appendSlice(allocator, "/\n");
+    }
+    try appendHeader(allocator, output, "//", 0, 0, 0, 0, table.items.len);
+    try output.appendSlice(allocator, table.items);
+    if (table.items.len & 1 != 0) try output.append(allocator, '\n');
+
+    for (entries, offsets) |entry, name_offset| {
+        var name_buffer: [16]u8 = undefined;
+        const name = std.fmt.bufPrint(&name_buffer, "/{d}", .{name_offset}) catch
+            return error.ArHeaderFieldOverflow;
+        try appendHeader(
+            allocator,
+            output,
+            name,
+            entry.timestamp,
+            entry.owner,
+            entry.group,
+            entry.mode,
+            entry.size,
+        );
+    }
+    return output.items.len - start;
+}
+
+pub fn encodeThinInto(
+    allocator: std.mem.Allocator,
+    entries: []const ThinEncodeEntry,
+    output: []u8,
+) Error!usize {
+    const encoded = try encodeThinAlloc(allocator, entries);
+    defer allocator.free(encoded);
+    if (output.len < encoded.len) return error.OutputTooSmall;
+    @memcpy(output[0..encoded.len], encoded);
+    return encoded.len;
+}
+
+fn appendHeader(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    name: []const u8,
+    timestamp: u64,
+    owner: u32,
+    group: u32,
+    mode: u32,
+    size: usize,
+) Error!void {
+    if (name.len == 0 or name.len > 16) return error.ArHeaderFieldOverflow;
+    try output.appendSlice(allocator, name);
+    try output.appendNTimes(allocator, ' ', 16 - name.len);
+    try appendDecimalField(allocator, output, timestamp, 12);
+    try appendDecimalField(allocator, output, owner, 6);
+    try appendDecimalField(allocator, output, group, 6);
+    try appendOctalField(allocator, output, mode, 8);
+    try appendDecimalField(allocator, output, size, 10);
+    try output.appendSlice(allocator, "`\n");
 }
 
 fn appendEntry(
@@ -149,4 +243,36 @@ test "ar writer round trips simple long and odd-sized entries" {
         error.OutputTooSmall,
         encodeInto(allocator, &entries, &too_small),
     );
+}
+
+test "thin ar writer stores external metadata without embedding payloads" {
+    const allocator = std.testing.allocator;
+    const entries = [_]ThinEncodeEntry{
+        .{ .name = "short.o", .size = 4 },
+        .{ .name = "path/very-long-member-name.o", .size = 3 },
+    };
+    const encoded = try encodeThinAlloc(allocator, &entries);
+    defer allocator.free(encoded);
+    const parsed = try archive.parse(encoded);
+    try std.testing.expect(parsed.thin);
+    try std.testing.expectEqual(entries.len, parsed.entry_count);
+    for (entries, 0..) |expected, index| {
+        const entry = try parsed.entryAt(index);
+        try std.testing.expect(entry.external);
+        try std.testing.expectEqualStrings(expected.name, entry.name);
+        try std.testing.expectEqual(expected.size, entry.size);
+        try std.testing.expectEqual(@as(usize, 0), entry.stored_size);
+        try std.testing.expectError(
+            error.ArEntryRequiresResolver,
+            parsed.extractAlloc(allocator, entry),
+        );
+    }
+    const resolved = try parsed.extractThinAllocLimited(
+        allocator,
+        try parsed.entryAt(0),
+        "data ignored suffix",
+        4,
+    );
+    defer allocator.free(resolved);
+    try std.testing.expectEqualStrings("data", resolved);
 }

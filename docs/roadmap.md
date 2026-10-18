@@ -21632,3 +21632,16 @@ reuse, so production keeps the simpler independently owned plans.
   dictionary-growth and exhaustive OOM tests raise focused RAR coverage to 142
   tests, while the external matrix byte-compares all three members
   (`legacy_mixed_solid_unrar_entries=3`).
+
+- Added GNU/LLVM thin `ar` reading and deterministic writing. The parser keeps
+  inline symbol/string tables inside the archive, exposes header-only members
+  as external paths with declared prefix lengths and path-safety metadata, and
+  requires caller-supplied source bytes for every library extraction. The CLI
+  likewise requires an explicit source path and never follows archive-controlled
+  member paths. Thin writer APIs emit one deterministic GNU `//` table and never
+  access source files.
+  Focused tests cover long paths, bounded prefix reads, unsupported BSD inline
+  names, malformed references, Debian rejection and exhaustive OOM cleanup.
+  GNU ar 2.38 reads both Vort thin writer members; Vort reads GNU short/long
+  text members plus an object archive with an inline symbol table
+  (`thin_self=2`, `thin_external_read=2`, `thin_external_write=3`).

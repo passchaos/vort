@@ -11,13 +11,31 @@ pub fn createFile(
     const output_path = args.next() orelse return error.MissingCorpusPath;
     const entry_name = args.next() orelse return error.MissingCorpusPath;
     const input_path = args.next() orelse return error.MissingCorpusPath;
+    const thin = if (args.next()) |mode|
+        if (std.mem.eql(u8, mode, "thin"))
+            true
+        else if (std.mem.eql(u8, mode, "regular"))
+            false
+        else
+            return error.UnsupportedArFeature
+    else
+        false;
     const input = try readFile(init, input_path);
     defer init.gpa.free(input);
-    const entries = [_]vort.ArEncodeEntry{.{ .name = entry_name, .data = input }};
-    const encoded = try vort.encodeArAlloc(init.gpa, &entries);
+    const encoded = if (thin) blk: {
+        const entries = [_]vort.ArThinEncodeEntry{.{
+            .name = entry_name,
+            .size = input.len,
+        }};
+        break :blk try vort.encodeThinArAlloc(init.gpa, &entries);
+    } else blk: {
+        const entries = [_]vort.ArEncodeEntry{.{ .name = entry_name, .data = input }};
+        break :blk try vort.encodeArAlloc(init.gpa, &entries);
+    };
     defer init.gpa.free(encoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
-    try stdout.print("ar_entries=1 input_bytes={d} archive_bytes={d} path={s}\n", .{
+    try stdout.print("ar_entries=1 thin={} input_bytes={d} archive_bytes={d} path={s}\n", .{
+        thin,
         input.len,
         encoded.len,
         output_path,
@@ -33,12 +51,16 @@ pub fn listFile(
     const bytes = try readFile(init, input_path);
     defer init.gpa.free(bytes);
     const archive = try vort.parseArArchive(bytes);
-    try stdout.print("ar_entries={d} archive_bytes={d}\n", .{ archive.entry_count, bytes.len });
+    try stdout.print("ar_entries={d} thin={} archive_bytes={d}\n", .{
+        archive.entry_count,
+        archive.thin,
+        bytes.len,
+    });
     var iterator_value = archive.iterator();
     var index: usize = 0;
     while (try iterator_value.next()) |entry| : (index += 1) {
         try stdout.print(
-            "index={d} size={d} timestamp={d} owner={d} group={d} mode={o} safe_path={} name={s}\n",
+            "index={d} size={d} timestamp={d} owner={d} group={d} mode={o} external={} safe_path={} name={s}\n",
             .{
                 index,
                 entry.size,
@@ -46,6 +68,7 @@ pub fn listFile(
                 entry.owner,
                 entry.group,
                 entry.mode,
+                entry.external,
                 entry.safe_path,
                 entry.name,
             },
@@ -65,14 +88,23 @@ pub fn extractFile(
         try std.fmt.parseInt(usize, text, 10)
     else
         max_file_size;
+    const thin_source_path = args.next();
     const bytes = try readFile(init, input_path);
     defer init.gpa.free(bytes);
     const archive = try vort.parseArArchive(bytes);
-    const decoded = try archive.extractByNameAllocLimited(
-        init.gpa,
-        entry_name,
-        max_output_len,
-    );
+    const entry = (try archive.find(entry_name)) orelse return error.ArEntryNotFound;
+    const decoded = if (entry.external) blk: {
+        if (entry.size > max_output_len) return error.OutputLimitExceeded;
+        const source_path = thin_source_path orelse return error.ArEntryRequiresResolver;
+        const source = try readFile(init, source_path);
+        defer init.gpa.free(source);
+        break :blk try archive.extractThinAllocLimited(
+            init.gpa,
+            entry,
+            source,
+            max_output_len,
+        );
+    } else try archive.extractAllocLimited(init.gpa, entry, max_output_len);
     defer init.gpa.free(decoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
     try stdout.print("ar_bytes={d} decoded_bytes={d} entry={s} path={s}\n", .{

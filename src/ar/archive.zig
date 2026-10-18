@@ -5,6 +5,8 @@ pub const Error = core.Error || error{
     InvalidArArchive,
     UnsupportedArFeature,
     ArEntryNotFound,
+    ArEntryRequiresResolver,
+    ArEntryNotExternal,
 };
 
 pub const signature = "!<arch>\n";
@@ -23,12 +25,14 @@ pub const Entry = struct {
     group: u32,
     mode: u32,
     safe_path: bool,
+    external: bool,
 };
 
 pub const Archive = struct {
     bytes: []const u8,
     entry_count: usize,
     string_table: ?[]const u8,
+    thin: bool,
 
     pub fn iterator(self: Archive) Iterator {
         return .{ .archive = self, .offset = signature.len };
@@ -52,6 +56,7 @@ pub const Archive = struct {
 
     pub fn extractInto(self: Archive, entry: Entry, output: []u8) Error!usize {
         const canonical = try self.canonicalEntry(entry);
+        if (canonical.external) return error.ArEntryRequiresResolver;
         if (output.len < canonical.size) return error.OutputTooSmall;
         @memcpy(output[0..canonical.size], self.bytes[canonical.data_offset..][0..canonical.size]);
         return canonical.size;
@@ -68,6 +73,7 @@ pub const Archive = struct {
         max_output_len: usize,
     ) ![]u8 {
         const canonical = try self.canonicalEntry(entry);
+        if (canonical.external) return error.ArEntryRequiresResolver;
         if (canonical.size > max_output_len) return error.OutputLimitExceeded;
         return allocator.dupe(u8, self.bytes[canonical.data_offset..][0..canonical.size]);
     }
@@ -82,8 +88,75 @@ pub const Archive = struct {
         return self.extractAllocLimited(allocator, entry, max_output_len);
     }
 
+    pub fn extractThinInto(
+        self: Archive,
+        entry: Entry,
+        source: []const u8,
+        output: []u8,
+    ) Error!usize {
+        const canonical = try self.canonicalEntry(entry);
+        if (!canonical.external) return error.ArEntryNotExternal;
+        if (source.len < canonical.size) return error.SizeMismatch;
+        if (output.len < canonical.size) return error.OutputTooSmall;
+        @memcpy(output[0..canonical.size], source[0..canonical.size]);
+        return canonical.size;
+    }
+
+    pub fn extractThinAllocLimited(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        entry: Entry,
+        source: []const u8,
+        max_output_len: usize,
+    ) ![]u8 {
+        const canonical = try self.canonicalEntry(entry);
+        if (!canonical.external) return error.ArEntryNotExternal;
+        if (canonical.size > max_output_len) return error.OutputLimitExceeded;
+        if (source.len < canonical.size) return error.SizeMismatch;
+        return allocator.dupe(u8, source[0..canonical.size]);
+    }
+
+    pub fn extractThinAlloc(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        entry: Entry,
+        source: []const u8,
+    ) ![]u8 {
+        return self.extractThinAllocLimited(
+            allocator,
+            entry,
+            source,
+            std.math.maxInt(usize),
+        );
+    }
+
+    pub fn extractThinByNameAlloc(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        name: []const u8,
+        source: []const u8,
+    ) ![]u8 {
+        return self.extractThinByNameAllocLimited(
+            allocator,
+            name,
+            source,
+            std.math.maxInt(usize),
+        );
+    }
+
+    pub fn extractThinByNameAllocLimited(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        name: []const u8,
+        source: []const u8,
+        max_output_len: usize,
+    ) ![]u8 {
+        const entry = (try self.find(name)) orelse return error.ArEntryNotFound;
+        return self.extractThinAllocLimited(allocator, entry, source, max_output_len);
+    }
+
     fn canonicalEntry(self: Archive, entry: Entry) Error!Entry {
-        const parsed = (try parseMember(self.bytes, entry.header_offset, self.string_table)).entry orelse
+        const parsed = (try parseMember(self.bytes, entry.header_offset, self.string_table, self.thin)).entry orelse
             return error.InvalidArArchive;
         if (!sameEntry(parsed, entry)) return error.InvalidArArchive;
         return parsed;
@@ -100,6 +173,7 @@ pub const Iterator = struct {
                 self.archive.bytes,
                 self.offset,
                 self.archive.string_table,
+                self.archive.thin,
             );
             self.offset = member.next_offset;
             if (member.entry) |entry| return entry;
@@ -115,28 +189,35 @@ const ParsedMember = struct {
 };
 
 pub fn parse(bytes: []const u8) Error!Archive {
-    if (bytes.len >= thin_signature.len and std.mem.eql(u8, bytes[0..thin_signature.len], thin_signature))
-        return error.UnsupportedArFeature;
-    if (bytes.len < signature.len or !std.mem.eql(u8, bytes[0..signature.len], signature))
+    const thin = bytes.len >= thin_signature.len and
+        std.mem.eql(u8, bytes[0..thin_signature.len], thin_signature);
+    if (!thin and (bytes.len < signature.len or
+        !std.mem.eql(u8, bytes[0..signature.len], signature)))
         return error.InvalidMagic;
     var offset: usize = signature.len;
     var entry_count: usize = 0;
     var string_table: ?[]const u8 = null;
     while (offset < bytes.len) {
-        const member = try parseMember(bytes, offset, string_table);
+        const member = try parseMember(bytes, offset, string_table, thin);
         if (member.string_table) |table| string_table = table;
         if (member.entry != null) entry_count = std.math.add(usize, entry_count, 1) catch
             return error.IntegerOverflow;
         offset = member.next_offset;
     }
     if (offset != bytes.len) return error.InvalidArArchive;
-    return .{ .bytes = bytes, .entry_count = entry_count, .string_table = string_table };
+    return .{
+        .bytes = bytes,
+        .entry_count = entry_count,
+        .string_table = string_table,
+        .thin = thin,
+    };
 }
 
 fn parseMember(
     bytes: []const u8,
     offset: usize,
     string_table: ?[]const u8,
+    thin: bool,
 ) Error!ParsedMember {
     const header_end = try checkedEnd(offset, header_size, bytes.len);
     const header = bytes[offset..header_end];
@@ -146,15 +227,18 @@ fn parseMember(
     const group = try parseNumber(u32, header[34..40], 10);
     const mode = try parseNumber(u32, header[40..48], 8);
     const stored_size = try parseNumber(usize, header[48..58], 10);
-    const stored_end = try checkedEnd(header_end, stored_size, bytes.len);
+    const raw_name = std.mem.trimEnd(u8, header[0..16], " ");
+    if (raw_name.len == 0) return error.InvalidArArchive;
+    if (thin and std.mem.startsWith(u8, raw_name, "#1/"))
+        return error.UnsupportedArFeature;
+    const embedded = !thin or std.mem.eql(u8, raw_name, "//") or isSymbolTable(raw_name);
+    const physical_size = if (embedded) stored_size else 0;
+    const stored_end = try checkedEnd(header_end, physical_size, bytes.len);
     var next_offset = stored_end;
-    if (stored_size & 1 != 0) {
+    if (physical_size & 1 != 0) {
         next_offset = try checkedEnd(stored_end, 1, bytes.len);
         if (bytes[stored_end] != '\n') return error.InvalidArArchive;
     }
-
-    const raw_name = std.mem.trimEnd(u8, header[0..16], " ");
-    if (raw_name.len == 0) return error.InvalidArArchive;
     if (std.mem.eql(u8, raw_name, "//")) return .{
         .entry = null,
         .next_offset = next_offset,
@@ -198,13 +282,14 @@ fn parseMember(
             .data_offset = data_offset,
             .size = data_size,
             .header_offset = offset,
-            .stored_size = stored_size,
+            .stored_size = physical_size,
             .next_offset = next_offset,
             .timestamp = timestamp,
             .owner = owner,
             .group = group,
             .mode = mode,
             .safe_path = isSafePath(name),
+            .external = thin,
         },
         .next_offset = next_offset,
     };
@@ -239,7 +324,7 @@ fn sameEntry(a: Entry, b: Entry) bool {
         a.size == b.size and a.header_offset == b.header_offset and
         a.stored_size == b.stored_size and a.next_offset == b.next_offset and
         a.timestamp == b.timestamp and a.owner == b.owner and a.group == b.group and
-        a.mode == b.mode and a.safe_path == b.safe_path;
+        a.mode == b.mode and a.safe_path == b.safe_path and a.external == b.external;
 }
 
 pub fn isSafePath(path: []const u8) bool {
@@ -255,6 +340,8 @@ pub fn isSafePath(path: []const u8) bool {
 
 test "ar parser rejects thin truncated and malformed archives" {
     try std.testing.expectError(error.InvalidMagic, parse(""));
-    try std.testing.expectError(error.UnsupportedArFeature, parse(thin_signature));
+    const empty_thin = try parse(thin_signature);
+    try std.testing.expect(empty_thin.thin);
+    try std.testing.expectEqual(@as(usize, 0), empty_thin.entry_count);
     try std.testing.expectError(error.TruncatedFrame, parse(signature ++ "short"));
 }

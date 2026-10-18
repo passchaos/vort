@@ -2884,10 +2884,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  list-lha-file <path>        List LHA level-0/1/2/3 and SFX entries
         \\  extract-lha-file <lha> <entry> <out> [max_output]
         \\                              Extract common stored/LH/LArc LHA data
-        \\  create-ar-file <out> <entry> <in>
+        \\  create-ar-file <out> <entry> <in> [regular|thin]
         \\                              Create a deterministic Unix ar archive
         \\  list-ar-file <path>         List GNU/BSD Unix ar members
-        \\  extract-ar-file <ar> <entry> <out> [max_output]
+        \\  extract-ar-file <ar> <entry> <out> [max_output] [thin_source]
         \\                              Extract a bounded Unix ar member
         \\  create-deb-file <out> <package> <version> <entry> <in> [none|gzip|bzip2|lzma|xz|zstd]
         \\                              Create a deterministic Debian binary package
