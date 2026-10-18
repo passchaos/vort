@@ -43,8 +43,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   options and decoded-size preflight, including explicit 10...41-bit
   `window_log` selection on both `FrameOptions` and `NativeFrameOptions` with
   `null` preserving the established wire, strict block/history/dictionary
-  reach bounded by the selected window and the encoder's current 8 MiB
-  internal capability, a
+  reach bounded by the selected window, an unchanged 8 MiB default history,
+  and a 16 MiB sparse long-distance history for explicit windows of at least
+  24 bits, a
   dependency-free raw/RLE, literal-only compressed-block, single-/four-stream
   and treeless repeat Huffman-literals, minimal RLE-sequence, mixed
   RLE/predefined/FSE sequence-table, repeated sequence-table, and streaming
@@ -887,6 +888,8 @@ zig build -Doptimize=ReleaseFast run-zstd-encode-bench -- --libzstd /path/to/lib
 zig build -Doptimize=ReleaseFast run-zstd-native-encode-stage-bench-gate  # match-family timings plus single-beam search histograms
 zig build -Doptimize=ReleaseFast run-zstd-level-schedule-bench-gate  # parallel-vs-serial multi-block scheduling
 zig build run-zstd-large-sequence-probe  # >512-sequence single/cross-block encode plus Vort/libzstd decode
+zig build test-zstd  # focused Zstandard codec suite
+zig build test-zstd-far-window  # explicit >8 MiB match boundary
 zig build run-zstd-compat-probe  # optional system-libzstd decode matrix
 # Build and select the current local upstream reference explicitly:
 make -C ~/Work/zstd/lib -j4 libzstd-release
@@ -1336,8 +1339,9 @@ defer zstd_incremental_encoder.deinit();
 // Focused runtime-parameter tests pass 19/19 and the direct Deflate suite
 // passes 479/479; the full repository test graph passes 2621/2621.
 // Audited libz fixtures pin the exact fixed-Huffman raw/zlib/gzip wire across a
-// block flush. This non-aligning block primitive is the basis for future
-// stream-control work; inflateSync-compatible recovery is not yet implemented.
+// block flush. Raw inflateSync-style recovery is provided by
+// RawDeflateSyncScanner/findRawDeflateSyncPoint and the raw one-shot and
+// incremental resume helpers described above.
 // Set adaptive_blocks on a best encoder to use CompressionOptions.split_options
 // for costed, bounded block-boundary selection instead of one fixed block size.
 // Set lookahead_len to retain a bounded suffix and move normal block cuts to a
@@ -2296,7 +2300,7 @@ selected descriptor without a content size.
 | LZ4 native | `Lz4NativeDictionarySet` / `Lz4NativeDictionarySet.initFromMetadata` / `lz4NativeDictionarySetFromMetadataAlloc` | caller-owned slice of dictionaries or validated metadata+bytes catalog | Concatenated streams can carry different `Dictionary_ID` values, or a container provides versioned metadata records beside dictionary bytes. | Lets decoders resolve each frame without caller-side splitting; metadata construction validates bytes and duplicate IDs before decode; the alloc helper owns only the small catalog array. |
 | Zstd native | `ZstdNativeFrameOptions.selection` | `.auto`; `.auto` / `.raw_or_rle` / `.literal_only` | You need deterministic native-subset frame selection. | `.auto` chooses the smaller implemented native mode; explicit modes are useful for tests and predictable behavior. |
 | Zstd native | `ZstdNativeFrameOptions.block_size_max` | `std.compress.zstd.block_size_max`; `1...std.compress.zstd.block_size_max` | You need a latency/seekability/ratio knob. | Smaller blocks reduce per-block latency and direct-output bursts; larger blocks usually improve ratio and reduce headers. |
-| Zstd native | `ZstdFrameOptions.window_log` / `ZstdNativeFrameOptions.window_log` | `null`; explicit `10...41` | You need a standards-compatible advertised decode window or a tighter encode working set. | `null` is byte-identical to the prior writer. For an explicit value, block length, rolling history, match offsets, and dictionary visibility are bounded by the selected window; the current encoder also caps effective history at 8 MiB, so values above 23 advertise a larger legal window but do not yet enable farther matches. |
+| Zstd native | `ZstdFrameOptions.window_log` / `ZstdNativeFrameOptions.window_log` | `null`; explicit `10...41` | You need a standards-compatible advertised decode window or a tighter encode working set. | `null` is byte-identical to the prior writer and retains the 8 MiB default history. Explicit logs 24+ enable a separate 1/256-sampled long-distance index and up to `zstdNativeExplicitWindowMatchLenMax` (16 MiB) of history; logs above 24 may advertise a larger legal window but currently retain the 16 MiB match ceiling. |
 | Zstd native | `ZstdNativeFrameOptions.match_search_budget` | `vort.zstdNativeMaxMatchSearchBudget` (`512` currently); `0...vort.zstdNativeMaxMatchSearchBudget` | You want to bound the bootstrap mixed-match planner. | `0` disables generic duplicate/repeated mixed planning while dictionary-only matches can still be used; the default searches more branches for ratio. |
 | Zstd native | `vort.zstdNativeMaxDirectHuffmanSymbol` | `128` currently | You need to know when the bootstrap writer can use direct Huffman literal weights. | Byte values above this use FSE-compressed Huffman weights when the literal-only plan wins; incompressible shapes can still fall back to raw/RLE or another native plan. |
 | Zstd native | `content_checksum` / `include_content_size` | both on by default | You want self-describing frames and content verification. | Disabling them saves bytes when a container already carries size/checksum metadata. |

@@ -50,7 +50,9 @@ major gaps before Vort can claim broad industry-best parity:
   `FrameOptions.window_log` and `NativeFrameOptions.window_log` accept 10...41,
   with `null` preserving the old wire, and the one-shot, reusable, incremental,
   dictionary, dictionary-set, and seekable writers share the same window-aware
-  path. The encoder still has an 8 MiB internal match/history ceiling, and this
+  path. Null/default encoding retains its historical 8 MiB match/history
+  policy; explicit logs 24+ now opt into a separate sparse long-distance index
+  and 16 MiB history, while farther-than-16-MiB matching remains open. This
   completed slice does not establish general Zstd compatibility, ratio, or
   performance parity.
 - Cross-platform optimized kernels and reproducible competitor measurements are
@@ -21780,3 +21782,21 @@ reuse, so production keeps the simpler independently owned plans.
   tests. A fabricated compressed-wire multiplier was deliberately rejected:
   dynamic Huffman output still lacks a formally derived general bound, so the
   stateless Into path keeps its temporary result to preserve atomicity.
+
+- Extended explicit Zstd encode windows with real long-distance matching beyond
+  the legacy 8 MiB ceiling. Null/default options retain the original 8 MiB
+  history and byte-identical recent 4-way index. Explicit `window_log >= 24`
+  retains up to 16 MiB and enables an independent 4-way long index populated by
+  a deterministic 1/256 content-hash sample, so dense recent inserts cannot
+  evict sparse far anchors. A distance of 8 MiB plus one 128 KiB block now
+  compresses a repeated 128 KiB tail materially smaller at window 24 than at
+  window 23; one-shot and 64 KiB-input/4 KiB-output incremental wires are
+  byte-identical and decode exactly. Long-index allocation failures are
+  exhaustive, disabling the explicit mode hides retained long entries, and the
+  existing null-window wire oracle remains green. The required runtime
+  libzstd matrix independently decodes the Vort far-window frame and rises from
+  276 to 277 cases with `far_window_encode_cases=1`, `unsupported=0`. The public
+  `zstdNativeExplicitWindowMatchLenMax` pins the 16 MiB implementation ceiling;
+  advertised windows above 24 remain legal but do not yet emit farther matches.
+  `zig build test-zstd` now provides a permanent focused Zstandard suite, while
+  `test-zstd-far-window` isolates this large fixture for fast iteration.

@@ -120,9 +120,11 @@ Current interpretation:
 - The compatibility decoder now covers single-stream and four-stream
   Huffman-literals sections, can reuse that tree for treeless repeat-literals
   blocks, and decodes FSE-compressed sequence tables for the currently supported
-  sequence execution path. The broader gap remains open until Vort has
-  long-distance matching in the encoder/decoder pipeline, broader compression
-  strategy coverage, corpus
+  sequence execution path. Explicit encode windows now add a bounded 16 MiB
+  sparse long-distance matcher while the null/default path retains its 8 MiB
+  wire and memory policy. The broader gap remains open until Vort extends
+  matching across larger advertised windows, adds broader compression strategy
+  coverage, and records corpus
   throughput/ratio dashboards, and repeatable same-machine comparisons against
   zstd CLI/library modes.
 - The native encoder now exposes an explicit `fast_compressed` selection for

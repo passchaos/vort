@@ -6,8 +6,23 @@ pub const View = struct {
     absolute_start: usize,
     index: *const history_index.Index,
 
-    pub fn candidates(self: View, prefix: *const [8]u8) []const usize {
-        return self.index.candidates(prefix);
+    pub fn recentCandidates(self: View, prefix: *const [8]u8) []const usize {
+        return self.index.recentCandidates(prefix);
+    }
+
+    pub fn longCandidates(self: View, prefix: *const [8]u8) []const usize {
+        return self.index.longCandidates(prefix);
+    }
+
+    pub fn candidateSets(
+        self: View,
+        prefix: *const [8]u8,
+    ) history_index.CandidateSets {
+        return self.index.candidateSets(prefix);
+    }
+
+    pub fn longEnabled(self: View) bool {
+        return self.index.longEnabled();
     }
 };
 
@@ -49,7 +64,10 @@ pub const Rolling = struct {
         block: []const u8,
         window_len: usize,
     ) (std.mem.Allocator.Error || error{IntegerOverflow})!void {
-        if (window_len != 0) try self.index.prepare(allocator);
+        if (window_len != 0) try self.index.prepare(
+            allocator,
+            window_len > std.compress.zstd.default_window_len,
+        );
         _ = std.math.add(usize, self.absolute_end, block.len) catch return error.IntegerOverflow;
         const combined_len = std.math.add(usize, self.bytes.items.len, block.len) catch return error.IntegerOverflow;
         try self.bytes.ensureTotalCapacity(allocator, @min(window_len, combined_len));

@@ -379,6 +379,7 @@ const max_direct_huffman_symbol = 128;
 pub const native_max_match_search_budget: usize = mixed_match_path_search_budget;
 pub const native_max_direct_huffman_symbol: u8 = max_direct_huffman_symbol;
 pub const native_dictionary_window_len: usize = std.compress.zstd.default_window_len;
+pub const native_explicit_window_match_len_max: usize = 16 * 1024 * 1024;
 
 const ll_base = [_]usize{
     0,      1,      2,      3,       4,     5,     6,     7,
@@ -481,7 +482,8 @@ pub const NativeFrameOptions = struct {
     include_content_size: bool = true,
     /// Optional standard Zstd Window_Log (10...41). It caps block size,
     /// cross-block matches, and visible preset history in addition to changing
-    /// the frame header. Null preserves the historical native encoder wire.
+    /// the frame header. Explicit logs 24+ enable the bounded 16 MiB sparse-LDM
+    /// history; null preserves the historical 8 MiB encoder wire and policy.
     window_log: ?u6 = null,
     selection: NativeFrameSelection = .auto,
     block_size_max: usize = std.compress.zstd.block_size_max,
@@ -1977,8 +1979,9 @@ fn nativeExplicitWindowSize(options: NativeFrameOptions) Error!?u64 {
 }
 
 fn nativeEncoderWindowLen(options: NativeFrameOptions) Error!usize {
-    const advertised = try nativeExplicitWindowSize(options) orelse native_dictionary_window_len;
-    return @intCast(@min(advertised, native_dictionary_window_len));
+    const advertised = try nativeExplicitWindowSize(options) orelse
+        return native_dictionary_window_len;
+    return @intCast(@min(advertised, native_explicit_window_match_len_max));
 }
 
 fn nativeMatchWindowLen(options: NativeFrameOptions) Error!?usize {
@@ -29679,7 +29682,18 @@ test "zstd explicit window uses non-single FCS widths and validates logs" {
     try std.testing.expectError(error.InvalidBlockPlan, encodedNativeFrameBoundWithOptions(1, .{ .window_log = 9 }));
     try std.testing.expectError(error.InvalidBlockPlan, encodedNativeFrameBoundWithOptions(1, .{ .window_log = 42 }));
     try std.testing.expectError(error.IntegerOverflow, encodedNativeFrameBoundWithOptions(std.math.maxInt(usize), .{ .window_log = 10 }));
-    try std.testing.expectEqual(native_dictionary_window_len, try nativeEncoderWindowLen(.{ .window_log = 41 }));
+    try std.testing.expectEqual(
+        native_explicit_window_match_len_max,
+        try nativeEncoderWindowLen(.{ .window_log = 41 }),
+    );
+    try std.testing.expectEqual(
+        @as(usize, 1) << 23,
+        try nativeEncoderWindowLen(.{ .window_log = 23 }),
+    );
+    try std.testing.expectEqual(
+        native_dictionary_window_len,
+        try nativeEncoderWindowLen(.{}),
+    );
 
     var invalid_header: std.ArrayList(u8) = .empty;
     defer invalid_header.deinit(std.testing.allocator);
@@ -29748,6 +29762,94 @@ test "zstd null window preserves legacy wire and explicit bounds cover every mod
         },
         .seek_checksums = false,
     }));
+}
+
+test "zstd explicit 24-bit window emits matches beyond legacy history" {
+    const block_len = std.compress.zstd.block_size_max;
+    const far_distance = native_dictionary_window_len + block_len;
+    const payload_len = far_distance + block_len;
+    const payload = try std.testing.allocator.alloc(u8, payload_len);
+    defer std.testing.allocator.free(payload);
+    var random_state: u32 = 0x6a09_e667;
+    for (payload[0..far_distance]) |*byte| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(random_state >> 24);
+    }
+    @memcpy(payload[far_distance..], payload[0..block_len]);
+
+    const common = NativeFrameOptions{
+        .content_checksum = true,
+        .include_content_size = false,
+        .selection = .literal_only,
+        .match_search_budget = 0,
+    };
+    var near_options = common;
+    near_options.window_log = 23;
+    const near = try encodeNativeFrameWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        near_options,
+    );
+    defer std.testing.allocator.free(near.frame);
+    var far_options = common;
+    far_options.window_log = 24;
+    const far = try encodeNativeFrameWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        far_options,
+    );
+    defer std.testing.allocator.free(far.frame);
+
+    try std.testing.expect(far.frame.len + block_len / 2 < near.frame.len);
+    const header = try inspectNativeFrameHeader(far.frame);
+    try std.testing.expectEqual(@as(u64, 1) << 24, header.window_size);
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, far.frame);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    var incremental = try NativeIncrementalFrameEncoder.init(
+        std.testing.allocator,
+        far_options,
+    );
+    defer incremental.deinit();
+    var incremental_frame: std.ArrayList(u8) = .empty;
+    defer incremental_frame.deinit(std.testing.allocator);
+    var input_offset: usize = 0;
+    var scratch: [4096]u8 = undefined;
+    while (input_offset < payload.len) {
+        const input_end = @min(payload.len, input_offset + 64 * 1024);
+        const result = incremental.step(
+            payload[input_offset..input_end],
+            &scratch,
+        ) catch |err| {
+            std.debug.print(
+                "far-window incremental feed offset={d}/{d} end={d} snapshot={any}: {s}\n",
+                .{ input_offset, payload.len, input_end, incremental.snapshot(), @errorName(err) },
+            );
+            return err;
+        };
+        input_offset += result.progress.input_read;
+        try incremental_frame.appendSlice(
+            std.testing.allocator,
+            scratch[0..result.progress.output_written],
+        );
+    }
+    incremental.finish();
+    while (true) {
+        const result = incremental.step("", &scratch) catch |err| {
+            std.debug.print(
+                "far-window incremental drain snapshot={any}: {s}\n",
+                .{ incremental.snapshot(), @errorName(err) },
+            );
+            return err;
+        };
+        try incremental_frame.appendSlice(
+            std.testing.allocator,
+            scratch[0..result.progress.output_written],
+        );
+        if (result.status == .done) break;
+    }
+    try std.testing.expectEqualSlices(u8, far.frame, incremental_frame.items);
 }
 
 test "zstd explicit window caps block size and cross-block history" {

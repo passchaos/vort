@@ -54,6 +54,7 @@ pub fn main(init: std.process.Init) !void {
     var golden_cases: usize = 0;
     var golden_error_cases: usize = 0;
     var advanced_cases: usize = 0;
+    var far_window_encode_cases: usize = 0;
     var explicit_sequence_cases: usize = 0;
     var streaming_cases: usize = 0;
     var trained_dictionary_cases: usize = 0;
@@ -127,6 +128,50 @@ pub fn main(init: std.process.Init) !void {
         checked += 1;
         advanced_cases += 1;
     }
+    const far_window_block_len = std.compress.zstd.block_size_max;
+    const far_window_distance = vort.zstdNativeDictionaryWindowLen +
+        far_window_block_len;
+    const far_window_payload = try init.gpa.alloc(
+        u8,
+        far_window_distance + far_window_block_len,
+    );
+    defer init.gpa.free(far_window_payload);
+    var far_window_state: u32 = 0x6a09_e667;
+    for (far_window_payload[0..far_window_distance]) |*byte| {
+        far_window_state = far_window_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(far_window_state >> 24);
+    }
+    @memcpy(
+        far_window_payload[far_window_distance..],
+        far_window_payload[0..far_window_block_len],
+    );
+    const far_window_frame = try vort.zstdEncodeNativeFrameWithOptionsAlloc(
+        init.gpa,
+        far_window_payload,
+        .{
+            .content_checksum = true,
+            .include_content_size = false,
+            .window_log = 24,
+            .selection = .literal_only,
+            .match_search_budget = 0,
+        },
+    );
+    defer init.gpa.free(far_window_frame.frame);
+    const far_window_header = try vort.zstdInspectNativeFrameHeader(
+        far_window_frame.frame,
+    );
+    if (far_window_header.window_size != @as(u64, 1) << 24)
+        return error.ReferenceEncodeFailed;
+    const far_window_reference_output = try init.gpa.alloc(
+        u8,
+        far_window_payload.len,
+    );
+    defer init.gpa.free(far_window_reference_output);
+    try runtime.decode(far_window_frame.frame, far_window_reference_output);
+    if (!std.mem.eql(u8, far_window_payload, far_window_reference_output))
+        return error.SizeMismatch;
+    checked += 1;
+    far_window_encode_cases += 1;
     var raw_dictionary: [32 * 1024]u8 = undefined;
     var raw_dictionary_state: u32 = 0x243f_6a88;
     for (&raw_dictionary) |*byte| {
@@ -549,8 +594,8 @@ pub fn main(init: std.process.Init) !void {
         return error.ReferenceEncodeFailed;
     const combined_mode_mask = coverage.sequence_mode_combinations | prior_mode_mask;
     std.debug.print(
-        "zstd_compat_probe checked={d} unsupported={d} advanced_cases={d} explicit_sequence_cases={d} streaming_cases={d} trained_dictionary_cases={d} raw_dictionary_cases={d} corpus_cases={d} golden_cases={d} golden_error_cases={d} decodecorpus_cases={d} decodecorpus_incremental_cases={d} decodecorpus_reusable_cases={d} decodecorpus_reusable_hits={d} decodecorpus_block_stream_cases={d} decodecorpus_streamed_literal_blocks={d} decodecorpus_streamed_sequence_blocks={d} decodecorpus_max_compressed_buffered={d} decodecorpus_max_compressed_capacity={d} decodecorpus_max_block_stream_decoded_buffered={d} decodecorpus_max_block_stream_decoded_capacity={d} ",
-        .{ checked, unsupported, advanced_cases, explicit_sequence_cases, streaming_cases, trained_dictionary_cases, raw_dictionary_cases, corpus_cases, golden_cases, golden_error_cases, decodecorpus_cases, decodecorpus_incremental_cases, decodecorpus_reusable_cases, decodecorpus_reusable_hits, decodecorpus_block_stream_cases, decodecorpus_streamed_literal_blocks, decodecorpus_streamed_sequence_blocks, decodecorpus_max_compressed_buffered, decodecorpus_max_compressed_capacity, decodecorpus_max_block_stream_decoded_buffered, decodecorpus_max_block_stream_decoded_capacity },
+        "zstd_compat_probe checked={d} unsupported={d} advanced_cases={d} far_window_encode_cases={d} explicit_sequence_cases={d} streaming_cases={d} trained_dictionary_cases={d} raw_dictionary_cases={d} corpus_cases={d} golden_cases={d} golden_error_cases={d} decodecorpus_cases={d} decodecorpus_incremental_cases={d} decodecorpus_reusable_cases={d} decodecorpus_reusable_hits={d} decodecorpus_block_stream_cases={d} decodecorpus_streamed_literal_blocks={d} decodecorpus_streamed_sequence_blocks={d} decodecorpus_max_compressed_buffered={d} decodecorpus_max_compressed_capacity={d} decodecorpus_max_block_stream_decoded_buffered={d} decodecorpus_max_block_stream_decoded_capacity={d} ",
+        .{ checked, unsupported, advanced_cases, far_window_encode_cases, explicit_sequence_cases, streaming_cases, trained_dictionary_cases, raw_dictionary_cases, corpus_cases, golden_cases, golden_error_cases, decodecorpus_cases, decodecorpus_incremental_cases, decodecorpus_reusable_cases, decodecorpus_reusable_hits, decodecorpus_block_stream_cases, decodecorpus_streamed_literal_blocks, decodecorpus_streamed_sequence_blocks, decodecorpus_max_compressed_buffered, decodecorpus_max_compressed_capacity, decodecorpus_max_block_stream_decoded_buffered, decodecorpus_max_block_stream_decoded_capacity },
     );
     std.debug.print(
         "decodecorpus_max_sequence_count={d} decodecorpus_max_block_count={d} decodecorpus_sequence_count_tiers=0x{x} decodecorpus_sequence_mode_combinations={d} decodecorpus_sequence_mode_mask=0x{x} decodecorpus_combined_mode_combinations={d} decodecorpus_combined_mode_mask=0x{x} max_sequence_count={d} max_block_count={d} sequence_count_tiers=0x{x} sequence_mode_combinations={d} sequence_mode_mask=0x{x} combined_mode_combinations={d} combined_mode_mask=0x{x} version={s}\n",

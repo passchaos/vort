@@ -25,9 +25,18 @@ pub const Plan = struct {
 };
 
 /// Build a greedy multi-sequence plan from the persistent rolling-history
-/// index. At most four same-hash candidates and 128 matches are examined per
-/// block, so planner work stays bounded even with the full advertised window.
+/// index. At most four recent plus four sparse-long same-hash candidates and
+/// 128 matches are examined per block, so work stays bounded at large windows.
 pub fn findPlan(history: history_mod.View, block: []const u8) Plan {
+    if (history.longEnabled()) return findPlanImpl(true, history, block);
+    return findPlanImpl(false, history, block);
+}
+
+fn findPlanImpl(
+    comptime include_long: bool,
+    history: history_mod.View,
+    block: []const u8,
+) Plan {
     var plan: Plan = .{};
     // No indexed match can contain the required eight-byte anchor when the
     // retained history is shorter than one anchor. In particular, this avoids
@@ -35,7 +44,7 @@ pub fn findPlan(history: history_mod.View, block: []const u8) Plan {
     if (history.bytes.len < 8 or block.len < 8) return plan;
     var literal_start: usize = 0;
     while (plan.len < max_matches and literal_start + 8 <= block.len) {
-        const found = findNext(history, block, literal_start) orelse break;
+        const found = findNext(include_long, history, block, literal_start) orelse break;
         plan.matches[plan.len] = found;
         plan.len += 1;
         literal_start = found.block_start + found.len;
@@ -43,29 +52,64 @@ pub fn findPlan(history: history_mod.View, block: []const u8) Plan {
     return plan;
 }
 
-fn findNext(history: history_mod.View, block: []const u8, start: usize) ?Match {
+fn findNext(
+    comptime include_long: bool,
+    history: history_mod.View,
+    block: []const u8,
+    start: usize,
+) ?Match {
     var block_start = start;
     while (block_start + 8 <= block.len) : (block_start += 1) {
         var best: ?Match = null;
-        for (history.candidates(block[block_start..][0..8])) |absolute_candidate| {
-            if (absolute_candidate == history_index.invalid_position or
-                absolute_candidate < history.absolute_start) continue;
-            const history_start = absolute_candidate - history.absolute_start;
-            if (history_start + 8 > history.bytes.len or
-                !std.mem.eql(u8, history.bytes[history_start..][0..8], block[block_start..][0..8])) continue;
-
-            var len: usize = 8;
-            while (history_start + len < history.bytes.len and
-                block_start + len < block.len and
-                history.bytes[history_start + len] == block[block_start + len]) : (len += 1)
-            {}
-            if (best == null or len > best.?.len) {
-                best = .{ .history_start = history_start, .block_start = block_start, .len = len };
-            }
+        const prefix = block[block_start..][0..8];
+        if (comptime include_long) {
+            const candidates = history.candidateSets(prefix);
+            considerCandidates(history, block, block_start, prefix, candidates.recent, &best);
+            if (candidates.long.len != 0)
+                considerCandidates(history, block, block_start, prefix, candidates.long, &best);
+        } else {
+            considerCandidates(
+                history,
+                block,
+                block_start,
+                prefix,
+                history.recentCandidates(prefix),
+                &best,
+            );
         }
         if (best) |match| return match;
     }
     return null;
+}
+
+inline fn considerCandidates(
+    history: history_mod.View,
+    block: []const u8,
+    block_start: usize,
+    prefix: *const [8]u8,
+    candidates: []const usize,
+    best: *?Match,
+) void {
+    for (candidates) |absolute_candidate| {
+        if (absolute_candidate == history_index.invalid_position or
+            absolute_candidate < history.absolute_start) continue;
+        const history_start = absolute_candidate - history.absolute_start;
+        if (history_start + 8 > history.bytes.len or
+            !std.mem.eql(u8, history.bytes[history_start..][0..8], prefix)) continue;
+
+        var len: usize = 8;
+        while (history_start + len < history.bytes.len and
+            block_start + len < block.len and
+            history.bytes[history_start + len] == block[block_start + len]) : (len += 1)
+        {}
+        if (best.* == null or len > best.*.?.len) {
+            best.* = .{
+                .history_start = history_start,
+                .block_start = block_start,
+                .len = len,
+            };
+        }
+    }
 }
 
 test "Zstd incremental history matcher finds multiple non-prefix matches" {

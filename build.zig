@@ -207,6 +207,30 @@ pub fn build(b: *std.Build) void {
     const run_br_tests = b.addRunArtifact(br_tests);
     const br_test_step = b.step("test-br", "Run focused Brotli codec tests");
     br_test_step.dependOn(&run_br_tests.step);
+    const zstd_tests_mod = b.createModule(.{
+        .root_source_file = b.path("src/zstd.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    zstd_tests_mod.addObject(zstd_huffman_x2_obj);
+    const zstd_tests = b.addTest(.{
+        .name = "vort-zstd-tests",
+        .root_module = zstd_tests_mod,
+    });
+    const run_zstd_tests = b.addRunArtifact(zstd_tests);
+    const zstd_test_step = b.step("test-zstd", "Run focused Zstandard codec tests");
+    zstd_test_step.dependOn(&run_zstd_tests.step);
+    const zstd_far_window_tests = b.addTest(.{
+        .name = "vort-zstd-far-window-tests",
+        .root_module = zstd_tests_mod,
+        .filters = &.{"zstd explicit 24-bit window"},
+    });
+    const run_zstd_far_window_tests = b.addRunArtifact(zstd_far_window_tests);
+    const zstd_far_window_test_step = b.step(
+        "test-zstd-far-window",
+        "Run focused Zstandard explicit far-window tests",
+    );
+    zstd_far_window_test_step.dependOn(&run_zstd_far_window_tests.step);
     const zstd_huffman_x2_tests = b.addTest(.{
         .name = "vort-zstd-huffman-x2-tests",
         .root_module = tests_mod,
