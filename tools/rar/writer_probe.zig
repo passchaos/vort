@@ -114,7 +114,9 @@ pub fn main(init: std.process.Init) !void {
         }
         return;
     }
-    if (std.mem.eql(u8, mode, "ppmd-solid")) {
+    if (std.mem.eql(u8, mode, "ppmd-solid") or
+        std.mem.eql(u8, mode, "ppmd-filtered-solid"))
+    {
         if (version != .rar4) return error.UnsupportedRarVersion;
         const payload = "solid history payload alpha beta gamma\n" ** 128;
         const entries = [_]vort.RarEncodeEntry{
@@ -124,6 +126,11 @@ pub fn main(init: std.process.Init) !void {
         const bytes = try vort.encodeRarAlloc(init.gpa, &entries, .{
             .version = .rar4,
             .compression = .rar29_ppmd,
+            .block_size = 257,
+            .filter = if (std.mem.eql(u8, mode, "ppmd-filtered-solid"))
+                .{ .delta = 2 }
+            else
+                null,
             .solid = true,
             .ppmd_memory_size = 1024 * 1024,
         });

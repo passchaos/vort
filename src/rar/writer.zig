@@ -339,7 +339,15 @@ fn encodeRar4VolumesAlloc(
             else
                 try encoder.encodeMemberAlloc(entry.data, solid_continuation)
         else if (use_ppmd)
-            try ppmd_encoder.encodeMemberAlloc(entry.data, solid_continuation)
+            if (options.filter) |filter|
+                try ppmd_encoder.encodeFilteredMemberAlloc(
+                    entry.data,
+                    try rar29Filter(filter),
+                    options.block_size,
+                    solid_continuation,
+                )
+            else
+                try ppmd_encoder.encodeMemberAlloc(entry.data, solid_continuation)
         else
             null;
         defer if (compressed) |bytes| allocator.free(bytes);
@@ -468,13 +476,15 @@ fn validateEntries(
                 try rar29_encoder.validateFilter(try rar29Filter(filter));
         },
         .rar29_ppmd => {
-            if (options.version != .rar4 or options.filter != null)
+            if (options.version != .rar4)
                 return error.UnsupportedRarEncodeOptions;
             _ = try rar29DictionaryFlags(options.dictionary_size);
             _ = try ppmd_h.validateEncodeOptions(.{
                 .order = options.ppmd_order,
                 .memory_size = options.ppmd_memory_size,
             });
+            if (options.filter) |filter|
+                try ppmd_h.validateFilter(try rar29Filter(filter), options.block_size);
         },
         .rar50 => {
             if (options.version != .rar5 or options.block_size == 0 or
@@ -701,7 +711,15 @@ fn appendRar4File(
         else
             try encoder.encodeMemberAlloc(entry.data, solid_continuation)
     else if (use_ppmd)
-        try ppmd_encoder.encodeMemberAlloc(entry.data, solid_continuation)
+        if (options.filter) |filter|
+            try ppmd_encoder.encodeFilteredMemberAlloc(
+                entry.data,
+                try rar29Filter(filter),
+                options.block_size,
+                solid_continuation,
+            )
+        else
+            try ppmd_encoder.encodeMemberAlloc(entry.data, solid_continuation)
     else
         null;
     defer if (compressed) |bytes| allocator.free(bytes);
@@ -1475,14 +1493,23 @@ test "RAR29 PPMd writer emits deterministic ordinary and solid streams" {
             .compression = .rar29_ppmd,
         }),
     );
-    try std.testing.expectError(
-        error.UnsupportedRarEncodeOptions,
-        encodeAlloc(allocator, &entries, .{
-            .version = .rar4,
-            .compression = .rar29_ppmd,
-            .filter = .e8,
-        }),
+    const filtered = try encodeAlloc(allocator, &entries, .{
+        .version = .rar4,
+        .compression = .rar29_ppmd,
+        .block_size = 1024,
+        .filter = .{ .delta = 2 },
+        .ppmd_memory_size = 1024 * 1024,
+        .solid = true,
+    });
+    defer allocator.free(filtered);
+    const filtered_archive = try archive.parse(filtered);
+    const filtered_output = try filtered_archive.extractByNameAllocLimited(
+        allocator,
+        "second.txt",
+        @max(first_payload.len, second_payload.len),
     );
+    defer allocator.free(filtered_output);
+    try std.testing.expectEqualSlices(u8, second_payload, filtered_output);
     try std.testing.expectError(
         error.InvalidRarPpmdEncodeOptions,
         encodeAlloc(allocator, &entries, .{

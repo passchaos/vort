@@ -472,7 +472,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   table-length RLE, multiblock output, 64 KiB through 4 MiB declared
   dictionaries and cross-member solid history, pure Zig RAR29 PPMd Variant H
   literal/escape writing with solid model continuation, RAR29 LZ writing with
-  E8/E8E9/Delta/Itanium/RGB/Audio VM filters, and 7-Zip interoperability, plus
+  E8/E8E9/Delta/Itanium/RGB/Audio VM filters, PPMd-attached VM records across
+  ordinary/solid/encrypted/split members, and 7-Zip/unrar interoperability, plus
   deterministic RAR50 LZ writing with canonical tables, multiblock output, and
   Delta/E8/E8E9/ARM filters plus cross-member solid history, post-compression
   RAR5 file-data/header encryption, and deterministic stored/compressed/solid

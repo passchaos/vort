@@ -152,7 +152,11 @@ members, block termination, model reset, and solid model continuation are
 supported. The current writer intentionally omits PPMd-to-LZ match escape
 selection; this affects ratio, not wire compatibility or decoded content.
 `encodeRar29PpmdAlloc` and reusable `Rar29PpmdEncoder` expose the same raw
-member codec beneath the archive writer.
+member codec beneath the archive writer. `encodeRar29PpmdFilteredAlloc` and
+`Rar29PpmdEncoder.encodeFilteredMemberAlloc` additionally transform bounded
+blocks and encode the corresponding control-3 RAR VM records inside the PPMd
+symbol stream. All six standard RAR29 filters support ordinary and solid model
+continuation, AES-encrypted members, and packed streams split across volumes.
 `RarEncodeEntry.rar4_encryption` applies optional-salt AES-128 after Stored,
 RAR29 LZ, or RAR29 PPMd compression. `rar4_header_encryption` sets the clear
 main password flag and emits every later header as salt plus block-aligned
@@ -167,9 +171,10 @@ directories terminate both RAR29 LZ and PPMd compression chains.
 RAR29 LZ output can apply E8, E8E9, Delta, Itanium, RGB, or Audio filters.
 The writer emits canonical RAR VM program bytecode, declares/reuses programs
 across blocks, and bounds filter blocks to the VM-compatible 120–128 KiB
-range. RGB and Audio parameters are explicit. Filtered RAR29 solid and PPMd
-writing remain rejected until their combined cross-member semantics are
-exposed by the public API.
+range. RGB and Audio parameters are explicit. Filtered RAR29 LZ solid writing
+remains rejected until its cross-member dictionary/filter semantics are exposed
+by the public API; filtered PPMd solid writing is supported because the model
+and member-local VM schedule have independent explicit state.
 RAR50 output can additionally select a whole-member Delta, E8, E8E9, or ARM
 filter. The writer applies the forward transform independently to each legal
 filter-sized block, writes native filter records, and uses absolute member
@@ -262,10 +267,16 @@ escape, match, mixed-member, and solid-member outputs byte-for-byte with
 two RAR20 members; RAR20 is compared with 7-Zip, and all three are compared
 with unrar (`rar15_encrypted_entries=1`, `rar20_encrypted_entries=2`,
 `legacy_encrypted_unrar_entries=3`). It also covers all six standard RAR VM
-filters, LZ and PPMd filter records, 64-channel Delta, program reuse and
-unusual encoded integers. A
-checksum-valid generic-program mutation is compared with its canonical
-standard-program output. RAR5 checks cover compression methods 1, 3, and 5,
+filters in both LZ and PPMd writer streams, including PPMd solid and AES
+composition. 7-Zip and unrar independently extract all six ordinary PPMd
+filters plus the solid and encrypted cases (`writer_ppmd_filtered=6`,
+`writer_ppmd_filtered_external=6`, `writer_ppmd_filtered_unrar=6`,
+`writer_ppmd_filtered_solid_external=1`,
+`writer_ppmd_filtered_encrypted_external=1`). Decoder coverage retains the
+independently authored PPMd-embedded VM fixture, 64-channel Delta, program reuse
+and unusual encoded integers. A checksum-valid generic-program mutation is
+compared with its canonical standard-program output. RAR5 checks cover
+compression methods 1, 3, and 5,
 all four native filters, generated multi-block input, malformed first-block
 table reuse, and the legacy out-of-window zero-fill behavior. Solid
 coverage includes five RAR50 archives and nineteen members, including Quick
@@ -293,6 +304,6 @@ zig build run -- extract-rar-volumes entry.bin output.bin 1048576 --password=pas
   archive.part1.rar archive.part2.rar archive.part3.rar
 ```
 
-Mixed RAR15/RAR20 solid transitions remain a compatibility follow-up. The next
-RAR4 writer stages include PPMd-attached VM filters. PPMd hybrid match escapes
-remain a later compression-ratio optimization.
+Mixed RAR15/RAR20 solid transitions and filtered RAR29 LZ solid writing remain
+compatibility follow-ups. PPMd hybrid match escapes remain a later
+compression-ratio optimization.

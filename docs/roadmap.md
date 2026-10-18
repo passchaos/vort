@@ -21594,3 +21594,17 @@ reuse, so production keeps the simpler independently owned plans.
   RAR coverage is now 132 tests. The external matrix compares RAR20 with 7-Zip
   and all three members with unrar (`rar15_encrypted_entries=1`,
   `rar20_encrypted_entries=2`, `legacy_encrypted_unrar_entries=3`).
+
+- Added RAR29 PPMd-attached VM filter writing. The PPMd encoder now emits
+  escape/control-3 records, range-codes raw record bytes without literal escape
+  doubling, applies the same bounded forward transforms as the LZ writer, and
+  reuses a declared VM program across blocks. All E8, E8E9, Delta, Itanium, RGB
+  and Audio filters compose with ordinary and solid PPMd model state, RAR4 AES,
+  and arbitrary multi-volume packed-data cuts. One-shot and reusable raw APIs
+  expose the same behavior. Four focused tests cover all six filters,
+  determinism, validation, solid+AES, volume splitting and exhaustive OOM
+  cleanup; focused RAR coverage is now 136 tests. 7-Zip and unrar independently
+  extract all six ordinary writer cases plus filtered solid and encrypted
+  output (`writer_ppmd_filtered=6`, `writer_ppmd_filtered_external=6`,
+  `writer_ppmd_filtered_unrar=6`, `writer_ppmd_filtered_solid_external=1`,
+  `writer_ppmd_filtered_encrypted_external=1`).

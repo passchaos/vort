@@ -1,14 +1,18 @@
 const std = @import("std");
 const core = @import("../core.zig");
 const model_mod = @import("../seven_zip/ppmd7/model.zig");
+const filter_encoder = @import("rar29_filter_encoder.zig");
 
-pub const Error = core.Error || model_mod.Error || error{
+pub const Error = core.Error || model_mod.Error || filter_encoder.Error || error{
     InvalidRarPpmd,
     InvalidRarPpmdEncodeOptions,
     MissingRarPpmdSolidEncoderState,
     RarPpmdEncoderPoisoned,
     RarPpmdMemoryLimitExceeded,
 };
+
+/// Standard RAR29 VM transform embedded in a PPMd control stream.
+pub const Filter = filter_encoder.Filter;
 
 const top_value: u32 = 1 << 24;
 const bottom_value: u32 = 1 << 15;
@@ -345,6 +349,32 @@ pub const Encoder = struct {
         input: []const u8,
         solid: bool,
     ) Error![]u8 {
+        return self.encodeMemberInternal(input, solid, null, 0);
+    }
+
+    /// Encodes one member with PPMd escape/control-3 VM records. `block_size`
+    /// is a requested upper bound; format-specific filter limits can reduce it.
+    pub fn encodeFilteredMemberAlloc(
+        self: *Encoder,
+        input: []const u8,
+        filter: Filter,
+        block_size: usize,
+        solid: bool,
+    ) Error![]u8 {
+        if (input.len == 0) return error.InvalidRar29FilterOptions;
+        const effective_block_size = try filter_encoder.blockSize(filter, block_size);
+        if (!filter_encoder.canApply(filter, @min(input.len, effective_block_size)))
+            return error.InvalidRar29FilterOptions;
+        return self.encodeMemberInternal(input, solid, filter, block_size);
+    }
+
+    fn encodeMemberInternal(
+        self: *Encoder,
+        input: []const u8,
+        solid: bool,
+        filter: ?Filter,
+        requested_block_size: usize,
+    ) Error![]u8 {
         const order_bits = try validateEncodeOptions(self.options);
         if (!solid)
             self.reset()
@@ -377,7 +407,38 @@ pub const Encoder = struct {
 
         var range = RangeEncoder{ .allocator = self.allocator };
         defer range.deinit();
-        for (input) |symbol| try self.encodeLiteral(&range, symbol);
+        if (filter) |active| {
+            const block_size = try filter_encoder.blockSize(active, requested_block_size);
+            var start: usize = 0;
+            var filter_program_initialized = false;
+            var filter_applied = false;
+            while (start < input.len) {
+                const end = @min(input.len, start +| block_size);
+                const block = input[start..end];
+                if (filter_encoder.canApply(active, block.len)) {
+                    var prepared = try filter_encoder.prepareBlockAlloc(
+                        self.allocator,
+                        block,
+                        active,
+                        start,
+                        !filter_program_initialized,
+                    );
+                    defer prepared.deinit();
+                    try self.encodeSymbol(&range, self.options.escape);
+                    try self.encodeSymbol(&range, 3);
+                    for (prepared.record) |symbol| try self.encodeSymbol(&range, symbol);
+                    for (prepared.data) |symbol| try self.encodeLiteral(&range, symbol);
+                    filter_program_initialized = true;
+                    filter_applied = true;
+                } else {
+                    for (block) |symbol| try self.encodeLiteral(&range, symbol);
+                }
+                start = end;
+            }
+            if (!filter_applied) return error.InvalidRar29FilterOptions;
+        } else {
+            for (input) |symbol| try self.encodeLiteral(&range, symbol);
+        }
         try self.encodeSymbol(&range, self.options.escape);
         try self.encodeSymbol(&range, 2);
         const payload = try range.finishAlloc();
@@ -510,6 +571,19 @@ pub fn encodeAlloc(
     return encoder.encodeMemberAlloc(input, false);
 }
 
+/// One-shot filtered PPMd member encoding built on `Encoder`.
+pub fn encodeFilteredAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    filter: Filter,
+    block_size: usize,
+    options: EncodeOptions,
+) Error![]u8 {
+    var encoder = Encoder.init(allocator, options);
+    defer encoder.deinit();
+    return encoder.encodeFilteredMemberAlloc(input, filter, block_size, false);
+}
+
 pub fn validateEncodeOptions(options: EncodeOptions) Error!u8 {
     const order_bits: u8 = if (options.order <= 16)
         options.order -| 1
@@ -523,6 +597,10 @@ pub fn validateEncodeOptions(options: EncodeOptions) Error!u8 {
         options.memory_size % mib != 0)
         return error.InvalidRarPpmdEncodeOptions;
     return order_bits;
+}
+
+pub fn validateFilter(filter: Filter, block_size: usize) Error!void {
+    _ = try filter_encoder.blockSize(filter, block_size);
 }
 
 fn readByte(input: []const u8, position: *usize) Error!u8 {

@@ -10,6 +10,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from ppmd_filter_diff import run_matrix as run_ppmd_filter_matrix
+
 
 def run(
     program: Path | str,
@@ -202,6 +204,15 @@ def main() -> None:
     writer_compressed_external = 0
     writer_ppmd = 0
     writer_ppmd_external = 0
+    writer_ppmd_filtered = 0
+    writer_ppmd_filtered_external = 0
+    writer_ppmd_filtered_unrar = 0
+    writer_ppmd_filtered_solid = 0
+    writer_ppmd_filtered_solid_external = 0
+    writer_ppmd_filtered_solid_unrar = 0
+    writer_ppmd_filtered_encrypted = 0
+    writer_ppmd_filtered_encrypted_external = 0
+    writer_ppmd_filtered_encrypted_unrar = 0
     writer_filtered = 0
     writer_filtered_external = 0
     writer_solid = 0
@@ -968,6 +979,31 @@ def main() -> None:
                     raise AssertionError(f"7-Zip rejected Vort RAR29 {filter_name} output")
                 writer_filtered_external += 1
 
+        ppmd_filter_counts = run_ppmd_filter_matrix(
+            args.cli,
+            args.writer,
+            seven_zip,
+            unrar_tool,
+            temp,
+            rar29_filter_source,
+            bytes(rar29_filter_payload),
+            rar4_password,
+            rar4_salt,
+        )
+        writer_ppmd_filtered += ppmd_filter_counts.ordinary
+        writer_ppmd_filtered_external += ppmd_filter_counts.ordinary_7zip
+        writer_ppmd_filtered_unrar += ppmd_filter_counts.ordinary_unrar
+        writer_filtered += ppmd_filter_counts.ordinary
+        writer_filtered_external += ppmd_filter_counts.ordinary_7zip
+        writer_ppmd_filtered_solid += ppmd_filter_counts.solid
+        writer_ppmd_filtered_solid_external += ppmd_filter_counts.solid_7zip
+        writer_ppmd_filtered_solid_unrar += ppmd_filter_counts.solid_unrar
+        writer_solid += ppmd_filter_counts.solid
+        writer_solid_external += ppmd_filter_counts.solid_7zip
+        writer_ppmd_filtered_encrypted += ppmd_filter_counts.encrypted
+        writer_ppmd_filtered_encrypted_external += ppmd_filter_counts.encrypted_7zip
+        writer_ppmd_filtered_encrypted_unrar += ppmd_filter_counts.encrypted_unrar
+
         if args.writer is not None:
             for version in versions:
                 archive = temp / f"probe-{version}.rar"
@@ -1692,6 +1728,15 @@ def main() -> None:
         f"writer_compressed_external={writer_compressed_external} "
         f"writer_ppmd={writer_ppmd} "
         f"writer_ppmd_external={writer_ppmd_external} "
+        f"writer_ppmd_filtered={writer_ppmd_filtered} "
+        f"writer_ppmd_filtered_external={writer_ppmd_filtered_external} "
+        f"writer_ppmd_filtered_unrar={writer_ppmd_filtered_unrar} "
+        f"writer_ppmd_filtered_solid={writer_ppmd_filtered_solid} "
+        f"writer_ppmd_filtered_solid_external={writer_ppmd_filtered_solid_external} "
+        f"writer_ppmd_filtered_solid_unrar={writer_ppmd_filtered_solid_unrar} "
+        f"writer_ppmd_filtered_encrypted={writer_ppmd_filtered_encrypted} "
+        f"writer_ppmd_filtered_encrypted_external={writer_ppmd_filtered_encrypted_external} "
+        f"writer_ppmd_filtered_encrypted_unrar={writer_ppmd_filtered_encrypted_unrar} "
         f"writer_filtered={writer_filtered} "
         f"writer_filtered_external={writer_filtered_external} "
         f"writer_solid={writer_solid} "
