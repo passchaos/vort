@@ -67,6 +67,13 @@ const selector_payload =
     "alpha alpha alpha beta gamma service=vort\n" ++
     "region=west status=warn message=gamma alpha\n" ++
     "message=beta beta beta status=ok\n";
+const cover_training = [_][]const u8{
+    "service=vort region=west status=ok message=alpha alpha alpha",
+    "service=vort region=east status=ok message=beta beta beta",
+    "service=vort region=north status=warn message=gamma gamma",
+    "service=vort region=south status=retry message=delta delta",
+    "service=vort region=central status=ok message=alpha beta gamma",
+};
 
 const DictionaryCaseResult = struct {
     trained_size: usize,
@@ -75,6 +82,7 @@ const DictionaryCaseResult = struct {
 };
 
 const SelectorCaseResult = struct { baseline_size: usize, selected_size: usize };
+const CoverCaseResult = struct { content_size: usize, reference_size: usize };
 
 fn nextDictionaryId(id: u32) u32 {
     return if (id == std.math.maxInt(u32)) 1 else id + 1;
@@ -140,6 +148,44 @@ fn compareValidatedHistorySelector(
     if (!std.mem.eql(u8, selector_payload, decoded)) return error.SizeMismatch;
     if (selected_encoded.len > baseline_encoded.len) return error.CompressionRegression;
     return .{ .baseline_size = baseline_encoded.len, .selected_size = selected_encoded.len };
+}
+
+fn verifyCoverStandardDictionary(
+    allocator: std.mem.Allocator,
+    runtime: libzstd.Runtime,
+    dictionary_id: u32,
+) !CoverCaseResult {
+    const trained = try vort.zstdTrainCoverStandardDictionaryAlloc(
+        allocator,
+        &cover_training,
+        .{ .target_size = 64, .segment_size = 24, .hash_log = 8 },
+        dictionary_id,
+    );
+    defer trained.deinit(allocator);
+
+    const reference_encoded = try runtime.encodeUsingDictAlloc(allocator, selector_payload, trained.bytes, 1);
+    defer allocator.free(reference_encoded);
+    const vort_decoded = try vort.zstdDecodeFrameAllocWithDictionary(
+        allocator,
+        reference_encoded,
+        trained.asDictionary(),
+    );
+    defer allocator.free(vort_decoded);
+    if (!std.mem.eql(u8, selector_payload, vort_decoded)) return error.SizeMismatch;
+
+    const vort_encoded = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(
+        allocator,
+        selector_payload,
+        .{ .content_checksum = false },
+        trained.asDictionary(),
+    );
+    defer allocator.free(vort_encoded.frame);
+    const reference_output = try allocator.alloc(u8, selector_payload.len);
+    defer allocator.free(reference_output);
+    try runtime.decodeUsingDict(vort_encoded.frame, reference_output, trained.bytes);
+    if (!std.mem.eql(u8, selector_payload, reference_output)) return error.SizeMismatch;
+
+    return .{ .content_size = trained.view.content.len, .reference_size = reference_encoded.len };
 }
 
 fn compareTrainedDictionaryCase(
@@ -215,6 +261,7 @@ pub fn main(init: std.process.Init) !void {
     var baseline_total: usize = 0;
     var trained_sequence_entropy_len: usize = 0;
     var selector_sizes: SelectorCaseResult = .{ .baseline_size = 0, .selected_size = 0 };
+    var cover_sizes: CoverCaseResult = .{ .content_size = 0, .reference_size = 0 };
 
     if (generated_path) |output_path| {
         const generated_id = nextDictionaryId(parsed.view.id);
@@ -245,6 +292,7 @@ pub fn main(init: std.process.Init) !void {
         structured_sizes = try compareTrainedDictionaryCase(init.gpa, runtime, &structured_training, structured_payload, structured_id);
         binary_sizes = try compareTrainedDictionaryCase(init.gpa, runtime, &binary_training, &binary_payload, binary_id);
         selector_sizes = try compareValidatedHistorySelector(init.gpa, runtime, nextDictionaryId(binary_id));
+        cover_sizes = try verifyCoverStandardDictionary(init.gpa, runtime, nextDictionaryId(nextDictionaryId(binary_id)));
         trained_total = text_sizes.trained_size + structured_sizes.trained_size + binary_sizes.trained_size;
         baseline_total = text_sizes.baseline_size + structured_sizes.baseline_size + binary_sizes.baseline_size;
         if (trained_total >= baseline_total) return error.CompressionRegression;
@@ -303,8 +351,8 @@ pub fn main(init: std.process.Init) !void {
     var buffer: [384]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
     try stdout.interface.print(
-        "zstd_full_dictionary_diff=ok version={s} id={d} vort={d} reference={d} generated={s} custom_repcodes={s} text={d}/{d} structured={d}/{d} binary={d}/{d} total={d}/{d} selector={d}/{d} sequence_entropy={d}\n",
-        .{ runtime.version(), parsed.view.id, vort_encoded.frame.len, reference_encoded.len, if (generated_path == null) "no" else "yes", if (generated_path == null) "no" else "yes", text_sizes.trained_size, text_sizes.baseline_size, structured_sizes.trained_size, structured_sizes.baseline_size, binary_sizes.trained_size, binary_sizes.baseline_size, trained_total, baseline_total, selector_sizes.selected_size, selector_sizes.baseline_size, trained_sequence_entropy_len },
+        "zstd_full_dictionary_diff=ok version={s} id={d} vort={d} reference={d} generated={s} custom_repcodes={s} text={d}/{d} structured={d}/{d} binary={d}/{d} total={d}/{d} selector={d}/{d} cover={d}/{d} sequence_entropy={d}\n",
+        .{ runtime.version(), parsed.view.id, vort_encoded.frame.len, reference_encoded.len, if (generated_path == null) "no" else "yes", if (generated_path == null) "no" else "yes", text_sizes.trained_size, text_sizes.baseline_size, structured_sizes.trained_size, structured_sizes.baseline_size, binary_sizes.trained_size, binary_sizes.baseline_size, trained_total, baseline_total, selector_sizes.selected_size, selector_sizes.baseline_size, cover_sizes.content_size, cover_sizes.reference_size, trained_sequence_entropy_len },
     );
     try stdout.interface.flush();
 }

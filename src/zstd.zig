@@ -700,6 +700,26 @@ pub fn trainStandardDictionaryAlloc(
     return try standardDictionaryFromSelectedContentAndSamplesAlloc(allocator, content, samples, dictionary_id);
 }
 
+/// Train a standard full Zstandard dictionary whose history is selected by
+/// Vort's deterministic COVER-class selector. The selected history then feeds
+/// the same corpus-specific Huffman, FSE, and repcode finalization as
+/// `trainStandardDictionaryAlloc`.
+///
+/// This API implements the COVER selection model without claiming byte-for-
+/// byte equivalence with libzstd COVER or FastCover output. Candidate segments
+/// never cross a caller-provided sample boundary.
+pub fn trainCoverStandardDictionaryAlloc(
+    allocator: std.mem.Allocator,
+    samples: []const []const u8,
+    options: CoverDictionaryTrainOptions,
+    dictionary_id: u32,
+) Error!OwnedStandardDictionary {
+    if (dictionary_id == 0) return error.InvalidDictionaryMetadata;
+    const content = try dictionary_mod.trainCoverAlloc(allocator, samples, options);
+    defer allocator.free(content);
+    return try standardDictionaryFromSelectedContentAndSamplesAlloc(allocator, content, samples, dictionary_id);
+}
+
 /// Validation-guided variant of `trainStandardDictionaryAlloc`. The held-out
 /// samples select among a fixed family of phrase configurations, layouts, and
 /// bounded history sizes using a codec-independent stored/literal/match cost.
@@ -1350,6 +1370,94 @@ test "standard Zstd dictionary trainer emits corpus literal entropy" {
     ));
 }
 
+test "standard Zstd COVER-class trainer finalizes deterministic history" {
+    const samples = [_][]const u8{
+        "service=vort region=west status=ok message=alpha alpha alpha alpha",
+        "service=vort region=east status=ok message=beta beta beta beta",
+        "service=vort region=north status=warn message=gamma gamma gamma",
+        "service=vort region=south status=retry message=delta delta delta",
+        "service=vort region=central status=ok message=alpha beta gamma",
+    };
+    const options: CoverDictionaryTrainOptions = .{
+        .target_size = 64,
+        .segment_size = 24,
+        .hash_log = dictionary_mod.cover.min_hash_log,
+    };
+    const selected = try dictionary_mod.trainCoverAlloc(std.testing.allocator, &samples, options);
+    defer std.testing.allocator.free(selected);
+    const first = try trainCoverStandardDictionaryAlloc(
+        std.testing.allocator,
+        &samples,
+        options,
+        0x1000_0009,
+    );
+    defer first.deinit(std.testing.allocator);
+    const second = try trainCoverStandardDictionaryAlloc(
+        std.testing.allocator,
+        &samples,
+        options,
+        0x1000_0009,
+    );
+    defer second.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(DictionaryKind.standard_full, first.asDictionary().kind());
+    try std.testing.expectEqual(@as(u32, 0x1000_0009), first.view.id);
+    try std.testing.expectEqualSlices(u8, selected, first.view.content);
+    try std.testing.expectEqualSlices(u8, first.bytes, second.bytes);
+    const summary = try summarizeStandardDictionary(first.bytes);
+    try std.testing.expectEqual(@as(usize, 256), summary.huffman_symbol_count);
+    try std.testing.expect(summary.offset_table_entries != 0);
+    try std.testing.expect(summary.match_table_entries != 0);
+    try std.testing.expect(summary.literal_table_entries != 0);
+
+    const payload = "service=vort region=west status=retry message=alpha gamma delta";
+    const encoded = try encodeFrameWithDictionaryAlloc(std.testing.allocator, payload, first.asDictionary());
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeFrameAllocWithDictionary(std.testing.allocator, encoded, first.asDictionary());
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    try std.testing.expectError(error.InvalidDictionaryMetadata, trainCoverStandardDictionaryAlloc(
+        std.testing.allocator,
+        samples[0..4],
+        options,
+        0,
+    ));
+    try std.testing.expectError(error.InvalidDictionaryTraining, trainCoverStandardDictionaryAlloc(
+        std.testing.allocator,
+        samples[0..4],
+        options,
+        1,
+    ));
+}
+
+test "standard Zstd COVER-class trainer releases allocation failures" {
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const samples = [_][]const u8{
+                "cover allocation sample alpha alpha",
+                "cover allocation sample beta beta",
+                "cover allocation sample gamma gamma",
+                "cover allocation sample delta delta",
+                "cover allocation sample epsilon epsilon",
+            };
+            const trained = try trainCoverStandardDictionaryAlloc(
+                allocator,
+                &samples,
+                .{
+                    .target_size = 24,
+                    .segment_size = 12,
+                    .hash_log = dictionary_mod.cover.min_hash_log,
+                },
+                0x1000_000a,
+            );
+            defer trained.deinit(allocator);
+            try std.testing.expectEqual(DictionaryKind.standard_full, trained.asDictionary().kind());
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{});
+}
+
 test "standard Zstd dictionary trainer adopts only a smaller repcode model" {
     var content: [1024]u8 = undefined;
     var random_state: u32 = 0x6a09_e667;
@@ -1744,6 +1852,7 @@ test "standard Zstd dictionary view constructs raw-content native dictionary" {
 }
 
 pub const NativeDictionaryTrainOptions = dictionary_mod.TrainOptions;
+pub const CoverDictionaryTrainOptions = dictionary_mod.CoverTrainOptions;
 pub const Dictionary = NativeDictionary;
 pub const DictionaryTrainOptions = NativeDictionaryTrainOptions;
 
