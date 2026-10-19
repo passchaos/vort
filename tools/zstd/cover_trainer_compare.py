@@ -125,9 +125,33 @@ def main() -> int:
             selected = [int(value) for value in fields.get("selected", "").split("/")]
             if len(selected) != 3 or selected[0] not in (32, 64, 128, 256, 352) or selected[1] not in (6, 8) or selected[2] not in (12, 16, 20):
                 raise SystemExit(f"selected COVER parameters are outside the grid: {output!r}")
+            oracle_selected = [int(value) for value in fields.get("oracle_selected", "").split("/")]
+            if len(oracle_selected) != 3 or oracle_selected[0] not in (32, 64, 128, 256, 352) or oracle_selected[1] not in (6, 8) or oracle_selected[2] not in (12, 16, 20):
+                raise SystemExit(f"oracle COVER parameters are outside the grid: {output!r}")
+            native_oracle_selected = [int(value) for value in fields.get("native_oracle_selected", "").split("/")]
+            if len(native_oracle_selected) != 3 or native_oracle_selected[0] not in (32, 64, 128, 256, 352) or native_oracle_selected[1] not in (6, 8) or native_oracle_selected[2] not in (12, 16, 20):
+                raise SystemExit(f"native oracle COVER parameters are outside the grid: {output!r}")
             for field in ("content", "dict", "level1", "level3", "level9", "train_ns"):
                 values = [int(value) for value in fields.get(field, "").split("/")]
                 if len(values) != 3 or min(values) <= 0:
+                    raise SystemExit(f"invalid {field} evidence: {output!r}")
+            for field in (
+                "oracle_rank",
+                "oracle_score",
+                "oracle_dict",
+                "oracle_level1",
+                "oracle_level3",
+                "oracle_level9",
+                "native_oracle_rank",
+                "native_oracle_score",
+                "native_oracle_dict",
+                "native_oracle_level1",
+                "native_oracle_level3",
+                "native_oracle_level9",
+                "oracle_train_ns",
+                "native_oracle_train_ns",
+            ):
+                if int(fields.get(field, 0)) <= 0:
                     raise SystemExit(f"invalid {field} evidence: {output!r}")
             for level in ("level1", "level3", "level9"):
                 vort_size, cover_size, fastcover_size = map(int, fields[level].split("/"))
@@ -145,9 +169,30 @@ def main() -> int:
     fastcover_total = sum(int(fields[level].split("/")[2]) for _, fields, _ in outputs for level in ("level1", "level3", "level9"))
     if vort_total * 100 > cover_total * 103 or vort_total * 100 > fastcover_total * 103:
         raise SystemExit(f"aggregate COVER ratio gap exceeded: {vort_total}/{cover_total}/{fastcover_total}")
+    oracle_total = sum(int(fields[f"oracle_{level}"]) for _, fields, _ in outputs for level in ("level1", "level3", "level9"))
+    native_oracle_total = sum(int(fields[f"native_oracle_{level}"]) for _, fields, _ in outputs for level in ("level1", "level3", "level9"))
+    for kind, fields, output in outputs:
+        for level in ("level1", "level3", "level9"):
+            generic = int(fields[level].split("/")[0])
+            oracle = int(fields[f"oracle_{level}"])
+            native_oracle = int(fields[f"native_oracle_{level}"])
+            if oracle * 100 > generic * 105 or native_oracle * 100 > generic * 105:
+                raise SystemExit(f"codec-aware held-out regression exceeded for {kind}/{level}: {output!r}")
+        generic_ns = int(fields["train_ns"].split("/")[0])
+        if int(fields["native_oracle_train_ns"]) > generic_ns * 100:
+            raise SystemExit(f"native codec-aware training gap exceeded: {output!r}")
+    json_fields = next(fields for kind, fields, _ in outputs if kind == "json")
+    if int(json_fields["native_oracle_level3"]) >= int(json_fields["level3"].split("/")[0]):
+        raise SystemExit("native codec-aware JSON level-3 selection no longer improves")
+    if oracle_total * 100 > vort_total * 102 or native_oracle_total * 100 > vort_total * 102:
+        raise SystemExit(
+            f"aggregate codec-aware held-out regression exceeded: "
+            f"{vort_total}/{oracle_total}/{native_oracle_total}"
+        )
     print(
         f"zstd_cover_trainer_compare_gate=ok cases={len(outputs)} rounds={TRAIN_ROUNDS} "
-        f"total={vort_total}/{cover_total}/{fastcover_total}"
+        f"total={vort_total}/{cover_total}/{fastcover_total} "
+        f"oracle={oracle_total}/{native_oracle_total}"
     )
     return 0
 

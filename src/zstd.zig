@@ -659,6 +659,13 @@ pub const OwnedOptimizedCoverStandardDictionary = struct {
     }
 };
 
+const default_cover_codec_levels = [_]c_int{ 1, 3, 9 };
+
+pub const CoverDictionaryCodecOptimizeOptions = struct {
+    cover: CoverDictionaryOptimizeOptions,
+    levels: []const c_int = &default_cover_codec_levels,
+};
+
 /// Fixed bytes added before the caller-selected history by Vort's baseline
 /// standard Zstandard dictionary generator.
 pub const standard_dictionary_header_len = dictionary_format.generated_header_len;
@@ -686,6 +693,26 @@ pub fn standardDictionaryFromContentAlloc(allocator: std.mem.Allocator, content:
     errdefer allocator.free(bytes);
     _ = try standardDictionaryFromContentInto(content, dictionary_id, bytes);
     return .{ .bytes = bytes, .view = try inspectStandardDictionary(bytes) };
+}
+
+/// Train Huffman, FSE, and repcode metadata around caller-selected history.
+/// This separates codec-specific entropy finalization from history selection,
+/// allowing applications to use their own deterministic selector without
+/// falling back to the portable baseline entropy tables.
+pub fn trainStandardDictionaryFromContentAlloc(
+    allocator: std.mem.Allocator,
+    content: []const u8,
+    samples: []const []const u8,
+    dictionary_id: u32,
+) Error!OwnedStandardDictionary {
+    if (dictionary_id == 0 or content.len < 8) return error.InvalidDictionaryMetadata;
+    if (samples.len == 0) return error.InvalidDictionaryTraining;
+    var total_sample_bytes: usize = 0;
+    for (samples) |sample|
+        total_sample_bytes = std.math.add(usize, total_sample_bytes, sample.len) catch
+            return error.InvalidDictionaryTraining;
+    if (total_sample_bytes > std.math.maxInt(u32) - 1) return error.InvalidDictionaryTraining;
+    return standardDictionaryFromSelectedContentAndSamplesAlloc(allocator, content, samples, dictionary_id);
 }
 
 /// Train a standard full dictionary with a corpus-specific literal Huffman
@@ -776,6 +803,102 @@ pub fn trainOptimizedCoverStandardDictionaryAlloc(
         .candidates_evaluated = optimized.candidates_evaluated,
     };
 }
+
+/// Slow, ratio-oriented COVER parameter search using actual Vort Zstandard
+/// frame sizes on the validation partition. Every history candidate is
+/// finalized with training-corpus entropy before scoring. The winning history
+/// is finalized again with both input partitions, so callers should retain a
+/// third partition for unbiased evaluation.
+pub fn trainCodecOptimizedCoverStandardDictionaryAlloc(
+    allocator: std.mem.Allocator,
+    training_samples: []const []const u8,
+    validation_samples: []const []const u8,
+    options: CoverDictionaryCodecOptimizeOptions,
+    dictionary_id: u32,
+) Error!OwnedOptimizedCoverStandardDictionary {
+    if (dictionary_id == 0) return error.InvalidDictionaryMetadata;
+    if (options.levels.len == 0 or options.levels.len > 8) return error.InvalidBlockPlan;
+    for (options.levels) |level| {
+        if (level < min_compression_level or level > max_compression_level)
+            return error.InvalidBlockPlan;
+    }
+    var scorer: ZstdCoverValidationScorer = .{
+        .allocator = allocator,
+        .training_samples = training_samples,
+        .levels = options.levels,
+        .dictionary_id = dictionary_id,
+    };
+    var optimized = try dictionary_mod.cover_optimize.trainAllocWithScorerContext(
+        allocator,
+        training_samples,
+        validation_samples,
+        options.cover,
+        &scorer,
+        ZstdCoverValidationScorer.score,
+    );
+    defer optimized.deinit(allocator);
+
+    const entropy_sample_count = std.math.add(usize, training_samples.len, validation_samples.len) catch
+        return error.InvalidDictionaryTraining;
+    const entropy_samples = try allocator.alloc([]const u8, entropy_sample_count);
+    defer allocator.free(entropy_samples);
+    @memcpy(entropy_samples[0..training_samples.len], training_samples);
+    @memcpy(entropy_samples[training_samples.len..], validation_samples);
+    const standard = try standardDictionaryFromSelectedContentAndSamplesAlloc(
+        allocator,
+        optimized.bytes,
+        entropy_samples,
+        dictionary_id,
+    );
+    return .{
+        .bytes = standard.bytes,
+        .view = standard.view,
+        .selected_options = optimized.selected_options,
+        .validation_score = optimized.validation_score,
+        .candidates_evaluated = optimized.candidates_evaluated,
+    };
+}
+
+const ZstdCoverValidationScorer = struct {
+    allocator: std.mem.Allocator,
+    training_samples: []const []const u8,
+    levels: []const c_int,
+    dictionary_id: u32,
+
+    fn score(
+        self: *ZstdCoverValidationScorer,
+        content: []const u8,
+        validation_samples: []const []const u8,
+        _: usize,
+    ) Error!dictionary_mod.CoverOptimizeScore {
+        const dictionary = try standardDictionaryFromSelectedContentAndSamplesAlloc(
+            self.allocator,
+            content,
+            self.training_samples,
+            self.dictionary_id,
+        );
+        defer dictionary.deinit(self.allocator);
+        var encoded_size = dictionary.bytes.len;
+        for (validation_samples) |sample| {
+            for (self.levels) |level| {
+                const encoded = try encodeFrameWithLevelAndOptionsAndDictionaryAlloc(
+                    self.allocator,
+                    sample,
+                    level,
+                    .{},
+                    dictionary.asDictionary(),
+                );
+                defer self.allocator.free(encoded);
+                encoded_size = std.math.add(usize, encoded_size, encoded.len) catch
+                    return error.InvalidDictionaryTraining;
+            }
+        }
+        return .{
+            .estimated_bits = std.math.mul(usize, encoded_size, 8) catch
+                return error.InvalidDictionaryTraining,
+        };
+    }
+};
 
 /// Validation-guided variant of `trainStandardDictionaryAlloc`. The held-out
 /// samples select among a fixed family of phrase configurations, layouts, and
@@ -1427,6 +1550,63 @@ test "standard Zstd dictionary trainer emits corpus literal entropy" {
     ));
 }
 
+test "standard Zstd dictionary finalizes caller-selected history" {
+    const content = "caller-selected dictionary history with stable adjacent records";
+    const samples = [_][]const u8{
+        "caller-selected dictionary history record alpha alpha",
+        "caller-selected dictionary history record beta beta",
+    };
+    const first = try trainStandardDictionaryFromContentAlloc(
+        std.testing.allocator,
+        content,
+        &samples,
+        0x1000_000d,
+    );
+    defer first.deinit(std.testing.allocator);
+    const second = try trainStandardDictionaryFromContentAlloc(
+        std.testing.allocator,
+        content,
+        &samples,
+        0x1000_000d,
+    );
+    defer second.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, content, first.view.content);
+    try std.testing.expectEqualSlices(u8, first.bytes, second.bytes);
+    try std.testing.expectEqual(DictionaryKind.standard_full, first.asDictionary().kind());
+    try std.testing.expectError(error.InvalidDictionaryMetadata, trainStandardDictionaryFromContentAlloc(
+        std.testing.failing_allocator,
+        content,
+        &.{},
+        0,
+    ));
+    try std.testing.expectError(error.InvalidDictionaryTraining, trainStandardDictionaryFromContentAlloc(
+        std.testing.allocator,
+        content,
+        &.{},
+        1,
+    ));
+}
+
+test "standard Zstd caller-selected history finalizer releases allocation failures" {
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const content = "caller-selected dictionary history with stable adjacent records";
+            const samples = [_][]const u8{
+                "caller-selected dictionary history record alpha alpha",
+                "caller-selected dictionary history record beta beta",
+            };
+            const trained = try trainStandardDictionaryFromContentAlloc(
+                allocator,
+                content,
+                &samples,
+                0x1000_000e,
+            );
+            defer trained.deinit(allocator);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{});
+}
+
 test "standard Zstd COVER-class trainer finalizes deterministic history" {
     const samples = [_][]const u8{
         "service=vort region=west status=ok message=alpha alpha alpha alpha",
@@ -1592,6 +1772,97 @@ test "standard Zstd optimized COVER-class trainer releases allocation failures" 
                     .hash_logs = &.{8},
                 },
                 0x1000_000c,
+            );
+            defer trained.deinit(allocator);
+            try std.testing.expectEqual(@as(usize, 1), trained.candidates_evaluated);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{});
+}
+
+test "standard Zstd codec-optimized COVER trainer is deterministic" {
+    const training = [_][]const u8{
+        "service=vort region=west status=ok message=alpha alpha alpha alpha",
+        "service=vort region=east status=ok message=beta beta beta beta",
+        "service=vort region=north status=warn message=gamma gamma gamma",
+        "service=vort region=south status=retry message=delta delta delta",
+        "service=vort region=central status=ok message=alpha beta gamma",
+    };
+    const validation = [_][]const u8{
+        "service=vort region=west status=retry message=alpha gamma",
+        "service=vort region=south status=ok message=delta beta",
+    };
+    const options: CoverDictionaryCodecOptimizeOptions = .{
+        .cover = .{
+            .target_size = 48,
+            .segment_sizes = &.{ 12, 24 },
+            .dmer_sizes = &.{ 6, 8 },
+            .hash_logs = &.{8},
+        },
+        .levels = &.{ 1, 3 },
+    };
+    const first = try trainCodecOptimizedCoverStandardDictionaryAlloc(
+        std.testing.allocator,
+        &training,
+        &validation,
+        options,
+        0x1000_000f,
+    );
+    defer first.deinit(std.testing.allocator);
+    const second = try trainCodecOptimizedCoverStandardDictionaryAlloc(
+        std.testing.allocator,
+        &training,
+        &validation,
+        options,
+        0x1000_000f,
+    );
+    defer second.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 4), first.candidates_evaluated);
+    try std.testing.expectEqual(first.selected_options, second.selected_options);
+    try std.testing.expectEqual(first.validation_score, second.validation_score);
+    try std.testing.expectEqualSlices(u8, first.bytes, second.bytes);
+    try std.testing.expect(first.validation_score.estimated_bits != 0);
+    try std.testing.expectError(error.InvalidBlockPlan, trainCodecOptimizedCoverStandardDictionaryAlloc(
+        std.testing.allocator,
+        &training,
+        &validation,
+        .{ .cover = options.cover, .levels = &.{} },
+        1,
+    ));
+    try std.testing.expectError(error.InvalidDictionaryMetadata, trainCodecOptimizedCoverStandardDictionaryAlloc(
+        std.testing.failing_allocator,
+        training[0..4],
+        &.{},
+        .{ .cover = options.cover, .levels = &.{} },
+        0,
+    ));
+}
+
+test "standard Zstd codec-optimized COVER trainer releases allocation failures" {
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const training = [_][]const u8{
+                "codec cover allocation sample alpha alpha",
+                "codec cover allocation sample beta beta",
+                "codec cover allocation sample gamma gamma",
+                "codec cover allocation sample delta delta",
+                "codec cover allocation sample epsilon epsilon",
+            };
+            const validation = [_][]const u8{"codec cover allocation sample alpha beta"};
+            const trained = try trainCodecOptimizedCoverStandardDictionaryAlloc(
+                allocator,
+                &training,
+                &validation,
+                .{
+                    .cover = .{
+                        .target_size = 24,
+                        .segment_sizes = &.{12},
+                        .dmer_sizes = &.{6},
+                        .hash_logs = &.{8},
+                    },
+                    .levels = &.{1},
+                },
+                0x1000_0010,
             );
             defer trained.deinit(allocator);
             try std.testing.expectEqual(@as(usize, 1), trained.candidates_evaluated);

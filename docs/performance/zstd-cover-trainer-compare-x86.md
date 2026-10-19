@@ -45,10 +45,10 @@ Each cell is `Vort / COVER / FastCover` in bytes.
 | text | 337 / 343 / 317 | 298 / 285 / 285 | 265 / 263 / 245 | 32 / 8 / 12 |
 | JSON | 198 / 170 / 185 | 212 / 170 / 185 | 189 / 187 / 199 | 64 / 8 / 16 |
 | binary | 813 / 800 / 799 | 817 / 787 / 790 | 812 / 806 / 812 | 256 / 6 / 16 |
-| source | 1,868 / 1,829 / 1,841 | 1,827 / 1,803 / 1,807 | 1,791 / 1,781 / 1,784 | 32 / 6 / 12 |
+| source | 1,811 / 1,804 / 1,793 | 1,776 / 1,784 / 1,773 | 1,757 / 1,754 / 1,747 | 32 / 8 / 12 |
 
-Across all twelve rows the totals are `9,427 / 9,224 / 9,249`: Vort is 2.20%
-larger than COVER and 1.92% larger than FastCover. Text level 1 beats COVER,
+Across all twelve rows the totals are `9,285 / 9,153 / 9,130`: Vort is 1.44%
+larger than COVER and 1.70% larger than FastCover. Text level 1 beats COVER,
 and JSON level 9 beats FastCover, but JSON level 3 remains the largest gap at
 24.7% versus COVER and 14.6% versus FastCover. Source and binary rows are
 generally within about 0--4%.
@@ -60,14 +60,40 @@ and both aggregate gaps to 3%. These are regression bounds, not parity claims.
 
 | Corpus | Full dictionary bytes `V/C/F` | History bytes `V/C/F` | Training ms `V/C/F` |
 | --- | ---: | ---: | ---: |
-| text | 476 / 512 / 512 | 352 / 388 / 376 | 567.06 / 14.25 / 12.26 |
-| JSON | 493 / 512 / 512 | 352 / 389 / 370 | 1,299.51 / 16.62 / 12.06 |
-| binary | 494 / 512 / 512 | 352 / 362 / 363 | 67.61 / 29.27 / 18.54 |
-| source | 509 / 512 / 512 | 352 / 358 / 358 | 259.94 / 43.70 / 20.08 |
+| text | 476 / 512 / 512 | 352 / 388 / 376 | 571.26 / 13.98 / 12.07 |
+| JSON | 493 / 512 / 512 | 352 / 389 / 370 | 1,308.85 / 17.00 / 11.55 |
+| binary | 494 / 512 / 512 | 352 / 362 / 363 | 68.03 / 29.38 / 18.02 |
+| source | 506 / 512 / 512 | 352 / 357 / 356 | 290.74 / 43.72 / 20.61 |
 
-Vort's training latency is currently about 2.3--108 times the faster reference,
+Vort's training latency is currently about 2.3--113 times the faster reference,
 depending on corpus. The permanent gate only prevents a catastrophic widening
 beyond 200 times because process startup and this small corpus make absolute
 latency noisy. Closing the gap requires parameter-grid frequency reuse across
 hash logs, cheaper entropy finalization during search, and pruning candidates
 with held-out lower bounds. Ratio work should prioritize JSON level 3.
+
+## Codec-aware second-stage selection
+
+The probe also scores all 30 histories with real selector-frame sizes. The
+libzstd oracle uses libzstd for scoring; the production pure-Zig API
+`zstdTrainCodecOptimizedCoverStandardDictionaryAlloc` uses Vort's encoder.
+
+| Corpus | Generic held-out total | libzstd oracle | Pure-Vort codec score | Generic rank of lib/Vort winners |
+| --- | ---: | ---: | ---: | ---: |
+| text | 900 | 865 | 877 | 16 / 26 |
+| JSON | 599 | 569 | 577 | 3 / 22 |
+| binary | 2,442 | 2,426 | 2,423 | 19 / 26 |
+| source | 5,344 | 5,308 | 5,399 | 2 / 24 |
+| total | 9,285 | 9,168 | 9,276 | — |
+
+The Vort codec scorer improves JSON level 3 from 212 to 195 and the aggregate
+by nine bytes, but overfits the selector partition on source by 55 bytes.
+Generic-score ranks also show why a small top-N shortlist is insufficient:
+three pure-Vort winners rank 22nd or worse.
+
+This mode is intentionally explicit and slow. Full-grid pure-Vort scoring takes
+about 2.1--51.7 seconds for these small cases, versus 0.07--1.31 seconds for the
+default match-cost selector. The permanent gate requires the key JSON level-3
+improvement, limits every held-out regression to 5%, limits aggregate
+regression to 2%, and caps the slow-mode training-time ratio at 100x. It does
+not make codec-aware selection the default.
