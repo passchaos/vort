@@ -45,10 +45,10 @@ Each cell is `Vort / COVER / FastCover` in bytes.
 | text | 337 / 343 / 317 | 298 / 285 / 285 | 265 / 263 / 245 | 32 / 8 / 12 |
 | JSON | 198 / 170 / 185 | 212 / 170 / 185 | 189 / 187 / 199 | 64 / 8 / 16 |
 | binary | 813 / 800 / 799 | 817 / 787 / 790 | 812 / 806 / 812 | 256 / 6 / 16 |
-| source | 1,811 / 1,804 / 1,793 | 1,776 / 1,784 / 1,773 | 1,757 / 1,754 / 1,747 | 32 / 8 / 12 |
+| source | 1,798 / 1,815 / 1,800 | 1,768 / 1,784 / 1,773 | 1,747 / 1,761 / 1,754 | 32 / 8 / 20 |
 
-Across all twelve rows the totals are `9,285 / 9,153 / 9,130`: Vort is 1.44%
-larger than COVER and 1.70% larger than FastCover. Text level 1 beats COVER,
+Across all twelve rows the totals are `9,254 / 9,171 / 9,144`: Vort is 0.91%
+larger than COVER and 1.20% larger than FastCover. Text level 1 beats COVER,
 and JSON level 9 beats FastCover, but JSON level 3 remains the largest gap at
 24.7% versus COVER and 14.6% versus FastCover. Source and binary rows are
 generally within about 0--4%.
@@ -63,7 +63,7 @@ and both aggregate gaps to 3%. These are regression bounds, not parity claims.
 | text | 476 / 512 / 512 | 352 / 388 / 376 | 571.26 / 13.98 / 12.07 |
 | JSON | 493 / 512 / 512 | 352 / 389 / 370 | 1,308.85 / 17.00 / 11.55 |
 | binary | 494 / 512 / 512 | 352 / 362 / 363 | 68.03 / 29.38 / 18.02 |
-| source | 506 / 512 / 512 | 352 / 357 / 356 | 290.74 / 43.72 / 20.61 |
+| source | 507 / 512 / 512 | 352 / 358 / 358 | 344.66 / 44.11 / 20.06 |
 
 Vort's training latency is currently about 2.3--113 times the faster reference,
 depending on corpus. The permanent gate only prevents a catastrophic widening
@@ -83,11 +83,11 @@ libzstd oracle uses libzstd for scoring; the production pure-Zig API
 | text | 900 | 865 | 877 | 16 / 26 |
 | JSON | 599 | 569 | 577 | 3 / 22 |
 | binary | 2,442 | 2,426 | 2,423 | 19 / 26 |
-| source | 5,344 | 5,308 | 5,399 | 2 / 24 |
-| total | 9,285 | 9,168 | 9,276 | — |
+| source | 5,313 | 5,303 | 5,396 | 4 / 23 |
+| total | 9,254 | 9,163 | 9,273 | — |
 
-The Vort codec scorer improves JSON level 3 from 212 to 195 and the aggregate
-by nine bytes, but overfits the selector partition on source by 55 bytes.
+The Vort codec scorer improves JSON level 3 from 212 to 195, but overfits the
+selector partition on source by 83 bytes and is 19 bytes larger in aggregate.
 Generic-score ranks also show why a small top-N shortlist is insufficient:
 three pure-Vort winners rank 22nd or worse.
 
@@ -97,3 +97,11 @@ default match-cost selector. The permanent gate requires the key JSON level-3
 improvement, limits every held-out regression to 5%, limits aggregate
 regression to 2%, and caps the slow-mode training-time ratio at 100x. It does
 not make codec-aware selection the default.
+
+An exact progressive experiment seeded the exhaustive search with the generic
+winner and stopped encoding a candidate once its partial byte total could no
+longer beat the current best. It preserved every selected parameter and output
+byte, but did not produce a stable end-to-end gain: entropy finalization, which
+must still run for every candidate, dominates this workload. Text, binary, and
+source slowed slightly while JSON improved only about 2--3%, so the extra state
+and generic pre-pass were removed.
