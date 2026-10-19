@@ -53,7 +53,8 @@ pub fn trainAlloc(
     const parameters = try validateOptions(samples, options);
     const table_len = @as(usize, 1) << @intCast(options.hash_log);
 
-    const dmer_offsets = try allocator.alloc(usize, samples.len + 1);
+    const offset_count = std.math.add(usize, samples.len, 1) catch return error.InvalidDictionaryTraining;
+    const dmer_offsets = try allocator.alloc(usize, offset_count);
     defer allocator.free(dmer_offsets);
     dmer_offsets[0] = 0;
     for (samples, 0..) |sample, index| {
@@ -73,10 +74,123 @@ pub fn trainAlloc(
     defer allocator.free(active_counts);
     @memset(active_counts, 0);
 
-    const output = try allocator.alloc(u8, options.target_size);
+    return buildDictionaryAlloc(
+        allocator,
+        samples,
+        dmer_offsets,
+        options.target_size,
+        parameters.segment_size,
+        parameters.dmer_size,
+        options.hash_log,
+        frequencies,
+        active_counts,
+    );
+}
+
+/// Reusable d-mer corpus state for evaluating several segment sizes with the
+/// same `(d, hash_log)`. The sample slices remain borrowed for this object's
+/// lifetime. `trainAlloc` resets all mutable tables before every candidate, so
+/// an allocation failure does not poison later calls.
+pub const Prepared = struct {
+    samples: []const []const u8,
+    dmer_offsets: []usize,
+    base_frequencies: []u32,
+    frequencies: []u32,
+    active_counts: []u32,
+    dmer_size: usize,
+    hash_log: u8,
+
+    pub fn init(
+        allocator: std.mem.Allocator,
+        samples: []const []const u8,
+        dmer_size_value: u8,
+        hash_log: u8,
+        max_corpus_size: usize,
+    ) !Prepared {
+        try validateCorpusParameters(samples, dmer_size_value, hash_log, max_corpus_size);
+        const dmer_size: usize = dmer_size_value;
+        const offset_count = std.math.add(usize, samples.len, 1) catch return error.InvalidDictionaryTraining;
+        const dmer_offsets = try allocator.alloc(usize, offset_count);
+        errdefer allocator.free(dmer_offsets);
+        dmer_offsets[0] = 0;
+        for (samples, 0..) |sample, index| {
+            const count = dmerCount(sample.len, dmer_size);
+            dmer_offsets[index + 1] = std.math.add(usize, dmer_offsets[index], count) catch
+                return error.InvalidDictionaryTraining;
+        }
+        if (dmer_offsets[samples.len] == 0) return error.InvalidDictionaryTraining;
+
+        const table_len = @as(usize, 1) << @intCast(hash_log);
+        const base_frequencies = try allocator.alloc(u32, table_len);
+        errdefer allocator.free(base_frequencies);
+        @memset(base_frequencies, 0);
+        collectFrequencies(samples, dmer_size, hash_log, base_frequencies);
+        const frequencies = try allocator.alloc(u32, table_len);
+        errdefer allocator.free(frequencies);
+        const active_counts = try allocator.alloc(u32, table_len);
+        errdefer allocator.free(active_counts);
+        return .{
+            .samples = samples,
+            .dmer_offsets = dmer_offsets,
+            .base_frequencies = base_frequencies,
+            .frequencies = frequencies,
+            .active_counts = active_counts,
+            .dmer_size = dmer_size,
+            .hash_log = hash_log,
+        };
+    }
+
+    pub fn deinit(self: *Prepared, allocator: std.mem.Allocator) void {
+        allocator.free(self.dmer_offsets);
+        allocator.free(self.base_frequencies);
+        allocator.free(self.frequencies);
+        allocator.free(self.active_counts);
+        self.* = undefined;
+    }
+
+    pub fn trainAlloc(
+        self: *Prepared,
+        allocator: std.mem.Allocator,
+        target_size: usize,
+        segment_size: usize,
+    ) ![]u8 {
+        if (target_size == 0) return allocator.alloc(u8, 0);
+        if (segment_size < self.dmer_size or segment_size > target_size)
+            return error.InvalidDictionaryTraining;
+        @memcpy(self.frequencies, self.base_frequencies);
+        @memset(self.active_counts, 0);
+        return buildDictionaryAlloc(
+            allocator,
+            self.samples,
+            self.dmer_offsets,
+            target_size,
+            segment_size,
+            self.dmer_size,
+            self.hash_log,
+            self.frequencies,
+            self.active_counts,
+        );
+    }
+};
+
+fn buildDictionaryAlloc(
+    allocator: std.mem.Allocator,
+    samples: []const []const u8,
+    dmer_offsets: []const usize,
+    target_size: usize,
+    segment_size: usize,
+    dmer_size: usize,
+    hash_log: u8,
+    frequencies: []u32,
+    active_counts: []u32,
+) ![]u8 {
+    std.debug.assert(target_size != 0);
+    std.debug.assert(dmer_offsets[samples.len] != 0);
+
+    const output = try allocator.alloc(u8, target_size);
     errdefer allocator.free(output);
     var tail = output.len;
-    const epochs = computeEpochs(options.target_size, total_dmers, parameters.segment_size);
+    const epochs = computeEpochs(target_size, dmer_offsets[samples.len], segment_size);
     var epoch_index: usize = 0;
     var zero_score_run: usize = 0;
     const max_zero_score_run: usize = 10;
@@ -89,9 +203,9 @@ pub fn trainAlloc(
             dmer_offsets,
             epoch_begin,
             epoch_end,
-            parameters.segment_size,
-            parameters.dmer_size,
-            options.hash_log,
+            segment_size,
+            dmer_size,
+            hash_log,
             frequencies,
             active_counts,
         );
@@ -106,16 +220,16 @@ pub fn trainAlloc(
         zeroSegmentFrequencies(
             samples[segment.sample_index],
             segment,
-            parameters.dmer_size,
-            options.hash_log,
+            dmer_size,
+            hash_log,
             frequencies,
         );
 
-        const selected_size = segment.end - segment.begin + parameters.dmer_size - 1;
+        const selected_size = segment.end - segment.begin + dmer_size - 1;
         const copy_len = @min(selected_size, tail);
         // A trailing fragment shorter than one d-mer cannot contribute any of
         // the evidence used to select it.
-        if (copy_len < parameters.dmer_size) break;
+        if (copy_len < dmer_size) break;
         tail -= copy_len;
         @memcpy(
             output[tail..][0..copy_len],
@@ -135,24 +249,32 @@ const Parameters = struct {
 };
 
 fn validateOptions(samples: []const []const u8, options: TrainOptions) !Parameters {
-    if (samples.len < 5) return error.InvalidDictionaryTraining;
-    if (options.dmer_size != 6 and options.dmer_size != 8) return error.InvalidDictionaryTraining;
-    if (options.hash_log < min_hash_log or options.hash_log > max_hash_log) return error.InvalidDictionaryTraining;
-    if (options.max_corpus_size == 0) return error.InvalidDictionaryTraining;
+    try validateCorpusParameters(samples, options.dmer_size, options.hash_log, options.max_corpus_size);
 
     const dmer_size: usize = options.dmer_size;
     const segment_size = options.segment_size orelse @min(options.target_size, 64);
     if (segment_size < dmer_size or segment_size > options.target_size) return error.InvalidDictionaryTraining;
 
+    return .{ .segment_size = segment_size, .dmer_size = dmer_size };
+}
+
+fn validateCorpusParameters(
+    samples: []const []const u8,
+    dmer_size: u8,
+    hash_log: u8,
+    max_corpus_size: usize,
+) !void {
+    if (samples.len < 5) return error.InvalidDictionaryTraining;
+    if (dmer_size != 6 and dmer_size != 8) return error.InvalidDictionaryTraining;
+    if (hash_log < min_hash_log or hash_log > max_hash_log) return error.InvalidDictionaryTraining;
+    if (max_corpus_size == 0) return error.InvalidDictionaryTraining;
     var total_size: usize = 0;
     for (samples) |sample| {
         total_size = std.math.add(usize, total_size, sample.len) catch
             return error.InvalidDictionaryTraining;
     }
-    if (total_size > options.max_corpus_size or total_size > std.math.maxInt(u32))
+    if (total_size > max_corpus_size or total_size > std.math.maxInt(u32))
         return error.InvalidDictionaryTraining;
-
-    return .{ .segment_size = segment_size, .dmer_size = dmer_size };
 }
 
 fn dmerCount(sample_len: usize, dmer_size: usize) usize {
@@ -475,6 +597,71 @@ test "COVER-class trainer releases every allocation failure path" {
             });
             defer allocator.free(trained);
             try std.testing.expect(trained.len <= 17);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{});
+}
+
+test "COVER-class prepared corpus matches independent segment training" {
+    const samples = [_][]const u8{
+        "service=vort region=west status=ok message=alpha alpha alpha",
+        "service=vort region=east status=ok message=beta beta beta",
+        "service=vort region=north status=warn message=gamma gamma",
+        "service=vort region=south status=retry message=delta delta",
+        "service=vort region=central status=ok message=alpha beta gamma",
+    };
+    inline for (.{ @as(u8, 6), @as(u8, 8) }) |dmer_size| {
+        inline for (.{ @as(u8, 8), @as(u8, 10) }) |hash_log| {
+            var prepared = try Prepared.init(
+                std.testing.allocator,
+                &samples,
+                dmer_size,
+                hash_log,
+                default_max_corpus_size,
+            );
+            defer prepared.deinit(std.testing.allocator);
+            inline for (.{ @as(usize, 12), @as(usize, 24) }) |segment_size| {
+                const expected = try trainAlloc(std.testing.allocator, &samples, .{
+                    .target_size = 48,
+                    .segment_size = segment_size,
+                    .dmer_size = dmer_size,
+                    .hash_log = hash_log,
+                });
+                defer std.testing.allocator.free(expected);
+                const actual = try prepared.trainAlloc(std.testing.allocator, 48, segment_size);
+                defer std.testing.allocator.free(actual);
+                try std.testing.expectEqualSlices(u8, expected, actual);
+            }
+        }
+    }
+}
+
+test "COVER-class prepared corpus recovers from candidate allocation failure" {
+    const samples = [_][]const u8{ "abcdefghijklmnop", "abcdefghijklmnop", "abcdefghijklmnop", "abcdefghijklmnop", "abcdefghijklmnop" };
+    var prepared = try Prepared.init(std.testing.allocator, &samples, 6, min_hash_log, default_max_corpus_size);
+    defer prepared.deinit(std.testing.allocator);
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.OutOfMemory, prepared.trainAlloc(failing.allocator(), 16, 8));
+    const recovered = try prepared.trainAlloc(std.testing.allocator, 16, 8);
+    defer std.testing.allocator.free(recovered);
+    const expected = try trainAlloc(std.testing.allocator, &samples, .{
+        .target_size = 16,
+        .segment_size = 8,
+        .dmer_size = 6,
+        .hash_log = min_hash_log,
+    });
+    defer std.testing.allocator.free(expected);
+    try std.testing.expectEqualSlices(u8, expected, recovered);
+}
+
+test "COVER-class prepared corpus releases every allocation failure path" {
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const samples = [_][]const u8{ "abcdefghijklmnop", "abcdefghijklmnop", "abcdefghijklmnop", "abcdefghijklmnop", "abcdefghijklmnop" };
+            var prepared = try Prepared.init(allocator, &samples, 6, min_hash_log, default_max_corpus_size);
+            defer prepared.deinit(allocator);
+            const trained = try prepared.trainAlloc(allocator, 16, 8);
+            defer allocator.free(trained);
         }
     };
     try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{});

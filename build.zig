@@ -4886,6 +4886,10 @@ pub fn build(b: *std.Build) void {
             .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
         }),
     });
+    const run_dictionary_train_bench = b.addRunArtifact(dictionary_train_bench_exe);
+    if (b.args) |args| run_dictionary_train_bench.addArgs(args);
+    const dictionary_train_bench_step = b.step("run-dictionary-train-bench", "Benchmark deterministic dictionary training modes");
+    dictionary_train_bench_step.dependOn(&run_dictionary_train_bench.step);
     const run_dictionary_train_bench_csv = b.addRunArtifact(dictionary_train_bench_exe);
     run_dictionary_train_bench_csv.addArgs(&.{ "--iterations", "20", "--rounds", "3", "--csv", "zig-out/vort-dictionary-train-bench.csv" });
     const dictionary_train_bench_gate = b.addSystemCommand(&.{ "python3", "tools/dictionary_train_bench_gate.py", "--csv", "zig-out/vort-dictionary-train-bench.csv" });
@@ -4893,6 +4897,19 @@ pub fn build(b: *std.Build) void {
     dictionary_train_bench_gate.step.dependOn(&run_dictionary_train_bench_csv.step);
     const dictionary_train_bench_gate_step = b.step("run-dictionary-train-bench-gate", "Validate deterministic dictionary training throughput");
     dictionary_train_bench_gate_step.dependOn(&dictionary_train_bench_gate.step);
+    const cover_dictionary_train_bench_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/dictionary_train_bench_gate.py",
+        "--csv",
+        "zig-out/vort-dictionary-train-bench.csv",
+        "--cover-only",
+    });
+    cover_dictionary_train_bench_gate.step.dependOn(&run_dictionary_train_bench_csv.step);
+    const cover_dictionary_train_bench_gate_step = b.step(
+        "run-cover-dictionary-train-bench-gate",
+        "Validate shared COVER parameter-training throughput and allocations",
+    );
+    cover_dictionary_train_bench_gate_step.dependOn(&cover_dictionary_train_bench_gate.step);
 
     const zstd_compat_probe_exe = b.addExecutable(.{
         .name = "vort-zstd-compat-probe",

@@ -5,6 +5,11 @@ const default_dmer_sizes = [_]u8{ 6, 8 };
 const default_hash_logs = [_]u8{ 12, 16 };
 const maximum_candidate_limit: usize = 256;
 
+const Candidate = struct {
+    options: cover.TrainOptions,
+    serial: usize,
+};
+
 /// Parameter grid and resource limits for held-out COVER-class selection.
 /// Empty `segment_sizes` selects the bounded automatic ladder
 /// `min(target_size, 32/64/128/256)` with duplicate values collapsed.
@@ -56,7 +61,8 @@ pub fn trainAllocWithScorer(
     const segment_sizes = if (options.segment_sizes.len == 0) auto_segments[0..] else options.segment_sizes;
     try validateOptions(training_samples, validation_samples, segment_sizes, options);
 
-    var compatible_candidates: usize = 0;
+    var candidates: [maximum_candidate_limit]Candidate = undefined;
+    var candidate_count: usize = 0;
     for (options.dmer_sizes, 0..) |dmer_size, dmer_index| {
         if (hasEarlier(u8, options.dmer_sizes, dmer_index)) continue;
         if (!corpusHasDmer(training_samples, dmer_size)) continue;
@@ -64,53 +70,69 @@ pub fn trainAllocWithScorer(
             if (hasEarlier(usize, segment_sizes, segment_index) or segment_size < dmer_size) continue;
             for (options.hash_logs, 0..) |_, hash_index| {
                 if (hasEarlier(u8, options.hash_logs, hash_index)) continue;
-                compatible_candidates = std.math.add(usize, compatible_candidates, 1) catch
-                    return error.InvalidDictionaryTraining;
+                if (candidate_count == options.max_candidates) return error.InvalidDictionaryTraining;
+                const hash_log = options.hash_logs[hash_index];
+                candidates[candidate_count] = .{
+                    .options = .{
+                        .target_size = options.target_size,
+                        .segment_size = segment_size,
+                        .dmer_size = dmer_size,
+                        .hash_log = hash_log,
+                        .max_corpus_size = options.max_corpus_size,
+                    },
+                    .serial = candidate_count,
+                };
+                candidate_count += 1;
             }
         }
     }
-    if (compatible_candidates == 0 or compatible_candidates > options.max_candidates)
-        return error.InvalidDictionaryTraining;
+    if (candidate_count == 0) return error.InvalidDictionaryTraining;
 
     var best_bytes: ?[]u8 = null;
     errdefer if (best_bytes) |bytes| allocator.free(bytes);
     var best_score: Score = .{};
     var best_options: cover.TrainOptions = undefined;
+    var best_serial: usize = std.math.maxInt(usize);
     var candidates_evaluated: usize = 0;
 
-    for (options.dmer_sizes, 0..) |dmer_size, dmer_index| {
-        if (hasEarlier(u8, options.dmer_sizes, dmer_index)) continue;
-        if (!corpusHasDmer(training_samples, dmer_size)) continue;
-        for (segment_sizes, 0..) |segment_size, segment_index| {
-            if (hasEarlier(usize, segment_sizes, segment_index) or segment_size < dmer_size) continue;
-            for (options.hash_logs, 0..) |hash_log, hash_index| {
-                if (hasEarlier(u8, options.hash_logs, hash_index)) continue;
-                const candidate_options: cover.TrainOptions = .{
-                    .target_size = options.target_size,
-                    .segment_size = segment_size,
-                    .dmer_size = dmer_size,
-                    .hash_log = hash_log,
-                    .max_corpus_size = options.max_corpus_size,
-                };
-                const candidate = try cover.trainAlloc(allocator, training_samples, candidate_options);
-                const raw_score = scoreFn(candidate, validation_samples, options.min_match_len) catch |err| {
-                    allocator.free(candidate);
-                    return err;
-                };
-                const score: Score = .{
-                    .estimated_bits = raw_score.estimated_bits,
-                    .covered_bytes = raw_score.covered_bytes,
-                    .matches = raw_score.matches,
-                    .distance_bits = raw_score.distance_bits,
-                };
-                candidates_evaluated += 1;
-                if (best_bytes == null or scoreBetter(score, best_score)) {
-                    if (best_bytes) |bytes| allocator.free(bytes);
-                    best_bytes = candidate;
-                    best_score = score;
-                    best_options = candidate_options;
-                } else allocator.free(candidate);
-            }
+    for (candidates[0..candidate_count], 0..) |group, group_index| {
+        if (hasEarlierGroup(candidates[0..candidate_count], group_index)) continue;
+        var prepared = try cover.Prepared.init(
+            allocator,
+            training_samples,
+            group.options.dmer_size,
+            group.options.hash_log,
+            options.max_corpus_size,
+        );
+        defer prepared.deinit(allocator);
+        for (candidates[0..candidate_count]) |candidate_spec| {
+            if (candidate_spec.options.dmer_size != group.options.dmer_size or
+                candidate_spec.options.hash_log != group.options.hash_log) continue;
+            const candidate = try prepared.trainAlloc(
+                allocator,
+                candidate_spec.options.target_size,
+                candidate_spec.options.segment_size.?,
+            );
+            const raw_score = scoreFn(candidate, validation_samples, options.min_match_len) catch |err| {
+                allocator.free(candidate);
+                return err;
+            };
+            const score: Score = .{
+                .estimated_bits = raw_score.estimated_bits,
+                .covered_bytes = raw_score.covered_bytes,
+                .matches = raw_score.matches,
+                .distance_bits = raw_score.distance_bits,
+            };
+            candidates_evaluated += 1;
+            if (best_bytes == null or scoreBetter(score, best_score) or
+                (std.meta.eql(score, best_score) and candidate_spec.serial < best_serial))
+            {
+                if (best_bytes) |bytes| allocator.free(bytes);
+                best_bytes = candidate;
+                best_score = score;
+                best_options = candidate_spec.options;
+                best_serial = candidate_spec.serial;
+            } else allocator.free(candidate);
         }
     }
 
@@ -168,6 +190,15 @@ fn hasEarlier(comptime T: type, values: []const T, index: usize) bool {
     return false;
 }
 
+fn hasEarlierGroup(candidates: []const Candidate, index: usize) bool {
+    const current = candidates[index].options;
+    for (candidates[0..index]) |candidate| {
+        if (candidate.options.dmer_size == current.dmer_size and
+            candidate.options.hash_log == current.hash_log) return true;
+    }
+    return false;
+}
+
 fn corpusHasDmer(samples: []const []const u8, dmer_size: usize) bool {
     for (samples) |sample| if (sample.len >= dmer_size) return true;
     return false;
@@ -204,6 +235,51 @@ fn testScore(dictionary: []const u8, samples: []const []const u8, min_match_len:
         score.estimated_bits += (sample.len - sample_covered) * 8;
     }
     return score;
+}
+
+fn trainSeparateForTest(
+    allocator: std.mem.Allocator,
+    training_samples: []const []const u8,
+    validation_samples: []const []const u8,
+    options: OptimizeOptions,
+) !OwnedResult {
+    var best_bytes: ?[]u8 = null;
+    errdefer if (best_bytes) |bytes| allocator.free(bytes);
+    var best_options: cover.TrainOptions = undefined;
+    var best_score: Score = .{};
+    var count: usize = 0;
+    for (options.dmer_sizes) |dmer_size| {
+        for (options.segment_sizes) |segment_size| {
+            if (segment_size < dmer_size) continue;
+            for (options.hash_logs) |hash_log| {
+                const candidate_options: cover.TrainOptions = .{
+                    .target_size = options.target_size,
+                    .segment_size = segment_size,
+                    .dmer_size = dmer_size,
+                    .hash_log = hash_log,
+                    .max_corpus_size = options.max_corpus_size,
+                };
+                const candidate = try cover.trainAlloc(allocator, training_samples, candidate_options);
+                const score = testScore(candidate, validation_samples, options.min_match_len) catch |err| {
+                    allocator.free(candidate);
+                    return err;
+                };
+                count += 1;
+                if (best_bytes == null or scoreBetter(score, best_score)) {
+                    if (best_bytes) |bytes| allocator.free(bytes);
+                    best_bytes = candidate;
+                    best_options = candidate_options;
+                    best_score = score;
+                } else allocator.free(candidate);
+            }
+        }
+    }
+    return .{
+        .bytes = best_bytes.?,
+        .selected_options = best_options,
+        .validation_score = best_score,
+        .candidates_evaluated = count,
+    };
 }
 
 test "COVER-class optimizer collapses duplicate grid points and preserves first ties" {
@@ -255,6 +331,42 @@ test "COVER-class optimizer automatic segment ladder is bounded and deterministi
     try std.testing.expectEqualSlices(u8, first.bytes, second.bytes);
 }
 
+test "COVER-class optimizer shared contexts match separate training oracle" {
+    var storage: [7][80]u8 = undefined;
+    var state: u32 = 0x243f_6a88;
+    for (&storage, 0..) |*sample, sample_index| {
+        for (sample, 0..) |*byte, offset| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = if (offset % 17 < 12)
+                "shared-cover-history"[(offset + sample_index * 3) % 20]
+            else
+                @truncate(state >> 24);
+        }
+    }
+    const training = [_][]const u8{ &storage[0], &storage[1], &storage[2], &storage[3], &storage[4] };
+    const validation = [_][]const u8{ &storage[5], &storage[6] };
+    const options: OptimizeOptions = .{
+        .target_size = 48,
+        .segment_sizes = &.{ 12, 24 },
+        .dmer_sizes = &.{ 6, 8 },
+        .hash_logs = &.{ 8, 10 },
+    };
+    var expected = try trainSeparateForTest(std.testing.allocator, &training, &validation, options);
+    defer expected.deinit(std.testing.allocator);
+    var actual = try trainAllocWithScorer(
+        std.testing.allocator,
+        &training,
+        &validation,
+        options,
+        testScore,
+    );
+    defer actual.deinit(std.testing.allocator);
+    try std.testing.expectEqual(expected.selected_options, actual.selected_options);
+    try std.testing.expectEqual(expected.validation_score, actual.validation_score);
+    try std.testing.expectEqual(expected.candidates_evaluated, actual.candidates_evaluated);
+    try std.testing.expectEqualSlices(u8, expected.bytes, actual.bytes);
+}
+
 test "COVER-class optimizer validates grid and candidate limits" {
     const training = [_][]const u8{ "abcdefgh", "abcdefgh", "abcdefgh", "abcdefgh", "abcdefgh" };
     const validation = [_][]const u8{"abcdefgh"};
@@ -298,15 +410,15 @@ test "COVER-class optimizer validates grid and candidate limits" {
 test "COVER-class optimizer releases every allocation failure path" {
     const Test = struct {
         fn run(allocator: std.mem.Allocator) !void {
-            const training = [_][]const u8{ "abcdefgh", "abcdefgh", "abcdefgh", "abcdefgh", "abcdefgh" };
-            const validation = [_][]const u8{"abcdefgh"};
+            const training = [_][]const u8{ "abcdefghijklmnop", "abcdefghijklmnop", "abcdefghijklmnop", "abcdefghijklmnop", "abcdefghijklmnop" };
+            const validation = [_][]const u8{"abcdefghijklmnop"};
             var optimized = try trainAllocWithScorer(
                 allocator,
                 &training,
                 &validation,
                 .{
-                    .target_size = 8,
-                    .segment_sizes = &.{8},
+                    .target_size = 16,
+                    .segment_sizes = &.{ 8, 16 },
                     .dmer_sizes = &.{6},
                     .hash_logs = &.{8},
                 },

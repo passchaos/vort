@@ -10,12 +10,21 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", required=True)
     parser.add_argument("--enforce-throughput", action="store_true")
+    parser.add_argument("--cover-only", action="store_true")
     args = parser.parse_args()
     with Path(args.csv).open(newline="") as file:
         rows = list(csv.DictReader(file))
     expected_rows = {
         (mode, case)
-        for mode in ("basic", "validated", "validated_separate", "validated_targets", "zstd_validated")
+        for mode in (
+            "basic",
+            "validated",
+            "validated_separate",
+            "validated_targets",
+            "cover_optimized_separate",
+            "cover_optimized",
+            "zstd_validated",
+        )
         for case in ("text", "json", "binary")
     }
     if len(rows) != len(expected_rows) or {(row["mode"], row["case"]) for row in rows} != expected_rows:
@@ -33,6 +42,12 @@ def main() -> int:
         ("validated_targets", "text"): 3191280,
         ("validated_targets", "json"): 2525080,
         ("validated_targets", "binary"): 3808660,
+        ("cover_optimized_separate", "text"): 129600,
+        ("cover_optimized_separate", "json"): 103500,
+        ("cover_optimized_separate", "binary"): 1296880,
+        ("cover_optimized", "text"): 129600,
+        ("cover_optimized", "json"): 103500,
+        ("cover_optimized", "binary"): 1296880,
         ("zstd_validated", "text"): 423100,
         ("zstd_validated", "json"): 486380,
         ("zstd_validated", "binary"): 862560,
@@ -61,6 +76,8 @@ def main() -> int:
             "validated": 100_000,
             "validated_separate": 15_000,
             "validated_targets": 75_000,
+            "cover_optimized_separate": 800_000,
+            "cover_optimized": 1_000_000,
             "zstd_validated": 50_000,
         }[row["mode"]]
         if args.enforce_throughput and int(row["bytes_per_second"]) < minimum_throughput:
@@ -71,7 +88,23 @@ def main() -> int:
         shared = int(by_key[("validated_targets", case)]["bytes_per_second"])
         if shared * 2 < separate * 5:
             raise SystemExit(f"multi-target dictionary scan reuse regressed for {case}: {shared}/{separate}")
-    print(f"dictionary_train_bench_gate=ok rows={len(rows)}")
+        cover_separate = by_key[("cover_optimized_separate", case)]
+        cover_shared = by_key[("cover_optimized", case)]
+        cover_separate_throughput = int(cover_separate["bytes_per_second"])
+        cover_shared_throughput = int(cover_shared["bytes_per_second"])
+        if cover_shared_throughput * 10 < cover_separate_throughput * 11:
+            raise SystemExit(
+                f"COVER context reuse throughput regressed for {case}: "
+                f"{cover_shared_throughput}/{cover_separate_throughput}"
+            )
+        if int(cover_shared["checksum"]) != int(cover_separate["checksum"]):
+            raise SystemExit(f"COVER context reuse changed output for {case}")
+        if int(cover_shared["allocations"]) >= int(cover_separate["allocations"]):
+            raise SystemExit(f"COVER context reuse allocation count regressed for {case}")
+        if int(cover_shared["allocated_bytes"]) * 4 > int(cover_separate["allocated_bytes"]) * 3:
+            raise SystemExit(f"COVER context reuse allocated bytes regressed for {case}")
+    marker = "cover_dictionary_train_bench_gate" if args.cover_only else "dictionary_train_bench_gate"
+    print(f"{marker}=ok rows={len(rows)}")
     return 0
 
 

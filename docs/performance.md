@@ -7,6 +7,10 @@ can be tied to reproducible evidence.
 Recent decoder evidence: [Zstd sequence field grouping](performance/zstd-sequence-fields.md)
 records a bounded all-FSE reader optimization, generic-reference safety checks,
 and paired comparison with libzstd 1.5.7 on Apple M1 Pro.
+[Zstd COVER trainer context reuse](performance/zstd-cover-trainer-context-reuse-x86.md)
+records byte-exact `(d, hash_log)` corpus-state reuse across `k` candidates,
+allocation reductions, and the permanent shared-versus-separate ReleaseFast
+training gate on Intel Comet Lake.
 [Zstd x86-64 full raw-block copying](performance/zstd-raw-copy-x86.md)
 records the ERMSB-gated 128 KiB path and paired comparison with the local
 libzstd 1.6.0-dev checkout on Intel Comet Lake.
@@ -128,6 +132,7 @@ zig build -Doptimize=ReleaseFast run-zstd-decode-profile -- --libzstd /path/to/l
 zig build -Doptimize=ReleaseFast run-zstd-decode-profile -- --input path/to/file --name corpus_case --level 1
 zig build -Doptimize=ReleaseFast run-zstd-decode-profile -- --input path/to/file --encoded-input path/to/file.zst --name corpus_case --iterations 300
 zig build -Doptimize=ReleaseFast run-zstd-encode-bench-gate
+zig build run-cover-dictionary-train-bench-gate
 zig build -Doptimize=ReleaseFast run-zstd-encode-bench-path-smoke
 zig build -Doptimize=ReleaseFast run-zstd-encode-bench -- --level 1 --limit 131072 --path README.md --path src/zstd.zig
 zig build -Doptimize=ReleaseFast run-zstd-level-schedule-bench-gate
