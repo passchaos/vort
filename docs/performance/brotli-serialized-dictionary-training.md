@@ -12,7 +12,7 @@ custom dictionary, and validates profitability on held-out samples with the
 production Brotli encoder.
 
 This is not a COVER/FastCover-equivalent trainer. General context clustering,
-omit/prefix/suffix transform-list learning, and representative corpus
+learned prefix/suffix stringlets, and representative corpus
 calibration remain future work.
 
 ## Selection contract
@@ -87,3 +87,23 @@ forms compete on the held-out wire. A locked fixture trains on four lowercase
 The regression requires at least a 40% complete-total saving, verifies that the
 case profile wins, checks all three serialized transforms, and retains identity
 for corpora where the extra transform address space cannot improve the wire.
+
+## Omit-transform evidence
+
+The same trained word lists also produce an independent family containing
+identity, omit-last 1...9, and omit-first 1...9. A combined case+omit family is
+evaluated separately so its shifted addresses cannot hide a smaller omit-only
+wire. A locked fixture trains four 16-byte records and validates their
+12-byte omit-last-four forms:
+
+| Metric | Bytes |
+|---|---:|
+| Dictionary-free held-out frames | 3,584 |
+| Omit-transform dictionary-backed frames | 2,647 |
+| Serialized dictionary | 226 |
+| Charged trained total | 2,873 |
+| Total saving | 711 (19.8%) |
+
+The regression requires at least a 15% complete-total saving, verifies that the
+omit-only profile wins, replays both omit-last and omit-first addresses, and
+checks experimental libbrotli interoperability in both directions.

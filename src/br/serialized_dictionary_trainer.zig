@@ -5,7 +5,12 @@ const builder = @import("serialized_dictionary_builder.zig");
 const literal_context = @import("encoder/literal_context.zig");
 
 pub const DictionaryId = dictionary_train.DictionaryId;
-pub const TransformProfile = enum { identity, ascii_case };
+pub const TransformProfile = enum {
+    identity,
+    ascii_case,
+    omit,
+    ascii_case_omit,
+};
 
 pub const Options = struct {
     min_word_len: u5 = 4,
@@ -39,18 +44,48 @@ pub fn withCaseTransformsAlloc(
     allocator: std.mem.Allocator,
     source: *const Candidate,
 ) (Error || std.mem.Allocator.Error)!Candidate {
+    return withTransformProfileAlloc(allocator, source, .ascii_case);
+}
+
+pub fn withOmitTransformsAlloc(
+    allocator: std.mem.Allocator,
+    source: *const Candidate,
+    include_case: bool,
+) (Error || std.mem.Allocator.Error)!Candidate {
+    return withTransformProfileAlloc(
+        allocator,
+        source,
+        if (include_case) .ascii_case_omit else .omit,
+    );
+}
+
+fn withTransformProfileAlloc(
+    allocator: std.mem.Allocator,
+    source: *const Candidate,
+    profile: TransformProfile,
+) (Error || std.mem.Allocator.Error)!Candidate {
+    if (profile == .identity) return error.InvalidTrainingOptions;
     const parsed = try serialized_dictionary.parse(source.encoded);
     var word_lists: [serialized_dictionary.max_contexts]builder.WordListSpec =
         undefined;
     for (word_lists[0..parsed.word_list_count], parsed.word_lists[0..parsed.word_list_count]) |*destination, words|
         destination.* = builder.WordListSpec.fromParsed(words);
+    var transform_bytes: [3 * 21]u8 = undefined;
+    var transform_count: usize = 0;
+    appendTransform(&transform_bytes, &transform_count, 0);
+    if (profile == .ascii_case or profile == .ascii_case_omit) {
+        appendTransform(&transform_bytes, &transform_count, 10);
+        appendTransform(&transform_bytes, &transform_count, 11);
+    }
+    if (profile == .omit or profile == .ascii_case_omit) {
+        for (1..10) |kind|
+            appendTransform(&transform_bytes, &transform_count, @intCast(kind));
+        for (12..21) |kind|
+            appendTransform(&transform_bytes, &transform_count, @intCast(kind));
+    }
     const transform_lists = [_]builder.TransformListSpec{.{
         .prefix_suffix = &.{0},
-        .transforms = &.{
-            0, 0, 0, // identity
-            0, 10, 0, // uppercase first
-            0, 11, 0, // uppercase all
-        },
+        .transforms = transform_bytes[0 .. transform_count * 3],
     }};
     const encoded = try builder.serializeAlloc(allocator, .{
         .raw_prefix = parsed.raw_prefix,
@@ -67,8 +102,20 @@ pub fn withCaseTransformsAlloc(
         .context_based = source.context_based,
         .context_mode = source.context_mode,
         .context_cutoff = source.context_cutoff,
-        .transform_profile = .ascii_case,
+        .transform_profile = profile,
     };
+}
+
+fn appendTransform(
+    output: *[3 * 21]u8,
+    count: *usize,
+    kind: u8,
+) void {
+    const cursor = count.* * 3;
+    output[cursor] = 0;
+    output[cursor + 1] = kind;
+    output[cursor + 2] = 0;
+    count.* += 1;
 }
 
 pub const Error = builder.Error || error{
@@ -518,7 +565,7 @@ test "serialized trainer learns deterministic two-group context maps" {
     try std.testing.expect((try parsed.findLongest(40, high_word, &scratch)) != null);
 }
 
-test "serialized trainer derives canonical case transform families" {
+test "serialized trainer derives canonical transform families" {
     const samples = [_][]const u8{
         "lowercaseword lowercaseword lowercaseword",
         "lowercaseword anotherlowercase lowercaseword",
@@ -555,6 +602,47 @@ test "serialized trainer derives canonical case transform families" {
         &expected,
         (try parsed.resolve(0, 8, 2 * word_count, &scratch)).bytes,
     );
+
+    const omit = try withOmitTransformsAlloc(
+        std.testing.allocator,
+        &identity,
+        false,
+    );
+    defer omit.deinit(std.testing.allocator);
+    const parsed_omit = try serialized_dictionary.parse(omit.encoded);
+    try std.testing.expectEqual(
+        @as(usize, 19),
+        parsed_omit.transform_lists[0].transformCount(),
+    );
+    const omit_words = &parsed_omit.word_lists[0];
+    const omit_word_count = omit_words.wordCount(8);
+    const omit_word = omit_words.word(8, 0).?;
+    try std.testing.expectEqualSlices(
+        u8,
+        omit_word[0..7],
+        (try parsed_omit.resolve(0, 8, omit_word_count, &scratch)).bytes,
+    );
+    try std.testing.expectEqualSlices(
+        u8,
+        omit_word[1..],
+        (try parsed_omit.resolve(0, 8, 10 * omit_word_count, &scratch)).bytes,
+    );
+
+    const combined = try withOmitTransformsAlloc(
+        std.testing.allocator,
+        &identity,
+        true,
+    );
+    defer combined.deinit(std.testing.allocator);
+    const parsed_combined = try serialized_dictionary.parse(combined.encoded);
+    try std.testing.expectEqual(
+        @as(usize, 21),
+        parsed_combined.transform_lists[0].transformCount(),
+    );
+    try std.testing.expectEqual(
+        TransformProfile.ascii_case_omit,
+        combined.transform_profile,
+    );
 }
 
 test "serialized trainer releases every allocation failure path" {
@@ -576,6 +664,18 @@ test "serialized trainer releases every allocation failure path" {
                 &candidate,
             );
             defer case_candidate.deinit(allocator);
+            const omit_candidate = try withOmitTransformsAlloc(
+                allocator,
+                &candidate,
+                false,
+            );
+            defer omit_candidate.deinit(allocator);
+            const combined_candidate = try withOmitTransformsAlloc(
+                allocator,
+                &candidate,
+                true,
+            );
+            defer combined_candidate.deinit(allocator);
             const contextual = (try trainContextCandidateAlloc(
                 allocator,
                 &samples,

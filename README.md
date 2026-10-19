@@ -2194,9 +2194,9 @@ dictionary symbols reports the whole runtime matrix as skipped instead of
 silently reducing coverage.
 
 With local upstream libbrotli 1.2.0 built using `BROTLI_EXPERIMENTAL`, the same
-gate additionally passes eight serialized custom-static cases: bidirectional
+gate additionally passes ten serialized custom-static cases: bidirectional
 non-contextual coverage, a UTF8-context winner, an identity-trained dictionary,
-and a case-transform-trained dictionary. A non-experimental build reports them as skipped
+and case/omit-transform-trained dictionaries. A non-experimental build reports them as skipped
 explicitly.
 
 `brTrainSerializedSharedDictionaryAlloc` provides deterministic bounded
@@ -2206,9 +2206,10 @@ candidates across a bounded cutoff list (16/32/48 by default). By default serial
 once against the validation frame total; non-winning candidates return null.
 The trainer also compares identity-only word lists with canonical
 identity/uppercase-first/uppercase-all transform families without retraining
-the words. The result includes a stable content-derived ID and exact accounting.
-It does not claim COVER/FastCover equivalence, general clustering, or general
-omit/prefix/suffix transform learning.
+the words, plus independent omit-first/last and combined case+omit families.
+The result includes a stable content-derived ID and exact accounting. It does
+not claim COVER/FastCover equivalence, general clustering, or learned
+prefix/suffix stringlets.
 
 ### Brotli planned encoder controls
 
