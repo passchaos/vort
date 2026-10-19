@@ -2424,6 +2424,8 @@ pub const ZstdOwnedStandardDictionary = zstd.OwnedStandardDictionary;
 pub const ZstdOwnedOptimizedCoverStandardDictionary = zstd.OwnedOptimizedCoverStandardDictionary;
 pub const ZstdStandardDictionaryTrainingProfile = zstd.StandardDictionaryTrainingProfile;
 pub const ZstdProfiledStandardDictionary = zstd.ProfiledStandardDictionary;
+pub const ZstdCoverCodecSearchProfile = zstd.CoverCodecSearchProfile;
+pub const ZstdProfiledCodecOptimizedCoverStandardDictionary = zstd.ProfiledCodecOptimizedCoverStandardDictionary;
 pub const zstdInspectStandardDictionary = zstd.inspectStandardDictionary;
 pub const zstdIsStandardDictionary = zstd.isStandardDictionary;
 pub const zstdStandardDictionaryId = zstd.standardDictionaryId;
@@ -2438,6 +2440,7 @@ pub const zstdTrainStandardDictionaryAlloc = zstd.trainStandardDictionaryAlloc;
 pub const zstdTrainCoverStandardDictionaryAlloc = zstd.trainCoverStandardDictionaryAlloc;
 pub const zstdTrainOptimizedCoverStandardDictionaryAlloc = zstd.trainOptimizedCoverStandardDictionaryAlloc;
 pub const zstdTrainCodecOptimizedCoverStandardDictionaryAlloc = zstd.trainCodecOptimizedCoverStandardDictionaryAlloc;
+pub const zstdProfileCodecOptimizedCoverStandardDictionaryAlloc = zstd.profileCodecOptimizedCoverStandardDictionaryAlloc;
 pub const zstdTrainValidatedStandardDictionaryAlloc = zstd.trainValidatedStandardDictionaryAlloc;
 pub const zstdTrainDictionaryAlloc = zstd.trainDictionaryAlloc;
 pub const zstdDictionarySetFromMetadataAlloc = zstd.dictionarySetFromMetadataAlloc;
@@ -6454,6 +6457,25 @@ test "root zstd public reusable aliases expose dictionary helpers" {
     defer codec_cover.deinit(std.testing.allocator);
     try std.testing.expectEqual(ZstdDictionaryKind.standard_full, codec_cover.asDictionary().kind());
     try std.testing.expectEqual(@as(usize, 1), codec_cover.candidates_evaluated);
+    const profiled_codec: ZstdProfiledCodecOptimizedCoverStandardDictionary = try zstdProfileCodecOptimizedCoverStandardDictionaryAlloc(
+        std.testing.allocator,
+        std.testing.io,
+        &cover_samples,
+        &.{"root zstd public dictionary sample alpha gamma"},
+        .{
+            .cover = .{
+                .target_size = 32,
+                .segment_sizes = &.{16},
+                .dmer_sizes = &.{6},
+                .hash_logs = &.{8},
+            },
+            .levels = &.{1},
+        },
+        dict.id +% 4,
+    );
+    defer profiled_codec.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, codec_cover.bytes, profiled_codec.dictionary.bytes);
+    try std.testing.expectEqual(@as(usize, 1), profiled_codec.profile.candidate_frames);
     const validated_standard = try zstdTrainValidatedStandardDictionaryAlloc(
         std.testing.allocator,
         &samples,

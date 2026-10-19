@@ -162,6 +162,20 @@ def main() -> int:
             total_ns, _, collection_ns, greedy_ns, lazy_ns, *_ = finalizer_ns
             if total_ns < collection_ns or collection_ns < greedy_ns or collection_ns < lazy_ns:
                 raise SystemExit(f"inconsistent finalizer timing hierarchy: {output!r}")
+            codec_profile_ns = [int(value) for value in fields.get("codec_profile_ns", "").split("/")]
+            codec_finalizer_ns = [int(value) for value in fields.get("codec_finalizer_ns", "").split("/")]
+            codec_profile_work = [int(value) for value in fields.get("codec_profile_work", "").split("/")]
+            if len(codec_profile_ns) != 5 or len(codec_finalizer_ns) != 9 or len(codec_profile_work) != 7:
+                raise SystemExit(f"invalid codec search profile shape: {output!r}")
+            if min(codec_profile_ns) <= 0 or min(codec_finalizer_ns[:7]) <= 0 or min(codec_profile_work[:6]) <= 0:
+                raise SystemExit(f"missing codec search profile coverage: {output!r}")
+            codec_total, codec_search, codec_finalizer, codec_selector, codec_winner = codec_profile_ns
+            if codec_total < codec_search or codec_search < codec_finalizer or codec_search < codec_selector or codec_total < codec_winner:
+                raise SystemExit(f"inconsistent codec search timing hierarchy: {output!r}")
+            if codec_profile_work[0] != 30 * len(selector) * 3:
+                raise SystemExit(f"codec selector-frame coverage mismatch: {output!r}")
+            if codec_finalizer_ns[-2:] != [0, 0] or codec_profile_work[-1] != 0:
+                raise SystemExit(f"candidate repcode scoring unexpectedly executed: {output!r}")
             for level in ("level1", "level3", "level9"):
                 vort_size, cover_size, fastcover_size = map(int, fields[level].split("/"))
                 if vort_size * 100 > cover_size * 126 or vort_size * 100 > fastcover_size * 116:

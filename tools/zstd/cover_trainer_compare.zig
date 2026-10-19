@@ -220,6 +220,32 @@ pub fn main(init: std.process.Init) !void {
             oracle.profile.offset_sequences,
         },
     );
+    try stdout.interface.print(
+        "codec_profile_ns={d}/{d}/{d}/{d}/{d} codec_finalizer_ns={d}/{d}/{d}/{d}/{d}/{d}/{d}/{d}/{d} codec_profile_work={d}/{d}/{d}/{d}/{d}/{d}/{d}\n",
+        .{
+            oracle.codec_profile.total_ns,
+            oracle.codec_profile.candidate_search_ns,
+            oracle.codec_profile.candidate_finalizer.total_ns,
+            oracle.codec_profile.selector_encoding_ns,
+            oracle.codec_profile.winner_finalization_ns,
+            oracle.codec_profile.candidate_finalizer.total_ns,
+            oracle.codec_profile.candidate_finalizer.literal_entropy_ns,
+            oracle.codec_profile.candidate_finalizer.sequence_collection_ns,
+            oracle.codec_profile.candidate_finalizer.greedy_parse_ns,
+            oracle.codec_profile.candidate_finalizer.lazy_parse_ns,
+            oracle.codec_profile.candidate_finalizer.sequence_entropy_ns,
+            oracle.codec_profile.candidate_finalizer.baseline_assembly_ns,
+            oracle.codec_profile.candidate_finalizer.repcode_entropy_ns,
+            oracle.codec_profile.candidate_finalizer.repcode_scoring_ns,
+            oracle.codec_profile.candidate_frames,
+            oracle.codec_profile.selector_encoded_bytes,
+            oracle.codec_profile.candidate_finalizer.sample_bytes,
+            oracle.codec_profile.candidate_finalizer.blocks,
+            oracle.codec_profile.candidate_finalizer.greedy_tokens,
+            oracle.codec_profile.candidate_finalizer.lazy_tokens,
+            oracle.codec_profile.candidate_finalizer.offset_sequences,
+        },
+    );
     try stdout.interface.flush();
 }
 
@@ -235,6 +261,7 @@ const OracleTraining = struct {
     train_ns: usize,
     native_train_ns: usize,
     profile: vort.ZstdStandardDictionaryTrainingProfile,
+    codec_profile: vort.ZstdCoverCodecSearchProfile,
 };
 
 const ScoredOptions = struct {
@@ -255,8 +282,9 @@ fn trainCodecOracle(
     const hash_logs = [_]u8{ 12, 16, 20 };
     const levels = [_]c_int{ 1, 3, 9 };
     const native_start = std.Io.Clock.awake.now(init.io);
-    const native_dictionary = try vort.zstdTrainCodecOptimizedCoverStandardDictionaryAlloc(
+    const native_profiled = try vort.zstdProfileCodecOptimizedCoverStandardDictionaryAlloc(
         init.gpa,
+        init.io,
         training,
         selector,
         .{
@@ -271,6 +299,8 @@ fn trainCodecOracle(
         },
         nextDictionaryId(dictionary_id),
     );
+    const native_dictionary = native_profiled.dictionary;
+    const codec_profile = native_profiled.profile;
     errdefer native_dictionary.deinit(init.gpa);
     const native_train_ns = elapsed(native_start, init.io);
 
@@ -365,6 +395,7 @@ fn trainCodecOracle(
         .train_ns = elapsed(start, init.io),
         .native_train_ns = native_train_ns,
         .profile = aggregate_profile,
+        .codec_profile = codec_profile,
     };
 }
 

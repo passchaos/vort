@@ -685,6 +685,25 @@ pub const ProfiledStandardDictionary = struct {
     }
 };
 
+pub const CoverCodecSearchProfile = struct {
+    total_ns: u64 = 0,
+    candidate_search_ns: u64 = 0,
+    selector_encoding_ns: u64 = 0,
+    winner_finalization_ns: u64 = 0,
+    candidate_frames: usize = 0,
+    selector_encoded_bytes: usize = 0,
+    candidate_finalizer: StandardDictionaryTrainingProfile = .{},
+};
+
+pub const ProfiledCodecOptimizedCoverStandardDictionary = struct {
+    dictionary: OwnedOptimizedCoverStandardDictionary,
+    profile: CoverCodecSearchProfile,
+
+    pub fn deinit(self: ProfiledCodecOptimizedCoverStandardDictionary, allocator: std.mem.Allocator) void {
+        self.dictionary.deinit(allocator);
+    }
+};
+
 const StandardDictionaryProfileContext = struct {
     io: std.Io,
     profile: *StandardDictionaryTrainingProfile,
@@ -698,6 +717,22 @@ const StandardDictionaryProfileContext = struct {
         start: ?std.Io.Timestamp,
         field: *u64,
     ) void {
+        const context = self orelse return;
+        const started = start orelse return;
+        const ns = started.durationTo(std.Io.Clock.awake.now(context.io)).nanoseconds;
+        if (ns > 0) field.* = field.* +| @as(u64, @intCast(ns));
+    }
+};
+
+const CoverCodecProfileContext = struct {
+    io: std.Io,
+    profile: *CoverCodecSearchProfile,
+
+    fn begin(self: ?*const CoverCodecProfileContext) ?std.Io.Timestamp {
+        return if (self) |context| std.Io.Clock.awake.now(context.io) else null;
+    }
+
+    fn end(self: ?*const CoverCodecProfileContext, start: ?std.Io.Timestamp, field: *u64) void {
         const context = self orelse return;
         const started = start orelse return;
         const ns = started.durationTo(std.Io.Clock.awake.now(context.io)).nanoseconds;
@@ -890,6 +925,49 @@ pub fn trainCodecOptimizedCoverStandardDictionaryAlloc(
     options: CoverDictionaryCodecOptimizeOptions,
     dictionary_id: u32,
 ) Error!OwnedOptimizedCoverStandardDictionary {
+    return trainCodecOptimizedCoverStandardDictionaryProfiledAlloc(
+        allocator,
+        training_samples,
+        validation_samples,
+        options,
+        dictionary_id,
+        null,
+    );
+}
+
+/// Diagnostic codec-aware search that preserves the production dictionary and
+/// returns candidate-finalizer, selector-encoding, and winner-finalizer costs.
+pub fn profileCodecOptimizedCoverStandardDictionaryAlloc(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    training_samples: []const []const u8,
+    validation_samples: []const []const u8,
+    options: CoverDictionaryCodecOptimizeOptions,
+    dictionary_id: u32,
+) Error!ProfiledCodecOptimizedCoverStandardDictionary {
+    var profile: CoverCodecSearchProfile = .{};
+    var context: CoverCodecProfileContext = .{ .io = io, .profile = &profile };
+    const total_start = CoverCodecProfileContext.begin(&context);
+    const dictionary = try trainCodecOptimizedCoverStandardDictionaryProfiledAlloc(
+        allocator,
+        training_samples,
+        validation_samples,
+        options,
+        dictionary_id,
+        &context,
+    );
+    CoverCodecProfileContext.end(&context, total_start, &profile.total_ns);
+    return .{ .dictionary = dictionary, .profile = profile };
+}
+
+fn trainCodecOptimizedCoverStandardDictionaryProfiledAlloc(
+    allocator: std.mem.Allocator,
+    training_samples: []const []const u8,
+    validation_samples: []const []const u8,
+    options: CoverDictionaryCodecOptimizeOptions,
+    dictionary_id: u32,
+    profile_context: ?*const CoverCodecProfileContext,
+) Error!OwnedOptimizedCoverStandardDictionary {
     if (dictionary_id == 0) return error.InvalidDictionaryMetadata;
     if (options.levels.len == 0 or options.levels.len > 8) return error.InvalidBlockPlan;
     for (options.levels) |level| {
@@ -902,7 +980,9 @@ pub fn trainCodecOptimizedCoverStandardDictionaryAlloc(
         .levels = options.levels,
         .dictionary_id = dictionary_id,
         .candidate_repcodes = options.candidate_repcodes,
+        .profile_context = profile_context,
     };
+    const search_start = CoverCodecProfileContext.begin(profile_context);
     var optimized = try dictionary_mod.cover_optimize.trainAllocWithScorerContext(
         allocator,
         training_samples,
@@ -911,6 +991,8 @@ pub fn trainCodecOptimizedCoverStandardDictionaryAlloc(
         &scorer,
         ZstdCoverValidationScorer.score,
     );
+    if (profile_context) |context|
+        CoverCodecProfileContext.end(profile_context, search_start, &context.profile.candidate_search_ns);
     defer optimized.deinit(allocator);
 
     const entropy_sample_count = std.math.add(usize, training_samples.len, validation_samples.len) catch
@@ -919,12 +1001,15 @@ pub fn trainCodecOptimizedCoverStandardDictionaryAlloc(
     defer allocator.free(entropy_samples);
     @memcpy(entropy_samples[0..training_samples.len], training_samples);
     @memcpy(entropy_samples[training_samples.len..], validation_samples);
+    const winner_start = CoverCodecProfileContext.begin(profile_context);
     const standard = try standardDictionaryFromSelectedContentAndSamplesAlloc(
         allocator,
         optimized.bytes,
         entropy_samples,
         dictionary_id,
     );
+    if (profile_context) |context|
+        CoverCodecProfileContext.end(profile_context, winner_start, &context.profile.winner_finalization_ns);
     return .{
         .bytes = standard.bytes,
         .view = standard.view,
@@ -940,6 +1025,7 @@ const ZstdCoverValidationScorer = struct {
     levels: []const c_int,
     dictionary_id: u32,
     candidate_repcodes: bool,
+    profile_context: ?*const CoverCodecProfileContext,
 
     fn score(
         self: *ZstdCoverValidationScorer,
@@ -947,7 +1033,20 @@ const ZstdCoverValidationScorer = struct {
         validation_samples: []const []const u8,
         _: usize,
     ) Error!dictionary_mod.CoverOptimizeScore {
-        const dictionary = try standardDictionaryFromSelectedContentAndSamplesOptionsAlloc(
+        const dictionary = if (self.profile_context) |codec_context| blk: {
+            var finalizer_context: StandardDictionaryProfileContext = .{
+                .io = codec_context.io,
+                .profile = &codec_context.profile.candidate_finalizer,
+            };
+            break :blk try standardDictionaryFromSelectedContentAndSamplesProfiledAlloc(
+                self.allocator,
+                content,
+                self.training_samples,
+                self.dictionary_id,
+                &finalizer_context,
+                self.candidate_repcodes,
+            );
+        } else try standardDictionaryFromSelectedContentAndSamplesOptionsAlloc(
             self.allocator,
             content,
             self.training_samples,
@@ -958,6 +1057,7 @@ const ZstdCoverValidationScorer = struct {
         var encoded_size = dictionary.bytes.len;
         for (validation_samples) |sample| {
             for (self.levels) |level| {
+                const encode_start = CoverCodecProfileContext.begin(self.profile_context);
                 const encoded = try encodeFrameWithLevelAndOptionsAndDictionaryAlloc(
                     self.allocator,
                     sample,
@@ -966,6 +1066,15 @@ const ZstdCoverValidationScorer = struct {
                     dictionary.asDictionary(),
                 );
                 defer self.allocator.free(encoded);
+                if (self.profile_context) |context| {
+                    CoverCodecProfileContext.end(
+                        self.profile_context,
+                        encode_start,
+                        &context.profile.selector_encoding_ns,
+                    );
+                    context.profile.candidate_frames +|= 1;
+                    context.profile.selector_encoded_bytes +|= encoded.len;
+                }
                 encoded_size = std.math.add(usize, encoded_size, encoded.len) catch
                     return error.InvalidDictionaryTraining;
             }
@@ -1211,7 +1320,7 @@ fn standardDictionaryFromSelectedContentAndSamplesProfiledAlloc(
     var sample_bytes: usize = 0;
     for (samples) |sample|
         sample_bytes = std.math.add(usize, sample_bytes, sample.len) catch return error.InvalidDictionaryTraining;
-    if (profile_context) |context| context.profile.sample_bytes = sample_bytes;
+    if (profile_context) |context| context.profile.sample_bytes +|= sample_bytes;
     // Both parsers use min_match=4 below, so their combined sequence count is
     // bounded by half the input bytes. Reserve once instead of growing this
     // training-only trace repeatedly across samples.
@@ -1228,7 +1337,7 @@ fn standardDictionaryFromSelectedContentAndSamplesProfiledAlloc(
         profile_context,
     );
     if (profile_context) |context| {
-        context.profile.offset_sequences = offset_sequences.items.len;
+        context.profile.offset_sequences +|= offset_sequences.items.len;
         StandardDictionaryProfileContext.end(profile_context, collection_start, &context.profile.sequence_collection_ns);
     }
     const sequence_entropy_start = StandardDictionaryProfileContext.begin(profile_context);
@@ -2041,6 +2150,28 @@ test "standard Zstd codec-optimized COVER trainer is deterministic" {
     );
     defer exhaustive.deinit(std.testing.allocator);
     try std.testing.expectEqual(first.candidates_evaluated, exhaustive.candidates_evaluated);
+    const profiled = try profileCodecOptimizedCoverStandardDictionaryAlloc(
+        std.testing.allocator,
+        std.testing.io,
+        &training,
+        &validation,
+        options,
+        0x1000_000f,
+    );
+    defer profiled.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, first.bytes, profiled.dictionary.bytes);
+    try std.testing.expectEqual(first.selected_options, profiled.dictionary.selected_options);
+    try std.testing.expectEqual(first.validation_score, profiled.dictionary.validation_score);
+    try std.testing.expect(profiled.profile.total_ns != 0);
+    try std.testing.expect(profiled.profile.candidate_search_ns != 0);
+    try std.testing.expect(profiled.profile.selector_encoding_ns != 0);
+    try std.testing.expect(profiled.profile.winner_finalization_ns != 0);
+    try std.testing.expect(profiled.profile.total_ns >= profiled.profile.candidate_search_ns);
+    try std.testing.expect(profiled.profile.candidate_search_ns >= profiled.profile.selector_encoding_ns);
+    try std.testing.expectEqual(@as(usize, 16), profiled.profile.candidate_frames);
+    try std.testing.expect(profiled.profile.selector_encoded_bytes != 0);
+    try std.testing.expect(profiled.profile.candidate_finalizer.total_ns != 0);
+    try std.testing.expectEqual(@as(u64, 0), profiled.profile.candidate_finalizer.repcode_scoring_ns);
     const single_fast = try trainCodecOptimizedCoverStandardDictionaryAlloc(
         std.testing.allocator,
         &training,

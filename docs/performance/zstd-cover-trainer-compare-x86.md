@@ -45,10 +45,10 @@ Each cell is `Vort / COVER / FastCover` in bytes.
 | text | 337 / 343 / 317 | 298 / 285 / 285 | 265 / 263 / 245 | 32 / 8 / 12 |
 | JSON | 198 / 170 / 185 | 212 / 170 / 185 | 189 / 187 / 199 | 64 / 8 / 16 |
 | binary | 813 / 800 / 799 | 817 / 787 / 790 | 812 / 806 / 812 | 256 / 6 / 16 |
-| source | 1,813 / 1,792 / 1,802 | 1,798 / 1,772 / 1,794 | 1,775 / 1,757 / 1,761 | 32 / 6 / 12 |
+| source | 1,902 / 1,895 / 1,892 | 1,874 / 1,868 / 1,867 | 1,851 / 1,846 / 1,849 | 32 / 6 / 16 |
 
-Across all twelve rows the totals are `9,327 / 9,132 / 9,174`: Vort is 2.14%
-larger than COVER and 1.67% larger than FastCover. Text level 1 beats COVER,
+Across all twelve rows the totals are `9,568 / 9,420 / 9,425`: Vort is 1.57%
+larger than COVER and 1.52% larger than FastCover. Text level 1 beats COVER,
 and JSON level 9 beats FastCover, but JSON level 3 remains the largest gap at
 24.7% versus COVER and 14.6% versus FastCover. Source and binary rows are
 generally within about 0--4%.
@@ -63,7 +63,7 @@ and both aggregate gaps to 3%. These are regression bounds, not parity claims.
 | text | 476 / 512 / 512 | 352 / 388 / 376 | 571.26 / 13.98 / 12.07 |
 | JSON | 493 / 512 / 512 | 352 / 389 / 370 | 1,308.85 / 17.00 / 11.55 |
 | binary | 494 / 512 / 512 | 352 / 362 / 363 | 68.03 / 29.38 / 18.02 |
-| source | 507 / 512 / 512 | 352 / 360 / 359 | 285.78 / 43.42 / 21.19 |
+| source | 509 / 512 / 512 | 352 / 359 / 358 | 1,213.25 / 42.74 / 20.96 |
 
 Vort's training latency is currently about 2.3--113 times the faster reference,
 depending on corpus. The permanent gate only prevents a catastrophic widening
@@ -83,11 +83,11 @@ libzstd oracle uses libzstd for scoring; the production pure-Zig API
 | text | 900 | 865 | 877 | 16 / 26 |
 | JSON | 599 | 569 | 577 | 3 / 22 |
 | binary | 2,442 | 2,426 | 2,423 | 19 / 26 |
-| source | 5,386 | 5,414 | 5,391 | 2 / 4 |
-| total | 9,327 | 9,274 | 9,268 | — |
+| source | 5,627 | 5,630 | 5,622 | 4 / 22 |
+| total | 9,568 | 9,490 | 9,499 | — |
 
 The Vort codec scorer improves JSON level 3 from 212 to 195 and the aggregate
-by 59 bytes, while the selector-partition choice is five bytes larger on source.
+by 69 bytes; the source row is also five bytes smaller in this snapshot.
 Generic-score ranks also show why a small top-N shortlist is insufficient:
 three pure-Vort winners rank 22nd or worse.
 
@@ -109,7 +109,7 @@ The exhaustive reference path reports:
 | text | 15.871 s | 15.858 s | 99.919% | 0.060% |
 | JSON | 36.202 s | 36.193 s | 99.974% | 0.019% |
 | binary | 1.252 s | 1.224 s | 97.813% | 1.784% |
-| source | 9.867 s | 9.839 s | 99.714% | 0.230% |
+| source | 19.532 s | 19.503 s | 99.851% | 0.121% |
 
 This evidence changes the optimization target: dictionary-aware greedy/lazy
 parsing is not the dominant stage here. Re-encoding every training sample with
@@ -136,6 +136,30 @@ A second experiment serialized the corpus-only literal Huffman entropy once and
 reused it for all 30 histories. Normal and flat-corpus fallback tests were
 byte-identical to separate finalization, but complete training did not improve:
 text moved from about 24.19 to 24.63 seconds, JSON from 51.70 to 52.45 seconds,
-and binary from 2.12 to 2.28 seconds. This refactor was also removed. The
-dominant remaining work is history-dependent sequence parsing, FSE/repcode
-training, and complete candidate encoding rather than literal-tree creation.
+and binary from 2.12 to 2.28 seconds. This refactor was also removed.
+
+Reusing one `NativeFrameEncoder` and its retained scratch across all candidate
+frames was byte-identical, but remained neutral: text and JSON improved by only
+about 0.4--0.5%, while binary and source were flat or slightly slower. The
+baseline-repcode profile shows that selector scoring is dominated by actual
+search and arbitration rather than encoder construction, so this extra lifetime
+state was removed as well.
+
+## Baseline-repcode search profile
+
+Profiling the production `candidate_repcodes=false` path separates the complete
+candidate search from finalization and selector-frame encoding:
+
+| Corpus | Total | Candidate search | Candidate finalizer | Selector encoding | Winner finalizer | Selector/search share |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| text | 8.241 s | 7.700 s | 10.7 ms | 7.665 s | 540 ms | 99.54% |
+| JSON | 15.938 s | 14.579 s | 8.7 ms | 14.545 s | 1.359 s | 99.77% |
+| binary | 0.890 s | 0.840 s | 23.6 ms | 0.793 s | 49 ms | 94.35% |
+| source | 1.450 s | 1.154 s | 25.0 ms | 1.103 s | 296 ms | 95.55% |
+
+Each row covers exactly 360 selector frames (30 candidates × four selector
+samples × three levels). Candidate finalization no longer performs repcode
+entropy or frame scoring, and history construction plus loop overhead is only
+about 24--26 ms per corpus. The new dominant cost is real multi-level selector
+encoding, not finalization or encoder allocation. Future speed work must reduce
+the number or cost of those 360 encodes without losing the low-ranked winners.
