@@ -12,6 +12,7 @@ const command_lut = @import("br/command_lut.zig");
 const pattern = @import("br/pattern.zig");
 const command_plan = @import("br/encoder/command_plan.zig");
 const fast_fragment = @import("br/encoder/fast_fragment.zig");
+const fast_fragment_two_pass = @import("br/encoder/fast_fragment_two_pass.zig");
 const literal_context = @import("br/encoder/literal_context.zig");
 const literal_context_split = @import("br/encoder/literal_context_split.zig");
 const literal_entropy_plan = @import("br/encoder/literal_entropy_plan.zig");
@@ -71,6 +72,7 @@ var test_external_literal_lookup_hits: usize = 0;
 var test_context_independent_literal_lookup_hits: usize = 0;
 var test_single_tree_external_lookup_hits: usize = 0;
 var test_wide_auxiliary_lookup10_hits: usize = 0;
+var test_q1_two_pass_writer_hits: usize = 0;
 
 const large_window_text_section = code_sections.large_window;
 const adaptive_split_text_section = code_sections.adaptive_split;
@@ -945,6 +947,7 @@ test {
     _ = pattern;
     _ = command_plan;
     _ = fast_fragment;
+    _ = fast_fragment_two_pass;
     _ = literal_context;
     _ = literal_context_split;
     _ = context_map_encoder;
@@ -4628,6 +4631,234 @@ const PlannedMetaBlockCandidate = struct {
     wire_state: PlannedWireState = .{},
 };
 
+const Q1TwoPassPayloadWriter = struct {
+    allocator: std.mem.Allocator,
+    writer: *BitWriter,
+    literal_alphabet: *const command_plan.PrefixAlphabetFor(256),
+    command_alphabet: *const command_plan.PrefixAlphabet,
+    distance_alphabet: *const command_plan.PrefixAlphabetFor(64),
+    literal_encoder: *const huffman.HuffmanTable(256).Encoder,
+    command_encoder: *const huffman.HuffmanTable(704).Encoder,
+    distance_encoder: *const huffman.HuffmanTable(64).Encoder,
+    last_distances: [4]usize,
+
+    pub fn event(self: *@This(), value: fast_fragment_two_pass.Event) Error!void {
+        if (value.code < 64) {
+            const symbol = fast_fragment_two_pass.commandSymbol(@intCast(value.code));
+            if (self.command_alphabet.len > 1) {
+                if (self.command_alphabet.len <= 4) {
+                    const code = self.command_alphabet.simpleCode(symbol) orelse
+                        return error.InvalidBlockPlan;
+                    try self.writer.writeHuffmanBits(self.allocator, code.code, code.bits);
+                } else {
+                    const bits = self.command_encoder.bits[symbol];
+                    if (bits == 0) return error.InvalidBlockPlan;
+                    try self.writer.writeHuffmanBits(
+                        self.allocator,
+                        self.command_encoder.codes[symbol],
+                        bits,
+                    );
+                }
+            }
+        } else {
+            const symbol: u6 = @intCast(value.code - 64);
+            if (self.distance_alphabet.len > 1) {
+                if (self.distance_alphabet.len <= 4) {
+                    const code = self.distance_alphabet.simpleCode(symbol) orelse
+                        return error.InvalidBlockPlan;
+                    try self.writer.writeHuffmanBits(self.allocator, code.code, code.bits);
+                } else {
+                    const bits = self.distance_encoder.bits[symbol];
+                    if (bits == 0) return error.InvalidBlockPlan;
+                    try self.writer.writeHuffmanBits(
+                        self.allocator,
+                        self.distance_encoder.codes[symbol],
+                        bits,
+                    );
+                }
+            }
+        }
+        if (value.extraBits() != 0)
+            try self.writer.writeBits(self.allocator, value.extra, value.extraBits());
+    }
+
+    pub fn literals(self: *@This(), bytes: []const u8) Error!void {
+        if (self.literal_alphabet.len <= 1) return;
+        for (bytes) |literal| {
+            if (self.literal_alphabet.len <= 4) {
+                const code = self.literal_alphabet.simpleCode(literal) orelse
+                    return error.InvalidBlockPlan;
+                try self.writer.writeHuffmanBits(self.allocator, code.code, code.bits);
+            } else {
+                const bits = self.literal_encoder.bits[literal];
+                if (bits == 0) return error.InvalidBlockPlan;
+                try self.writer.writeHuffmanBits(
+                    self.allocator,
+                    self.literal_encoder.codes[literal],
+                    bits,
+                );
+            }
+        }
+    }
+
+    pub fn distance(self: *@This(), actual: usize, pushes_ring: bool) Error!void {
+        if (pushes_ring) pushLastDistance(&self.last_distances, actual);
+    }
+};
+
+fn q1TreeLengths(
+    comptime alphabet_size: usize,
+    frequencies: *const [alphabet_size]u32,
+    alphabet: *const command_plan.PrefixAlphabetFor(alphabet_size),
+    max_bits: u4,
+) Error![alphabet_size]u4 {
+    if (alphabet.len <= 4) return alphabet.codeLengths(frequencies);
+    return huffman.treeCodeLengths(alphabet_size, frequencies, max_bits);
+}
+
+fn encodeQ1TwoPassMetaBlockCandidate(
+    allocator: std.mem.Allocator,
+    bytes: *std.ArrayList(u8),
+    start_byte: u8,
+    start_bit_index: u3,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    initial_wire_state: PlannedWireState,
+) Error!PlannedMetaBlockCandidate {
+    bytes.clearRetainingCapacity();
+    if (start_bit_index != 0) try bytes.append(allocator, start_byte);
+    var writer = BitWriter{ .out = bytes, .bit_index = start_bit_index };
+    const start_bit_position = writer.bitPosition();
+    const histograms = fast_fragment_two_pass.collect(input, commands) catch
+        return error.InvalidBlockPlan;
+    if (histograms.literal_count == 0) return error.InvalidBlockPlan;
+
+    var literal_alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
+    try command_plan.alphabetFromFrequenciesInto(
+        256,
+        &literal_alphabet,
+        &histograms.literals,
+    );
+    var compact_command_alphabet: command_plan.PrefixAlphabetFor(64) = undefined;
+    try command_plan.alphabetFromFrequenciesInto(
+        64,
+        &compact_command_alphabet,
+        &histograms.commands,
+    );
+    var distance_alphabet: command_plan.PrefixAlphabetFor(64) = undefined;
+    try command_plan.alphabetFromFrequenciesInto(
+        64,
+        &distance_alphabet,
+        &histograms.distances,
+    );
+    const command_alphabet = fast_fragment_two_pass.expandCommandAlphabet(
+        &compact_command_alphabet,
+    );
+
+    const literal_lengths = try q1TreeLengths(
+        256,
+        &histograms.literals,
+        &literal_alphabet,
+        8,
+    );
+    const compact_command_lengths = try q1TreeLengths(
+        64,
+        &histograms.commands,
+        &compact_command_alphabet,
+        15,
+    );
+    const command_lengths = fast_fragment_two_pass.expandCommandLengths(
+        &compact_command_lengths,
+    );
+    const distance_lengths = try q1TreeLengths(
+        64,
+        &histograms.distances,
+        &distance_alphabet,
+        14,
+    );
+
+    try writeCompressedMetaBlockHeader(allocator, &writer, input.len, false);
+    const parameters = encoder_distance.Parameters.init(0, 0);
+    try writePlannedCompressedHeader(
+        64,
+        allocator,
+        &writer,
+        &literal_alphabet,
+        &command_alphabet,
+        null,
+        &distance_alphabet,
+        null,
+        parameters,
+        64,
+        &literal_lengths,
+        &command_lengths,
+        &distance_lengths,
+    );
+
+    const literal_encoder = if (literal_alphabet.len <= 4)
+        huffman.HuffmanTable(256).Encoder{}
+    else if (literal_alphabet.len <= 64)
+        try huffman.HuffmanTable(256).Encoder.initSparseTrusted(
+            &literal_lengths,
+            literal_alphabet.symbols[0..literal_alphabet.len],
+        )
+    else
+        try huffman.HuffmanTable(256).Encoder.init(&literal_lengths);
+    const command_encoder = if (command_alphabet.len <= 4)
+        huffman.HuffmanTable(704).Encoder{}
+    else
+        try huffman.HuffmanTable(704).Encoder.initSparseTrusted(
+            &command_lengths,
+            command_alphabet.symbols[0..command_alphabet.len],
+        );
+    const distance_encoder = if (distance_alphabet.len <= 4)
+        huffman.HuffmanTable(64).Encoder{}
+    else
+        try huffman.HuffmanTable(64).Encoder.initSparseTrusted(
+            &distance_lengths,
+            distance_alphabet.symbols[0..distance_alphabet.len],
+        );
+    var payload_writer = Q1TwoPassPayloadWriter{
+        .allocator = allocator,
+        .writer = &writer,
+        .literal_alphabet = &literal_alphabet,
+        .command_alphabet = &command_alphabet,
+        .distance_alphabet = &distance_alphabet,
+        .literal_encoder = &literal_encoder,
+        .command_encoder = &command_encoder,
+        .distance_encoder = &distance_encoder,
+        .last_distances = initial_wire_state.last_distances,
+    };
+    const emitted = fast_fragment_two_pass.walk(
+        input,
+        commands,
+        &payload_writer,
+    ) catch |err| switch (err) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.IntegerOverflow => return error.IntegerOverflow,
+        else => return error.InvalidBlockPlan,
+    };
+    if (emitted.event_count != histograms.event_count or
+        emitted.literal_count != histograms.literal_count or
+        emitted.explicit_distance_count != histograms.explicit_distance_count)
+    {
+        return error.InvalidBlockPlan;
+    }
+    if (builtin.is_test) test_q1_two_pass_writer_hits += 1;
+    return .{
+        .bit_index = writer.bit_index,
+        .bit_count = writer.bitPosition() - start_bit_position,
+        .wire_state = .{
+            .last_distances = payload_writer.last_distances,
+            .output_pos = std.math.add(
+                usize,
+                initial_wire_state.output_pos,
+                input.len,
+            ) catch return error.IntegerOverflow,
+        },
+    };
+}
+
 fn encodePlannedMetaBlockCandidate(
     allocator: std.mem.Allocator,
     bytes: *std.ArrayList(u8),
@@ -4694,6 +4925,31 @@ fn considerPlannedMetaBlockCommands(
     candidate_wire: *std.ArrayList(u8),
     best_wire: *std.ArrayList(u8),
 ) Error!void {
+    if (policy.fragment_variant == .q1) {
+        if (encodeQ1TwoPassMetaBlockCandidate(
+            allocator,
+            candidate_wire,
+            start_byte,
+            start_bit_index,
+            input,
+            commands,
+            wire_state,
+        )) |candidate| {
+            try retainSmallerMetaBlockCandidate(
+                allocator,
+                best,
+                candidate_wire,
+                best_wire,
+                candidate,
+            );
+            return;
+        } else |err| switch (err) {
+            // Compound-dictionary command plans and any future command source
+            // outside q1's local LZ subset retain the complete general writer.
+            error.InvalidBlockPlan => {},
+            else => return err,
+        }
+    }
     const common = CommandPlanEncodeOptions{
         .window_bits = window_bits,
         .compound_dictionary_size = compound_dictionary_size,
@@ -21308,6 +21564,28 @@ test "br planned quality and mode matrix is deterministic bounded and reusable" 
             if (quality == 11) try std.testing.expect(expected.len <= q10_sizes[mode_index]);
         }
     }
+}
+
+test "br q1 compact two-pass writer crosses the 64-symbol literal boundary" {
+    var payload: [8 * 1024]u8 = undefined;
+    for (&payload, 0..) |*byte, index| byte.* = @intCast(index & 127);
+    test_q1_two_pass_writer_hits = 0;
+    const encoded = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        &payload,
+        .{ .quality = 1 },
+    );
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expect(test_q1_two_pass_writer_hits != 0);
+    const summary = try summarizeStream(encoded);
+    try std.testing.expectEqual(@as(usize, 1), summary.compressed_meta_block_count);
+    const decoded = try decodeStreamAllocExactSize(
+        std.testing.allocator,
+        encoded,
+        payload.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
 }
 
 test "br planned quality releases every candidate on allocation failure" {

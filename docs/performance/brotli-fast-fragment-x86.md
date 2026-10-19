@@ -27,11 +27,11 @@ the same bounded block core as chunked and incremental encoding, so default
 16 KiB q0 and 32 KiB q1 boundaries have one deterministic wire implementation.
 Compressed-versus-stored arbitration remains exact.
 
-This completes the fragment parser and streaming-state slice, not the full
-libbrotli fast encoders. Both qualities still use Vort's shared general
-command, distance, and exact-histogram Huffman writer. A specialized q0
-one-pass writer and q1 compact two-pass 128-symbol writer remain the primary
-functional and throughput gap.
+This completes the fragment parser and streaming-state slice. q1 subsequently
+gained a compact two-pass 128-symbol writer, documented in
+[the q1 writer evidence](brotli-q1-two-pass-x86.md); q0 still uses Vort's
+shared general command/tree writer. A specialized q0 one-pass writer remains
+the next fast-encoder gap.
 
 ## Correctness evidence
 
@@ -45,7 +45,8 @@ q0/q1 do not accidentally use earlier-fragment LZ history, while the legacy
 fast policy still does. Both q0 and q1 one-shot paths pass exhaustive
 allocation-failure injection.
 
-`zig build test-br --summary all` passes 801/801 tests. The complete
+`zig build test-br --summary all` now passes 807/807 tests after the q1 writer
+follow-up. The complete
 `zig build run-br-planned-node-diff` matrix passes, including q0/q1 in
 generic/text/font modes, so Node/libbrotli decodes every selected wire. The
 benchmark itself also decodes Vort output through runtime libbrotli before
@@ -79,9 +80,9 @@ The fixed-hash latency policy improves text/JSON size but trades 11.39% q0 and
 than runtime libbrotli there. This is an explicit speed/ratio tradeoff, not a
 blanket ratio improvement.
 
-The candidate remains only 0.0976x--0.1877x of libbrotli throughput on these
-rows. The next q0/q1 milestone is therefore the specialized entropy writer and
-direct bitstream path, not additional tuning of the now-cheaper parser.
+At this parser-only milestone the candidate remained only 0.0976x--0.1877x of
+libbrotli throughput. The later q1 writer raises its four rows to
+0.2405x--0.2863x; q0 still needs the corresponding one-pass direct writer.
 
 Reproduce the matrix with the following command, substituting quality 1 for
 the second run and running the baseline checkout in the same way:

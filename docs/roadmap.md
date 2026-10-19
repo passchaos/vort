@@ -22,11 +22,12 @@ major gaps before Vort can claim broad industry-best parity:
   distance splitting and context clustering, but the matrix is not libbrotli
   algorithm, byte, ratio, or throughput parity. q0/q1 now use dedicated
   block-local fixed-hash fragment parsers with reusable scratch and identical
-  one-shot/chunked/incremental block semantics, but still use the shared
-  general command/tree writer rather than libbrotli's one-pass/compact
-  two-pass entropy writers. Those specialized writers, q2/q3 entropy writers,
-  q10/q11 Zopfli/HQ cost refinement, contextual dictionary encoding and
-  global exact-cost segmentation remain open.
+  one-shot/chunked/incremental block semantics. q1 now also uses a dedicated
+  compact two-pass 128-symbol event/histogram writer for ordinary LZ command
+  plans, with a general-writer fallback for compound-dictionary commands. A
+  q0 one-pass adaptive entropy writer, q2/q3 entropy writers, q10/q11
+  Zopfli/HQ cost refinement, contextual dictionary encoding and global
+  exact-cost segmentation remain open.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
   entropy block switching, static dictionaries, consecutive compressed

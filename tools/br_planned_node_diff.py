@@ -28,14 +28,25 @@ def main() -> int:
                 raise SystemExit(f"{mode}: node output mismatch")
             print(f"brotli planned {mode} node diff: encoded={len(encoded)} decoded={len(actual)}")
     quality_modes = ("generic", "text", "font")
+    q1_sizes = {"generic": 69, "text": 95, "font": 92}
     for quality in range(12):
         for planned_mode, (name, expected) in zip(quality_modes, cases):
             mode = f"q{quality}-{planned_mode}-{name}"
             encoded = subprocess.check_output([sys.argv[1], mode])
+            if quality == 1 and len(encoded) != q1_sizes[planned_mode]:
+                raise SystemExit(f"{mode}: q1 wire size changed: {len(encoded)}")
             actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
             if actual != expected:
                 raise SystemExit(f"{mode}: node output mismatch")
             print(f"brotli planned {mode} node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = bytes(range(128)) * 512
+    encoded = subprocess.check_output([sys.argv[1], "q1-wide-literals"])
+    if len(encoded) != 137:
+        raise SystemExit(f"q1-wide-literals: wire size changed: {len(encoded)}")
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("q1-wide-literals: node output mismatch")
+    print(f"brotli planned q1-wide-literals node diff: encoded={len(encoded)} decoded={len(actual)}")
     expected = (
         b"alpha beta gamma delta alpha beta gamma delta " * 64
         + b"qzxwvbnm1234567890QZXWVBNM!@#$%^&*"

@@ -38,9 +38,11 @@ point as the corresponding libbrotli number.
 
 ## Implemented schedule
 
-q0/q1 use bounded hash-greedy LZ77 planning; q2...q11 use bounded lazy LZ77
-planning. All qualities share the existing Brotli Huffman and command writers,
-exact complete-wire candidate comparison, and stored fallback. The default
+q0/q1 use bounded block-local fast-fragment planning; q2...q11 use bounded lazy
+LZ77 planning. q1 expands its command plan through a dedicated compact
+two-pass 128-symbol event alphabet and exact first-pass histograms; q0 and
+q2...q11 retain the general command writer. All qualities keep exact
+compressed-versus-stored comparison. The default
 advertised window is 16 bits. q0...q5 accept 10...16-bit windows; q6...q11
 accept RFC windows 10...24. The quality path's ordinary LZ matcher is capped at
 `lz77.max_window_len`, currently 65,535 bytes, even when a wider window is
@@ -73,7 +75,7 @@ split.
 | Quality | Family | Current Vort behavior |
 | ---: | --- | --- |
 | 0 | fast | Dedicated block-local fixed-hash fragment parsing with five-byte anchors, one hash candidate, recent-distance probing, incompressible skip-ahead, sparse match-tail seeding, and a 16 KiB default fragment. It deliberately does not borrow prior-fragment LZ history. The shared exact-histogram Brotli writer remains in use; this is not libbrotli's one-pass entropy writer. Explicit RAW shared-prefix matching remains available. |
-| 1 | fast | Dedicated block-local fixed-hash fragment parsing with four-byte anchors through 32 KiB (six bytes for wider explicit fragments), the same bounded recent-distance/skip model, and a 32 KiB default fragment. It remains independent of prior-fragment LZ history. The shared exact-histogram writer is not libbrotli's compact two-pass entropy writer. Explicit RAW shared-prefix matching remains available. |
+| 1 | fast | Dedicated block-local fixed-hash fragment parsing with four-byte anchors through 32 KiB (six bytes for wider explicit fragments), the same bounded recent-distance/skip model, and a 32 KiB default fragment. It remains independent of prior-fragment LZ history. A dedicated compact two-pass writer collects exact literal/64-command/64-distance histograms, expands them into RFC trees, and emits the second pass directly; non-LZ compound-dictionary plans retain the general writer. Explicit RAW shared-prefix matching remains available. |
 | 2 | balanced | Lazy chain 4 and nice length 32; every mode may try the built-in transformed static dictionary through 256 bytes. No specialized q2 entropy writer is present. |
 | 3 | balanced | Lazy chain 8, nice length 48, recent-distance selection, and the same short-input dictionary candidate in every mode. No specialized q3 entropy writer is present. |
 | 4 | balanced | Lazy chain 16 and nice length 64; enables existing literal/command/distance split candidates and distance-parameter search. Font additionally compares its first mode-specific distance-shape candidate. |
@@ -322,10 +324,9 @@ multi-corpus performance claim.
 The following are explicit gaps, not implied by the presence of the preset
 names:
 
-- libbrotli-class q0 one-pass and q1 compact two-pass entropy writers. The
-  block-local fixed-hash parser, reusable scratch, deterministic one-shot/
-  chunked/incremental block core, and streaming fragment boundaries are now in
-  place, but the shared general command/tree writer still owns wire emission;
+- a libbrotli-class q0 one-pass entropy writer and its cross-fragment adaptive
+  tree state. q1 now has a compact two-pass 128-symbol writer, although it does
+  not claim byte identity with libbrotli;
 - the specialized q2/q3 entropy writers and their matching block decisions;
 - real q10/q11 Zopfli/HQ cost refinement, including iterative model feedback;
 - contextual dictionary encoding;
