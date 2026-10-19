@@ -76,6 +76,7 @@ pub const Candidate = struct {
     id: DictionaryId,
     word_selection_profile: WordSelectionProfile = .heavy_hitter,
     cover_dmer_size: ?u8 = null,
+    cover_hash_log: ?u8 = null,
     context_based: bool = false,
     context_mode: ?u2 = null,
     context_cutoff: ?u6 = null,
@@ -179,6 +180,7 @@ pub fn withPrefixSuffixTransformsAlloc(
         .id = .fromBytes(encoded),
         .word_selection_profile = source.word_selection_profile,
         .cover_dmer_size = source.cover_dmer_size,
+        .cover_hash_log = source.cover_hash_log,
         .context_based = source.context_based,
         .context_mode = source.context_mode,
         .context_cutoff = source.context_cutoff,
@@ -294,6 +296,7 @@ pub fn withShiftTransformsAlloc(
         .id = .fromBytes(encoded),
         .word_selection_profile = source.word_selection_profile,
         .cover_dmer_size = source.cover_dmer_size,
+        .cover_hash_log = source.cover_hash_log,
         .context_based = source.context_based,
         .context_mode = source.context_mode,
         .context_cutoff = source.context_cutoff,
@@ -382,6 +385,7 @@ fn withTransformProfileAlloc(
         .id = .fromBytes(encoded),
         .word_selection_profile = source.word_selection_profile,
         .cover_dmer_size = source.cover_dmer_size,
+        .cover_hash_log = source.cover_hash_log,
         .context_based = source.context_based,
         .context_mode = source.context_mode,
         .context_cutoff = source.context_cutoff,
@@ -506,6 +510,7 @@ pub fn withClusteredTransformProfilesAlloc(
         .id = .fromBytes(encoded),
         .word_selection_profile = sources[0].word_selection_profile,
         .cover_dmer_size = sources[0].cover_dmer_size,
+        .cover_hash_log = sources[0].cover_hash_log,
         .context_based = sources[0].context_based,
         .context_mode = sources[0].context_mode,
         .context_cutoff = sources[0].context_cutoff,
@@ -699,6 +704,10 @@ pub fn trainCandidateAlloc(
             options.cover_dmer_size
         else
             null,
+        .cover_hash_log = if (options.word_selection == .cover)
+            options.cover_hash_log
+        else
+            null,
     };
 }
 
@@ -837,6 +846,10 @@ fn trainMappedContextCandidateAlloc(
         .word_selection_profile = options.word_selection,
         .cover_dmer_size = if (options.word_selection == .cover)
             options.cover_dmer_size
+        else
+            null,
+        .cover_hash_log = if (options.word_selection == .cover)
+            options.cover_hash_log
         else
             null,
         .context_based = true,
@@ -1071,6 +1084,10 @@ test "serialized trainer builds deterministic fixed-word COVER buckets" {
     try std.testing.expectEqualSlices(u8, first.encoded, second.encoded);
     try std.testing.expectEqual(WordSelectionProfile.cover, first.word_selection_profile);
     try std.testing.expectEqual(@as(?u8, 6), first.cover_dmer_size);
+    try std.testing.expectEqual(
+        @as(?u8, dictionary_train.cover.min_hash_log),
+        first.cover_hash_log,
+    );
     const parsed = try serialized_dictionary.parse(first.encoded);
     const word_count = parsed.word_lists[0].wordCount(8);
     try std.testing.expect(word_count >= 2 and std.math.isPowerOfTwo(word_count));

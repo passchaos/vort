@@ -331,9 +331,9 @@ The following are explicit gaps, not implied by the presence of the preset
 names:
 
 - real q10/q11 Zopfli/HQ cost refinement, including iterative model feedback;
-- optimized COVER/FastCover parameter search and broad serialized-dictionary
-  corpus calibration. Deterministic heavy-hitter/COVER fixed-word selection,
-  bounded multi-cutoff two-group and arbitrary
+- FastCover-style acceleration and broad serialized-dictionary corpus
+  calibration. Deterministic heavy-hitter/COVER fixed-word selection plus an
+  actual-wire `(d, hash_log)` grid, bounded multi-cutoff two-group and arbitrary
   non-contiguous context clustering, case/omit families, observed prefix/suffix
   stringlet/SHIFT learning, and per-dictionary transform-profile clustering use
   held-out complete-wire arbitration.

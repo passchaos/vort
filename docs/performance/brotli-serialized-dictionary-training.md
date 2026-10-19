@@ -13,7 +13,7 @@ transform custom dictionary, and validate profitability on held-out samples
 with the production Brotli encoder.
 
 This does not claim byte-identical libzstd/libbrotli COVER or FastCover output.
-Optimized COVER parameter search and representative corpus calibration remain
+FastCover-style acceleration and representative corpus calibration remain
 future work.
 
 ## Selection contract
@@ -29,31 +29,35 @@ total by at least `min_savings_bytes`. Deployments that distribute dictionaries
 out of band may disable the one-time dictionary charge explicitly. Every
 returned result includes both frame totals, the charged bytes, total savings,
 word and bucket counts, global/cutoff/clustered context profile, actual cluster
-count, heavy-hitter/COVER word profile and d-mer width, selected transform
-profile/list count, learned stringlet and SHIFT parameter/transform counts, and
-a stable content-derived dictionary ID.
+count, heavy-hitter/COVER word profile, selected d-mer/hash-log and evaluated
+grid count, selected transform profile/list count, learned stringlet and SHIFT
+parameter/transform counts, and a stable content-derived dictionary ID.
 
 ## Heavy-hitter and COVER word evidence
 
 Eight training samples and 64 held-out samples share four otherwise
-non-repeating 16-byte records. With quality 5 and one eight-word bucket:
+non-repeating 16-byte records. With quality 5 and an eight-word limit, the
+default four-configuration grid selects `d=6`, `hash_log=16`, MSB6, and cutoff
+32:
 
 | Metric | Bytes |
 |---|---:|
 | Dictionary-free held-out frames | 4,608 |
-| COVER-backed held-out frames | 2,527 |
-| Serialized dictionary | 172 |
-| Charged trained total | 2,699 |
-| Total saving | 1,909 (41.4%) |
+| Optimized COVER-backed held-out frames | 2,416 |
+| Serialized contextual dictionary | 266 |
+| Charged trained total | 2,682 |
+| Total saving | 1,926 (41.8%) |
 
 The regression requires at least a 40% complete-total saving, byte-identical
-training across repeated calls, the `.cover` profile with `d=8`, identical
-stable IDs, and correct parsing. The same fixture with COVER disabled locks the
-previous heavy-hitter result at 2,632 frame bytes plus the same 172-byte
-dictionary, saving 1,804 bytes. A single held-out sample with no amortized
-benefit must return null. Allocation-failure enumeration covers both builders,
-and an experimental libbrotli 1.2.0 build accepts the selected dictionary in
-both encode/decode directions.
+training across repeated calls, `.cover`, `d=6`, `hash_log=16`, four evaluated
+configurations, the selected context metadata, identical stable IDs, and
+correct parsing. Disabling optimization retains the original `d=8/hash_log=16`
+global COVER result at 2,527 frame bytes plus a 172-byte dictionary, saving
+1,909 bytes. Disabling COVER retains the heavy-hitter result at 2,632 frame
+bytes plus the same 172-byte dictionary, saving 1,804 bytes. A single held-out
+sample with no amortized benefit must return null. Allocation-failure
+enumeration covers both builders, and an experimental libbrotli 1.2.0 build
+accepts the selected dictionary in both encode/decode directions.
 
 ## Two-group context evidence
 

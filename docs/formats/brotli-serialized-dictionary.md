@@ -101,7 +101,9 @@ from caller-supplied training samples. Each word length compares one bounded
 heavy-hitter collection with an optional Vort-native COVER-class selection
 whose full segment size equals the word length. COVER output is reordered from
 history-tail priority to low Brotli word addresses. Each emitted bucket is the
-largest legal power of two within the configured limits. When context training is enabled, it trains two word lists
+largest legal power of two within the configured limits. The default bounded
+grid evaluates `d={6,8}` and `hash_log={12,16}` through actual complete Brotli
+wire cost; results report the winning pair and evaluated count. When context training is enabled, it trains two word lists
 on each side of caller-selected context cutoffs for LSB6, MSB6, UTF8, and
 Signed. It also hashes the next minimum-length phrase into a fixed 64-bin
 signature per context and uses normalized integer L1 agglomeration to learn
@@ -147,7 +149,7 @@ does not promise stability for upstream's experimental container format.
 The trainer is deterministic and complete-wire validated, with bounded multi-
 cutoff two-group maps, arbitrary non-contiguous context clustering, and bounded
 prefix/suffix stringlet, SHIFT parameter, and per-dictionary transform-profile
-learning. COVER-class candidate selection is now available for fixed words;
-optimized COVER/FastCover parameter-grid search and broad corpus calibration
-remain open. The builder also remains available for fully explicit caller-owned
-specifications.
+learning. COVER-class fixed-word selection and actual-wire parameter grids are
+available; FastCover-style acceleration, wider calibration, and broad corpus
+evidence remain open. The builder also remains available for fully explicit
+caller-owned specifications.
