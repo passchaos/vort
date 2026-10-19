@@ -77,9 +77,12 @@ pub fn main(init: std.process.Init) !void {
         try cases.append(init.gpa, .{ .name = "uppercase", .payload = uppercase_payload });
         try cases.append(init.gpa, .{ .name = "incompressible", .payload = incompressible_payload });
         try cases.append(init.gpa, .{ .name = "records_q8", .payload = &records_q8, .quality = 8 });
-        const source = try std.Io.Dir.cwd().readFileAlloc(init.io, "src/br.zig", init.gpa, .limited(2 * 1024 * 1024));
-        defer init.gpa.free(source);
-        const source_file = try init.gpa.dupe(u8, source[0 .. 32 * 1024]);
+        const source_file = try readFilePrefixAlloc(
+            init.io,
+            init.gpa,
+            "src/br.zig",
+            32 * 1024,
+        );
         errdefer init.gpa.free(source_file);
         const source_name = try init.gpa.dupe(u8, "source32k");
         errdefer init.gpa.free(source_name);
@@ -299,6 +302,27 @@ fn caseNameForPath(allocator: std.mem.Allocator, path: []const u8, index: usize)
     for (std.fs.path.basename(path)) |byte|
         try out.writer.writeByte(if (std.ascii.isAlphanumeric(byte)) byte else '_');
     return try out.toOwnedSlice();
+}
+
+fn readFilePrefixAlloc(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    path: []const u8,
+    limit: usize,
+) ![]u8 {
+    if (limit == 0) return error.MissingLimit;
+    const file = try std.Io.Dir.cwd().openFile(io, path, .{});
+    defer file.close(io);
+    const stat = try file.stat(io);
+    const read_len: usize = @intCast(@min(stat.size, limit));
+    if (read_len == 0) return error.InputTooSmall;
+    const bytes = try allocator.alloc(u8, read_len);
+    errdefer allocator.free(bytes);
+    var buffer: [4096]u8 = undefined;
+    var reader = file.reader(io, &buffer);
+    if (try reader.interface.readSliceShort(bytes) != read_len)
+        return error.InputTooSmall;
+    return bytes;
 }
 
 fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) !Options {
