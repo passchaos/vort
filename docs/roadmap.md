@@ -20,10 +20,13 @@ major gaps before Vort can claim broad industry-best parity:
   static-dictionary subset, and a Vort-native q0...q11 by generic/text/font
   policy matrix. Ratio-oriented presets can use bounded literal, command, and
   distance splitting and context clustering, but the matrix is not libbrotli
-  algorithm, byte, ratio, or throughput parity. Specialized q0/q1 fragment
-  encoders, q2/q3 entropy writers, q10/q11 Zopfli/HQ cost refinement,
-  contextual dictionary encoding and global exact-cost segmentation remain
-  open.
+  algorithm, byte, ratio, or throughput parity. q0/q1 now use dedicated
+  block-local fixed-hash fragment parsers with reusable scratch and identical
+  one-shot/chunked/incremental block semantics, but still use the shared
+  general command/tree writer rather than libbrotli's one-pass/compact
+  two-pass entropy writers. Those specialized writers, q2/q3 entropy writers,
+  q10/q11 Zopfli/HQ cost refinement, contextual dictionary encoding and
+  global exact-cost segmentation remain open.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
   entropy block switching, static dictionaries, consecutive compressed
@@ -135,7 +138,10 @@ ordinary entropy splitting begins at q4, and higher presets progressively
 enable adaptive distance/literal/command proposals. Generic, text, and font use
 the same parser, context, and dictionary budgets. Their only current policy
 difference is a font-only q4+ complete-wire candidate using
-`NPOSTFIX=1, NDIRECT=12`. q0/q1 use the hash-greedy planner; q2...q11 use lazy planning.
+`NPOSTFIX=1, NDIRECT=12`. q0/q1 use distinct block-local fast-fragment
+parsers; q2...q11 use lazy planning. q0/q1 fragment parsing intentionally
+does not borrow earlier meta-block history, while RAW compound-dictionary
+attachments remain explicit candidates.
 q10's 256-chain/128-candidate optimal search applies through 64 KiB, while
 q11's deeper 512/256 search is limited to 32 KiB and always retains the complete
 q10 winner, guaranteeing q11 output is no larger than q10 for the same options.

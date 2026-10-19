@@ -11,6 +11,7 @@ const static_dictionary = @import("br/static_dictionary.zig");
 const command_lut = @import("br/command_lut.zig");
 const pattern = @import("br/pattern.zig");
 const command_plan = @import("br/encoder/command_plan.zig");
+const fast_fragment = @import("br/encoder/fast_fragment.zig");
 const literal_context = @import("br/encoder/literal_context.zig");
 const literal_context_split = @import("br/encoder/literal_context_split.zig");
 const literal_entropy_plan = @import("br/encoder/literal_entropy_plan.zig");
@@ -549,6 +550,7 @@ const IncrementalPlannedEncoderCodec = struct {
         history_snapshot: std.ArrayList(u8) = .empty,
         greedy_scratch: lz77.TinyGreedyScratch = .{},
         dictionary_greedy_scratch: lz77.DictionaryGreedyScratch = .{},
+        fragment_scratch: fast_fragment.Scratch = .{},
         compound_matcher: ?compound_dictionary_matcher.Matcher = null,
         compound_dictionary_size: usize = 0,
         wire_state: PlannedWireState = .{},
@@ -557,6 +559,7 @@ const IncrementalPlannedEncoderCodec = struct {
     pub fn deinitState(state: *State, allocator: std.mem.Allocator) void {
         state.greedy_scratch.deinit(allocator);
         state.dictionary_greedy_scratch.deinit(allocator);
+        state.fragment_scratch.deinit(allocator);
         if (state.compound_matcher) |*matcher| matcher.deinit();
         state.tokens.deinit(allocator);
         state.commands.deinit(allocator);
@@ -600,6 +603,7 @@ const IncrementalPlannedEncoderCodec = struct {
             state.history_snapshot.capacity +
             state.greedy_scratch.retainedCapacity() +
             state.dictionary_greedy_scratch.retainedCapacity() +
+            state.fragment_scratch.retainedCapacity() +
             (if (state.compound_matcher) |*matcher| matcher.retainedCapacity() else 0);
     }
 
@@ -940,6 +944,7 @@ test {
     _ = paired_literal_lookup;
     _ = pattern;
     _ = command_plan;
+    _ = fast_fragment;
     _ = literal_context;
     _ = literal_context_split;
     _ = context_map_encoder;
@@ -3098,9 +3103,13 @@ pub fn encodePlannedStreamAlloc(allocator: std.mem.Allocator, input: []const u8)
     return encodePlannedStreamAllocWithStats(allocator, input, &stats);
 }
 
+fn usesFastFragment(quality: ?u4) bool {
+    return if (quality) |value| value <= 1 else false;
+}
+
 pub fn encodePlannedStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
     try validatePlannedEncodeOptions(input.len, options);
-    if (input.len > max_uncompressed_meta_block_len) {
+    if (input.len > max_uncompressed_meta_block_len or usesFastFragment(options.quality)) {
         const chunks = [_][]const u8{input};
         return encodePlannedStreamChunksWithOptionsAlloc(
             allocator,
@@ -3336,7 +3345,7 @@ pub fn encodedPlannedStreamBound(input_len: usize) Error!usize {
 pub fn encodedPlannedStreamBoundWithOptions(input_len: usize, options: PlannedEncodeOptions) Error!usize {
     try validatePlannedEncodeOptions(input_len, options);
     const window_bits = try resolvedPlannedWindowBits(options);
-    if (input_len > max_uncompressed_meta_block_len)
+    if (input_len > max_uncompressed_meta_block_len or usesFastFragment(options.quality))
         return encodedPlannedChunkedStreamBoundForInputLen(
             input_len,
             try plannedStreamChunksOptionsFromEncodeOptions(options),
@@ -4555,6 +4564,7 @@ const PlannedMetaBlockPolicy = struct {
     search_distance_parameters: bool = false,
     font_distance_candidate: bool = false,
     hash_candidates: usize = 1,
+    fragment_variant: ?fast_fragment.Variant = null,
 
     fn fromLevel(level: PlannedCompressionLevel) PlannedMetaBlockPolicy {
         return switch (level) {
@@ -4604,6 +4614,10 @@ const PlannedMetaBlockPolicy = struct {
             .use_recent_distances = schedule.use_recent_distances,
             .search_distance_parameters = schedule.search_distance_parameters,
             .font_distance_candidate = schedule.mode == .font and schedule.quality.int() >= 4,
+            .fragment_variant = if (schedule.fragment_parser) |parser| switch (parser) {
+                .q0 => fast_fragment.Variant.q0,
+                .q1 => fast_fragment.Variant.q1,
+            } else null,
         };
     }
 };
@@ -4866,53 +4880,66 @@ fn considerPlannedMetaBlockPolicy(
         .min_match = 3,
         .max_match = lz77.max_match_len,
     };
-    const plan_stats = if (state.history.items.len == 0)
-        switch (policy.family) {
-            .fast => try lz77.hashGreedyPlanAutoTinyScratchReuse(
-                &state.tokens,
-                &state.greedy_scratch,
-                allocator,
-                input,
-                parser_options,
-            ),
-            .balanced, .ratio => if (input.len <= 32 * 1024)
-                try lz77.lazyGreedyPlanTinyReuse(
+    var match_count: usize = 0;
+    if (policy.fragment_variant) |variant| {
+        // q0/q1 deliberately ignore earlier meta-block history. Their fixed
+        // hash state is fragment-local, which keeps streaming memory bounded
+        // and makes PROCESS/FLUSH boundaries independent parser units.
+        const fragment_stats = try fast_fragment.planReuse(
+            &state.commands,
+            &state.fragment_scratch,
+            allocator,
+            input,
+            variant,
+            max_backward_distance,
+        );
+        match_count = fragment_stats.matches;
+    } else {
+        const plan_stats = if (state.history.items.len == 0)
+            switch (policy.family) {
+                .fast => try lz77.hashGreedyPlanAutoTinyScratchReuse(
                     &state.tokens,
+                    &state.greedy_scratch,
                     allocator,
                     input,
-                    parser_options,
-                )
-            else
-                try lz77.lazyGreedyPlanWithDictionaryReuse(
-                    &state.tokens,
-                    &state.dictionary_greedy_scratch,
-                    allocator,
-                    input,
-                    "",
                     parser_options,
                 ),
-        }
-    else switch (policy.family) {
-        .fast => try lz77.hashGreedyPlanWithDictionaryReuse(
-            &state.tokens,
-            &state.dictionary_greedy_scratch,
-            allocator,
-            input,
-            state.history.items,
-            parser_options,
-        ),
-        .balanced, .ratio => try lz77.lazyGreedyPlanWithDictionaryReuse(
-            &state.tokens,
-            &state.dictionary_greedy_scratch,
-            allocator,
-            input,
-            state.history.items,
-            parser_options,
-        ),
-    };
-    if (plan_stats.matches != 0 or state.compound_dictionary_size != 0 or
-        policy.dictionary.static_dictionary)
-    {
+                .balanced, .ratio => if (input.len <= 32 * 1024)
+                    try lz77.lazyGreedyPlanTinyReuse(
+                        &state.tokens,
+                        allocator,
+                        input,
+                        parser_options,
+                    )
+                else
+                    try lz77.lazyGreedyPlanWithDictionaryReuse(
+                        &state.tokens,
+                        &state.dictionary_greedy_scratch,
+                        allocator,
+                        input,
+                        "",
+                        parser_options,
+                    ),
+            }
+        else switch (policy.family) {
+            .fast => try lz77.hashGreedyPlanWithDictionaryReuse(
+                &state.tokens,
+                &state.dictionary_greedy_scratch,
+                allocator,
+                input,
+                state.history.items,
+                parser_options,
+            ),
+            .balanced, .ratio => try lz77.lazyGreedyPlanWithDictionaryReuse(
+                &state.tokens,
+                &state.dictionary_greedy_scratch,
+                allocator,
+                input,
+                state.history.items,
+                parser_options,
+            ),
+        };
+        match_count = plan_stats.matches;
         _ = if (state.history.items.len == 0)
             try command_plan.buildTrustedReuse(&state.commands, allocator, input, state.tokens.items)
         else
@@ -4923,6 +4950,10 @@ fn considerPlannedMetaBlockPolicy(
                 state.history.items.len,
                 state.tokens.items,
             );
+    }
+    if (match_count != 0 or state.compound_dictionary_size != 0 or
+        policy.dictionary.static_dictionary)
+    {
         const mixed = if (state.compound_dictionary_size != 0)
             try command_plan.mixCompoundDictionaryAlloc(
                 allocator,
@@ -4935,7 +4966,7 @@ fn considerPlannedMetaBlockPolicy(
             null;
         defer if (mixed) |plan| plan.deinit(allocator);
         const commands = if (mixed) |plan| plan.commands else state.commands.items;
-        if (plan_stats.matches != 0 or (mixed != null and mixed.?.match_count != 0))
+        if (match_count != 0 or (mixed != null and mixed.?.match_count != 0))
             try considerPlannedMetaBlockCommands(
                 allocator,
                 input,
@@ -5054,6 +5085,15 @@ fn restorePlannedHistory(
     try state.history.appendSlice(allocator, state.history_snapshot.items);
 }
 
+fn plannedStateRetainsMatchHistory(
+    state: *const IncrementalPlannedEncoderCodec.State,
+) Error!bool {
+    const quality = state.quality orelse return true;
+    const schedule = quality_schedule.getInt(quality, state.mode) catch
+        return error.InvalidBlockPlan;
+    return schedule.fragment_parser == null;
+}
+
 fn writeAdaptivePlannedStreamBlock(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
@@ -5133,13 +5173,15 @@ fn writeAdaptivePlannedStreamBlock(
         try restorePlannedHistory(allocator, state);
         state.bit_index = single_bit_index;
         state.wire_state = single_wire_state;
-        const max_backward_distance = (@as(usize, 1) << state.window_bits) - 16;
-        try IncrementalPlannedEncoderCodec.appendHistory(
-            &state.history,
-            allocator,
-            block,
-            max_backward_distance,
-        );
+        if (try plannedStateRetainsMatchHistory(state)) {
+            const max_backward_distance = (@as(usize, 1) << state.window_bits) - 16;
+            try IncrementalPlannedEncoderCodec.appendHistory(
+                &state.history,
+                allocator,
+                block,
+                max_backward_distance,
+            );
+        }
     }
     try commitPlannedMetaBlockCandidate(
         allocator,
@@ -5168,10 +5210,12 @@ fn writePlannedStreamMetaBlock(
     state.candidate_wire.clearRetainingCapacity();
     state.best_wire.clearRetainingCapacity();
     var best: ?PlannedMetaBlockCandidate = null;
+    var retain_match_history = true;
 
     if (state.quality) |quality| {
         const schedule = quality_schedule.getInt(quality, state.mode) catch
             return error.InvalidBlockPlan;
+        retain_match_history = schedule.fragment_parser == null;
         if (schedule.quality == .q11) {
             const q10 = quality_schedule.get(.q10, schedule.mode);
             try considerPlannedMetaBlockPolicy(
@@ -5231,7 +5275,7 @@ fn writePlannedStreamMetaBlock(
         state.wire_state.output_pos = std.math.add(usize, start_wire_state.output_pos, block.len) catch
             return error.IntegerOverflow;
     }
-    if (update_history) {
+    if (update_history and retain_match_history) {
         const max_backward_distance = (@as(usize, 1) << state.window_bits) - 16;
         try IncrementalPlannedEncoderCodec.appendHistory(
             &state.history,
@@ -5636,7 +5680,7 @@ pub const PlannedStreamEncoder = struct {
     /// inputs retain their one-shot paths because they need wider search state.
     pub fn encodeWithOptionsAlloc(self: *PlannedStreamEncoder, allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
         try validatePlannedEncodeOptions(input.len, options);
-        if (input.len > max_uncompressed_meta_block_len) {
+        if (input.len > max_uncompressed_meta_block_len or usesFastFragment(options.quality)) {
             const chunks = [_][]const u8{input};
             return self.encodeChunksWithOptionsAlloc(
                 allocator,
@@ -5756,7 +5800,7 @@ pub const PlannedStreamEncoder = struct {
     /// The returned slice is invalidated by the next call or by `deinit`.
     pub fn encodeScratchWithOptions(self: *PlannedStreamEncoder, input: []const u8, options: PlannedEncodeOptions) Error![]const u8 {
         try validatePlannedEncodeOptions(input.len, options);
-        if (input.len > max_uncompressed_meta_block_len) {
+        if (input.len > max_uncompressed_meta_block_len or usesFastFragment(options.quality)) {
             const chunks = [_][]const u8{input};
             return self.encodeChunksScratchWithOptions(
                 &chunks,

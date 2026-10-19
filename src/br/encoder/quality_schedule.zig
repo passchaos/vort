@@ -45,6 +45,13 @@ pub const LevelFamily = enum {
     ratio,
 };
 
+/// Dedicated block-local parser selected before the general family planner.
+/// Null keeps the schedule on the general lazy/hash path.
+pub const FragmentParser = enum {
+    q0,
+    q1,
+};
+
 pub const WindowPolicy = struct {
     default_bits: u5,
     min_bits: u5,
@@ -97,6 +104,7 @@ pub const Schedule = struct {
     quality: Quality,
     mode: Mode,
     family: LevelFamily,
+    fragment_parser: ?FragmentParser,
     window: WindowPolicy,
     lazy: LazyBudget,
     optimal: OptimalBudget,
@@ -113,6 +121,16 @@ pub const Schedule = struct {
     stream_entropy_split: bool,
 
     pub fn validate(self: Schedule) Error!void {
+        const expected_fragment: ?FragmentParser = switch (self.quality) {
+            .q0 => .q0,
+            .q1 => .q1,
+            else => null,
+        };
+        if (self.fragment_parser != expected_fragment or
+            (self.fragment_parser != null and self.family != .fast))
+        {
+            return error.InvalidSchedule;
+        }
         if (self.window.min_bits < 10 or self.window.max_bits > 24 or
             self.window.min_bits > self.window.default_bits or
             self.window.default_bits > self.window.max_bits)
@@ -269,6 +287,11 @@ fn makeSchedule(quality: Quality, mode: Mode) Schedule {
         .quality = quality,
         .mode = mode,
         .family = family,
+        .fragment_parser = switch (quality) {
+            .q0 => .q0,
+            .q1 => .q1,
+            else => null,
+        },
         .window = .{
             .default_bits = 16,
             .min_bits = 10,
@@ -350,6 +373,14 @@ test "quality schedule covers the deterministic twelve by three matrix" {
             try selected.validate();
             try std.testing.expectEqual(quality, selected.quality);
             try std.testing.expectEqual(mode, selected.mode);
+            try std.testing.expectEqual(
+                switch (quality) {
+                    .q0 => FragmentParser.q0,
+                    .q1 => FragmentParser.q1,
+                    else => null,
+                },
+                selected.fragment_parser,
+            );
             try std.testing.expectEqualDeep(selected, try getInt(@intCast(quality_index), mode));
             try std.testing.expectEqualDeep(selected, matrix[quality_index][mode_index]);
         }
@@ -440,5 +471,13 @@ test "quality schedule validator rejects inconsistent policies" {
 
     invalid = get(.q11, .text);
     invalid.optimal.max_candidates = 0;
+    try std.testing.expectError(error.InvalidSchedule, invalid.validate());
+
+    invalid = get(.q0, .generic);
+    invalid.fragment_parser = null;
+    try std.testing.expectError(error.InvalidSchedule, invalid.validate());
+
+    invalid = get(.q8, .generic);
+    invalid.fragment_parser = .q0;
     try std.testing.expectError(error.InvalidSchedule, invalid.validate());
 }

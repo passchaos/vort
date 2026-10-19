@@ -72,8 +72,8 @@ split.
 
 | Quality | Family | Current Vort behavior |
 | ---: | --- | --- |
-| 0 | fast | Minimum hash-greedy search: chain 1, nice length 16, one candidate; no contexts, splitting, recent distances, or built-in static-dictionary probing. Explicit RAW shared-prefix matching remains available. This is not a fragment encoder. |
-| 1 | fast | Hash-greedy chain 2 and nice length 24; still no contexts, splitting, recent distances, or built-in static-dictionary probing. Explicit RAW shared-prefix matching remains available. This is not a fragment encoder. |
+| 0 | fast | Dedicated block-local fixed-hash fragment parsing with five-byte anchors, one hash candidate, recent-distance probing, incompressible skip-ahead, sparse match-tail seeding, and a 16 KiB default fragment. It deliberately does not borrow prior-fragment LZ history. The shared exact-histogram Brotli writer remains in use; this is not libbrotli's one-pass entropy writer. Explicit RAW shared-prefix matching remains available. |
+| 1 | fast | Dedicated block-local fixed-hash fragment parsing with four-byte anchors through 32 KiB (six bytes for wider explicit fragments), the same bounded recent-distance/skip model, and a 32 KiB default fragment. It remains independent of prior-fragment LZ history. The shared exact-histogram writer is not libbrotli's compact two-pass entropy writer. Explicit RAW shared-prefix matching remains available. |
 | 2 | balanced | Lazy chain 4 and nice length 32; every mode may try the built-in transformed static dictionary through 256 bytes. No specialized q2 entropy writer is present. |
 | 3 | balanced | Lazy chain 8, nice length 48, recent-distance selection, and the same short-input dictionary candidate in every mode. No specialized q3 entropy writer is present. |
 | 4 | balanced | Lazy chain 16 and nice length 64; enables existing literal/command/distance split candidates and distance-parameter search. Font additionally compares its first mode-specific distance-shape candidate. |
@@ -322,7 +322,10 @@ multi-corpus performance claim.
 The following are explicit gaps, not implied by the presence of the preset
 names:
 
-- dedicated q0/q1 fragment compressors and their streaming fragment model;
+- libbrotli-class q0 one-pass and q1 compact two-pass entropy writers. The
+  block-local fixed-hash parser, reusable scratch, deterministic one-shot/
+  chunked/incremental block core, and streaming fragment boundaries are now in
+  place, but the shared general command/tree writer still owns wire emission;
 - the specialized q2/q3 entropy writers and their matching block decisions;
 - real q10/q11 Zopfli/HQ cost refinement, including iterative model feedback;
 - contextual dictionary encoding;
