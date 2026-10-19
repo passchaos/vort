@@ -233,6 +233,44 @@ pub noinline fn chooseProposals(allocator: std.mem.Allocator, input: []const u8,
     return proposals;
 }
 
+/// Evaluate suffix, bounded-16-tree, and complete clustered proposals for one
+/// caller-selected RFC mode. Serialized dictionary command plans use this to
+/// preserve the mode that determined their context-relative addresses.
+pub noinline fn chooseProposalsForMode(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    mode: u2,
+) !Proposals {
+    return chooseModeProposals(
+        allocator,
+        input,
+        commands,
+        mode,
+        true,
+        max_trees,
+        .{ 0, 0 },
+    );
+}
+
+pub noinline fn chooseProposalsForModeWithPrefix(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    mode: u2,
+    initial_previous: [2]u8,
+) !Proposals {
+    return chooseModeProposals(
+        allocator,
+        input,
+        commands,
+        mode,
+        true,
+        max_trees,
+        initial_previous,
+    );
+}
+
 /// Profile the exact proposal search without adding clock reads or counters to
 /// the production `chooseProposals` specialization.
 pub fn profileSearch(
@@ -379,7 +417,7 @@ fn collectAnalysis(allocator: std.mem.Allocator, input: []const u8, commands: []
 fn chooseWithClusters(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, include_clusters: bool, max_tree_count: usize) !?Candidate {
     var best: ?Candidate = null;
     for (0..4) |mode_value| {
-        const mode_proposals = try chooseModeProposals(allocator, input, commands, @intCast(mode_value), include_clusters, max_tree_count);
+        const mode_proposals = try chooseModeProposals(allocator, input, commands, @intCast(mode_value), include_clusters, max_tree_count, .{ 0, 0 });
         const candidate = if (!include_clusters)
             mode_proposals.suffix
         else if (max_tree_count <= 16)
@@ -392,10 +430,10 @@ fn chooseWithClusters(allocator: std.mem.Allocator, input: []const u8, commands:
 }
 
 fn chooseMode(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, mode: u2) !?Candidate {
-    return (try chooseModeProposals(allocator, input, commands, mode, true, max_trees)).full;
+    return (try chooseModeProposals(allocator, input, commands, mode, true, max_trees, .{ 0, 0 })).full;
 }
 
-fn chooseModeProposals(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, mode: u2, include_clusters: bool, max_tree_count: usize) !Proposals {
+fn chooseModeProposals(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, mode: u2, include_clusters: bool, max_tree_count: usize, initial_previous: [2]u8) !Proposals {
     var by_context: [64][256]u32 = @splat(@splat(0));
     var total: [256]u32 = @splat(0);
     var literal_count: usize = 0;
@@ -403,8 +441,16 @@ fn chooseModeProposals(allocator: std.mem.Allocator, input: []const u8, commands
         const end = std.math.add(usize, command.insert_start, command.insert_len) catch return .{};
         if (end > input.len) return .{};
         for (input[command.insert_start..end], command.insert_start..) |literal, position| {
-            const previous = if (position == 0) 0 else input[position - 1];
-            const second_previous = if (position < 2) 0 else input[position - 2];
+            const previous = if (position == 0)
+                initial_previous[1]
+            else
+                input[position - 1];
+            const second_previous = if (position == 0)
+                initial_previous[0]
+            else if (position == 1)
+                initial_previous[1]
+            else
+                input[position - 2];
             const context = literal_context.value(mode, previous, second_previous);
             by_context[context][literal] += 1;
             total[literal] += 1;

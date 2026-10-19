@@ -68,3 +68,20 @@ borrowed descriptor; one-shot encoding prepares it per call.
   matcher rather than silently dropping legal words or transforms.
 - Production one-shot, reusable, chunked, and incremental encoding preserve an
   exact address/mode invariant independently for LSB6, MSB6, UTF8, and Signed.
+
+## Joint literal-context wire evidence
+
+After dictionary addresses are fixed for one RFC mode, the encoder now compares
+the single-tree wire with same-mode suffix, bounded-16-tree, and complete
+clustered literal-context candidates. It never reuses a command plan under a
+different mode.
+
+A deterministic fixture containing one custom static-dictionary copy followed
+by 768 context-correlated, non-repeating literal bytes encodes to 627 bytes with
+the same command plan and a single literal tree. Complete wire arbitration
+selects multiple literal context trees and produces 523 bytes, a 16.6% size
+reduction. The regression gate requires at least a 15% reduction and verifies
+the exact decoded payload. A two-meta-block variant starts the joint block with
+non-zero prefix history and verifies the caller-owned context trees against the
+decoder, covering the two bytes where block-local zero history would select a
+different tree.

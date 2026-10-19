@@ -78,6 +78,8 @@ addresses are computed from the active context without duplicating index data
 64 times. Context-varying descriptors generate independent command plans for
 LSB6, MSB6, UTF8, and Signed, emit the matching mode in each candidate header,
 and retain the smallest complete wire. Multi-block encoding carries the exact
-two-byte prefix history into every mode search. Joint optimization with
-multi-tree literal entropy contexts remains open. Vort does not promise
-stability for upstream's experimental container format.
+two-byte prefix history into every mode search. Within each address-stable
+mode, the encoder additionally arbitrates single-tree, suffix, bounded-16-tree,
+and complete clustered literal-context candidates. A locked joint fixture
+shrinks from 627 to 523 bytes while retaining custom dictionary copies. Vort
+does not promise stability for upstream's experimental container format.

@@ -3451,6 +3451,52 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
             else => return err,
         };
         if (candidate) |encoded| retainSmallerOwnedWire(allocator, &best, encoded);
+
+        const context_mode: u2 = @intCast(mode);
+        const proposals = try literal_context_split.chooseProposalsForMode(
+            allocator,
+            input,
+            plan.commands,
+            context_mode,
+        );
+        const alternatives = [_]?literal_context_split.Candidate{
+            proposals.suffix,
+            proposals.up_to_16,
+            proposals.full,
+        };
+        for (alternatives, 0..) |maybe_context, index| {
+            const context = maybe_context orelse continue;
+            var duplicate = false;
+            for (alternatives[0..index]) |prior| {
+                if (prior) |existing| {
+                    duplicate = duplicate or literal_context_split.Candidate.eql(
+                        context,
+                        existing,
+                    );
+                }
+            }
+            if (duplicate) continue;
+            var context_stats: encoder_stats.PlannedEncodeStats = .{};
+            const context_wire = encodeCommandPlanWithOptionsAlloc(
+                allocator,
+                input,
+                plan.commands,
+                null,
+                &context_stats,
+                .{
+                    .literal_context_candidate = context,
+                    .window_bits = window_bits,
+                    .metadata = options.metadata,
+                    .compound_dictionary_size = compound_size,
+                    .literal_context_mode = context_mode,
+                },
+            ) catch |err| switch (err) {
+                error.InvalidBlockPlan => null,
+                else => return err,
+            };
+            if (context_wire) |encoded|
+                retainSmallerOwnedWire(allocator, &best, encoded);
+        }
     };
 
     const legacy_record_distance_search = options.level == .ratio and
@@ -4747,9 +4793,24 @@ const CommandPlanEncodeOptions = struct {
     optimize_same_last_distance: bool = true,
     compound_dictionary_size: usize = 0,
     initial_output_pos: usize = 0,
+    /// `{ second_previous, previous }` immediately before `input[0]`.
+    initial_previous: [2]u8 = .{ 0, 0 },
     starting_last_distances: [4]usize = initial_last_distances,
     final_wire_state: ?*PlannedWireState = null,
 };
+
+fn literalContextHistory(
+    input: []const u8,
+    position: usize,
+    initial_previous: [2]u8,
+) [2]u8 {
+    return if (position == 0)
+        .{ initial_previous[1], initial_previous[0] }
+    else if (position == 1)
+        .{ input[0], initial_previous[1] }
+    else
+        .{ input[position - 1], input[position - 2] };
+}
 const PlannedWireState = struct {
     last_distances: [4]usize = initial_last_distances,
     output_pos: usize = 0,
@@ -5767,6 +5828,7 @@ fn considerPlannedMetaBlockCommands(
     const common = CommandPlanEncodeOptions{
         .window_bits = window_bits,
         .compound_dictionary_size = compound_dictionary_size,
+        .initial_previous = state.context_previous,
     };
     if (encodePlannedMetaBlockCandidate(
         allocator,
@@ -5862,6 +5924,7 @@ fn considerPlannedMetaBlockCommands(
         .adaptive_distance_split = if (symbol_splits.adaptive_distance) |*plan| plan else null,
         .window_bits = window_bits,
         .compound_dictionary_size = compound_dictionary_size,
+        .initial_previous = state.context_previous,
     };
     if (encodePlannedMetaBlockCandidate(
         allocator,
@@ -5937,6 +6000,7 @@ fn considerSerializedMetaBlockCommands(
     input: []const u8,
     commands: []const command_plan.Command,
     context_mode: u2,
+    initial_previous: [2]u8,
     window_bits: u5,
     compound_dictionary_size: usize,
     start_byte: u8,
@@ -5958,6 +6022,7 @@ fn considerSerializedMetaBlockCommands(
             .window_bits = window_bits,
             .compound_dictionary_size = compound_dictionary_size,
             .literal_context_mode = context_mode,
+            .initial_previous = initial_previous,
         },
     ) catch |err| switch (err) {
         error.InvalidBlockPlan => return,
@@ -5970,6 +6035,59 @@ fn considerSerializedMetaBlockCommands(
         best_wire,
         candidate,
     );
+
+    const proposals = try literal_context_split.chooseProposalsForModeWithPrefix(
+        allocator,
+        input,
+        commands,
+        context_mode,
+        initial_previous,
+    );
+    const alternatives = [_]?literal_context_split.Candidate{
+        proposals.suffix,
+        proposals.up_to_16,
+        proposals.full,
+    };
+    for (alternatives, 0..) |maybe_context, index| {
+        const context = maybe_context orelse continue;
+        std.debug.assert(context.mode == context_mode);
+        var duplicate = false;
+        for (alternatives[0..index]) |prior| {
+            if (prior) |existing| {
+                duplicate = duplicate or literal_context_split.Candidate.eql(
+                    context,
+                    existing,
+                );
+            }
+        }
+        if (duplicate) continue;
+        const context_candidate = encodePlannedMetaBlockCandidate(
+            allocator,
+            candidate_wire,
+            start_byte,
+            start_bit_index,
+            input,
+            commands,
+            wire_state,
+            .{
+                .literal_context_candidate = context,
+                .window_bits = window_bits,
+                .compound_dictionary_size = compound_dictionary_size,
+                .literal_context_mode = context_mode,
+                .initial_previous = initial_previous,
+            },
+        ) catch |err| switch (err) {
+            error.InvalidBlockPlan => continue,
+            else => return err,
+        };
+        try retainSmallerMetaBlockCandidate(
+            allocator,
+            best,
+            candidate_wire,
+            best_wire,
+            context_candidate,
+        );
+    }
 }
 
 fn considerPlannedMetaBlockPolicy(
@@ -6118,6 +6236,7 @@ fn considerPlannedMetaBlockPolicy(
                         input,
                         with_serialized.commands,
                         @intCast(mode),
+                        state.context_previous,
                         state.window_bits,
                         state.compound_dictionary_size,
                         start_byte,
@@ -8767,9 +8886,16 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
                 }
                 const block_type: usize = split.types[adaptive_literal_block_index];
                 if (options.literal_entropy_plan) |joint| {
-                    const previous = if (position == 0) 0 else input[position - 1];
-                    const second_previous = if (position < 2) 0 else input[position - 2];
-                    const context = literal_context.value(joint.context_modes[block_type], previous, second_previous);
+                    const history = literalContextHistory(
+                        input,
+                        position,
+                        options.initial_previous,
+                    );
+                    const context = literal_context.value(
+                        joint.context_modes[block_type],
+                        history[0],
+                        history[1],
+                    );
                     const tree = joint.treeFor(block_type, context) catch |err| switch (err) {
                         error.IntegerOverflow => return error.IntegerOverflow,
                         else => return error.InvalidBlockPlan,
@@ -8782,9 +8908,16 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
             } else {
                 try literal_alphabet.recordByteFrequency(&literal_frequencies, &literal_seen, literal);
                 if (context_candidate) |candidate| {
-                    const previous = if (position == 0) 0 else input[position - 1];
-                    const second_previous = if (position < 2) 0 else input[position - 2];
-                    const context = literal_context.value(candidate.mode, previous, second_previous);
+                    const history = literalContextHistory(
+                        input,
+                        position,
+                        options.initial_previous,
+                    );
+                    const context = literal_context.value(
+                        candidate.mode,
+                        history[0],
+                        history[1],
+                    );
                     literal_context_frequencies[candidate.treeFor(context)][literal] += 1;
                 }
             }
@@ -9362,9 +9495,16 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
                 }
                 const block_type: usize = split.types[adaptive_literal_block_index];
                 const encoder = if (options.literal_entropy_plan) |joint| blk: {
-                    const previous = if (position == 0) 0 else input[position - 1];
-                    const second_previous = if (position < 2) 0 else input[position - 2];
-                    const context = literal_context.value(joint.context_modes[block_type], previous, second_previous);
+                    const history = literalContextHistory(
+                        input,
+                        position,
+                        options.initial_previous,
+                    );
+                    const context = literal_context.value(
+                        joint.context_modes[block_type],
+                        history[0],
+                        history[1],
+                    );
                     const tree = joint.treeFor(block_type, context) catch |err| switch (err) {
                         error.IntegerOverflow => return error.IntegerOverflow,
                         else => return error.InvalidBlockPlan,
@@ -9375,9 +9515,16 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
                     try writer.writeHuffmanBits(allocator, encoder.codes[literal], encoder.bits[literal]);
                 literal_index += 1;
             } else if (context_candidate) |candidate| {
-                const previous = if (position == 0) 0 else input[position - 1];
-                const second_previous = if (position < 2) 0 else input[position - 2];
-                const context = literal_context.value(candidate.mode, previous, second_previous);
+                const history = literalContextHistory(
+                    input,
+                    position,
+                    options.initial_previous,
+                );
+                const context = literal_context.value(
+                    candidate.mode,
+                    history[0],
+                    history[1],
+                );
                 const encoder = &literal_context_encoders[candidate.treeFor(context)];
                 if (encoder.bits[literal] != 0) try writer.writeHuffmanBits(allocator, encoder.codes[literal], encoder.bits[literal]);
             } else if (literal_alphabet.len > 1) try writer.writeHuffmanBits(allocator, literal_encoder.codes[literal], literal_encoder.bits[literal]);
@@ -32215,6 +32362,128 @@ test "br serialized encoder arbitrates every RFC dictionary context mode" {
         defer std.testing.allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, payload.items, decoded);
     }
+}
+
+test "br serialized dictionary commands jointly select literal context trees" {
+    const dictionary_word = "abcdefghijklmnopqrstuvwxyz12345";
+    var serialized_bytes: std.ArrayList(u8) = .empty;
+    defer serialized_bytes.deinit(std.testing.allocator);
+    try serialized_bytes.appendSlice(std.testing.allocator, &.{ 0x91, 0, 0, 1 });
+    var bits: [28]u8 = @splat(0);
+    bits[dictionary_word.len - serialized_dictionary.min_word_len] = 1;
+    try serialized_bytes.appendSlice(std.testing.allocator, &bits);
+    try serialized_bytes.appendSlice(std.testing.allocator, dictionary_word);
+    try serialized_bytes.appendSlice(
+        std.testing.allocator,
+        "9876543210ZYXWVUTSRQPONMLKJIHGF",
+    );
+    try serialized_bytes.appendSlice(std.testing.allocator, &.{
+        1, 1, 0, 0, 1, 0, 0, 0, // one identity transform list
+        1, 0, 0, // one custom/custom dictionary choice
+        0, // context map disabled
+    });
+    const dictionary = try parseSerializedSharedDictionary(serialized_bytes.items);
+    const shared = SharedDictionary{ .serialized = &dictionary };
+    const decode_options = DecodeOptions{ .shared_dictionary = shared };
+
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    try payload.appendSlice(std.testing.allocator, dictionary_word);
+    for (0..256) |marker| {
+        const context: u8 = @intCast(marker & 63);
+        try payload.appendSlice(std.testing.allocator, &.{
+            @intCast(marker),
+            context,
+            if (context < 32) 'A' else 'B',
+        });
+    }
+
+    const commands = [_]command_plan.Command{
+        .{
+            .insert_start = 0,
+            .insert_len = 0,
+            .copy_len = dictionary_word.len,
+            .has_copy = true,
+            .source = .static,
+            .dictionary_output_len = dictionary_word.len,
+            .dictionary_address = 0,
+        },
+        .{
+            .insert_start = dictionary_word.len,
+            .insert_len = payload.items.len - dictionary_word.len,
+        },
+    };
+    var plain_stats: encoder_stats.PlannedEncodeStats = .{};
+    const plain = try encodeCommandPlanWithOptionsAlloc(
+        std.testing.allocator,
+        payload.items,
+        &commands,
+        null,
+        &plain_stats,
+        .{ .literal_context_mode = literal_context.mode_lsb6 },
+    );
+    defer std.testing.allocator.free(plain);
+    const encoded = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload.items,
+        .{ .level = .fast, .shared_dictionary = shared },
+    );
+    defer std.testing.allocator.free(encoded);
+    const summary = try summarizeStreamWithOptions(encoded, decode_options);
+    try std.testing.expect(summary.shared_dictionary_copy_count > 0);
+    try std.testing.expect(summary.max_literal_context_trees >= 2);
+    // The locked fixture moves from 627 to 523 bytes; retain a conservative
+    // percentage invariant rather than pinning unrelated header byte details.
+    try std.testing.expect(encoded.len * 100 <= plain.len * 85);
+    const decoded = try decodeStreamAllocExactSizeWithOptions(
+        std.testing.allocator,
+        encoded,
+        payload.items.len,
+        decode_options,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload.items, decoded);
+
+    var prefix: [32]u8 = undefined;
+    for (&prefix, 0..) |*byte, index| byte.* = @truncate(index * 37 + 11);
+    prefix[prefix.len - 2] = 0x30;
+    prefix[prefix.len - 1] = 0x01;
+    var second_block: std.ArrayList(u8) = .empty;
+    defer second_block.deinit(std.testing.allocator);
+    try second_block.appendSlice(
+        std.testing.allocator,
+        payload.items[dictionary_word.len..],
+    );
+    try second_block.appendSlice(std.testing.allocator, dictionary_word);
+    const chunks = [_][]const u8{ &prefix, second_block.items };
+    const chunked = try encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{
+            .level = .fast,
+            .block_len = 1024,
+            .shared_dictionary = shared,
+        },
+    );
+    defer std.testing.allocator.free(chunked);
+    const chunked_summary = try summarizeStreamWithOptions(
+        chunked,
+        decode_options,
+    );
+    try std.testing.expect(chunked_summary.shared_dictionary_copy_count > 0);
+    try std.testing.expect(chunked_summary.max_literal_context_trees >= 2);
+    var expected: std.ArrayList(u8) = .empty;
+    defer expected.deinit(std.testing.allocator);
+    try expected.appendSlice(std.testing.allocator, &prefix);
+    try expected.appendSlice(std.testing.allocator, second_block.items);
+    const chunked_decoded = try decodeStreamAllocExactSizeWithOptions(
+        std.testing.allocator,
+        chunked,
+        expected.items.len,
+        decode_options,
+    );
+    defer std.testing.allocator.free(chunked_decoded);
+    try std.testing.expectEqualSlices(u8, expected.items, chunked_decoded);
 }
 
 test "br RAW shared dictionary rejects invalid descriptors before output mutation" {

@@ -2176,8 +2176,10 @@ address space. Planned one-shot, reusable, chunked, and incremental encoders
 use a bounded reusable contextual candidate index. Context-varying descriptors
 build independent LSB6, MSB6, UTF8, and Signed command plans and retain the
 smallest complete wire; mode-invariant maps keep the single LSB6 fast path.
-The exhaustive matcher remains the oracle and oversized-descriptor fallback,
-and the experimental upstream format carries no stability promise.
+Each address-stable mode also arbitrates single-tree, suffix, bounded-16-tree,
+and complete clustered literal-context candidates. The exhaustive matcher
+remains the oracle and oversized-descriptor fallback, and the experimental
+upstream format carries no stability promise.
 
 The `run-br-compound-dictionary-diff` gate passes in Debug and ReleaseFast
 against local libbrotli 1.2.0. It covers libbrotli encode to Vort decode for

@@ -331,11 +331,11 @@ The following are explicit gaps, not implied by the presence of the preset
 names:
 
 - real q10/q11 Zopfli/HQ cost refinement, including iterative model feedback;
-- joint serialized-dictionary and multi-tree literal-context optimization.
-  Strict zero-copy parsing, mixed built-in/custom address replay, production
-  decode attachment, bounded reusable indexing, and complete-wire selection
-  across all four RFC context modes are available; oversized descriptors retain
-  exhaustive matching;
+- serialized contextual dictionary construction/training and broad production
+  calibration. Strict zero-copy parsing, mixed built-in/custom address replay,
+  production decode attachment, bounded reusable indexing, all four RFC modes,
+  and joint multi-tree literal-context complete-wire selection are available;
+  oversized descriptors retain exhaustive matching;
 - global multi-boundary segmentation and exact compressed-cost optimization
   beyond the current bounded midpoint entropy lookahead;
 - calibration and regression gates for compression ratio, throughput, peak
