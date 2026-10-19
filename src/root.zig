@@ -2422,6 +2422,8 @@ pub const ZstdStandardDictionaryEntropySummary = zstd.StandardDictionaryEntropyS
 pub const ZstdStandardDictionaryNativeView = zstd.StandardDictionaryNativeView;
 pub const ZstdOwnedStandardDictionary = zstd.OwnedStandardDictionary;
 pub const ZstdOwnedOptimizedCoverStandardDictionary = zstd.OwnedOptimizedCoverStandardDictionary;
+pub const ZstdStandardDictionaryTrainingProfile = zstd.StandardDictionaryTrainingProfile;
+pub const ZstdProfiledStandardDictionary = zstd.ProfiledStandardDictionary;
 pub const zstdInspectStandardDictionary = zstd.inspectStandardDictionary;
 pub const zstdIsStandardDictionary = zstd.isStandardDictionary;
 pub const zstdStandardDictionaryId = zstd.standardDictionaryId;
@@ -2431,6 +2433,7 @@ pub const zstdStandardDictionaryFromContentBound = zstd.standardDictionaryFromCo
 pub const zstdStandardDictionaryFromContentInto = zstd.standardDictionaryFromContentInto;
 pub const zstdStandardDictionaryFromContentAlloc = zstd.standardDictionaryFromContentAlloc;
 pub const zstdTrainStandardDictionaryFromContentAlloc = zstd.trainStandardDictionaryFromContentAlloc;
+pub const zstdProfileStandardDictionaryFromContentAlloc = zstd.profileStandardDictionaryFromContentAlloc;
 pub const zstdTrainStandardDictionaryAlloc = zstd.trainStandardDictionaryAlloc;
 pub const zstdTrainCoverStandardDictionaryAlloc = zstd.trainCoverStandardDictionaryAlloc;
 pub const zstdTrainOptimizedCoverStandardDictionaryAlloc = zstd.trainOptimizedCoverStandardDictionaryAlloc;
@@ -6388,6 +6391,16 @@ test "root zstd public reusable aliases expose dictionary helpers" {
     );
     defer finalized_content.deinit(std.testing.allocator);
     try std.testing.expectEqualSlices(u8, dict.content, finalized_content.view.content);
+    const profiled_content: ZstdProfiledStandardDictionary = try zstdProfileStandardDictionaryFromContentAlloc(
+        std.testing.allocator,
+        std.testing.io,
+        dict.content,
+        &samples,
+        dict.id +% 1,
+    );
+    defer profiled_content.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, finalized_content.bytes, profiled_content.dictionary.bytes);
+    try std.testing.expect(profiled_content.profile.total_ns != 0);
     const cover_samples = [_][]const u8{
         samples[0],
         samples[1],

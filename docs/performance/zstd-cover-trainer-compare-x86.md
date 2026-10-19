@@ -45,10 +45,10 @@ Each cell is `Vort / COVER / FastCover` in bytes.
 | text | 337 / 343 / 317 | 298 / 285 / 285 | 265 / 263 / 245 | 32 / 8 / 12 |
 | JSON | 198 / 170 / 185 | 212 / 170 / 185 | 189 / 187 / 199 | 64 / 8 / 16 |
 | binary | 813 / 800 / 799 | 817 / 787 / 790 | 812 / 806 / 812 | 256 / 6 / 16 |
-| source | 1,798 / 1,815 / 1,800 | 1,768 / 1,784 / 1,773 | 1,747 / 1,761 / 1,754 | 32 / 8 / 20 |
+| source | 1,800 / 1,801 / 1,808 | 1,786 / 1,785 / 1,790 | 1,753 / 1,754 / 1,752 | 32 / 6 / 16 |
 
-Across all twelve rows the totals are `9,254 / 9,171 / 9,144`: Vort is 0.91%
-larger than COVER and 1.20% larger than FastCover. Text level 1 beats COVER,
+Across all twelve rows the totals are `9,280 / 9,151 / 9,167`: Vort is 1.41%
+larger than COVER and 1.23% larger than FastCover. Text level 1 beats COVER,
 and JSON level 9 beats FastCover, but JSON level 3 remains the largest gap at
 24.7% versus COVER and 14.6% versus FastCover. Source and binary rows are
 generally within about 0--4%.
@@ -63,7 +63,7 @@ and both aggregate gaps to 3%. These are regression bounds, not parity claims.
 | text | 476 / 512 / 512 | 352 / 388 / 376 | 571.26 / 13.98 / 12.07 |
 | JSON | 493 / 512 / 512 | 352 / 389 / 370 | 1,308.85 / 17.00 / 11.55 |
 | binary | 494 / 512 / 512 | 352 / 362 / 363 | 68.03 / 29.38 / 18.02 |
-| source | 507 / 512 / 512 | 352 / 358 / 358 | 344.66 / 44.11 / 20.06 |
+| source | 509 / 512 / 512 | 352 / 356 / 356 | 307.71 / 43.52 / 21.12 |
 
 Vort's training latency is currently about 2.3--113 times the faster reference,
 depending on corpus. The permanent gate only prevents a catastrophic widening
@@ -83,20 +83,41 @@ libzstd oracle uses libzstd for scoring; the production pure-Zig API
 | text | 900 | 865 | 877 | 16 / 26 |
 | JSON | 599 | 569 | 577 | 3 / 22 |
 | binary | 2,442 | 2,426 | 2,423 | 19 / 26 |
-| source | 5,313 | 5,303 | 5,396 | 4 / 23 |
-| total | 9,254 | 9,163 | 9,273 | — |
+| source | 5,339 | 5,339 | 5,422 | 1 / 7 |
+| total | 9,280 | 9,199 | 9,299 | — |
 
 The Vort codec scorer improves JSON level 3 from 212 to 195, but overfits the
 selector partition on source by 83 bytes and is 19 bytes larger in aggregate.
 Generic-score ranks also show why a small top-N shortlist is insufficient:
 three pure-Vort winners rank 22nd or worse.
 
-This mode is intentionally explicit and slow. Full-grid pure-Vort scoring takes
-about 2.1--51.7 seconds for these small cases, versus 0.07--1.31 seconds for the
-default match-cost selector. The permanent gate requires the key JSON level-3
-improvement, limits every held-out regression to 5%, limits aggregate
-regression to 2%, and caps the slow-mode training-time ratio at 100x. It does
-not make codec-aware selection the default.
+This mode is intentionally explicit and slow. The default baseline-repcode
+candidate search takes about 0.83--15.8 seconds for these small cases, versus
+0.07--1.31 seconds for the match-cost selector. Setting
+`candidate_repcodes=true` raises the range to roughly 2.1--51.7 seconds. The
+permanent gate requires the key JSON level-3 improvement, limits every held-out
+regression to 5%, limits aggregate regression to 2%, and caps the slow-mode
+training-time ratio at 100x. It does not make codec-aware selection the default.
+
+## Finalizer stage profile
+
+The same 30-candidate reference loop aggregates profiled finalizer timings.
+The exhaustive reference path reports:
+
+| Corpus | Finalizer total | Repcode frame scoring | Share | Sequence collection share |
+| --- | ---: | ---: | ---: | ---: |
+| text | 15.901 s | 15.888 s | 99.920% | 0.060% |
+| JSON | 35.739 s | 35.730 s | 99.974% | 0.020% |
+| binary | 1.250 s | 1.223 s | 97.817% | 1.786% |
+| source | 8.237 s | 8.208 s | 99.647% | 0.283% |
+
+This evidence changes the optimization target: dictionary-aware greedy/lazy
+parsing is not the dominant stage here. Re-encoding every training sample with
+baseline and candidate repcodes is. Candidate search now scores with stable
+`1/4/8` repcodes and fully retrains only the winner. Stable text, JSON, and
+binary rows retain the same selected parameters and held-out bytes while
+training improves by roughly 2.5--3.3x. Exhaustive per-candidate repcode search
+remains available through `candidate_repcodes=true`.
 
 An exact progressive experiment seeded the exhaustive search with the generic
 winner and stopped encoding a candidate once its partial byte total could no

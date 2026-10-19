@@ -143,7 +143,7 @@ pub fn main(init: std.process.Init) !void {
     var buffer: [1024]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
     try stdout.interface.print(
-        "zstd_cover_trainer_compare=ok case={s} samples={d}/{d}/{d} target={d} candidates={d} selected={d}/{d}/{d} oracle_selected={d}/{d}/{d} oracle_rank={d} oracle_score={d} native_oracle_selected={d}/{d}/{d} native_oracle_rank={d} native_oracle_score={d} content={d}/{d}/{d} dict={d}/{d}/{d} oracle_dict={d} native_oracle_dict={d}",
+        "zstd_cover_trainer_compare=ok case={s} samples={d}/{d}/{d} target={d} candidates={d} selected={d}/{d}/{d} oracle_selected={d}/{d}/{d} oracle_rank={d} oracle_score={d} native_oracle_selected={d}/{d}/{d} native_oracle_rank={d} native_oracle_score={d} native_candidate_repcodes=0 content={d}/{d}/{d} dict={d}/{d}/{d} oracle_dict={d} native_oracle_dict={d}",
         .{
             case_name,
             training_count,
@@ -175,7 +175,7 @@ pub fn main(init: std.process.Init) !void {
         },
     );
     try stdout.interface.print(
-        " level1={d}/{d}/{d} oracle_level1={d} native_oracle_level1={d} level3={d}/{d}/{d} oracle_level3={d} native_oracle_level3={d} level9={d}/{d}/{d} oracle_level9={d} native_oracle_level9={d} train_ns={d}/{d}/{d} oracle_train_ns={d} native_oracle_train_ns={d} rounds={d} version={s}\n",
+        " level1={d}/{d}/{d} oracle_level1={d} native_oracle_level1={d} level3={d}/{d}/{d} oracle_level3={d} native_oracle_level3={d} level9={d}/{d}/{d} oracle_level9={d} native_oracle_level9={d} train_ns={d}/{d}/{d} oracle_train_ns={d} native_oracle_train_ns={d} rounds={d} version={s}",
         .{
             vort_sizes[0],
             cover_sizes[0],
@@ -201,6 +201,25 @@ pub fn main(init: std.process.Init) !void {
             runtime.version(),
         },
     );
+    try stdout.interface.print(
+        " finalizer_ns={d}/{d}/{d}/{d}/{d}/{d}/{d}/{d}/{d} finalizer_work={d}/{d}/{d}/{d}/{d}\n",
+        .{
+            oracle.profile.total_ns,
+            oracle.profile.literal_entropy_ns,
+            oracle.profile.sequence_collection_ns,
+            oracle.profile.greedy_parse_ns,
+            oracle.profile.lazy_parse_ns,
+            oracle.profile.sequence_entropy_ns,
+            oracle.profile.baseline_assembly_ns,
+            oracle.profile.repcode_entropy_ns,
+            oracle.profile.repcode_scoring_ns,
+            oracle.profile.sample_bytes,
+            oracle.profile.blocks,
+            oracle.profile.greedy_tokens,
+            oracle.profile.lazy_tokens,
+            oracle.profile.offset_sequences,
+        },
+    );
     try stdout.interface.flush();
 }
 
@@ -215,6 +234,7 @@ const OracleTraining = struct {
     native_generic_rank: usize,
     train_ns: usize,
     native_train_ns: usize,
+    profile: vort.ZstdStandardDictionaryTrainingProfile,
 };
 
 const ScoredOptions = struct {
@@ -262,6 +282,7 @@ fn trainCodecOracle(
     var best_generic_score: vort.dictionary.ValidationScore = undefined;
     var scored: [30]ScoredOptions = undefined;
     var scored_count: usize = 0;
+    var aggregate_profile: vort.ZstdStandardDictionaryTrainingProfile = .{};
 
     for (dmer_sizes) |dmer_size| {
         for (segment_sizes) |segment_size| {
@@ -274,12 +295,15 @@ fn trainCodecOracle(
                 };
                 const content = try vort.dictionary.trainCoverAlloc(init.gpa, training, options);
                 defer init.gpa.free(content);
-                const candidate = try vort.zstdTrainStandardDictionaryFromContentAlloc(
+                const profiled = try vort.zstdProfileStandardDictionaryFromContentAlloc(
                     init.gpa,
+                    init.io,
                     content,
                     training,
                     dictionary_id,
                 );
+                addTrainingProfile(&aggregate_profile, profiled.profile);
+                const candidate = profiled.dictionary;
                 const generic_score = try vort.dictionary.validationScore(content, selector, 4);
                 scored[scored_count] = .{ .options = options, .score = generic_score };
                 scored_count += 1;
@@ -340,7 +364,17 @@ fn trainCodecOracle(
         .native_generic_rank = native_generic_rank,
         .train_ns = elapsed(start, init.io),
         .native_train_ns = native_train_ns,
+        .profile = aggregate_profile,
     };
+}
+
+fn addTrainingProfile(
+    total: *vort.ZstdStandardDictionaryTrainingProfile,
+    sample: vort.ZstdStandardDictionaryTrainingProfile,
+) void {
+    inline for (std.meta.fields(vort.ZstdStandardDictionaryTrainingProfile)) |field| {
+        @field(total, field.name) +|= @field(sample, field.name);
+    }
 }
 
 fn validationScoreBetter(

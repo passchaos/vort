@@ -659,11 +659,61 @@ pub const OwnedOptimizedCoverStandardDictionary = struct {
     }
 };
 
+pub const StandardDictionaryTrainingProfile = struct {
+    total_ns: u64 = 0,
+    literal_entropy_ns: u64 = 0,
+    sequence_collection_ns: u64 = 0,
+    greedy_parse_ns: u64 = 0,
+    lazy_parse_ns: u64 = 0,
+    sequence_entropy_ns: u64 = 0,
+    baseline_assembly_ns: u64 = 0,
+    repcode_entropy_ns: u64 = 0,
+    repcode_scoring_ns: u64 = 0,
+    sample_bytes: usize = 0,
+    blocks: usize = 0,
+    greedy_tokens: usize = 0,
+    lazy_tokens: usize = 0,
+    offset_sequences: usize = 0,
+};
+
+pub const ProfiledStandardDictionary = struct {
+    dictionary: OwnedStandardDictionary,
+    profile: StandardDictionaryTrainingProfile,
+
+    pub fn deinit(self: ProfiledStandardDictionary, allocator: std.mem.Allocator) void {
+        self.dictionary.deinit(allocator);
+    }
+};
+
+const StandardDictionaryProfileContext = struct {
+    io: std.Io,
+    profile: *StandardDictionaryTrainingProfile,
+
+    fn begin(self: ?*const StandardDictionaryProfileContext) ?std.Io.Timestamp {
+        return if (self) |context| std.Io.Clock.awake.now(context.io) else null;
+    }
+
+    fn end(
+        self: ?*const StandardDictionaryProfileContext,
+        start: ?std.Io.Timestamp,
+        field: *u64,
+    ) void {
+        const context = self orelse return;
+        const started = start orelse return;
+        const ns = started.durationTo(std.Io.Clock.awake.now(context.io)).nanoseconds;
+        if (ns > 0) field.* = field.* +| @as(u64, @intCast(ns));
+    }
+};
+
 const default_cover_codec_levels = [_]c_int{ 1, 3, 9 };
 
 pub const CoverDictionaryCodecOptimizeOptions = struct {
     cover: CoverDictionaryOptimizeOptions,
     levels: []const c_int = &default_cover_codec_levels,
+    /// Retrain and frame-score candidate repcodes for every history. Disabled
+    /// by default because the final winner is always fully retrained and this
+    /// exhaustive search dominates training time.
+    candidate_repcodes: bool = false,
 };
 
 /// Fixed bytes added before the caller-selected history by Vort's baseline
@@ -713,6 +763,30 @@ pub fn trainStandardDictionaryFromContentAlloc(
             return error.InvalidDictionaryTraining;
     if (total_sample_bytes > std.math.maxInt(u32) - 1) return error.InvalidDictionaryTraining;
     return standardDictionaryFromSelectedContentAndSamplesAlloc(allocator, content, samples, dictionary_id);
+}
+
+/// Diagnostic variant of `trainStandardDictionaryFromContentAlloc` that
+/// returns stage timings and work counters while preserving identical bytes.
+pub fn profileStandardDictionaryFromContentAlloc(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    content: []const u8,
+    samples: []const []const u8,
+    dictionary_id: u32,
+) Error!ProfiledStandardDictionary {
+    if (dictionary_id == 0 or content.len < 8) return error.InvalidDictionaryMetadata;
+    if (samples.len == 0) return error.InvalidDictionaryTraining;
+    var profile: StandardDictionaryTrainingProfile = .{};
+    var context: StandardDictionaryProfileContext = .{ .io = io, .profile = &profile };
+    const dictionary = try standardDictionaryFromSelectedContentAndSamplesProfiledAlloc(
+        allocator,
+        content,
+        samples,
+        dictionary_id,
+        &context,
+        true,
+    );
+    return .{ .dictionary = dictionary, .profile = profile };
 }
 
 /// Train a standard full dictionary with a corpus-specific literal Huffman
@@ -827,6 +901,7 @@ pub fn trainCodecOptimizedCoverStandardDictionaryAlloc(
         .training_samples = training_samples,
         .levels = options.levels,
         .dictionary_id = dictionary_id,
+        .candidate_repcodes = options.candidate_repcodes,
     };
     var optimized = try dictionary_mod.cover_optimize.trainAllocWithScorerContext(
         allocator,
@@ -864,6 +939,7 @@ const ZstdCoverValidationScorer = struct {
     training_samples: []const []const u8,
     levels: []const c_int,
     dictionary_id: u32,
+    candidate_repcodes: bool,
 
     fn score(
         self: *ZstdCoverValidationScorer,
@@ -871,11 +947,12 @@ const ZstdCoverValidationScorer = struct {
         validation_samples: []const []const u8,
         _: usize,
     ) Error!dictionary_mod.CoverOptimizeScore {
-        const dictionary = try standardDictionaryFromSelectedContentAndSamplesAlloc(
+        const dictionary = try standardDictionaryFromSelectedContentAndSamplesOptionsAlloc(
             self.allocator,
             content,
             self.training_samples,
             self.dictionary_id,
+            self.candidate_repcodes,
         );
         defer dictionary.deinit(self.allocator);
         var encoded_size = dictionary.bytes.len;
@@ -1062,7 +1139,46 @@ fn standardDictionaryFromSelectedContentAndSamplesAlloc(
     samples: []const []const u8,
     dictionary_id: u32,
 ) Error!OwnedStandardDictionary {
+    return standardDictionaryFromSelectedContentAndSamplesProfiledAlloc(
+        allocator,
+        content,
+        samples,
+        dictionary_id,
+        null,
+        true,
+    );
+}
+
+fn standardDictionaryFromSelectedContentAndSamplesOptionsAlloc(
+    allocator: std.mem.Allocator,
+    content: []const u8,
+    samples: []const []const u8,
+    dictionary_id: u32,
+    train_repcodes: bool,
+) Error!OwnedStandardDictionary {
+    return standardDictionaryFromSelectedContentAndSamplesProfiledAlloc(
+        allocator,
+        content,
+        samples,
+        dictionary_id,
+        null,
+        train_repcodes,
+    );
+}
+
+fn standardDictionaryFromSelectedContentAndSamplesProfiledAlloc(
+    allocator: std.mem.Allocator,
+    content: []const u8,
+    samples: []const []const u8,
+    dictionary_id: u32,
+    profile_context: ?*const StandardDictionaryProfileContext,
+    train_repcodes: bool,
+) Error!OwnedStandardDictionary {
+    const total_start = StandardDictionaryProfileContext.begin(profile_context);
+    defer if (profile_context) |context|
+        StandardDictionaryProfileContext.end(profile_context, total_start, &context.profile.total_ns);
     try dictionary_format.validateGenerationInput(content.len, dictionary_id);
+    const literal_start = StandardDictionaryProfileContext.begin(profile_context);
     var frequencies: SmallHuffmanFrequencies = @splat(@splat(0));
     for (0..256) |symbol| frequencies[0][symbol] = 1;
     for (samples) |sample| addBytesToSmallHuffmanFrequencies(&frequencies, sample);
@@ -1084,6 +1200,8 @@ fn standardDictionaryFromSelectedContentAndSamplesAlloc(
         finalizeSmallHuffmanLiteralPlan(&plan) orelse return error.InvalidDictionaryTraining;
         if (!try emitSmallHuffmanTree(allocator, &literal_entropy, &plan)) return error.InvalidDictionaryTraining;
     }
+    if (profile_context) |context|
+        StandardDictionaryProfileContext.end(profile_context, literal_start, &context.profile.literal_entropy_ns);
     var sequence_entropy: std.ArrayList(u8) = .empty;
     defer sequence_entropy.deinit(allocator);
     var repcode_counts: StandardDictionaryRepcodeCounts = @splat(0);
@@ -1093,19 +1211,31 @@ fn standardDictionaryFromSelectedContentAndSamplesAlloc(
     var sample_bytes: usize = 0;
     for (samples) |sample|
         sample_bytes = std.math.add(usize, sample_bytes, sample.len) catch return error.InvalidDictionaryTraining;
+    if (profile_context) |context| context.profile.sample_bytes = sample_bytes;
     // Both parsers use min_match=4 below, so their combined sequence count is
     // bounded by half the input bytes. Reserve once instead of growing this
     // training-only trace repeatedly across samples.
-    try offset_sequences.ensureTotalCapacity(allocator, @min(sample_bytes / 2, 4096));
+    if (train_repcodes)
+        try offset_sequences.ensureTotalCapacity(allocator, @min(sample_bytes / 2, 4096));
+    const collection_start = StandardDictionaryProfileContext.begin(profile_context);
     const baseline_counts = try collectStandardDictionarySequenceCounts(
         allocator,
         samples,
         content,
         initial_repeated_offsets,
-        &repcode_counts,
-        &offset_sequences,
+        if (train_repcodes) &repcode_counts else null,
+        if (train_repcodes) &offset_sequences else null,
+        profile_context,
     );
+    if (profile_context) |context| {
+        context.profile.offset_sequences = offset_sequences.items.len;
+        StandardDictionaryProfileContext.end(profile_context, collection_start, &context.profile.sequence_collection_ns);
+    }
+    const sequence_entropy_start = StandardDictionaryProfileContext.begin(profile_context);
     try emitStandardDictionarySequenceEntropy(allocator, &sequence_entropy, &baseline_counts);
+    if (profile_context) |context|
+        StandardDictionaryProfileContext.end(profile_context, sequence_entropy_start, &context.profile.sequence_entropy_ns);
+    const baseline_assembly_start = StandardDictionaryProfileContext.begin(profile_context);
     var baseline = try assembleStandardDictionaryAlloc(
         allocator,
         content,
@@ -1114,13 +1244,18 @@ fn standardDictionaryFromSelectedContentAndSamplesAlloc(
         sequence_entropy.items,
         initial_repeated_offsets,
     );
+    if (profile_context) |context|
+        StandardDictionaryProfileContext.end(profile_context, baseline_assembly_start, &context.profile.baseline_assembly_ns);
     errdefer baseline.deinit(allocator);
+
+    if (!train_repcodes) return baseline;
 
     const candidate_repcodes = selectStandardDictionaryRepcodes(&repcode_counts, content.len);
     if (std.meta.eql(candidate_repcodes, initial_repeated_offsets)) return baseline;
 
     var candidate_sequence_entropy: std.ArrayList(u8) = .empty;
     defer candidate_sequence_entropy.deinit(allocator);
+    const repcode_entropy_start = StandardDictionaryProfileContext.begin(profile_context);
     var candidate_counts = baseline_counts;
     candidate_counts.offset = @splat(1);
     try addStandardDictionaryOffsetSequenceCounts(&candidate_counts.offset, offset_sequences.items, candidate_repcodes);
@@ -1133,13 +1268,18 @@ fn standardDictionaryFromSelectedContentAndSamplesAlloc(
         candidate_sequence_entropy.items,
         candidate_repcodes,
     );
+    if (profile_context) |context|
+        StandardDictionaryProfileContext.end(profile_context, repcode_entropy_start, &context.profile.repcode_entropy_ns);
     errdefer candidate.deinit(allocator);
+    const repcode_scoring_start = StandardDictionaryProfileContext.begin(profile_context);
     const encoded_sizes = try standardDictionaryEncodedSampleByteCounts(
         allocator,
         baseline.asDictionary(),
         candidate.asDictionary(),
         samples,
     );
+    if (profile_context) |context|
+        StandardDictionaryProfileContext.end(profile_context, repcode_scoring_start, &context.profile.repcode_scoring_ns);
     if (standardDictionaryRepcodeCandidateImproves(encoded_sizes.baseline, encoded_sizes.candidate)) {
         baseline.deinit(allocator);
         return candidate;
@@ -1270,6 +1410,7 @@ fn collectStandardDictionarySequenceCounts(
     initial_offsets: [3]usize,
     repcode_counts: ?*StandardDictionaryRepcodeCounts,
     offset_sequences: ?*std.ArrayList(StandardDictionaryOffsetSequence),
+    profile_context: ?*const StandardDictionaryProfileContext,
 ) Error!StandardDictionarySequenceCounts {
     var counts: StandardDictionarySequenceCounts = .{};
     var tokens: std.ArrayList(lz77.Token) = .empty;
@@ -1290,6 +1431,8 @@ fn collectStandardDictionarySequenceCounts(
             // compression will. Block splitting also keeps literal lengths in
             // the RFC sequence-code range for arbitrarily large samples.
             options.window_len = lz77.default_window_len;
+            if (profile_context) |context| context.profile.blocks +|= 1;
+            const greedy_start = StandardDictionaryProfileContext.begin(profile_context);
             const greedy_stats = try lz77.hashGreedyPlanWithDictionaryReuse(
                 &tokens,
                 &scratch,
@@ -1298,11 +1441,16 @@ fn collectStandardDictionarySequenceCounts(
                 dictionary_content,
                 options,
             );
+            if (profile_context) |context| {
+                context.profile.greedy_tokens +|= tokens.items.len;
+                StandardDictionaryProfileContext.end(profile_context, greedy_start, &context.profile.greedy_parse_ns);
+            }
             try addStandardDictionarySequenceCounts(&counts, tokens.items, initial_offsets);
             if (offset_sequences) |sequences|
                 try appendStandardDictionaryOffsetSequences(allocator, sequences, tokens.items, greedy_stats.matches);
             if (repcode_counts) |candidate_counts|
                 try addStandardDictionaryRepcodeCounts(candidate_counts, tokens.items, greedy_stats.matches, dictionary_content.len, initial_offsets);
+            const lazy_start = StandardDictionaryProfileContext.begin(profile_context);
             const lazy_stats = try lz77.lazyGreedyPlanWithDictionaryReuse(
                 &lazy_tokens,
                 &lazy_scratch,
@@ -1311,6 +1459,10 @@ fn collectStandardDictionarySequenceCounts(
                 dictionary_content,
                 options,
             );
+            if (profile_context) |context| {
+                context.profile.lazy_tokens +|= lazy_tokens.items.len;
+                StandardDictionaryProfileContext.end(profile_context, lazy_start, &context.profile.lazy_parse_ns);
+            }
             try addStandardDictionarySequenceCounts(&counts, lazy_tokens.items, initial_offsets);
             if (offset_sequences) |sequences|
                 try appendStandardDictionaryOffsetSequences(allocator, sequences, lazy_tokens.items, lazy_stats.matches);
@@ -1337,6 +1489,7 @@ fn trainStandardDictionarySequenceEntropy(
         dictionary_content,
         initial_offsets,
         repcode_counts,
+        null,
         null,
     );
     try emitStandardDictionarySequenceEntropy(allocator, out, &counts);
@@ -1607,6 +1760,63 @@ test "standard Zstd caller-selected history finalizer releases allocation failur
     try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{});
 }
 
+test "standard Zstd profiled finalizer preserves wire and reports work" {
+    const content = "profiled caller-selected dictionary history with stable adjacent records";
+    const samples = [_][]const u8{
+        "profiled caller-selected dictionary history record alpha alpha" ** 4,
+        "profiled caller-selected dictionary history record beta beta" ** 4,
+    };
+    const expected = try trainStandardDictionaryFromContentAlloc(
+        std.testing.allocator,
+        content,
+        &samples,
+        0x1000_0011,
+    );
+    defer expected.deinit(std.testing.allocator);
+    const actual = try profileStandardDictionaryFromContentAlloc(
+        std.testing.allocator,
+        std.testing.io,
+        content,
+        &samples,
+        0x1000_0011,
+    );
+    defer actual.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, expected.bytes, actual.dictionary.bytes);
+    try std.testing.expect(actual.profile.total_ns != 0);
+    try std.testing.expect(actual.profile.literal_entropy_ns != 0);
+    try std.testing.expect(actual.profile.sequence_collection_ns != 0);
+    try std.testing.expect(actual.profile.greedy_parse_ns != 0);
+    try std.testing.expect(actual.profile.lazy_parse_ns != 0);
+    try std.testing.expect(actual.profile.total_ns >= actual.profile.sequence_collection_ns);
+    try std.testing.expect(actual.profile.sequence_collection_ns >= actual.profile.greedy_parse_ns);
+    try std.testing.expect(actual.profile.sequence_collection_ns >= actual.profile.lazy_parse_ns);
+    try std.testing.expectEqual(samples[0].len + samples[1].len, actual.profile.sample_bytes);
+    try std.testing.expectEqual(@as(usize, 2), actual.profile.blocks);
+    try std.testing.expect(actual.profile.greedy_tokens != 0);
+    try std.testing.expect(actual.profile.lazy_tokens != 0);
+}
+
+test "standard Zstd profiled finalizer releases allocation failures" {
+    const Test = struct {
+        fn run(allocator: std.mem.Allocator) !void {
+            const content = "profiled caller-selected dictionary history with stable adjacent records";
+            const samples = [_][]const u8{
+                "profiled caller-selected dictionary history record alpha alpha",
+                "profiled caller-selected dictionary history record beta beta",
+            };
+            const trained = try profileStandardDictionaryFromContentAlloc(
+                allocator,
+                std.testing.io,
+                content,
+                &samples,
+                0x1000_0012,
+            );
+            defer trained.deinit(allocator);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{});
+}
+
 test "standard Zstd COVER-class trainer finalizes deterministic history" {
     const samples = [_][]const u8{
         "service=vort region=west status=ok message=alpha alpha alpha alpha",
@@ -1822,6 +2032,49 @@ test "standard Zstd codec-optimized COVER trainer is deterministic" {
     try std.testing.expectEqual(first.validation_score, second.validation_score);
     try std.testing.expectEqualSlices(u8, first.bytes, second.bytes);
     try std.testing.expect(first.validation_score.estimated_bits != 0);
+    const exhaustive = try trainCodecOptimizedCoverStandardDictionaryAlloc(
+        std.testing.allocator,
+        &training,
+        &validation,
+        .{ .cover = options.cover, .levels = options.levels, .candidate_repcodes = true },
+        0x1000_000f,
+    );
+    defer exhaustive.deinit(std.testing.allocator);
+    try std.testing.expectEqual(first.candidates_evaluated, exhaustive.candidates_evaluated);
+    const single_fast = try trainCodecOptimizedCoverStandardDictionaryAlloc(
+        std.testing.allocator,
+        &training,
+        &validation,
+        .{
+            .cover = .{
+                .target_size = 48,
+                .segment_sizes = &.{12},
+                .dmer_sizes = &.{6},
+                .hash_logs = &.{8},
+            },
+            .levels = &.{1},
+        },
+        0x1000_0013,
+    );
+    defer single_fast.deinit(std.testing.allocator);
+    const single_exhaustive = try trainCodecOptimizedCoverStandardDictionaryAlloc(
+        std.testing.allocator,
+        &training,
+        &validation,
+        .{
+            .cover = .{
+                .target_size = 48,
+                .segment_sizes = &.{12},
+                .dmer_sizes = &.{6},
+                .hash_logs = &.{8},
+            },
+            .levels = &.{1},
+            .candidate_repcodes = true,
+        },
+        0x1000_0013,
+    );
+    defer single_exhaustive.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, single_exhaustive.bytes, single_fast.bytes);
     try std.testing.expectError(error.InvalidBlockPlan, trainCodecOptimizedCoverStandardDictionaryAlloc(
         std.testing.allocator,
         &training,
@@ -1861,6 +2114,7 @@ test "standard Zstd codec-optimized COVER trainer releases allocation failures" 
                         .hash_logs = &.{8},
                     },
                     .levels = &.{1},
+                    .candidate_repcodes = true,
                 },
                 0x1000_0010,
             );

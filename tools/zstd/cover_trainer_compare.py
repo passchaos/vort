@@ -122,6 +122,8 @@ def main() -> int:
                 raise SystemExit(f"candidate grid mismatch: {output!r}")
             if int(fields.get("rounds", 0)) != TRAIN_ROUNDS:
                 raise SystemExit(f"training round coverage mismatch: {output!r}")
+            if int(fields.get("native_candidate_repcodes", -1)) != 0:
+                raise SystemExit(f"unexpected candidate-repcode policy: {output!r}")
             selected = [int(value) for value in fields.get("selected", "").split("/")]
             if len(selected) != 3 or selected[0] not in (32, 64, 128, 256, 352) or selected[1] not in (6, 8) or selected[2] not in (12, 16, 20):
                 raise SystemExit(f"selected COVER parameters are outside the grid: {output!r}")
@@ -153,6 +155,13 @@ def main() -> int:
             ):
                 if int(fields.get(field, 0)) <= 0:
                     raise SystemExit(f"invalid {field} evidence: {output!r}")
+            finalizer_ns = [int(value) for value in fields.get("finalizer_ns", "").split("/")]
+            finalizer_work = [int(value) for value in fields.get("finalizer_work", "").split("/")]
+            if len(finalizer_ns) != 9 or len(finalizer_work) != 5 or min(finalizer_ns) <= 0 or min(finalizer_work) <= 0:
+                raise SystemExit(f"invalid finalizer profile evidence: {output!r}")
+            total_ns, _, collection_ns, greedy_ns, lazy_ns, *_ = finalizer_ns
+            if total_ns < collection_ns or collection_ns < greedy_ns or collection_ns < lazy_ns:
+                raise SystemExit(f"inconsistent finalizer timing hierarchy: {output!r}")
             for level in ("level1", "level3", "level9"):
                 vort_size, cover_size, fastcover_size = map(int, fields[level].split("/"))
                 if vort_size * 100 > cover_size * 126 or vort_size * 100 > fastcover_size * 116:
