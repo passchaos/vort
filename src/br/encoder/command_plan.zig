@@ -4,6 +4,8 @@ const static_dictionary = @import("../static_dictionary.zig");
 const small_huffman = @import("small_huffman.zig");
 const static_dictionary_matcher = @import("static_dictionary_matcher.zig");
 const compound_dictionary_matcher = @import("compound_dictionary_matcher.zig");
+const literal_context = @import("literal_context.zig");
+const serialized_dictionary = @import("../serialized_dictionary.zig");
 
 /// A Brotli insert/copy command derived from a generic LZ77 token stream.
 /// `insert_start` indexes the original input so the wire writer can emit the
@@ -637,6 +639,97 @@ pub fn mixCompoundDictionaryAlloc(
     return .{ .commands = try commands.toOwnedSlice(allocator), .match_count = match_count };
 }
 
+/// Replace literal runs with contextual serialized static-dictionary copies.
+///
+/// `context_mode` must be exactly the mode emitted by the eventual Brotli
+/// meta-block header. `initial_previous` is `{ second_previous, previous }` at
+/// the start of `input`, allowing the same routine to operate on later stream
+/// blocks without flattening prior history.
+pub fn mixSerializedDictionaryAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    baseline: []const Command,
+    dictionary: *const serialized_dictionary.Dictionary,
+    context_mode: u2,
+    initial_previous: [2]u8,
+) !Plan {
+    var commands: std.ArrayList(Command) = .empty;
+    errdefer commands.deinit(allocator);
+    var transformed_scratch: [serialized_dictionary.max_transformed_word_len]u8 = undefined;
+    var cursor: usize = 0;
+    var pending_start: usize = 0;
+    var pending_len: usize = 0;
+    var match_count: usize = 0;
+
+    for (baseline) |command| {
+        if (command.insert_start != cursor or command.insert_len > input.len - cursor)
+            return error.InvalidBlockPlan;
+        const literal_end = cursor + command.insert_len;
+        var position = cursor;
+        while (position < literal_end) {
+            const previous = if (position >= 1)
+                input[position - 1]
+            else
+                initial_previous[1];
+            const second_previous = if (position >= 2)
+                input[position - 2]
+            else if (position == 1)
+                initial_previous[1]
+            else
+                initial_previous[0];
+            const context = literal_context.value(
+                context_mode,
+                previous,
+                second_previous,
+            );
+            const match = try dictionary.findLongest(
+                context,
+                input[position..literal_end],
+                &transformed_scratch,
+            );
+            if (match == null) {
+                position += 1;
+                pending_len += 1;
+                continue;
+            }
+            try commands.append(allocator, .{
+                .insert_start = pending_start,
+                .insert_len = pending_len,
+                .copy_len = match.?.copy_len,
+                .has_copy = true,
+                .source = .static,
+                .dictionary_output_len = match.?.output_len,
+                .dictionary_address = match.?.address,
+            });
+            position += match.?.output_len;
+            pending_start = position;
+            pending_len = 0;
+            match_count += 1;
+        }
+        cursor = literal_end;
+        if (!command.has_copy) continue;
+        const output_len = command.outputLen();
+        if (output_len == 0 or output_len > input.len - cursor)
+            return error.InvalidBlockPlan;
+        var copied = command;
+        copied.insert_start = pending_start;
+        copied.insert_len = pending_len;
+        try commands.append(allocator, copied);
+        cursor += output_len;
+        pending_start = cursor;
+        pending_len = 0;
+    }
+    if (cursor != input.len) return error.InvalidBlockPlan;
+    if (pending_len != 0) try commands.append(allocator, .{
+        .insert_start = pending_start,
+        .insert_len = pending_len,
+    });
+    return .{
+        .commands = try commands.toOwnedSlice(allocator),
+        .match_count = match_count,
+    };
+}
+
 pub fn staticDictionaryIndexBytes() usize {
     return static_dictionary_matcher.max_index_bytes;
 }
@@ -871,6 +964,44 @@ test "compound dictionary mixer replaces literal runs and preserves LZ77 copies"
     try std.testing.expectEqual(Source.lz77, mixed.commands[1].source);
     try std.testing.expectEqual(@as(usize, 4), mixed.commands[1].distance);
     try std.testing.expectEqual(@as(usize, 4), mixed.commands[2].insert_len);
+}
+
+test "serialized dictionary mixer uses the emitted literal context mode" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    try encoded.appendSlice(std.testing.allocator, &.{ 0x91, 0x00, 0, 2 });
+    var bits: [28]u8 = @splat(0);
+    bits[0] = 1;
+    try encoded.appendSlice(std.testing.allocator, &bits);
+    try encoded.appendSlice(std.testing.allocator, "red!xxxx");
+    try encoded.appendSlice(std.testing.allocator, &bits);
+    try encoded.appendSlice(std.testing.allocator, "bluezzzz");
+    try encoded.appendSlice(std.testing.allocator, &.{
+        1, 1, 0, 0, 1, 0, 0, 0, // identity transform list
+        2, 0, 0, 1, 0, // two dictionary choices
+        1, // contextual
+    });
+    var context_map: [64]u8 = @splat(0);
+    context_map['a' & 0x3f] = 1;
+    try encoded.appendSlice(std.testing.allocator, &context_map);
+    const dictionary = try serialized_dictionary.parse(encoded.items);
+    const input = "ablue red!";
+    const baseline = [_]Command{.{ .insert_start = 0, .insert_len = input.len }};
+    const mixed = try mixSerializedDictionaryAlloc(
+        std.testing.allocator,
+        input,
+        &baseline,
+        &dictionary,
+        literal_context.mode_lsb6,
+        .{ 0, 0 },
+    );
+    defer mixed.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 2), mixed.match_count);
+    try std.testing.expectEqual(@as(usize, 2), mixed.commands.len);
+    try std.testing.expectEqual(@as(usize, 1), mixed.commands[0].insert_len);
+    try std.testing.expectEqual(@as(usize, 4), mixed.commands[0].dictionary_output_len);
+    try std.testing.expectEqual(@as(usize, 1), mixed.commands[1].insert_len);
+    try std.testing.expectEqual(@as(usize, 4), mixed.commands[1].dictionary_output_len);
 }
 
 test "legacy command initializers default to LZ77" {

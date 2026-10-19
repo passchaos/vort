@@ -337,6 +337,87 @@ pub const Dictionary = struct {
         ) orelse error.DictionaryAddressOutOfBounds;
     }
 
+    /// Exhaustive correctness matcher for the complete serialized descriptor,
+    /// including independently mixed custom and RFC built-in word/transform
+    /// tables. Production indexing may replace the search strategy but must
+    /// preserve this address ordering and tie break.
+    pub fn findLongest(
+        self: *const Dictionary,
+        context: usize,
+        input: []const u8,
+        transformed_scratch: []u8,
+    ) Error!?Match {
+        if (input.len < min_word_len) return null;
+        const preferred = try self.dictionaryForContext(context);
+        var best: ?Match = null;
+        for (min_word_len..max_word_len + 1) |word_len| {
+            var address_base: usize = 0;
+            for (0..self.dictionary_count) |visit_index| {
+                const dictionary_id = visitDictionaryId(visit_index, preferred);
+                const selected = self.dictionaries[dictionary_id];
+                const word_count = self.wordCount(selected, word_len);
+                const transform_count = self.transformCount(selected);
+                const capacity = std.math.mul(
+                    usize,
+                    word_count,
+                    transform_count,
+                ) catch return error.IntegerOverflow;
+                for (0..transform_count) |transform_index| {
+                    for (0..word_count) |word_index| {
+                        const word_bytes = self.wordForChoice(
+                            selected,
+                            word_len,
+                            word_index,
+                        ).?;
+                        const transformed = try self.applyTransform(
+                            selected,
+                            transform_index,
+                            word_bytes,
+                            transformed_scratch,
+                        );
+                        if (transformed.len < min_word_len or
+                            transformed.len > input.len or
+                            !std.mem.eql(u8, transformed, input[0..transformed.len]))
+                        {
+                            continue;
+                        }
+                        const local_address = std.math.add(
+                            usize,
+                            std.math.mul(
+                                usize,
+                                transform_index,
+                                word_count,
+                            ) catch return error.IntegerOverflow,
+                            word_index,
+                        ) catch return error.IntegerOverflow;
+                        const address = std.math.add(
+                            usize,
+                            address_base,
+                            local_address,
+                        ) catch return error.IntegerOverflow;
+                        if (best == null or transformed.len > best.?.output_len or
+                            (transformed.len == best.?.output_len and
+                                address < best.?.address))
+                        {
+                            best = .{
+                                .output_len = @intCast(transformed.len),
+                                .copy_len = @intCast(word_len),
+                                .address = address,
+                                .dictionary_id = @intCast(dictionary_id),
+                            };
+                        }
+                    }
+                }
+                address_base = std.math.add(
+                    usize,
+                    address_base,
+                    capacity,
+                ) catch return error.IntegerOverflow;
+            }
+        }
+        return best;
+    }
+
     /// Exhaustive correctness matcher for custom-only dictionary combinations.
     /// Production indexing is intentionally a later layer; this reference path
     /// establishes address ordering and context semantics first.
@@ -832,6 +913,34 @@ test "complete resolver mixes custom and built-in words and transforms" {
         "<first",
         (try custom_transform_dictionary.resolve(0, 5, 0, &output)).bytes,
     );
+
+    const custom_word_match = (try custom_word_dictionary.findLongest(
+        0,
+        "hello ",
+        &output,
+    )).?;
+    try std.testing.expectEqual(@as(u16, 6), custom_word_match.output_len);
+    try std.testing.expectEqual(@as(u5, 5), custom_word_match.copy_len);
+    try std.testing.expectEqual(@as(usize, 2), custom_word_match.address);
+    try std.testing.expectEqualSlices(
+        u8,
+        "hello ",
+        (try custom_word_dictionary.resolve(
+            0,
+            custom_word_match.copy_len,
+            custom_word_match.address,
+            &output,
+        )).bytes,
+    );
+
+    const custom_transform_match = (try custom_transform_dictionary.findLongest(
+        0,
+        "<first",
+        &output,
+    )).?;
+    try std.testing.expectEqual(@as(u16, 6), custom_transform_match.output_len);
+    try std.testing.expectEqual(@as(u5, 5), custom_transform_match.copy_len);
+    try std.testing.expectEqual(@as(usize, 0), custom_transform_match.address);
 }
 
 test "custom transform replay covers every transform family" {

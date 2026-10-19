@@ -107,7 +107,7 @@ pub fn main(init: std.process.Init) !void {
             "br_compound_dictionary_diff=ok fixture_cases=4 descriptor_errors=3 " ++
                 "shared_dictionary_matrix=skipped reason=libbrotli_unavailable " ++
                 "reference_encode=skipped vort_encode=skipped " ++
-                "runtime_regressions=skipped\n",
+                "runtime_regressions=skipped serialized_cases=skipped\n",
         );
         return;
     };
@@ -127,7 +127,7 @@ pub fn main(init: std.process.Init) !void {
             "br_compound_dictionary_diff=ok fixture_cases=4 descriptor_errors=3 " ++
                 "shared_dictionary_matrix=skipped reason=libbrotli_missing_symbols " ++
                 "reference_version={x} reference_encode=skipped vort_encode=skipped " ++
-                "runtime_regressions=skipped\n",
+                "runtime_regressions=skipped serialized_cases=skipped\n",
             .{runtime.version()},
         );
         return;
@@ -149,12 +149,17 @@ pub fn main(init: std.process.Init) !void {
         init.gpa,
         runtime,
     );
+    const serialized_cases = try validateSerializedDictionaryMatrix(
+        init.gpa,
+        runtime,
+    );
     try writeSuccess(
         &stdout.interface,
         runtime.version(),
         reference_encode_cases,
         vort_counts,
         runtime_regression_cases,
+        serialized_cases,
     );
 }
 
@@ -164,6 +169,7 @@ fn writeSuccess(
     reference_encode_cases: usize,
     vort_counts: VortEncodeCounts,
     runtime_regression_cases: usize,
+    serialized_cases: ?usize,
 ) !void {
     try writer.print(
         "br_compound_dictionary_diff=ok fixture_cases=4 descriptor_errors=3 " ++
@@ -171,6 +177,10 @@ fn writeSuccess(
             "runtime_regression_cases={d} reference_version={x}",
         .{ reference_encode_cases, runtime_regression_cases, reference_version },
     );
+    if (serialized_cases) |count|
+        try writer.print(" serialized_cases={d}", .{count})
+    else
+        try writer.writeAll(" serialized_cases=skipped reason=experimental_disabled");
 
     if (vort_counts.one_shot == 0) {
         try writer.writeAll(
@@ -204,6 +214,74 @@ fn writeSuccess(
         );
     }
     try writer.writeByte('\n');
+}
+
+fn validateSerializedDictionaryMatrix(
+    allocator: std.mem.Allocator,
+    runtime: libbrotli.Runtime,
+) !?usize {
+    const dictionary_word = "abcdefghijklmnopqrstuvwxyz12345";
+    const input = dictionary_word ** 8;
+    var encoded_dictionary: std.ArrayList(u8) = .empty;
+    defer encoded_dictionary.deinit(allocator);
+    try encoded_dictionary.appendSlice(allocator, &.{ 0x91, 0, 0, 1 });
+    var bits: [28]u8 = @splat(0);
+    bits[dictionary_word.len - 4] = 1;
+    try encoded_dictionary.appendSlice(allocator, &bits);
+    try encoded_dictionary.appendSlice(allocator, dictionary_word);
+    try encoded_dictionary.appendSlice(
+        allocator,
+        "9876543210ZYXWVUTSRQPONMLKJIHGF",
+    );
+    try encoded_dictionary.appendSlice(allocator, &.{
+        1, 1, 0, 0, 1, 0, 0, 0, // identity transform list
+        1, 0, 0, // one custom/custom dictionary choice
+        0, // context map disabled
+    });
+    if (!runtime.supportsSerializedDictionary(encoded_dictionary.items, 5))
+        return null;
+
+    const parsed = try vort.brParseSerializedSharedDictionary(
+        encoded_dictionary.items,
+    );
+    const shared = vort.BrotliSharedDictionary{ .serialized = &parsed };
+    const decode_options = vort.BrotliDecodeOptions{
+        .shared_dictionary = shared,
+    };
+    const vort_wire = try vort.brEncodePlannedStreamWithOptionsAlloc(
+        allocator,
+        input,
+        .{ .quality = 5, .shared_dictionary = shared },
+    );
+    defer allocator.free(vort_wire);
+    var reference_output: [input.len]u8 = undefined;
+    try runtime.decodeWithSerializedDictionary(
+        vort_wire,
+        &reference_output,
+        encoded_dictionary.items,
+    );
+    if (!std.mem.eql(u8, input, &reference_output))
+        return error.ReferenceDecodeFailed;
+
+    var reference_options = streaming_options;
+    reference_options.quality = 5;
+    const reference_wire = try runtime.encodeWithSerializedDictionaryAlloc(
+        allocator,
+        input,
+        encoded_dictionary.items,
+        reference_options,
+    );
+    defer allocator.free(reference_wire);
+    const vort_output = try vort.brDecodeStreamAllocExactSizeWithOptions(
+        allocator,
+        reference_wire,
+        input.len,
+        decode_options,
+    );
+    defer allocator.free(vort_output);
+    if (!std.mem.eql(u8, input, vort_output))
+        return error.ReferenceDecodeFailed;
+    return 2;
 }
 
 fn validateVortFixtureDecode(

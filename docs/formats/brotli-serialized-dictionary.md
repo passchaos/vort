@@ -27,10 +27,10 @@ RFC built-in tables. Custom replay covers identity, omit-first/last 1...9,
 uppercase-first/all, SHIFT_FIRST, SHIFT_ALL, arbitrary prefix/suffix
 stringlets, and byte-exact UTF-8 shift behavior.
 
-`findLongestCustom` is the allocation-free exhaustive correctness matcher for
-custom-only dictionary combinations. It returns the same context-relative
-combined address consumed by `resolveCustom`; production indexing can use it
-as an oracle.
+`findLongestCustom` remains the compact custom-only oracle. `findLongest`
+exhaustively covers independently mixed built-in/custom word and transform
+tables and returns the same context-relative combined address consumed by
+`resolve`.
 
 The encoded bytes must remain alive and unchanged while the parsed view or any
 nested word/transform slice is used.
@@ -63,14 +63,18 @@ prefix borrowing. Mixed custom/built-in word and transform combinations are
 also replayed. Production decode tests cover one-shot allocation, caller-owned
 output, atomic append, chunk joining, summary replay, caller-history
 progressive decode, allocator-owned progressive decode, serialized RAW-prefix
-distance shifting, and history-selected context maps. The parser allocates no
-memory.
+distance shifting, and history-selected context maps. Encoder tests cover
+one-shot, reusable, chunked, incremental, q0 cross-block context retention,
+and complete address replay. An experimental libbrotli 1.2.0 build passes both
+Vort-encode/libbrotli-decode and libbrotli-encode/Vort-decode cases. The parser
+allocates no memory.
 
-## Remaining codec work
+## Remaining performance work
 
-Production decoding is attached. Production encoding remains intentionally
-rejected for a descriptor that changes the static dictionary: the next
-increment must add context-aware matching/indexing and preserve the literal
-context mode used to compute each dictionary ID. Until then, Vort claims
-serialized contextual dictionary decode behavior, not encode interoperability
-or stability of upstream's experimental container format.
+Production encode and decode are attached. Encoding currently uses the
+allocation-free exhaustive matcher as a correctness-first implementation and
+emits LSB6 literal context mode for every candidate containing contextual
+static references. The next increment should build reusable context-aware
+indexes and then allow other literal context modes without breaking the
+address/mode invariant. Vort does not promise stability for upstream's
+experimental container format.

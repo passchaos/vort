@@ -153,14 +153,40 @@ pub const PlannedParserOptions = struct {
 };
 
 fn plannedSharedDictionarySize(dictionary: SharedDictionary) Error!usize {
-    // Decode supports serialized contextual static dictionaries. Until the
-    // encoder's contextual matcher is attached, reject them rather than emit
-    // built-in static addresses that the peer would reinterpret differently.
-    if (dictionary.hasSerializedStatic()) return error.InvalidBlockPlan;
     return dictionary.totalSize() catch |err| switch (err) {
         error.IntegerOverflow => error.IntegerOverflow,
         else => error.InvalidBlockPlan,
     };
+}
+
+fn mixSerializedDictionaryAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    baseline: []const command_plan.Command,
+    dictionary: *const SerializedSharedDictionary,
+    initial_previous: [2]u8,
+) Error!command_plan.Plan {
+    return command_plan.mixSerializedDictionaryAlloc(
+        allocator,
+        input,
+        baseline,
+        dictionary,
+        literal_context.mode_lsb6,
+        initial_previous,
+    ) catch |err| switch (err) {
+        error.OutOfMemory => error.OutOfMemory,
+        error.IntegerOverflow => error.IntegerOverflow,
+        else => error.InvalidBlockPlan,
+    };
+}
+
+fn appendPreviousBytes(previous: *[2]u8, bytes: []const u8) void {
+    if (bytes.len == 0) return;
+    if (bytes.len == 1) {
+        previous.* = .{ previous[1], bytes[0] };
+    } else {
+        previous.* = .{ bytes[bytes.len - 2], bytes[bytes.len - 1] };
+    }
 }
 
 pub fn parseSerializedSharedDictionary(
@@ -592,6 +618,8 @@ const IncrementalPlannedEncoderCodec = struct {
         q0_entropy_state: fast_fragment_one_pass.State = .{},
         compound_matcher: ?compound_dictionary_matcher.Matcher = null,
         compound_dictionary_size: usize = 0,
+        shared_dictionary: SharedDictionary = .{},
+        context_previous: [2]u8 = .{ 0, 0 },
         wire_state: PlannedWireState = .{},
     };
 
@@ -626,6 +654,8 @@ const IncrementalPlannedEncoderCodec = struct {
         state.adaptive_split_wire.clearRetainingCapacity();
         state.history_snapshot.clearRetainingCapacity();
         state.compound_dictionary_size = 0;
+        state.shared_dictionary = .{};
+        state.context_previous = .{ 0, 0 };
         state.wire_state = .{};
         state.q0_entropy_state.reset();
         state.greedy_scratch.head_initialized = @splat(0);
@@ -672,6 +702,7 @@ const IncrementalPlannedEncoderCodec = struct {
             &state.compound_matcher.?,
             options.shared_dictionary,
         );
+        state.shared_dictionary = options.shared_dictionary;
         var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
         try writeWindowBits(allocator, &writer, options.window_bits);
         if (options.metadata.len != 0) try writeMetadataMetaBlock(allocator, &writer, options.metadata);
@@ -3215,7 +3246,7 @@ pub fn encodePlannedStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: 
         );
     }
     const compound_size = try plannedSharedDictionarySize(options.shared_dictionary);
-    if (compound_size != 0) {
+    if (compound_size != 0 or options.shared_dictionary.hasSerializedStatic()) {
         var matcher = compound_dictionary_matcher.Matcher.init(allocator);
         defer matcher.deinit();
         _ = try preparePlannedSharedDictionary(&matcher, options.shared_dictionary);
@@ -3242,7 +3273,6 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
     matcher: *const compound_dictionary_matcher.Matcher,
     compound_size: usize,
 ) Error![]u8 {
-    std.debug.assert(compound_size != 0);
     const window_bits = try resolvedPlannedWindowBits(options);
     const stream_options = StoredStreamOptions{ .window_bits = window_bits, .metadata = options.metadata };
     std.debug.assert(input.len <= max_uncompressed_meta_block_len);
@@ -3286,15 +3316,32 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
     defer lz_plan.deinit(allocator);
     const baseline = try command_plan.buildAlloc(allocator, input, lz_plan.tokens);
     defer baseline.deinit(allocator);
-    const mixed = try command_plan.mixCompoundDictionaryAlloc(
-        allocator,
-        input,
-        baseline.commands,
-        matcher,
-        compound_dictionary_matcher.bucket_ways,
-    );
-    defer mixed.deinit(allocator);
-    if (mixed.match_count == 0 and lz_plan.stats.matches == 0)
+    const mixed = if (compound_size != 0)
+        try command_plan.mixCompoundDictionaryAlloc(
+            allocator,
+            input,
+            baseline.commands,
+            matcher,
+            compound_dictionary_matcher.bucket_ways,
+        )
+    else
+        null;
+    defer if (mixed) |plan| plan.deinit(allocator);
+    const base_commands = if (mixed) |plan| plan.commands else baseline.commands;
+    const serialized_plan = if (options.shared_dictionary.hasSerializedStatic())
+        try mixSerializedDictionaryAlloc(
+            allocator,
+            input,
+            base_commands,
+            options.shared_dictionary.serialized.?,
+            .{ 0, 0 },
+        )
+    else
+        null;
+    defer if (serialized_plan) |plan| plan.deinit(allocator);
+    if ((mixed == null or mixed.?.match_count == 0) and
+        (serialized_plan == null or serialized_plan.?.match_count == 0) and
+        lz_plan.stats.matches == 0)
         return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options);
 
     var stats: encoder_stats.PlannedEncodeStats = .{};
@@ -3316,17 +3363,37 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
         };
     lazy_options.compound_dictionary_size = compound_size;
     var best = (if (options.level == .fast and options.quality == null)
-        encodeCommandPlanWithOptionsAlloc(allocator, input, mixed.commands, null, &stats, .{
+        encodeCommandPlanWithOptionsAlloc(allocator, input, base_commands, null, &stats, .{
             .window_bits = window_bits,
             .metadata = options.metadata,
             .compound_dictionary_size = compound_size,
         })
     else
-        encodeLazyCommandPlanAlloc(allocator, input, mixed.commands, &stats, lazy_options)) catch |err| switch (err) {
+        encodeLazyCommandPlanAlloc(allocator, input, base_commands, &stats, lazy_options)) catch |err| switch (err) {
         error.InvalidBlockPlan => return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options),
         else => return err,
     };
     errdefer allocator.free(best);
+
+    if (serialized_plan) |plan| if (plan.match_count != 0) {
+        var serialized_stats: encoder_stats.PlannedEncodeStats = .{};
+        const candidate = encodeCommandPlanWithOptionsAlloc(
+            allocator,
+            input,
+            plan.commands,
+            null,
+            &serialized_stats,
+            .{
+                .window_bits = window_bits,
+                .metadata = options.metadata,
+                .compound_dictionary_size = compound_size,
+            },
+        ) catch |err| switch (err) {
+            error.InvalidBlockPlan => null,
+            else => return err,
+        };
+        if (candidate) |encoded| retainSmallerOwnedWire(allocator, &best, encoded);
+    };
 
     const legacy_record_distance_search = options.level == .ratio and
         (options.window_bits == null or options.window_bits.? == default_window_bits) and
@@ -3339,7 +3406,7 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
         const candidate = encodeCommandPlanWithDistanceParameterSearchAlloc(
             allocator,
             input,
-            mixed.commands,
+            base_commands,
             true,
             &distance_stats,
             .{
@@ -3356,10 +3423,11 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
         if (candidate) |encoded| retainSmallerOwnedWire(allocator, &best, encoded);
     }
 
-    const try_static = input.len <= ratio_static_dictionary_max_input_len and
+    const try_static = !options.shared_dictionary.hasSerializedStatic() and
+        input.len <= ratio_static_dictionary_max_input_len and
         (options.level == .ratio or if (schedule) |active| active.dictionary.static_dictionary else false);
     if (try_static) {
-        const with_static = try command_plan.mixStaticDictionaryAlloc(allocator, input, mixed.commands);
+        const with_static = try command_plan.mixStaticDictionaryAlloc(allocator, input, base_commands);
         defer with_static.deinit(allocator);
         if (with_static.match_count != 0) {
             var static_stats: encoder_stats.PlannedEncodeStats = .{};
@@ -3369,7 +3437,9 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
             };
             if (candidate) |encoded| retainSmallerOwnedWire(allocator, &best, encoded);
         }
-    } else if (input.len <= ratio_extended_static_dictionary_max_input_len) {
+    } else if (!options.shared_dictionary.hasSerializedStatic() and
+        input.len <= ratio_extended_static_dictionary_max_input_len)
+    {
         const extended_probes: usize = if (options.extended_dictionary_probes != 0)
             options.extended_dictionary_probes
         else if (schedule) |active|
@@ -3380,7 +3450,7 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
             const with_static = try command_plan.mixStaticDictionaryWithCacheProbeLimitAlloc(
                 allocator,
                 input,
-                mixed.commands,
+                base_commands,
                 null,
                 extended_probes,
             );
@@ -3405,7 +3475,7 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
         if (try long_distance.augmentAllocWithMaxDistance(
             allocator,
             input,
-            mixed.commands,
+            base_commands,
             long_max_distance,
         )) |long_commands| {
             defer allocator.free(long_commands);
@@ -5793,6 +5863,48 @@ fn considerPlannedMetaBlockCommands(
     }
 }
 
+/// Serialized dictionary addresses below are selected with LSB6 contexts, so
+/// this candidate deliberately uses the plain header writer whose literal
+/// context mode is also LSB6. Other safe baseline candidates may still use
+/// adaptive contexts because they contain no contextual static references.
+fn considerSerializedMetaBlockCommands(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    window_bits: u5,
+    compound_dictionary_size: usize,
+    start_byte: u8,
+    start_bit_index: u3,
+    wire_state: PlannedWireState,
+    best: *?PlannedMetaBlockCandidate,
+    candidate_wire: *std.ArrayList(u8),
+    best_wire: *std.ArrayList(u8),
+) Error!void {
+    const candidate = encodePlannedMetaBlockCandidate(
+        allocator,
+        candidate_wire,
+        start_byte,
+        start_bit_index,
+        input,
+        commands,
+        wire_state,
+        .{
+            .window_bits = window_bits,
+            .compound_dictionary_size = compound_dictionary_size,
+        },
+    ) catch |err| switch (err) {
+        error.InvalidBlockPlan => return,
+        else => return err,
+    };
+    try retainSmallerMetaBlockCandidate(
+        allocator,
+        best,
+        candidate_wire,
+        best_wire,
+        candidate,
+    );
+}
+
 fn considerPlannedMetaBlockPolicy(
     allocator: std.mem.Allocator,
     state: *IncrementalPlannedEncoderCodec.State,
@@ -5887,8 +5999,9 @@ fn considerPlannedMetaBlockPolicy(
             );
     }
     const q0_one_pass = policy.fragment_variant == .q0 and !state.adaptive_blocks;
+    const has_serialized_static = state.shared_dictionary.hasSerializedStatic();
     if (match_count != 0 or state.compound_dictionary_size != 0 or
-        policy.dictionary.static_dictionary or q0_one_pass)
+        has_serialized_static or policy.dictionary.static_dictionary or q0_one_pass)
     {
         const mixed = if (state.compound_dictionary_size != 0)
             try command_plan.mixCompoundDictionaryAlloc(
@@ -5918,7 +6031,32 @@ fn considerPlannedMetaBlockPolicy(
                 &state.candidate_wire,
                 &state.best_wire,
             );
-        if (policy.dictionary.static_dictionary and
+        if (has_serialized_static) {
+            const serialized = state.shared_dictionary.serialized.?;
+            const with_serialized = try mixSerializedDictionaryAlloc(
+                allocator,
+                input,
+                commands,
+                serialized,
+                state.context_previous,
+            );
+            defer with_serialized.deinit(allocator);
+            if (with_serialized.match_count != 0)
+                try considerSerializedMetaBlockCommands(
+                    allocator,
+                    input,
+                    with_serialized.commands,
+                    state.window_bits,
+                    state.compound_dictionary_size,
+                    start_byte,
+                    start_bit_index,
+                    state.wire_state,
+                    best,
+                    &state.candidate_wire,
+                    &state.best_wire,
+                );
+        }
+        if (!has_serialized_static and policy.dictionary.static_dictionary and
             input.len <= ratio_extended_static_dictionary_max_input_len)
         {
             const with_static = if (input.len <= ratio_static_dictionary_max_input_len)
@@ -6044,6 +6182,7 @@ fn writeAdaptivePlannedStreamBlock(
     const start_bit_index = state.bit_index;
     const start_byte = if (start_len == 0) 0 else out.items[start_len - 1];
     const start_wire_state = state.wire_state;
+    const start_context_previous = state.context_previous;
     state.history_snapshot.clearRetainingCapacity();
     try state.history_snapshot.appendSlice(allocator, state.history.items);
 
@@ -6064,6 +6203,7 @@ fn writeAdaptivePlannedStreamBlock(
     );
     const single_bit_index = state.bit_index;
     const single_wire_state = state.wire_state;
+    const single_context_previous = state.context_previous;
     const single_bits = IncrementalPlannedEncoderCodec.startBitPosition(
         state.adaptive_single_wire.items.len,
         single_bit_index,
@@ -6077,10 +6217,12 @@ fn writeAdaptivePlannedStreamBlock(
     );
     state.bit_index = start_bit_index;
     state.wire_state = start_wire_state;
+    state.context_previous = start_context_previous;
     errdefer {
         restorePlannedHistory(allocator, state) catch {};
         state.bit_index = start_bit_index;
         state.wire_state = start_wire_state;
+        state.context_previous = start_context_previous;
     }
     try writePlannedStreamMetaBlock(
         allocator,
@@ -6112,6 +6254,7 @@ fn writeAdaptivePlannedStreamBlock(
         try restorePlannedHistory(allocator, state);
         state.bit_index = single_bit_index;
         state.wire_state = single_wire_state;
+        state.context_previous = single_context_previous;
         if (try plannedStateRetainsMatchHistory(state)) {
             const max_backward_distance = (@as(usize, 1) << state.window_bits) - 16;
             try IncrementalPlannedEncoderCodec.appendHistory(
@@ -6225,6 +6368,7 @@ fn writePlannedStreamMetaBlock(
             max_backward_distance,
         );
     }
+    appendPreviousBytes(&state.context_previous, block);
 }
 const min_recent_distance_candidate_count: usize = 64;
 const planned_command_symbol_cache_capacity: usize = 128;
@@ -6630,7 +6774,7 @@ pub const PlannedStreamEncoder = struct {
             );
         }
         const compound_size = try preparePlannedSharedDictionary(&self.compound_matcher, options.shared_dictionary);
-        if (compound_size != 0) {
+        if (compound_size != 0 or options.shared_dictionary.hasSerializedStatic()) {
             return encodePlannedStreamWithPreparedSharedDictionaryAlloc(
                 allocator,
                 input,
@@ -6749,7 +6893,7 @@ pub const PlannedStreamEncoder = struct {
             );
         }
         const compound_size = try preparePlannedSharedDictionary(&self.compound_matcher, options.shared_dictionary);
-        if (compound_size != 0) {
+        if (compound_size != 0 or options.shared_dictionary.hasSerializedStatic()) {
             const encoded = try encodePlannedStreamWithPreparedSharedDictionaryAlloc(
                 self.allocator,
                 input,
@@ -31586,14 +31730,20 @@ test "br serialized shared dictionary decodes contextual static references acros
     try owned.finish();
     try std.testing.expectEqualSlices(u8, expected, &owned_output);
 
-    try std.testing.expectError(
-        error.InvalidBlockPlan,
-        encodePlannedStreamWithOptionsAlloc(
-            std.testing.allocator,
-            expected,
-            .{ .shared_dictionary = dictionary },
-        ),
+    const reencoded = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        expected,
+        .{ .shared_dictionary = dictionary },
     );
+    defer std.testing.allocator.free(reencoded);
+    const redecoded = try decodeStreamAllocExactSizeWithOptions(
+        std.testing.allocator,
+        reencoded,
+        expected.len,
+        options,
+    );
+    defer std.testing.allocator.free(redecoded);
+    try std.testing.expectEqualSlices(u8, expected, redecoded);
 }
 
 test "br serialized shared dictionary selects custom words from output context" {
@@ -31669,6 +31819,194 @@ test "br serialized shared dictionary selects custom words from output context" 
         try std.testing.expectEqual(@as(usize, 1), summary.shared_dictionary_copy_count);
         try std.testing.expectEqual(@as(usize, 4), summary.shared_dictionary_bytes);
     }
+}
+
+test "br serialized shared dictionary encodes across planned ownership models" {
+    const dictionary_word = "abcdefghijklmnopqrstuvwxyz12345";
+    const payload = dictionary_word ** 8;
+    var serialized_bytes: std.ArrayList(u8) = .empty;
+    defer serialized_bytes.deinit(std.testing.allocator);
+    try serialized_bytes.appendSlice(std.testing.allocator, &.{
+        0x91, 0x00, 0, // magic and empty RAW prefix
+        1, // custom word lists
+    });
+    var bits: [28]u8 = @splat(0);
+    bits[dictionary_word.len - serialized_dictionary.min_word_len] = 1;
+    try serialized_bytes.appendSlice(std.testing.allocator, &bits);
+    try serialized_bytes.appendSlice(std.testing.allocator, dictionary_word);
+    try serialized_bytes.appendSlice(std.testing.allocator, "9876543210ZYXWVUTSRQPONMLKJIHGF");
+    try serialized_bytes.appendSlice(std.testing.allocator, &.{
+        1, // custom transform lists
+        1, 0, 0, // one empty stringlet
+        1, 0, 0, 0, // one identity transform
+        1, 0, 0, // one custom/custom dictionary choice
+        0, // context map disabled
+    });
+    const serialized = try parseSerializedSharedDictionary(serialized_bytes.items);
+    const shared = SharedDictionary{ .serialized = &serialized };
+    const decode_options = DecodeOptions{ .shared_dictionary = shared };
+
+    const one_shot = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .level = .fast, .shared_dictionary = shared },
+    );
+    defer std.testing.allocator.free(one_shot);
+    const one_shot_summary = try summarizeStreamWithOptions(
+        one_shot,
+        decode_options,
+    );
+    try std.testing.expect(one_shot_summary.shared_dictionary_copy_count > 0);
+    const one_shot_decoded = try decodeStreamAllocExactSizeWithOptions(
+        std.testing.allocator,
+        one_shot,
+        payload.len,
+        decode_options,
+    );
+    defer std.testing.allocator.free(one_shot_decoded);
+    try std.testing.expectEqualSlices(u8, payload, one_shot_decoded);
+
+    var reusable = PlannedStreamEncoder.init(std.testing.allocator);
+    defer reusable.deinit();
+    const reusable_wire = try reusable.encodeWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .level = .balanced, .shared_dictionary = shared },
+    );
+    defer std.testing.allocator.free(reusable_wire);
+    const reusable_summary = try summarizeStreamWithOptions(
+        reusable_wire,
+        decode_options,
+    );
+    try std.testing.expect(reusable_summary.shared_dictionary_copy_count > 0);
+
+    const chunks = [_][]const u8{
+        payload[0..73],
+        payload[73..159],
+        payload[159..],
+    };
+    const chunked = try reusable.encodeChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{
+            .level = .ratio,
+            .block_len = payload.len,
+            .shared_dictionary = shared,
+        },
+    );
+    defer std.testing.allocator.free(chunked);
+    const chunked_decoded = try decodeStreamAllocExactSizeWithOptions(
+        std.testing.allocator,
+        chunked,
+        payload.len,
+        decode_options,
+    );
+    defer std.testing.allocator.free(chunked_decoded);
+    try std.testing.expectEqualSlices(u8, payload, chunked_decoded);
+    try std.testing.expect(
+        (try summarizeStreamWithOptions(chunked, decode_options))
+            .shared_dictionary_copy_count > 0,
+    );
+
+    var incremental = IncrementalPlannedStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{
+            .stream = .{
+                .quality = 2,
+                .block_len = payload.len,
+                .shared_dictionary = shared,
+            },
+            .block_len = payload.len,
+        },
+    );
+    defer incremental.deinit();
+    var incremental_wire: std.ArrayList(u8) = .empty;
+    defer incremental_wire.deinit(std.testing.allocator);
+    var input_offset: usize = 0;
+    var output_scratch: [3]u8 = undefined;
+    while (input_offset < payload.len) {
+        const input_end = @min(payload.len, input_offset + 5);
+        const step = try incremental.step(
+            payload[input_offset..input_end],
+            &output_scratch,
+        );
+        input_offset += step.progress.input_read;
+        try incremental_wire.appendSlice(
+            std.testing.allocator,
+            output_scratch[0..step.progress.output_written],
+        );
+    }
+    try incremental.finish();
+    while (true) {
+        const step = try incremental.step("", &output_scratch);
+        try incremental_wire.appendSlice(
+            std.testing.allocator,
+            output_scratch[0..step.progress.output_written],
+        );
+        if (step.status == .done) break;
+    }
+    const incremental_decoded = try decodeStreamAllocExactSizeWithOptions(
+        std.testing.allocator,
+        incremental_wire.items,
+        payload.len,
+        decode_options,
+    );
+    defer std.testing.allocator.free(incremental_decoded);
+    try std.testing.expectEqualSlices(u8, payload, incremental_decoded);
+    try std.testing.expect(
+        (try summarizeStreamWithOptions(
+            incremental_wire.items,
+            decode_options,
+        )).shared_dictionary_copy_count > 0,
+    );
+}
+
+test "br serialized encoder retains LSB6 dictionary context across q0 blocks" {
+    const first_word = "9876543210ZYXWVUTSRQPONMLKJIHGF";
+    const contextual_word = "abcdefghijklmnopqrstuvwxyz12345";
+    const first_block = "0123456789012345678901234567890a";
+    const payload = first_block ++ contextual_word;
+    var serialized_bytes: std.ArrayList(u8) = .empty;
+    defer serialized_bytes.deinit(std.testing.allocator);
+    try serialized_bytes.appendSlice(std.testing.allocator, &.{ 0x91, 0, 0, 2 });
+    var bits: [28]u8 = @splat(0);
+    bits[31 - serialized_dictionary.min_word_len] = 1;
+    try serialized_bytes.appendSlice(std.testing.allocator, &bits);
+    try serialized_bytes.appendSlice(std.testing.allocator, first_word ** 2);
+    try serialized_bytes.appendSlice(std.testing.allocator, &bits);
+    try serialized_bytes.appendSlice(std.testing.allocator, contextual_word ** 2);
+    try serialized_bytes.appendSlice(std.testing.allocator, &.{
+        1, 1, 0, 0, 1, 0, 0, 0, // identity transform list
+        2, 0, 0, 1, 0, // two custom/custom choices
+        1, // context map enabled
+    });
+    var context_map: [64]u8 = @splat(0);
+    context_map['a' & 0x3f] = 1;
+    try serialized_bytes.appendSlice(std.testing.allocator, &context_map);
+    const serialized = try parseSerializedSharedDictionary(serialized_bytes.items);
+    const shared = SharedDictionary{ .serialized = &serialized };
+    const chunks = [_][]const u8{payload};
+    const encoded = try encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{
+            .quality = 0,
+            .block_len = first_block.len,
+            .shared_dictionary = shared,
+        },
+    );
+    defer std.testing.allocator.free(encoded);
+    const decode_options = DecodeOptions{ .shared_dictionary = shared };
+    const summary = try summarizeStreamWithOptions(encoded, decode_options);
+    try std.testing.expect(summary.shared_dictionary_copy_count > 0);
+    const decoded = try decodeStreamAllocExactSizeWithOptions(
+        std.testing.allocator,
+        encoded,
+        payload.len,
+        decode_options,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
 test "br RAW shared dictionary rejects invalid descriptors before output mutation" {

@@ -2172,9 +2172,12 @@ address replay. A parsed view can be attached through
 `BrotliSharedDictionary.serialized` for production one-shot, chunked, summary,
 caller-history, and allocator-owned or caller-history progressive decoding.
 The serialized RAW prefix follows explicit RAW attachments in Vort's compound
-address space. Production encoding still rejects custom serialized static
-dictionaries until its context-aware matcher is attached, and the experimental
-upstream format carries no stability promise.
+address space. Planned one-shot, reusable, chunked, and incremental encoders
+use a correctness-first exhaustive contextual matcher with a fixed LSB6 mode;
+the selected dictionary address and emitted meta-block mode therefore stay
+identical across block boundaries. Production indexing and adaptive-mode
+matching remain performance work, and the experimental upstream format carries
+no stability promise.
 
 The `run-br-compound-dictionary-diff` gate passes in Debug and ReleaseFast
 against local libbrotli 1.2.0. It covers libbrotli encode to Vort decode for
@@ -2186,6 +2189,11 @@ copy, incremental metadata/backpressure, and static addressing after a
 saturated compound region. A system libbrotli 1.0.9 without the optional shared-
 dictionary symbols reports the whole runtime matrix as skipped instead of
 silently reducing coverage.
+
+With local upstream libbrotli 1.2.0 built using `BROTLI_EXPERIMENTAL`, the same
+gate additionally passes two serialized custom-static cases: Vort encode to
+libbrotli decode and libbrotli encode to Vort decode. A non-experimental build
+reports those cases as skipped explicitly.
 
 ### Brotli planned encoder controls
 
