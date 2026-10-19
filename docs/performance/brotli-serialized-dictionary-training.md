@@ -11,9 +11,9 @@ retains the largest legal power-of-two word bucket, emits one identity-transform
 custom dictionary, and validates profitability on held-out samples with the
 production Brotli encoder.
 
-This is not a COVER/FastCover-equivalent trainer. Context-map learning,
-transform-list learning, multi-candidate parameter search, and representative
-corpus calibration remain future work.
+This is not a COVER/FastCover-equivalent trainer. General context clustering,
+transform-list learning, multi-cutoff search, and representative corpus
+calibration remain future work.
 
 ## Selection contract
 
@@ -48,3 +48,23 @@ the returned dictionary. A single held-out sample with no amortized benefit
 must return null. Allocation-failure enumeration covers the bounded candidate
 builder, and an experimental libbrotli 1.2.0 build accepts the trained
 dictionary in both encode/decode directions.
+
+## Two-group context evidence
+
+With `context_cutoff = 32`, the trainer builds two word lists for each RFC
+context mode and compares all contextual candidates with the global dictionary.
+A locked LSB6 fixture contains 16 distinct words behind contexts below the
+cutoff and 16 behind contexts above it, while each individual word occurs only
+once per frame:
+
+| Metric | Bytes |
+|---|---:|
+| Dictionary-free held-out frames | 17,344 |
+| Contextual dictionary-backed frames | 11,328 |
+| Serialized contextual dictionary | 266 |
+| Charged trained total | 11,594 |
+| Total saving | 5,750 (33.2%) |
+
+The regression requires at least a 25% complete-total saving and verifies that
+the selected candidate records LSB6, the configured cutoff, a two-entry context
+map, stable bytes, and successful decoding.

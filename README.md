@@ -2200,11 +2200,12 @@ each direction. A non-experimental build reports those cases as skipped
 explicitly.
 
 `brTrainSerializedSharedDictionaryAlloc` provides deterministic bounded
-identity-word training with held-out complete-wire arbitration. By default the
-serialized dictionary bytes are charged once against the validation frame
-total; non-winning candidates return null. The result includes a stable
-content-derived ID and exact baseline/frame/dictionary/savings accounting. It
-does not claim COVER/FastCover equivalence or contextual/transform learning.
+identity-word and two-group context-map training with held-out complete-wire
+arbitration. It compares a global dictionary with LSB6, MSB6, UTF8, and Signed
+candidates at the configured cutoff. By default serialized bytes are charged
+once against the validation frame total; non-winning candidates return null.
+The result includes a stable content-derived ID and exact accounting. It does
+not claim COVER/FastCover equivalence, general clustering, or transform learning.
 
 ### Brotli planned encoder controls
 

@@ -95,13 +95,16 @@ The parser allocates no memory.
 `brTrainSerializedSharedDictionaryAlloc` trains identity-transform word lists
 from caller-supplied training samples, one bounded heavy-hitter collection per
 word length. Each emitted bucket is the largest legal power of two within the
-configured limits. Held-out samples are then encoded both without and with the
-candidate; the function returns null unless the actual complete Brotli frame
-total, plus the serialized dictionary by default, meets `min_savings_bytes`.
+configured limits. When context training is enabled, it also trains two word
+lists on each side of a caller-selected context cutoff for LSB6, MSB6, UTF8,
+and Signed, then compares those candidates with the global dictionary. Held-out
+samples are encoded both without and with every candidate; the function returns
+null unless the best actual complete Brotli frame total, plus the serialized
+dictionary by default, meets `min_savings_bytes`.
 The owned result reports frame totals, charged dictionary bytes, word/bucket
 counts, total savings, and a stable content-derived `DictionaryId`. This first
 trainer reuses Vort's bounded deterministic phrase collector; it does not claim
-COVER/FastCover equivalence or contextual/transform training.
+COVER/FastCover equivalence, general context clustering, or transform learning.
 
 ## Remaining performance work
 
@@ -117,7 +120,7 @@ mode, the encoder additionally arbitrates single-tree, suffix, bounded-16-tree,
 and complete clustered literal-context candidates. A locked joint fixture
 shrinks from 627 to 523 bytes while retaining custom dictionary copies. Vort
 does not promise stability for upstream's experimental container format.
-The first trainer is deterministic and complete-wire validated, but contextual
-map learning, transform-list learning, and COVER/FastCover-class candidate
-selection remain open. The builder also remains available for fully explicit
-caller-owned specifications.
+The trainer is deterministic and complete-wire validated, with bounded
+two-group context-map learning. General context clustering, transform-list
+learning, and COVER/FastCover-class candidate selection remain open. The builder
+also remains available for fully explicit caller-owned specifications.

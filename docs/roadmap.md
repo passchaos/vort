@@ -42,8 +42,11 @@ major gaps before Vort can claim broad industry-best parity:
   selects power-of-two length buckets and retains candidates only after a
   held-out complete-wire win including dictionary storage by default; its
   locked fixture improves 4,608 baseline bytes to 2,632 frame bytes plus a
-  172-byte dictionary. Context-map/transform learning and broader corpus
-  calibration remain open.
+  172-byte dictionary. Bounded two-group context-map training compares all four
+  RFC modes at a configured cutoff; its locked contextual fixture improves
+  17,344 baseline bytes to 11,328 frame bytes plus a 266-byte dictionary.
+  General context clustering, transform learning, and broader corpus calibration
+  remain open.
   q10/q11 Zopfli/HQ cost refinement and global exact-cost segmentation also
   remain open.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
