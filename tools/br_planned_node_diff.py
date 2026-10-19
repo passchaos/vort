@@ -31,6 +31,8 @@ def main() -> int:
     fast_quality_sizes = {
         0: {"generic": 122, "text": 143, "font": 142},
         1: {"generic": 69, "text": 95, "font": 92},
+        2: {"generic": 80, "text": 115, "font": 97},
+        3: {"generic": 62, "text": 103, "font": 86},
     }
     for quality in range(12):
         for planned_mode, (name, expected) in zip(quality_modes, cases):
@@ -58,6 +60,14 @@ def main() -> int:
     if actual != expected:
         raise SystemExit("q0-adaptive-trees: node output mismatch")
     print(f"brotli planned q0-adaptive-trees node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = b"a" * (129 * 6)
+    encoded = subprocess.check_output([sys.argv[1], "q2-dynamic-commands"])
+    if len(encoded) != 27:
+        raise SystemExit(f"q2-dynamic-commands: wire size changed: {len(encoded)}")
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("q2-dynamic-commands: node output mismatch")
+    print(f"brotli planned q2-dynamic-commands node diff: encoded={len(encoded)} decoded={len(actual)}")
     expected = (
         b"alpha beta gamma delta alpha beta gamma delta " * 64
         + b"qzxwvbnm1234567890QZXWVBNM!@#$%^&*"

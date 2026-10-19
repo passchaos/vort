@@ -74,6 +74,14 @@ pub fn main(init: std.process.Init) !void {
         try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
         return;
     }
+    if (std.mem.eql(u8, mode, "q2-dynamic-commands")) {
+        const encoded = try vort.br.IncrementalTestSupport.encodeQ2DynamicCommands(
+            init.gpa,
+        );
+        defer init.gpa.free(encoded);
+        try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
+        return;
+    }
     if (std.mem.eql(u8, mode, "chunked-multiblock")) {
         const first = "alpha beta gamma delta alpha beta gamma delta " ** 64;
         const middle = "qzxwvbnm1234567890QZXWVBNM!@#$%^&*";

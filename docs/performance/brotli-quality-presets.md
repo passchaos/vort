@@ -42,8 +42,10 @@ q0/q1 use bounded block-local fast-fragment planning; q2...q11 use bounded lazy
 LZ77 planning. q0 uses a compact one-pass entropy writer whose current
 fragment updates the next fragment's command/distance trees; q1 expands its
 command plan through a dedicated compact two-pass 128-symbol event alphabet
-and exact first-pass histograms. q2...q11 retain the general command writer.
-All qualities keep exact
+and exact first-pass histograms. q2 uses its static-tree fast path through 128
+commands and bounded dynamic trees above it; q3 uses a trivial single-block
+dynamic three-tree writer. q4...q11 retain the general command writer. All
+qualities keep exact
 compressed-versus-stored comparison. The default
 advertised window is 16 bits. q0...q5 accept 10...16-bit windows; q6...q11
 accept RFC windows 10...24. The quality path's ordinary LZ matcher is capped at
@@ -78,8 +80,8 @@ split.
 | ---: | --- | --- |
 | 0 | fast | Dedicated block-local fixed-hash fragment parsing with five-byte anchors, one hash candidate, recent-distance probing, incompressible skip-ahead, sparse match-tail seeding, and a 16 KiB default fragment. It deliberately does not borrow prior-fragment LZ history. Its compact one-pass writer starts with the audited Brotli default tree, estimates the literal tree before LZ emission, and uses each fragment's seeded event histogram for the next fragment. Compound-dictionary commands and explicitly forced adaptive 64 KiB block arbitration retain the general writer. |
 | 1 | fast | Dedicated block-local fixed-hash fragment parsing with four-byte anchors through 32 KiB (six bytes for wider explicit fragments), the same bounded recent-distance/skip model, and a 32 KiB default fragment. It remains independent of prior-fragment LZ history. A dedicated compact two-pass writer collects exact literal/64-command/64-distance histograms, expands them into RFC trees, and emits the second pass directly; non-LZ compound-dictionary plans retain the general writer. Explicit RAW shared-prefix matching remains available. |
-| 2 | balanced | Lazy chain 4 and nice length 32; every mode may try the built-in transformed static dictionary through 256 bytes. No specialized q2 entropy writer is present. |
-| 3 | balanced | Lazy chain 8, nice length 48, recent-distance selection, and the same short-input dictionary candidate in every mode. No specialized q3 entropy writer is present. |
+| 2 | balanced | Lazy chain 4 and nice length 32; ordinary LZ plans use an upstream-shaped fast writer with exact literal tree plus static command/distance trees through 128 commands, then 8-/10-/6-bit bounded dynamic trees. Every mode may try the built-in transformed static dictionary through 256 bytes; dictionary command plans retain the general writer. |
+| 3 | balanced | Lazy chain 8, nice length 48, recent-distance selection, and a dedicated trivial single-meta-block writer with exact dynamic literal/command/distance trees but no block split. The same short-input dictionary candidate remains available through the general writer. |
 | 4 | balanced | Lazy chain 16 and nice length 64; enables existing literal/command/distance split candidates and distance-parameter search. Font additionally compares its first mode-specific distance-shape candidate. |
 | 5 | balanced | Lazy chain 32 and nice length 96; every mode enables the fixed two-tree UTF-8 literal-context candidate. |
 | 6 | ratio | Lazy chain 64 and nice length 128; adds a bounded 64-chain/16-candidate optimal search for 4--32 KiB inputs. The advertised window range expands to 10...24 bits. |
@@ -326,7 +328,6 @@ multi-corpus performance claim.
 The following are explicit gaps, not implied by the presence of the preset
 names:
 
-- the specialized q2/q3 entropy writers and their matching block decisions;
 - real q10/q11 Zopfli/HQ cost refinement, including iterative model feedback;
 - contextual dictionary encoding;
 - global multi-boundary segmentation and exact compressed-cost optimization
@@ -335,8 +336,8 @@ names:
   memory, and output-size monotonicity across representative corpora and
   platforms.
 
-q0 and q1 now have dedicated fast entropy writers, but neither claims
-libbrotli byte identity or general speed/ratio parity.
+q0...q3 now have dedicated entropy writers, but none claims libbrotli byte
+identity or general speed/ratio parity.
 
 Until those items land, describe this surface as “Vort-native q0...q11
 generic/text/font presets” rather than “libbrotli-compatible quality presets.”

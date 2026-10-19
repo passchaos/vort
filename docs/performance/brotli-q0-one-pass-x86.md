@@ -38,7 +38,8 @@ failure cleanup, and an actual two-fragment state transition.
 
 The Node differential pins q0 generic/text/font wire sizes and adds a 32 KiB
 two-fragment fixture whose second header uses the first fragment's learned
-tree. `zig build test-br --summary all` passes 812/812 tests.
+tree. `zig build test-br --summary all` now passes 814/814 tests after the
+q2/q3 writer follow-up.
 
 ## Fixed-CPU A/B evidence
 

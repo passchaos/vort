@@ -44,8 +44,8 @@ one-shot, chunked, reusable, caller-buffer, and arbitrarily fragmented
 incremental q1 output to remain byte-identical, and q0/q1 allocation-failure
 injection covers the new path.
 
-`zig build test-br --summary all` now passes 812/812 tests after the q0 writer
-follow-up. The complete
+`zig build test-br --summary all` now passes 814/814 tests after the q0...q3
+writer follow-ups. The complete
 `zig build run-br-planned-node-diff` matrix passes with the new wide-literal
 case, and `run-br-compound-dictionary-diff` passes its four repository-owned
 fallback fixtures. The system 1.0.9 runtime lacks the newer shared-dictionary

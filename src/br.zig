@@ -75,6 +75,10 @@ var test_single_tree_external_lookup_hits: usize = 0;
 var test_wide_auxiliary_lookup10_hits: usize = 0;
 var test_q0_one_pass_writer_hits: usize = 0;
 var test_q1_two_pass_writer_hits: usize = 0;
+var test_q2_fast_writer_hits: usize = 0;
+var test_q2_static_tree_hits: usize = 0;
+var test_q2_dynamic_tree_hits: usize = 0;
+var test_q3_trivial_writer_hits: usize = 0;
 
 const large_window_text_section = code_sections.large_window;
 const adaptive_split_text_section = code_sections.adaptive_split;
@@ -1001,6 +1005,49 @@ pub const IncrementalTestSupport = struct {
 
     pub fn encodeStored(allocator: std.mem.Allocator, payload: []const u8) Error![]u8 {
         return encodeStoredStreamAlloc(allocator, payload);
+    }
+
+    pub fn encodeQ2DynamicCommands(allocator: std.mem.Allocator) Error![]u8 {
+        const command_count = 129;
+        const payload = [_]u8{'a'} ** (command_count * 6);
+        var commands: [command_count]command_plan.Command = undefined;
+        for (&commands, 0..) |*command, index| command.* = .{
+            .insert_start = index * 6,
+            .insert_len = 1,
+            .copy_len = 5,
+            .distance = 1,
+            .has_copy = true,
+        };
+        var stream: std.ArrayList(u8) = .empty;
+        errdefer stream.deinit(allocator);
+        var prefix_writer = BitWriter{ .out = &stream };
+        try writeWindowBits(allocator, &prefix_writer, default_window_bits);
+        const start_bit_index = prefix_writer.bit_index;
+        const start_byte = stream.items[stream.items.len - 1];
+        var candidate_wire: std.ArrayList(u8) = .empty;
+        defer candidate_wire.deinit(allocator);
+        const candidate = try encodeQ23MetaBlockCandidate(
+            .q2_fast,
+            allocator,
+            &candidate_wire,
+            start_byte,
+            start_bit_index,
+            &payload,
+            &commands,
+            default_window_bits,
+            0,
+            .{},
+        );
+        try commitPlannedMetaBlockCandidate(
+            allocator,
+            &stream,
+            start_bit_index,
+            candidate_wire.items,
+        );
+        var final_writer = BitWriter{ .out = &stream, .bit_index = candidate.bit_index };
+        try final_writer.writeBits(allocator, 1, 1);
+        try final_writer.writeBits(allocator, 1, 1);
+        return stream.toOwnedSlice(allocator);
     }
 
     /// Encode one insertion-only production stream with a caller-selected RFC
@@ -3111,13 +3158,13 @@ pub fn encodePlannedStreamAlloc(allocator: std.mem.Allocator, input: []const u8)
     return encodePlannedStreamAllocWithStats(allocator, input, &stats);
 }
 
-fn usesFastFragment(quality: ?u4) bool {
-    return if (quality) |value| value <= 1 else false;
+fn usesDedicatedQualityBlockCore(quality: ?u4) bool {
+    return if (quality) |value| value <= 3 else false;
 }
 
 pub fn encodePlannedStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
     try validatePlannedEncodeOptions(input.len, options);
-    if (input.len > max_uncompressed_meta_block_len or usesFastFragment(options.quality)) {
+    if (input.len > max_uncompressed_meta_block_len or usesDedicatedQualityBlockCore(options.quality)) {
         const chunks = [_][]const u8{input};
         return encodePlannedStreamChunksWithOptionsAlloc(
             allocator,
@@ -3353,7 +3400,7 @@ pub fn encodedPlannedStreamBound(input_len: usize) Error!usize {
 pub fn encodedPlannedStreamBoundWithOptions(input_len: usize, options: PlannedEncodeOptions) Error!usize {
     try validatePlannedEncodeOptions(input_len, options);
     const window_bits = try resolvedPlannedWindowBits(options);
-    if (input_len > max_uncompressed_meta_block_len or usesFastFragment(options.quality))
+    if (input_len > max_uncompressed_meta_block_len or usesDedicatedQualityBlockCore(options.quality))
         return encodedPlannedChunkedStreamBoundForInputLen(
             input_len,
             try plannedStreamChunksOptionsFromEncodeOptions(options),
@@ -4541,6 +4588,7 @@ const PlannedWireContext = struct {
 };
 
 const PlannedMetaBlockPolicy = struct {
+    quality: ?quality_schedule.Quality = null,
     family: quality_schedule.LevelFamily,
     lazy: quality_schedule.LazyBudget,
     optimal: quality_schedule.OptimalBudget = .{
@@ -4613,6 +4661,7 @@ const PlannedMetaBlockPolicy = struct {
 
     fn fromSchedule(schedule: quality_schedule.Schedule) PlannedMetaBlockPolicy {
         return .{
+            .quality = schedule.quality,
             .family = schedule.family,
             .lazy = schedule.lazy,
             .optimal = schedule.optimal,
@@ -5059,6 +5108,333 @@ fn encodeQ1TwoPassMetaBlockCandidate(
     };
 }
 
+const Q23EntropyMode = enum {
+    q2_fast,
+    q3_trivial,
+};
+
+const Q23ResolvedCommand = struct {
+    encoding: CommandEncoding,
+    distance: ?encoder_distance.Encoding,
+    recent_symbol: ?u4,
+    wire_distance: usize,
+};
+
+const Q23Frequencies = struct {
+    literals: [256]u32 = @splat(0),
+    commands: [704]u32 = @splat(0),
+    distances: [64]u32 = @splat(0),
+    final_last_distances: [4]usize,
+    literal_count: usize = 0,
+    explicit_distance_count: usize = 0,
+};
+
+const q2_static_command_lengths: [704]u4 = blk: {
+    var lengths: [704]u4 = undefined;
+    for (&lengths, 0..) |*bits, symbol| bits.* = if (symbol < 448) 9 else 11;
+    break :blk lengths;
+};
+const q2_static_distance_lengths: [64]u4 = @splat(6);
+
+fn fullPrefixAlphabet(comptime capacity: usize) command_plan.PrefixAlphabetFor(capacity) {
+    var alphabet: command_plan.PrefixAlphabetFor(capacity) = undefined;
+    alphabet.len = capacity;
+    for (alphabet.symbols[0..capacity], 0..) |*symbol, index| symbol.* = @intCast(index);
+    return alphabet;
+}
+
+fn resolveQ23Command(
+    mode: Q23EntropyMode,
+    command: command_plan.Command,
+    wire_distance: usize,
+    last_distances: *const [4]usize,
+) Error!Q23ResolvedCommand {
+    const recent_symbol: ?u4 = if (!command.has_copy)
+        null
+    else switch (mode) {
+        .q2_fast => if (wire_distance == last_distances[3]) 0 else null,
+        .q3_trivial => recentDistanceSymbol(wire_distance, last_distances),
+    };
+    const encoding = commandEntryForLengthsAndDistance(
+        command.insert_len,
+        command.copy_len,
+        recent_symbol == 0,
+    ) orelse commandEntryForLengths(command.insert_len, command.copy_len) orelse
+        return error.InvalidBlockPlan;
+    const distance = if (command.has_copy and encoding.command.distance_code == -1)
+        if (recent_symbol) |symbol|
+            encoder_distance.Encoding{ .symbol = symbol }
+        else
+            encoder_distance.encodeWithParameters(
+                wire_distance,
+                encoder_distance.Parameters.init(0, 0),
+            ) orelse return error.InvalidBlockPlan
+    else
+        null;
+    return .{
+        .encoding = encoding,
+        .distance = distance,
+        .recent_symbol = recent_symbol,
+        .wire_distance = wire_distance,
+    };
+}
+
+fn q23PushDistance(
+    last_distances: *[4]usize,
+    command: command_plan.Command,
+    resolved: Q23ResolvedCommand,
+) void {
+    if (!command.has_copy) return;
+    if (resolved.recent_symbol == null or resolved.recent_symbol.? != 0)
+        pushLastDistance(last_distances, resolved.wire_distance);
+}
+
+fn collectQ23Frequencies(
+    mode: Q23EntropyMode,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    wire_context: PlannedWireContext,
+) Error!Q23Frequencies {
+    if (commands.len == 0) return error.InvalidBlockPlan;
+    var result = Q23Frequencies{ .final_last_distances = wire_context.starting_last_distances };
+    var cursor: usize = 0;
+    for (commands) |command| {
+        if (!command.isLz77() or command.insert_start != cursor or
+            command.insert_len > input.len - cursor)
+        {
+            return error.InvalidBlockPlan;
+        }
+        const literal_end = cursor + command.insert_len;
+        for (input[cursor..literal_end]) |literal| result.literals[literal] += 1;
+        result.literal_count += command.insert_len;
+        cursor = literal_end;
+        const wire_distance = if (command.has_copy)
+            try commandWireDistance(
+                command,
+                wire_context.window_bits,
+                wire_context.compound_dictionary_size,
+                wire_context.initial_output_pos,
+            )
+        else
+            0;
+        const resolved = try resolveQ23Command(
+            mode,
+            command,
+            wire_distance,
+            &result.final_last_distances,
+        );
+        result.commands[resolved.encoding.symbol] += 1;
+        if (resolved.distance) |distance| {
+            if (distance.symbol >= result.distances.len) return error.InvalidBlockPlan;
+            result.distances[distance.symbol] += 1;
+            result.explicit_distance_count += 1;
+        }
+        q23PushDistance(&result.final_last_distances, command, resolved);
+        if (command.has_copy) {
+            if (command.copy_len > input.len - cursor) return error.InvalidBlockPlan;
+            cursor += command.copy_len;
+        }
+    }
+    if (cursor != input.len) return error.InvalidBlockPlan;
+    if (result.literal_count == 0) result.literals[0] = 1;
+    if (result.explicit_distance_count == 0) result.distances[0] = 1;
+    return result;
+}
+
+fn writeQ23Symbol(
+    comptime capacity: usize,
+    allocator: std.mem.Allocator,
+    writer: *BitWriter,
+    alphabet: *const command_plan.PrefixAlphabetFor(capacity),
+    encoder: *const huffman.HuffmanTable(capacity).Encoder,
+    symbol: usize,
+) Error!void {
+    if (symbol >= capacity) return error.InvalidBlockPlan;
+    if (alphabet.len <= 1) return;
+    if (alphabet.len <= 4) {
+        const code = alphabet.simpleCode(@intCast(symbol)) orelse
+            return error.InvalidBlockPlan;
+        return writer.writeHuffmanBits(allocator, code.code, code.bits);
+    }
+    const bits = encoder.bits[symbol];
+    if (bits == 0) return error.InvalidBlockPlan;
+    return writer.writeHuffmanBits(allocator, encoder.codes[symbol], bits);
+}
+
+fn q23Encoder(
+    comptime capacity: usize,
+    lengths: *const [capacity]u4,
+    alphabet: *const command_plan.PrefixAlphabetFor(capacity),
+) Error!huffman.HuffmanTable(capacity).Encoder {
+    if (alphabet.len <= 4) return .{};
+    if (alphabet.len <= 64)
+        return huffman.HuffmanTable(capacity).Encoder.initSparseTrusted(
+            lengths,
+            alphabet.symbols[0..alphabet.len],
+        );
+    return huffman.HuffmanTable(capacity).Encoder.init(lengths);
+}
+
+fn encodeQ23MetaBlockCandidate(
+    mode: Q23EntropyMode,
+    allocator: std.mem.Allocator,
+    bytes: *std.ArrayList(u8),
+    start_byte: u8,
+    start_bit_index: u3,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    window_bits: u5,
+    compound_dictionary_size: usize,
+    initial_wire_state: PlannedWireState,
+) Error!PlannedMetaBlockCandidate {
+    bytes.clearRetainingCapacity();
+    if (start_bit_index != 0) try bytes.append(allocator, start_byte);
+    var writer = BitWriter{ .out = bytes, .bit_index = start_bit_index };
+    const start_bit_position = writer.bitPosition();
+    const wire_context = PlannedWireContext{
+        .window_bits = window_bits,
+        .compound_dictionary_size = compound_dictionary_size,
+        .initial_output_pos = initial_wire_state.output_pos,
+        .starting_last_distances = initial_wire_state.last_distances,
+    };
+    const frequencies = try collectQ23Frequencies(mode, input, commands, wire_context);
+
+    var literal_alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
+    try command_plan.alphabetFromFrequenciesInto(256, &literal_alphabet, &frequencies.literals);
+    const static_q2 = mode == .q2_fast and commands.len <= 128;
+    var command_alphabet: command_plan.PrefixAlphabet = undefined;
+    var distance_alphabet: command_plan.PrefixAlphabetFor(64) = undefined;
+    if (static_q2) {
+        command_alphabet = fullPrefixAlphabet(704);
+        distance_alphabet = fullPrefixAlphabet(64);
+    } else {
+        try command_plan.alphabetFromFrequenciesInto(704, &command_alphabet, &frequencies.commands);
+        try command_plan.alphabetFromFrequenciesInto(64, &distance_alphabet, &frequencies.distances);
+    }
+    const literal_lengths = try q1TreeLengths(
+        256,
+        &frequencies.literals,
+        &literal_alphabet,
+        if (mode == .q2_fast) 8 else 15,
+    );
+    const command_lengths = if (static_q2)
+        q2_static_command_lengths
+    else
+        try q1TreeLengths(
+            704,
+            &frequencies.commands,
+            &command_alphabet,
+            if (mode == .q2_fast) 10 else 15,
+        );
+    const distance_lengths = if (static_q2)
+        q2_static_distance_lengths
+    else
+        try q1TreeLengths(
+            64,
+            &frequencies.distances,
+            &distance_alphabet,
+            if (mode == .q2_fast) 6 else 15,
+        );
+
+    try writeCompressedMetaBlockHeader(allocator, &writer, input.len, false);
+    try writePlannedCompressedHeader(
+        64,
+        allocator,
+        &writer,
+        &literal_alphabet,
+        &command_alphabet,
+        null,
+        &distance_alphabet,
+        null,
+        encoder_distance.Parameters.init(0, 0),
+        64,
+        &literal_lengths,
+        &command_lengths,
+        &distance_lengths,
+    );
+    const literal_encoder = try q23Encoder(256, &literal_lengths, &literal_alphabet);
+    const command_encoder = try q23Encoder(704, &command_lengths, &command_alphabet);
+    const distance_encoder = try q23Encoder(64, &distance_lengths, &distance_alphabet);
+
+    var cursor: usize = 0;
+    var last_distances = initial_wire_state.last_distances;
+    for (commands) |command| {
+        const literal_end = cursor + command.insert_len;
+        const wire_distance = if (command.has_copy)
+            try commandWireDistance(
+                command,
+                window_bits,
+                compound_dictionary_size,
+                initial_wire_state.output_pos,
+            )
+        else
+            0;
+        const resolved = try resolveQ23Command(mode, command, wire_distance, &last_distances);
+        try writeQ23Symbol(
+            704,
+            allocator,
+            &writer,
+            &command_alphabet,
+            &command_encoder,
+            resolved.encoding.symbol,
+        );
+        try writeCommandLengthExtras(
+            allocator,
+            &writer,
+            resolved.encoding,
+            command.insert_len,
+            command.copy_len,
+        );
+        for (input[cursor..literal_end]) |literal|
+            try writeQ23Symbol(
+                256,
+                allocator,
+                &writer,
+                &literal_alphabet,
+                &literal_encoder,
+                literal,
+            );
+        cursor = literal_end;
+        if (resolved.distance) |distance| {
+            try writeQ23Symbol(
+                64,
+                allocator,
+                &writer,
+                &distance_alphabet,
+                &distance_encoder,
+                distance.symbol,
+            );
+            if (distance.extra_bits != 0)
+                try writer.writeBits(allocator, distance.extra, distance.extra_bits);
+        }
+        q23PushDistance(&last_distances, command, resolved);
+        if (command.has_copy) cursor += command.copy_len;
+    }
+    if (cursor != input.len) return error.InvalidBlockPlan;
+    if (builtin.is_test) switch (mode) {
+        .q2_fast => {
+            test_q2_fast_writer_hits += 1;
+            if (static_q2)
+                test_q2_static_tree_hits += 1
+            else
+                test_q2_dynamic_tree_hits += 1;
+        },
+        .q3_trivial => test_q3_trivial_writer_hits += 1,
+    };
+    return .{
+        .bit_index = writer.bit_index,
+        .bit_count = writer.bitPosition() - start_bit_position,
+        .wire_state = .{
+            .last_distances = last_distances,
+            .output_pos = std.math.add(
+                usize,
+                initial_wire_state.output_pos,
+                input.len,
+            ) catch return error.IntegerOverflow,
+        },
+    };
+}
+
 fn encodePlannedMetaBlockCandidate(
     allocator: std.mem.Allocator,
     bytes: *std.ArrayList(u8),
@@ -5174,6 +5550,39 @@ fn considerPlannedMetaBlockCommands(
         } else |err| switch (err) {
             // Compound-dictionary command plans and any future command source
             // outside q1's local LZ subset retain the complete general writer.
+            error.InvalidBlockPlan => {},
+            else => return err,
+        }
+    }
+    const q23_mode: ?Q23EntropyMode = if (policy.quality) |quality| switch (quality) {
+        .q2 => .q2_fast,
+        .q3 => .q3_trivial,
+        else => null,
+    } else null;
+    if (q23_mode) |mode| {
+        if (encodeQ23MetaBlockCandidate(
+            mode,
+            allocator,
+            candidate_wire,
+            start_byte,
+            start_bit_index,
+            input,
+            commands,
+            window_bits,
+            compound_dictionary_size,
+            wire_state,
+        )) |candidate| {
+            try retainSmallerMetaBlockCandidate(
+                allocator,
+                best,
+                candidate_wire,
+                best_wire,
+                candidate,
+            );
+            return;
+        } else |err| switch (err) {
+            // Static/compound dictionary command sources retain the complete
+            // general writer and its out-of-window distance handling.
             error.InvalidBlockPlan => {},
             else => return err,
         }
@@ -6170,7 +6579,7 @@ pub const PlannedStreamEncoder = struct {
     /// inputs retain their one-shot paths because they need wider search state.
     pub fn encodeWithOptionsAlloc(self: *PlannedStreamEncoder, allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
         try validatePlannedEncodeOptions(input.len, options);
-        if (input.len > max_uncompressed_meta_block_len or usesFastFragment(options.quality)) {
+        if (input.len > max_uncompressed_meta_block_len or usesDedicatedQualityBlockCore(options.quality)) {
             const chunks = [_][]const u8{input};
             return self.encodeChunksWithOptionsAlloc(
                 allocator,
@@ -6290,7 +6699,7 @@ pub const PlannedStreamEncoder = struct {
     /// The returned slice is invalidated by the next call or by `deinit`.
     pub fn encodeScratchWithOptions(self: *PlannedStreamEncoder, input: []const u8, options: PlannedEncodeOptions) Error![]const u8 {
         try validatePlannedEncodeOptions(input.len, options);
-        if (input.len > max_uncompressed_meta_block_len or usesFastFragment(options.quality)) {
+        if (input.len > max_uncompressed_meta_block_len or usesDedicatedQualityBlockCore(options.quality)) {
             const chunks = [_][]const u8{input};
             return self.encodeChunksScratchWithOptions(
                 &chunks,
@@ -21845,6 +22254,55 @@ test "br q0 one-pass writer learns command trees across fragments" {
     ));
     const summary = try summarizeStream(encoded);
     try std.testing.expectEqual(@as(usize, 2), summary.compressed_meta_block_count);
+    const decoded = try decodeStreamAllocExactSize(
+        std.testing.allocator,
+        encoded,
+        payload.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
+test "br q2 static and q3 trivial writers drive public quality paths" {
+    const payload = "balanced entropy writer payload 0123456789\n" ** 128;
+    test_q2_fast_writer_hits = 0;
+    test_q2_static_tree_hits = 0;
+    test_q3_trivial_writer_hits = 0;
+    const q2 = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .quality = 2 },
+    );
+    defer std.testing.allocator.free(q2);
+    const q3 = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .quality = 3 },
+    );
+    defer std.testing.allocator.free(q3);
+    try std.testing.expect(test_q2_fast_writer_hits != 0);
+    try std.testing.expect(test_q2_static_tree_hits != 0);
+    try std.testing.expect(test_q3_trivial_writer_hits != 0);
+    for ([_][]const u8{ q2, q3 }) |encoded| {
+        const decoded = try decodeStreamAllocExactSize(
+            std.testing.allocator,
+            encoded,
+            payload.len,
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
+}
+
+test "br q2 dynamic fast writer covers more than 128 commands" {
+    const command_count = 129;
+    const payload = [_]u8{'a'} ** (command_count * 6);
+    test_q2_dynamic_tree_hits = 0;
+    const encoded = try IncrementalTestSupport.encodeQ2DynamicCommands(
+        std.testing.allocator,
+    );
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expectEqual(@as(usize, 1), test_q2_dynamic_tree_hits);
     const decoded = try decodeStreamAllocExactSize(
         std.testing.allocator,
         encoded,

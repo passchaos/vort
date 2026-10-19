@@ -26,9 +26,9 @@ major gaps before Vort can claim broad industry-best parity:
   writer with the audited default first tree and cross-fragment adaptive
   command/distance state; q1 uses a dedicated compact two-pass 128-symbol
   event/histogram writer. Compound-dictionary commands retain the general
-  writer. q2/q3 entropy writers, q10/q11 Zopfli/HQ cost refinement,
-  contextual dictionary encoding and global exact-cost segmentation remain
-  open.
+  writer. q2 now has its static/dynamic fast-tree writer and q3 its trivial
+  dynamic three-tree writer. q10/q11 Zopfli/HQ cost refinement, contextual
+  dictionary encoding and global exact-cost segmentation remain open.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
   entropy block switching, static dictionaries, consecutive compressed

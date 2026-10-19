@@ -44,7 +44,7 @@ q0/q1 do not accidentally use earlier-fragment LZ history, while the legacy
 fast policy still does. Both q0 and q1 one-shot paths pass exhaustive
 allocation-failure injection.
 
-`zig build test-br --summary all` now passes 812/812 tests after the q0/q1
+`zig build test-br --summary all` now passes 814/814 tests after the q0...q3
 writer follow-ups. The complete
 `zig build run-br-planned-node-diff` matrix passes, including q0/q1 in
 generic/text/font modes, so Node/libbrotli decodes every selected wire. The
