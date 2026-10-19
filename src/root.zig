@@ -859,11 +859,14 @@ pub const BrotliSerializedSharedDictionaryChoice = br.SerializedSharedDictionary
 pub const BrotliSerializedSharedDictionaryWordListSpec = br.SerializedSharedDictionaryWordListSpec;
 pub const BrotliSerializedSharedDictionaryTransformListSpec = br.SerializedSharedDictionaryTransformListSpec;
 pub const BrotliSerializedSharedDictionaryBuildError = br.SerializedSharedDictionaryBuildError;
+pub const BrotliSerializedSharedDictionaryTrainOptions = br.SerializedSharedDictionaryTrainOptions;
+pub const BrotliOwnedTrainedSerializedSharedDictionary = br.OwnedTrainedSerializedSharedDictionary;
 pub const brParseSerializedSharedDictionary = br.parseSerializedSharedDictionary;
 pub const brSerializedSharedDictionaryEncodedSize = br.serializedSharedDictionaryEncodedSize;
 pub const brSerializeSharedDictionaryInto = br.serializeSharedDictionaryInto;
 pub const brSerializeSharedDictionaryAppend = br.serializeSharedDictionaryAppend;
 pub const brSerializeSharedDictionaryAlloc = br.serializeSharedDictionaryAlloc;
+pub const brTrainSerializedSharedDictionaryAlloc = br.trainSerializedSharedDictionaryAlloc;
 pub const BrotliPlannedEncodeOptions = br.PlannedEncodeOptions;
 pub const brotliMaxExtendedDictionaryProbes = br.max_extended_dictionary_probes;
 pub const BrotliPlannedStreamChunksOptions = br.PlannedStreamChunksOptions;
@@ -4054,11 +4057,14 @@ test "root exports lz4 and zstd codec helpers" {
     _ = BrotliSerializedSharedDictionaryWordListSpec;
     _ = BrotliSerializedSharedDictionaryTransformListSpec;
     _ = BrotliSerializedSharedDictionaryBuildError;
+    _ = BrotliSerializedSharedDictionaryTrainOptions;
+    _ = BrotliOwnedTrainedSerializedSharedDictionary;
     _ = brParseSerializedSharedDictionary;
     _ = brSerializedSharedDictionaryEncodedSize;
     _ = brSerializeSharedDictionaryInto;
     _ = brSerializeSharedDictionaryAppend;
     _ = brSerializeSharedDictionaryAlloc;
+    _ = brTrainSerializedSharedDictionaryAlloc;
     const default_serialized_dictionary = try brParseSerializedSharedDictionary(
         &.{ 0x91, 0x00, 0x00, 0x00, 0x00 },
     );

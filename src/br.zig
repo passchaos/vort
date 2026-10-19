@@ -66,6 +66,7 @@ const distance_history = @import("br/decoder/distance_history.zig");
 const shared_dictionary = @import("br/shared_dictionary.zig");
 const serialized_dictionary = @import("br/serialized_dictionary.zig");
 const serialized_dictionary_builder = @import("br/serialized_dictionary_builder.zig");
+const serialized_dictionary_trainer = @import("br/serialized_dictionary_trainer.zig");
 const code_length_decoder_mod = @import("br/code_length_decoder.zig");
 
 const distanceWithDelta = distance_history.withDelta;
@@ -107,6 +108,40 @@ pub const serializedSharedDictionaryEncodedSize = serialized_dictionary_builder.
 pub const serializeSharedDictionaryInto = serialized_dictionary_builder.serializeInto;
 pub const serializeSharedDictionaryAppend = serialized_dictionary_builder.serializeAppend;
 pub const serializeSharedDictionaryAlloc = serialized_dictionary_builder.serializeAlloc;
+pub const SerializedSharedDictionaryTrainOptions = struct {
+    min_word_len: u5 = 4,
+    max_word_len: u5 = 16,
+    max_words_per_length: u16 = 64,
+    max_phrases_per_length: usize = 256,
+    quality: u4 = 5,
+    mode: PlannedMode = .generic,
+    /// Charge the serialized dictionary bytes once against the held-out frame
+    /// total. Disable only when deployment amortizes dictionary distribution
+    /// out of band.
+    include_dictionary_size: bool = true,
+    min_savings_bytes: usize = 1,
+};
+
+pub const OwnedTrainedSerializedSharedDictionary = struct {
+    bytes: []u8,
+    id: serialized_dictionary_trainer.DictionaryId,
+    bucket_count: usize,
+    word_count: usize,
+    baseline_frame_bytes: usize,
+    trained_frame_bytes: usize,
+    charged_dictionary_bytes: usize,
+    total_savings_bytes: usize,
+
+    pub fn deinit(self: OwnedTrainedSerializedSharedDictionary, allocator: std.mem.Allocator) void {
+        allocator.free(self.bytes);
+    }
+
+    pub fn parse(
+        self: *const OwnedTrainedSerializedSharedDictionary,
+    ) SerializedSharedDictionaryError!SerializedSharedDictionary {
+        return parseSerializedSharedDictionary(self.bytes);
+    }
+};
 pub const max_extended_dictionary_probes: u16 = 4096;
 pub const PlannedEncodeOptions = struct {
     level: PlannedCompressionLevel = .fast,
@@ -208,6 +243,94 @@ pub fn parseSerializedSharedDictionary(
     encoded: []const u8,
 ) SerializedSharedDictionaryError!SerializedSharedDictionary {
     return serialized_dictionary.parse(encoded);
+}
+
+pub fn trainSerializedSharedDictionaryAlloc(
+    allocator: std.mem.Allocator,
+    training_samples: []const []const u8,
+    validation_samples: []const []const u8,
+    options: SerializedSharedDictionaryTrainOptions,
+) Error!?OwnedTrainedSerializedSharedDictionary {
+    if (validation_samples.len == 0 or options.min_savings_bytes == 0 or
+        options.quality > 11)
+        return error.InvalidDictionaryTraining;
+    const maybe_candidate = serialized_dictionary_trainer.trainCandidateAlloc(
+        allocator,
+        training_samples,
+        .{
+            .min_word_len = options.min_word_len,
+            .max_word_len = options.max_word_len,
+            .max_words_per_length = options.max_words_per_length,
+            .max_phrases_per_length = options.max_phrases_per_length,
+        },
+    ) catch |err| switch (err) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.IntegerOverflow => return error.IntegerOverflow,
+        else => return error.InvalidDictionaryTraining,
+    };
+    var candidate = maybe_candidate orelse return null;
+    errdefer candidate.deinit(allocator);
+    const parsed = parseSerializedSharedDictionary(candidate.encoded) catch
+        return error.InvalidDictionaryTraining;
+    const shared = SharedDictionary{ .serialized = &parsed };
+
+    var baseline_frame_bytes: usize = 0;
+    var trained_frame_bytes: usize = 0;
+    for (validation_samples) |sample| {
+        const baseline = try encodePlannedStreamWithOptionsAlloc(
+            allocator,
+            sample,
+            .{ .quality = options.quality, .mode = options.mode },
+        );
+        defer allocator.free(baseline);
+        baseline_frame_bytes = std.math.add(
+            usize,
+            baseline_frame_bytes,
+            baseline.len,
+        ) catch return error.IntegerOverflow;
+
+        const trained = try encodePlannedStreamWithOptionsAlloc(
+            allocator,
+            sample,
+            .{
+                .quality = options.quality,
+                .mode = options.mode,
+                .shared_dictionary = shared,
+            },
+        );
+        defer allocator.free(trained);
+        trained_frame_bytes = std.math.add(
+            usize,
+            trained_frame_bytes,
+            trained.len,
+        ) catch return error.IntegerOverflow;
+    }
+    const charged_dictionary_bytes = if (options.include_dictionary_size)
+        candidate.encoded.len
+    else
+        0;
+    const trained_total = std.math.add(
+        usize,
+        trained_frame_bytes,
+        charged_dictionary_bytes,
+    ) catch return error.IntegerOverflow;
+    if (trained_total >= baseline_frame_bytes or
+        baseline_frame_bytes - trained_total < options.min_savings_bytes)
+    {
+        candidate.deinit(allocator);
+        return null;
+    }
+    const result = OwnedTrainedSerializedSharedDictionary{
+        .bytes = candidate.encoded,
+        .id = candidate.id,
+        .bucket_count = candidate.bucket_count,
+        .word_count = candidate.word_count,
+        .baseline_frame_bytes = baseline_frame_bytes,
+        .trained_frame_bytes = trained_frame_bytes,
+        .charged_dictionary_bytes = charged_dictionary_bytes,
+        .total_savings_bytes = baseline_frame_bytes - trained_total,
+    };
+    return result;
 }
 
 fn preparePlannedSharedDictionary(
@@ -1070,6 +1193,7 @@ test {
     _ = code_length_decoder_mod;
     _ = serialized_dictionary;
     _ = serialized_dictionary_builder;
+    _ = serialized_dictionary_trainer;
 }
 
 pub const IncrementalTestSupport = struct {
@@ -32495,6 +32619,120 @@ test "br serialized dictionary commands jointly select literal context trees" {
     );
     defer std.testing.allocator.free(chunked_decoded);
     try std.testing.expectEqualSlices(u8, expected.items, chunked_decoded);
+}
+
+test "br serialized dictionary trainer retains held-out complete-wire wins" {
+    const phrases = [_][]const u8{
+        "A1b2C3d4E5f6G7h8",
+        "J9k0L1m2N3p4Q5r6",
+        "S7t8U9v0W1x2Y3z4",
+        "B5c6D7e8F9g0H1i2",
+    };
+    comptime for (phrases) |phrase| std.debug.assert(phrase.len == 16);
+    var training_storage: [8][68]u8 = undefined;
+    var training_samples: [training_storage.len][]const u8 = undefined;
+    for (&training_storage, &training_samples, 0..) |*storage, *sample, index| {
+        std.mem.writeInt(u32, storage[0..4], @intCast(index), .little);
+        var cursor: usize = 4;
+        for (phrases) |phrase| {
+            @memcpy(storage[cursor..][0..phrase.len], phrase);
+            cursor += phrase.len;
+        }
+        sample.* = storage[0..cursor];
+    }
+    var validation_storage: [64][68]u8 = undefined;
+    var validation_samples: [validation_storage.len][]const u8 = undefined;
+    for (&validation_storage, &validation_samples, 0..) |*storage, *sample, index| {
+        std.mem.writeInt(u32, storage[0..4], @intCast(0x1000 + index), .little);
+        var cursor: usize = 4;
+        for (phrases) |phrase| {
+            @memcpy(storage[cursor..][0..phrase.len], phrase);
+            cursor += phrase.len;
+        }
+        sample.* = storage[0..cursor];
+    }
+    const options = SerializedSharedDictionaryTrainOptions{
+        .min_word_len = 16,
+        .max_word_len = 16,
+        .max_words_per_length = 8,
+        .max_phrases_per_length = 64,
+        .quality = 5,
+    };
+    const first = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        options,
+    )) orelse return error.TestUnexpectedResult;
+    defer first.deinit(std.testing.allocator);
+    const second = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        options,
+    )) orelse return error.TestUnexpectedResult;
+    defer second.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, first.bytes, second.bytes);
+    try std.testing.expectEqual(first.id, second.id);
+    try std.testing.expectEqual(first.id.asInt(), second.id.asInt());
+    try std.testing.expect(first.bucket_count != 0 and first.word_count >= 2);
+    try std.testing.expect(first.total_savings_bytes >= options.min_savings_bytes);
+    // Locked evidence: 4,608 baseline bytes versus 2,632 frame bytes plus a
+    // 172-byte dictionary. Keep a conservative complete-total improvement.
+    try std.testing.expect(
+        first.total_savings_bytes * 100 >= first.baseline_frame_bytes * 30,
+    );
+    try std.testing.expectEqual(
+        first.baseline_frame_bytes - first.total_savings_bytes,
+        first.trained_frame_bytes + first.charged_dictionary_bytes,
+    );
+    const parsed = try first.parse();
+    try std.testing.expectEqual(@as(u7, 1), parsed.word_list_count);
+}
+
+test "br serialized dictionary trainer rejects non-wins and invalid evaluation" {
+    const samples = [_][]const u8{"one held-out sample with no amortization"};
+    try std.testing.expectEqual(
+        @as(?OwnedTrainedSerializedSharedDictionary, null),
+        try trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{
+                .min_word_len = 8,
+                .max_word_len = 8,
+                .max_words_per_length = 2,
+                .max_phrases_per_length = 8,
+            },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &.{},
+            .{},
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .min_savings_bytes = 0 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .quality = 12 },
+        ),
+    );
 }
 
 test "br RAW shared dictionary rejects invalid descriptors before output mutation" {

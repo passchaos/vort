@@ -331,11 +331,12 @@ The following are explicit gaps, not implied by the presence of the preset
 names:
 
 - real q10/q11 Zopfli/HQ cost refinement, including iterative model feedback;
-- serialized contextual dictionary training and broad production calibration.
-  Strict zero-copy parsing, canonical construction, mixed built-in/custom
-  address replay, production decode attachment, bounded reusable indexing, all
-  four RFC modes, and joint multi-tree literal-context complete-wire selection
-  are available; oversized descriptors retain exhaustive matching;
+- contextual-map/transform-aware serialized dictionary training and broad
+  production calibration. Deterministic identity-word training with held-out
+  complete-wire arbitration, strict parsing, canonical construction, mixed
+  built-in/custom replay, production decode attachment, bounded indexing, all
+  four RFC modes, and joint multi-tree selection are available; oversized
+  descriptors retain exhaustive matching;
 - global multi-boundary segmentation and exact compressed-cost optimization
   beyond the current bounded midpoint entropy lookahead;
 - calibration and regression gates for compression ratio, throughput, peak

@@ -38,8 +38,12 @@ major gaps before Vort can claim broad industry-best parity:
   suffix, bounded-16-tree, and complete clustered literal-context candidates.
   A canonical Zig-native builder now exposes encoded-size, caller-buffer,
   append, and allocating forms for the complete borrowed specification, with
-  deterministic parse/serialize round trips. Dictionary training and broader
-  corpus calibration remain open.
+  deterministic parse/serialize round trips. A bounded identity-word trainer
+  selects power-of-two length buckets and retains candidates only after a
+  held-out complete-wire win including dictionary storage by default; its
+  locked fixture improves 4,608 baseline bytes to 2,632 frame bytes plus a
+  172-byte dictionary. Context-map/transform learning and broader corpus
+  calibration remain open.
   q10/q11 Zopfli/HQ cost refinement and global exact-cost segmentation also
   remain open.
 - True byte-progressive Brotli decoding now covers stored data, metadata,

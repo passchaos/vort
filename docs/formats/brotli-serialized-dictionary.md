@@ -85,11 +85,23 @@ distance shifting, and history-selected context maps. Encoder tests cover
 one-shot, reusable, chunked, incremental, q0 cross-block context retention,
 and complete address replay. An experimental libbrotli 1.2.0 build passes both
 Vort-encode/libbrotli-decode and libbrotli-encode/Vort-decode cases. The
-contextual differential dictionary is produced through the public builder.
+contextual differential dictionary is produced through the public builder, and
+an additional bidirectional pair uses the public trainer (`serialized_cases=6`).
 Builder tests cover deterministic parse/serialize round trips, built-in/custom
 mixed choices, all output ownership forms, varint boundaries, invalid size
 buckets/transforms/context IDs, atomic caller output, and allocation failure.
 The parser allocates no memory.
+
+`brTrainSerializedSharedDictionaryAlloc` trains identity-transform word lists
+from caller-supplied training samples, one bounded heavy-hitter collection per
+word length. Each emitted bucket is the largest legal power of two within the
+configured limits. Held-out samples are then encoded both without and with the
+candidate; the function returns null unless the actual complete Brotli frame
+total, plus the serialized dictionary by default, meets `min_savings_bytes`.
+The owned result reports frame totals, charged dictionary bytes, word/bucket
+counts, total savings, and a stable content-derived `DictionaryId`. This first
+trainer reuses Vort's bounded deterministic phrase collector; it does not claim
+COVER/FastCover equivalence or contextual/transform training.
 
 ## Remaining performance work
 
@@ -105,5 +117,7 @@ mode, the encoder additionally arbitrates single-tree, suffix, bounded-16-tree,
 and complete clustered literal-context candidates. A locked joint fixture
 shrinks from 627 to 523 bytes while retaining custom dictionary copies. Vort
 does not promise stability for upstream's experimental container format.
-Dictionary training and corpus-driven word/transform selection remain open;
-the builder intentionally serializes an explicit caller-owned specification.
+The first trainer is deterministic and complete-wire validated, but contextual
+map learning, transform-list learning, and COVER/FastCover-class candidate
+selection remain open. The builder also remains available for fully explicit
+caller-owned specifications.
