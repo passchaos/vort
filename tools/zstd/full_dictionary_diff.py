@@ -66,6 +66,11 @@ def main() -> int:
             raise SystemExit(f"validated history selector regressed: {output!r}")
         if cover_content <= 0 or cover_content > 64 or cover_reference <= 0:
             raise SystemExit(f"COVER-class full dictionary interoperability was not exercised: {output!r}")
+        if int(fields.get("cover_candidates", 0)) != 8:
+            raise SystemExit(f"COVER-class parameter search coverage regressed: {output!r}")
+        cover_fixed = int(fields.get("cover_fixed", 0))
+        if cover_fixed <= 0 or cover_reference > cover_fixed:
+            raise SystemExit(f"COVER-class parameter search regressed against fixed parameters: {output!r}")
         generated_bytes = generated.read_bytes()
         if generated_bytes[:4] != bytes.fromhex("37a430ec"):
             raise SystemExit("Vort generated dictionary has bad magic")

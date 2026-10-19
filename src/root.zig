@@ -2412,6 +2412,7 @@ pub const ZstdDictionary = zstd.Dictionary;
 pub const ZstdDictionaryKind = zstd.DictionaryKind;
 pub const ZstdDictionaryTrainOptions = zstd.DictionaryTrainOptions;
 pub const ZstdCoverDictionaryTrainOptions = zstd.CoverDictionaryTrainOptions;
+pub const ZstdCoverDictionaryOptimizeOptions = zstd.CoverDictionaryOptimizeOptions;
 pub const ZstdOwnedDictionary = zstd.OwnedDictionary;
 pub const ZstdDictionarySet = zstd.DictionarySet;
 pub const ZstdOwnedDictionarySet = zstd.OwnedDictionarySet;
@@ -2419,6 +2420,7 @@ pub const ZstdStandardDictionaryView = zstd.StandardDictionaryView;
 pub const ZstdStandardDictionaryEntropySummary = zstd.StandardDictionaryEntropySummary;
 pub const ZstdStandardDictionaryNativeView = zstd.StandardDictionaryNativeView;
 pub const ZstdOwnedStandardDictionary = zstd.OwnedStandardDictionary;
+pub const ZstdOwnedOptimizedCoverStandardDictionary = zstd.OwnedOptimizedCoverStandardDictionary;
 pub const zstdInspectStandardDictionary = zstd.inspectStandardDictionary;
 pub const zstdIsStandardDictionary = zstd.isStandardDictionary;
 pub const zstdStandardDictionaryId = zstd.standardDictionaryId;
@@ -2429,6 +2431,7 @@ pub const zstdStandardDictionaryFromContentInto = zstd.standardDictionaryFromCon
 pub const zstdStandardDictionaryFromContentAlloc = zstd.standardDictionaryFromContentAlloc;
 pub const zstdTrainStandardDictionaryAlloc = zstd.trainStandardDictionaryAlloc;
 pub const zstdTrainCoverStandardDictionaryAlloc = zstd.trainCoverStandardDictionaryAlloc;
+pub const zstdTrainOptimizedCoverStandardDictionaryAlloc = zstd.trainOptimizedCoverStandardDictionaryAlloc;
 pub const zstdTrainValidatedStandardDictionaryAlloc = zstd.trainValidatedStandardDictionaryAlloc;
 pub const zstdTrainDictionaryAlloc = zstd.trainDictionaryAlloc;
 pub const zstdDictionarySetFromMetadataAlloc = zstd.dictionarySetFromMetadataAlloc;
@@ -6394,12 +6397,27 @@ test "root zstd public reusable aliases expose dictionary helpers" {
     );
     defer cover_standard.deinit(std.testing.allocator);
     try std.testing.expectEqual(ZstdDictionaryKind.standard_full, cover_standard.asDictionary().kind());
+    const optimized_cover = try zstdTrainOptimizedCoverStandardDictionaryAlloc(
+        std.testing.allocator,
+        &cover_samples,
+        &.{"root zstd public dictionary sample alpha gamma"},
+        .{
+            .target_size = 32,
+            .segment_sizes = &.{ 12, 16 },
+            .dmer_sizes = &.{ 6, 8 },
+            .hash_logs = &.{8},
+        },
+        dict.id +% 3,
+    );
+    defer optimized_cover.deinit(std.testing.allocator);
+    try std.testing.expectEqual(ZstdDictionaryKind.standard_full, optimized_cover.asDictionary().kind());
+    try std.testing.expectEqual(@as(usize, 4), optimized_cover.candidates_evaluated);
     const validated_standard = try zstdTrainValidatedStandardDictionaryAlloc(
         std.testing.allocator,
         &samples,
         &.{"root zstd public dictionary sample alpha beta"},
         train_options,
-        dict.id +% 3,
+        dict.id +% 4,
     );
     defer validated_standard.deinit(std.testing.allocator);
     try std.testing.expectEqual(ZstdDictionaryKind.standard_full, validated_standard.asDictionary().kind());

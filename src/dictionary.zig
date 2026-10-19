@@ -2,10 +2,15 @@ const std = @import("std");
 const checksum = @import("checksum.zig");
 
 pub const cover = @import("dictionary/cover.zig");
+pub const cover_optimize = @import("dictionary/cover_optimize.zig");
 pub const CoverTrainOptions = cover.TrainOptions;
+pub const CoverOptimizeOptions = cover_optimize.OptimizeOptions;
+pub const CoverOptimizeScore = cover_optimize.Score;
+pub const OwnedOptimizedCoverDictionary = cover_optimize.OwnedResult;
 
 test {
     _ = cover;
+    _ = cover_optimize;
 }
 
 const patch_magic = [_]u8{ 'V', 'D', 'C', 'T' };
@@ -233,6 +238,34 @@ pub fn trainCoverAlloc(
     options: CoverTrainOptions,
 ) ![]u8 {
     return cover.trainAlloc(allocator, samples, options);
+}
+
+/// Select `(d, k, hash_log)` on held-out samples using the shared greedy
+/// dictionary match-cost model. Equal scores preserve caller enumeration order.
+pub fn trainOptimizedCoverAlloc(
+    allocator: std.mem.Allocator,
+    training_samples: []const []const u8,
+    validation_samples: []const []const u8,
+    options: CoverOptimizeOptions,
+) !OwnedOptimizedCoverDictionary {
+    const ScoreAdapter = struct {
+        fn score(dictionary: []const u8, samples: []const []const u8, min_match_len: usize) !cover_optimize.Score {
+            const value = try validationScore(dictionary, samples, min_match_len);
+            return .{
+                .estimated_bits = value.estimated_bits,
+                .covered_bytes = value.covered_bytes,
+                .matches = value.matches,
+                .distance_bits = value.distance_bits,
+            };
+        }
+    };
+    return cover_optimize.trainAllocWithScorer(
+        allocator,
+        training_samples,
+        validation_samples,
+        options,
+        ScoreAdapter.score,
+    );
 }
 
 const Phrase = struct {
@@ -1494,6 +1527,50 @@ test "validated dictionary trainer preserves or improves held-out coverage" {
     }
     try std.testing.expect(selected_covered >= baseline_covered);
     try std.testing.expectEqualSlices(u8, selected, again);
+}
+
+test "COVER-class optimizer selects the best enumerated held-out score" {
+    const training = [_][]const u8{
+        "service=vort region=west status=ok message=alpha alpha alpha",
+        "service=vort region=east status=ok message=beta beta beta",
+        "service=vort region=north status=warn message=gamma gamma",
+        "service=vort region=south status=retry message=delta delta",
+        "service=vort region=central status=ok message=alpha beta gamma",
+    };
+    const validation = [_][]const u8{
+        "service=vort region=west status=retry message=alpha gamma",
+        "service=vort region=south status=ok message=delta beta",
+    };
+    const options: CoverOptimizeOptions = .{
+        .target_size = 48,
+        .segment_sizes = &.{ 12, 24 },
+        .dmer_sizes = &.{ 6, 8 },
+        .hash_logs = &.{ 8, 10 },
+    };
+    var optimized = try trainOptimizedCoverAlloc(std.testing.allocator, &training, &validation, options);
+    defer optimized.deinit(std.testing.allocator);
+    var again = try trainOptimizedCoverAlloc(std.testing.allocator, &training, &validation, options);
+    defer again.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 8), optimized.candidates_evaluated);
+    try std.testing.expectEqual(optimized.selected_options, again.selected_options);
+    try std.testing.expectEqual(optimized.validation_score, again.validation_score);
+    try std.testing.expectEqualSlices(u8, optimized.bytes, again.bytes);
+
+    for (options.dmer_sizes) |dmer_size| {
+        for (options.segment_sizes) |segment_size| {
+            for (options.hash_logs) |hash_log| {
+                const candidate = try trainCoverAlloc(std.testing.allocator, &training, .{
+                    .target_size = options.target_size,
+                    .segment_size = segment_size,
+                    .dmer_size = dmer_size,
+                    .hash_log = hash_log,
+                });
+                defer std.testing.allocator.free(candidate);
+                const score = try validationScore(candidate, &validation, options.min_match_len);
+                try std.testing.expect(optimized.validation_score.estimated_bits <= score.estimated_bits);
+            }
+        }
+    }
 }
 
 test "validated dictionary trainer reuses collection without changing selection" {

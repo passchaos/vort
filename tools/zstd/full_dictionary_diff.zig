@@ -82,7 +82,12 @@ const DictionaryCaseResult = struct {
 };
 
 const SelectorCaseResult = struct { baseline_size: usize, selected_size: usize };
-const CoverCaseResult = struct { content_size: usize, reference_size: usize };
+const CoverCaseResult = struct {
+    content_size: usize,
+    reference_size: usize,
+    fixed_reference_size: usize,
+    candidates: usize,
+};
 
 fn nextDictionaryId(id: u32) u32 {
     return if (id == std.math.maxInt(u32)) 1 else id + 1;
@@ -155,10 +160,26 @@ fn verifyCoverStandardDictionary(
     runtime: libzstd.Runtime,
     dictionary_id: u32,
 ) !CoverCaseResult {
-    const trained = try vort.zstdTrainCoverStandardDictionaryAlloc(
+    const fixed = try vort.zstdTrainCoverStandardDictionaryAlloc(
         allocator,
         &cover_training,
         .{ .target_size = 64, .segment_size = 24, .hash_log = 8 },
+        nextDictionaryId(dictionary_id),
+    );
+    defer fixed.deinit(allocator);
+    const fixed_reference_encoded = try runtime.encodeUsingDictAlloc(allocator, selector_payload, fixed.bytes, 1);
+    defer allocator.free(fixed_reference_encoded);
+
+    const trained = try vort.zstdTrainOptimizedCoverStandardDictionaryAlloc(
+        allocator,
+        &cover_training,
+        &.{selector_payload},
+        .{
+            .target_size = 64,
+            .segment_sizes = &.{ 16, 24 },
+            .dmer_sizes = &.{ 6, 8 },
+            .hash_logs = &.{ 8, 10 },
+        },
         dictionary_id,
     );
     defer trained.deinit(allocator);
@@ -185,7 +206,12 @@ fn verifyCoverStandardDictionary(
     try runtime.decodeUsingDict(vort_encoded.frame, reference_output, trained.bytes);
     if (!std.mem.eql(u8, selector_payload, reference_output)) return error.SizeMismatch;
 
-    return .{ .content_size = trained.view.content.len, .reference_size = reference_encoded.len };
+    return .{
+        .content_size = trained.view.content.len,
+        .reference_size = reference_encoded.len,
+        .fixed_reference_size = fixed_reference_encoded.len,
+        .candidates = trained.candidates_evaluated,
+    };
 }
 
 fn compareTrainedDictionaryCase(
@@ -261,7 +287,12 @@ pub fn main(init: std.process.Init) !void {
     var baseline_total: usize = 0;
     var trained_sequence_entropy_len: usize = 0;
     var selector_sizes: SelectorCaseResult = .{ .baseline_size = 0, .selected_size = 0 };
-    var cover_sizes: CoverCaseResult = .{ .content_size = 0, .reference_size = 0 };
+    var cover_sizes: CoverCaseResult = .{
+        .content_size = 0,
+        .reference_size = 0,
+        .fixed_reference_size = 0,
+        .candidates = 0,
+    };
 
     if (generated_path) |output_path| {
         const generated_id = nextDictionaryId(parsed.view.id);
@@ -351,8 +382,8 @@ pub fn main(init: std.process.Init) !void {
     var buffer: [384]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
     try stdout.interface.print(
-        "zstd_full_dictionary_diff=ok version={s} id={d} vort={d} reference={d} generated={s} custom_repcodes={s} text={d}/{d} structured={d}/{d} binary={d}/{d} total={d}/{d} selector={d}/{d} cover={d}/{d} sequence_entropy={d}\n",
-        .{ runtime.version(), parsed.view.id, vort_encoded.frame.len, reference_encoded.len, if (generated_path == null) "no" else "yes", if (generated_path == null) "no" else "yes", text_sizes.trained_size, text_sizes.baseline_size, structured_sizes.trained_size, structured_sizes.baseline_size, binary_sizes.trained_size, binary_sizes.baseline_size, trained_total, baseline_total, selector_sizes.selected_size, selector_sizes.baseline_size, cover_sizes.content_size, cover_sizes.reference_size, trained_sequence_entropy_len },
+        "zstd_full_dictionary_diff=ok version={s} id={d} vort={d} reference={d} generated={s} custom_repcodes={s} text={d}/{d} structured={d}/{d} binary={d}/{d} total={d}/{d} selector={d}/{d} cover={d}/{d} cover_fixed={d} cover_candidates={d} sequence_entropy={d}\n",
+        .{ runtime.version(), parsed.view.id, vort_encoded.frame.len, reference_encoded.len, if (generated_path == null) "no" else "yes", if (generated_path == null) "no" else "yes", text_sizes.trained_size, text_sizes.baseline_size, structured_sizes.trained_size, structured_sizes.baseline_size, binary_sizes.trained_size, binary_sizes.baseline_size, trained_total, baseline_total, selector_sizes.selected_size, selector_sizes.baseline_size, cover_sizes.content_size, cover_sizes.reference_size, cover_sizes.fixed_reference_size, cover_sizes.candidates, trained_sequence_entropy_len },
     );
     try stdout.interface.flush();
 }
