@@ -851,6 +851,9 @@ pub const BrotliLiteralContextProfile = br.LiteralContextProfile;
 pub const BrotliPlannedCompressionLevel = br.PlannedCompressionLevel;
 pub const BrotliPlannedMode = br.PlannedMode;
 pub const BrotliSharedDictionary = br.SharedDictionary;
+pub const BrotliSerializedSharedDictionary = br.SerializedSharedDictionary;
+pub const BrotliSerializedSharedDictionaryError = br.SerializedSharedDictionaryError;
+pub const brParseSerializedSharedDictionary = br.parseSerializedSharedDictionary;
 pub const BrotliPlannedEncodeOptions = br.PlannedEncodeOptions;
 pub const brotliMaxExtendedDictionaryProbes = br.max_extended_dictionary_probes;
 pub const BrotliPlannedStreamChunksOptions = br.PlannedStreamChunksOptions;
@@ -4033,6 +4036,17 @@ test "root exports lz4 and zstd codec helpers" {
 
     _ = BrotliError;
     _ = BrotliDecodeOptions;
+    _ = BrotliSerializedSharedDictionary;
+    _ = BrotliSerializedSharedDictionaryError;
+    _ = brParseSerializedSharedDictionary;
+    const default_serialized_dictionary = try brParseSerializedSharedDictionary(
+        &.{ 0x91, 0x00, 0x00, 0x00, 0x00 },
+    );
+    try std.testing.expectEqual(
+        @as(u7, 1),
+        default_serialized_dictionary.dictionary_count,
+    );
+    try std.testing.expect(!default_serialized_dictionary.context_based);
     try std.testing.expectEqual(@as(usize, 1 << 24), brotliMaxUncompressedMetaBlockLen);
     try std.testing.expectEqual(@as(u5, 16), brotliDefaultWindowBits);
     _ = brEncodedStoredStreamBound;

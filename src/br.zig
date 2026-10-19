@@ -63,6 +63,7 @@ const paired_literal_lookup = @import("br/paired_literal_lookup.zig");
 const code_sections = @import("br/format/code_sections.zig");
 const distance_history = @import("br/decoder/distance_history.zig");
 const shared_dictionary = @import("br/shared_dictionary.zig");
+const serialized_dictionary = @import("br/serialized_dictionary.zig");
 const code_length_decoder_mod = @import("br/code_length_decoder.zig");
 
 const distanceWithDelta = distance_history.withDelta;
@@ -92,6 +93,8 @@ pub const LiteralContextProfile = literal_context_split.Profile;
 pub const PlannedCompressionLevel = enum { fast, balanced, ratio };
 pub const PlannedMode = quality_schedule.Mode;
 pub const SharedDictionary = shared_dictionary.Dictionary;
+pub const SerializedSharedDictionary = serialized_dictionary.Dictionary;
+pub const SerializedSharedDictionaryError = serialized_dictionary.Error;
 pub const max_extended_dictionary_probes: u16 = 4096;
 pub const PlannedEncodeOptions = struct {
     level: PlannedCompressionLevel = .fast,
@@ -154,6 +157,12 @@ fn plannedSharedDictionarySize(dictionary: SharedDictionary) Error!usize {
         error.IntegerOverflow => error.IntegerOverflow,
         else => error.InvalidBlockPlan,
     };
+}
+
+pub fn parseSerializedSharedDictionary(
+    encoded: []const u8,
+) SerializedSharedDictionaryError!SerializedSharedDictionary {
+    return serialized_dictionary.parse(encoded);
 }
 
 fn preparePlannedSharedDictionary(
@@ -975,6 +984,7 @@ test {
     _ = compound_wire;
     _ = header_profile;
     _ = code_length_decoder_mod;
+    _ = serialized_dictionary;
 }
 
 pub const IncrementalTestSupport = struct {

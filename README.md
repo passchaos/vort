@@ -2164,9 +2164,13 @@ therefore retain their internal temporary result for atomicity; use the reusable
 encoder when repeated-call allocation behavior matters.
 
 Upstream still marks serialized shared dictionaries as
-`BROTLI_EXPERIMENTAL`/`DO NOT USE`; Vort does not claim that unstable wire.
-Caller-supplied custom static dictionaries likewise remain unsupported. RAW
-support makes no future API or wire-compatibility promise for either form.
+`BROTLI_EXPERIMENTAL`/`DO NOT USE`. Vort now exposes a strict borrowed parser
+through `brParseSerializedSharedDictionary`, including custom word lists,
+transform lists, 64-entry contextual selection, all 23 transform families,
+an exhaustive custom-only reference matcher, and custom-address replay. This
+is an inspection/preparation API, not yet a codec attachment: production
+encode/decode still accepts RAW shared-prefix attachments only and makes no
+experimental wire-compatibility promise.
 
 The `run-br-compound-dictionary-diff` gate passes in Debug and ReleaseFast
 against local libbrotli 1.2.0. It covers libbrotli encode to Vort decode for

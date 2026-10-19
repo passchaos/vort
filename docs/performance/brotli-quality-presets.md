@@ -329,7 +329,10 @@ The following are explicit gaps, not implied by the presence of the preset
 names:
 
 - real q10/q11 Zopfli/HQ cost refinement, including iterative model feedback;
-- contextual dictionary encoding;
+- contextual serialized-dictionary matching and codec attachment. Strict
+  zero-copy parsing, context selection, exhaustive custom-only reference
+  matching, and custom transform/address replay are available, but production
+  encode/decode does not yet attach them;
 - global multi-boundary segmentation and exact compressed-cost optimization
   beyond the current bounded midpoint entropy lookahead;
 - calibration and regression gates for compression ratio, throughput, peak
