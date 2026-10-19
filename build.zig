@@ -2213,6 +2213,29 @@ pub fn build(b: *std.Build) void {
     br_complete_dictionary_bench_gate_step.dependOn(
         &br_complete_dictionary_bench_gate.step,
     );
+
+    const br_serialized_dictionary_bench_exe = b.addExecutable(.{
+        .name = "vort-br-serialized-dictionary-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/serialized_dictionary_bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod_releasefast },
+            },
+        }),
+    });
+    const run_br_serialized_dictionary_bench = b.addRunArtifact(
+        br_serialized_dictionary_bench_exe,
+    );
+    if (b.args) |args| run_br_serialized_dictionary_bench.addArgs(args);
+    const br_serialized_dictionary_bench_step = b.step(
+        "run-br-serialized-dictionary-bench",
+        "Compare indexed and exhaustive serialized Brotli dictionary matching",
+    );
+    br_serialized_dictionary_bench_step.dependOn(
+        &run_br_serialized_dictionary_bench.step,
+    );
     const br_context_tree_report_exe = b.addExecutable(.{
         .name = "vort-br-context-tree-report",
         .root_module = b.createModule(.{
@@ -5881,6 +5904,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&br_static_dictionary_report_exe.step);
     check_step.dependOn(&br_upstream_multiblock_diff_exe.step);
     check_step.dependOn(&br_compound_dictionary_diff_exe.step);
+    check_step.dependOn(&br_serialized_dictionary_bench_exe.step);
     check_step.dependOn(&br_progressive_copy_bench_exe.step);
     check_step.dependOn(&br_progressive_huffman_bench_exe.step);
     check_step.dependOn(&br_incremental_planned_bench_exe.step);

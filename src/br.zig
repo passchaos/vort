@@ -37,6 +37,7 @@ const literal_block_split = @import("br/encoder/literal_block_split.zig");
 const command_block_split = @import("br/encoder/command_block_split.zig");
 const distance_block_split = @import("br/encoder/distance_block_split.zig");
 const compound_dictionary_matcher = @import("br/encoder/compound_dictionary_matcher.zig");
+const serialized_dictionary_matcher = @import("br/encoder/serialized_dictionary_matcher.zig");
 const compound_wire = @import("br/encoder/compound_wire.zig");
 const block_split_plan = @import("br/encoder/block_split_plan.zig");
 const adaptive_block_code = @import("br/encoder/adaptive_block_code.zig");
@@ -95,6 +96,7 @@ pub const PlannedMode = quality_schedule.Mode;
 pub const SharedDictionary = shared_dictionary.Dictionary;
 pub const SerializedSharedDictionary = serialized_dictionary.Dictionary;
 pub const SerializedSharedDictionaryError = serialized_dictionary.Error;
+pub const SerializedSharedDictionaryMatcher = serialized_dictionary_matcher.Matcher;
 pub const max_extended_dictionary_probes: u16 = 4096;
 pub const PlannedEncodeOptions = struct {
     level: PlannedCompressionLevel = .fast,
@@ -164,13 +166,15 @@ fn mixSerializedDictionaryAlloc(
     input: []const u8,
     baseline: []const command_plan.Command,
     dictionary: *const SerializedSharedDictionary,
+    matcher: ?*const serialized_dictionary_matcher.Matcher,
     initial_previous: [2]u8,
 ) Error!command_plan.Plan {
-    return command_plan.mixSerializedDictionaryAlloc(
+    return command_plan.mixSerializedDictionaryWithMatcherAlloc(
         allocator,
         input,
         baseline,
         dictionary,
+        matcher,
         literal_context.mode_lsb6,
         initial_previous,
     ) catch |err| switch (err) {
@@ -617,6 +621,7 @@ const IncrementalPlannedEncoderCodec = struct {
         fragment_scratch: fast_fragment.Scratch = .{},
         q0_entropy_state: fast_fragment_one_pass.State = .{},
         compound_matcher: ?compound_dictionary_matcher.Matcher = null,
+        serialized_matcher: ?serialized_dictionary_matcher.Matcher = null,
         compound_dictionary_size: usize = 0,
         shared_dictionary: SharedDictionary = .{},
         context_previous: [2]u8 = .{ 0, 0 },
@@ -628,6 +633,7 @@ const IncrementalPlannedEncoderCodec = struct {
         state.dictionary_greedy_scratch.deinit(allocator);
         state.fragment_scratch.deinit(allocator);
         if (state.compound_matcher) |*matcher| matcher.deinit();
+        if (state.serialized_matcher) |*matcher| matcher.deinit();
         state.tokens.deinit(allocator);
         state.commands.deinit(allocator);
         state.history.deinit(allocator);
@@ -674,7 +680,8 @@ const IncrementalPlannedEncoderCodec = struct {
             state.greedy_scratch.retainedCapacity() +
             state.dictionary_greedy_scratch.retainedCapacity() +
             state.fragment_scratch.retainedCapacity() +
-            (if (state.compound_matcher) |*matcher| matcher.retainedCapacity() else 0);
+            (if (state.compound_matcher) |*matcher| matcher.retainedCapacity() else 0) +
+            (if (state.serialized_matcher) |*matcher| matcher.retainedCapacity() else 0);
     }
 
     pub fn readyOutputLen(state: *const State, pending_len: usize, final_written: bool) usize {
@@ -698,6 +705,19 @@ const IncrementalPlannedEncoderCodec = struct {
         const adaptive_blocks = try plannedStreamAdaptiveBlocks(options);
         if (state.compound_matcher == null)
             state.compound_matcher = compound_dictionary_matcher.Matcher.init(allocator);
+        if (options.shared_dictionary.hasSerializedStatic()) {
+            if (state.serialized_matcher == null)
+                state.serialized_matcher = serialized_dictionary_matcher.Matcher.init(allocator);
+            state.serialized_matcher.?.prepare(
+                options.shared_dictionary.serialized.?,
+            ) catch |err| switch (err) {
+                error.OutOfMemory => return error.OutOfMemory,
+                error.IntegerOverflow => return error.IntegerOverflow,
+                else => return error.InvalidBlockPlan,
+            };
+        } else if (state.serialized_matcher) |*matcher| {
+            matcher.reset();
+        }
         state.compound_dictionary_size = try preparePlannedSharedDictionary(
             &state.compound_matcher.?,
             options.shared_dictionary,
@@ -1029,6 +1049,7 @@ test {
     _ = small_huffman;
     _ = encoder_stats;
     _ = static_dictionary_matcher;
+    _ = serialized_dictionary_matcher;
     _ = literal_block_split;
     _ = command_block_split;
     _ = distance_block_split;
@@ -3255,6 +3276,7 @@ pub fn encodePlannedStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: 
             input,
             options,
             &matcher,
+            null,
             compound_size,
         );
     }
@@ -3271,13 +3293,33 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
     input: []const u8,
     options: PlannedEncodeOptions,
     matcher: *const compound_dictionary_matcher.Matcher,
+    prepared_serialized_matcher: ?*serialized_dictionary_matcher.Matcher,
     compound_size: usize,
 ) Error![]u8 {
     const window_bits = try resolvedPlannedWindowBits(options);
-    const stream_options = StoredStreamOptions{ .window_bits = window_bits, .metadata = options.metadata };
+    const stream_options = StoredStreamOptions{
+        .window_bits = window_bits,
+        .metadata = options.metadata,
+    };
     std.debug.assert(input.len <= max_uncompressed_meta_block_len);
-    if (input.len < 4) return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options);
+    if (input.len < 4)
+        return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options);
 
+    var local_serialized_matcher = serialized_dictionary_matcher.Matcher.init(allocator);
+    defer local_serialized_matcher.deinit();
+    const active_serialized_matcher: ?*const serialized_dictionary_matcher.Matcher =
+        if (options.shared_dictionary.hasSerializedStatic()) blk: {
+            const active = prepared_serialized_matcher orelse
+                &local_serialized_matcher;
+            active.prepare(
+                options.shared_dictionary.serialized.?,
+            ) catch |err| switch (err) {
+                error.OutOfMemory => return error.OutOfMemory,
+                error.IntegerOverflow => return error.IntegerOverflow,
+                else => return error.InvalidBlockPlan,
+            };
+            break :blk active;
+        } else null;
     const schedule = if (options.quality != null) try resolvedQualitySchedule(options) else null;
     const window_len = @min(
         input.len,
@@ -3334,6 +3376,7 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
             input,
             base_commands,
             options.shared_dictionary.serialized.?,
+            active_serialized_matcher,
             .{ 0, 0 },
         )
     else
@@ -6038,6 +6081,7 @@ fn considerPlannedMetaBlockPolicy(
                 input,
                 commands,
                 serialized,
+                if (state.serialized_matcher) |*matcher| matcher else null,
                 state.context_previous,
             );
             defer with_serialized.deinit(allocator);
@@ -6709,12 +6753,14 @@ pub const PlannedStreamEncoder = struct {
     output: std.ArrayList(u8) = .empty,
     greedy_scratch: lz77.TinyGreedyScratch = .{},
     compound_matcher: compound_dictionary_matcher.Matcher,
+    serialized_matcher: serialized_dictionary_matcher.Matcher,
     stream_state: IncrementalPlannedEncoderCodec.State = .{},
 
     pub fn init(allocator: std.mem.Allocator) PlannedStreamEncoder {
         return .{
             .allocator = allocator,
             .compound_matcher = compound_dictionary_matcher.Matcher.init(allocator),
+            .serialized_matcher = serialized_dictionary_matcher.Matcher.init(allocator),
         };
     }
 
@@ -6722,6 +6768,7 @@ pub const PlannedStreamEncoder = struct {
         IncrementalPlannedEncoderCodec.deinitState(&self.stream_state, self.allocator);
         self.greedy_scratch.deinit(self.allocator);
         self.compound_matcher.deinit();
+        self.serialized_matcher.deinit();
         self.tokens.deinit(self.allocator);
         self.commands.deinit(self.allocator);
         self.output.deinit(self.allocator);
@@ -6780,6 +6827,7 @@ pub const PlannedStreamEncoder = struct {
                 input,
                 options,
                 &self.compound_matcher,
+                &self.serialized_matcher,
                 compound_size,
             );
         }
@@ -6829,6 +6877,7 @@ pub const PlannedStreamEncoder = struct {
             self.output.capacity +
             self.greedy_scratch.retainedCapacity() +
             self.compound_matcher.retainedCapacity() +
+            self.serialized_matcher.retainedCapacity() +
             IncrementalPlannedEncoderCodec.stateRetainedCapacity(&self.stream_state);
     }
 
@@ -6899,6 +6948,7 @@ pub const PlannedStreamEncoder = struct {
                 input,
                 options,
                 &self.compound_matcher,
+                &self.serialized_matcher,
                 compound_size,
             );
             defer self.allocator.free(encoded);
@@ -31879,6 +31929,19 @@ test "br serialized shared dictionary encodes across planned ownership models" {
         decode_options,
     );
     try std.testing.expect(reusable_summary.shared_dictionary_copy_count > 0);
+    try std.testing.expect(reusable.serialized_matcher.usesIndex());
+    const serialized_index_capacity = reusable.serialized_matcher.retainedCapacity();
+    const reusable_wire_again = try reusable.encodeWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .level = .balanced, .shared_dictionary = shared },
+    );
+    defer std.testing.allocator.free(reusable_wire_again);
+    try std.testing.expectEqualSlices(u8, reusable_wire, reusable_wire_again);
+    try std.testing.expectEqual(
+        serialized_index_capacity,
+        reusable.serialized_matcher.retainedCapacity(),
+    );
 
     const chunks = [_][]const u8{
         payload[0..73],
@@ -31907,6 +31970,7 @@ test "br serialized shared dictionary encodes across planned ownership models" {
         (try summarizeStreamWithOptions(chunked, decode_options))
             .shared_dictionary_copy_count > 0,
     );
+    try std.testing.expect(reusable.stream_state.serialized_matcher.?.usesIndex());
 
     var incremental = IncrementalPlannedStreamEncoder.initWithOptions(
         std.testing.allocator,

@@ -331,10 +331,10 @@ The following are explicit gaps, not implied by the presence of the preset
 names:
 
 - real q10/q11 Zopfli/HQ cost refinement, including iterative model feedback;
-- indexed contextual serialized-dictionary matching and adaptive-mode
-  selection. Strict zero-copy parsing, mixed built-in/custom address replay,
-  production decode attachment, and correctness-first exhaustive LSB6 encoding
-  across planned surfaces are available;
+- adaptive-mode serialized-dictionary selection. Strict zero-copy parsing,
+  mixed built-in/custom address replay, production decode attachment, and
+  bounded reusable indexed LSB6 encoding across planned surfaces are
+  available; oversized descriptors retain exhaustive matching;
 - global multi-boundary segmentation and exact compressed-cost optimization
   beyond the current bounded midpoint entropy lookahead;
 - calibration and regression gates for compression ratio, throughput, peak

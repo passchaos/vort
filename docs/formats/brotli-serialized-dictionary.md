@@ -72,9 +72,10 @@ allocates no memory.
 ## Remaining performance work
 
 Production encode and decode are attached. Encoding currently uses the
-allocation-free exhaustive matcher as a correctness-first implementation and
-emits LSB6 literal context mode for every candidate containing contextual
-static references. The next increment should build reusable context-aware
-indexes and then allow other literal context modes without breaking the
-address/mode invariant. Vort does not promise stability for upstream's
-experimental container format.
+complete exhaustive matcher as a correctness oracle and bounded fallback.
+Ordinary descriptors use a reusable four-byte candidate index; combined
+addresses are computed from the active context without duplicating index data
+64 times. Encoding emits LSB6 literal context mode for every candidate
+containing contextual static references. Adaptive context-mode selection
+without breaking this address/mode invariant remains open. Vort does not
+promise stability for upstream's experimental container format.

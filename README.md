@@ -2173,11 +2173,11 @@ address replay. A parsed view can be attached through
 caller-history, and allocator-owned or caller-history progressive decoding.
 The serialized RAW prefix follows explicit RAW attachments in Vort's compound
 address space. Planned one-shot, reusable, chunked, and incremental encoders
-use a correctness-first exhaustive contextual matcher with a fixed LSB6 mode;
-the selected dictionary address and emitted meta-block mode therefore stay
-identical across block boundaries. Production indexing and adaptive-mode
-matching remain performance work, and the experimental upstream format carries
-no stability promise.
+use a bounded reusable contextual candidate index with a fixed LSB6 mode; the
+selected dictionary address and emitted meta-block mode therefore stay
+identical across block boundaries. The exhaustive matcher remains the oracle
+and oversized-descriptor fallback. Adaptive-mode matching remains performance
+work, and the experimental upstream format carries no stability promise.
 
 The `run-br-compound-dictionary-diff` gate passes in Debug and ReleaseFast
 against local libbrotli 1.2.0. It covers libbrotli encode to Vort decode for

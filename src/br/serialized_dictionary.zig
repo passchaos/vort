@@ -158,6 +158,19 @@ pub const Match = struct {
     dictionary_id: u6,
 };
 
+pub const CandidateShape = struct {
+    word_count: usize,
+    transform_count: usize,
+
+    pub fn capacity(self: CandidateShape) Error!usize {
+        return std.math.mul(
+            usize,
+            self.word_count,
+            self.transform_count,
+        ) catch error.IntegerOverflow;
+    }
+};
+
 /// Borrowed zero-copy view of one serialized Brotli shared dictionary.
 /// All nested slices remain valid only while `encoded` remains alive.
 pub const Dictionary = struct {
@@ -180,6 +193,49 @@ pub const Dictionary = struct {
     pub fn choice(self: *const Dictionary, dictionary_id: usize) ?DictionaryChoice {
         if (dictionary_id >= self.dictionary_count) return null;
         return self.dictionaries[dictionary_id];
+    }
+
+    pub fn candidateShape(
+        self: *const Dictionary,
+        dictionary_id: usize,
+        word_len: usize,
+    ) ?CandidateShape {
+        const selected = self.choice(dictionary_id) orelse return null;
+        if (word_len < min_word_len or word_len > max_word_len) return null;
+        return .{
+            .word_count = self.wordCount(selected, word_len),
+            .transform_count = self.transformCount(selected),
+        };
+    }
+
+    pub fn materializeCandidate(
+        self: *const Dictionary,
+        dictionary_id: usize,
+        word_len: usize,
+        word_index: usize,
+        transform_index: usize,
+        output: []u8,
+    ) Error![]const u8 {
+        const selected = self.choice(dictionary_id) orelse
+            return error.DictionaryAddressOutOfBounds;
+        const shape = self.candidateShape(dictionary_id, word_len) orelse
+            return error.DictionaryAddressOutOfBounds;
+        if (word_index >= shape.word_count or
+            transform_index >= shape.transform_count)
+        {
+            return error.DictionaryAddressOutOfBounds;
+        }
+        const word_bytes = self.wordForChoice(
+            selected,
+            word_len,
+            word_index,
+        ) orelse return error.DictionaryAddressOutOfBounds;
+        return self.applyTransform(
+            selected,
+            transform_index,
+            word_bytes,
+            output,
+        );
     }
 
     pub fn resolveCustom(

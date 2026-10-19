@@ -853,6 +853,7 @@ pub const BrotliPlannedMode = br.PlannedMode;
 pub const BrotliSharedDictionary = br.SharedDictionary;
 pub const BrotliSerializedSharedDictionary = br.SerializedSharedDictionary;
 pub const BrotliSerializedSharedDictionaryError = br.SerializedSharedDictionaryError;
+pub const BrotliSerializedSharedDictionaryMatcher = br.SerializedSharedDictionaryMatcher;
 pub const brParseSerializedSharedDictionary = br.parseSerializedSharedDictionary;
 pub const BrotliPlannedEncodeOptions = br.PlannedEncodeOptions;
 pub const brotliMaxExtendedDictionaryProbes = br.max_extended_dictionary_probes;
@@ -4038,6 +4039,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = BrotliDecodeOptions;
     _ = BrotliSerializedSharedDictionary;
     _ = BrotliSerializedSharedDictionaryError;
+    _ = BrotliSerializedSharedDictionaryMatcher;
     _ = brParseSerializedSharedDictionary;
     const default_serialized_dictionary = try brParseSerializedSharedDictionary(
         &.{ 0x91, 0x00, 0x00, 0x00, 0x00 },

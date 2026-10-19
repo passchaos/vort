@@ -6,6 +6,7 @@ const static_dictionary_matcher = @import("static_dictionary_matcher.zig");
 const compound_dictionary_matcher = @import("compound_dictionary_matcher.zig");
 const literal_context = @import("literal_context.zig");
 const serialized_dictionary = @import("../serialized_dictionary.zig");
+const serialized_dictionary_matcher = @import("serialized_dictionary_matcher.zig");
 
 /// A Brotli insert/copy command derived from a generic LZ77 token stream.
 /// `insert_start` indexes the original input so the wire writer can emit the
@@ -653,6 +654,26 @@ pub fn mixSerializedDictionaryAlloc(
     context_mode: u2,
     initial_previous: [2]u8,
 ) !Plan {
+    return mixSerializedDictionaryWithMatcherAlloc(
+        allocator,
+        input,
+        baseline,
+        dictionary,
+        null,
+        context_mode,
+        initial_previous,
+    );
+}
+
+pub fn mixSerializedDictionaryWithMatcherAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    baseline: []const Command,
+    dictionary: *const serialized_dictionary.Dictionary,
+    matcher: ?*const serialized_dictionary_matcher.Matcher,
+    context_mode: u2,
+    initial_previous: [2]u8,
+) !Plan {
     var commands: std.ArrayList(Command) = .empty;
     errdefer commands.deinit(allocator);
     var transformed_scratch: [serialized_dictionary.max_transformed_word_len]u8 = undefined;
@@ -682,11 +703,18 @@ pub fn mixSerializedDictionaryAlloc(
                 previous,
                 second_previous,
             );
-            const match = try dictionary.findLongest(
-                context,
-                input[position..literal_end],
-                &transformed_scratch,
-            );
+            const match = if (matcher) |indexed|
+                try indexed.findLongest(
+                    context,
+                    input[position..literal_end],
+                    &transformed_scratch,
+                )
+            else
+                try dictionary.findLongest(
+                    context,
+                    input[position..literal_end],
+                    &transformed_scratch,
+                );
             if (match == null) {
                 position += 1;
                 pending_len += 1;
