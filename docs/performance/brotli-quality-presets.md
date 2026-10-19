@@ -337,6 +337,9 @@ names:
   non-contiguous context clustering, case/omit families, observed prefix/suffix
   stringlet/SHIFT learning, and per-dictionary transform-profile clustering use
   held-out complete-wire arbitration.
+  The repository source/Markdown/JSON/binary trainer report currently records
+  zero charged winners and zero regressions; real-corpus profitability remains
+  a measured gap rather than an implied capability.
   Strict parsing, canonical construction, mixed replay, production decode
   attachment, bounded indexing, all four RFC modes, and joint multi-tree
   selection are available; oversized descriptors retain exhaustive matching;

@@ -4445,6 +4445,41 @@ pub fn build(b: *std.Build) void {
     );
     br_real_corpus_diff_step.dependOn(&br_real_corpus_diff.step);
 
+    const br_serialized_trainer_report_exe = b.addExecutable(.{
+        .name = "vort-br-serialized-trainer-report",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/serialized_dictionary_trainer_report.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const br_serialized_trainer_report_smoke = b.addSystemCommand(&.{
+        "python3", "tools/br/serialized_dictionary_trainer_report_smoke.py",
+    });
+    const br_serialized_trainer_report_smoke_step = b.step(
+        "run-br-serialized-trainer-report-smoke",
+        "Validate serialized dictionary trainer report accounting and artifacts",
+    );
+    br_serialized_trainer_report_smoke_step.dependOn(
+        &br_serialized_trainer_report_smoke.step,
+    );
+    const br_serialized_trainer_report = b.addSystemCommand(&.{
+        "python3", "tools/br/serialized_dictionary_trainer_report.py",
+    });
+    br_serialized_trainer_report.addArtifactArg(br_serialized_trainer_report_exe);
+    if (b.args) |args| br_serialized_trainer_report.addArgs(args);
+    br_serialized_trainer_report.step.dependOn(
+        &br_serialized_trainer_report_smoke.step,
+    );
+    const br_serialized_trainer_report_step = b.step(
+        "run-br-serialized-trainer-report",
+        "Write Brotli serialized dictionary trainer JSON/Markdown real-corpus evidence",
+    );
+    br_serialized_trainer_report_step.dependOn(&br_serialized_trainer_report.step);
+
     const br_progressive_copy_bench_exe = b.addExecutable(.{
         .name = "vort-br-progressive-copy-bench",
         .root_module = b.createModule(.{
@@ -5911,6 +5946,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&br_upstream_multiblock_diff_exe.step);
     check_step.dependOn(&br_compound_dictionary_diff_exe.step);
     check_step.dependOn(&br_serialized_dictionary_bench_exe.step);
+    check_step.dependOn(&br_serialized_trainer_report_exe.step);
     check_step.dependOn(&br_progressive_copy_bench_exe.step);
     check_step.dependOn(&br_progressive_huffman_bench_exe.step);
     check_step.dependOn(&br_incremental_planned_bench_exe.step);
@@ -5996,6 +6032,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(br_context_tree_dashboard_gate_step);
     ci_smoke_step.dependOn(br_context_tree_dashboard_gate_smoke_step);
     ci_smoke_step.dependOn(br_real_corpus_diff_step);
+    ci_smoke_step.dependOn(br_serialized_trainer_report_smoke_step);
     ci_smoke_step.dependOn(br_progressive_copy_bench_gate_step);
     ci_smoke_step.dependOn(br_progressive_huffman_bench_gate_step);
     ci_smoke_step.dependOn(br_static_dictionary_report_step);

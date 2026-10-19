@@ -153,3 +153,6 @@ learning. COVER-class fixed-word selection and actual-wire parameter grids are
 available; FastCover-style acceleration, wider calibration, and broad corpus
 evidence remain open. The builder also remains available for fully explicit
 caller-owned specifications.
+The repository-owned four-category trainer report currently records zero
+charged winners and zero regressions (`16,054 -> 16,054` aggregate), making
+real-corpus profitability an explicit tracked gap.

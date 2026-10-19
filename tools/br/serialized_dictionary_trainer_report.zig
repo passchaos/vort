@@ -1,0 +1,324 @@
+const std = @import("std");
+const vort = @import("vort");
+
+const Case = struct {
+    label: []const u8,
+    category: []const u8,
+    path: []const u8,
+};
+
+const CountingAllocator = struct {
+    child: std.mem.Allocator,
+    live_bytes: usize = 0,
+    peak_bytes: usize = 0,
+
+    fn allocator(self: *CountingAllocator) std.mem.Allocator {
+        return .{ .ptr = self, .vtable = &vtable };
+    }
+
+    fn alloc(context: *anyopaque, len: usize, alignment: std.mem.Alignment, return_address: usize) ?[*]u8 {
+        const self: *CountingAllocator = @ptrCast(@alignCast(context));
+        const result = self.child.rawAlloc(len, alignment, return_address) orelse
+            return null;
+        self.live_bytes += len;
+        self.peak_bytes = @max(self.peak_bytes, self.live_bytes);
+        return result;
+    }
+
+    fn resize(context: *anyopaque, memory: []u8, alignment: std.mem.Alignment, new_len: usize, return_address: usize) bool {
+        const self: *CountingAllocator = @ptrCast(@alignCast(context));
+        if (!self.child.rawResize(memory, alignment, new_len, return_address))
+            return false;
+        self.adjust(memory.len, new_len);
+        return true;
+    }
+
+    fn remap(context: *anyopaque, memory: []u8, alignment: std.mem.Alignment, new_len: usize, return_address: usize) ?[*]u8 {
+        const self: *CountingAllocator = @ptrCast(@alignCast(context));
+        const result = self.child.rawRemap(memory, alignment, new_len, return_address) orelse
+            return null;
+        self.adjust(memory.len, new_len);
+        return result;
+    }
+
+    fn free(context: *anyopaque, memory: []u8, alignment: std.mem.Alignment, return_address: usize) void {
+        const self: *CountingAllocator = @ptrCast(@alignCast(context));
+        self.child.rawFree(memory, alignment, return_address);
+        std.debug.assert(self.live_bytes >= memory.len);
+        self.live_bytes -= memory.len;
+    }
+
+    fn adjust(self: *CountingAllocator, old_len: usize, new_len: usize) void {
+        if (new_len >= old_len)
+            self.live_bytes += new_len - old_len
+        else
+            self.live_bytes -= old_len - new_len;
+        self.peak_bytes = @max(self.peak_bytes, self.live_bytes);
+    }
+
+    const vtable: std.mem.Allocator.VTable = .{
+        .alloc = alloc,
+        .resize = resize,
+        .remap = remap,
+        .free = free,
+    };
+};
+
+pub fn main(init: std.process.Init) !void {
+    var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
+    defer args.deinit();
+    _ = args.next();
+    var cases: std.ArrayList(Case) = .empty;
+    defer cases.deinit(init.gpa);
+    var limit: usize = 16 * 1024;
+    var chunk_len: usize = 256;
+    while (args.next()) |arg| {
+        if (std.mem.eql(u8, arg, "--limit")) {
+            limit = try std.fmt.parseInt(usize, args.next() orelse
+                return error.InvalidTrainingOptions, 10);
+        } else if (std.mem.eql(u8, arg, "--chunk")) {
+            chunk_len = try std.fmt.parseInt(usize, args.next() orelse
+                return error.InvalidTrainingOptions, 10);
+        } else if (std.mem.eql(u8, arg, "--case")) {
+            try cases.append(init.gpa, .{
+                .label = args.next() orelse return error.InvalidTrainingOptions,
+                .category = args.next() orelse return error.InvalidTrainingOptions,
+                .path = args.next() orelse return error.InvalidTrainingOptions,
+            });
+        } else {
+            return error.InvalidTrainingOptions;
+        }
+    }
+    if (cases.items.len == 0 or limit < chunk_len or chunk_len < 64)
+        return error.InvalidTrainingOptions;
+
+    var stdout_buffer: [4096]u8 = undefined;
+    var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
+    const output = &stdout_writer.interface;
+    try output.writeAll(
+        "label\tcategory\tinput_bytes\ttraining_samples\tvalidation_samples" ++
+            "\tbaseline_frames\ttrained_frames\tdictionary_bytes\ttotal_bytes" ++
+            "\tsavings\tratio_ppm\twinner\tword_profile\tcover_d\tcover_hash_log" ++
+            "\tcontext_profile\tcontext_mode\tcontext_cutoff\tcontext_clusters" ++
+            "\ttransform_profile\ttransform_lists\tshift_parameters" ++
+            "\ttrain_ns\tpeak_bytes\tworst_sample_delta\n",
+    );
+    for (cases.items) |case| try reportCase(init, output, case, limit, chunk_len);
+    try output.flush();
+}
+
+fn reportCase(
+    init: std.process.Init,
+    output: *std.Io.Writer,
+    case: Case,
+    limit: usize,
+    chunk_len: usize,
+) !void {
+    const payload = try readFilePrefixAlloc(init, case.path, limit);
+    defer init.gpa.free(payload);
+    var training: std.ArrayList([]const u8) = .empty;
+    defer training.deinit(init.gpa);
+    var validation: std.ArrayList([]const u8) = .empty;
+    defer validation.deinit(init.gpa);
+    var offset: usize = 0;
+    var chunk_index: usize = 0;
+    while (offset + chunk_len <= payload.len) : ({
+        offset += chunk_len;
+        chunk_index += 1;
+    }) {
+        const chunk = payload[offset..][0..chunk_len];
+        if (chunk_index % 2 == 1)
+            try validation.append(init.gpa, chunk)
+        else
+            try training.append(init.gpa, chunk);
+    }
+    if (training.items.len < 5 or validation.items.len == 0)
+        return error.InvalidTrainingOptions;
+
+    const baseline = try frameBytes(init.gpa, validation.items, null);
+    const train_options: vort.BrotliSerializedSharedDictionaryTrainOptions = .{
+        .min_word_len = 4,
+        .max_word_len = 16,
+        .max_words_per_length = 8,
+        .max_phrases_per_length = 64,
+        .cover_dmer_sizes = &.{ 6, 8 },
+        .cover_hash_logs = &.{12},
+        .max_cover_candidates = 2,
+        .context_cutoffs = &.{32},
+        .context_modes = &.{ 0, 2 },
+        .train_context_clustering = false,
+        .train_prefix_suffix_transforms = false,
+        .train_shift_transforms = false,
+        .max_transform_cluster_dictionaries = 2,
+        .quality = 5,
+    };
+    var counting = CountingAllocator{ .child = init.gpa };
+    const training_allocator = counting.allocator();
+    const started = std.Io.Clock.awake.now(init.io);
+    const trained = try vort.brTrainSerializedSharedDictionaryAlloc(
+        training_allocator,
+        training.items,
+        validation.items,
+        train_options,
+    );
+    const elapsed_ns: u64 = @intCast(started.untilNow(init.io, .awake).toNanoseconds());
+    const peak_bytes = counting.peak_bytes;
+    defer if (trained) |result| result.deinit(training_allocator);
+    const repeated = try vort.brTrainSerializedSharedDictionaryAlloc(
+        init.gpa,
+        training.items,
+        validation.items,
+        train_options,
+    );
+    defer if (repeated) |result| result.deinit(init.gpa);
+    try verifyDeterministic(trained, repeated);
+
+    var trained_frames = baseline;
+    var dictionary_bytes: usize = 0;
+    var savings: usize = 0;
+    var worst_delta: i64 = 0;
+    if (trained) |*result| {
+        trained_frames = result.trained_frame_bytes;
+        dictionary_bytes = result.charged_dictionary_bytes;
+        savings = result.total_savings_bytes;
+        const parsed = try result.parse();
+        for (validation.items) |sample| {
+            const plain = try vort.brEncodePlannedStreamWithOptionsAlloc(
+                init.gpa,
+                sample,
+                .{ .quality = 5 },
+            );
+            defer init.gpa.free(plain);
+            const encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(
+                init.gpa,
+                sample,
+                .{
+                    .quality = 5,
+                    .shared_dictionary = .{ .serialized = &parsed },
+                },
+            );
+            defer init.gpa.free(encoded);
+            const decoded = try vort.brDecodeStreamAllocExactSizeWithOptions(
+                init.gpa,
+                encoded,
+                sample.len,
+                .{ .shared_dictionary = .{ .serialized = &parsed } },
+            );
+            defer init.gpa.free(decoded);
+            if (!std.mem.eql(u8, sample, decoded)) return error.RoundTripMismatch;
+            const delta = @as(i64, @intCast(encoded.len)) -
+                @as(i64, @intCast(plain.len));
+            worst_delta = @max(worst_delta, delta);
+        }
+    }
+    const total_bytes = trained_frames + dictionary_bytes;
+    if (total_bytes > baseline or baseline - total_bytes != savings)
+        return error.TestUnexpectedResult;
+    const ratio_ppm: usize = @intCast(
+        @as(u128, total_bytes) * 1_000_000 / baseline,
+    );
+
+    try output.print(
+        "{s}\t{s}\t{d}\t{d}\t{d}\t{d}\t{d}\t{d}\t{d}\t{d}\t{d}\t{d}",
+        .{
+            case.label,
+            case.category,
+            payload.len,
+            training.items.len,
+            validation.items.len,
+            baseline,
+            trained_frames,
+            dictionary_bytes,
+            total_bytes,
+            savings,
+            ratio_ppm,
+            @intFromBool(trained != null),
+        },
+    );
+    if (trained) |result| {
+        try output.print("\t{s}", .{@tagName(result.word_selection_profile)});
+        try printOptional(output, result.cover_dmer_size);
+        try printOptional(output, result.cover_hash_log);
+        try output.print("\t{s}", .{@tagName(result.context_profile)});
+        try printOptional(output, result.trained_context_mode);
+        try printOptional(output, result.context_cutoff);
+        try output.print(
+            "\t{d}\t{s}\t{d}\t{d}",
+            .{
+                result.context_cluster_count,
+                @tagName(result.transform_profile),
+                result.transform_list_count,
+                result.learned_shift_parameter_count,
+            },
+        );
+    } else {
+        try output.writeAll("\tnone\t-\t-\tnone\t-\t-\t0\tnone\t0\t0");
+    }
+    try output.print("\t{d}\t{d}\t{d}\n", .{
+        elapsed_ns,
+        peak_bytes,
+        worst_delta,
+    });
+}
+
+fn verifyDeterministic(
+    first: ?vort.BrotliOwnedTrainedSerializedSharedDictionary,
+    second: ?vort.BrotliOwnedTrainedSerializedSharedDictionary,
+) !void {
+    if ((first == null) != (second == null)) return error.TestUnexpectedResult;
+    if (first) |a| {
+        const b = second.?;
+        if (!std.mem.eql(u8, a.bytes, b.bytes) or
+            a.id.asInt() != b.id.asInt() or
+            a.baseline_frame_bytes != b.baseline_frame_bytes or
+            a.trained_frame_bytes != b.trained_frame_bytes or
+            a.charged_dictionary_bytes != b.charged_dictionary_bytes or
+            a.total_savings_bytes != b.total_savings_bytes or
+            a.word_selection_profile != b.word_selection_profile or
+            a.context_profile != b.context_profile or
+            a.transform_profile != b.transform_profile)
+        {
+            return error.TestUnexpectedResult;
+        }
+    }
+}
+
+fn printOptional(output: *std.Io.Writer, value: anytype) !void {
+    if (value) |active|
+        try output.print("\t{d}", .{active})
+    else
+        try output.writeAll("\t-");
+}
+
+fn frameBytes(
+    allocator: std.mem.Allocator,
+    samples: []const []const u8,
+    shared: ?vort.BrotliSharedDictionary,
+) !usize {
+    var total: usize = 0;
+    for (samples) |sample| {
+        const encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(
+            allocator,
+            sample,
+            .{
+                .quality = 5,
+                .shared_dictionary = shared orelse .{},
+            },
+        );
+        defer allocator.free(encoded);
+        total += encoded.len;
+    }
+    return total;
+}
+
+fn readFilePrefixAlloc(init: std.process.Init, path: []const u8, limit: usize) ![]u8 {
+    const stat = try std.Io.Dir.cwd().statFile(init.io, path, .{});
+    const file_len = std.math.cast(usize, stat.size) orelse limit;
+    const prefix_len = @min(file_len, limit);
+    const payload = try init.gpa.alloc(u8, prefix_len);
+    errdefer init.gpa.free(payload);
+    var file = try std.Io.Dir.cwd().openFile(init.io, path, .{});
+    defer file.close(init.io);
+    const read_len = try file.readPositionalAll(init.io, payload, 0);
+    return init.gpa.realloc(payload, read_len);
+}

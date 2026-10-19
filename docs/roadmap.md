@@ -66,7 +66,13 @@ major gaps before Vort can claim broad industry-best parity:
   learning now infers signed parameters for SHIFT_FIRST/ALL, stacks them over
   every existing family, and improves a locked UTF-8 fixture from 3,513 baseline
   bytes to 2,624 frame bytes plus a 184-byte dictionary. FastCover-style
-  acceleration and broader corpus calibration remain open.
+  acceleration and broader corpus ratio improvements remain open. A new
+  schema-versioned real-corpus report now covers repository source, Markdown,
+  structured JSON, and binary prefixes with deterministic reruns, training
+  time, logical peak allocation, and worst-sample evidence. Its first bounded
+  16 KiB/chunked baseline correctly returns null for all four categories and
+  holds aggregate complete total at `16,054 -> 16,054`; producing real-corpus
+  wins without regressions is now an explicit measured target.
   q10/q11 Zopfli/HQ cost refinement and global exact-cost segmentation also
   remain open.
 - True byte-progressive Brotli decoding now covers stored data, metadata,

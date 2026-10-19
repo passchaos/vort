@@ -633,6 +633,7 @@ zig build -Doptimize=ReleaseFast run-br-ratio-stage-profile-gate
 zig build -Doptimize=ReleaseFast run-br-planned-chunks-bench-gate
 zig build -Doptimize=ReleaseFast run-br-upstream-multiblock-diff
 zig build -Doptimize=ReleaseFast run-br-real-corpus-diff
+zig build -Doptimize=ReleaseFast run-br-serialized-trainer-report
 # Optional real-corpus prefixes from neighboring checkouts:
 zig build -Doptimize=ReleaseFast run-br-real-corpus-diff -- \
   --extra-file ~/Work/godot/thirdparty/ufbx/ufbx.c \
@@ -2248,6 +2249,14 @@ those transforms to each existing family before per-dictionary clustering.
 Defaults cap shift transforms at eight, parameter candidates at 4,096, indexed
 words at 256, and sampled positions at 4,096. It does not claim
 FastCover-style accelerated search or broad-corpus calibration.
+`run-br-serialized-trainer-report` partitions 16 KiB prefixes of the required
+source, Markdown, structured JSON, and binary manifest cases into independent
+256-byte training/validation chunks, repeats training to prove deterministic
+selection, and writes schema-versioned JSON/Markdown with complete-total bytes,
+profiles, time, logical peak allocation, and worst per-sample delta. The current
+four-category baseline has zero winners and zero regressions
+(`16054 -> 16054` aggregate); this is an explicit calibration gap, not a
+claimed ratio win.
 
 ### Brotli planned encoder controls
 

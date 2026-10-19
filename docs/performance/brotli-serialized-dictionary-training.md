@@ -242,3 +242,31 @@ parameter, two learned transforms, exact SHIFT_FIRST/ALL replay, and byte-
 identical repeated training. Allocation-failure enumeration covers both the
 learner and family builder. The experimental libbrotli matrix validates the
 trained dictionary in both directions.
+
+## Repository real-corpus calibration
+
+`run-br-serialized-trainer-report` uses the required Brotli real-corpus
+manifest: source, documentation, structured JSON, and binary data. It reads a
+16 KiB prefix per file and alternates independent 256-byte chunks between
+training and validation, producing 32 samples on each side. The bounded report
+matrix searches word lengths 4...16, eight words per length, two COVER d-mer
+widths at `hash_log=12`, global plus LSB6/UTF8 cutoff32 maps, and canonical
+case/omit families. Every case is trained twice to require identical null/result
+state, bytes, ID, sizes, and selected profiles.
+
+The current ReleaseFast baseline is deliberately recorded even though no
+dictionary wins after charging its bytes:
+
+| Category | Baseline | Charged total | Saving | Train ms (observed) | Logical peak MiB |
+|---|---:|---:|---:|---:|---:|
+| Source | 4,172 | 4,172 | 0 | 1,032 | 0.20 |
+| Documentation | 5,209 | 5,209 | 0 | 1,666 | 0.20 |
+| Structured JSON | 3,658 | 3,658 | 0 | 832 | 0.20 |
+| Binary | 3,015 | 3,015 | 0 | 648 | 0.20 |
+
+Aggregate baseline/total is `16,054/16,054`: zero winners, zero regressions,
+and zero worst per-sample delta because every result is correctly null. Times
+are observational rather than gated; the gate enforces category/count/accounting
+integrity, deterministic reruns, a 1 GiB logical peak guard, and schema-versioned
+JSON/Markdown artifacts. Improving this baseline is the next trainer
+performance target.
