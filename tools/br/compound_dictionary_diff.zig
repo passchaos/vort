@@ -370,7 +370,12 @@ fn validateSerializedDictionaryMatrix(
         runtime,
         reference_options,
     );
-    return 12;
+    try validateClusteredTrainedSerializedDictionary(
+        allocator,
+        runtime,
+        reference_options,
+    );
+    return 14;
 }
 
 fn validateTrainedSerializedDictionary(
@@ -401,6 +406,7 @@ fn validateTrainedSerializedDictionary(
             .max_word_len = 16,
             .max_words_per_length = 8,
             .max_phrases_per_length = 64,
+            .train_context_clustering = false,
             .train_prefix_suffix_transforms = false,
             .quality = 5,
         },
@@ -633,6 +639,79 @@ fn validatePrefixSuffixTrainedSerializedDictionary(
     if (trained.transform_profile != .prefix_suffix or
         trained.learned_stringlet_count != 2 or
         trained.learned_prefix_suffix_transform_count != 1)
+    {
+        return error.ReferenceEncodeFailed;
+    }
+    try validateOwnedTrainedDictionaryInterop(
+        allocator,
+        runtime,
+        reference_options,
+        &trained,
+        validation_samples[0],
+    );
+}
+
+fn validateClusteredTrainedSerializedDictionary(
+    allocator: std.mem.Allocator,
+    runtime: libbrotli.Runtime,
+    reference_options: libbrotli.Runtime.StreamingOptions,
+) !void {
+    const Fixture = struct {
+        const markers = [3][2]u8{
+            .{ 8, 32 },
+            .{ 16, 40 },
+            .{ 24, 48 },
+        };
+
+        fn word(group: usize, index: usize) [8]u8 {
+            var value = (@as(u64, group + 1) << 48) |
+                (@as(u64, index + 1) << 8) | 0x5b;
+            value *%= 0x9e37_79b9_7f4a_7c15;
+            var result: [8]u8 = undefined;
+            std.mem.writeInt(u64, &result, value, .little);
+            result[0] |= 0x80;
+            return result;
+        }
+
+        fn fill(storage: *[9]u8, ordinal: usize) []const u8 {
+            const shape = ordinal % (3 * 2 * 8);
+            const group = shape / 16;
+            const marker_index = (shape / 8) % 2;
+            storage[0] = markers[group][marker_index];
+            const bytes = word(group, shape % 8);
+            @memcpy(storage[1..], &bytes);
+            return storage;
+        }
+    };
+    var training_storage: [192][9]u8 = undefined;
+    var training_samples: [training_storage.len][]const u8 = undefined;
+    for (&training_storage, &training_samples, 0..) |*storage, *sample, index|
+        sample.* = Fixture.fill(storage, index);
+    var validation_storage: [384][9]u8 = undefined;
+    var validation_samples: [validation_storage.len][]const u8 = undefined;
+    for (&validation_storage, &validation_samples, 0..) |*storage, *sample, index|
+        sample.* = Fixture.fill(storage, index);
+    const trained = (try vort.brTrainSerializedSharedDictionaryAlloc(
+        allocator,
+        &training_samples,
+        &validation_samples,
+        .{
+            .min_word_len = 8,
+            .max_word_len = 8,
+            .max_words_per_length = 8,
+            .max_phrases_per_length = 64,
+            .train_case_transforms = false,
+            .train_omit_transforms = false,
+            .train_prefix_suffix_transforms = false,
+            .context_cluster_counts = &.{4},
+            .max_context_positions_per_group = 1024,
+            .max_context_signature_positions = 1024,
+            .quality = 5,
+        },
+    )) orelse return error.ReferenceEncodeFailed;
+    defer trained.deinit(allocator);
+    if (trained.context_profile != .clustered or
+        trained.context_cluster_count != 4)
     {
         return error.ReferenceEncodeFailed;
     }

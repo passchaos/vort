@@ -46,13 +46,18 @@ major gaps before Vort can claim broad industry-best parity:
   RFC modes across a caller-selected cutoff list; its locked contextual fixture
   selects MSB6/cutoff48 and improves 17,344 baseline bytes to 14,272 frame bytes
   plus a 266-byte dictionary.
+  Fixed-memory phrase-signature clustering now learns arbitrary non-contiguous
+  maps across all four RFC modes and caller-selected 2...16 cluster counts. Its
+  locked four-cluster fixture groups `{8,32}`, `{16,40}`, and `{24,48}` while
+  improving 4,992 baseline bytes to 3,584 frame bytes plus a 454-byte
+  dictionary.
   Identity word lists are also reserialized as independent case, omit-first/
   last, and combined transform families that compete by the same held-out cost.
   A bounded deterministic learner now ranks observed prefix-only, suffix-only,
   and paired stringlets and independently combines them with all four base
   families; its locked fixture improves 5,120 baseline bytes to 1,279 frame
-  bytes plus a 179-byte dictionary. General context/transform clustering,
-  SHIFT-family learning, and broader corpus calibration remain open.
+  bytes plus a 179-byte dictionary. General transform clustering, SHIFT-family
+  learning, and broader corpus calibration remain open.
   q10/q11 Zopfli/HQ cost refinement and global exact-cost segmentation also
   remain open.
 - True byte-progressive Brotli decoding now covers stored data, metadata,

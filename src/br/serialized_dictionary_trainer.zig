@@ -3,6 +3,7 @@ const dictionary_train = @import("../dictionary.zig");
 const serialized_dictionary = @import("serialized_dictionary.zig");
 const builder = @import("serialized_dictionary_builder.zig");
 const affix_trainer = @import("serialized_dictionary_affix_trainer.zig");
+const context_clusterer = @import("serialized_dictionary_context_clusterer.zig");
 const literal_context = @import("encoder/literal_context.zig");
 
 pub const DictionaryId = dictionary_train.DictionaryId;
@@ -24,6 +25,16 @@ pub const max_learned_prefix_suffix_transforms = affix_trainer.max_transforms;
 pub const max_learned_prefix_suffix_words = affix_trainer.max_dictionary_words;
 pub const max_learned_prefix_suffix_positions = affix_trainer.max_sampled_positions;
 
+pub const ContextProfile = enum {
+    global,
+    cutoff,
+    clustered,
+};
+
+pub const max_context_signature_positions =
+    context_clusterer.max_positions_per_context;
+pub const max_context_training_positions_per_group: usize = 1024 * 1024;
+
 pub const Options = struct {
     min_word_len: u5 = 4,
     max_word_len: u5 = 16,
@@ -35,6 +46,7 @@ pub const Options = struct {
     train_context_map: bool = true,
     context_cutoff: u6 = 32,
     max_context_positions_per_group: usize = 16 * 1024,
+    max_context_signature_positions: usize = 4096,
 };
 
 pub const Candidate = struct {
@@ -45,6 +57,8 @@ pub const Candidate = struct {
     context_based: bool = false,
     context_mode: ?u2 = null,
     context_cutoff: ?u6 = null,
+    context_profile: ContextProfile = .global,
+    context_cluster_count: u7 = 1,
     transform_profile: TransformProfile = .identity,
     learned_stringlet_count: usize = 0,
     learned_prefix_suffix_transform_count: usize = 0,
@@ -140,6 +154,8 @@ pub fn withPrefixSuffixTransformsAlloc(
         .context_based = source.context_based,
         .context_mode = source.context_mode,
         .context_cutoff = source.context_cutoff,
+        .context_profile = source.context_profile,
+        .context_cluster_count = source.context_cluster_count,
         .transform_profile = transform_profile,
         .learned_stringlet_count = plan.stringlet_count - 1,
         .learned_prefix_suffix_transform_count = plan.transformCount(),
@@ -218,6 +234,8 @@ fn withTransformProfileAlloc(
         .context_based = source.context_based,
         .context_mode = source.context_mode,
         .context_cutoff = source.context_cutoff,
+        .context_profile = source.context_profile,
+        .context_cluster_count = source.context_cluster_count,
         .transform_profile = profile,
     };
 }
@@ -362,72 +380,131 @@ pub fn trainContextCandidateAlloc(
     try validateOptions(options);
     if (!options.train_context_map) return null;
     if (samples.len == 0) return null;
-    var lists: [2]OwnedWordList = undefined;
-    {
-        var initialized: usize = 0;
-        errdefer for (lists[0..initialized]) |list| list.deinit(allocator);
-        for (&lists, 0..) |*list, group| {
-            list.* = try trainContextWordListAlloc(
-                allocator,
-                samples,
-                options,
-                mode,
-                group == 1,
-            );
-            initialized += 1;
-        }
-    }
-    defer for (lists) |list| list.deinit(allocator);
-    const word_count = std.math.add(
-        usize,
-        lists[0].word_count,
-        lists[1].word_count,
-    ) catch return error.IntegerOverflow;
-    if (word_count == 0) return null;
-    const word_lists = [_]builder.WordListSpec{
-        .{
-            .size_bits_by_length = lists[0].size_bits_by_length,
-            .data = lists[0].data,
-        },
-        .{
-            .size_bits_by_length = lists[1].size_bits_by_length,
-            .data = lists[1].data,
-        },
-    };
-    const transform_lists = [_]builder.TransformListSpec{.{
-        .prefix_suffix = &.{0},
-        .transforms = &.{ 0, 0, 0 },
-    }};
-    const choices = [_]serialized_dictionary.DictionaryChoice{
-        .{ .word_list_index = 0, .transform_list_index = 0 },
-        .{ .word_list_index = 1, .transform_list_index = 0 },
-    };
-    var context_map: [64]u6 = undefined;
+    var context_map: [serialized_dictionary.max_contexts]u6 = undefined;
     for (&context_map, 0..) |*dictionary_id, context|
         dictionary_id.* = @intFromBool(context >= options.context_cutoff);
-    const encoded = try builder.serializeAlloc(allocator, .{
-        .word_lists = &word_lists,
-        .transform_lists = &transform_lists,
-        .dictionaries = &choices,
-        .context_map = &context_map,
-    });
-    return .{
-        .encoded = encoded,
-        .bucket_count = lists[0].bucket_count + lists[1].bucket_count,
-        .word_count = word_count,
-        .id = .fromBytes(encoded),
-        .context_based = true,
-        .context_mode = mode,
-        .context_cutoff = options.context_cutoff,
-    };
+    var candidate = (try trainMappedContextCandidateAlloc(
+        allocator,
+        samples,
+        options,
+        mode,
+        &context_map,
+        2,
+    )) orelse return null;
+    candidate.context_profile = .cutoff;
+    candidate.context_cutoff = options.context_cutoff;
+    return candidate;
 }
 
-fn trainContextWordListAlloc(
+pub fn trainClusteredContextCandidateAlloc(
     allocator: std.mem.Allocator,
     samples: []const []const u8,
     options: Options,
     mode: u2,
-    upper_group: bool,
+    target_clusters: u7,
+) (Error || std.mem.Allocator.Error)!?Candidate {
+    try validateOptions(options);
+    if (!options.train_context_map) return null;
+    const learned = (try context_clusterer.learn(samples, mode, .{
+        .phrase_len = options.min_word_len,
+        .target_clusters = target_clusters,
+        .max_positions_per_context = options.max_context_signature_positions,
+    })) orelse return null;
+    if (learned.cluster_count < 2) return null;
+    var candidate = (try trainMappedContextCandidateAlloc(
+        allocator,
+        samples,
+        options,
+        mode,
+        &learned.context_map,
+        learned.cluster_count,
+    )) orelse return null;
+    candidate.context_profile = .clustered;
+    candidate.context_cluster_count = learned.cluster_count;
+    return candidate;
+}
+
+fn trainMappedContextCandidateAlloc(
+    allocator: std.mem.Allocator,
+    samples: []const []const u8,
+    options: Options,
+    mode: u2,
+    context_map: *const [serialized_dictionary.max_contexts]u6,
+    cluster_count: u7,
+) (Error || std.mem.Allocator.Error)!?Candidate {
+    if (cluster_count < 2 or cluster_count > serialized_dictionary.max_contexts)
+        return error.InvalidTrainingOptions;
+    for (context_map) |cluster_id|
+        if (cluster_id >= cluster_count) return error.InvalidTrainingOptions;
+    var lists: [serialized_dictionary.max_contexts]OwnedWordList = undefined;
+    const active_lists = lists[0..cluster_count];
+    {
+        var initialized: usize = 0;
+        errdefer for (active_lists[0..initialized]) |list| list.deinit(allocator);
+        for (active_lists, 0..) |*list, group| {
+            list.* = try trainMappedContextWordListAlloc(
+                allocator,
+                samples,
+                options,
+                mode,
+                context_map,
+                @intCast(group),
+            );
+            initialized += 1;
+        }
+    }
+    defer for (active_lists) |list| list.deinit(allocator);
+    var word_count: usize = 0;
+    var bucket_count: usize = 0;
+    for (active_lists) |list| {
+        word_count = std.math.add(usize, word_count, list.word_count) catch
+            return error.IntegerOverflow;
+        bucket_count = std.math.add(usize, bucket_count, list.bucket_count) catch
+            return error.IntegerOverflow;
+    }
+    if (word_count == 0) return null;
+    var word_lists: [serialized_dictionary.max_contexts]builder.WordListSpec =
+        undefined;
+    var choices: [serialized_dictionary.max_contexts]serialized_dictionary.DictionaryChoice =
+        undefined;
+    for (active_lists, 0..) |list, group| {
+        word_lists[group] = .{
+            .size_bits_by_length = list.size_bits_by_length,
+            .data = list.data,
+        };
+        choices[group] = .{
+            .word_list_index = @intCast(group),
+            .transform_list_index = 0,
+        };
+    }
+    const transform_lists = [_]builder.TransformListSpec{.{
+        .prefix_suffix = &.{0},
+        .transforms = &.{ 0, 0, 0 },
+    }};
+    const encoded = try builder.serializeAlloc(allocator, .{
+        .word_lists = word_lists[0..cluster_count],
+        .transform_lists = &transform_lists,
+        .dictionaries = choices[0..cluster_count],
+        .context_map = context_map,
+    });
+    return .{
+        .encoded = encoded,
+        .bucket_count = bucket_count,
+        .word_count = word_count,
+        .id = .fromBytes(encoded),
+        .context_based = true,
+        .context_mode = mode,
+        .context_cluster_count = cluster_count,
+    };
+}
+
+fn trainMappedContextWordListAlloc(
+    allocator: std.mem.Allocator,
+    samples: []const []const u8,
+    options: Options,
+    mode: u2,
+    context_map: *const [serialized_dictionary.max_contexts]u6,
+    group: u6,
 ) (Error || std.mem.Allocator.Error)!OwnedWordList {
     var buckets: std.ArrayList(OwnedBucket) = .empty;
     defer {
@@ -437,13 +514,13 @@ fn trainContextWordListAlloc(
     var word_count: usize = 0;
     var total_data_len: usize = 0;
     for (options.min_word_len..options.max_word_len + 1) |word_len| {
-        const position_samples = try collectContextPositionSamplesAlloc(
+        const position_samples = try collectMappedContextPositionSamplesAlloc(
             allocator,
             samples,
             word_len,
             mode,
-            options.context_cutoff,
-            upper_group,
+            context_map,
+            group,
             options.max_context_positions_per_group,
         );
         defer allocator.free(position_samples);
@@ -508,13 +585,13 @@ fn trainContextWordListAlloc(
     };
 }
 
-fn collectContextPositionSamplesAlloc(
+fn collectMappedContextPositionSamplesAlloc(
     allocator: std.mem.Allocator,
     samples: []const []const u8,
     word_len: usize,
     mode: u2,
-    cutoff: u6,
-    upper_group: bool,
+    context_map: *const [serialized_dictionary.max_contexts]u6,
+    group: u6,
     limit: usize,
 ) (Error || std.mem.Allocator.Error)![][]const u8 {
     var eligible: usize = 0;
@@ -522,7 +599,7 @@ fn collectContextPositionSamplesAlloc(
         if (sample.len < word_len) continue;
         for (0..sample.len - word_len + 1) |position| {
             const context = trainingContext(sample, position, mode);
-            if ((context >= cutoff) == upper_group)
+            if (context_map[context] == group)
                 eligible = std.math.add(usize, eligible, 1) catch
                     return error.IntegerOverflow;
         }
@@ -540,7 +617,7 @@ fn collectContextPositionSamplesAlloc(
         if (sample.len < word_len) continue;
         for (0..sample.len - word_len + 1) |position| {
             const context = trainingContext(sample, position, mode);
-            if ((context >= cutoff) != upper_group) continue;
+            if (context_map[context] != group) continue;
             if (ordinal % stride == 0 and written < result.len) {
                 result[written] = sample[position..][0..word_len];
                 written += 1;
@@ -572,7 +649,8 @@ fn validateOptions(options: Options) Error!void {
         (options.train_context_map and
             (options.context_cutoff == 0 or
                 options.context_cutoff >= 64 or
-                options.max_context_positions_per_group == 0)))
+                options.max_context_positions_per_group == 0 or
+                options.max_context_positions_per_group > max_context_training_positions_per_group)))
     {
         return error.InvalidTrainingOptions;
     }
@@ -679,6 +757,59 @@ test "serialized trainer learns deterministic two-group context maps" {
     const high_word = parsed.word_lists[1].word(8, 0).?;
     try std.testing.expect((try parsed.findLongest(24, low_word, &scratch)) != null);
     try std.testing.expect((try parsed.findLongest(40, high_word, &scratch)) != null);
+}
+
+test "serialized trainer learns deterministic non-contiguous context clusters" {
+    const words_a = [_][]const u8{ "a0000000", "a1111111" };
+    const words_b = [_][]const u8{ "b0000000", "b1111111" };
+    const markers = [_]u8{ 8, 32, 16, 40 };
+    var storage: [64][9]u8 = undefined;
+    var samples: [storage.len][]const u8 = undefined;
+    for (&storage, &samples, 0..) |*item, *sample, index| {
+        const group = (index / 16) / 2;
+        const marker_index = (index / 16) % 2;
+        const words = if (group == 0) &words_a else &words_b;
+        item[0] = markers[group * 2 + marker_index];
+        @memcpy(item[1..], words[index % words.len]);
+        sample.* = item;
+    }
+    const options = Options{
+        .min_word_len = 8,
+        .max_word_len = 8,
+        .max_words_per_length = 4,
+        .max_phrases_per_length = 32,
+        .max_context_positions_per_group = 128,
+        .max_context_signature_positions = 128,
+    };
+    const first = (try trainClusteredContextCandidateAlloc(
+        std.testing.allocator,
+        &samples,
+        options,
+        literal_context.mode_lsb6,
+        3,
+    )).?;
+    defer first.deinit(std.testing.allocator);
+    const second = (try trainClusteredContextCandidateAlloc(
+        std.testing.allocator,
+        &samples,
+        options,
+        literal_context.mode_lsb6,
+        3,
+    )).?;
+    defer second.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, first.encoded, second.encoded);
+    try std.testing.expectEqual(first.id, second.id);
+    try std.testing.expectEqual(ContextProfile.clustered, first.context_profile);
+    try std.testing.expectEqual(@as(u7, 3), first.context_cluster_count);
+    try std.testing.expectEqual(@as(?u6, null), first.context_cutoff);
+    const parsed = try serialized_dictionary.parse(first.encoded);
+    try std.testing.expectEqual(@as(u7, 3), parsed.word_list_count);
+    try std.testing.expectEqual(parsed.context_map[8], parsed.context_map[32]);
+    try std.testing.expectEqual(parsed.context_map[16], parsed.context_map[40]);
+    try std.testing.expect(parsed.context_map[8] != parsed.context_map[16]);
+    var scratch: [serialized_dictionary.max_transformed_word_len]u8 = undefined;
+    try std.testing.expect((try parsed.findLongest(8, words_a[0], &scratch)) != null);
+    try std.testing.expect((try parsed.findLongest(16, words_b[0], &scratch)) != null);
 }
 
 test "serialized trainer derives canonical transform families" {
@@ -906,6 +1037,31 @@ test "serialized trainer releases every allocation failure path" {
                 literal_context.mode_utf8,
             )) orelse return error.TestUnexpectedResult;
             defer contextual.deinit(allocator);
+            const cluster_samples = [_][]const u8{
+                "\x08a0000000",
+                "\x08a1111111",
+                "\x20a0000000",
+                "\x20a1111111",
+                "\x10b0000000",
+                "\x10b1111111",
+                "\x28b0000000",
+                "\x28b1111111",
+            };
+            const clustered = (try trainClusteredContextCandidateAlloc(
+                allocator,
+                &cluster_samples,
+                .{
+                    .min_word_len = 8,
+                    .max_word_len = 8,
+                    .max_words_per_length = 4,
+                    .max_phrases_per_length = 16,
+                    .max_context_positions_per_group = 32,
+                    .max_context_signature_positions = 32,
+                },
+                literal_context.mode_lsb6,
+                3,
+            )) orelse return error.TestUnexpectedResult;
+            defer clustered.deinit(allocator);
         }
     };
     try std.testing.checkAllAllocationFailures(

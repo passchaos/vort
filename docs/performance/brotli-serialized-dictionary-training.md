@@ -11,9 +11,9 @@ retains the largest legal power-of-two word bucket, emits one identity-transform
 custom dictionary, and validates profitability on held-out samples with the
 production Brotli encoder.
 
-This is not a COVER/FastCover-equivalent trainer. General context/transform
-clustering, SHIFT-family learning, and representative corpus calibration remain
-future work.
+This is not a COVER/FastCover-equivalent trainer. General transform clustering,
+SHIFT-family learning, and representative corpus calibration remain future
+work.
 
 ## Selection contract
 
@@ -27,7 +27,8 @@ The candidate is returned only when this total beats the dictionary-free frame
 total by at least `min_savings_bytes`. Deployments that distribute dictionaries
 out of band may disable the one-time dictionary charge explicitly. Every
 returned result includes both frame totals, the charged bytes, total savings,
-word and bucket counts, and a stable content-derived dictionary ID.
+word and bucket counts, global/cutoff/clustered context profile, actual cluster
+count, and a stable content-derived dictionary ID.
 
 ## Locked fixture
 
@@ -68,6 +69,34 @@ once per frame:
 The regression requires at least a 15% complete-total saving and verifies that
 the selected candidate records MSB6, cutoff 48, a two-entry context
 map, stable bytes, and successful decoding.
+
+## Non-contiguous context-cluster evidence
+
+For each RFC literal-context mode, the trainer hashes the next minimum-length
+phrase at each training position into one of 64 fixed signature bins. Every
+context retains a separately bounded count vector. Deterministic agglomeration
+merges the pair with the smallest normalized integer L1 distance; equal costs
+use the lowest member contexts. Empty-evidence contexts join the numerically
+nearest observed cluster. The algorithm uses fixed stack storage, no floating
+point, and no heap allocation. Default cluster-count candidates are 3 and 4;
+callers may provide up to eight strictly increasing counts in 2...16.
+
+A locked four-cluster fixture places three eight-word families behind non-
+contiguous LSB6 context pairs `{8,32}`, `{16,40}`, and `{24,48}`. A fourth
+cluster owns start-of-sample phrases. No single cutoff can reproduce this map:
+
+| Metric | Bytes |
+|---|---:|
+| Dictionary-free held-out frames | 4,992 |
+| Clustered dictionary-backed frames | 3,584 |
+| Serialized dictionary | 454 |
+| Charged trained total | 4,038 |
+| Total saving | 954 (19.1%) |
+
+The regression requires at least a 15% complete-total saving, selects LSB6 and
+four word lists, verifies every non-contiguous pair and cross-group separation,
+replays a group-specific dictionary word, and requires repeated public training
+to produce byte-identical bytes and IDs.
 
 ## Case-transform evidence
 

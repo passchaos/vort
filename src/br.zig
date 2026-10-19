@@ -105,6 +105,7 @@ pub const SerializedSharedDictionaryWordListSpec = serialized_dictionary_builder
 pub const SerializedSharedDictionaryTransformListSpec = serialized_dictionary_builder.TransformListSpec;
 pub const SerializedSharedDictionaryBuildError = serialized_dictionary_builder.Error;
 pub const SerializedSharedDictionaryTransformProfile = serialized_dictionary_trainer.TransformProfile;
+pub const SerializedSharedDictionaryContextProfile = serialized_dictionary_trainer.ContextProfile;
 pub const serializedSharedDictionaryEncodedSize = serialized_dictionary_builder.encodedSize;
 pub const serializeSharedDictionaryInto = serialized_dictionary_builder.serializeInto;
 pub const serializeSharedDictionaryAppend = serialized_dictionary_builder.serializeAppend;
@@ -115,6 +116,7 @@ pub const SerializedSharedDictionaryTrainOptions = struct {
     max_words_per_length: u16 = 64,
     max_phrases_per_length: usize = 256,
     train_context_map: bool = true,
+    train_context_clustering: bool = true,
     train_case_transforms: bool = true,
     train_omit_transforms: bool = true,
     train_prefix_suffix_transforms: bool = true,
@@ -130,7 +132,11 @@ pub const SerializedSharedDictionaryTrainOptions = struct {
     /// Strictly increasing candidate cutoffs. Equal-cost ties keep the first
     /// cutoff, then the first RFC mode (LSB6, MSB6, UTF8, Signed).
     context_cutoffs: []const u6 = &.{ 16, 32, 48 },
+    /// Strictly increasing learned cluster counts. These arbitrary context maps
+    /// compete with the global and two-range cutoff candidates.
+    context_cluster_counts: []const u7 = &.{ 3, 4 },
     max_context_positions_per_group: usize = 16 * 1024,
+    max_context_signature_positions: usize = 4096,
     quality: u4 = 5,
     mode: PlannedMode = .generic,
     /// Charge the serialized dictionary bytes once against the held-out frame
@@ -152,6 +158,10 @@ pub const OwnedTrainedSerializedSharedDictionary = struct {
     context_based: bool,
     trained_context_mode: ?u2,
     context_cutoff: ?u6,
+    /// Global, contiguous-cutoff, or learned arbitrary context selection.
+    context_profile: SerializedSharedDictionaryContextProfile,
+    /// One for global candidates, two for cutoffs, otherwise the learned count.
+    context_cluster_count: u7,
     transform_profile: SerializedSharedDictionaryTransformProfile,
     /// Non-empty serialized stringlets contributed by the selected learner.
     learned_stringlet_count: usize,
@@ -280,7 +290,13 @@ pub fn trainSerializedSharedDictionaryAlloc(
     if (validation_samples.len == 0 or options.min_savings_bytes == 0 or
         options.quality > 11 or
         (options.train_context_map and
-            !validSerializedTrainingCutoffs(options.context_cutoffs)) or
+            (!validSerializedTrainingCutoffs(options.context_cutoffs) or
+                options.max_context_positions_per_group == 0 or
+                options.max_context_positions_per_group > serialized_dictionary_trainer.max_context_training_positions_per_group or
+                (options.train_context_clustering and
+                    (!validSerializedTrainingClusterCounts(options.context_cluster_counts) or
+                        options.max_context_signature_positions == 0 or
+                        options.max_context_signature_positions > serialized_dictionary_trainer.max_context_signature_positions)))) or
         (options.train_prefix_suffix_transforms and
             (options.max_prefix_suffix_len == 0 or
                 options.max_prefix_suffix_len > serialized_dictionary_trainer.max_learned_stringlet_len or
@@ -305,6 +321,7 @@ pub fn trainSerializedSharedDictionaryAlloc(
         else
             options.context_cutoffs[0],
         .max_context_positions_per_group = options.max_context_positions_per_group,
+        .max_context_signature_positions = options.max_context_signature_positions,
     };
     const baseline_frame_bytes = try serializedTrainingFrameBytes(
         allocator,
@@ -358,6 +375,32 @@ pub fn trainSerializedSharedDictionaryAlloc(
                 }
             }
         }
+        if (options.train_context_clustering) {
+            for (options.context_cluster_counts) |cluster_count| {
+                for (0..4) |mode| {
+                    if (serialized_dictionary_trainer.trainClusteredContextCandidateAlloc(
+                        allocator,
+                        training_samples,
+                        core_options,
+                        @intCast(mode),
+                        cluster_count,
+                    ) catch |err| switch (err) {
+                        error.OutOfMemory => return error.OutOfMemory,
+                        error.IntegerOverflow => return error.IntegerOverflow,
+                        else => return error.InvalidDictionaryTraining,
+                    }) |candidate| {
+                        try considerSerializedTrainingCandidateFamily(
+                            allocator,
+                            training_samples,
+                            validation_samples,
+                            options,
+                            candidate,
+                            &selection,
+                        );
+                    }
+                }
+            }
+        }
     }
     const candidate = selection.candidate orelse return null;
     if (selection.total_bytes >= baseline_frame_bytes or
@@ -378,6 +421,8 @@ pub fn trainSerializedSharedDictionaryAlloc(
         .context_based = candidate.context_based,
         .trained_context_mode = candidate.context_mode,
         .context_cutoff = candidate.context_cutoff,
+        .context_profile = candidate.context_profile,
+        .context_cluster_count = candidate.context_cluster_count,
         .transform_profile = candidate.transform_profile,
         .learned_stringlet_count = candidate.learned_stringlet_count,
         .learned_prefix_suffix_transform_count = candidate.learned_prefix_suffix_transform_count,
@@ -391,6 +436,16 @@ fn validSerializedTrainingCutoffs(cutoffs: []const u6) bool {
     for (cutoffs) |cutoff| {
         if (cutoff == 0 or cutoff >= 64 or cutoff <= previous) return false;
         previous = cutoff;
+    }
+    return true;
+}
+
+fn validSerializedTrainingClusterCounts(counts: []const u7) bool {
+    if (counts.len == 0 or counts.len > 8) return false;
+    var previous: u7 = 1;
+    for (counts) |count| {
+        if (count < 2 or count > 16 or count <= previous) return false;
+        previous = count;
     }
     return true;
 }
@@ -32893,6 +32948,7 @@ test "br serialized dictionary trainer retains held-out complete-wire wins" {
         .max_word_len = 16,
         .max_words_per_length = 8,
         .max_phrases_per_length = 64,
+        .train_context_clustering = false,
         .train_omit_transforms = false,
         .train_prefix_suffix_transforms = false,
         .quality = 5,
@@ -32918,6 +32974,11 @@ test "br serialized dictionary trainer retains held-out complete-wire wins" {
         SerializedSharedDictionaryTransformProfile.identity,
         first.transform_profile,
     );
+    try std.testing.expectEqual(
+        SerializedSharedDictionaryContextProfile.global,
+        first.context_profile,
+    );
+    try std.testing.expectEqual(@as(u7, 1), first.context_cluster_count);
     try std.testing.expect(first.bucket_count != 0 and first.word_count >= 2);
     try std.testing.expect(first.total_savings_bytes >= options.min_savings_bytes);
     // Locked evidence: 4,608 baseline bytes versus 2,632 frame bytes plus a
@@ -33005,6 +33066,51 @@ test "br serialized dictionary trainer rejects non-wins and invalid evaluation" 
             &samples,
             &samples,
             .{ .context_cutoffs = &.{ 16, 16 } },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .context_cluster_counts = &.{} },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .context_cluster_counts = &.{ 4, 3 } },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .context_cluster_counts = &.{17} },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .max_context_signature_positions = 0 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .max_context_positions_per_group = 0 },
         ),
     );
     try std.testing.expectError(
@@ -33132,6 +33238,7 @@ test "br serialized dictionary trainer selects profitable context maps" {
             .max_word_len = 8,
             .max_words_per_length = 8,
             .max_phrases_per_length = 64,
+            .train_context_clustering = false,
             .train_case_transforms = false,
             .train_omit_transforms = false,
             .train_prefix_suffix_transforms = false,
@@ -33140,6 +33247,11 @@ test "br serialized dictionary trainer selects profitable context maps" {
     )) orelse return error.TestUnexpectedResult;
     defer trained.deinit(std.testing.allocator);
     try std.testing.expect(trained.context_based);
+    try std.testing.expectEqual(
+        SerializedSharedDictionaryContextProfile.cutoff,
+        trained.context_profile,
+    );
+    try std.testing.expectEqual(@as(u7, 2), trained.context_cluster_count);
     try std.testing.expectEqual(
         SerializedSharedDictionaryTransformProfile.identity,
         trained.transform_profile,
@@ -33162,6 +33274,101 @@ test "br serialized dictionary trainer selects profitable context maps" {
     try std.testing.expect(parsed.context_based);
     try std.testing.expectEqual(@as(u6, 0), parsed.context_map[47]);
     try std.testing.expectEqual(@as(u6, 1), parsed.context_map[48]);
+}
+
+test "br serialized dictionary trainer selects non-contiguous context clusters" {
+    const Test = struct {
+        const markers = [3][2]u8{
+            .{ 8, 32 },
+            .{ 16, 40 },
+            .{ 24, 48 },
+        };
+
+        fn word(group: usize, index: usize) [8]u8 {
+            var value = (@as(u64, group + 1) << 48) |
+                (@as(u64, index + 1) << 8) | 0x5b;
+            value *%= 0x9e37_79b9_7f4a_7c15;
+            var result: [8]u8 = undefined;
+            std.mem.writeInt(u64, &result, value, .little);
+            result[0] |= 0x80;
+            return result;
+        }
+
+        fn fill(storage: *[9]u8, ordinal: usize) []const u8 {
+            const shape = ordinal % (3 * 2 * 8);
+            const group = shape / 16;
+            const marker_index = (shape / 8) % 2;
+            const word_index = shape % 8;
+            storage[0] = markers[group][marker_index];
+            const bytes = word(group, word_index);
+            @memcpy(storage[1..], &bytes);
+            return storage;
+        }
+    };
+    var training_storage: [192][9]u8 = undefined;
+    var training_samples: [training_storage.len][]const u8 = undefined;
+    for (&training_storage, &training_samples, 0..) |*storage, *sample, index|
+        sample.* = Test.fill(storage, index);
+    var validation_storage: [384][9]u8 = undefined;
+    var validation_samples: [validation_storage.len][]const u8 = undefined;
+    for (&validation_storage, &validation_samples, 0..) |*storage, *sample, index|
+        sample.* = Test.fill(storage, index);
+    const options = SerializedSharedDictionaryTrainOptions{
+        .min_word_len = 8,
+        .max_word_len = 8,
+        .max_words_per_length = 8,
+        .max_phrases_per_length = 64,
+        .train_case_transforms = false,
+        .train_omit_transforms = false,
+        .train_prefix_suffix_transforms = false,
+        .context_cluster_counts = &.{4},
+        .max_context_positions_per_group = 1024,
+        .max_context_signature_positions = 1024,
+        .quality = 5,
+    };
+    const trained = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        options,
+    )) orelse return error.TestUnexpectedResult;
+    defer trained.deinit(std.testing.allocator);
+    const repeated = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        options,
+    )) orelse return error.TestUnexpectedResult;
+    defer repeated.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, trained.bytes, repeated.bytes);
+    try std.testing.expectEqual(trained.id, repeated.id);
+    try std.testing.expectEqual(@as(usize, 4_992), trained.baseline_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 3_584), trained.trained_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 454), trained.charged_dictionary_bytes);
+    try std.testing.expectEqual(@as(usize, 954), trained.total_savings_bytes);
+    try std.testing.expectEqual(
+        SerializedSharedDictionaryContextProfile.clustered,
+        trained.context_profile,
+    );
+    try std.testing.expectEqual(@as(u7, 4), trained.context_cluster_count);
+    try std.testing.expectEqual(@as(?u6, null), trained.context_cutoff);
+    try std.testing.expectEqual(
+        @as(?u2, literal_context.mode_lsb6),
+        trained.trained_context_mode,
+    );
+    try std.testing.expect(
+        trained.total_savings_bytes * 100 >= trained.baseline_frame_bytes * 15,
+    );
+    const parsed = try trained.parse();
+    try std.testing.expectEqual(@as(u7, 4), parsed.word_list_count);
+    for (Test.markers) |pair|
+        try std.testing.expectEqual(parsed.context_map[pair[0]], parsed.context_map[pair[1]]);
+    try std.testing.expect(parsed.context_map[8] != parsed.context_map[16]);
+    try std.testing.expect(parsed.context_map[8] != parsed.context_map[24]);
+    try std.testing.expect(parsed.context_map[16] != parsed.context_map[24]);
+    var scratch: [serialized_dictionary.max_transformed_word_len]u8 = undefined;
+    const group_word = Test.word(2, 7);
+    try std.testing.expect((try parsed.findLongest(24, &group_word, &scratch)) != null);
 }
 
 test "br serialized dictionary trainer selects case transforms on held-out wire" {

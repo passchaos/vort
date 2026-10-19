@@ -86,9 +86,9 @@ one-shot, reusable, chunked, incremental, q0 cross-block context retention,
 and complete address replay. An experimental libbrotli 1.2.0 build passes both
 Vort-encode/libbrotli-decode and libbrotli-encode/Vort-decode cases. The
 contextual differential dictionary is produced through the public builder, and
-four additional bidirectional pairs use identity, case-transform,
-omit-transform, and learned-prefix/suffix trainer results
-(`serialized_cases=12`).
+five additional bidirectional pairs use identity, case-transform,
+omit-transform, learned-prefix/suffix, and non-contiguous-context-cluster
+trainer results (`serialized_cases=14`).
 Builder tests cover deterministic parse/serialize round trips, built-in/custom
 mixed choices, all output ownership forms, varint boundaries, invalid size
 buckets/transforms/context IDs, atomic caller output, and allocation failure.
@@ -97,23 +97,28 @@ The parser allocates no memory.
 `brTrainSerializedSharedDictionaryAlloc` trains identity-transform word lists
 from caller-supplied training samples, one bounded heavy-hitter collection per
 word length. Each emitted bucket is the largest legal power of two within the
-configured limits. When context training is enabled, it also trains two word
-lists on each side of caller-selected context cutoffs for LSB6, MSB6, UTF8,
-and Signed. The public option accepts a strictly increasing bounded cutoff list
-(16/32/48 by default), then compares every cutoff/mode candidate with the global dictionary. Held-out
-samples are encoded both without and with every candidate; the function returns
-null unless the best actual complete Brotli frame total, plus the serialized
-dictionary by default, meets `min_savings_bytes`.
+configured limits. When context training is enabled, it trains two word lists
+on each side of caller-selected context cutoffs for LSB6, MSB6, UTF8, and
+Signed. It also hashes the next minimum-length phrase into a fixed 64-bin
+signature per context and uses normalized integer L1 agglomeration to learn
+arbitrary non-contiguous maps, with 3/4 clusters by default. Public options
+bound cutoff and cluster-count lists, per-context signature positions, and
+training positions per group. Every cutoff/mode and cluster-count/mode candidate
+competes with the global dictionary. Held-out samples are encoded both without
+and with every candidate; the function returns null unless the best actual
+complete Brotli frame total, plus the serialized dictionary by default, meets
+`min_savings_bytes`.
 The owned result reports frame totals, charged dictionary bytes, word/bucket
-counts, total savings, learned stringlet/transform counts, and a stable
-content-derived `DictionaryId`. The trainer reuses Vort's bounded deterministic
+counts, total savings, context profile/cluster count, learned
+stringlet/transform counts, and a stable content-derived `DictionaryId`. The
+trainer reuses Vort's bounded deterministic
 phrase collector, then indexes each candidate's trained words and learns
 prefix-only, suffix-only, and observed prefix+suffix identity transforms from
 deterministically sampled corpus matches. Ranked transforms are reserialized
 independently with identity, case, omit-first/last, and combined case+omit base
 families before the same complete-wire arbitration. It does not claim
-COVER/FastCover equivalence, general context/transform clustering, or learned
-SHIFT transforms.
+COVER/FastCover equivalence, general transform clustering, or learned SHIFT
+transforms.
 
 ## Remaining performance work
 
@@ -129,9 +134,9 @@ mode, the encoder additionally arbitrates single-tree, suffix, bounded-16-tree,
 and complete clustered literal-context candidates. A locked joint fixture
 shrinks from 627 to 523 bytes while retaining custom dictionary copies. Vort
 does not promise stability for upstream's experimental container format.
-The trainer is deterministic and complete-wire validated, with bounded
-multi-cutoff two-group context-map learning and bounded prefix/suffix stringlet
-learning. General context and transform clustering, SHIFT-family learning,
-COVER/FastCover-class candidate selection, and broad corpus calibration remain
-open. The builder also remains available for fully explicit caller-owned
-specifications.
+The trainer is deterministic and complete-wire validated, with bounded multi-
+cutoff two-group maps, arbitrary non-contiguous context clustering, and bounded
+prefix/suffix stringlet learning. General transform clustering, SHIFT-family
+learning, COVER/FastCover-class candidate selection, and broad corpus
+calibration remain open. The builder also remains available for fully explicit
+caller-owned specifications.
