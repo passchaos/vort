@@ -105,3 +105,11 @@ byte, but did not produce a stable end-to-end gain: entropy finalization, which
 must still run for every candidate, dominates this workload. Text, binary, and
 source slowed slightly while JSON improved only about 2--3%, so the extra state
 and generic pre-pass were removed.
+
+A second experiment serialized the corpus-only literal Huffman entropy once and
+reused it for all 30 histories. Normal and flat-corpus fallback tests were
+byte-identical to separate finalization, but complete training did not improve:
+text moved from about 24.19 to 24.63 seconds, JSON from 51.70 to 52.45 seconds,
+and binary from 2.12 to 2.28 seconds. This refactor was also removed. The
+dominant remaining work is history-dependent sequence parsing, FSE/repcode
+training, and complete candidate encoding rather than literal-tree creation.
