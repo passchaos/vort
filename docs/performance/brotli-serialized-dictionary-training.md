@@ -11,9 +11,9 @@ retains the largest legal power-of-two word bucket, emits one identity-transform
 custom dictionary, and validates profitability on held-out samples with the
 production Brotli encoder.
 
-This is not a COVER/FastCover-equivalent trainer. General transform clustering,
-SHIFT-family learning, and representative corpus calibration remain future
-work.
+This is not a COVER/FastCover-equivalent trainer. SHIFT-family learning,
+arbitrary transform synthesis, and representative corpus calibration remain
+future work.
 
 ## Selection contract
 
@@ -28,7 +28,8 @@ total by at least `min_savings_bytes`. Deployments that distribute dictionaries
 out of band may disable the one-time dictionary charge explicitly. Every
 returned result includes both frame totals, the charged bytes, total savings,
 word and bucket counts, global/cutoff/clustered context profile, actual cluster
-count, and a stable content-derived dictionary ID.
+count, selected transform profile/list count, and a stable content-derived
+dictionary ID.
 
 ## Locked fixture
 
@@ -168,3 +169,38 @@ learned non-empty stringlets and one pair transform, replays the combined
 address, and retains identity with zero learned metadata when affixes cannot
 improve the wire. The experimental libbrotli matrix checks the learned result
 in both encode/decode directions.
+
+## Per-dictionary transform clustering evidence
+
+Contextual candidates may assign different enabled transform profiles to each
+dictionary choice. The richest enabled family is prepared once with the
+production matcher and scans a caller-bounded, deterministic set of held-out
+positions. Every winning address is resolved back to its actual dictionary and
+transform kind. Each dictionary then selects the first, smallest profile whose
+case/omit/affix capabilities cover its observed demand; dictionaries choosing
+the same profile share one serialized transform list. A final complete-wire
+comparison can still reject the mixed result. Defaults consider at most four
+dictionaries and 65,536 positions; hard ceilings are 16 dictionaries and
+1,048,576 positions.
+
+The locked LSB6 fixture trains three 16-byte word families plus a start-of-
+sample list. Held-out contexts deliberately reference another group's words as
+uppercase, omit-last-four, or identity forms, exercising the preferred/fallback
+address ordering. The selected result reuses two transform lists—19-transform
+omit and 21-transform case+omit—instead of applying the largest family to all
+four dictionaries:
+
+| Metric | Bytes |
+|---|---:|
+| Dictionary-free held-out frames | 13,568 |
+| Clustered-transform dictionary-backed frames | 7,680 |
+| Serialized dictionary | 831 |
+| Charged trained total | 8,511 |
+| Total saving | 5,057 (37.3%) |
+
+Within the locked LSB6 domain, the uniform case+omit candidate costs 8,770
+bytes, so transform clustering saves another 259 bytes after paying for the
+second list. The regression requires at least a 35% baseline saving,
+byte-identical repeated training, exact 19/21 transform counts, and successful
+uppercase, omit, and identity replay. The experimental libbrotli matrix checks
+all three payload shapes in both directions.

@@ -88,7 +88,8 @@ Vort-encode/libbrotli-decode and libbrotli-encode/Vort-decode cases. The
 contextual differential dictionary is produced through the public builder, and
 five additional bidirectional pairs use identity, case-transform,
 omit-transform, learned-prefix/suffix, and non-contiguous-context-cluster
-trainer results (`serialized_cases=14`).
+trainer results. Three more payloads exercise both directions of one clustered
+multi-transform-list result (`serialized_cases=20`).
 Builder tests cover deterministic parse/serialize round trips, built-in/custom
 mixed choices, all output ownership forms, varint boundaries, invalid size
 buckets/transforms/context IDs, atomic caller output, and allocation failure.
@@ -102,8 +103,8 @@ on each side of caller-selected context cutoffs for LSB6, MSB6, UTF8, and
 Signed. It also hashes the next minimum-length phrase into a fixed 64-bin
 signature per context and uses normalized integer L1 agglomeration to learn
 arbitrary non-contiguous maps, with 3/4 clusters by default. Public options
-bound cutoff and cluster-count lists, per-context signature positions, and
-training positions per group. Every cutoff/mode and cluster-count/mode candidate
+bound the RFC mode, cutoff, and cluster-count lists, per-context signature
+positions, and training positions per group. Every cutoff/mode and cluster-count/mode candidate
 competes with the global dictionary. Held-out samples are encoded both without
 and with every candidate; the function returns null unless the best actual
 complete Brotli frame total, plus the serialized dictionary by default, meets
@@ -117,8 +118,12 @@ prefix-only, suffix-only, and observed prefix+suffix identity transforms from
 deterministically sampled corpus matches. Ranked transforms are reserialized
 independently with identity, case, omit-first/last, and combined case+omit base
 families before the same complete-wire arbitration. It does not claim
-COVER/FastCover equivalence, general transform clustering, or learned SHIFT
-transforms.
+COVER/FastCover equivalence or learned SHIFT transforms. For contextual
+candidates, the richest enabled family acts as one held-out matcher oracle.
+Actual winning transform kinds are attributed to their resolved dictionary;
+each dictionary selects the smallest enabled capability profile covering that
+demand, and equal profiles reuse one transform list. The resulting mixed
+candidate is accepted only through the same complete-wire comparison.
 
 ## Remaining performance work
 
@@ -136,7 +141,7 @@ shrinks from 627 to 523 bytes while retaining custom dictionary copies. Vort
 does not promise stability for upstream's experimental container format.
 The trainer is deterministic and complete-wire validated, with bounded multi-
 cutoff two-group maps, arbitrary non-contiguous context clustering, and bounded
-prefix/suffix stringlet learning. General transform clustering, SHIFT-family
-learning, COVER/FastCover-class candidate selection, and broad corpus
-calibration remain open. The builder also remains available for fully explicit
-caller-owned specifications.
+prefix/suffix stringlet and per-dictionary transform-profile clustering.
+SHIFT-family learning, arbitrary transform synthesis, COVER/FastCover-class
+candidate selection, and broad corpus calibration remain open. The builder also
+remains available for fully explicit caller-owned specifications.

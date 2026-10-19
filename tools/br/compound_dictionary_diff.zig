@@ -375,7 +375,12 @@ fn validateSerializedDictionaryMatrix(
         runtime,
         reference_options,
     );
-    return 14;
+    try validateTransformClusteredSerializedDictionary(
+        allocator,
+        runtime,
+        reference_options,
+    );
+    return 20;
 }
 
 fn validateTrainedSerializedDictionary(
@@ -722,6 +727,100 @@ fn validateClusteredTrainedSerializedDictionary(
         &trained,
         validation_samples[0],
     );
+}
+
+fn validateTransformClusteredSerializedDictionary(
+    allocator: std.mem.Allocator,
+    runtime: libbrotli.Runtime,
+    reference_options: libbrotli.Runtime.StreamingOptions,
+) !void {
+    const Fixture = struct {
+        const markers = [3][2]u8{
+            .{ 8, 32 },
+            .{ 16, 40 },
+            .{ 24, 48 },
+        };
+
+        fn word(group: usize, index: usize) [16]u8 {
+            var result: [16]u8 = undefined;
+            result[0] = @intCast('a' + group);
+            result[1] = @intCast('a' + index);
+            for (result[2..], 2..) |*byte, position|
+                byte.* = @intCast('a' + (group * 7 + index * 11 + position * 3) % 26);
+            return result;
+        }
+
+        fn fillTraining(storage: *[17]u8, ordinal: usize) []const u8 {
+            const shape = ordinal % (3 * 2 * 8);
+            const group = shape / 16;
+            storage[0] = markers[group][(shape / 8) % 2];
+            const bytes = word(group, shape % 8);
+            @memcpy(storage[1..], &bytes);
+            return storage;
+        }
+
+        fn fillValidation(storage: *[17]u8, shape: usize) []const u8 {
+            const context_group = shape / 16;
+            const word_group = (context_group + 1) % 3;
+            storage[0] = markers[context_group][(shape / 8) % 2];
+            const bytes = word(word_group, shape % 8);
+            if (context_group == 0) {
+                for (bytes, 0..) |byte, position|
+                    storage[position + 1] = std.ascii.toUpper(byte);
+                return storage;
+            }
+            const word_len: usize = if (context_group == 1) 12 else bytes.len;
+            @memcpy(storage[1..][0..word_len], bytes[0..word_len]);
+            return storage[0 .. word_len + 1];
+        }
+    };
+    var training_storage: [192][17]u8 = undefined;
+    var training_samples: [training_storage.len][]const u8 = undefined;
+    for (&training_storage, &training_samples, 0..) |*storage, *sample, index|
+        sample.* = Fixture.fillTraining(storage, index);
+    var validation_storage: [768][17]u8 = undefined;
+    var validation_samples: [validation_storage.len][]const u8 = undefined;
+    for (&validation_storage, &validation_samples, 0..) |*storage, *sample, index| {
+        const shape = if (index < 64)
+            index % 16
+        else if (index < 704)
+            16 + (index - 64) % 16
+        else
+            32 + (index - 704) % 16;
+        sample.* = Fixture.fillValidation(storage, shape);
+    }
+    const trained = (try vort.brTrainSerializedSharedDictionaryAlloc(
+        allocator,
+        &training_samples,
+        &validation_samples,
+        .{
+            .min_word_len = 16,
+            .max_word_len = 16,
+            .max_words_per_length = 8,
+            .max_phrases_per_length = 64,
+            .train_prefix_suffix_transforms = false,
+            .context_modes = &.{0},
+            .context_cluster_counts = &.{4},
+            .max_context_positions_per_group = 1024,
+            .max_context_signature_positions = 1024,
+            .max_transform_scoring_positions = 16 * 1024,
+            .quality = 5,
+        },
+    )) orelse return error.ReferenceEncodeFailed;
+    defer trained.deinit(allocator);
+    if (trained.transform_profile != .clustered or
+        trained.transform_list_count != 2)
+    {
+        return error.ReferenceEncodeFailed;
+    }
+    for ([_]usize{ 0, 64, 704 }) |sample_index|
+        try validateOwnedTrainedDictionaryInterop(
+            allocator,
+            runtime,
+            reference_options,
+            &trained,
+            validation_samples[sample_index],
+        );
 }
 
 fn fillOmitTrainingSample(

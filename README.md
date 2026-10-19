@@ -2195,16 +2195,19 @@ dictionary symbols reports the whole runtime matrix as skipped instead of
 silently reducing coverage.
 
 With local upstream libbrotli 1.2.0 built using `BROTLI_EXPERIMENTAL`, the same
-gate additionally passes fourteen serialized custom-static cases:
+gate additionally passes twenty serialized custom-static cases:
 bidirectional non-contextual coverage, a UTF8-context winner, and identity-,
 case-, omit-, learned-prefix/suffix-, and non-contiguous-context-cluster-trained
-dictionaries. A non-experimental build reports them as skipped explicitly.
+dictionaries, plus three payload shapes using a per-dictionary clustered
+transform-list result. A non-experimental build reports them as skipped
+explicitly.
 
 `brTrainSerializedSharedDictionaryAlloc` provides deterministic bounded
 identity-word, multi-cutoff two-group, and arbitrary non-contiguous context-map
 training with held-out complete-wire arbitration. It compares a global
-dictionary with LSB6, MSB6, UTF8, and Signed candidates across a bounded cutoff
-list (16/32/48 by default) plus learned 3/4-cluster maps. Each context receives
+dictionary with a caller-selected RFC mode list (all LSB6, MSB6, UTF8, and
+Signed modes by default) across bounded cutoffs 16/32/48 plus learned
+3/4-cluster maps. Each context receives
 a fixed 64-bin phrase signature; normalized integer L1 agglomeration produces
 stable maps without floating point or heap allocation. By default serialized
 bytes are charged once against the validation frame total; non-winning
@@ -2219,11 +2222,15 @@ all four base families. Defaults cap stringlets at eight bytes, learned
 transforms at sixteen, distinct candidates at 4,096, and sampled word positions
 at 16,384; the word index retains at most 4,096 distinct trained words. Public
 hard ceilings keep these bounds at 64 transforms, 65,536 candidates/words, and
-1,048,576 sampled positions. The result reports global/cutoff/clustered context
-profile, actual cluster count, selected transform profile, learned
-stringlet/transform counts, stable content-derived ID, and exact byte
-accounting. It does not claim COVER/FastCover equivalence, general transform
-clustering, or learned SHIFT transforms.
+1,048,576 sampled positions. For contextual candidates, one richest-family
+oracle attributes actual held-out transform kinds to their matched dictionary;
+each dictionary then selects the smallest identity/case/omit/affix profile that
+covers its demand, and equal profiles share one serialized transform list. The
+mixed result still competes by complete wire. The result reports
+global/cutoff/clustered context profile, actual context/transform-list counts,
+selected transform profile, learned stringlet/transform counts, stable content-
+derived ID, and exact byte accounting. It does not claim COVER/FastCover
+equivalence or learned SHIFT transforms.
 
 ### Brotli planned encoder controls
 

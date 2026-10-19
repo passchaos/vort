@@ -56,8 +56,12 @@ major gaps before Vort can claim broad industry-best parity:
   A bounded deterministic learner now ranks observed prefix-only, suffix-only,
   and paired stringlets and independently combines them with all four base
   families; its locked fixture improves 5,120 baseline bytes to 1,279 frame
-  bytes plus a 179-byte dictionary. General transform clustering, SHIFT-family
-  learning, and broader corpus calibration remain open.
+  bytes plus a 179-byte dictionary. A single held-out oracle now assigns the
+  minimum demanded identity/case/omit/affix profile per context dictionary and
+  deduplicates equal transform lists; its locked mixed fixture improves 13,568
+  baseline bytes to 7,680 frame bytes plus an 831-byte dictionary. SHIFT-family
+  learning, arbitrary transform synthesis, and broader corpus calibration
+  remain open.
   q10/q11 Zopfli/HQ cost refinement and global exact-cost segmentation also
   remain open.
 - True byte-progressive Brotli decoding now covers stored data, metadata,

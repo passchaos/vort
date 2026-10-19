@@ -67,6 +67,7 @@ const shared_dictionary = @import("br/shared_dictionary.zig");
 const serialized_dictionary = @import("br/serialized_dictionary.zig");
 const serialized_dictionary_builder = @import("br/serialized_dictionary_builder.zig");
 const serialized_dictionary_trainer = @import("br/serialized_dictionary_trainer.zig");
+const serialized_dictionary_transform_clusterer = @import("br/serialized_dictionary_transform_clusterer.zig");
 const code_length_decoder_mod = @import("br/code_length_decoder.zig");
 
 const distanceWithDelta = distance_history.withDelta;
@@ -120,6 +121,9 @@ pub const SerializedSharedDictionaryTrainOptions = struct {
     train_case_transforms: bool = true,
     train_omit_transforms: bool = true,
     train_prefix_suffix_transforms: bool = true,
+    train_transform_clustering: bool = true,
+    max_transform_cluster_dictionaries: u7 = 4,
+    max_transform_scoring_positions: usize = 64 * 1024,
     /// Bounded stringlet learner. Candidate transforms are ranked
     /// deterministically, then retained only through complete held-out wire
     /// comparison with the identity/case/omit families.
@@ -132,6 +136,8 @@ pub const SerializedSharedDictionaryTrainOptions = struct {
     /// Strictly increasing candidate cutoffs. Equal-cost ties keep the first
     /// cutoff, then the first RFC mode (LSB6, MSB6, UTF8, Signed).
     context_cutoffs: []const u6 = &.{ 16, 32, 48 },
+    /// Strictly increasing RFC literal-context modes to evaluate.
+    context_modes: []const u2 = &.{ 0, 1, 2, 3 },
     /// Strictly increasing learned cluster counts. These arbitrary context maps
     /// compete with the global and two-range cutoff candidates.
     context_cluster_counts: []const u7 = &.{ 3, 4 },
@@ -163,6 +169,8 @@ pub const OwnedTrainedSerializedSharedDictionary = struct {
     /// One for global candidates, two for cutoffs, otherwise the learned count.
     context_cluster_count: u7,
     transform_profile: SerializedSharedDictionaryTransformProfile,
+    /// Number of distinct serialized transform lists in the selected result.
+    transform_list_count: u7,
     /// Non-empty serialized stringlets contributed by the selected learner.
     learned_stringlet_count: usize,
     /// Learned prefix/suffix transform triplets, excluding the base family.
@@ -291,6 +299,7 @@ pub fn trainSerializedSharedDictionaryAlloc(
         options.quality > 11 or
         (options.train_context_map and
             (!validSerializedTrainingCutoffs(options.context_cutoffs) or
+                !validSerializedTrainingModes(options.context_modes) or
                 options.max_context_positions_per_group == 0 or
                 options.max_context_positions_per_group > serialized_dictionary_trainer.max_context_training_positions_per_group or
                 (options.train_context_clustering and
@@ -308,7 +317,12 @@ pub fn trainSerializedSharedDictionaryAlloc(
                 options.max_prefix_suffix_words > serialized_dictionary_trainer.max_learned_prefix_suffix_words or
                 options.max_prefix_suffix_positions == 0 or
                 options.max_prefix_suffix_positions > serialized_dictionary_trainer.max_learned_prefix_suffix_positions or
-                options.min_prefix_suffix_occurrences == 0)))
+                options.min_prefix_suffix_occurrences == 0)) or
+        (options.train_transform_clustering and
+            (options.max_transform_cluster_dictionaries < 2 or
+                options.max_transform_cluster_dictionaries > serialized_dictionary_transform_clusterer.max_dictionaries or
+                options.max_transform_scoring_positions == 0 or
+                options.max_transform_scoring_positions > serialized_dictionary_transform_clusterer.max_scoring_positions)))
         return error.InvalidDictionaryTraining;
     const core_options = serialized_dictionary_trainer.Options{
         .min_word_len = options.min_word_len,
@@ -353,12 +367,12 @@ pub fn trainSerializedSharedDictionaryAlloc(
         for (options.context_cutoffs) |cutoff| {
             var context_options = core_options;
             context_options.context_cutoff = cutoff;
-            for (0..4) |mode| {
+            for (options.context_modes) |mode| {
                 if (serialized_dictionary_trainer.trainContextCandidateAlloc(
                     allocator,
                     training_samples,
                     context_options,
-                    @intCast(mode),
+                    mode,
                 ) catch |err| switch (err) {
                     error.OutOfMemory => return error.OutOfMemory,
                     error.IntegerOverflow => return error.IntegerOverflow,
@@ -377,12 +391,12 @@ pub fn trainSerializedSharedDictionaryAlloc(
         }
         if (options.train_context_clustering) {
             for (options.context_cluster_counts) |cluster_count| {
-                for (0..4) |mode| {
+                for (options.context_modes) |mode| {
                     if (serialized_dictionary_trainer.trainClusteredContextCandidateAlloc(
                         allocator,
                         training_samples,
                         core_options,
-                        @intCast(mode),
+                        mode,
                         cluster_count,
                     ) catch |err| switch (err) {
                         error.OutOfMemory => return error.OutOfMemory,
@@ -424,6 +438,7 @@ pub fn trainSerializedSharedDictionaryAlloc(
         .context_profile = candidate.context_profile,
         .context_cluster_count = candidate.context_cluster_count,
         .transform_profile = candidate.transform_profile,
+        .transform_list_count = candidate.transform_list_count,
         .learned_stringlet_count = candidate.learned_stringlet_count,
         .learned_prefix_suffix_transform_count = candidate.learned_prefix_suffix_transform_count,
     };
@@ -436,6 +451,16 @@ fn validSerializedTrainingCutoffs(cutoffs: []const u6) bool {
     for (cutoffs) |cutoff| {
         if (cutoff == 0 or cutoff >= 64 or cutoff <= previous) return false;
         previous = cutoff;
+    }
+    return true;
+}
+
+fn validSerializedTrainingModes(modes: []const u2) bool {
+    if (modes.len == 0 or modes.len > 4) return false;
+    var previous: ?u2 = null;
+    for (modes) |mode| {
+        if (previous) |value| if (mode <= value) return false;
+        previous = mode;
     }
     return true;
 }
@@ -465,7 +490,7 @@ fn considerSerializedTrainingCandidateFamily(
     identity: serialized_dictionary_trainer.Candidate,
     selection: *SerializedTrainingSelection,
 ) Error!void {
-    var derived: [7]serialized_dictionary_trainer.Candidate = undefined;
+    var derived: [8]serialized_dictionary_trainer.Candidate = undefined;
     var derived_count: usize = 0;
     var prefix_suffix_plan: ?serialized_dictionary_trainer.PrefixSuffixPlan = null;
     defer if (prefix_suffix_plan) |plan| plan.deinit(allocator);
@@ -529,6 +554,16 @@ fn considerSerializedTrainingCandidateFamily(
                 }
             }
         }
+        if (try deriveSerializedTransformClusterCandidateAlloc(
+            allocator,
+            validation_samples,
+            options,
+            &identity,
+            derived[0..derived_count],
+        )) |clustered| {
+            derived[derived_count] = clustered;
+            derived_count += 1;
+        }
     }
     considerSerializedTrainingCandidate(
         allocator,
@@ -553,6 +588,77 @@ fn considerSerializedTrainingCandidateFamily(
             return err;
         };
     }
+}
+
+fn deriveSerializedTransformClusterCandidateAlloc(
+    allocator: std.mem.Allocator,
+    validation_samples: []const []const u8,
+    options: SerializedSharedDictionaryTrainOptions,
+    identity: *const serialized_dictionary_trainer.Candidate,
+    derived: []const serialized_dictionary_trainer.Candidate,
+) Error!?serialized_dictionary_trainer.Candidate {
+    if (!options.train_transform_clustering or !identity.context_based or
+        derived.len == 0 or derived.len + 1 > serialized_dictionary_transform_clusterer.max_profiles)
+    {
+        return null;
+    }
+    const identity_parsed = parseSerializedSharedDictionary(identity.encoded) catch
+        return error.InvalidDictionaryTraining;
+    if (identity_parsed.dictionary_count > options.max_transform_cluster_dictionaries)
+        return null;
+
+    var candidate_sources: [serialized_dictionary_transform_clusterer.max_profiles]*const serialized_dictionary_trainer.Candidate =
+        undefined;
+    var capabilities: [serialized_dictionary_transform_clusterer.max_profiles]u3 =
+        undefined;
+    var parsed_sources: [serialized_dictionary_transform_clusterer.max_profiles]SerializedSharedDictionary =
+        undefined;
+    var dictionary_sources: [serialized_dictionary_transform_clusterer.max_profiles]*const SerializedSharedDictionary =
+        undefined;
+    candidate_sources[0] = identity;
+    capabilities[0] = 0;
+    parsed_sources[0] = identity_parsed;
+    dictionary_sources[0] = &parsed_sources[0];
+    for (derived, 1..) |*candidate, source_index| {
+        candidate_sources[source_index] = candidate;
+        capabilities[source_index] = serializedTransformCapabilities(
+            candidate.transform_profile,
+        ) orelse return error.InvalidDictionaryTraining;
+        parsed_sources[source_index] = parseSerializedSharedDictionary(candidate.encoded) catch
+            return error.InvalidDictionaryTraining;
+        dictionary_sources[source_index] = &parsed_sources[source_index];
+    }
+    const source_count = derived.len + 1;
+    const assignment = (serialized_dictionary_transform_clusterer.assignAlloc(
+        allocator,
+        dictionary_sources[0..source_count],
+        capabilities[0..source_count],
+        validation_samples,
+        identity.context_mode orelse return error.InvalidDictionaryTraining,
+        .{ .max_positions = options.max_transform_scoring_positions },
+    ) catch |err| return mapSerializedTrainingError(err)) orelse return null;
+    const candidate = serialized_dictionary_trainer.withClusteredTransformProfilesAlloc(
+        allocator,
+        candidate_sources[0..source_count],
+        assignment.profile_by_dictionary[0..assignment.dictionary_count],
+    ) catch |err| return mapSerializedTrainingError(err);
+    return candidate;
+}
+
+fn serializedTransformCapabilities(
+    profile: SerializedSharedDictionaryTransformProfile,
+) ?u3 {
+    return switch (profile) {
+        .identity => 0,
+        .ascii_case => 1,
+        .omit => 2,
+        .ascii_case_omit => 3,
+        .prefix_suffix => 4,
+        .ascii_case_prefix_suffix => 5,
+        .omit_prefix_suffix => 6,
+        .ascii_case_omit_prefix_suffix => 7,
+        .clustered => null,
+    };
 }
 
 fn mapSerializedTrainingError(err: anyerror) Error {
@@ -33083,6 +33189,24 @@ test "br serialized dictionary trainer rejects non-wins and invalid evaluation" 
             std.testing.allocator,
             &samples,
             &samples,
+            .{ .context_modes = &.{} },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .context_modes = &.{ 1, 1 } },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
             .{ .context_cluster_counts = &.{ 4, 3 } },
         ),
     );
@@ -33111,6 +33235,24 @@ test "br serialized dictionary trainer rejects non-wins and invalid evaluation" 
             &samples,
             &samples,
             .{ .max_context_positions_per_group = 0 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .max_transform_cluster_dictionaries = 1 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .max_transform_scoring_positions = 0 },
         ),
     );
     try std.testing.expectError(
@@ -33321,6 +33463,7 @@ test "br serialized dictionary trainer selects non-contiguous context clusters" 
         .train_case_transforms = false,
         .train_omit_transforms = false,
         .train_prefix_suffix_transforms = false,
+        .context_modes = &.{literal_context.mode_lsb6},
         .context_cluster_counts = &.{4},
         .max_context_positions_per_group = 1024,
         .max_context_signature_positions = 1024,
@@ -33369,6 +33512,135 @@ test "br serialized dictionary trainer selects non-contiguous context clusters" 
     var scratch: [serialized_dictionary.max_transformed_word_len]u8 = undefined;
     const group_word = Test.word(2, 7);
     try std.testing.expect((try parsed.findLongest(24, &group_word, &scratch)) != null);
+}
+
+test "br serialized dictionary trainer clusters transform lists by context dictionary" {
+    const Test = struct {
+        const markers = [3][2]u8{
+            .{ 8, 32 },
+            .{ 16, 40 },
+            .{ 24, 48 },
+        };
+
+        fn word(group: usize, index: usize) [16]u8 {
+            var result: [16]u8 = undefined;
+            result[0] = @intCast('a' + group);
+            result[1] = @intCast('a' + index);
+            for (result[2..], 2..) |*byte, position|
+                byte.* = @intCast('a' + (group * 7 + index * 11 + position * 3) % 26);
+            return result;
+        }
+
+        fn fillTraining(storage: *[17]u8, ordinal: usize) []const u8 {
+            const shape = ordinal % (3 * 2 * 8);
+            const group = shape / 16;
+            storage[0] = markers[group][(shape / 8) % 2];
+            const bytes = word(group, shape % 8);
+            @memcpy(storage[1..], &bytes);
+            return storage;
+        }
+
+        fn fillValidation(storage: *[17]u8, ordinal: usize) []const u8 {
+            const shape = ordinal % (3 * 2 * 8);
+            const context_group = shape / 16;
+            const word_group = (context_group + 1) % 3;
+            storage[0] = markers[context_group][(shape / 8) % 2];
+            const bytes = word(word_group, shape % 8);
+            if (context_group == 0) {
+                for (bytes, 0..) |byte, position|
+                    storage[position + 1] = std.ascii.toUpper(byte);
+                return storage;
+            }
+            const word_len: usize = if (context_group == 1) 12 else bytes.len;
+            @memcpy(storage[1..][0..word_len], bytes[0..word_len]);
+            return storage[0 .. word_len + 1];
+        }
+    };
+    var training_storage: [192][17]u8 = undefined;
+    var training_samples: [training_storage.len][]const u8 = undefined;
+    for (&training_storage, &training_samples, 0..) |*storage, *sample, index|
+        sample.* = Test.fillTraining(storage, index);
+    var validation_storage: [768][17]u8 = undefined;
+    var validation_samples: [validation_storage.len][]const u8 = undefined;
+    for (&validation_storage, &validation_samples, 0..) |*storage, *sample, index| {
+        const shape = if (index < 64)
+            index % 16
+        else if (index < 704)
+            16 + (index - 64) % 16
+        else
+            32 + (index - 704) % 16;
+        sample.* = Test.fillValidation(storage, shape);
+    }
+    const options = SerializedSharedDictionaryTrainOptions{
+        .min_word_len = 16,
+        .max_word_len = 16,
+        .max_words_per_length = 8,
+        .max_phrases_per_length = 64,
+        .train_prefix_suffix_transforms = false,
+        .context_modes = &.{literal_context.mode_lsb6},
+        .context_cluster_counts = &.{4},
+        .max_context_positions_per_group = 1024,
+        .max_context_signature_positions = 1024,
+        .max_transform_scoring_positions = 16 * 1024,
+        .quality = 5,
+    };
+    const trained = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        options,
+    )) orelse return error.TestUnexpectedResult;
+    defer trained.deinit(std.testing.allocator);
+    const repeated = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        options,
+    )) orelse return error.TestUnexpectedResult;
+    defer repeated.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, trained.bytes, repeated.bytes);
+    try std.testing.expectEqual(trained.id, repeated.id);
+    try std.testing.expectEqual(@as(usize, 13_568), trained.baseline_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 7_680), trained.trained_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 831), trained.charged_dictionary_bytes);
+    try std.testing.expectEqual(@as(usize, 5_057), trained.total_savings_bytes);
+    try std.testing.expectEqual(
+        SerializedSharedDictionaryTransformProfile.clustered,
+        trained.transform_profile,
+    );
+    try std.testing.expectEqual(@as(u7, 2), trained.transform_list_count);
+    try std.testing.expect(
+        trained.total_savings_bytes * 100 >= trained.baseline_frame_bytes * 35,
+    );
+    const parsed = try trained.parse();
+    const identity_dictionary = parsed.context_map[Test.markers[0][0]];
+    const case_dictionary = parsed.context_map[Test.markers[1][0]];
+    const omit_dictionary = parsed.context_map[Test.markers[2][0]];
+    const case_list = parsed.dictionaries[case_dictionary].transform_list_index;
+    const omit_list = parsed.dictionaries[omit_dictionary].transform_list_index;
+    const identity_list = parsed.dictionaries[identity_dictionary].transform_list_index;
+    try std.testing.expectEqual(
+        @as(usize, 21),
+        parsed.transform_lists[case_list].transformCount(),
+    );
+    try std.testing.expectEqual(
+        @as(usize, 19),
+        parsed.transform_lists[omit_list].transformCount(),
+    );
+    try std.testing.expectEqual(
+        @as(usize, 19),
+        parsed.transform_lists[identity_list].transformCount(),
+    );
+    var scratch: [serialized_dictionary.max_transformed_word_len]u8 = undefined;
+    const case_word = Test.word(1, 0);
+    var uppercase_word: [16]u8 = undefined;
+    for (case_word, 0..) |byte, index|
+        uppercase_word[index] = std.ascii.toUpper(byte);
+    try std.testing.expect((try parsed.findLongest(8, &uppercase_word, &scratch)) != null);
+    const omit_word = Test.word(2, 0);
+    try std.testing.expect((try parsed.findLongest(16, omit_word[0..12], &scratch)) != null);
+    const identity_word = Test.word(0, 0);
+    try std.testing.expect((try parsed.findLongest(24, &identity_word, &scratch)) != null);
 }
 
 test "br serialized dictionary trainer selects case transforms on held-out wire" {

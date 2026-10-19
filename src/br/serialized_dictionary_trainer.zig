@@ -16,6 +16,7 @@ pub const TransformProfile = enum {
     ascii_case_prefix_suffix,
     omit_prefix_suffix,
     ascii_case_omit_prefix_suffix,
+    clustered,
 };
 
 pub const PrefixSuffixOptions = affix_trainer.Options;
@@ -60,6 +61,7 @@ pub const Candidate = struct {
     context_profile: ContextProfile = .global,
     context_cluster_count: u7 = 1,
     transform_profile: TransformProfile = .identity,
+    transform_list_count: u7 = 1,
     learned_stringlet_count: usize = 0,
     learned_prefix_suffix_transform_count: usize = 0,
 
@@ -157,6 +159,7 @@ pub fn withPrefixSuffixTransformsAlloc(
         .context_profile = source.context_profile,
         .context_cluster_count = source.context_cluster_count,
         .transform_profile = transform_profile,
+        .transform_list_count = 1,
         .learned_stringlet_count = plan.stringlet_count - 1,
         .learned_prefix_suffix_transform_count = plan.transformCount(),
     };
@@ -237,6 +240,104 @@ fn withTransformProfileAlloc(
         .context_profile = source.context_profile,
         .context_cluster_count = source.context_cluster_count,
         .transform_profile = profile,
+        .transform_list_count = 1,
+    };
+}
+
+pub fn withClusteredTransformProfilesAlloc(
+    allocator: std.mem.Allocator,
+    sources: []const *const Candidate,
+    profile_by_dictionary: []const u8,
+) (Error || std.mem.Allocator.Error)!Candidate {
+    if (sources.len < 2 or sources.len > 8)
+        return error.InvalidTrainingOptions;
+    var parsed_sources: [8]serialized_dictionary.Dictionary = undefined;
+    for (sources, 0..) |source, source_index|
+        parsed_sources[source_index] = try serialized_dictionary.parse(source.encoded);
+    const base = &parsed_sources[0];
+    if (!base.context_based or base.dictionary_count < 2 or
+        profile_by_dictionary.len != base.dictionary_count)
+    {
+        return error.InvalidTrainingOptions;
+    }
+    var used: [8]bool = @splat(false);
+    for (profile_by_dictionary) |profile_index| {
+        if (profile_index >= sources.len) return error.InvalidTrainingOptions;
+        used[profile_index] = true;
+    }
+    var transform_specs: [8]builder.TransformListSpec = undefined;
+    var transform_index_by_source: [8]u8 = @splat(0);
+    var transform_list_count: usize = 0;
+    for (parsed_sources[0..sources.len], 0..) |*parsed, source_index| {
+        if (!used[source_index]) continue;
+        if (parsed.transform_list_count != 1 or
+            parsed.dictionary_count != base.dictionary_count or
+            parsed.word_list_count != base.word_list_count or
+            parsed.context_based != base.context_based or
+            !std.mem.eql(u6, &parsed.context_map, &base.context_map))
+        {
+            return error.InvalidTrainingOptions;
+        }
+        for (0..base.dictionary_count) |dictionary_id| {
+            if (parsed.dictionaries[dictionary_id].word_list_index !=
+                base.dictionaries[dictionary_id].word_list_index)
+            {
+                return error.InvalidTrainingOptions;
+            }
+        }
+        transform_index_by_source[source_index] = @intCast(transform_list_count);
+        transform_specs[transform_list_count] =
+            builder.TransformListSpec.fromParsed(parsed.transform_lists[0]);
+        transform_list_count += 1;
+    }
+    if (transform_list_count < 2) return error.InvalidTrainingOptions;
+
+    var word_lists: [serialized_dictionary.max_contexts]builder.WordListSpec =
+        undefined;
+    for (word_lists[0..base.word_list_count], base.word_lists[0..base.word_list_count]) |*destination, words|
+        destination.* = builder.WordListSpec.fromParsed(words);
+    var choices: [serialized_dictionary.max_contexts]serialized_dictionary.DictionaryChoice =
+        undefined;
+    for (choices[0..base.dictionary_count], base.dictionaries[0..base.dictionary_count], profile_by_dictionary) |*destination, source_choice, profile_index| {
+        destination.* = .{
+            .word_list_index = source_choice.word_list_index,
+            .transform_list_index = transform_index_by_source[profile_index],
+        };
+    }
+    const encoded = try builder.serializeAlloc(allocator, .{
+        .raw_prefix = base.raw_prefix,
+        .word_lists = word_lists[0..base.word_list_count],
+        .transform_lists = transform_specs[0..transform_list_count],
+        .dictionaries = choices[0..base.dictionary_count],
+        .context_map = &base.context_map,
+    });
+    var learned_stringlet_count: usize = 0;
+    var learned_transform_count: usize = 0;
+    for (sources, 0..) |source, source_index| {
+        if (!used[source_index]) continue;
+        learned_stringlet_count = @max(
+            learned_stringlet_count,
+            source.learned_stringlet_count,
+        );
+        learned_transform_count = @max(
+            learned_transform_count,
+            source.learned_prefix_suffix_transform_count,
+        );
+    }
+    return .{
+        .encoded = encoded,
+        .bucket_count = sources[0].bucket_count,
+        .word_count = sources[0].word_count,
+        .id = .fromBytes(encoded),
+        .context_based = sources[0].context_based,
+        .context_mode = sources[0].context_mode,
+        .context_cutoff = sources[0].context_cutoff,
+        .context_profile = sources[0].context_profile,
+        .context_cluster_count = sources[0].context_cluster_count,
+        .transform_profile = .clustered,
+        .transform_list_count = @intCast(transform_list_count),
+        .learned_stringlet_count = learned_stringlet_count,
+        .learned_prefix_suffix_transform_count = learned_transform_count,
     };
 }
 
@@ -810,6 +911,37 @@ test "serialized trainer learns deterministic non-contiguous context clusters" {
     var scratch: [serialized_dictionary.max_transformed_word_len]u8 = undefined;
     try std.testing.expect((try parsed.findLongest(8, words_a[0], &scratch)) != null);
     try std.testing.expect((try parsed.findLongest(16, words_b[0], &scratch)) != null);
+
+    const case_candidate = try withCaseTransformsAlloc(
+        std.testing.allocator,
+        &first,
+    );
+    defer case_candidate.deinit(std.testing.allocator);
+    const omit_candidate = try withOmitTransformsAlloc(
+        std.testing.allocator,
+        &first,
+        false,
+    );
+    defer omit_candidate.deinit(std.testing.allocator);
+    const sources = [_]*const Candidate{
+        &first,
+        &case_candidate,
+        &omit_candidate,
+    };
+    const mixed = try withClusteredTransformProfilesAlloc(
+        std.testing.allocator,
+        &sources,
+        &.{ 0, 1, 2 },
+    );
+    defer mixed.deinit(std.testing.allocator);
+    try std.testing.expectEqual(TransformProfile.clustered, mixed.transform_profile);
+    try std.testing.expectEqual(@as(u7, 3), mixed.transform_list_count);
+    try std.testing.expectEqual(ContextProfile.clustered, mixed.context_profile);
+    const parsed_mixed = try serialized_dictionary.parse(mixed.encoded);
+    try std.testing.expectEqual(@as(u7, 3), parsed_mixed.transform_list_count);
+    try std.testing.expectEqual(@as(u8, 0), parsed_mixed.dictionaries[0].transform_list_index);
+    try std.testing.expectEqual(@as(u8, 1), parsed_mixed.dictionaries[1].transform_list_index);
+    try std.testing.expectEqual(@as(u8, 2), parsed_mixed.dictionaries[2].transform_list_index);
 }
 
 test "serialized trainer derives canonical transform families" {
@@ -1037,6 +1169,28 @@ test "serialized trainer releases every allocation failure path" {
                 literal_context.mode_utf8,
             )) orelse return error.TestUnexpectedResult;
             defer contextual.deinit(allocator);
+            const contextual_case = try withCaseTransformsAlloc(
+                allocator,
+                &contextual,
+            );
+            defer contextual_case.deinit(allocator);
+            const contextual_omit = try withOmitTransformsAlloc(
+                allocator,
+                &contextual,
+                false,
+            );
+            defer contextual_omit.deinit(allocator);
+            const contextual_sources = [_]*const Candidate{
+                &contextual,
+                &contextual_case,
+                &contextual_omit,
+            };
+            const contextual_mixed = try withClusteredTransformProfilesAlloc(
+                allocator,
+                &contextual_sources,
+                &.{ 1, 2 },
+            );
+            defer contextual_mixed.deinit(allocator);
             const cluster_samples = [_][]const u8{
                 "\x08a0000000",
                 "\x08a1111111",

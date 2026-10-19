@@ -331,10 +331,11 @@ The following are explicit gaps, not implied by the presence of the preset
 names:
 
 - real q10/q11 Zopfli/HQ cost refinement, including iterative model feedback;
-- general transform clustering and broad serialized-dictionary corpus
-  calibration. Deterministic identity-word, bounded multi-cutoff two-group and
-  arbitrary non-contiguous context clustering, case/omit families, and observed
-  prefix/suffix stringlet learning use held-out complete-wire arbitration.
+- SHIFT-family synthesis and broad serialized-dictionary corpus calibration.
+  Deterministic identity-word, bounded multi-cutoff two-group and arbitrary
+  non-contiguous context clustering, case/omit families, observed prefix/suffix
+  stringlet learning, and per-dictionary transform-profile clustering use
+  held-out complete-wire arbitration.
   Strict parsing, canonical construction, mixed replay, production decode
   attachment, bounded indexing, all four RFC modes, and joint multi-tree
   selection are available; oversized descriptors retain exhaustive matching;
