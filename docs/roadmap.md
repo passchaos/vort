@@ -46,8 +46,10 @@ major gaps before Vort can claim broad industry-best parity:
   RFC modes across a caller-selected cutoff list; its locked contextual fixture
   selects MSB6/cutoff48 and improves 17,344 baseline bytes to 14,272 frame bytes
   plus a 266-byte dictionary.
-  General context clustering, transform learning, and broader corpus calibration
-  remain open.
+  Identity word lists are also reserialized with uppercase-first/all transforms
+  and compete by the same held-out cost. General context clustering,
+  omit/prefix/suffix transform learning, and broader corpus calibration remain
+  open.
   q10/q11 Zopfli/HQ cost refinement and global exact-cost segmentation also
   remain open.
 - True byte-progressive Brotli decoding now covers stored data, metadata,

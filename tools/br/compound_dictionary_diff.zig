@@ -355,7 +355,12 @@ fn validateSerializedDictionaryMatrix(
         runtime,
         reference_options,
     );
-    return 6;
+    try validateCaseTrainedSerializedDictionary(
+        allocator,
+        runtime,
+        reference_options,
+    );
+    return 8;
 }
 
 fn validateTrainedSerializedDictionary(
@@ -427,6 +432,96 @@ fn validateTrainedSerializedDictionary(
     defer allocator.free(vort_output);
     if (!std.mem.eql(u8, sample, vort_output))
         return error.ReferenceDecodeFailed;
+}
+
+fn validateCaseTrainedSerializedDictionary(
+    allocator: std.mem.Allocator,
+    runtime: libbrotli.Runtime,
+    reference_options: libbrotli.Runtime.StreamingOptions,
+) !void {
+    const phrases = [_][]const u8{
+        "azbycxdwevfugths",
+        "qwertyuiopasdfgh",
+        "mnbvcxzlkjhgfdsa",
+        "plmoknijbuhvygct",
+    };
+    var training_storage: [8][68]u8 = undefined;
+    var training_samples: [training_storage.len][]const u8 = undefined;
+    for (&training_storage, &training_samples, 0..) |*storage, *sample, index|
+        sample.* = fillCaseTrainingSample(storage, index, &phrases, false);
+    var validation_storage: [64][68]u8 = undefined;
+    var validation_samples: [validation_storage.len][]const u8 = undefined;
+    for (&validation_storage, &validation_samples, 0..) |*storage, *sample, index|
+        sample.* = fillCaseTrainingSample(storage, 0x2000 + index, &phrases, true);
+    const trained = (try vort.brTrainSerializedSharedDictionaryAlloc(
+        allocator,
+        &training_samples,
+        &validation_samples,
+        .{
+            .min_word_len = 16,
+            .max_word_len = 16,
+            .max_words_per_length = 8,
+            .max_phrases_per_length = 64,
+            .train_context_map = false,
+            .quality = 5,
+        },
+    )) orelse return error.ReferenceEncodeFailed;
+    defer trained.deinit(allocator);
+    if (trained.transform_profile != .ascii_case)
+        return error.ReferenceEncodeFailed;
+    const parsed = try trained.parse();
+    const shared = vort.BrotliSharedDictionary{ .serialized = &parsed };
+    const decode_options = vort.BrotliDecodeOptions{ .shared_dictionary = shared };
+    const sample = validation_samples[0];
+    const vort_wire = try vort.brEncodePlannedStreamWithOptionsAlloc(
+        allocator,
+        sample,
+        .{ .quality = 5, .shared_dictionary = shared },
+    );
+    defer allocator.free(vort_wire);
+    const reference_output = try allocator.alloc(u8, sample.len);
+    defer allocator.free(reference_output);
+    try runtime.decodeWithSerializedDictionary(
+        vort_wire,
+        reference_output,
+        trained.bytes,
+    );
+    if (!std.mem.eql(u8, sample, reference_output))
+        return error.ReferenceDecodeFailed;
+
+    const reference_wire = try runtime.encodeWithSerializedDictionaryAlloc(
+        allocator,
+        sample,
+        trained.bytes,
+        reference_options,
+    );
+    defer allocator.free(reference_wire);
+    const vort_output = try vort.brDecodeStreamAllocExactSizeWithOptions(
+        allocator,
+        reference_wire,
+        sample.len,
+        decode_options,
+    );
+    defer allocator.free(vort_output);
+    if (!std.mem.eql(u8, sample, vort_output))
+        return error.ReferenceDecodeFailed;
+}
+
+fn fillCaseTrainingSample(
+    storage: *[68]u8,
+    id: usize,
+    phrases: *const [4][]const u8,
+    uppercase: bool,
+) []const u8 {
+    std.mem.writeInt(u32, storage[0..4], @intCast(id), .little);
+    var cursor: usize = 4;
+    for (phrases) |phrase| {
+        for (phrase) |byte| {
+            storage[cursor] = if (uppercase) std.ascii.toUpper(byte) else byte;
+            cursor += 1;
+        }
+    }
+    return storage[0..cursor];
 }
 
 fn fillSerializedTrainingSample(

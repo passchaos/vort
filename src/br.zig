@@ -104,6 +104,7 @@ pub const SerializedSharedDictionaryChoice = serialized_dictionary.DictionaryCho
 pub const SerializedSharedDictionaryWordListSpec = serialized_dictionary_builder.WordListSpec;
 pub const SerializedSharedDictionaryTransformListSpec = serialized_dictionary_builder.TransformListSpec;
 pub const SerializedSharedDictionaryBuildError = serialized_dictionary_builder.Error;
+pub const SerializedSharedDictionaryTransformProfile = serialized_dictionary_trainer.TransformProfile;
 pub const serializedSharedDictionaryEncodedSize = serialized_dictionary_builder.encodedSize;
 pub const serializeSharedDictionaryInto = serialized_dictionary_builder.serializeInto;
 pub const serializeSharedDictionaryAppend = serialized_dictionary_builder.serializeAppend;
@@ -114,6 +115,7 @@ pub const SerializedSharedDictionaryTrainOptions = struct {
     max_words_per_length: u16 = 64,
     max_phrases_per_length: usize = 256,
     train_context_map: bool = true,
+    train_case_transforms: bool = true,
     /// Strictly increasing candidate cutoffs. Equal-cost ties keep the first
     /// cutoff, then the first RFC mode (LSB6, MSB6, UTF8, Signed).
     context_cutoffs: []const u6 = &.{ 16, 32, 48 },
@@ -139,6 +141,7 @@ pub const OwnedTrainedSerializedSharedDictionary = struct {
     context_based: bool,
     trained_context_mode: ?u2,
     context_cutoff: ?u6,
+    transform_profile: SerializedSharedDictionaryTransformProfile,
 
     pub fn deinit(self: OwnedTrainedSerializedSharedDictionary, allocator: std.mem.Allocator) void {
         allocator.free(self.bytes);
@@ -293,7 +296,7 @@ pub fn trainSerializedSharedDictionaryAlloc(
         error.IntegerOverflow => return error.IntegerOverflow,
         else => return error.InvalidDictionaryTraining,
     }) |candidate| {
-        try considerSerializedTrainingCandidate(
+        try considerSerializedTrainingCandidateFamily(
             allocator,
             validation_samples,
             options,
@@ -316,7 +319,7 @@ pub fn trainSerializedSharedDictionaryAlloc(
                     error.IntegerOverflow => return error.IntegerOverflow,
                     else => return error.InvalidDictionaryTraining,
                 }) |candidate| {
-                    try considerSerializedTrainingCandidate(
+                    try considerSerializedTrainingCandidateFamily(
                         allocator,
                         validation_samples,
                         options,
@@ -346,6 +349,7 @@ pub fn trainSerializedSharedDictionaryAlloc(
         .context_based = candidate.context_based,
         .trained_context_mode = candidate.context_mode,
         .context_cutoff = candidate.context_cutoff,
+        .transform_profile = candidate.transform_profile,
     };
     return result;
 }
@@ -366,6 +370,53 @@ const SerializedTrainingSelection = struct {
     charged_dictionary_bytes: usize = 0,
     total_bytes: usize = std.math.maxInt(usize),
 };
+
+fn considerSerializedTrainingCandidateFamily(
+    allocator: std.mem.Allocator,
+    validation_samples: []const []const u8,
+    options: SerializedSharedDictionaryTrainOptions,
+    identity: serialized_dictionary_trainer.Candidate,
+    selection: *SerializedTrainingSelection,
+) Error!void {
+    const case_candidate = if (options.train_case_transforms) blk: {
+        const candidate = serialized_dictionary_trainer.withCaseTransformsAlloc(
+            allocator,
+            &identity,
+        ) catch |err| switch (err) {
+            error.OutOfMemory => {
+                identity.deinit(allocator);
+                return error.OutOfMemory;
+            },
+            error.IntegerOverflow => {
+                identity.deinit(allocator);
+                return error.IntegerOverflow;
+            },
+            else => {
+                identity.deinit(allocator);
+                return error.InvalidDictionaryTraining;
+            },
+        };
+        break :blk candidate;
+    } else null;
+    considerSerializedTrainingCandidate(
+        allocator,
+        validation_samples,
+        options,
+        identity,
+        selection,
+    ) catch |err| {
+        if (case_candidate) |candidate| candidate.deinit(allocator);
+        return err;
+    };
+    if (case_candidate) |candidate|
+        try considerSerializedTrainingCandidate(
+            allocator,
+            validation_samples,
+            options,
+            candidate,
+            selection,
+        );
+}
 
 fn considerSerializedTrainingCandidate(
     allocator: std.mem.Allocator,
@@ -32771,6 +32822,10 @@ test "br serialized dictionary trainer retains held-out complete-wire wins" {
     try std.testing.expectEqualSlices(u8, first.bytes, second.bytes);
     try std.testing.expectEqual(first.id, second.id);
     try std.testing.expectEqual(first.id.asInt(), second.id.asInt());
+    try std.testing.expectEqual(
+        SerializedSharedDictionaryTransformProfile.identity,
+        first.transform_profile,
+    );
     try std.testing.expect(first.bucket_count != 0 and first.word_count >= 2);
     try std.testing.expect(first.total_savings_bytes >= options.min_savings_bytes);
     // Locked evidence: 4,608 baseline bytes versus 2,632 frame bytes plus a
@@ -32905,11 +32960,16 @@ test "br serialized dictionary trainer selects profitable context maps" {
             .max_word_len = 8,
             .max_words_per_length = 8,
             .max_phrases_per_length = 64,
+            .train_case_transforms = false,
             .quality = 5,
         },
     )) orelse return error.TestUnexpectedResult;
     defer trained.deinit(std.testing.allocator);
     try std.testing.expect(trained.context_based);
+    try std.testing.expectEqual(
+        SerializedSharedDictionaryTransformProfile.identity,
+        trained.transform_profile,
+    );
     // Locked evidence: 17,344 baseline bytes versus 14,272 frame bytes plus a
     // 266-byte contextual dictionary.
     try std.testing.expectEqual(@as(usize, 17_344), trained.baseline_frame_bytes);
@@ -32928,6 +32988,68 @@ test "br serialized dictionary trainer selects profitable context maps" {
     try std.testing.expect(parsed.context_based);
     try std.testing.expectEqual(@as(u6, 0), parsed.context_map[47]);
     try std.testing.expectEqual(@as(u6, 1), parsed.context_map[48]);
+}
+
+test "br serialized dictionary trainer selects case transforms on held-out wire" {
+    const phrases = [_][]const u8{
+        "azbycxdwevfugths",
+        "qwertyuiopasdfgh",
+        "mnbvcxzlkjhgfdsa",
+        "plmoknijbuhvygct",
+    };
+    comptime for (phrases) |phrase| std.debug.assert(phrase.len == 16);
+    var training_storage: [8][68]u8 = undefined;
+    var training_samples: [training_storage.len][]const u8 = undefined;
+    for (&training_storage, &training_samples, 0..) |*storage, *sample, index| {
+        std.mem.writeInt(u32, storage[0..4], @intCast(index), .little);
+        var cursor: usize = 4;
+        for (phrases) |phrase| {
+            @memcpy(storage[cursor..][0..phrase.len], phrase);
+            cursor += phrase.len;
+        }
+        sample.* = storage[0..cursor];
+    }
+    var validation_storage: [64][68]u8 = undefined;
+    var validation_samples: [validation_storage.len][]const u8 = undefined;
+    for (&validation_storage, &validation_samples, 0..) |*storage, *sample, index| {
+        std.mem.writeInt(u32, storage[0..4], @intCast(0x2000 + index), .little);
+        var cursor: usize = 4;
+        for (phrases) |phrase| {
+            for (phrase) |byte| {
+                storage[cursor] = std.ascii.toUpper(byte);
+                cursor += 1;
+            }
+        }
+        sample.* = storage[0..cursor];
+    }
+    const trained = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        .{
+            .min_word_len = 16,
+            .max_word_len = 16,
+            .max_words_per_length = 8,
+            .max_phrases_per_length = 64,
+            .train_context_map = false,
+            .quality = 5,
+        },
+    )) orelse return error.TestUnexpectedResult;
+    defer trained.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 4_608), trained.baseline_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 2_424), trained.trained_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 178), trained.charged_dictionary_bytes);
+    try std.testing.expectEqual(@as(usize, 2_006), trained.total_savings_bytes);
+    try std.testing.expect(
+        trained.total_savings_bytes * 100 >= trained.baseline_frame_bytes * 40,
+    );
+    try std.testing.expectEqual(
+        SerializedSharedDictionaryTransformProfile.ascii_case,
+        trained.transform_profile,
+    );
+    try std.testing.expect(!trained.context_based);
+    const parsed = try trained.parse();
+    try std.testing.expectEqual(@as(usize, 3), parsed.transform_lists[0].transformCount());
 }
 
 test "br RAW shared dictionary rejects invalid descriptors before output mutation" {

@@ -5,6 +5,7 @@ const builder = @import("serialized_dictionary_builder.zig");
 const literal_context = @import("encoder/literal_context.zig");
 
 pub const DictionaryId = dictionary_train.DictionaryId;
+pub const TransformProfile = enum { identity, ascii_case };
 
 pub const Options = struct {
     min_word_len: u5 = 4,
@@ -27,11 +28,48 @@ pub const Candidate = struct {
     context_based: bool = false,
     context_mode: ?u2 = null,
     context_cutoff: ?u6 = null,
+    transform_profile: TransformProfile = .identity,
 
     pub fn deinit(self: Candidate, allocator: std.mem.Allocator) void {
         allocator.free(self.encoded);
     }
 };
+
+pub fn withCaseTransformsAlloc(
+    allocator: std.mem.Allocator,
+    source: *const Candidate,
+) (Error || std.mem.Allocator.Error)!Candidate {
+    const parsed = try serialized_dictionary.parse(source.encoded);
+    var word_lists: [serialized_dictionary.max_contexts]builder.WordListSpec =
+        undefined;
+    for (word_lists[0..parsed.word_list_count], parsed.word_lists[0..parsed.word_list_count]) |*destination, words|
+        destination.* = builder.WordListSpec.fromParsed(words);
+    const transform_lists = [_]builder.TransformListSpec{.{
+        .prefix_suffix = &.{0},
+        .transforms = &.{
+            0, 0, 0, // identity
+            0, 10, 0, // uppercase first
+            0, 11, 0, // uppercase all
+        },
+    }};
+    const encoded = try builder.serializeAlloc(allocator, .{
+        .raw_prefix = parsed.raw_prefix,
+        .word_lists = word_lists[0..parsed.word_list_count],
+        .transform_lists = &transform_lists,
+        .dictionaries = parsed.dictionaries[0..parsed.dictionary_count],
+        .context_map = if (parsed.context_based) &parsed.context_map else null,
+    });
+    return .{
+        .encoded = encoded,
+        .bucket_count = source.bucket_count,
+        .word_count = source.word_count,
+        .id = .fromBytes(encoded),
+        .context_based = source.context_based,
+        .context_mode = source.context_mode,
+        .context_cutoff = source.context_cutoff,
+        .transform_profile = .ascii_case,
+    };
+}
 
 pub const Error = builder.Error || error{
     InvalidTrainingOptions,
@@ -480,6 +518,45 @@ test "serialized trainer learns deterministic two-group context maps" {
     try std.testing.expect((try parsed.findLongest(40, high_word, &scratch)) != null);
 }
 
+test "serialized trainer derives canonical case transform families" {
+    const samples = [_][]const u8{
+        "lowercaseword lowercaseword lowercaseword",
+        "lowercaseword anotherlowercase lowercaseword",
+    };
+    const identity = (try trainCandidateAlloc(
+        std.testing.allocator,
+        &samples,
+        .{
+            .min_word_len = 8,
+            .max_word_len = 8,
+            .max_words_per_length = 8,
+            .max_phrases_per_length = 32,
+        },
+    )).?;
+    defer identity.deinit(std.testing.allocator);
+    const first = try withCaseTransformsAlloc(std.testing.allocator, &identity);
+    defer first.deinit(std.testing.allocator);
+    const second = try withCaseTransformsAlloc(std.testing.allocator, &identity);
+    defer second.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, first.encoded, second.encoded);
+    try std.testing.expectEqual(first.id, second.id);
+    try std.testing.expectEqual(TransformProfile.ascii_case, first.transform_profile);
+    const parsed = try serialized_dictionary.parse(first.encoded);
+    try std.testing.expectEqual(@as(usize, 3), parsed.transform_lists[0].transformCount());
+    const words = &parsed.word_lists[0];
+    const word_count = words.wordCount(8);
+    const base_word = words.word(8, 0).?;
+    var expected: [8]u8 = undefined;
+    for (&expected, base_word) |*destination, byte|
+        destination.* = std.ascii.toUpper(byte);
+    var scratch: [serialized_dictionary.max_transformed_word_len]u8 = undefined;
+    try std.testing.expectEqualSlices(
+        u8,
+        &expected,
+        (try parsed.resolve(0, 8, 2 * word_count, &scratch)).bytes,
+    );
+}
+
 test "serialized trainer releases every allocation failure path" {
     const Test = struct {
         fn run(allocator: std.mem.Allocator) !void {
@@ -494,6 +571,11 @@ test "serialized trainer releases every allocation failure path" {
                 .max_phrases_per_length = 32,
             })) orelse return error.TestUnexpectedResult;
             defer candidate.deinit(allocator);
+            const case_candidate = try withCaseTransformsAlloc(
+                allocator,
+                &candidate,
+            );
+            defer case_candidate.deinit(allocator);
             const contextual = (try trainContextCandidateAlloc(
                 allocator,
                 &samples,

@@ -86,7 +86,8 @@ one-shot, reusable, chunked, incremental, q0 cross-block context retention,
 and complete address replay. An experimental libbrotli 1.2.0 build passes both
 Vort-encode/libbrotli-decode and libbrotli-encode/Vort-decode cases. The
 contextual differential dictionary is produced through the public builder, and
-an additional bidirectional pair uses the public trainer (`serialized_cases=6`).
+two additional bidirectional pairs use identity and case-transform trainer
+results (`serialized_cases=8`).
 Builder tests cover deterministic parse/serialize round trips, built-in/custom
 mixed choices, all output ownership forms, varint boundaries, invalid size
 buckets/transforms/context IDs, atomic caller output, and allocation failure.
@@ -105,7 +106,9 @@ dictionary by default, meets `min_savings_bytes`.
 The owned result reports frame totals, charged dictionary bytes, word/bucket
 counts, total savings, and a stable content-derived `DictionaryId`. This first
 trainer reuses Vort's bounded deterministic phrase collector; it does not claim
-COVER/FastCover equivalence, general context clustering, or transform learning.
+COVER/FastCover equivalence, general context clustering, or general
+omit/prefix/suffix transform learning. It does compare identity word lists with
+a canonical identity/uppercase-first/uppercase-all family.
 
 ## Remaining performance work
 
@@ -123,5 +126,5 @@ shrinks from 627 to 523 bytes while retaining custom dictionary copies. Vort
 does not promise stability for upstream's experimental container format.
 The trainer is deterministic and complete-wire validated, with bounded
 multi-cutoff two-group context-map learning. General context clustering, transform-list
-learning, and COVER/FastCover-class candidate selection remain open. The builder
+learning beyond the case family, and COVER/FastCover-class candidate selection remain open. The builder
 also remains available for fully explicit caller-owned specifications.
