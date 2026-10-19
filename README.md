@@ -530,6 +530,7 @@ the same inlined decode body through a target-safe unaligned wrapper.
 
 ```sh
 zig build test
+zig build test-br -Dbr-test-filter="serialized dictionary trainer"
 zig build check
 zig build check-wasm
 zig build -Doptimize=ReleaseFast ci-smoke
@@ -2194,10 +2195,10 @@ dictionary symbols reports the whole runtime matrix as skipped instead of
 silently reducing coverage.
 
 With local upstream libbrotli 1.2.0 built using `BROTLI_EXPERIMENTAL`, the same
-gate additionally passes ten serialized custom-static cases: bidirectional
-non-contextual coverage, a UTF8-context winner, an identity-trained dictionary,
-and case/omit-transform-trained dictionaries. A non-experimental build reports them as skipped
-explicitly.
+gate additionally passes twelve serialized custom-static cases: bidirectional
+non-contextual coverage, a UTF8-context winner, and identity-, case-, omit-,
+and learned-prefix/suffix-trained dictionaries. A non-experimental build
+reports them as skipped explicitly.
 
 `brTrainSerializedSharedDictionaryAlloc` provides deterministic bounded
 identity-word and multi-cutoff two-group context-map training with held-out complete-wire
@@ -2207,9 +2208,17 @@ once against the validation frame total; non-winning candidates return null.
 The trainer also compares identity-only word lists with canonical
 identity/uppercase-first/uppercase-all transform families without retraining
 the words, plus independent omit-first/last and combined case+omit families.
-The result includes a stable content-derived ID and exact accounting. It does
-not claim COVER/FastCover equivalence, general clustering, or learned
-prefix/suffix stringlets.
+Its bounded stringlet learner indexes the trained words, samples real training-
+corpus occurrences deterministically, ranks observed prefix-only, suffix-only,
+and prefix+suffix transforms, and combines the learned list independently with
+all four base families. Defaults cap stringlets at eight bytes, learned
+transforms at sixteen, distinct candidates at 4,096, and sampled word positions
+at 16,384; the word index retains at most 4,096 distinct trained words. Public
+hard ceilings keep these bounds at 64 transforms, 65,536 candidates/words, and
+1,048,576 sampled positions. The result reports the selected profile, learned
+stringlet/transform counts, stable content-derived ID, and exact byte
+accounting. It does not claim COVER/FastCover equivalence, general
+context/transform clustering, or learned SHIFT transforms.
 
 ### Brotli planned encoder controls
 

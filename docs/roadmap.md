@@ -48,8 +48,11 @@ major gaps before Vort can claim broad industry-best parity:
   plus a 266-byte dictionary.
   Identity word lists are also reserialized as independent case, omit-first/
   last, and combined transform families that compete by the same held-out cost.
-  General context clustering, learned prefix/suffix stringlets, and broader
-  corpus calibration remain open.
+  A bounded deterministic learner now ranks observed prefix-only, suffix-only,
+  and paired stringlets and independently combines them with all four base
+  families; its locked fixture improves 5,120 baseline bytes to 1,279 frame
+  bytes plus a 179-byte dictionary. General context/transform clustering,
+  SHIFT-family learning, and broader corpus calibration remain open.
   q10/q11 Zopfli/HQ cost refinement and global exact-cost segmentation also
   remain open.
 - True byte-progressive Brotli decoding now covers stored data, metadata,

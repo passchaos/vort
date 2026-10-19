@@ -117,6 +117,16 @@ pub const SerializedSharedDictionaryTrainOptions = struct {
     train_context_map: bool = true,
     train_case_transforms: bool = true,
     train_omit_transforms: bool = true,
+    train_prefix_suffix_transforms: bool = true,
+    /// Bounded stringlet learner. Candidate transforms are ranked
+    /// deterministically, then retained only through complete held-out wire
+    /// comparison with the identity/case/omit families.
+    max_prefix_suffix_len: u8 = 8,
+    max_prefix_suffix_transforms: u8 = 16,
+    max_prefix_suffix_candidates: usize = 4096,
+    max_prefix_suffix_words: usize = 4096,
+    max_prefix_suffix_positions: usize = 16 * 1024,
+    min_prefix_suffix_occurrences: u16 = 2,
     /// Strictly increasing candidate cutoffs. Equal-cost ties keep the first
     /// cutoff, then the first RFC mode (LSB6, MSB6, UTF8, Signed).
     context_cutoffs: []const u6 = &.{ 16, 32, 48 },
@@ -143,6 +153,10 @@ pub const OwnedTrainedSerializedSharedDictionary = struct {
     trained_context_mode: ?u2,
     context_cutoff: ?u6,
     transform_profile: SerializedSharedDictionaryTransformProfile,
+    /// Non-empty serialized stringlets contributed by the selected learner.
+    learned_stringlet_count: usize,
+    /// Learned prefix/suffix transform triplets, excluding the base family.
+    learned_prefix_suffix_transform_count: usize,
 
     pub fn deinit(self: OwnedTrainedSerializedSharedDictionary, allocator: std.mem.Allocator) void {
         allocator.free(self.bytes);
@@ -266,7 +280,19 @@ pub fn trainSerializedSharedDictionaryAlloc(
     if (validation_samples.len == 0 or options.min_savings_bytes == 0 or
         options.quality > 11 or
         (options.train_context_map and
-            !validSerializedTrainingCutoffs(options.context_cutoffs)))
+            !validSerializedTrainingCutoffs(options.context_cutoffs)) or
+        (options.train_prefix_suffix_transforms and
+            (options.max_prefix_suffix_len == 0 or
+                options.max_prefix_suffix_len > serialized_dictionary_trainer.max_learned_stringlet_len or
+                options.max_prefix_suffix_transforms == 0 or
+                options.max_prefix_suffix_transforms > serialized_dictionary_trainer.max_learned_prefix_suffix_transforms or
+                options.max_prefix_suffix_candidates < options.max_prefix_suffix_transforms or
+                options.max_prefix_suffix_candidates > 64 * 1024 or
+                options.max_prefix_suffix_words == 0 or
+                options.max_prefix_suffix_words > serialized_dictionary_trainer.max_learned_prefix_suffix_words or
+                options.max_prefix_suffix_positions == 0 or
+                options.max_prefix_suffix_positions > serialized_dictionary_trainer.max_learned_prefix_suffix_positions or
+                options.min_prefix_suffix_occurrences == 0)))
         return error.InvalidDictionaryTraining;
     const core_options = serialized_dictionary_trainer.Options{
         .min_word_len = options.min_word_len,
@@ -299,6 +325,7 @@ pub fn trainSerializedSharedDictionaryAlloc(
     }) |candidate| {
         try considerSerializedTrainingCandidateFamily(
             allocator,
+            training_samples,
             validation_samples,
             options,
             candidate,
@@ -322,6 +349,7 @@ pub fn trainSerializedSharedDictionaryAlloc(
                 }) |candidate| {
                     try considerSerializedTrainingCandidateFamily(
                         allocator,
+                        training_samples,
                         validation_samples,
                         options,
                         candidate,
@@ -351,6 +379,8 @@ pub fn trainSerializedSharedDictionaryAlloc(
         .trained_context_mode = candidate.context_mode,
         .context_cutoff = candidate.context_cutoff,
         .transform_profile = candidate.transform_profile,
+        .learned_stringlet_count = candidate.learned_stringlet_count,
+        .learned_prefix_suffix_transform_count = candidate.learned_prefix_suffix_transform_count,
     };
     return result;
 }
@@ -374,13 +404,16 @@ const SerializedTrainingSelection = struct {
 
 fn considerSerializedTrainingCandidateFamily(
     allocator: std.mem.Allocator,
+    training_samples: []const []const u8,
     validation_samples: []const []const u8,
     options: SerializedSharedDictionaryTrainOptions,
     identity: serialized_dictionary_trainer.Candidate,
     selection: *SerializedTrainingSelection,
 ) Error!void {
-    var derived: [3]serialized_dictionary_trainer.Candidate = undefined;
+    var derived: [7]serialized_dictionary_trainer.Candidate = undefined;
     var derived_count: usize = 0;
+    var prefix_suffix_plan: ?serialized_dictionary_trainer.PrefixSuffixPlan = null;
+    defer if (prefix_suffix_plan) |plan| plan.deinit(allocator);
     {
         errdefer {
             identity.deinit(allocator);
@@ -407,6 +440,38 @@ fn considerSerializedTrainingCandidateFamily(
                     true,
                 ) catch |err| return mapSerializedTrainingError(err);
                 derived_count += 1;
+            }
+        }
+        if (options.train_prefix_suffix_transforms) {
+            prefix_suffix_plan = serialized_dictionary_trainer.learnPrefixSuffixPlanAlloc(
+                allocator,
+                &identity,
+                training_samples,
+                .{
+                    .max_stringlet_len = options.max_prefix_suffix_len,
+                    .max_transforms = options.max_prefix_suffix_transforms,
+                    .max_candidates = options.max_prefix_suffix_candidates,
+                    .max_words = options.max_prefix_suffix_words,
+                    .max_positions = options.max_prefix_suffix_positions,
+                    .min_occurrences = options.min_prefix_suffix_occurrences,
+                },
+            ) catch |err| return mapSerializedTrainingError(err);
+            if (prefix_suffix_plan) |*plan| {
+                const base_derived_count = derived_count;
+                derived[derived_count] = serialized_dictionary_trainer.withPrefixSuffixTransformsAlloc(
+                    allocator,
+                    &identity,
+                    plan,
+                ) catch |err| return mapSerializedTrainingError(err);
+                derived_count += 1;
+                for (0..base_derived_count) |base_index| {
+                    derived[derived_count] = serialized_dictionary_trainer.withPrefixSuffixTransformsAlloc(
+                        allocator,
+                        &derived[base_index],
+                        plan,
+                    ) catch |err| return mapSerializedTrainingError(err);
+                    derived_count += 1;
+                }
             }
         }
     }
@@ -32829,6 +32894,7 @@ test "br serialized dictionary trainer retains held-out complete-wire wins" {
         .max_words_per_length = 8,
         .max_phrases_per_length = 64,
         .train_omit_transforms = false,
+        .train_prefix_suffix_transforms = false,
         .quality = 5,
     };
     const first = (try trainSerializedSharedDictionaryAlloc(
@@ -32941,6 +33007,45 @@ test "br serialized dictionary trainer rejects non-wins and invalid evaluation" 
             .{ .context_cutoffs = &.{ 16, 16 } },
         ),
     );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .max_prefix_suffix_len = 0 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .max_prefix_suffix_transforms = 65 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{
+                .max_prefix_suffix_transforms = 8,
+                .max_prefix_suffix_candidates = 7,
+            },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .max_prefix_suffix_words = 0 },
+        ),
+    );
 }
 
 test "br serialized dictionary trainer retains identity when transforms cannot win" {
@@ -32976,6 +33081,11 @@ test "br serialized dictionary trainer retains identity when transforms cannot w
     try std.testing.expectEqual(
         SerializedSharedDictionaryTransformProfile.identity,
         trained.transform_profile,
+    );
+    try std.testing.expectEqual(@as(usize, 0), trained.learned_stringlet_count);
+    try std.testing.expectEqual(
+        @as(usize, 0),
+        trained.learned_prefix_suffix_transform_count,
     );
 }
 
@@ -33024,6 +33134,7 @@ test "br serialized dictionary trainer selects profitable context maps" {
             .max_phrases_per_length = 64,
             .train_case_transforms = false,
             .train_omit_transforms = false,
+            .train_prefix_suffix_transforms = false,
             .quality = 5,
         },
     )) orelse return error.TestUnexpectedResult;
@@ -33095,6 +33206,7 @@ test "br serialized dictionary trainer selects case transforms on held-out wire"
             .max_words_per_length = 8,
             .max_phrases_per_length = 64,
             .train_context_map = false,
+            .train_prefix_suffix_transforms = false,
             .quality = 5,
         },
     )) orelse return error.TestUnexpectedResult;
@@ -33155,6 +33267,7 @@ test "br serialized dictionary trainer selects omit transforms on held-out wire"
             .max_words_per_length = 8,
             .max_phrases_per_length = 64,
             .train_context_map = false,
+            .train_prefix_suffix_transforms = false,
             .quality = 5,
         },
     )) orelse return error.TestUnexpectedResult;
@@ -33173,6 +33286,123 @@ test "br serialized dictionary trainer selects omit transforms on held-out wire"
     try std.testing.expect(!trained.context_based);
     const parsed = try trained.parse();
     try std.testing.expectEqual(@as(usize, 19), parsed.transform_lists[0].transformCount());
+}
+
+test "br serialized dictionary trainer learns prefix suffix stringlets" {
+    const phrases = [_][]const u8{
+        "azbycxdwevfugths",
+        "qwertyuiopasdfgh",
+        "mnbvcxzlkjhgfdsa",
+        "plmoknijbuhvygct",
+    };
+    comptime for (phrases) |phrase| std.debug.assert(phrase.len == 16);
+    var wrapped_training_storage: [32][18]u8 = undefined;
+    var training_samples: [64][]const u8 = undefined;
+    var training_index: usize = 0;
+    for (phrases, 0..) |phrase, phrase_index| {
+        for (0..8) |_| {
+            training_samples[training_index] = phrase;
+            training_index += 1;
+        }
+        for (0..8) |repeat_index| {
+            const wrapped = &wrapped_training_storage[phrase_index * 8 + repeat_index];
+            wrapped[0] = '<';
+            @memcpy(wrapped[1..17], phrase);
+            wrapped[17] = '>';
+            training_samples[training_index] = wrapped;
+            training_index += 1;
+        }
+    }
+    std.debug.assert(training_index == training_samples.len);
+    var validation_storage: [64][76]u8 = undefined;
+    var validation_samples: [validation_storage.len][]const u8 = undefined;
+    for (&validation_storage, &validation_samples, 0..) |*storage, *sample, index| {
+        std.mem.writeInt(u32, storage[0..4], @intCast(0x4000 + index), .little);
+        var cursor: usize = 4;
+        for (phrases) |phrase| {
+            storage[cursor] = '<';
+            cursor += 1;
+            @memcpy(storage[cursor..][0..phrase.len], phrase);
+            cursor += phrase.len;
+            storage[cursor] = '>';
+            cursor += 1;
+        }
+        sample.* = storage[0..cursor];
+    }
+    const options = SerializedSharedDictionaryTrainOptions{
+        .min_word_len = 16,
+        .max_word_len = 16,
+        .max_words_per_length = 8,
+        .max_phrases_per_length = 64,
+        .train_context_map = false,
+        .train_case_transforms = false,
+        .train_omit_transforms = false,
+        .max_prefix_suffix_len = 1,
+        .max_prefix_suffix_transforms = 1,
+        .max_prefix_suffix_candidates = 16,
+        .max_prefix_suffix_positions = 1024,
+        .quality = 5,
+    };
+    const trained = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        options,
+    )) orelse return error.TestUnexpectedResult;
+    defer trained.deinit(std.testing.allocator);
+    const repeated = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        options,
+    )) orelse return error.TestUnexpectedResult;
+    defer repeated.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, trained.bytes, repeated.bytes);
+    try std.testing.expectEqual(trained.id, repeated.id);
+    try std.testing.expectEqual(@as(usize, 5_120), trained.baseline_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 1_279), trained.trained_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 179), trained.charged_dictionary_bytes);
+    try std.testing.expectEqual(@as(usize, 3_662), trained.total_savings_bytes);
+    try std.testing.expectEqual(
+        SerializedSharedDictionaryTransformProfile.prefix_suffix,
+        trained.transform_profile,
+    );
+    try std.testing.expectEqual(@as(usize, 2), trained.learned_stringlet_count);
+    try std.testing.expectEqual(
+        @as(usize, 1),
+        trained.learned_prefix_suffix_transform_count,
+    );
+    try std.testing.expect(
+        trained.total_savings_bytes * 100 >= trained.baseline_frame_bytes * 70,
+    );
+    const parsed = try trained.parse();
+    try std.testing.expectEqual(@as(usize, 2), parsed.transform_lists[0].transformCount());
+    const words = &parsed.word_lists[0];
+    const word_count = words.wordCount(16);
+    var phrase_index: ?usize = null;
+    for (0..word_count) |word_index| {
+        const word = words.word(16, word_index).?;
+        if (std.mem.eql(u8, word, phrases[0])) {
+            phrase_index = word_index;
+            break;
+        }
+    }
+    const selected_index = phrase_index orelse return error.TestUnexpectedResult;
+    var scratch: [serialized_dictionary.max_transformed_word_len]u8 = undefined;
+    var expected: [18]u8 = undefined;
+    expected[0] = '<';
+    @memcpy(expected[1..17], phrases[0]);
+    expected[17] = '>';
+    try std.testing.expectEqualSlices(
+        u8,
+        &expected,
+        (try parsed.resolve(
+            0,
+            16,
+            word_count + selected_index,
+            &scratch,
+        )).bytes,
+    );
 }
 
 test "br RAW shared dictionary rejects invalid descriptors before output mutation" {

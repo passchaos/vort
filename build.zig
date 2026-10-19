@@ -200,9 +200,15 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     br_tests_mod.addObject(br_record_optimal_obj);
+    const br_test_filter = b.option(
+        []const u8,
+        "br-test-filter",
+        "Compile and run only Brotli tests whose names contain this text",
+    );
     const br_tests = b.addTest(.{
         .name = "vort-br-tests",
         .root_module = br_tests_mod,
+        .filters = if (br_test_filter) |filter| &.{filter} else &.{},
     });
     const run_br_tests = b.addRunArtifact(br_tests);
     const br_test_step = b.step("test-br", "Run focused Brotli codec tests");

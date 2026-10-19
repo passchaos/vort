@@ -1,6 +1,6 @@
 # Brotli serialized contextual dictionary status
 
-Date: 2026-10-19. Upstream marks `BROTLI_SHARED_DICTIONARY_SERIALIZED` as
+Date: 2026-10-20. Upstream marks `BROTLI_SHARED_DICTIONARY_SERIALIZED` as
 experimental and “do not use”. Vort therefore keeps its strict parser and
 borrowed attachment explicit rather than implying a stable wire contract.
 
@@ -86,8 +86,9 @@ one-shot, reusable, chunked, incremental, q0 cross-block context retention,
 and complete address replay. An experimental libbrotli 1.2.0 build passes both
 Vort-encode/libbrotli-decode and libbrotli-encode/Vort-decode cases. The
 contextual differential dictionary is produced through the public builder, and
-three additional bidirectional pairs use identity, case-transform, and
-omit-transform trainer results (`serialized_cases=10`).
+four additional bidirectional pairs use identity, case-transform,
+omit-transform, and learned-prefix/suffix trainer results
+(`serialized_cases=12`).
 Builder tests cover deterministic parse/serialize round trips, built-in/custom
 mixed choices, all output ownership forms, varint boundaries, invalid size
 buckets/transforms/context IDs, atomic caller output, and allocation failure.
@@ -104,11 +105,15 @@ samples are encoded both without and with every candidate; the function returns
 null unless the best actual complete Brotli frame total, plus the serialized
 dictionary by default, meets `min_savings_bytes`.
 The owned result reports frame totals, charged dictionary bytes, word/bucket
-counts, total savings, and a stable content-derived `DictionaryId`. This first
-trainer reuses Vort's bounded deterministic phrase collector; it does not claim
-COVER/FastCover equivalence, general context clustering, or learned
-prefix/suffix stringlets. It compares independent identity, case,
-omit-first/last, and combined case+omit transform families.
+counts, total savings, learned stringlet/transform counts, and a stable
+content-derived `DictionaryId`. The trainer reuses Vort's bounded deterministic
+phrase collector, then indexes each candidate's trained words and learns
+prefix-only, suffix-only, and observed prefix+suffix identity transforms from
+deterministically sampled corpus matches. Ranked transforms are reserialized
+independently with identity, case, omit-first/last, and combined case+omit base
+families before the same complete-wire arbitration. It does not claim
+COVER/FastCover equivalence, general context/transform clustering, or learned
+SHIFT transforms.
 
 ## Remaining performance work
 
@@ -125,6 +130,8 @@ and complete clustered literal-context candidates. A locked joint fixture
 shrinks from 627 to 523 bytes while retaining custom dictionary copies. Vort
 does not promise stability for upstream's experimental container format.
 The trainer is deterministic and complete-wire validated, with bounded
-multi-cutoff two-group context-map learning. General context clustering, transform-list
-learning beyond the case/omit families, and COVER/FastCover-class candidate selection remain open. The builder
-also remains available for fully explicit caller-owned specifications.
+multi-cutoff two-group context-map learning and bounded prefix/suffix stringlet
+learning. General context and transform clustering, SHIFT-family learning,
+COVER/FastCover-class candidate selection, and broad corpus calibration remain
+open. The builder also remains available for fully explicit caller-owned
+specifications.

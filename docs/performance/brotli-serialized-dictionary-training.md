@@ -1,6 +1,6 @@
 # Brotli serialized dictionary training baseline
 
-Date: 2026-10-19
+Date: 2026-10-20
 
 ## Scope
 
@@ -11,9 +11,9 @@ retains the largest legal power-of-two word bucket, emits one identity-transform
 custom dictionary, and validates profitability on held-out samples with the
 production Brotli encoder.
 
-This is not a COVER/FastCover-equivalent trainer. General context clustering,
-learned prefix/suffix stringlets, and representative corpus
-calibration remain future work.
+This is not a COVER/FastCover-equivalent trainer. General context/transform
+clustering, SHIFT-family learning, and representative corpus calibration remain
+future work.
 
 ## Selection contract
 
@@ -107,3 +107,35 @@ wire. A locked fixture trains four 16-byte records and validates their
 The regression requires at least a 15% complete-total saving, verifies that the
 omit-only profile wins, replays both omit-last and omit-first addresses, and
 checks experimental libbrotli interoperability in both directions.
+
+## Learned prefix/suffix evidence
+
+For every global or contextual word-list candidate, the bounded learner builds
+a deduplicated word index and scans actual training-corpus matches. It samples
+at most a caller-bounded number of positions at a deterministic stride, counts
+prefix-only, suffix-only, and observed prefix+suffix shapes, then ranks them by
+`occurrences * added bytes` with bytewise deterministic ties. The canonical
+table stores non-empty stringlets first and the mandatory empty stringlet last.
+The distinct-word index, candidate map, string length, selected transforms, and
+sampled positions all have separately validated public limits.
+The learned list competes independently on identity, case, omit, and case+omit
+base families; strict complete-total comparison keeps the old candidate on a
+tie.
+
+A locked fixture trains four standalone and `<word>` 16-byte records, limits
+learning to the top one transform, and validates 64 frames containing the
+wrapped records:
+
+| Metric | Bytes |
+|---|---:|
+| Dictionary-free held-out frames | 5,120 |
+| Prefix/suffix dictionary-backed frames | 1,279 |
+| Serialized dictionary | 179 |
+| Charged trained total | 1,458 |
+| Total saving | 3,662 (71.5%) |
+
+The regression requires at least a 70% complete-total saving, verifies two
+learned non-empty stringlets and one pair transform, replays the combined
+address, and retains identity with zero learned metadata when affixes cannot
+improve the wire. The experimental libbrotli matrix checks the learned result
+in both encode/decode directions.

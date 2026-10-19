@@ -2,6 +2,7 @@ const std = @import("std");
 const dictionary_train = @import("../dictionary.zig");
 const serialized_dictionary = @import("serialized_dictionary.zig");
 const builder = @import("serialized_dictionary_builder.zig");
+const affix_trainer = @import("serialized_dictionary_affix_trainer.zig");
 const literal_context = @import("encoder/literal_context.zig");
 
 pub const DictionaryId = dictionary_train.DictionaryId;
@@ -10,7 +11,18 @@ pub const TransformProfile = enum {
     ascii_case,
     omit,
     ascii_case_omit,
+    prefix_suffix,
+    ascii_case_prefix_suffix,
+    omit_prefix_suffix,
+    ascii_case_omit_prefix_suffix,
 };
+
+pub const PrefixSuffixOptions = affix_trainer.Options;
+pub const PrefixSuffixPlan = affix_trainer.Plan;
+pub const max_learned_stringlet_len = affix_trainer.max_stringlet_len;
+pub const max_learned_prefix_suffix_transforms = affix_trainer.max_transforms;
+pub const max_learned_prefix_suffix_words = affix_trainer.max_dictionary_words;
+pub const max_learned_prefix_suffix_positions = affix_trainer.max_sampled_positions;
 
 pub const Options = struct {
     min_word_len: u5 = 4,
@@ -34,11 +46,115 @@ pub const Candidate = struct {
     context_mode: ?u2 = null,
     context_cutoff: ?u6 = null,
     transform_profile: TransformProfile = .identity,
+    learned_stringlet_count: usize = 0,
+    learned_prefix_suffix_transform_count: usize = 0,
 
     pub fn deinit(self: Candidate, allocator: std.mem.Allocator) void {
         allocator.free(self.encoded);
     }
 };
+
+pub fn learnPrefixSuffixPlanAlloc(
+    allocator: std.mem.Allocator,
+    source: *const Candidate,
+    samples: []const []const u8,
+    options: PrefixSuffixOptions,
+) (Error || std.mem.Allocator.Error)!?PrefixSuffixPlan {
+    const parsed = try serialized_dictionary.parse(source.encoded);
+    return affix_trainer.learnAlloc(allocator, &parsed, samples, options) catch |err|
+        switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.IntegerOverflow => return error.IntegerOverflow,
+            else => return error.InvalidTrainingOptions,
+        };
+}
+
+pub fn withPrefixSuffixTransformsAlloc(
+    allocator: std.mem.Allocator,
+    source: *const Candidate,
+    plan: *const PrefixSuffixPlan,
+) (Error || std.mem.Allocator.Error)!Candidate {
+    if (plan.transformCount() == 0 or plan.stringlet_count < 2)
+        return error.InvalidTrainingOptions;
+    const transform_profile = prefixSuffixProfile(source.transform_profile) orelse
+        return error.InvalidTrainingOptions;
+    const parsed = try serialized_dictionary.parse(source.encoded);
+    if (parsed.transform_list_count != 1)
+        return error.InvalidTrainingOptions;
+    const source_transforms = &parsed.transform_lists[0];
+    if (source_transforms.prefix_suffix.len != 1 or
+        source_transforms.prefix_suffix[0] != 0 or
+        source_transforms.params != null)
+    {
+        return error.InvalidTrainingOptions;
+    }
+    const transform_count = std.math.add(
+        usize,
+        source_transforms.transformCount(),
+        plan.transformCount(),
+    ) catch return error.IntegerOverflow;
+    if (transform_count > std.math.maxInt(u8))
+        return error.InvalidTrainingOptions;
+    const transform_len = std.math.mul(usize, transform_count, 3) catch
+        return error.IntegerOverflow;
+    const transform_bytes = try allocator.alloc(u8, transform_len);
+    defer allocator.free(transform_bytes);
+    const empty_id = plan.emptyStringletId();
+    for (0..source_transforms.transformCount()) |transform_index| {
+        const source_transform = source_transforms.transform(transform_index) orelse
+            return error.InvalidTrainingOptions;
+        if (source_transform.prefix_id != 0 or source_transform.suffix_id != 0 or
+            source_transform.kind >= 21)
+        {
+            return error.InvalidTrainingOptions;
+        }
+        const base = transform_index * 3;
+        transform_bytes[base] = empty_id;
+        transform_bytes[base + 1] = source_transform.kind;
+        transform_bytes[base + 2] = empty_id;
+    }
+    @memcpy(
+        transform_bytes[source_transforms.transforms.len..],
+        plan.transforms,
+    );
+    var word_lists: [serialized_dictionary.max_contexts]builder.WordListSpec =
+        undefined;
+    for (word_lists[0..parsed.word_list_count], parsed.word_lists[0..parsed.word_list_count]) |*destination, words|
+        destination.* = builder.WordListSpec.fromParsed(words);
+    const transform_lists = [_]builder.TransformListSpec{.{
+        .prefix_suffix = plan.prefix_suffix,
+        .transforms = transform_bytes,
+    }};
+    const encoded = try builder.serializeAlloc(allocator, .{
+        .raw_prefix = parsed.raw_prefix,
+        .word_lists = word_lists[0..parsed.word_list_count],
+        .transform_lists = &transform_lists,
+        .dictionaries = parsed.dictionaries[0..parsed.dictionary_count],
+        .context_map = if (parsed.context_based) &parsed.context_map else null,
+    });
+    return .{
+        .encoded = encoded,
+        .bucket_count = source.bucket_count,
+        .word_count = source.word_count,
+        .id = .fromBytes(encoded),
+        .context_based = source.context_based,
+        .context_mode = source.context_mode,
+        .context_cutoff = source.context_cutoff,
+        .transform_profile = transform_profile,
+        .learned_stringlet_count = plan.stringlet_count - 1,
+        .learned_prefix_suffix_transform_count = plan.transformCount(),
+    };
+}
+
+fn prefixSuffixProfile(profile: TransformProfile) ?TransformProfile {
+    return switch (profile) {
+        .identity => .prefix_suffix,
+        .ascii_case => .ascii_case_prefix_suffix,
+        .omit => .omit_prefix_suffix,
+        .ascii_case_omit => .ascii_case_omit_prefix_suffix,
+        else => null,
+    };
+}
 
 pub fn withCaseTransformsAlloc(
     allocator: std.mem.Allocator,
@@ -643,6 +759,89 @@ test "serialized trainer derives canonical transform families" {
         TransformProfile.ascii_case_omit,
         combined.transform_profile,
     );
+
+    var affix_sample_storage: [4 * 10]u8 = undefined;
+    var affix_cursor: usize = 0;
+    for (0..4) |_| {
+        affix_sample_storage[affix_cursor] = '<';
+        affix_cursor += 1;
+        @memcpy(
+            affix_sample_storage[affix_cursor..][0..base_word.len],
+            base_word,
+        );
+        affix_cursor += base_word.len;
+        affix_sample_storage[affix_cursor] = '>';
+        affix_cursor += 1;
+    }
+    const affix_samples = [_][]const u8{affix_sample_storage[0..affix_cursor]};
+    const affix_plan = (try learnPrefixSuffixPlanAlloc(
+        std.testing.allocator,
+        &identity,
+        &affix_samples,
+        .{
+            .max_stringlet_len = 1,
+            .max_transforms = 3,
+            .max_candidates = 16,
+            .max_positions = 32,
+        },
+    )).?;
+    defer affix_plan.deinit(std.testing.allocator);
+    const affix = try withPrefixSuffixTransformsAlloc(
+        std.testing.allocator,
+        &identity,
+        &affix_plan,
+    );
+    defer affix.deinit(std.testing.allocator);
+    try std.testing.expectEqual(TransformProfile.prefix_suffix, affix.transform_profile);
+    try std.testing.expectEqual(@as(usize, 2), affix.learned_stringlet_count);
+    try std.testing.expectEqual(@as(usize, 3), affix.learned_prefix_suffix_transform_count);
+    const parsed_affix = try serialized_dictionary.parse(affix.encoded);
+    try std.testing.expectEqual(@as(usize, 4), parsed_affix.transform_lists[0].transformCount());
+    const affix_word = parsed_affix.word_lists[0].word(8, 0).?;
+    var affix_expected: [10]u8 = undefined;
+    affix_expected[0] = '<';
+    @memcpy(affix_expected[1..9], affix_word);
+    affix_expected[9] = '>';
+    try std.testing.expectEqualSlices(
+        u8,
+        &affix_expected,
+        (try parsed_affix.resolve(
+            0,
+            8,
+            parsed_affix.word_lists[0].wordCount(8),
+            &scratch,
+        )).bytes,
+    );
+    const case_affix = try withPrefixSuffixTransformsAlloc(
+        std.testing.allocator,
+        &first,
+        &affix_plan,
+    );
+    defer case_affix.deinit(std.testing.allocator);
+    try std.testing.expectEqual(
+        TransformProfile.ascii_case_prefix_suffix,
+        case_affix.transform_profile,
+    );
+    const omit_affix = try withPrefixSuffixTransformsAlloc(
+        std.testing.allocator,
+        &omit,
+        &affix_plan,
+    );
+    defer omit_affix.deinit(std.testing.allocator);
+    try std.testing.expectEqual(
+        TransformProfile.omit_prefix_suffix,
+        omit_affix.transform_profile,
+    );
+    const combined_affix = try withPrefixSuffixTransformsAlloc(
+        std.testing.allocator,
+        &combined,
+        &affix_plan,
+    );
+    defer combined_affix.deinit(std.testing.allocator);
+    try std.testing.expectEqual(
+        TransformProfile.ascii_case_omit_prefix_suffix,
+        combined_affix.transform_profile,
+    );
 }
 
 test "serialized trainer releases every allocation failure path" {
@@ -676,6 +875,24 @@ test "serialized trainer releases every allocation failure path" {
                 true,
             );
             defer combined_candidate.deinit(allocator);
+            const affix_plan = (try learnPrefixSuffixPlanAlloc(
+                allocator,
+                &candidate,
+                &samples,
+                .{
+                    .max_stringlet_len = 2,
+                    .max_transforms = 4,
+                    .max_candidates = 32,
+                    .max_positions = 64,
+                },
+            )) orelse return error.TestUnexpectedResult;
+            defer affix_plan.deinit(allocator);
+            const affix_candidate = try withPrefixSuffixTransformsAlloc(
+                allocator,
+                &candidate,
+                &affix_plan,
+            );
+            defer affix_candidate.deinit(allocator);
             const contextual = (try trainContextCandidateAlloc(
                 allocator,
                 &samples,
