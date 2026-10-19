@@ -9,6 +9,7 @@ const Mode = enum {
     validated_separate,
     validated_targets,
     cover_optimized_separate,
+    cover_optimized_linear,
     cover_optimized,
     zstd_validated,
 };
@@ -52,6 +53,7 @@ pub fn main(init: std.process.Init) !void {
         try benchmarkCase(init, &csv.writer, case, .validated_separate, options);
         try benchmarkCase(init, &csv.writer, case, .validated_targets, options);
         try benchmarkCase(init, &csv.writer, case, .cover_optimized_separate, options);
+        try benchmarkCase(init, &csv.writer, case, .cover_optimized_linear, options);
         try benchmarkCase(init, &csv.writer, case, .cover_optimized, options);
         try benchmarkCase(init, &csv.writer, case, .zstd_validated, options);
     }
@@ -127,6 +129,7 @@ fn trainMode(allocator: std.mem.Allocator, training: []const []const u8, validat
             break :blk try combined.toOwnedSlice(allocator);
         },
         .cover_optimized_separate => try trainCoverOptimizedSeparateAlloc(allocator, training, validation),
+        .cover_optimized_linear => try trainCoverOptimizedLinearAlloc(allocator, training, validation),
         .cover_optimized => blk: {
             const trained = try vort.dictionary.trainOptimizedCoverAlloc(
                 allocator,
@@ -152,6 +155,40 @@ fn trainMode(allocator: std.mem.Allocator, training: []const []const u8, validat
             defer trained.deinit(allocator);
             break :blk try allocator.dupe(u8, trained.bytes);
         },
+    };
+}
+
+fn trainCoverOptimizedLinearAlloc(
+    allocator: std.mem.Allocator,
+    training: []const []const u8,
+    validation: []const []const u8,
+) ![]u8 {
+    const trained = try vort.dictionary.cover_optimize.trainAllocWithScorer(
+        allocator,
+        training,
+        validation,
+        .{
+            .target_size = 512,
+            .segment_sizes = &cover_segment_sizes,
+            .dmer_sizes = &cover_dmer_sizes,
+            .hash_logs = &cover_hash_logs,
+        },
+        coverLinearScore,
+    );
+    return trained.bytes;
+}
+
+fn coverLinearScore(
+    dictionary: []const u8,
+    samples: []const []const u8,
+    min_match_len: usize,
+) !vort.dictionary.CoverOptimizeScore {
+    const score = try vort.dictionary.validationScore(dictionary, samples, min_match_len);
+    return .{
+        .estimated_bits = score.estimated_bits,
+        .covered_bytes = score.covered_bytes,
+        .matches = score.matches,
+        .distance_bits = score.distance_bits,
     };
 }
 

@@ -46,15 +46,17 @@ Environment:
 
 | Corpus | Separate bytes/s | Shared bytes/s | Speedup | Allocations | Shared allocations | Allocated bytes | Shared allocated bytes |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| text | 4,147,281 | 5,863,410 | 1.4138x | 60 | 40 | 3,351,336 | 1,678,824 |
-| JSON | 4,140,216 | 5,770,268 | 1.3937x | 60 | 40 | 3,351,341 | 1,678,829 |
-| binary | 2,051,313 | 2,401,549 | 1.1707x | 48 | 28 | 3,350,496 | 1,677,984 |
+| text | 4,194,112 | 5,851,247 | 1.3951x | 60 | 40 | 3,351,336 | 1,678,824 |
+| JSON | 4,162,134 | 5,831,280 | 1.4010x | 60 | 40 | 3,351,341 | 1,678,829 |
+| binary | 2,072,921 | 2,417,359 | 1.1662x | 48 | 28 | 3,350,496 | 1,677,984 |
 
-All corresponding checksum rows are identical. The permanent gate requires at
-least `1.10x` shared/separate throughput, fewer allocations, and at most 75% of
-the separate allocated-byte total for every corpus. The observed allocation
-bytes are approximately halved because three `k` candidates reuse each pair's
-frequency state.
+All corresponding checksum rows are identical. The shared column is the
+`cover_optimized_linear` mode, isolating context reuse from the later indexed
+validation optimization. The permanent gate requires at least `1.10x`
+shared/separate throughput, fewer allocations, and at most 75% of the separate
+allocated-byte total for every corpus. The observed allocation bytes are
+approximately halved because three `k` candidates reuse each pair's frequency
+state.
 
 The broader dictionary benchmark's unrelated `zstd_validated` absolute
 throughput floor can remain sensitive to machine load. The dedicated COVER gate

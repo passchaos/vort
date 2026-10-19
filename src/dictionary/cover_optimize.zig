@@ -52,6 +52,31 @@ pub fn trainAllocWithScorer(
     options: OptimizeOptions,
     comptime scoreFn: anytype,
 ) !OwnedResult {
+    const Adapter = struct {
+        fn score(_: void, dictionary: []const u8, samples: []const []const u8, min_match_len: usize) !Score {
+            return scoreFn(dictionary, samples, min_match_len);
+        }
+    };
+    return trainAllocWithScorerContext(
+        allocator,
+        training_samples,
+        validation_samples,
+        options,
+        {},
+        Adapter.score,
+    );
+}
+
+/// Stateful scorer variant used when candidate evaluation has reusable scratch.
+/// `scorerContext` is passed to `scoreFn` before the dictionary arguments.
+pub fn trainAllocWithScorerContext(
+    allocator: std.mem.Allocator,
+    training_samples: []const []const u8,
+    validation_samples: []const []const u8,
+    options: OptimizeOptions,
+    scorer_context: anytype,
+    comptime scoreFn: anytype,
+) !OwnedResult {
     const auto_segments = [_]usize{
         @min(options.target_size, 32),
         @min(options.target_size, 64),
@@ -113,7 +138,7 @@ pub fn trainAllocWithScorer(
                 candidate_spec.options.target_size,
                 candidate_spec.options.segment_size.?,
             );
-            const raw_score = scoreFn(candidate, validation_samples, options.min_match_len) catch |err| {
+            const raw_score = scoreFn(scorer_context, candidate, validation_samples, options.min_match_len) catch |err| {
                 allocator.free(candidate);
                 return err;
             };

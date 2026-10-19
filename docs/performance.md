@@ -11,6 +11,9 @@ and paired comparison with libzstd 1.5.7 on Apple M1 Pro.
 records byte-exact `(d, hash_log)` corpus-state reuse across `k` candidates,
 allocation reductions, and the permanent shared-versus-separate ReleaseFast
 training gate on Intel Comet Lake.
+[Zstd COVER held-out index](performance/zstd-cover-validation-index-x86.md)
+records the adaptive reusable dictionary-position index, neutral short-history
+controls, and the binary-history training gain on the same host.
 [Zstd x86-64 full raw-block copying](performance/zstd-raw-copy-x86.md)
 records the ERMSB-gated 128 KiB path and paired comparison with the local
 libzstd 1.6.0-dev checkout on Intel Comet Lake.

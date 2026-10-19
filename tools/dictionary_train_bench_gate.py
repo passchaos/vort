@@ -22,6 +22,7 @@ def main() -> int:
             "validated_separate",
             "validated_targets",
             "cover_optimized_separate",
+            "cover_optimized_linear",
             "cover_optimized",
             "zstd_validated",
         )
@@ -45,6 +46,9 @@ def main() -> int:
         ("cover_optimized_separate", "text"): 129600,
         ("cover_optimized_separate", "json"): 103500,
         ("cover_optimized_separate", "binary"): 1296880,
+        ("cover_optimized_linear", "text"): 129600,
+        ("cover_optimized_linear", "json"): 103500,
+        ("cover_optimized_linear", "binary"): 1296880,
         ("cover_optimized", "text"): 129600,
         ("cover_optimized", "json"): 103500,
         ("cover_optimized", "binary"): 1296880,
@@ -77,6 +81,7 @@ def main() -> int:
             "validated_separate": 15_000,
             "validated_targets": 75_000,
             "cover_optimized_separate": 800_000,
+            "cover_optimized_linear": 1_000_000,
             "cover_optimized": 1_000_000,
             "zstd_validated": 50_000,
         }[row["mode"]]
@@ -89,7 +94,7 @@ def main() -> int:
         if shared * 2 < separate * 5:
             raise SystemExit(f"multi-target dictionary scan reuse regressed for {case}: {shared}/{separate}")
         cover_separate = by_key[("cover_optimized_separate", case)]
-        cover_shared = by_key[("cover_optimized", case)]
+        cover_shared = by_key[("cover_optimized_linear", case)]
         cover_separate_throughput = int(cover_separate["bytes_per_second"])
         cover_shared_throughput = int(cover_shared["bytes_per_second"])
         if cover_shared_throughput * 10 < cover_separate_throughput * 11:
@@ -103,6 +108,22 @@ def main() -> int:
             raise SystemExit(f"COVER context reuse allocation count regressed for {case}")
         if int(cover_shared["allocated_bytes"]) * 4 > int(cover_separate["allocated_bytes"]) * 3:
             raise SystemExit(f"COVER context reuse allocated bytes regressed for {case}")
+        cover_linear = cover_shared
+        cover_indexed = by_key[("cover_optimized", case)]
+        linear_throughput = int(cover_linear["bytes_per_second"])
+        indexed_throughput = int(cover_indexed["bytes_per_second"])
+        if indexed_throughput * 100 < linear_throughput * 95:
+            raise SystemExit(
+                f"COVER indexed validation regressed control throughput for {case}: "
+                f"{indexed_throughput}/{linear_throughput}"
+            )
+        if case == "binary" and indexed_throughput < linear_throughput * 2:
+            raise SystemExit(
+                f"COVER indexed validation binary speedup regressed: "
+                f"{indexed_throughput}/{linear_throughput}"
+            )
+        if int(cover_linear["checksum"]) != int(cover_indexed["checksum"]):
+            raise SystemExit(f"COVER indexed validation changed output for {case}")
     marker = "cover_dictionary_train_bench_gate" if args.cover_only else "dictionary_train_bench_gate"
     print(f"{marker}=ok rows={len(rows)}")
     return 0
