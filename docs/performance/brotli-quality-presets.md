@@ -340,10 +340,11 @@ names:
   The repository source/Markdown/JSON/binary trainer report currently records
   zero charged winners and zero regressions; real-corpus profitability remains
   a measured gap rather than an implied capability. Its out-of-band shadow finds
-  only a 16-byte structured-JSON frame saving behind a 2,128-byte dictionary
-  (about 4,256 frames to break even); eight smaller uniform-cap/range profiles
-  do not beat the base layout, so per-length sparse bucket search is higher
-  priority than FastCover throughput work.
+  a 16-byte structured-JSON frame saving behind a 2,128-byte dictionary
+  (about 4,256 frames to break even) and a 4-byte source saving behind 1,920
+  bytes. Eight explicit sparse JSON profiles do not beat the base layout, so
+  automatic per-length marginal search is higher priority than FastCover
+  throughput work.
   Strict parsing, canonical construction, mixed replay, production decode
   attachment, bounded indexing, all four RFC modes, and joint multi-tree
   selection are available; oversized descriptors retain exhaustive matching;

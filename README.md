@@ -2230,6 +2230,10 @@ Callers may additionally provide up to eight bounded word-bucket profiles
 evaluated first; every unique subprofile traverses the same heavy/COVER,
 context, and transform matrix, and results report the selected range/cap and
 evaluated profile count.
+For non-contiguous layouts, a sparse profile lists strictly increasing
+`(word_len,max_words)` entries; unlisted lengths are disabled, caps must be
+legal powers of two, and up to eight sparse profiles follow the base/range
+candidates in stable order. Results expose the selected sparse profile index.
 The trainer also compares identity-only word lists with canonical
 identity/uppercase-first/uppercase-all transform families without retraining
 the words, plus independent omit-first/last and combined case+omit families.
@@ -2260,17 +2264,17 @@ source, Markdown, structured JSON, and binary manifest cases into independent
 selection, and writes schema-versioned JSON/Markdown with complete-total bytes,
 profiles, time, logical peak allocation, and worst per-sample delta. The current
 four-category baseline has zero winners and zero regressions
-(`16182 -> 16182` aggregate); this is an explicit calibration gap, not a
+(`16208 -> 16208` aggregate); this is an explicit calibration gap, not a
 claimed ratio win.
 An out-of-band shadow run removes the one-time dictionary charge without
 changing candidate selection. Structured JSON is the only frame-only winner
 (`3658 -> 3642`) and uses a 2,128-byte `d=6/hash_log=12` COVER dictionary; it
 breaks even after 133 equivalent validation batches, about 4,256 frames, while
-its worst individual frame grows by 12 bytes. Aggregate shadow frames are
-16,166, saving 16 bytes. A nine-profile structured grid covering smaller
-uniform bucket caps and contiguous word ranges still selects base
-`4...16/max8`, so the next ratio work requires per-length sparse bucket
-selection. Source, documentation, and binary have no shadow winner.
+its worst individual frame grows by 12 bytes. Source now has a separate
+4-byte frame saving behind a 1,920-byte dictionary, requiring roughly 15,360
+frames and showing a worst `+31` delta. Aggregate shadow frames are 16,188,
+saving 20 bytes. Eight explicit per-length sparse structured profiles still
+lose to base `4...16/max8`; documentation and binary have no shadow winner.
 
 ### Brotli planned encoder controls
 

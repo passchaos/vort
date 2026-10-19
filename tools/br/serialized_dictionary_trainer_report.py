@@ -17,14 +17,15 @@ HEADER = (
     "label", "category", "input_bytes", "training_samples", "validation_samples",
     "baseline_frames", "trained_frames", "dictionary_bytes", "total_bytes",
     "savings", "ratio_ppm", "winner", "word_profile", "word_min", "word_max",
-    "max_words_per_length", "word_bucket_candidates", "cover_d", "cover_hash_log",
+    "max_words_per_length", "word_bucket_candidates", "sparse_profile",
+    "cover_d", "cover_hash_log",
     "context_profile", "context_mode", "context_cutoff", "context_clusters",
     "transform_profile", "transform_lists", "shift_parameters",
     "shadow_winner", "shadow_frames", "shadow_dictionary_bytes",
     "shadow_frame_savings", "break_even_batches", "break_even_frames",
     "shadow_word_profile", "shadow_word_min", "shadow_word_max",
     "shadow_max_words_per_length", "shadow_word_bucket_candidates",
-    "shadow_cover_d", "shadow_cover_hash_log",
+    "shadow_sparse_profile", "shadow_cover_d", "shadow_cover_hash_log",
     "train_ns", "shadow_train_ns", "peak_bytes", "worst_sample_delta",
     "shadow_worst_sample_delta",
 )
@@ -42,7 +43,7 @@ INTEGER_FIELDS = {
 }
 OPTIONAL_INTEGER_FIELDS = {
     "cover_d", "cover_hash_log", "context_mode", "context_cutoff",
-    "shadow_cover_d", "shadow_cover_hash_log",
+    "sparse_profile", "shadow_sparse_profile", "shadow_cover_d", "shadow_cover_hash_log",
 }
 
 
@@ -114,7 +115,7 @@ def validate_rows(rows: list[dict[str, object]], manifest: real_corpus_diff.Mani
         if winner == 0 and (
             savings != 0 or row["dictionary_bytes"] != 0 or row["word_profile"] != "none" or
             row["word_min"] != 0 or row["word_max"] != 0 or row["max_words_per_length"] != 0 or
-            row["word_bucket_candidates"] != 0
+            row["word_bucket_candidates"] != 0 or row["sparse_profile"] is not None
         ):
             raise RuntimeError(f"case {case.label} reports a synthetic non-winner")
         if winner == 1:
@@ -125,6 +126,8 @@ def validate_rows(rows: list[dict[str, object]], manifest: real_corpus_diff.Mani
                 raise RuntimeError(f"case {case.label} has an invalid word range")
             if int(row["max_words_per_length"]) < 2 or int(row["word_bucket_candidates"]) < 1:
                 raise RuntimeError(f"case {case.label} has invalid word bucket metadata")
+            if row["sparse_profile"] is not None and not (0 <= int(row["sparse_profile"]) < 8):
+                raise RuntimeError(f"case {case.label} has invalid sparse profile metadata")
         shadow_winner = int(row["shadow_winner"])
         shadow_frames = int(row["shadow_frames"])
         shadow_dictionary = int(row["shadow_dictionary_bytes"])
@@ -138,7 +141,8 @@ def validate_rows(rows: list[dict[str, object]], manifest: real_corpus_diff.Mani
                     row["break_even_batches"] != 0 or row["break_even_frames"] != 0 or
                     row["shadow_word_profile"] != "none" or row["shadow_word_min"] != 0 or
                     row["shadow_word_max"] != 0 or row["shadow_max_words_per_length"] != 0 or
-                    row["shadow_word_bucket_candidates"] != 0):
+                    row["shadow_word_bucket_candidates"] != 0 or
+                    row["shadow_sparse_profile"] is not None):
                 raise RuntimeError(f"case {case.label} reports a synthetic shadow non-winner")
         else:
             shadow_winners += 1
@@ -156,6 +160,8 @@ def validate_rows(rows: list[dict[str, object]], manifest: real_corpus_diff.Mani
                 raise RuntimeError(f"case {case.label} has an invalid shadow word range")
             if int(row["shadow_max_words_per_length"]) < 2 or int(row["shadow_word_bucket_candidates"]) < 1:
                 raise RuntimeError(f"case {case.label} has invalid shadow word bucket metadata")
+            if row["shadow_sparse_profile"] is not None and not (0 <= int(row["shadow_sparse_profile"]) < 8):
+                raise RuntimeError(f"case {case.label} has invalid shadow sparse profile metadata")
             break_even_values.append(int(row["break_even_frames"]))
         if int(row["training_samples"]) < 5 or int(row["validation_samples"]) <= 0:
             raise RuntimeError(f"case {case.label} has an invalid partition")
@@ -207,12 +213,16 @@ def write_markdown(path: Path, rows: list[dict[str, object]], summary: dict[str,
         charged_word = str(row["word_profile"])
         if charged_word != "none":
             charged_word += f"[{row['word_min']}..{row['word_max']}×{row['max_words_per_length']}]"
+            if row["sparse_profile"] is not None:
+                charged_word += f"#s{row['sparse_profile']}"
         shadow_word = str(row["shadow_word_profile"])
         if shadow_word != "none":
             shadow_word += (
                 f"[{row['shadow_word_min']}..{row['shadow_word_max']}"
                 f"×{row['shadow_max_words_per_length']}]"
             )
+            if row["shadow_sparse_profile"] is not None:
+                shadow_word += f"#s{row['shadow_sparse_profile']}"
         profiles = (
             f"{charged_word}/{row['context_profile']}/{row['transform_profile']}"
             f"; shadow={shadow_word}"

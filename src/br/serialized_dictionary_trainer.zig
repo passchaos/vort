@@ -67,6 +67,8 @@ pub const Options = struct {
     cover_dmer_size: u8 = 8,
     cover_hash_log: u8 = 16,
     max_cover_corpus_size: usize = 256 * 1024 * 1024,
+    word_count_caps_by_length: ?*const [32]u16 = null,
+    sparse_word_profile_index: ?u8 = null,
 };
 
 pub const Candidate = struct {
@@ -77,6 +79,7 @@ pub const Candidate = struct {
     selected_min_word_len: u5 = 4,
     selected_max_word_len: u5 = 16,
     selected_max_words_per_length: u16 = 64,
+    sparse_word_profile_index: ?u8 = null,
     word_selection_profile: WordSelectionProfile = .heavy_hitter,
     cover_dmer_size: ?u8 = null,
     cover_hash_log: ?u8 = null,
@@ -185,6 +188,7 @@ pub fn withPrefixSuffixTransformsAlloc(
         .selected_min_word_len = source.selected_min_word_len,
         .selected_max_word_len = source.selected_max_word_len,
         .selected_max_words_per_length = source.selected_max_words_per_length,
+        .sparse_word_profile_index = source.sparse_word_profile_index,
         .cover_dmer_size = source.cover_dmer_size,
         .cover_hash_log = source.cover_hash_log,
         .context_based = source.context_based,
@@ -304,6 +308,7 @@ pub fn withShiftTransformsAlloc(
         .selected_min_word_len = source.selected_min_word_len,
         .selected_max_word_len = source.selected_max_word_len,
         .selected_max_words_per_length = source.selected_max_words_per_length,
+        .sparse_word_profile_index = source.sparse_word_profile_index,
         .cover_dmer_size = source.cover_dmer_size,
         .cover_hash_log = source.cover_hash_log,
         .context_based = source.context_based,
@@ -396,6 +401,7 @@ fn withTransformProfileAlloc(
         .selected_min_word_len = source.selected_min_word_len,
         .selected_max_word_len = source.selected_max_word_len,
         .selected_max_words_per_length = source.selected_max_words_per_length,
+        .sparse_word_profile_index = source.sparse_word_profile_index,
         .cover_dmer_size = source.cover_dmer_size,
         .cover_hash_log = source.cover_hash_log,
         .context_based = source.context_based,
@@ -524,6 +530,7 @@ pub fn withClusteredTransformProfilesAlloc(
         .selected_min_word_len = sources[0].selected_min_word_len,
         .selected_max_word_len = sources[0].selected_max_word_len,
         .selected_max_words_per_length = sources[0].selected_max_words_per_length,
+        .sparse_word_profile_index = sources[0].sparse_word_profile_index,
         .cover_dmer_size = sources[0].cover_dmer_size,
         .cover_hash_log = sources[0].cover_hash_log,
         .context_based = sources[0].context_based,
@@ -647,6 +654,11 @@ pub fn trainCandidateAlloc(
     var word_count: usize = 0;
     var total_data_len: usize = 0;
     for (options.min_word_len..options.max_word_len + 1) |word_len| {
+        const word_cap = if (options.word_count_caps_by_length) |caps|
+            caps[word_len]
+        else
+            options.max_words_per_length;
+        if (word_cap == 0) continue;
         const allocation = (try trainWordsForLengthAlloc(
             allocator,
             samples,
@@ -657,7 +669,7 @@ pub fn trainCandidateAlloc(
         const available_words = allocation.len / word_len;
         const selected_words = floorPowerOfTwo(@min(
             available_words,
-            options.max_words_per_length,
+            word_cap,
         ));
         if (selected_words < 2) {
             allocator.free(allocation);
@@ -715,9 +727,10 @@ pub fn trainCandidateAlloc(
         .word_count = word_count,
         .id = .fromBytes(encoded),
         .word_selection_profile = options.word_selection,
-        .selected_min_word_len = options.min_word_len,
-        .selected_max_word_len = options.max_word_len,
-        .selected_max_words_per_length = options.max_words_per_length,
+        .selected_min_word_len = selectedMinWordLen(options),
+        .selected_max_word_len = selectedMaxWordLen(options),
+        .selected_max_words_per_length = selectedMaxWordsPerLength(options),
+        .sparse_word_profile_index = options.sparse_word_profile_index,
         .cover_dmer_size = if (options.word_selection == .cover)
             options.cover_dmer_size
         else
@@ -862,9 +875,10 @@ fn trainMappedContextCandidateAlloc(
         .word_count = word_count,
         .id = .fromBytes(encoded),
         .word_selection_profile = options.word_selection,
-        .selected_min_word_len = options.min_word_len,
-        .selected_max_word_len = options.max_word_len,
-        .selected_max_words_per_length = options.max_words_per_length,
+        .selected_min_word_len = selectedMinWordLen(options),
+        .selected_max_word_len = selectedMaxWordLen(options),
+        .selected_max_words_per_length = selectedMaxWordsPerLength(options),
+        .sparse_word_profile_index = options.sparse_word_profile_index,
         .cover_dmer_size = if (options.word_selection == .cover)
             options.cover_dmer_size
         else
@@ -895,6 +909,11 @@ fn trainMappedContextWordListAlloc(
     var word_count: usize = 0;
     var total_data_len: usize = 0;
     for (options.min_word_len..options.max_word_len + 1) |word_len| {
+        const word_cap = if (options.word_count_caps_by_length) |caps|
+            caps[word_len]
+        else
+            options.max_words_per_length;
+        if (word_cap == 0) continue;
         const position_samples = try collectMappedContextPositionSamplesAlloc(
             allocator,
             samples,
@@ -915,7 +934,7 @@ fn trainMappedContextWordListAlloc(
         errdefer allocator.free(allocation);
         const selected_words = floorPowerOfTwo(@min(
             allocation.len / word_len,
-            options.max_words_per_length,
+            word_cap,
         ));
         if (selected_words < 2) {
             allocator.free(allocation);
@@ -1008,7 +1027,60 @@ fn floorPowerOfTwo(value: usize) usize {
     return @as(usize, 1) << @intCast(std.math.log2_int(usize, value));
 }
 
+fn selectedMinWordLen(options: Options) u5 {
+    const caps = options.word_count_caps_by_length orelse
+        return options.min_word_len;
+    for (options.min_word_len..options.max_word_len + 1) |word_len|
+        if (caps[word_len] != 0) return @intCast(word_len);
+    unreachable;
+}
+
+fn selectedMaxWordLen(options: Options) u5 {
+    const caps = options.word_count_caps_by_length orelse
+        return options.max_word_len;
+    var word_len: usize = options.max_word_len + 1;
+    while (word_len > options.min_word_len) {
+        word_len -= 1;
+        if (caps[word_len] != 0) return @intCast(word_len);
+    }
+    unreachable;
+}
+
+fn selectedMaxWordsPerLength(options: Options) u16 {
+    const caps = options.word_count_caps_by_length orelse
+        return options.max_words_per_length;
+    var result: u16 = 0;
+    for (options.min_word_len..options.max_word_len + 1) |word_len|
+        result = @max(result, caps[word_len]);
+    return result;
+}
+
 fn validateOptions(options: Options) Error!void {
+    if (options.min_word_len < serialized_dictionary.min_word_len or
+        options.max_word_len > serialized_dictionary.max_word_len or
+        options.min_word_len > options.max_word_len)
+    {
+        return error.InvalidTrainingOptions;
+    }
+    if ((options.word_count_caps_by_length == null) !=
+        (options.sparse_word_profile_index == null))
+    {
+        return error.InvalidTrainingOptions;
+    }
+    if (options.word_count_caps_by_length) |caps| {
+        var enabled = false;
+        for (options.min_word_len..options.max_word_len + 1) |word_len| {
+            const cap = caps[word_len];
+            if (cap == 0) continue;
+            if (cap < 2 or cap > options.max_words_per_length or
+                !std.math.isPowerOfTwo(cap))
+            {
+                return error.InvalidTrainingOptions;
+            }
+            enabled = true;
+        }
+        if (!enabled) return error.InvalidTrainingOptions;
+    }
     if (options.min_word_len < serialized_dictionary.min_word_len or
         options.max_word_len > serialized_dictionary.max_word_len or
         options.min_word_len > options.max_word_len or

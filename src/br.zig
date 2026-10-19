@@ -114,6 +114,14 @@ pub const SerializedSharedDictionaryWordBucketProfile = struct {
     max_words_per_length: u16,
 };
 pub const max_serialized_word_bucket_profiles: usize = 8;
+pub const SerializedSharedDictionaryWordLengthBucketCap = struct {
+    word_len: u5,
+    max_words: u16,
+};
+pub const SerializedSharedDictionarySparseWordProfile = struct {
+    buckets: []const SerializedSharedDictionaryWordLengthBucketCap,
+};
+pub const max_serialized_sparse_word_profiles: usize = 8;
 pub const serializedSharedDictionaryEncodedSize = serialized_dictionary_builder.encodedSize;
 pub const serializeSharedDictionaryInto = serialized_dictionary_builder.serializeInto;
 pub const serializeSharedDictionaryAppend = serialized_dictionary_builder.serializeAppend;
@@ -124,6 +132,7 @@ pub const SerializedSharedDictionaryTrainOptions = struct {
     max_words_per_length: u16 = 64,
     max_phrases_per_length: usize = 256,
     word_bucket_profiles: []const SerializedSharedDictionaryWordBucketProfile = &.{},
+    sparse_word_profiles: []const SerializedSharedDictionarySparseWordProfile = &.{},
     train_cover_words: bool = true,
     optimize_cover_words: bool = true,
     cover_dmer_size: u8 = 8,
@@ -187,6 +196,7 @@ pub const OwnedTrainedSerializedSharedDictionary = struct {
     selected_max_word_len: u5,
     selected_max_words_per_length: u16,
     word_bucket_candidates_evaluated: u8,
+    selected_sparse_word_profile: ?u8,
     word_selection_profile: SerializedSharedDictionaryWordSelectionProfile,
     cover_dmer_size: ?u8,
     cover_hash_log: ?u8,
@@ -332,6 +342,7 @@ pub fn trainSerializedSharedDictionaryAlloc(
     if (validation_samples.len == 0 or options.min_savings_bytes == 0 or
         options.quality > 11 or
         !validSerializedWordBucketProfiles(options) or
+        !validSerializedSparseWordProfiles(options) or
         (options.train_cover_words and
             ((options.optimize_cover_words and
                 !validSerializedCoverGrid(options)) or
@@ -428,6 +439,24 @@ pub fn trainSerializedSharedDictionaryAlloc(
         );
         word_bucket_candidates_evaluated += 1;
     }
+    for (options.sparse_word_profiles, 0..) |profile, profile_index| {
+        var caps: [32]u16 = @splat(0);
+        for (profile.buckets) |bucket|
+            caps[bucket.word_len] = bucket.max_words;
+        var bucket_options = core_options;
+        bucket_options.word_count_caps_by_length = &caps;
+        bucket_options.sparse_word_profile_index = @intCast(profile_index);
+        try considerSerializedWordBucketCandidates(
+            allocator,
+            training_samples,
+            validation_samples,
+            options,
+            bucket_options,
+            &selection,
+            &cover_candidates_evaluated,
+        );
+        word_bucket_candidates_evaluated += 1;
+    }
     const candidate = selection.candidate orelse return null;
     if (selection.total_bytes >= baseline_frame_bytes or
         baseline_frame_bytes - selection.total_bytes < options.min_savings_bytes)
@@ -448,6 +477,7 @@ pub fn trainSerializedSharedDictionaryAlloc(
         .selected_max_word_len = candidate.selected_max_word_len,
         .selected_max_words_per_length = candidate.selected_max_words_per_length,
         .word_bucket_candidates_evaluated = word_bucket_candidates_evaluated,
+        .selected_sparse_word_profile = candidate.sparse_word_profile_index,
         .word_selection_profile = candidate.word_selection_profile,
         .cover_dmer_size = candidate.cover_dmer_size,
         .cover_hash_log = candidate.cover_hash_log,
@@ -555,6 +585,58 @@ fn validSerializedWordBucketProfiles(
             {
                 return false;
             }
+        }
+    }
+    return true;
+}
+
+fn validSerializedSparseWordProfiles(
+    options: SerializedSharedDictionaryTrainOptions,
+) bool {
+    if (options.sparse_word_profiles.len > max_serialized_sparse_word_profiles)
+        return false;
+    for (options.sparse_word_profiles, 0..) |profile, profile_index| {
+        if (profile.buckets.len == 0 or profile.buckets.len > 28)
+            return false;
+        var previous_len: usize = 0;
+        var duplicates_base = profile.buckets.len ==
+            options.max_word_len - options.min_word_len + 1;
+        for (profile.buckets, 0..) |bucket, bucket_index| {
+            if (bucket.word_len < options.min_word_len or
+                bucket.word_len > options.max_word_len or
+                bucket.max_words < 2 or
+                bucket.max_words > options.max_words_per_length or
+                !std.math.isPowerOfTwo(bucket.max_words) or
+                (bucket_index != 0 and bucket.word_len <= previous_len))
+            {
+                return false;
+            }
+            if (duplicates_base and
+                (bucket.word_len != options.min_word_len + bucket_index or
+                    bucket.max_words != options.max_words_per_length))
+            {
+                duplicates_base = false;
+            }
+            previous_len = bucket.word_len;
+        }
+        if (duplicates_base) return false;
+        for (options.sparse_word_profiles[0..profile_index]) |previous| {
+            if (sparseWordProfilesEqual(previous, profile)) return false;
+        }
+    }
+    return true;
+}
+
+fn sparseWordProfilesEqual(
+    a: SerializedSharedDictionarySparseWordProfile,
+    b: SerializedSharedDictionarySparseWordProfile,
+) bool {
+    if (a.buckets.len != b.buckets.len) return false;
+    for (a.buckets, b.buckets) |a_bucket, b_bucket| {
+        if (a_bucket.word_len != b_bucket.word_len or
+            a_bucket.max_words != b_bucket.max_words)
+        {
+            return false;
         }
     }
     return true;
@@ -33420,15 +33502,22 @@ test "br serialized dictionary trainer selects smaller word bucket profiles" {
         @memcpy(storage[8..16], words[1]);
         sample.* = storage;
     }
+    var sparse_two: [13]SerializedSharedDictionaryWordLengthBucketCap = undefined;
+    var sparse_four: [13]SerializedSharedDictionaryWordLengthBucketCap = undefined;
+    for (&sparse_two, &sparse_four, 4..) |*two, *four, word_len| {
+        two.* = .{ .word_len = @intCast(word_len), .max_words = 2 };
+        four.* = .{ .word_len = @intCast(word_len), .max_words = 4 };
+    }
+    const sparse_profiles = [_]SerializedSharedDictionarySparseWordProfile{
+        .{ .buckets = &sparse_two },
+        .{ .buckets = &sparse_four },
+    };
     const options = SerializedSharedDictionaryTrainOptions{
         .min_word_len = 4,
         .max_word_len = 16,
         .max_words_per_length = 8,
         .max_phrases_per_length = 32,
-        .word_bucket_profiles = &.{
-            .{ .min_word_len = 4, .max_word_len = 16, .max_words_per_length = 2 },
-            .{ .min_word_len = 4, .max_word_len = 16, .max_words_per_length = 4 },
-        },
+        .sparse_word_profiles = &sparse_profiles,
         .train_cover_words = false,
         .train_context_map = false,
         .train_case_transforms = false,
@@ -33456,11 +33545,12 @@ test "br serialized dictionary trainer selects smaller word bucket profiles" {
     try std.testing.expectEqual(@as(u5, 16), trained.selected_max_word_len);
     try std.testing.expectEqual(@as(u16, 2), trained.selected_max_words_per_length);
     try std.testing.expectEqual(@as(u8, 3), trained.word_bucket_candidates_evaluated);
+    try std.testing.expectEqual(@as(?u8, 0), trained.selected_sparse_word_profile);
     try std.testing.expectEqual(@as(usize, 26), trained.word_count);
     try std.testing.expectEqual(@as(usize, 13), trained.bucket_count);
 
     var baseline_options = options;
-    baseline_options.word_bucket_profiles = &.{};
+    baseline_options.sparse_word_profiles = &.{};
     const baseline = (try trainSerializedSharedDictionaryAlloc(
         std.testing.allocator,
         &training_samples,
@@ -33631,6 +33721,40 @@ test "br serialized dictionary trainer rejects non-wins and invalid evaluation" 
             &samples,
             &samples,
             .{ .word_bucket_profiles = &too_many_profiles },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .sparse_word_profiles = &.{.{ .buckets = &.{} }} },
+        ),
+    );
+    const invalid_sparse_buckets = [_]SerializedSharedDictionaryWordLengthBucketCap{
+        .{ .word_len = 8, .max_words = 3 },
+    };
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .sparse_word_profiles = &.{.{ .buckets = &invalid_sparse_buckets }} },
+        ),
+    );
+    const unordered_sparse_buckets = [_]SerializedSharedDictionaryWordLengthBucketCap{
+        .{ .word_len = 8, .max_words = 2 },
+        .{ .word_len = 6, .max_words = 2 },
+    };
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .sparse_word_profiles = &.{.{ .buckets = &unordered_sparse_buckets }} },
         ),
     );
     try std.testing.expectError(
