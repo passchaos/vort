@@ -4877,6 +4877,24 @@ pub fn build(b: *std.Build) void {
     const zstd_dictionary_trainer_compare_step = b.step("run-zstd-dictionary-trainer-compare", "Compare Vort and zstd dictionary trainers on held-out corpora");
     zstd_dictionary_trainer_compare_step.dependOn(&zstd_dictionary_trainer_compare.step);
 
+    const zstd_cover_trainer_compare_exe = b.addExecutable(.{
+        .name = "vort-zstd-cover-trainer-compare",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/cover_trainer_compare.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .link_libc = true,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const zstd_cover_trainer_compare = b.addSystemCommand(&.{ "python3", "tools/zstd/cover_trainer_compare.py" });
+    zstd_cover_trainer_compare.addArtifactArg(zstd_cover_trainer_compare_exe);
+    const zstd_cover_trainer_compare_step = b.step(
+        "run-zstd-cover-trainer-compare",
+        "Compare Vort optimized COVER with zstd COVER and FastCover",
+    );
+    zstd_cover_trainer_compare_step.dependOn(&zstd_cover_trainer_compare.step);
+
     const dictionary_train_bench_exe = b.addExecutable(.{
         .name = "vort-dictionary-train-bench",
         .root_module = b.createModule(.{
@@ -5845,6 +5863,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_dictionary_probe_exe.step);
     check_step.dependOn(&zstd_full_dictionary_diff_exe.step);
     check_step.dependOn(&zstd_dictionary_trainer_compare_exe.step);
+    check_step.dependOn(&zstd_cover_trainer_compare_exe.step);
     check_step.dependOn(&dictionary_train_bench_exe.step);
     check_step.dependOn(&dictionary_deflate_report_exe.step);
     check_step.dependOn(&dictionary_decode_bench_exe.step);

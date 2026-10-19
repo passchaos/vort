@@ -535,6 +535,7 @@ zig build check-wasm
 zig build -Doptimize=ReleaseFast ci-smoke
 zig build run -- --help
 zig build -Doptimize=ReleaseFast run-zstd-dictionary-trainer-compare -j1
+zig build run-zstd-cover-trainer-compare
 zig build -Doptimize=ReleaseFast run-dictionary-train-bench-gate -j1
 zig build -Doptimize=ReleaseFast run-zstd-native-encode-stage-bench-gate
 zig build run -- checksum "hello vort"

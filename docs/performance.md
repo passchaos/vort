@@ -14,6 +14,10 @@ training gate on Intel Comet Lake.
 [Zstd COVER held-out index](performance/zstd-cover-validation-index-x86.md)
 records the adaptive reusable dictionary-position index, neutral short-history
 controls, and the binary-history training gain on the same host.
+[Zstd COVER/FastCover trainer comparison](performance/zstd-cover-trainer-compare-x86.md)
+records four held-out corpus families, three compression levels, dictionary
+sizes, training latency, and bidirectional interoperability against the local
+zstd 1.4.8 CLI.
 [Zstd x86-64 full raw-block copying](performance/zstd-raw-copy-x86.md)
 records the ERMSB-gated 128 KiB path and paired comparison with the local
 libzstd 1.6.0-dev checkout on Intel Comet Lake.
@@ -136,6 +140,7 @@ zig build -Doptimize=ReleaseFast run-zstd-decode-profile -- --input path/to/file
 zig build -Doptimize=ReleaseFast run-zstd-decode-profile -- --input path/to/file --encoded-input path/to/file.zst --name corpus_case --iterations 300
 zig build -Doptimize=ReleaseFast run-zstd-encode-bench-gate
 zig build run-cover-dictionary-train-bench-gate
+zig build run-zstd-cover-trainer-compare
 zig build -Doptimize=ReleaseFast run-zstd-encode-bench-path-smoke
 zig build -Doptimize=ReleaseFast run-zstd-encode-bench -- --level 1 --limit 131072 --path README.md --path src/zstd.zig
 zig build -Doptimize=ReleaseFast run-zstd-level-schedule-bench-gate
