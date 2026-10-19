@@ -127,6 +127,11 @@ must still run for every candidate, dominates this workload. Text, binary, and
 source slowed slightly while JSON improved only about 2--3%, so the extra state
 and generic pre-pass were removed.
 
+The same exact cutoff was re-evaluated after candidate repcode scoring was
+disabled. Text was effectively neutral, JSON improved by about 3.1%, while
+binary and source regressed by about 2.7% and 1.4%. It was again removed rather
+than making a corpus-sensitive generic pre-pass part of the default path.
+
 A second experiment serialized the corpus-only literal Huffman entropy once and
 reused it for all 30 histories. Normal and flat-corpus fallback tests were
 byte-identical to separate finalization, but complete training did not improve:
