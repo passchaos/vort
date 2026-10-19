@@ -1,8 +1,8 @@
 # Brotli serialized contextual dictionary status
 
 Date: 2026-10-19. Upstream marks `BROTLI_SHARED_DICTIONARY_SERIALIZED` as
-experimental and “do not use”. Vort therefore separates stable parsing and
-semantic validation from production codec attachment.
+experimental and “do not use”. Vort therefore keeps its strict parser and
+borrowed attachment explicit rather than implying a stable wire contract.
 
 ## Implemented
 
@@ -20,11 +20,12 @@ semantic validation from production codec attachment.
 - exact input consumption with no accepted trailing bytes.
 
 The view can select a dictionary from a caller-supplied RFC literal context
-and replay a custom dictionary address. Address resolution follows the decoder
-order: selected context dictionary first, then remaining dictionaries in ID
-order. Custom replay covers identity, omit-first/last 1...9, uppercase-first/
-all, SHIFT_FIRST, SHIFT_ALL, arbitrary prefix/suffix stringlets, and byte-exact
-UTF-8 shift behavior.
+and replay a complete dictionary address. Address resolution follows the
+decoder order: selected context dictionary first, then remaining dictionaries
+in ID order. Word and transform choices may independently select custom or
+RFC built-in tables. Custom replay covers identity, omit-first/last 1...9,
+uppercase-first/all, SHIFT_FIRST, SHIFT_ALL, arbitrary prefix/suffix
+stringlets, and byte-exact UTF-8 shift behavior.
 
 `findLongestCustom` is the allocation-free exhaustive correctness matcher for
 custom-only dictionary combinations. It returns the same context-relative
@@ -36,6 +37,9 @@ nested word/transform slice is used.
 
 ```zig
 const dictionary = try vort.brParseSerializedSharedDictionary(encoded);
+const decode_options = vort.BrotliDecodeOptions{
+    .shared_dictionary = .{ .serialized = &dictionary },
+};
 const dictionary_id = try dictionary.dictionaryForContext(context);
 _ = dictionary_id;
 
@@ -55,13 +59,18 @@ cross-dictionary match addresses, all 23 transform kinds, ASCII and multi-byte
 UTF-8 shift, the complete prefix/suffix stringlet ID domain, transforms whose
 source word is longer than their output, every truncation of a valid contextual
 fixture, invalid context IDs, bad magic, trailing bytes, and embedded RAW
-prefix borrowing. The parser allocates no memory.
+prefix borrowing. Mixed custom/built-in word and transform combinations are
+also replayed. Production decode tests cover one-shot allocation, caller-owned
+output, atomic append, chunk joining, summary replay, caller-history
+progressive decode, allocator-owned progressive decode, serialized RAW-prefix
+distance shifting, and history-selected context maps. The parser allocates no
+memory.
 
 ## Remaining codec work
 
-Production `BrotliSharedDictionary` still attaches RAW prefixes only. The next
-increment must replace exhaustive matching with context-aware indexes and
-thread the parsed descriptor
-through every one-shot, chunked, incremental, summary, and progressive decode
-surface. Until that lands, Vort does not claim serialized contextual dictionary
-encoding or decoding interoperability.
+Production decoding is attached. Production encoding remains intentionally
+rejected for a descriptor that changes the static dictionary: the next
+increment must add context-aware matching/indexing and preserve the literal
+context mode used to compute each dictionary ID. Until then, Vort claims
+serialized contextual dictionary decode behavior, not encode interoperability
+or stability of upstream's experimental container format.

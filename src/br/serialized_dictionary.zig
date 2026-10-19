@@ -1,4 +1,5 @@
 const std = @import("std");
+const static_dictionary = @import("static_dictionary.zig");
 
 pub const max_contexts: usize = 64;
 pub const min_word_len: usize = 4;
@@ -6,6 +7,7 @@ pub const max_word_len: usize = 31;
 pub const max_size_bits: u8 = 15;
 pub const transform_type_count: u8 = 23;
 pub const max_stringlets: usize = 256;
+pub const max_transformed_word_len: usize = max_word_len + 2 * 255;
 
 pub const Error = error{
     InvalidMagic,
@@ -234,6 +236,107 @@ pub const Dictionary = struct {
         return error.DictionaryAddressOutOfBounds;
     }
 
+    /// Resolve the complete serialized static-dictionary address space.
+    ///
+    /// Each dictionary choice may independently select custom or RFC built-in
+    /// words and transforms. The context-selected choice is visited first,
+    /// followed by every other choice in ascending dictionary ID order.
+    pub fn resolve(
+        self: *const Dictionary,
+        context: usize,
+        word_len: usize,
+        address: usize,
+        output: []u8,
+    ) Error!ResolvedWord {
+        if (word_len < min_word_len or word_len > max_word_len)
+            return error.DictionaryAddressOutOfBounds;
+        const preferred = try self.dictionaryForContext(context);
+        var remaining = address;
+        for (0..self.dictionary_count) |visit_index| {
+            const dictionary_id = visitDictionaryId(visit_index, preferred);
+            const selected = self.dictionaries[dictionary_id];
+            const word_count = self.wordCount(selected, word_len);
+            const transform_count = self.transformCount(selected);
+            const capacity = std.math.mul(
+                usize,
+                word_count,
+                transform_count,
+            ) catch return error.IntegerOverflow;
+            if (remaining >= capacity) {
+                remaining -= capacity;
+                continue;
+            }
+            const word_index = remaining % word_count;
+            const transform_index = remaining / word_count;
+            const word = self.wordForChoice(selected, word_len, word_index) orelse
+                return error.DictionaryAddressOutOfBounds;
+            const transformed = try self.applyTransform(
+                selected,
+                transform_index,
+                word,
+                output,
+            );
+            return .{
+                .bytes = transformed,
+                .dictionary_id = @intCast(dictionary_id),
+                .word_index = @intCast(word_index),
+                .transform_index = @intCast(transform_index),
+            };
+        }
+        return error.DictionaryAddressOutOfBounds;
+    }
+
+    fn wordCount(
+        self: *const Dictionary,
+        selected: DictionaryChoice,
+        word_len: usize,
+    ) usize {
+        if (selected.word_list_index < self.word_list_count)
+            return self.word_lists[selected.word_list_index].wordCount(word_len);
+        const bits = static_dictionary.sizeBits(word_len) orelse return 0;
+        return @as(usize, 1) << bits;
+    }
+
+    fn transformCount(
+        self: *const Dictionary,
+        selected: DictionaryChoice,
+    ) usize {
+        if (selected.transform_list_index < self.transform_list_count)
+            return self.transform_lists[selected.transform_list_index].transformCount();
+        return static_dictionary.transform_count;
+    }
+
+    fn wordForChoice(
+        self: *const Dictionary,
+        selected: DictionaryChoice,
+        word_len: usize,
+        word_index: usize,
+    ) ?[]const u8 {
+        if (selected.word_list_index < self.word_list_count)
+            return self.word_lists[selected.word_list_index].word(word_len, word_index);
+        return static_dictionary.baseWord(word_len, word_index);
+    }
+
+    fn applyTransform(
+        self: *const Dictionary,
+        selected: DictionaryChoice,
+        transform_index: usize,
+        word_bytes: []const u8,
+        output: []u8,
+    ) Error![]const u8 {
+        if (selected.transform_list_index < self.transform_list_count)
+            return self.transform_lists[selected.transform_list_index].apply(
+                transform_index,
+                word_bytes,
+                output,
+            );
+        return static_dictionary.transformWord(
+            transform_index,
+            word_bytes,
+            output,
+        ) orelse error.DictionaryAddressOutOfBounds;
+    }
+
     /// Exhaustive correctness matcher for custom-only dictionary combinations.
     /// Production indexing is intentionally a later layer; this reference path
     /// establishes address ordering and context semantics first.
@@ -319,6 +422,12 @@ pub const Dictionary = struct {
         return best;
     }
 };
+
+fn visitDictionaryId(visit_index: usize, preferred: usize) usize {
+    if (visit_index == 0) return preferred;
+    const candidate = visit_index - 1;
+    return if (candidate >= preferred) candidate + 1 else candidate;
+}
 
 const Reader = struct {
     bytes: []const u8,
@@ -674,6 +783,55 @@ test "reference matcher considers source words longer than transformed output" {
     try std.testing.expectEqual(@as(u5, 13), match.copy_len);
     try std.testing.expectEqual(@as(u16, 4), match.output_len);
     try std.testing.expectEqual(@as(usize, 0), match.address);
+}
+
+test "complete resolver mixes custom and built-in words and transforms" {
+    var custom_words: std.ArrayList(u8) = .empty;
+    defer custom_words.deinit(std.testing.allocator);
+    try custom_words.appendSlice(std.testing.allocator, &.{ 0x91, 0x00, 0x00, 0x01 });
+    var bits: [28]u8 = @splat(0);
+    bits[5 - min_word_len] = 1;
+    try custom_words.appendSlice(std.testing.allocator, &bits);
+    try custom_words.appendSlice(std.testing.allocator, "helloworld");
+    try custom_words.appendSlice(std.testing.allocator, &.{
+        0, // custom transform lists
+        1, // dictionary count
+        0, 0, // custom words plus built-in transforms
+        0, // context map disabled
+    });
+    const custom_word_dictionary = try parse(custom_words.items);
+    var output: [max_transformed_word_len]u8 = undefined;
+    try std.testing.expectEqualSlices(
+        u8,
+        "hello",
+        (try custom_word_dictionary.resolve(0, 5, 0, &output)).bytes,
+    );
+    try std.testing.expectEqualSlices(
+        u8,
+        "hello ",
+        (try custom_word_dictionary.resolve(0, 5, 2, &output)).bytes,
+    );
+
+    var custom_transforms: std.ArrayList(u8) = .empty;
+    defer custom_transforms.deinit(std.testing.allocator);
+    try custom_transforms.appendSlice(std.testing.allocator, &.{
+        0x91, 0x00, 0x00, // magic and empty RAW prefix
+        0, // custom word lists
+        1, // custom transform lists
+        3, 0, // prefix/suffix table length
+        1, '<', 0, // "<" and empty stringlets
+        1, // transform count
+        0, 0, 1, // prefix "<", identity, empty suffix
+        1, // dictionary count
+        0, 0, // built-in words plus custom transforms
+        0, // context map disabled
+    });
+    const custom_transform_dictionary = try parse(custom_transforms.items);
+    try std.testing.expectEqualSlices(
+        u8,
+        "<first",
+        (try custom_transform_dictionary.resolve(0, 5, 0, &output)).bytes,
+    );
 }
 
 test "custom transform replay covers every transform family" {

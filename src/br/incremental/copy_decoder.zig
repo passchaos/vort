@@ -46,7 +46,7 @@ pub fn Decoder(comptime Codec: type) type {
         shared_dictionary_size: usize = 0,
         dictionary_source: DictionarySource = .static,
         compound_cursor: shared_dictionary.Cursor = undefined,
-        dictionary_scratch: [64]u8 = undefined,
+        dictionary_scratch: [shared_dictionary.max_static_output_len]u8 = undefined,
         dictionary_offset: usize = 0,
         dictionary_len: usize = 0,
         last_distances: [4]usize = .{ 16, 15, 11, 4 },
@@ -685,10 +685,22 @@ pub fn Decoder(comptime Codec: type) type {
                     self.phase = .dictionary;
                 },
                 .static_dictionary => |address| {
-                    // Static words remain bounded by the 64-byte transform
-                    // scratch and, unlike valid compound references, never
-                    // update the RFC recent-distance ring.
-                    const word = try Codec.staticDictionaryWord(address, self.pending_copy, &self.dictionary_scratch);
+                    // Static words, including contextual serialized choices,
+                    // never update the RFC recent-distance ring.
+                    const context = try Codec.dictionaryContext(
+                        &self.header,
+                        self.previous[1],
+                        self.previous[0],
+                    );
+                    const word = self.options.decode.shared_dictionary.staticWord(
+                        context,
+                        address,
+                        self.pending_copy,
+                        &self.dictionary_scratch,
+                    ) catch |err| switch (err) {
+                        error.IntegerOverflow => return self.fail(.dictionary, error.IntegerOverflow),
+                        else => return self.fail(.dictionary, error.InvalidMatch),
+                    };
                     if (word.len > remaining or word.len > self.dictionary_scratch.len) return self.fail(.dictionary, error.CorruptFrame);
                     if (word.ptr != self.dictionary_scratch[0..].ptr) @memcpy(self.dictionary_scratch[0..word.len], word);
                     self.update_distance_ring = false;

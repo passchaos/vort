@@ -288,7 +288,10 @@ pub fn transform(address: usize, word_len: usize, out: []u8) ?[]const u8 {
 /// encoder search uses this form to avoid decoding the address and locating the
 /// same base word again for every transform candidate in a bucket.
 pub fn transformWord(transform_index: usize, word: []const u8, out: []u8) ?[]const u8 {
-    if (transform_index >= transforms.len or word.len < 4 or word.len > 24 or out.len < 64) return null;
+    // Serialized shared dictionaries may pair the RFC transform table with a
+    // custom 25...31-byte word list. The transform semantics are independent
+    // of the built-in dictionary's historical 24-byte maximum.
+    if (transform_index >= transforms.len or word.len < 4 or word.len > 31 or out.len < 64) return null;
     const spec = transforms[transform_index];
     var written: usize = 0;
     written += copyCString(out[written..], spec.prefix);

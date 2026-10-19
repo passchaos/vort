@@ -2167,10 +2167,14 @@ Upstream still marks serialized shared dictionaries as
 `BROTLI_EXPERIMENTAL`/`DO NOT USE`. Vort now exposes a strict borrowed parser
 through `brParseSerializedSharedDictionary`, including custom word lists,
 transform lists, 64-entry contextual selection, all 23 transform families,
-an exhaustive custom-only reference matcher, and custom-address replay. This
-is an inspection/preparation API, not yet a codec attachment: production
-encode/decode still accepts RAW shared-prefix attachments only and makes no
-experimental wire-compatibility promise.
+an exhaustive custom-only reference matcher, and complete mixed built-in/custom
+address replay. A parsed view can be attached through
+`BrotliSharedDictionary.serialized` for production one-shot, chunked, summary,
+caller-history, and allocator-owned or caller-history progressive decoding.
+The serialized RAW prefix follows explicit RAW attachments in Vort's compound
+address space. Production encoding still rejects custom serialized static
+dictionaries until its context-aware matcher is attached, and the experimental
+upstream format carries no stability promise.
 
 The `run-br-compound-dictionary-diff` gate passes in Debug and ReleaseFast
 against local libbrotli 1.2.0. It covers libbrotli encode to Vort decode for

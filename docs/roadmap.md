@@ -29,9 +29,11 @@ major gaps before Vort can claim broad industry-best parity:
   writer. q2 now has its static/dynamic fast-tree writer and q3 its trivial
   dynamic three-tree writer. Serialized contextual dictionaries now have a
   strict borrowed parser, context selector, exhaustive custom-only reference
-  matcher, and complete custom transform/address replay; production indexing
-  and codec attachment remain open. q10/q11 Zopfli/HQ cost refinement and
-  global exact-cost segmentation also remain open.
+  matcher, complete mixed built-in/custom transform/address replay, and
+  production decode attachment across one-shot, chunked, summary, and both
+  progressive ownership models. Production encoder matching/indexing remains
+  open. q10/q11 Zopfli/HQ cost refinement and global exact-cost segmentation
+  also remain open.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
   entropy block switching, static dictionaries, consecutive compressed

@@ -153,6 +153,10 @@ pub const PlannedParserOptions = struct {
 };
 
 fn plannedSharedDictionarySize(dictionary: SharedDictionary) Error!usize {
+    // Decode supports serialized contextual static dictionaries. Until the
+    // encoder's contextual matcher is attached, reject them rather than emit
+    // built-in static addresses that the peer would reinterpret differently.
+    if (dictionary.hasSerializedStatic()) return error.InvalidBlockPlan;
     return dictionary.totalSize() catch |err| switch (err) {
         error.IntegerOverflow => error.IntegerOverflow,
         else => error.InvalidBlockPlan,
@@ -183,8 +187,9 @@ fn preparePlannedSharedDictionary(
 /// remains disabled by default for strict format validation.
 pub const DecodeOptions = struct {
     allow_large_window: bool = false,
-    /// Borrowed RAW shared-prefix chunks attached out of band. Empty chunks are
-    /// byte-wise no-ops but still consume one of the fifteen attachment slots.
+    /// Borrowed RAW prefixes and optional parsed serialized contextual static
+    /// dictionary attached out of band. Explicit empty RAW chunks are byte-wise
+    /// no-ops but still consume one of the fifteen attachment slots.
     shared_dictionary: SharedDictionary = .{},
 };
 
@@ -198,7 +203,8 @@ fn decodeSharedDictionary(options: DecodeOptions) Error!?DecodeSharedDictionary 
         error.IntegerOverflow => return error.IntegerOverflow,
         else => return error.CorruptFrame,
     };
-    if (total_size == 0) return null;
+    if (total_size == 0 and options.shared_dictionary.serialized == null)
+        return null;
     return .{ .dictionary = options.shared_dictionary, .total_size = total_size };
 }
 
@@ -367,6 +373,21 @@ const IncrementalCopyCodec = struct {
         return @intCast(symbol);
     }
 
+    pub fn dictionaryContext(
+        header: *const Header,
+        previous: u8,
+        second_previous: u8,
+    ) IncrementalCopyCodec.Error!usize {
+        const block_type = header.compressed.literal_block.current_type;
+        if (block_type >= max_literal_block_types)
+            return error.UnsupportedBrotliFeature;
+        return literalContextFromMode(
+            header.compressed.literal_context_modes[block_type],
+            previous,
+            second_previous,
+        );
+    }
+
     pub fn readCommand(header: *Header, reader: anytype) IncrementalCopyCodec.Error!Command {
         const symbol = try readLargeCommandSymbolAny(&header.compressed, reader);
         if (symbol >= command_lut.entries.len) return error.InvalidHuffmanCode;
@@ -415,10 +436,10 @@ const IncrementalCopyCodec = struct {
         };
     }
 
-    pub fn dictionaryWord(distance: usize, copy_len: usize, max_backward_distance: usize, scratch: *[64]u8) IncrementalCopyCodec.Error![]const u8 {
+    pub fn dictionaryWord(distance: usize, copy_len: usize, max_backward_distance: usize, scratch: []u8) IncrementalCopyCodec.Error![]const u8 {
         return minimalStaticDictionaryWord(distance, copy_len, max_backward_distance, scratch);
     }
-    pub fn staticDictionaryWord(address: usize, copy_len: usize, scratch: *[64]u8) IncrementalCopyCodec.Error![]const u8 {
+    pub fn staticDictionaryWord(address: usize, copy_len: usize, scratch: []u8) IncrementalCopyCodec.Error![]const u8 {
         return minimalStaticDictionaryWordAtAddress(address, copy_len, scratch);
     }
 
@@ -2822,6 +2843,17 @@ const LiteralHistory = struct {
         const needed: u2 = if (mode <= 1) 1 else 2;
         if (self.known_suffix_len < needed) return contextIndependentLargeLiteralContext(header) orelse error.SummaryHistoryExhausted;
         return try literalContextFromMode(
+            mode,
+            self.previous[1],
+            self.previous[0],
+        );
+    }
+
+    fn dictionaryContext(self: *const LiteralHistory, mode: u2) SummaryError!usize {
+        const needed: u2 = if (mode <= 1) 1 else 2;
+        if (self.known_suffix_len < needed)
+            return error.SummaryHistoryExhausted;
+        return literalContextFromMode(
             mode,
             self.previous[1],
             self.previous[0],
@@ -11949,7 +11981,7 @@ fn processMinimalCompressedMetaBlockImpl(
     if (meta_block_end > output.len) return error.OutputTooSmall;
     var header: MinimalCompressedHeader = undefined;
     try readMinimalCompressedHeaderInto(reader, &header);
-    var transformed_dictionary_word: [64]u8 = undefined;
+    var transformed_dictionary_word: [serialized_dictionary.max_transformed_word_len]u8 = undefined;
     while (written.* < meta_block_end) {
         const command_symbol = try readCommandSymbol(&header, reader);
         const lengths = try readInsertCopyLengths(command_symbol, reader);
@@ -11973,7 +12005,18 @@ fn processMinimalCompressedMetaBlockImpl(
         if (distance == 0) return error.InvalidMatch;
         const max_distance = maxBackwardDistanceForWindow(window_bits, written.*);
         if (distance > max_distance) {
-            const kind = try appendOutOfWindowReference(output, written, meta_block_end, dictionary, distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
+            const dictionary_context = try literalContext(&header, output, written.*);
+            const kind = try appendOutOfWindowReference(
+                output,
+                written,
+                meta_block_end,
+                dictionary,
+                dictionary_context,
+                distance,
+                lengths.copy_len,
+                max_distance,
+                &transformed_dictionary_word,
+            );
             if (kind == .compound and decoded_distance.update_ring)
                 pushLastDistance(last_distances, distance);
             continue;
@@ -12025,7 +12068,7 @@ fn processMinimalCompressedMetaBlockLargeWindowImpl(
     if (meta_block_end > output.len) return error.OutputTooSmall;
     var header: LargeWindowCompressedHeader = undefined;
     try readMinimalCompressedHeaderIntoWithOptions(reader, &header, true);
-    var transformed_dictionary_word: [64]u8 = undefined;
+    var transformed_dictionary_word: [serialized_dictionary.max_transformed_word_len]u8 = undefined;
     while (written.* < meta_block_end) {
         const command_symbol = try readLargeCommandSymbol(&header, reader);
         const lengths = try readInsertCopyLengths(command_symbol, reader);
@@ -12049,7 +12092,18 @@ fn processMinimalCompressedMetaBlockLargeWindowImpl(
         if (distance == 0) return error.InvalidMatch;
         const max_distance = maxBackwardDistanceForWindow(window_bits, written.*);
         if (distance > max_distance) {
-            const kind = try appendOutOfWindowReference(output, written, meta_block_end, dictionary, distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
+            const dictionary_context = try largeLiteralContext(&header, output, written.*);
+            const kind = try appendOutOfWindowReference(
+                output,
+                written,
+                meta_block_end,
+                dictionary,
+                dictionary_context,
+                distance,
+                lengths.copy_len,
+                max_distance,
+                &transformed_dictionary_word,
+            );
             if (kind == .compound and decoded_distance.update_ring)
                 pushLastDistance(last_distances, distance);
             continue;
@@ -13742,7 +13796,7 @@ noinline fn skipDecodedCompressedPayload(
     header: *MinimalCompressedHeader,
     dictionary: ?*const DecodeSharedDictionary,
 ) SummaryError!void {
-    var transformed_dictionary_word: [64]u8 = undefined;
+    var transformed_dictionary_word: [serialized_dictionary.max_transformed_word_len]u8 = undefined;
     var written = start_written;
     while (written < meta_block_end) {
         const command_symbol = if (auxiliary_tail_lookups)
@@ -13782,7 +13836,26 @@ noinline fn skipDecodedCompressedPayload(
         if (distance == 0) return error.InvalidMatch;
         const max_distance = maxBackwardDistanceForWindow(window_bits, written);
         if (distance > max_distance) {
-            const replayed = try replayOutOfWindowReference(literal_history, stats, dictionary, distance, lengths.copy_len, max_distance, meta_block_end - written, &transformed_dictionary_word);
+            const dictionary_context = if (dictionary) |active|
+                if (active.dictionary.hasSerializedStatic())
+                    try literal_history.dictionaryContext(
+                        header.literal_context_modes[header.literal_block.current_type],
+                    )
+                else
+                    0
+            else
+                0;
+            const replayed = try replayOutOfWindowReference(
+                literal_history,
+                stats,
+                dictionary,
+                dictionary_context,
+                distance,
+                lengths.copy_len,
+                max_distance,
+                meta_block_end - written,
+                &transformed_dictionary_word,
+            );
             written += replayed.output_len;
             if (replayed.kind == .compound and decoded_distance.update_ring)
                 pushLastDistance(last_distances, distance);
@@ -13821,7 +13894,7 @@ noinline fn skipDecodedCompressedPayloadLargeWindow(
     header: *LargeWindowCompressedHeader,
     dictionary: ?*const DecodeSharedDictionary,
 ) linksection(large_window_text_section) SummaryError!void {
-    var transformed_dictionary_word: [64]u8 = undefined;
+    var transformed_dictionary_word: [serialized_dictionary.max_transformed_word_len]u8 = undefined;
     var written = start_written;
     while (written < meta_block_end) {
         const command_symbol = if (auxiliary_tail_lookups)
@@ -13859,7 +13932,26 @@ noinline fn skipDecodedCompressedPayloadLargeWindow(
         if (distance == 0) return error.InvalidMatch;
         const max_distance = maxBackwardDistanceForWindow(window_bits, written);
         if (distance > max_distance) {
-            const replayed = try replayOutOfWindowReference(literal_history, stats, dictionary, distance, lengths.copy_len, max_distance, meta_block_end - written, &transformed_dictionary_word);
+            const dictionary_context = if (dictionary) |active|
+                if (active.dictionary.hasSerializedStatic())
+                    try literal_history.dictionaryContext(
+                        header.literal_context_modes[header.literal_block.current_type],
+                    )
+                else
+                    0
+            else
+                0;
+            const replayed = try replayOutOfWindowReference(
+                literal_history,
+                stats,
+                dictionary,
+                dictionary_context,
+                distance,
+                lengths.copy_len,
+                max_distance,
+                meta_block_end - written,
+                &transformed_dictionary_word,
+            );
             written += replayed.output_len;
             if (replayed.kind == .compound and decoded_distance.update_ring)
                 pushLastDistance(last_distances, distance);
@@ -16606,7 +16698,7 @@ fn minimalStaticDictionaryWord(
     distance: usize,
     copy_len: usize,
     max_backward_distance: usize,
-    transformed_scratch: *[64]u8,
+    transformed_scratch: []u8,
 ) Error![]const u8 {
     // Brotli static-dictionary addresses are relative to the current maximum
     // LZ77 distance: min(decoded bytes, 2^WBITS - 16). This differs from total
@@ -16620,7 +16712,7 @@ fn minimalStaticDictionaryWord(
 fn minimalStaticDictionaryWordAtAddress(
     address: usize,
     copy_len: usize,
-    transformed_scratch: *[64]u8,
+    transformed_scratch: []u8,
 ) Error![]const u8 {
 
     // `static_dictionary.transform` is the complete RFC 7932 implementation.
@@ -16635,14 +16727,16 @@ fn minimalStaticDictionaryWordAtAddress(
 const ResolvedDictionaryReference = union(enum) {
     compound: shared_dictionary.Cursor,
     static: []const u8,
+    contextual_static: []const u8,
 };
 
 fn resolveOutOfWindowReference(
     dictionary: ?*const DecodeSharedDictionary,
+    dictionary_context: usize,
     distance: usize,
     copy_len: usize,
     max_history: usize,
-    static_scratch: *[64]u8,
+    static_scratch: []u8,
 ) Error!ResolvedDictionaryReference {
     const compound_size = if (dictionary) |active| active.total_size else 0;
     const target = shared_dictionary.classifyDistance(distance, max_history, compound_size) catch
@@ -16653,11 +16747,32 @@ fn resolveOutOfWindowReference(
             error.IntegerOverflow => return error.IntegerOverflow,
             else => return error.InvalidMatch,
         } },
-        .static_dictionary => |address| .{ .static = try minimalStaticDictionaryWordAtAddress(address, copy_len, static_scratch) },
+        .static_dictionary => |address| if (dictionary) |active| blk: {
+            if (!active.dictionary.hasSerializedStatic())
+                break :blk .{ .static = try minimalStaticDictionaryWordAtAddress(
+                    address,
+                    copy_len,
+                    static_scratch,
+                ) };
+            const word = active.dictionary.staticWord(
+                dictionary_context,
+                address,
+                copy_len,
+                static_scratch,
+            ) catch |err| switch (err) {
+                error.IntegerOverflow => return error.IntegerOverflow,
+                else => return error.InvalidMatch,
+            };
+            break :blk .{ .contextual_static = word };
+        } else .{ .static = try minimalStaticDictionaryWordAtAddress(
+            address,
+            copy_len,
+            static_scratch,
+        ) },
     };
 }
 
-const DictionaryReferenceKind = enum { compound, static };
+const DictionaryReferenceKind = enum { compound, static, contextual_static };
 const ReplayedDictionaryReference = struct {
     kind: DictionaryReferenceKind,
     output_len: usize,
@@ -16668,12 +16783,20 @@ fn appendOutOfWindowReference(
     written: *usize,
     output_end: usize,
     dictionary: ?*const DecodeSharedDictionary,
+    dictionary_context: usize,
     distance: usize,
     copy_len: usize,
     max_history: usize,
-    static_scratch: *[64]u8,
+    static_scratch: []u8,
 ) Error!DictionaryReferenceKind {
-    var resolved = try resolveOutOfWindowReference(dictionary, distance, copy_len, max_history, static_scratch);
+    var resolved = try resolveOutOfWindowReference(
+        dictionary,
+        dictionary_context,
+        distance,
+        copy_len,
+        max_history,
+        static_scratch,
+    );
     switch (resolved) {
         .compound => |*cursor| {
             if (copy_len > output_end - written.*) return error.CorruptFrame;
@@ -16689,6 +16812,12 @@ fn appendOutOfWindowReference(
             written.* += word.len;
             return .static;
         },
+        .contextual_static => |word| {
+            if (word.len > output_end - written.*) return error.CorruptFrame;
+            @memcpy(output[written.*..][0..word.len], word);
+            written.* += word.len;
+            return .contextual_static;
+        },
     }
 }
 
@@ -16696,13 +16825,21 @@ fn replayOutOfWindowReference(
     literal_history: *LiteralHistory,
     stats: ?*StreamSummaryMetaBlockStats,
     dictionary: ?*const DecodeSharedDictionary,
+    dictionary_context: usize,
     distance: usize,
     copy_len: usize,
     max_history: usize,
     remaining_output: usize,
-    static_scratch: *[64]u8,
+    static_scratch: []u8,
 ) SummaryError!ReplayedDictionaryReference {
-    var resolved = try resolveOutOfWindowReference(dictionary, distance, copy_len, max_history, static_scratch);
+    var resolved = try resolveOutOfWindowReference(
+        dictionary,
+        dictionary_context,
+        distance,
+        copy_len,
+        max_history,
+        static_scratch,
+    );
     switch (resolved) {
         .compound => |*cursor| {
             if (copy_len > remaining_output) return error.CorruptFrame;
@@ -16726,6 +16863,23 @@ fn replayOutOfWindowReference(
                 s.static_dictionary_bytes = std.math.add(usize, s.static_dictionary_bytes, word.len) catch return error.IntegerOverflow;
             }
             return .{ .kind = .static, .output_len = word.len };
+        },
+        .contextual_static => |word| {
+            if (word.len > remaining_output) return error.CorruptFrame;
+            literal_history.pushSlice(word);
+            if (stats) |s| {
+                s.shared_dictionary_copy_count = std.math.add(
+                    usize,
+                    s.shared_dictionary_copy_count,
+                    1,
+                ) catch return error.IntegerOverflow;
+                s.shared_dictionary_bytes = std.math.add(
+                    usize,
+                    s.shared_dictionary_bytes,
+                    word.len,
+                ) catch return error.IntegerOverflow;
+            }
+            return .{ .kind = .contextual_static, .output_len = word.len };
         },
     }
 }
@@ -31286,6 +31440,237 @@ test "br RAW shared dictionary progressive decoder resumes across prefix and out
     try std.testing.expectEqualSlices(u8, expected, &output);
 }
 
+test "br serialized shared dictionary decodes contextual static references across public APIs" {
+    var serialized_bytes: std.ArrayList(u8) = .empty;
+    defer serialized_bytes.deinit(std.testing.allocator);
+    try serialized_bytes.appendSlice(std.testing.allocator, &.{
+        0x91, 0x00,
+        3, 'r', 'a', 'w', // serialized RAW prefix
+        1, // custom word lists
+    });
+    var bits: [28]u8 = @splat(0);
+    bits[5 - serialized_dictionary.min_word_len] = 1;
+    try serialized_bytes.appendSlice(std.testing.allocator, &bits);
+    try serialized_bytes.appendSlice(std.testing.allocator, "helloworld");
+    try serialized_bytes.appendSlice(std.testing.allocator, &.{
+        1, // custom transform lists
+        1, 0, // prefix/suffix table length
+        0, // empty stringlet
+        1, // transform count
+        0, 0, 0, // identity
+        1, // dictionary count
+        0, 0, // custom words and transforms
+        0, // context map disabled
+    });
+    const serialized = try parseSerializedSharedDictionary(serialized_bytes.items);
+    const dictionary = SharedDictionary{ .serialized = &serialized };
+    const options = DecodeOptions{ .shared_dictionary = dictionary };
+
+    const expected = "hello";
+    const commands = [_]command_plan.Command{.{
+        .insert_start = 0,
+        .insert_len = 0,
+        .copy_len = expected.len,
+        .has_copy = true,
+        .source = .static,
+        .dictionary_output_len = expected.len,
+        .dictionary_address = 0,
+    }};
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const frame = try encodeCommandPlanWithOptionsAlloc(
+        std.testing.allocator,
+        expected,
+        &commands,
+        null,
+        &stats,
+        .{ .compound_dictionary_size = serialized.raw_prefix.len },
+    );
+    defer std.testing.allocator.free(frame);
+
+    const decoded = try decodeStreamAllocExactSizeWithOptions(
+        std.testing.allocator,
+        frame,
+        expected.len,
+        options,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+
+    var into: [expected.len]u8 = undefined;
+    try std.testing.expectEqual(
+        expected.len,
+        try decodeStreamIntoExactSizeWithOptions(frame, &into, expected.len, options),
+    );
+    try std.testing.expectEqualSlices(u8, expected, &into);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(
+        expected.len,
+        try decodeStreamAppendWithOptions(
+            std.testing.allocator,
+            &appended,
+            frame,
+            options,
+        ),
+    );
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ expected, appended.items);
+
+    const chunks = [_][]const u8{ frame[0..1], frame[1 .. frame.len - 1], frame[frame.len - 1 ..] };
+    var compressed_scratch: [64]u8 = undefined;
+    const chunked = try decodeStreamChunksAllocWithOptions(
+        std.testing.allocator,
+        &chunks,
+        &compressed_scratch,
+        options,
+    );
+    defer std.testing.allocator.free(chunked);
+    try std.testing.expectEqualSlices(u8, expected, chunked);
+
+    const summary = try summarizeStreamWithOptions(frame, options);
+    try std.testing.expect(summary.uses_shared_dictionary);
+    try std.testing.expectEqual(@as(usize, 1), summary.shared_dictionary_copy_count);
+    try std.testing.expectEqual(expected.len, summary.shared_dictionary_bytes);
+    try std.testing.expectEqual(@as(usize, 0), summary.static_dictionary_copy_count);
+
+    var history: [32]u8 = undefined;
+    var progressive = IncrementalCopyStreamDecoder.initWithOptions(&history, .{
+        .expected_output_len = expected.len,
+        .max_output_len = expected.len,
+        .decode = options,
+    });
+    var progressive_output: [expected.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (progressive.snapshot().phase != .done) {
+        const input_end = @min(frame.len, input_offset + 1);
+        const output_end = @min(progressive_output.len, output_offset + 1);
+        const step = try progressive.step(
+            frame[input_offset..input_end],
+            progressive_output[output_offset..output_end],
+        );
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+        if (step.status == .need_input)
+            try std.testing.expect(input_offset < frame.len);
+        if (step.status == .need_output)
+            try std.testing.expect(output_offset < progressive_output.len);
+    }
+    try progressive.finish();
+    try std.testing.expectEqualSlices(u8, expected, &progressive_output);
+
+    var owned = IncrementalStreamDecoder.initWithOptions(
+        std.testing.allocator,
+        .{
+            .expected_compressed_len = frame.len,
+            .expected_output_len = expected.len,
+            .max_output_len = expected.len,
+            .decode = options,
+        },
+    );
+    defer owned.deinit();
+    var owned_output: [expected.len]u8 = undefined;
+    input_offset = 0;
+    output_offset = 0;
+    while (owned.snapshot().phase != .done) {
+        const input_end = @min(frame.len, input_offset + 1);
+        const output_end = @min(owned_output.len, output_offset + 1);
+        const step = try owned.step(
+            frame[input_offset..input_end],
+            owned_output[output_offset..output_end],
+        );
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+    }
+    try owned.finish();
+    try std.testing.expectEqualSlices(u8, expected, &owned_output);
+
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        encodePlannedStreamWithOptionsAlloc(
+            std.testing.allocator,
+            expected,
+            .{ .shared_dictionary = dictionary },
+        ),
+    );
+}
+
+test "br serialized shared dictionary selects custom words from output context" {
+    var serialized_bytes: std.ArrayList(u8) = .empty;
+    defer serialized_bytes.deinit(std.testing.allocator);
+    try serialized_bytes.appendSlice(std.testing.allocator, &.{
+        0x91, 0x00, 0, // magic and empty RAW prefix
+        2, // custom word lists
+    });
+    var bits: [28]u8 = @splat(0);
+    bits[4 - serialized_dictionary.min_word_len] = 1;
+    try serialized_bytes.appendSlice(std.testing.allocator, &bits);
+    try serialized_bytes.appendSlice(std.testing.allocator, "red!xxxx");
+    try serialized_bytes.appendSlice(std.testing.allocator, &bits);
+    try serialized_bytes.appendSlice(std.testing.allocator, "bluezzzz");
+    try serialized_bytes.appendSlice(std.testing.allocator, &.{
+        1, // custom transform lists
+        1, 0, // prefix/suffix table length
+        0, // empty stringlet
+        1, // transform count
+        0, 0, 0, // identity
+        2, // dictionary count
+        0, 0, // dictionary 0: red words
+        1, 0, // dictionary 1: blue words
+        1, // context map enabled
+    });
+    var context_map: [64]u8 = @splat(0);
+    // For a preceding 'a' and implicit zero second-previous byte, these are
+    // the possible contexts under the four RFC literal context modes. Keeping
+    // all mapped to dictionary 1 makes the fixture independent of the writer's
+    // selected mode while still proving that decoded history is consulted.
+    context_map[24] = 1;
+    context_map[33] = 1;
+    context_map[56] = 1;
+    try serialized_bytes.appendSlice(std.testing.allocator, &context_map);
+
+    const serialized = try parseSerializedSharedDictionary(serialized_bytes.items);
+    const options = DecodeOptions{
+        .shared_dictionary = .{ .serialized = &serialized },
+    };
+    const cases = [_][]const u8{ " red!", "ablue" };
+    for (cases) |expected| {
+        const commands = [_]command_plan.Command{.{
+            .insert_start = 0,
+            .insert_len = 1,
+            .copy_len = 4,
+            .has_copy = true,
+            .source = .static,
+            .dictionary_output_len = 4,
+            .dictionary_address = 0,
+        }};
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const frame = try encodeCommandPlanWithOptionsAlloc(
+            std.testing.allocator,
+            expected,
+            &commands,
+            null,
+            &stats,
+            .{},
+        );
+        defer std.testing.allocator.free(frame);
+        const decoded = try decodeStreamAllocExactSizeWithOptions(
+            std.testing.allocator,
+            frame,
+            expected.len,
+            options,
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, expected, decoded);
+
+        const summary = try summarizeStreamWithOptions(frame, options);
+        try std.testing.expect(summary.uses_shared_dictionary);
+        try std.testing.expectEqual(@as(usize, 1), summary.shared_dictionary_copy_count);
+        try std.testing.expectEqual(@as(usize, 4), summary.shared_dictionary_bytes);
+    }
+}
+
 test "br RAW shared dictionary rejects invalid descriptors before output mutation" {
     const frame = [_]u8{ 0xa1, 0xa8, 0x00, 0xc0, 0x2f, 0x01, 0x10, 0xc4, 0x44, 0x09, 0x00 };
     const too_many: [shared_dictionary.max_raw_prefixes + 1][]const u8 = @splat("");
@@ -31358,6 +31743,7 @@ test "br RAW shared dictionary shifts static dictionary addresses after compound
 
     var compound = try resolveOutOfWindowReference(
         &shared,
+        0,
         max_history + 1,
         1,
         max_history,
@@ -31369,13 +31755,14 @@ test "br RAW shared dictionary shifts static dictionary addresses after compound
             try std.testing.expectEqual(@as(usize, 1), cursor.copyInto(&output));
             try std.testing.expectEqualSlices(u8, "c", &output);
         },
-        .static => return error.TestUnexpectedResult,
+        .static, .contextual_static => return error.TestUnexpectedResult,
     }
 
     const static_address: usize = 3;
     const shifted_distance = max_history + prefix.len + 1 + static_address;
     const shifted = try resolveOutOfWindowReference(
         &shared,
+        0,
         shifted_distance,
         5,
         max_history,
@@ -31384,6 +31771,7 @@ test "br RAW shared dictionary shifts static dictionary addresses after compound
     switch (shifted) {
         .compound => return error.TestUnexpectedResult,
         .static => |word| try std.testing.expectEqualSlices(u8, "world", word),
+        .contextual_static => return error.TestUnexpectedResult,
     }
 }
 

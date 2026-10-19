@@ -4047,6 +4047,10 @@ test "root exports lz4 and zstd codec helpers" {
         default_serialized_dictionary.dictionary_count,
     );
     try std.testing.expect(!default_serialized_dictionary.context_based);
+    const attached_serialized_dictionary = BrotliSharedDictionary{
+        .serialized = &default_serialized_dictionary,
+    };
+    try attached_serialized_dictionary.validate();
     try std.testing.expectEqual(@as(usize, 1 << 24), brotliMaxUncompressedMetaBlockLen);
     try std.testing.expectEqual(@as(u5, 16), brotliDefaultWindowBits);
     _ = brEncodedStoredStreamBound;

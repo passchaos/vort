@@ -213,10 +213,11 @@ allocator-owned decoder can replace them only through `nextFrame` after
 completing the current frame.
 
 Latest upstream still marks serialized shared dictionaries as
-`BROTLI_EXPERIMENTAL` and `DO NOT USE`, so Vort does not expose that unstable
-wire. Caller-supplied/custom static dictionaries are unsupported; RAW
-attachment support does not promise future API or wire compatibility for
-either unsupported form.
+`BROTLI_EXPERIMENTAL` and `DO NOT USE`. Vort exposes the container explicitly
+as a borrowed experimental descriptor and supports production decoding across
+its decode surfaces. Production encoders still reject a descriptor containing
+custom words or transforms; no stability promise is made for upstream's
+experimental container format.
 
 ## Large-input and API boundaries
 
@@ -329,10 +330,11 @@ The following are explicit gaps, not implied by the presence of the preset
 names:
 
 - real q10/q11 Zopfli/HQ cost refinement, including iterative model feedback;
-- contextual serialized-dictionary matching and codec attachment. Strict
-  zero-copy parsing, context selection, exhaustive custom-only reference
-  matching, and custom transform/address replay are available, but production
-  encode/decode does not yet attach them;
+- contextual serialized-dictionary encoding and production indexing. Strict
+  zero-copy parsing, mixed built-in/custom address replay, context selection,
+  exhaustive custom-only reference matching, and production decode attachment
+  across all decode surfaces are available; encoders deliberately reject a
+  custom serialized static dictionary until matching is attached;
 - global multi-boundary segmentation and exact compressed-cost optimization
   beyond the current bounded midpoint entropy lookahead;
 - calibration and regression gates for compression ratio, throughput, peak

@@ -1,4 +1,6 @@
 const std = @import("std");
+const serialized_dictionary = @import("serialized_dictionary.zig");
+const static_dictionary = @import("static_dictionary.zig");
 
 /// The stable upstream shared-dictionary container and prepared encoder accept
 /// at most fifteen RAW attachments. Empty attachments still consume a
@@ -7,6 +9,7 @@ const std = @import("std");
 /// narrower common descriptor so the same value remains valid for decode and
 /// future encode surfaces.
 pub const max_raw_prefixes: usize = 15;
+pub const max_static_output_len: usize = serialized_dictionary.max_transformed_word_len;
 
 /// SHARED_BROTLI_MAX_RAW_DICT_SIZE from upstream Brotli. `@sizeOf(usize)` is
 /// measured in bytes, just as C's `sizeof(size_t)` is.
@@ -26,20 +29,29 @@ pub const DistanceError = error{
     InvalidDistance,
 };
 
-/// A borrowing descriptor for Brotli RAW shared-dictionary prefixes.
+/// A borrowing descriptor for Brotli RAW prefixes and one parsed serialized
+/// shared dictionary.
 ///
-/// Prefix bytes and the outer slice must remain alive and unchanged while the
-/// dictionary or any cursor made from it is in use. Non-empty prefixes are
-/// logically concatenated in attachment order; no bytes are copied or owned.
+/// Prefix bytes, the outer slice, the serialized view, and its encoded backing
+/// bytes must remain alive and unchanged while the dictionary or any cursor
+/// made from it is in use. Explicit RAW prefixes are logically followed by the
+/// serialized dictionary's optional RAW prefix; no bytes are copied or owned.
 pub const Dictionary = struct {
     raw_prefixes: []const []const u8 = &.{},
+    serialized: ?*const serialized_dictionary.Dictionary = null,
 
     pub fn validate(self: Dictionary) ValidationError!void {
         _ = try self.totalSize();
     }
 
     pub fn totalSize(self: Dictionary) ValidationError!usize {
-        if (self.raw_prefixes.len > max_raw_prefixes) {
+        const serialized_prefix = self.serializedPrefix();
+        const prefix_count = std.math.add(
+            usize,
+            self.raw_prefixes.len,
+            @intFromBool(serialized_prefix.len != 0),
+        ) catch return error.IntegerOverflow;
+        if (prefix_count > max_raw_prefixes) {
             return error.TooManyRawPrefixes;
         }
 
@@ -50,9 +62,49 @@ pub const Dictionary = struct {
             total = std.math.add(usize, total, prefix.len) catch
                 return error.IntegerOverflow;
         }
+        total = std.math.add(usize, total, serialized_prefix.len) catch
+            return error.IntegerOverflow;
 
         if (total > max_raw_size) return error.RawDictionaryTooLarge;
         return total;
+    }
+
+    pub fn compoundChunkCount(self: Dictionary) usize {
+        return self.raw_prefixes.len + @intFromBool(self.serializedPrefix().len != 0);
+    }
+
+    pub fn compoundChunk(self: Dictionary, index: usize) ?[]const u8 {
+        if (index < self.raw_prefixes.len) return self.raw_prefixes[index];
+        if (index == self.raw_prefixes.len) {
+            const prefix = self.serializedPrefix();
+            if (prefix.len != 0) return prefix;
+        }
+        return null;
+    }
+
+    pub fn staticWord(
+        self: Dictionary,
+        context: usize,
+        address: usize,
+        copy_len: usize,
+        output: []u8,
+    ) serialized_dictionary.Error![]const u8 {
+        if (self.hasSerializedStatic()) {
+            const dictionary = self.serialized.?;
+            return (try dictionary.resolve(context, copy_len, address, output)).bytes;
+        }
+        return static_dictionary.transform(address, copy_len, output) orelse
+            error.DictionaryAddressOutOfBounds;
+    }
+
+    pub fn hasSerializedStatic(self: Dictionary) bool {
+        const dictionary = self.serialized orelse return false;
+        return dictionary.word_list_count != 0 or
+            dictionary.transform_list_count != 0;
+    }
+
+    fn serializedPrefix(self: Dictionary) []const u8 {
+        return if (self.serialized) |dictionary| dictionary.raw_prefix else "";
     }
 
     /// Begin a bounded copy from a logical compound-dictionary address.
@@ -86,6 +138,8 @@ pub const Dictionary = struct {
 /// prefixes. Calls may offer arbitrarily small output slices.
 pub const Cursor = struct {
     raw_prefixes: []const []const u8,
+    serialized_prefix: []const u8,
+    chunk_count: usize,
     chunk_index: usize,
     chunk_offset: usize,
     remaining_len: usize,
@@ -98,17 +152,20 @@ pub const Cursor = struct {
 
         var chunk_index: usize = 0;
         var chunk_address = address;
-        while (chunk_index < dictionary.raw_prefixes.len) : (chunk_index += 1) {
-            const prefix = dictionary.raw_prefixes[chunk_index];
+        const chunk_count = dictionary.compoundChunkCount();
+        while (chunk_index < chunk_count) : (chunk_index += 1) {
+            const prefix = dictionary.compoundChunk(chunk_index).?;
             if (prefix.len == 0) continue;
             if (chunk_address < prefix.len) break;
             chunk_address -= prefix.len;
         }
 
         // Only a zero-byte copy at the logical end can have no source chunk.
-        std.debug.assert(chunk_index < dictionary.raw_prefixes.len or copy_len == 0);
+        std.debug.assert(chunk_index < chunk_count or copy_len == 0);
         return .{
             .raw_prefixes = dictionary.raw_prefixes,
+            .serialized_prefix = dictionary.serializedPrefix(),
+            .chunk_count = chunk_count,
             .chunk_index = chunk_index,
             .chunk_offset = chunk_address,
             .remaining_len = copy_len,
@@ -121,9 +178,9 @@ pub const Cursor = struct {
         var written: usize = 0;
         while (written < output.len and self.remaining_len != 0) {
             self.skipExhaustedChunks();
-            std.debug.assert(self.chunk_index < self.raw_prefixes.len);
+            std.debug.assert(self.chunk_index < self.chunk_count);
 
-            const prefix = self.raw_prefixes[self.chunk_index];
+            const prefix = self.chunk(self.chunk_index);
             const available = prefix.len - self.chunk_offset;
             const count = @min(@min(available, output.len - written), self.remaining_len);
             @memcpy(output[written..][0..count], prefix[self.chunk_offset..][0..count]);
@@ -144,12 +201,18 @@ pub const Cursor = struct {
     }
 
     fn skipExhaustedChunks(self: *Cursor) void {
-        while (self.chunk_index < self.raw_prefixes.len) {
-            const prefix = self.raw_prefixes[self.chunk_index];
+        while (self.chunk_index < self.chunk_count) {
+            const prefix = self.chunk(self.chunk_index);
             if (self.chunk_offset < prefix.len) return;
             self.chunk_index += 1;
             self.chunk_offset = 0;
         }
+    }
+
+    fn chunk(self: Cursor, index: usize) []const u8 {
+        if (index < self.raw_prefixes.len) return self.raw_prefixes[index];
+        std.debug.assert(index == self.raw_prefixes.len and self.serialized_prefix.len != 0);
+        return self.serialized_prefix;
     }
 };
 
@@ -263,6 +326,26 @@ test "cursor resumes a copy across prefix and empty-prefix boundaries" {
     try std.testing.expectEqual(@as(usize, 0), cursor.remaining());
     try std.testing.expect(cursor.isDone());
     try std.testing.expectEqual(@as(usize, 0), cursor.copyInto(&output));
+}
+
+test "serialized RAW prefix follows explicit attachments without flattening" {
+    const serialized = try serialized_dictionary.parse(
+        &.{ 0x91, 0x00, 3, 'a', 'b', 'c', 0, 0 },
+    );
+    const dictionary = Dictionary{
+        .raw_prefixes = &.{"xy"},
+        .serialized = &serialized,
+    };
+    try std.testing.expectEqual(@as(usize, 5), try dictionary.totalSize());
+    var output: [4]u8 = undefined;
+    try dictionary.copyInto(1, &output);
+    try std.testing.expectEqualSlices(u8, "yabc", &output);
+
+    const full: [max_raw_prefixes][]const u8 = @splat("");
+    try std.testing.expectError(
+        error.TooManyRawPrefixes,
+        (Dictionary{ .raw_prefixes = &full, .serialized = &serialized }).validate(),
+    );
 }
 
 test "one-shot copies accept first, last, and empty end addresses" {

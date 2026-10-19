@@ -73,8 +73,9 @@ pub const Matcher = struct {
             @memset(self.buckets, empty_bucket);
         }
 
-        self.chunk_count = dictionary.raw_prefixes.len;
-        for (dictionary.raw_prefixes, 0..) |prefix, index| self.chunks[index] = prefix;
+        self.chunk_count = dictionary.compoundChunkCount();
+        for (0..self.chunk_count) |index|
+            self.chunks[index] = dictionary.compoundChunk(index).?;
         self.total_size = total_size;
         self.prepared = true;
 
@@ -120,8 +121,9 @@ pub const Matcher = struct {
     }
 
     fn sameDescriptor(self: *const Matcher, dictionary: shared_dictionary.Dictionary) bool {
-        if (!self.prepared or dictionary.raw_prefixes.len != self.chunk_count) return false;
-        for (dictionary.raw_prefixes, self.chunks[0..self.chunk_count]) |incoming, cached| {
+        if (!self.prepared or dictionary.compoundChunkCount() != self.chunk_count) return false;
+        for (self.chunks[0..self.chunk_count], 0..) |cached, index| {
+            const incoming = dictionary.compoundChunk(index).?;
             if (incoming.ptr != cached.ptr or incoming.len != cached.len) return false;
         }
         return true;
