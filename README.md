@@ -2200,9 +2200,9 @@ each direction. A non-experimental build reports those cases as skipped
 explicitly.
 
 `brTrainSerializedSharedDictionaryAlloc` provides deterministic bounded
-identity-word and two-group context-map training with held-out complete-wire
+identity-word and multi-cutoff two-group context-map training with held-out complete-wire
 arbitration. It compares a global dictionary with LSB6, MSB6, UTF8, and Signed
-candidates at the configured cutoff. By default serialized bytes are charged
+candidates across a bounded cutoff list (16/32/48 by default). By default serialized bytes are charged
 once against the validation frame total; non-winning candidates return null.
 The result includes a stable content-derived ID and exact accounting. It does
 not claim COVER/FastCover equivalence, general clustering, or transform learning.

@@ -43,8 +43,9 @@ major gaps before Vort can claim broad industry-best parity:
   held-out complete-wire win including dictionary storage by default; its
   locked fixture improves 4,608 baseline bytes to 2,632 frame bytes plus a
   172-byte dictionary. Bounded two-group context-map training compares all four
-  RFC modes at a configured cutoff; its locked contextual fixture improves
-  17,344 baseline bytes to 11,328 frame bytes plus a 266-byte dictionary.
+  RFC modes across a caller-selected cutoff list; its locked contextual fixture
+  selects MSB6/cutoff48 and improves 17,344 baseline bytes to 14,272 frame bytes
+  plus a 266-byte dictionary.
   General context clustering, transform learning, and broader corpus calibration
   remain open.
   q10/q11 Zopfli/HQ cost refinement and global exact-cost segmentation also

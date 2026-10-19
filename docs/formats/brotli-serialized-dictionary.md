@@ -96,8 +96,9 @@ The parser allocates no memory.
 from caller-supplied training samples, one bounded heavy-hitter collection per
 word length. Each emitted bucket is the largest legal power of two within the
 configured limits. When context training is enabled, it also trains two word
-lists on each side of a caller-selected context cutoff for LSB6, MSB6, UTF8,
-and Signed, then compares those candidates with the global dictionary. Held-out
+lists on each side of caller-selected context cutoffs for LSB6, MSB6, UTF8,
+and Signed. The public option accepts a strictly increasing bounded cutoff list
+(16/32/48 by default), then compares every cutoff/mode candidate with the global dictionary. Held-out
 samples are encoded both without and with every candidate; the function returns
 null unless the best actual complete Brotli frame total, plus the serialized
 dictionary by default, meets `min_savings_bytes`.
@@ -121,6 +122,6 @@ and complete clustered literal-context candidates. A locked joint fixture
 shrinks from 627 to 523 bytes while retaining custom dictionary copies. Vort
 does not promise stability for upstream's experimental container format.
 The trainer is deterministic and complete-wire validated, with bounded
-two-group context-map learning. General context clustering, transform-list
+multi-cutoff two-group context-map learning. General context clustering, transform-list
 learning, and COVER/FastCover-class candidate selection remain open. The builder
 also remains available for fully explicit caller-owned specifications.

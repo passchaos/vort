@@ -440,7 +440,7 @@ test "serialized trainer validates bounds and handles empty corpora" {
 }
 
 test "serialized trainer learns deterministic two-group context maps" {
-    const sample = ([_]u8{1} ++ "LOWWORD!" ++ [_]u8{63} ++ "HIGHWORD") ** 16;
+    const sample = ([_]u8{24} ++ "LOWWORD!" ++ [_]u8{40} ++ "HIGHWORD") ** 16;
     const samples = [_][]const u8{sample};
     const options = Options{
         .min_word_len = 8,
@@ -476,8 +476,8 @@ test "serialized trainer learns deterministic two-group context maps" {
     var scratch: [serialized_dictionary.max_transformed_word_len]u8 = undefined;
     const low_word = parsed.word_lists[0].word(8, 0).?;
     const high_word = parsed.word_lists[1].word(8, 0).?;
-    try std.testing.expect((try parsed.findLongest(1, low_word, &scratch)) != null);
-    try std.testing.expect((try parsed.findLongest(63, high_word, &scratch)) != null);
+    try std.testing.expect((try parsed.findLongest(24, low_word, &scratch)) != null);
+    try std.testing.expect((try parsed.findLongest(40, high_word, &scratch)) != null);
 }
 
 test "serialized trainer releases every allocation failure path" {
