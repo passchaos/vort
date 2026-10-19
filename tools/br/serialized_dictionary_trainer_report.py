@@ -18,17 +18,26 @@ HEADER = (
     "baseline_frames", "trained_frames", "dictionary_bytes", "total_bytes",
     "savings", "ratio_ppm", "winner", "word_profile", "cover_d", "cover_hash_log",
     "context_profile", "context_mode", "context_cutoff", "context_clusters",
-    "transform_profile", "transform_lists", "shift_parameters", "train_ns",
-    "peak_bytes", "worst_sample_delta",
+    "transform_profile", "transform_lists", "shift_parameters",
+    "shadow_winner", "shadow_frames", "shadow_dictionary_bytes",
+    "shadow_frame_savings", "break_even_batches", "break_even_frames",
+    "shadow_word_profile", "shadow_cover_d", "shadow_cover_hash_log",
+    "train_ns", "shadow_train_ns", "peak_bytes", "worst_sample_delta",
+    "shadow_worst_sample_delta",
 )
 INTEGER_FIELDS = {
     "input_bytes", "training_samples", "validation_samples", "baseline_frames",
     "trained_frames", "dictionary_bytes", "total_bytes", "savings", "winner",
     "ratio_ppm",
-    "context_clusters", "transform_lists", "shift_parameters", "train_ns",
-    "peak_bytes", "worst_sample_delta",
+    "context_clusters", "transform_lists", "shift_parameters", "shadow_winner",
+    "shadow_frames", "shadow_dictionary_bytes", "shadow_frame_savings",
+    "break_even_batches", "break_even_frames", "train_ns", "shadow_train_ns",
+    "peak_bytes", "worst_sample_delta", "shadow_worst_sample_delta",
 }
-OPTIONAL_INTEGER_FIELDS = {"cover_d", "cover_hash_log", "context_mode", "context_cutoff"}
+OPTIONAL_INTEGER_FIELDS = {
+    "cover_d", "cover_hash_log", "context_mode", "context_cutoff",
+    "shadow_cover_d", "shadow_cover_hash_log",
+}
 
 
 def parse_rows(output: str) -> list[dict[str, object]]:
@@ -59,6 +68,8 @@ def validate_rows(rows: list[dict[str, object]], manifest: real_corpus_diff.Mani
     if len(by_label) != len(rows):
         raise RuntimeError("report contains duplicate labels")
     winners = 0
+    shadow_winners = 0
+    break_even_values: list[int] = []
     totals = {
         "input_bytes": 0,
         "baseline_frames": 0,
@@ -66,9 +77,14 @@ def validate_rows(rows: list[dict[str, object]], manifest: real_corpus_diff.Mani
         "dictionary_bytes": 0,
         "total_bytes": 0,
         "savings": 0,
+        "shadow_frames": 0,
+        "shadow_dictionary_bytes": 0,
+        "shadow_frame_savings": 0,
         "train_ns": 0,
+        "shadow_train_ns": 0,
         "peak_bytes": 0,
         "worst_sample_delta": 0,
+        "shadow_worst_sample_delta": 0,
     }
     for case in manifest.cases:
         row = by_label.get(case.label)
@@ -95,23 +111,52 @@ def validate_rows(rows: list[dict[str, object]], manifest: real_corpus_diff.Mani
             winners += 1
             if row["word_profile"] not in ("heavy_hitter", "cover"):
                 raise RuntimeError(f"case {case.label} has an unknown word profile")
+        shadow_winner = int(row["shadow_winner"])
+        shadow_frames = int(row["shadow_frames"])
+        shadow_dictionary = int(row["shadow_dictionary_bytes"])
+        shadow_savings = int(row["shadow_frame_savings"])
+        if shadow_winner not in (0, 1):
+            raise RuntimeError(f"case {case.label} has invalid shadow winner flag")
+        if shadow_frames <= 0 or shadow_frames > baseline or shadow_savings != baseline - shadow_frames:
+            raise RuntimeError(f"case {case.label} violates shadow frame accounting")
+        if shadow_winner == 0:
+            if (shadow_frames != baseline or shadow_dictionary != 0 or shadow_savings != 0 or
+                    row["break_even_batches"] != 0 or row["break_even_frames"] != 0 or
+                    row["shadow_word_profile"] != "none"):
+                raise RuntimeError(f"case {case.label} reports a synthetic shadow non-winner")
+        else:
+            shadow_winners += 1
+            if shadow_dictionary <= 0 or shadow_savings <= 0:
+                raise RuntimeError(f"case {case.label} has an incomplete shadow winner")
+            expected_batches = (shadow_dictionary + shadow_savings - 1) // shadow_savings
+            expected_frames = (
+                shadow_dictionary * int(row["validation_samples"]) + shadow_savings - 1
+            ) // shadow_savings
+            if row["break_even_batches"] != expected_batches or row["break_even_frames"] != expected_frames:
+                raise RuntimeError(f"case {case.label} has inconsistent break-even accounting")
+            if row["shadow_word_profile"] not in ("heavy_hitter", "cover"):
+                raise RuntimeError(f"case {case.label} has an unknown shadow word profile")
+            break_even_values.append(int(row["break_even_frames"]))
         if int(row["training_samples"]) < 5 or int(row["validation_samples"]) <= 0:
             raise RuntimeError(f"case {case.label} has an invalid partition")
-        if int(row["train_ns"]) <= 0 or int(row["peak_bytes"]) <= 0:
+        if int(row["train_ns"]) <= 0 or int(row["shadow_train_ns"]) <= 0 or int(row["peak_bytes"]) <= 0:
             raise RuntimeError(f"case {case.label} lacks resource evidence")
         if int(row["peak_bytes"]) > 1024 * 1024 * 1024:
             raise RuntimeError(f"case {case.label} exceeds the 1 GiB logical peak guard")
         for field in totals:
             if field == "peak_bytes":
                 totals[field] = max(totals[field], int(row[field]))
-            elif field == "worst_sample_delta":
+            elif field in ("worst_sample_delta", "shadow_worst_sample_delta"):
                 totals[field] = max(totals[field], int(row[field]))
             else:
                 totals[field] += int(row[field])
     totals["winners"] = winners
+    totals["shadow_winners"] = shadow_winners
     totals["cases"] = len(rows)
     totals["categories"] = len({case.category for case in manifest.cases})
     totals["ratio_ppm"] = totals["total_bytes"] * 1_000_000 // totals["baseline_frames"]
+    totals["shadow_ratio_ppm"] = totals["shadow_frames"] * 1_000_000 // totals["baseline_frames"]
+    totals["minimum_break_even_frames"] = min(break_even_values, default=0)
     return totals
 
 
@@ -133,23 +178,29 @@ def write_markdown(path: Path, rows: list[dict[str, object]], summary: dict[str,
     lines = [
         "# Brotli serialized dictionary trainer corpus report",
         "",
-        f"Cases: {summary['cases']}; categories: {summary['categories']}; winners: {summary['winners']}.",
+        f"Cases: {summary['cases']}; categories: {summary['categories']}; charged winners: {summary['winners']}; shadow winners: {summary['shadow_winners']}.",
         "",
-        "| Case | Category | Baseline | Frames | Dictionary | Total | Ratio | Saving | Word/context/transform | Train ms | Peak MiB | Worst delta |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|",
+        "| Case | Category | Baseline | Charged total | Saving | Shadow frames | Shadow dict | Shadow saving | Break-even frames | Profiles | Train/shadow ms | Peak MiB | Worst shadow delta |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|",
     ]
     for row in rows:
-        profiles = f"{row['word_profile']}/{row['context_profile']}/{row['transform_profile']}"
+        profiles = (
+            f"{row['word_profile']}/{row['context_profile']}/{row['transform_profile']}"
+            f"; shadow={row['shadow_word_profile']}"
+        )
         lines.append(
             f"| {row['label']} | {row['category']} | {row['baseline_frames']} | "
-            f"{row['trained_frames']} | {row['dictionary_bytes']} | {row['total_bytes']} | "
-            f"{int(row['ratio_ppm']) / 10_000:.2f}% | {row['savings']} | {profiles} | {int(row['train_ns']) / 1_000_000:.1f} | "
-            f"{int(row['peak_bytes']) / (1024 * 1024):.2f} | {row['worst_sample_delta']} |"
+            f"{row['total_bytes']} | {row['savings']} | {row['shadow_frames']} | "
+            f"{row['shadow_dictionary_bytes']} | {row['shadow_frame_savings']} | "
+            f"{row['break_even_frames']} | {profiles} | "
+            f"{int(row['train_ns']) / 1_000_000:.1f}/{int(row['shadow_train_ns']) / 1_000_000:.1f} | "
+            f"{int(row['peak_bytes']) / (1024 * 1024):.2f} | {row['shadow_worst_sample_delta']} |"
         )
     lines.extend([
         "",
         f"Aggregate baseline/total/saving: {summary['baseline_frames']}/{summary['total_bytes']}/{summary['savings']} bytes ({summary['ratio_ppm'] / 10_000:.2f}%).",
-        f"Total training time: {summary['train_ns'] / 1_000_000:.1f} ms; maximum logical peak: {summary['peak_bytes'] / (1024 * 1024):.2f} MiB.",
+        f"Out-of-band shadow frames/saving: {summary['shadow_frames']}/{summary['shadow_frame_savings']} bytes ({summary['shadow_ratio_ppm'] / 10_000:.2f}%); minimum break-even: {summary['minimum_break_even_frames']} frames.",
+        f"Total charged/shadow training time: {summary['train_ns'] / 1_000_000:.1f}/{summary['shadow_train_ns'] / 1_000_000:.1f} ms; maximum logical peak: {summary['peak_bytes'] / (1024 * 1024):.2f} MiB.",
         "",
         "Times are observational; the gate enforces accounting, coverage, determinism tests, and a 1 GiB logical peak guard, not a host-dependent latency ceiling.",
     ])
@@ -183,9 +234,13 @@ def main() -> int:
     write_markdown(args.markdown, rows, summary)
     print(
         "br_serialized_trainer_report=ok "
-        f"cases={summary['cases']} categories={summary['categories']} winners={summary['winners']} "
+        f"cases={summary['cases']} categories={summary['categories']} winners={summary['winners']} shadow_winners={summary['shadow_winners']} "
         f"baseline={summary['baseline_frames']} total={summary['total_bytes']} savings={summary['savings']} "
-        f"train_ns={summary['train_ns']} peak_bytes={summary['peak_bytes']} worst_delta={summary['worst_sample_delta']}"
+        f"shadow_frames={summary['shadow_frames']} shadow_savings={summary['shadow_frame_savings']} "
+        f"minimum_break_even_frames={summary['minimum_break_even_frames']} "
+        f"train_ns={summary['train_ns']} shadow_train_ns={summary['shadow_train_ns']} "
+        f"peak_bytes={summary['peak_bytes']} worst_delta={summary['worst_sample_delta']} "
+        f"shadow_worst_delta={summary['shadow_worst_sample_delta']}"
     )
     return 0
 

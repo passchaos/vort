@@ -2257,6 +2257,13 @@ profiles, time, logical peak allocation, and worst per-sample delta. The current
 four-category baseline has zero winners and zero regressions
 (`16054 -> 16054` aggregate); this is an explicit calibration gap, not a
 claimed ratio win.
+An out-of-band shadow run removes the one-time dictionary charge without
+changing candidate selection. Structured JSON is the only frame-only winner
+(`3658 -> 3642`) and uses a 2,128-byte `d=6/hash_log=12` COVER dictionary; it
+breaks even after 133 equivalent validation batches, about 4,256 frames, while
+its worst individual frame grows by 12 bytes. Aggregate shadow frames are
+16,038, saving 16 bytes. Source, documentation, and binary have no shadow
+winner, focusing the next ratio work on smaller word-length/bucket subsets.
 
 ### Brotli planned encoder controls
 

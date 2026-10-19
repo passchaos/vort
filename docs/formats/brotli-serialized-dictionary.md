@@ -156,3 +156,6 @@ caller-owned specifications.
 The repository-owned four-category trainer report currently records zero
 charged winners and zero regressions (`16,054 -> 16,054` aggregate), making
 real-corpus profitability an explicit tracked gap.
+The out-of-band shadow finds one structured-JSON frame winner, but its 2,128-
+byte dictionary needs roughly 4,256 frames to amortize; the other three
+categories have no frame-only winner.

@@ -270,3 +270,13 @@ are observational rather than gated; the gate enforces category/count/accounting
 integrity, deterministic reruns, a 1 GiB logical peak guard, and schema-versioned
 JSON/Markdown artifacts. Improving this baseline is the next trainer
 performance target.
+
+The report also repeats training with `include_dictionary_size=false` to expose
+frame-only potential and calculate amortization honestly. Only structured JSON
+wins: frames fall from 3,658 to 3,642 with a 2,128-byte
+`d=6/hash_log=12` COVER dictionary. The 16-byte batch saving requires 133
+equivalent batches, or approximately 4,256 validation frames, to repay the
+dictionary; the worst individual frame grows by 12 bytes. Aggregate shadow
+frames are 16,038, a 16-byte saving (99.90%). Source, documentation, and binary
+return null even out of band. These results prioritize word-length/bucket subset
+search over training-throughput optimization.

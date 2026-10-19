@@ -29,7 +29,7 @@ def manifest() -> object:
     return report.real_corpus_diff.Manifest(32768, 4, ("source", "binary"), cases)
 
 
-def row(label: str, category: str, winner: int = 1) -> dict[str, object]:
+def row(label: str, category: str, winner: int = 1, shadow_winner: int = 1) -> dict[str, object]:
     baseline = 1000
     total = 800 if winner else baseline
     return {
@@ -55,15 +55,26 @@ def row(label: str, category: str, winner: int = 1) -> dict[str, object]:
         "transform_profile": "identity" if winner else "none",
         "transform_lists": 1 if winner else 0,
         "shift_parameters": 0,
+        "shadow_winner": shadow_winner,
+        "shadow_frames": 750 if shadow_winner else baseline,
+        "shadow_dictionary_bytes": 100 if shadow_winner else 0,
+        "shadow_frame_savings": 250 if shadow_winner else 0,
+        "break_even_batches": 1 if shadow_winner else 0,
+        "break_even_frames": 7 if shadow_winner else 0,
+        "shadow_word_profile": "cover" if shadow_winner else "none",
+        "shadow_cover_d": 6 if shadow_winner else None,
+        "shadow_cover_hash_log": 12 if shadow_winner else None,
         "train_ns": 1_000_000,
+        "shadow_train_ns": 900_000,
         "peak_bytes": 4 * 1024 * 1024,
         "worst_sample_delta": 2 if winner else 0,
+        "shadow_worst_sample_delta": 3 if shadow_winner else 0,
     }
 
 
 class ReportSmoke(unittest.TestCase):
     def test_complete_rows_and_artifacts(self) -> None:
-        rows = [row("source", "source"), row("binary", "binary", 0)]
+        rows = [row("source", "source"), row("binary", "binary", 0, 0)]
         summary = report.validate_rows(rows, manifest(), 32768)
         self.assertEqual(1, summary["winners"])
         with tempfile.TemporaryDirectory() as directory:
@@ -77,7 +88,7 @@ class ReportSmoke(unittest.TestCase):
             self.assertIn("| source | source |", markdown_path.read_text(encoding="utf-8"))
 
     def test_rejects_complete_total_regression(self) -> None:
-        rows = [row("source", "source"), row("binary", "binary", 0)]
+        rows = [row("source", "source"), row("binary", "binary", 0, 0)]
         rows[0]["total_bytes"] = 1001
         with self.assertRaisesRegex(RuntimeError, "complete-total"):
             report.validate_rows(rows, manifest(), 32768)
@@ -87,9 +98,15 @@ class ReportSmoke(unittest.TestCase):
             report.validate_rows([row("source", "source")], manifest(), 32768)
 
     def test_accepts_honest_no_winner_report(self) -> None:
-        rows = [row("source", "source", 0), row("binary", "binary", 0)]
+        rows = [row("source", "source", 0, 0), row("binary", "binary", 0, 0)]
         summary = report.validate_rows(rows, manifest(), 32768)
         self.assertEqual(0, summary["winners"])
+
+    def test_rejects_bad_break_even(self) -> None:
+        rows = [row("source", "source"), row("binary", "binary", 0, 0)]
+        rows[0]["break_even_frames"] = 8
+        with self.assertRaisesRegex(RuntimeError, "break-even"):
+            report.validate_rows(rows, manifest(), 32768)
 
     def test_parser_rejects_bad_header(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "unexpected header"):

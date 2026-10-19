@@ -101,7 +101,11 @@ pub fn main(init: std.process.Init) !void {
             "\tsavings\tratio_ppm\twinner\tword_profile\tcover_d\tcover_hash_log" ++
             "\tcontext_profile\tcontext_mode\tcontext_cutoff\tcontext_clusters" ++
             "\ttransform_profile\ttransform_lists\tshift_parameters" ++
-            "\ttrain_ns\tpeak_bytes\tworst_sample_delta\n",
+            "\tshadow_winner\tshadow_frames\tshadow_dictionary_bytes" ++
+            "\tshadow_frame_savings\tbreak_even_batches\tbreak_even_frames" ++
+            "\tshadow_word_profile\tshadow_cover_d\tshadow_cover_hash_log" ++
+            "\ttrain_ns\tshadow_train_ns\tpeak_bytes" ++
+            "\tworst_sample_delta\tshadow_worst_sample_delta\n",
     );
     for (cases.items) |case| try reportCase(init, output, case, limit, chunk_len);
     try output.flush();
@@ -173,6 +177,28 @@ fn reportCase(
     defer if (repeated) |result| result.deinit(init.gpa);
     try verifyDeterministic(trained, repeated);
 
+    var shadow_options = train_options;
+    shadow_options.include_dictionary_size = false;
+    const shadow_started = std.Io.Clock.awake.now(init.io);
+    const shadow = try vort.brTrainSerializedSharedDictionaryAlloc(
+        init.gpa,
+        training.items,
+        validation.items,
+        shadow_options,
+    );
+    const shadow_elapsed_ns: u64 = @intCast(
+        shadow_started.untilNow(init.io, .awake).toNanoseconds(),
+    );
+    defer if (shadow) |result| result.deinit(init.gpa);
+    const shadow_repeated = try vort.brTrainSerializedSharedDictionaryAlloc(
+        init.gpa,
+        training.items,
+        validation.items,
+        shadow_options,
+    );
+    defer if (shadow_repeated) |result| result.deinit(init.gpa);
+    try verifyDeterministic(shadow, shadow_repeated);
+
     var trained_frames = baseline;
     var dictionary_bytes: usize = 0;
     var savings: usize = 0;
@@ -181,35 +207,7 @@ fn reportCase(
         trained_frames = result.trained_frame_bytes;
         dictionary_bytes = result.charged_dictionary_bytes;
         savings = result.total_savings_bytes;
-        const parsed = try result.parse();
-        for (validation.items) |sample| {
-            const plain = try vort.brEncodePlannedStreamWithOptionsAlloc(
-                init.gpa,
-                sample,
-                .{ .quality = 5 },
-            );
-            defer init.gpa.free(plain);
-            const encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(
-                init.gpa,
-                sample,
-                .{
-                    .quality = 5,
-                    .shared_dictionary = .{ .serialized = &parsed },
-                },
-            );
-            defer init.gpa.free(encoded);
-            const decoded = try vort.brDecodeStreamAllocExactSizeWithOptions(
-                init.gpa,
-                encoded,
-                sample.len,
-                .{ .shared_dictionary = .{ .serialized = &parsed } },
-            );
-            defer init.gpa.free(decoded);
-            if (!std.mem.eql(u8, sample, decoded)) return error.RoundTripMismatch;
-            const delta = @as(i64, @intCast(encoded.len)) -
-                @as(i64, @intCast(plain.len));
-            worst_delta = @max(worst_delta, delta);
-        }
+        worst_delta = try worstDeltaForDictionary(init, validation.items, result);
     }
     const total_bytes = trained_frames + dictionary_bytes;
     if (total_bytes > baseline or baseline - total_bytes != savings)
@@ -217,6 +215,36 @@ fn reportCase(
     const ratio_ppm: usize = @intCast(
         @as(u128, total_bytes) * 1_000_000 / baseline,
     );
+
+    var shadow_frames = baseline;
+    var shadow_dictionary_bytes: usize = 0;
+    var shadow_frame_savings: usize = 0;
+    var break_even_batches: usize = 0;
+    var break_even_frames: usize = 0;
+    var shadow_worst_delta: i64 = 0;
+    if (shadow) |*result| {
+        if (result.charged_dictionary_bytes != 0)
+            return error.TestUnexpectedResult;
+        shadow_frames = result.trained_frame_bytes;
+        shadow_dictionary_bytes = result.bytes.len;
+        shadow_frame_savings = baseline - shadow_frames;
+        if (shadow_frame_savings == 0) return error.TestUnexpectedResult;
+        break_even_batches = divCeil(shadow_dictionary_bytes, shadow_frame_savings);
+        const scaled_dictionary_bytes = std.math.mul(
+            usize,
+            shadow_dictionary_bytes,
+            validation.items.len,
+        ) catch return error.IntegerOverflow;
+        break_even_frames = divCeil(
+            scaled_dictionary_bytes,
+            shadow_frame_savings,
+        );
+        shadow_worst_delta = try worstDeltaForDictionary(
+            init,
+            validation.items,
+            result,
+        );
+    }
 
     try output.print(
         "{s}\t{s}\t{d}\t{d}\t{d}\t{d}\t{d}\t{d}\t{d}\t{d}\t{d}\t{d}",
@@ -254,10 +282,27 @@ fn reportCase(
     } else {
         try output.writeAll("\tnone\t-\t-\tnone\t-\t-\t0\tnone\t0\t0");
     }
-    try output.print("\t{d}\t{d}\t{d}\n", .{
+    try output.print("\t{d}\t{d}\t{d}\t{d}\t{d}\t{d}", .{
+        @intFromBool(shadow != null),
+        shadow_frames,
+        shadow_dictionary_bytes,
+        shadow_frame_savings,
+        break_even_batches,
+        break_even_frames,
+    });
+    if (shadow) |result| {
+        try output.print("\t{s}", .{@tagName(result.word_selection_profile)});
+        try printOptional(output, result.cover_dmer_size);
+        try printOptional(output, result.cover_hash_log);
+    } else {
+        try output.writeAll("\tnone\t-\t-");
+    }
+    try output.print("\t{d}\t{d}\t{d}\t{d}\t{d}\n", .{
         elapsed_ns,
+        shadow_elapsed_ns,
         peak_bytes,
         worst_delta,
+        shadow_worst_delta,
     });
 }
 
@@ -281,6 +326,49 @@ fn verifyDeterministic(
             return error.TestUnexpectedResult;
         }
     }
+}
+
+fn worstDeltaForDictionary(
+    init: std.process.Init,
+    samples: []const []const u8,
+    result: *const vort.BrotliOwnedTrainedSerializedSharedDictionary,
+) !i64 {
+    const parsed = try result.parse();
+    var worst_delta: i64 = std.math.minInt(i64);
+    for (samples) |sample| {
+        const plain = try vort.brEncodePlannedStreamWithOptionsAlloc(
+            init.gpa,
+            sample,
+            .{ .quality = 5 },
+        );
+        defer init.gpa.free(plain);
+        const encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(
+            init.gpa,
+            sample,
+            .{
+                .quality = 5,
+                .shared_dictionary = .{ .serialized = &parsed },
+            },
+        );
+        defer init.gpa.free(encoded);
+        const decoded = try vort.brDecodeStreamAllocExactSizeWithOptions(
+            init.gpa,
+            encoded,
+            sample.len,
+            .{ .shared_dictionary = .{ .serialized = &parsed } },
+        );
+        defer init.gpa.free(decoded);
+        if (!std.mem.eql(u8, sample, decoded)) return error.RoundTripMismatch;
+        const delta = @as(i64, @intCast(encoded.len)) -
+            @as(i64, @intCast(plain.len));
+        worst_delta = @max(worst_delta, delta);
+    }
+    return worst_delta;
+}
+
+fn divCeil(numerator: usize, denominator: usize) usize {
+    std.debug.assert(denominator != 0);
+    return numerator / denominator + @intFromBool(numerator % denominator != 0);
 }
 
 fn printOptional(output: *std.Io.Writer, value: anytype) !void {
