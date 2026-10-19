@@ -2165,10 +2165,11 @@ encoder when repeated-call allocation behavior matters.
 
 Upstream still marks serialized shared dictionaries as
 `BROTLI_EXPERIMENTAL`/`DO NOT USE`. Vort now exposes a strict borrowed parser
-through `brParseSerializedSharedDictionary`, including custom word lists,
-transform lists, 64-entry contextual selection, all 23 transform families,
-an exhaustive custom-only reference matcher, and complete mixed built-in/custom
-address replay. A parsed view can be attached through
+through `brParseSerializedSharedDictionary` and deterministic encoded-size,
+Into, Append, and Alloc builders for RAW prefixes, custom word/transform lists,
+mixed RFC built-in choices, and 64-entry contextual maps. Parsing includes all
+23 transform families, an exhaustive custom-only reference matcher, and
+complete mixed built-in/custom address replay. A parsed view can be attached through
 `BrotliSharedDictionary.serialized` for production one-shot, chunked, summary,
 caller-history, and allocator-owned or caller-history progressive decoding.
 The serialized RAW prefix follows explicit RAW attachments in Vort's compound

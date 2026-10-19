@@ -36,8 +36,10 @@ major gaps before Vort can claim broad industry-best parity:
   exhaustive oracle/fallback and exact complete-wire selection across LSB6,
   MSB6, UTF8, and Signed. Each address-stable mode also arbitrates single-tree,
   suffix, bounded-16-tree, and complete clustered literal-context candidates.
-  Serialized dictionary construction/training and broader corpus calibration
-  remain open.
+  A canonical Zig-native builder now exposes encoded-size, caller-buffer,
+  append, and allocating forms for the complete borrowed specification, with
+  deterministic parse/serialize round trips. Dictionary training and broader
+  corpus calibration remain open.
   q10/q11 Zopfli/HQ cost refinement and global exact-cost segmentation also
   remain open.
 - True byte-progressive Brotli decoding now covers stored data, metadata,

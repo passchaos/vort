@@ -854,7 +854,16 @@ pub const BrotliSharedDictionary = br.SharedDictionary;
 pub const BrotliSerializedSharedDictionary = br.SerializedSharedDictionary;
 pub const BrotliSerializedSharedDictionaryError = br.SerializedSharedDictionaryError;
 pub const BrotliSerializedSharedDictionaryMatcher = br.SerializedSharedDictionaryMatcher;
+pub const BrotliSerializedSharedDictionarySpec = br.SerializedSharedDictionarySpec;
+pub const BrotliSerializedSharedDictionaryChoice = br.SerializedSharedDictionaryChoice;
+pub const BrotliSerializedSharedDictionaryWordListSpec = br.SerializedSharedDictionaryWordListSpec;
+pub const BrotliSerializedSharedDictionaryTransformListSpec = br.SerializedSharedDictionaryTransformListSpec;
+pub const BrotliSerializedSharedDictionaryBuildError = br.SerializedSharedDictionaryBuildError;
 pub const brParseSerializedSharedDictionary = br.parseSerializedSharedDictionary;
+pub const brSerializedSharedDictionaryEncodedSize = br.serializedSharedDictionaryEncodedSize;
+pub const brSerializeSharedDictionaryInto = br.serializeSharedDictionaryInto;
+pub const brSerializeSharedDictionaryAppend = br.serializeSharedDictionaryAppend;
+pub const brSerializeSharedDictionaryAlloc = br.serializeSharedDictionaryAlloc;
 pub const BrotliPlannedEncodeOptions = br.PlannedEncodeOptions;
 pub const brotliMaxExtendedDictionaryProbes = br.max_extended_dictionary_probes;
 pub const BrotliPlannedStreamChunksOptions = br.PlannedStreamChunksOptions;
@@ -4040,7 +4049,16 @@ test "root exports lz4 and zstd codec helpers" {
     _ = BrotliSerializedSharedDictionary;
     _ = BrotliSerializedSharedDictionaryError;
     _ = BrotliSerializedSharedDictionaryMatcher;
+    _ = BrotliSerializedSharedDictionarySpec;
+    _ = BrotliSerializedSharedDictionaryChoice;
+    _ = BrotliSerializedSharedDictionaryWordListSpec;
+    _ = BrotliSerializedSharedDictionaryTransformListSpec;
+    _ = BrotliSerializedSharedDictionaryBuildError;
     _ = brParseSerializedSharedDictionary;
+    _ = brSerializedSharedDictionaryEncodedSize;
+    _ = brSerializeSharedDictionaryInto;
+    _ = brSerializeSharedDictionaryAppend;
+    _ = brSerializeSharedDictionaryAlloc;
     const default_serialized_dictionary = try brParseSerializedSharedDictionary(
         &.{ 0x91, 0x00, 0x00, 0x00, 0x00 },
     );
@@ -4053,6 +4071,16 @@ test "root exports lz4 and zstd codec helpers" {
         .serialized = &default_serialized_dictionary,
     };
     try attached_serialized_dictionary.validate();
+    var rebuilt_serialized_dictionary: [5]u8 = undefined;
+    try std.testing.expectEqual(
+        rebuilt_serialized_dictionary.len,
+        try brSerializeSharedDictionaryInto(.{}, &rebuilt_serialized_dictionary),
+    );
+    try std.testing.expectEqualSlices(
+        u8,
+        &.{ 0x91, 0, 0, 0, 0 },
+        &rebuilt_serialized_dictionary,
+    );
     try std.testing.expectEqual(@as(usize, 1 << 24), brotliMaxUncompressedMetaBlockLen);
     try std.testing.expectEqual(@as(u5, 16), brotliDefaultWindowBits);
     _ = brEncodedStoredStreamBound;

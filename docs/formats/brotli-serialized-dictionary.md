@@ -35,6 +35,15 @@ tables and returns the same context-relative combined address consumed by
 The encoded bytes must remain alive and unchanged while the parsed view or any
 nested word/transform slice is used.
 
+`BrotliSerializedSharedDictionarySpec` is the borrowed construction model.
+`brSerializedSharedDictionaryEncodedSize`,
+`brSerializeSharedDictionaryInto`, `brSerializeSharedDictionaryAppend`, and
+`brSerializeSharedDictionaryAlloc` validate the complete specification before
+writing a canonical container. Word lists provide exact 4...31-byte bucket
+bits and concatenated word bytes; transform lists provide the serialized
+stringlet table, transform triplets, and optional SHIFT parameters. Dictionary
+choices may independently select custom or RFC built-in word/transform tables.
+
 ```zig
 const dictionary = try vort.brParseSerializedSharedDictionary(encoded);
 const decode_options = vort.BrotliDecodeOptions{
@@ -50,6 +59,15 @@ const word = try dictionary.resolveCustom(
     dictionary_address,
     &transformed,
 );
+
+const rebuilt = try vort.brSerializeSharedDictionaryAlloc(allocator, .{
+    .raw_prefix = raw_prefix,
+    .word_lists = word_lists,
+    .transform_lists = transform_lists,
+    .dictionaries = dictionary_choices,
+    .context_map = &context_map,
+});
+defer allocator.free(rebuilt);
 ```
 
 ## Validation
@@ -66,8 +84,12 @@ progressive decode, allocator-owned progressive decode, serialized RAW-prefix
 distance shifting, and history-selected context maps. Encoder tests cover
 one-shot, reusable, chunked, incremental, q0 cross-block context retention,
 and complete address replay. An experimental libbrotli 1.2.0 build passes both
-Vort-encode/libbrotli-decode and libbrotli-encode/Vort-decode cases. The parser
-allocates no memory.
+Vort-encode/libbrotli-decode and libbrotli-encode/Vort-decode cases. The
+contextual differential dictionary is produced through the public builder.
+Builder tests cover deterministic parse/serialize round trips, built-in/custom
+mixed choices, all output ownership forms, varint boundaries, invalid size
+buckets/transforms/context IDs, atomic caller output, and allocation failure.
+The parser allocates no memory.
 
 ## Remaining performance work
 
@@ -83,3 +105,5 @@ mode, the encoder additionally arbitrates single-tree, suffix, bounded-16-tree,
 and complete clustered literal-context candidates. A locked joint fixture
 shrinks from 627 to 523 bytes while retaining custom dictionary copies. Vort
 does not promise stability for upstream's experimental container format.
+Dictionary training and corpus-driven word/transform selection remain open;
+the builder intentionally serializes an explicit caller-owned specification.

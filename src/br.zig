@@ -65,6 +65,7 @@ const code_sections = @import("br/format/code_sections.zig");
 const distance_history = @import("br/decoder/distance_history.zig");
 const shared_dictionary = @import("br/shared_dictionary.zig");
 const serialized_dictionary = @import("br/serialized_dictionary.zig");
+const serialized_dictionary_builder = @import("br/serialized_dictionary_builder.zig");
 const code_length_decoder_mod = @import("br/code_length_decoder.zig");
 
 const distanceWithDelta = distance_history.withDelta;
@@ -97,6 +98,15 @@ pub const SharedDictionary = shared_dictionary.Dictionary;
 pub const SerializedSharedDictionary = serialized_dictionary.Dictionary;
 pub const SerializedSharedDictionaryError = serialized_dictionary.Error;
 pub const SerializedSharedDictionaryMatcher = serialized_dictionary_matcher.Matcher;
+pub const SerializedSharedDictionarySpec = serialized_dictionary_builder.Spec;
+pub const SerializedSharedDictionaryChoice = serialized_dictionary.DictionaryChoice;
+pub const SerializedSharedDictionaryWordListSpec = serialized_dictionary_builder.WordListSpec;
+pub const SerializedSharedDictionaryTransformListSpec = serialized_dictionary_builder.TransformListSpec;
+pub const SerializedSharedDictionaryBuildError = serialized_dictionary_builder.Error;
+pub const serializedSharedDictionaryEncodedSize = serialized_dictionary_builder.encodedSize;
+pub const serializeSharedDictionaryInto = serialized_dictionary_builder.serializeInto;
+pub const serializeSharedDictionaryAppend = serialized_dictionary_builder.serializeAppend;
+pub const serializeSharedDictionaryAlloc = serialized_dictionary_builder.serializeAlloc;
 pub const max_extended_dictionary_probes: u16 = 4096;
 pub const PlannedEncodeOptions = struct {
     level: PlannedCompressionLevel = .fast,
@@ -1059,6 +1069,7 @@ test {
     _ = header_profile;
     _ = code_length_decoder_mod;
     _ = serialized_dictionary;
+    _ = serialized_dictionary_builder;
 }
 
 pub const IncrementalTestSupport = struct {

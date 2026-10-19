@@ -358,28 +358,41 @@ fn buildContextualSerializedDictionary(
     dictionary: *std.ArrayList(u8),
     input: *std.ArrayList(u8),
 ) !void {
-    try dictionary.appendSlice(allocator, &.{ 0x91, 0, 0, 2 });
-    var bits: [28]u8 = @splat(0);
-    bits[8 - 4] = 8;
-    try dictionary.appendSlice(allocator, &bits);
+    var fallback_words: std.ArrayList(u8) = .empty;
+    defer fallback_words.deinit(allocator);
+    var contextual_words: std.ArrayList(u8) = .empty;
+    defer contextual_words.deinit(allocator);
     for (0..256) |index| {
         var bytes = contextualSerializedWord(index);
         bytes[0] &= 0x7f;
-        try dictionary.appendSlice(allocator, &bytes);
+        try fallback_words.appendSlice(allocator, &bytes);
     }
-    try dictionary.appendSlice(allocator, &bits);
     for (0..256) |index| {
         const bytes = contextualSerializedWord(index);
-        try dictionary.appendSlice(allocator, &bytes);
+        try contextual_words.appendSlice(allocator, &bytes);
     }
-    try dictionary.appendSlice(allocator, &.{
-        1, 1, 0, 0, 1, 0, 0, 0, // identity transform list
-        2, 0, 0, 1, 0, // fallback then contextual dictionary
-        1, // context map enabled
-    });
-    var context_map: [64]u8 = @splat(0);
+    var bits: [32]u8 = @splat(0);
+    bits[8] = 8;
+    const word_lists = [_]vort.BrotliSerializedSharedDictionaryWordListSpec{
+        .{ .size_bits_by_length = bits, .data = fallback_words.items },
+        .{ .size_bits_by_length = bits, .data = contextual_words.items },
+    };
+    const transform_lists = [_]vort.BrotliSerializedSharedDictionaryTransformListSpec{.{
+        .prefix_suffix = &.{0},
+        .transforms = &.{ 0, 0, 0 },
+    }};
+    const choices = [_]vort.BrotliSerializedSharedDictionaryChoice{
+        .{ .word_list_index = 0, .transform_list_index = 0 },
+        .{ .word_list_index = 1, .transform_list_index = 0 },
+    };
+    var context_map: [64]u6 = @splat(0);
     context_map[2] = 1; // UTF8(0x01, '0'); other modes select dictionary 0.
-    try dictionary.appendSlice(allocator, &context_map);
+    try vort.brSerializeSharedDictionaryAppend(allocator, dictionary, .{
+        .word_lists = &word_lists,
+        .transform_lists = &transform_lists,
+        .dictionaries = &choices,
+        .context_map = &context_map,
+    });
     for (0..64) |index| {
         try input.appendSlice(allocator, &.{ 0x30, 0x01 });
         const bytes = contextualSerializedWord(index);
