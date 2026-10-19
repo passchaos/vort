@@ -2225,6 +2225,11 @@ disable the grid for one explicit configuration. Results report selected
 `d/hash_log` and the evaluated parameter count. This reuses the shared COVER
 heuristic but does not claim byte-identical libzstd or libbrotli training
 output.
+Callers may additionally provide up to eight bounded word-bucket profiles
+`(min_word_len,max_word_len,max_words_per_length)`. The base profile is always
+evaluated first; every unique subprofile traverses the same heavy/COVER,
+context, and transform matrix, and results report the selected range/cap and
+evaluated profile count.
 The trainer also compares identity-only word lists with canonical
 identity/uppercase-first/uppercase-all transform families without retraining
 the words, plus independent omit-first/last and combined case+omit families.
@@ -2255,15 +2260,17 @@ source, Markdown, structured JSON, and binary manifest cases into independent
 selection, and writes schema-versioned JSON/Markdown with complete-total bytes,
 profiles, time, logical peak allocation, and worst per-sample delta. The current
 four-category baseline has zero winners and zero regressions
-(`16054 -> 16054` aggregate); this is an explicit calibration gap, not a
+(`16182 -> 16182` aggregate); this is an explicit calibration gap, not a
 claimed ratio win.
 An out-of-band shadow run removes the one-time dictionary charge without
 changing candidate selection. Structured JSON is the only frame-only winner
 (`3658 -> 3642`) and uses a 2,128-byte `d=6/hash_log=12` COVER dictionary; it
 breaks even after 133 equivalent validation batches, about 4,256 frames, while
 its worst individual frame grows by 12 bytes. Aggregate shadow frames are
-16,038, saving 16 bytes. Source, documentation, and binary have no shadow
-winner, focusing the next ratio work on smaller word-length/bucket subsets.
+16,166, saving 16 bytes. A nine-profile structured grid covering smaller
+uniform bucket caps and contiguous word ranges still selects base
+`4...16/max8`, so the next ratio work requires per-length sparse bucket
+selection. Source, documentation, and binary have no shadow winner.
 
 ### Brotli planned encoder controls
 

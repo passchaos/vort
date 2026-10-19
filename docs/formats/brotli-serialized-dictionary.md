@@ -103,7 +103,9 @@ whose full segment size equals the word length. COVER output is reordered from
 history-tail priority to low Brotli word addresses. Each emitted bucket is the
 largest legal power of two within the configured limits. The default bounded
 grid evaluates `d={6,8}` and `hash_log={12,16}` through actual complete Brotli
-wire cost; results report the winning pair and evaluated count. When context training is enabled, it trains two word lists
+wire cost; results report the winning pair and evaluated count. Up to eight
+explicit word-range/bucket-cap subprofiles may enter the same matrix after the
+base profile. When context training is enabled, it trains two word lists
 on each side of caller-selected context cutoffs for LSB6, MSB6, UTF8, and
 Signed. It also hashes the next minimum-length phrase into a fixed 64-bin
 signature per context and uses normalized integer L1 agglomeration to learn
@@ -154,8 +156,9 @@ available; FastCover-style acceleration, wider calibration, and broad corpus
 evidence remain open. The builder also remains available for fully explicit
 caller-owned specifications.
 The repository-owned four-category trainer report currently records zero
-charged winners and zero regressions (`16,054 -> 16,054` aggregate), making
+charged winners and zero regressions (`16,182 -> 16,182` aggregate), making
 real-corpus profitability an explicit tracked gap.
 The out-of-band shadow finds one structured-JSON frame winner, but its 2,128-
-byte dictionary needs roughly 4,256 frames to amortize; the other three
-categories have no frame-only winner.
+byte dictionary needs roughly 4,256 frames to amortize; a nine-profile uniform-
+cap/contiguous-range grid still selects the base word layout, and the other
+three categories have no frame-only winner.

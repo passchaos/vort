@@ -29,9 +29,10 @@ total by at least `min_savings_bytes`. Deployments that distribute dictionaries
 out of band may disable the one-time dictionary charge explicitly. Every
 returned result includes both frame totals, the charged bytes, total savings,
 word and bucket counts, global/cutoff/clustered context profile, actual cluster
-count, heavy-hitter/COVER word profile, selected d-mer/hash-log and evaluated
-grid count, selected transform profile/list count, learned stringlet and SHIFT
-parameter/transform counts, and a stable content-derived dictionary ID.
+count, heavy-hitter/COVER word profile, selected word range/bucket cap and
+evaluated profile count, selected d-mer/hash-log and evaluated grid count,
+selected transform profile/list count, learned stringlet and SHIFT parameter/
+transform counts, and a stable content-derived dictionary ID.
 
 ## Heavy-hitter and COVER word evidence
 
@@ -252,19 +253,20 @@ training and validation, producing 32 samples on each side. The bounded report
 matrix searches word lengths 4...16, eight words per length, two COVER d-mer
 widths at `hash_log=12`, global plus LSB6/UTF8 cutoff32 maps, and canonical
 case/omit families. Every case is trained twice to require identical null/result
-state, bytes, ID, sizes, and selected profiles.
+state, bytes, ID, sizes, and selected profiles. Structured JSON additionally
+searches eight smaller uniform-cap/contiguous-range word-bucket profiles.
 
 The current ReleaseFast baseline is deliberately recorded even though no
 dictionary wins after charging its bytes:
 
 | Category | Baseline | Charged total | Saving | Train ms (observed) | Logical peak MiB |
 |---|---:|---:|---:|---:|---:|
-| Source | 4,172 | 4,172 | 0 | 1,032 | 0.20 |
+| Source | 4,300 | 4,300 | 0 | 1,129 | 0.20 |
 | Documentation | 5,209 | 5,209 | 0 | 1,666 | 0.20 |
-| Structured JSON | 3,658 | 3,658 | 0 | 832 | 0.20 |
+| Structured JSON | 3,658 | 3,658 | 0 | 4,749 | 0.20 |
 | Binary | 3,015 | 3,015 | 0 | 648 | 0.20 |
 
-Aggregate baseline/total is `16,054/16,054`: zero winners, zero regressions,
+Aggregate baseline/total is `16,182/16,182`: zero winners, zero regressions,
 and zero worst per-sample delta because every result is correctly null. Times
 are observational rather than gated; the gate enforces category/count/accounting
 integrity, deterministic reruns, a 1 GiB logical peak guard, and schema-versioned
@@ -277,6 +279,8 @@ wins: frames fall from 3,658 to 3,642 with a 2,128-byte
 `d=6/hash_log=12` COVER dictionary. The 16-byte batch saving requires 133
 equivalent batches, or approximately 4,256 validation frames, to repay the
 dictionary; the worst individual frame grows by 12 bytes. Aggregate shadow
-frames are 16,038, a 16-byte saving (99.90%). Source, documentation, and binary
-return null even out of band. These results prioritize word-length/bucket subset
-search over training-throughput optimization.
+frames are 16,166, a 16-byte saving (99.90%). The nine total bucket candidates
+still select base `4...16/max8`; none of the uniform-cap/contiguous-range
+subsets improves amortization. Source, documentation, and binary return null
+even out of band. These results prioritize per-length sparse bucket selection
+over training-throughput optimization.

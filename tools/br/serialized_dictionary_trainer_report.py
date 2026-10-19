@@ -16,12 +16,15 @@ SCHEMA_VERSION = 1
 HEADER = (
     "label", "category", "input_bytes", "training_samples", "validation_samples",
     "baseline_frames", "trained_frames", "dictionary_bytes", "total_bytes",
-    "savings", "ratio_ppm", "winner", "word_profile", "cover_d", "cover_hash_log",
+    "savings", "ratio_ppm", "winner", "word_profile", "word_min", "word_max",
+    "max_words_per_length", "word_bucket_candidates", "cover_d", "cover_hash_log",
     "context_profile", "context_mode", "context_cutoff", "context_clusters",
     "transform_profile", "transform_lists", "shift_parameters",
     "shadow_winner", "shadow_frames", "shadow_dictionary_bytes",
     "shadow_frame_savings", "break_even_batches", "break_even_frames",
-    "shadow_word_profile", "shadow_cover_d", "shadow_cover_hash_log",
+    "shadow_word_profile", "shadow_word_min", "shadow_word_max",
+    "shadow_max_words_per_length", "shadow_word_bucket_candidates",
+    "shadow_cover_d", "shadow_cover_hash_log",
     "train_ns", "shadow_train_ns", "peak_bytes", "worst_sample_delta",
     "shadow_worst_sample_delta",
 )
@@ -29,9 +32,12 @@ INTEGER_FIELDS = {
     "input_bytes", "training_samples", "validation_samples", "baseline_frames",
     "trained_frames", "dictionary_bytes", "total_bytes", "savings", "winner",
     "ratio_ppm",
+    "word_min", "word_max", "max_words_per_length", "word_bucket_candidates",
     "context_clusters", "transform_lists", "shift_parameters", "shadow_winner",
     "shadow_frames", "shadow_dictionary_bytes", "shadow_frame_savings",
     "break_even_batches", "break_even_frames", "train_ns", "shadow_train_ns",
+    "shadow_word_min", "shadow_word_max", "shadow_max_words_per_length",
+    "shadow_word_bucket_candidates",
     "peak_bytes", "worst_sample_delta", "shadow_worst_sample_delta",
 }
 OPTIONAL_INTEGER_FIELDS = {
@@ -105,12 +111,20 @@ def validate_rows(rows: list[dict[str, object]], manifest: real_corpus_diff.Mani
             raise RuntimeError(f"case {case.label} has an inconsistent ratio")
         if winner not in (0, 1):
             raise RuntimeError(f"case {case.label} has invalid winner flag")
-        if winner == 0 and (savings != 0 or row["dictionary_bytes"] != 0 or row["word_profile"] != "none"):
+        if winner == 0 and (
+            savings != 0 or row["dictionary_bytes"] != 0 or row["word_profile"] != "none" or
+            row["word_min"] != 0 or row["word_max"] != 0 or row["max_words_per_length"] != 0 or
+            row["word_bucket_candidates"] != 0
+        ):
             raise RuntimeError(f"case {case.label} reports a synthetic non-winner")
         if winner == 1:
             winners += 1
             if row["word_profile"] not in ("heavy_hitter", "cover"):
                 raise RuntimeError(f"case {case.label} has an unknown word profile")
+            if not (4 <= int(row["word_min"]) <= int(row["word_max"]) <= 31):
+                raise RuntimeError(f"case {case.label} has an invalid word range")
+            if int(row["max_words_per_length"]) < 2 or int(row["word_bucket_candidates"]) < 1:
+                raise RuntimeError(f"case {case.label} has invalid word bucket metadata")
         shadow_winner = int(row["shadow_winner"])
         shadow_frames = int(row["shadow_frames"])
         shadow_dictionary = int(row["shadow_dictionary_bytes"])
@@ -122,7 +136,9 @@ def validate_rows(rows: list[dict[str, object]], manifest: real_corpus_diff.Mani
         if shadow_winner == 0:
             if (shadow_frames != baseline or shadow_dictionary != 0 or shadow_savings != 0 or
                     row["break_even_batches"] != 0 or row["break_even_frames"] != 0 or
-                    row["shadow_word_profile"] != "none"):
+                    row["shadow_word_profile"] != "none" or row["shadow_word_min"] != 0 or
+                    row["shadow_word_max"] != 0 or row["shadow_max_words_per_length"] != 0 or
+                    row["shadow_word_bucket_candidates"] != 0):
                 raise RuntimeError(f"case {case.label} reports a synthetic shadow non-winner")
         else:
             shadow_winners += 1
@@ -136,6 +152,10 @@ def validate_rows(rows: list[dict[str, object]], manifest: real_corpus_diff.Mani
                 raise RuntimeError(f"case {case.label} has inconsistent break-even accounting")
             if row["shadow_word_profile"] not in ("heavy_hitter", "cover"):
                 raise RuntimeError(f"case {case.label} has an unknown shadow word profile")
+            if not (4 <= int(row["shadow_word_min"]) <= int(row["shadow_word_max"]) <= 31):
+                raise RuntimeError(f"case {case.label} has an invalid shadow word range")
+            if int(row["shadow_max_words_per_length"]) < 2 or int(row["shadow_word_bucket_candidates"]) < 1:
+                raise RuntimeError(f"case {case.label} has invalid shadow word bucket metadata")
             break_even_values.append(int(row["break_even_frames"]))
         if int(row["training_samples"]) < 5 or int(row["validation_samples"]) <= 0:
             raise RuntimeError(f"case {case.label} has an invalid partition")
@@ -184,9 +204,18 @@ def write_markdown(path: Path, rows: list[dict[str, object]], summary: dict[str,
         "|---|---|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|",
     ]
     for row in rows:
+        charged_word = str(row["word_profile"])
+        if charged_word != "none":
+            charged_word += f"[{row['word_min']}..{row['word_max']}×{row['max_words_per_length']}]"
+        shadow_word = str(row["shadow_word_profile"])
+        if shadow_word != "none":
+            shadow_word += (
+                f"[{row['shadow_word_min']}..{row['shadow_word_max']}"
+                f"×{row['shadow_max_words_per_length']}]"
+            )
         profiles = (
-            f"{row['word_profile']}/{row['context_profile']}/{row['transform_profile']}"
-            f"; shadow={row['shadow_word_profile']}"
+            f"{charged_word}/{row['context_profile']}/{row['transform_profile']}"
+            f"; shadow={shadow_word}"
         )
         lines.append(
             f"| {row['label']} | {row['category']} | {row['baseline_frames']} | "

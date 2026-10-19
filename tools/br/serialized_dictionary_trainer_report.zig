@@ -98,12 +98,15 @@ pub fn main(init: std.process.Init) !void {
     try output.writeAll(
         "label\tcategory\tinput_bytes\ttraining_samples\tvalidation_samples" ++
             "\tbaseline_frames\ttrained_frames\tdictionary_bytes\ttotal_bytes" ++
-            "\tsavings\tratio_ppm\twinner\tword_profile\tcover_d\tcover_hash_log" ++
+            "\tsavings\tratio_ppm\twinner\tword_profile\tword_min\tword_max" ++
+            "\tmax_words_per_length\tword_bucket_candidates\tcover_d\tcover_hash_log" ++
             "\tcontext_profile\tcontext_mode\tcontext_cutoff\tcontext_clusters" ++
             "\ttransform_profile\ttransform_lists\tshift_parameters" ++
             "\tshadow_winner\tshadow_frames\tshadow_dictionary_bytes" ++
             "\tshadow_frame_savings\tbreak_even_batches\tbreak_even_frames" ++
-            "\tshadow_word_profile\tshadow_cover_d\tshadow_cover_hash_log" ++
+            "\tshadow_word_profile\tshadow_word_min\tshadow_word_max" ++
+            "\tshadow_max_words_per_length\tshadow_word_bucket_candidates" ++
+            "\tshadow_cover_d\tshadow_cover_hash_log" ++
             "\ttrain_ns\tshadow_train_ns\tpeak_bytes" ++
             "\tworst_sample_delta\tshadow_worst_sample_delta\n",
     );
@@ -140,7 +143,7 @@ fn reportCase(
         return error.InvalidTrainingOptions;
 
     const baseline = try frameBytes(init.gpa, validation.items, null);
-    const train_options: vort.BrotliSerializedSharedDictionaryTrainOptions = .{
+    var train_options: vort.BrotliSerializedSharedDictionaryTrainOptions = .{
         .min_word_len = 4,
         .max_word_len = 16,
         .max_words_per_length = 8,
@@ -156,6 +159,18 @@ fn reportCase(
         .max_transform_cluster_dictionaries = 2,
         .quality = 5,
     };
+    if (std.mem.eql(u8, case.category, "structured")) {
+        train_options.word_bucket_profiles = &.{
+            .{ .min_word_len = 4, .max_word_len = 16, .max_words_per_length = 2 },
+            .{ .min_word_len = 4, .max_word_len = 16, .max_words_per_length = 4 },
+            .{ .min_word_len = 4, .max_word_len = 8, .max_words_per_length = 2 },
+            .{ .min_word_len = 4, .max_word_len = 8, .max_words_per_length = 4 },
+            .{ .min_word_len = 4, .max_word_len = 10, .max_words_per_length = 2 },
+            .{ .min_word_len = 4, .max_word_len = 10, .max_words_per_length = 4 },
+            .{ .min_word_len = 6, .max_word_len = 12, .max_words_per_length = 2 },
+            .{ .min_word_len = 8, .max_word_len = 16, .max_words_per_length = 2 },
+        };
+    }
     var counting = CountingAllocator{ .child = init.gpa };
     const training_allocator = counting.allocator();
     const started = std.Io.Clock.awake.now(init.io);
@@ -264,7 +279,13 @@ fn reportCase(
         },
     );
     if (trained) |result| {
-        try output.print("\t{s}", .{@tagName(result.word_selection_profile)});
+        try output.print("\t{s}\t{d}\t{d}\t{d}\t{d}", .{
+            @tagName(result.word_selection_profile),
+            result.selected_min_word_len,
+            result.selected_max_word_len,
+            result.selected_max_words_per_length,
+            result.word_bucket_candidates_evaluated,
+        });
         try printOptional(output, result.cover_dmer_size);
         try printOptional(output, result.cover_hash_log);
         try output.print("\t{s}", .{@tagName(result.context_profile)});
@@ -280,7 +301,7 @@ fn reportCase(
             },
         );
     } else {
-        try output.writeAll("\tnone\t-\t-\tnone\t-\t-\t0\tnone\t0\t0");
+        try output.writeAll("\tnone\t0\t0\t0\t0\t-\t-\tnone\t-\t-\t0\tnone\t0\t0");
     }
     try output.print("\t{d}\t{d}\t{d}\t{d}\t{d}\t{d}", .{
         @intFromBool(shadow != null),
@@ -291,11 +312,17 @@ fn reportCase(
         break_even_frames,
     });
     if (shadow) |result| {
-        try output.print("\t{s}", .{@tagName(result.word_selection_profile)});
+        try output.print("\t{s}\t{d}\t{d}\t{d}\t{d}", .{
+            @tagName(result.word_selection_profile),
+            result.selected_min_word_len,
+            result.selected_max_word_len,
+            result.selected_max_words_per_length,
+            result.word_bucket_candidates_evaluated,
+        });
         try printOptional(output, result.cover_dmer_size);
         try printOptional(output, result.cover_hash_log);
     } else {
-        try output.writeAll("\tnone\t-\t-");
+        try output.writeAll("\tnone\t0\t0\t0\t0\t-\t-");
     }
     try output.print("\t{d}\t{d}\t{d}\t{d}\t{d}\n", .{
         elapsed_ns,

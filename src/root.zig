@@ -862,6 +862,7 @@ pub const BrotliSerializedSharedDictionaryBuildError = br.SerializedSharedDictio
 pub const BrotliSerializedSharedDictionaryTransformProfile = br.SerializedSharedDictionaryTransformProfile;
 pub const BrotliSerializedSharedDictionaryContextProfile = br.SerializedSharedDictionaryContextProfile;
 pub const BrotliSerializedSharedDictionaryWordSelectionProfile = br.SerializedSharedDictionaryWordSelectionProfile;
+pub const BrotliSerializedSharedDictionaryWordBucketProfile = br.SerializedSharedDictionaryWordBucketProfile;
 pub const BrotliSerializedSharedDictionaryTrainOptions = br.SerializedSharedDictionaryTrainOptions;
 pub const BrotliOwnedTrainedSerializedSharedDictionary = br.OwnedTrainedSerializedSharedDictionary;
 pub const brParseSerializedSharedDictionary = br.parseSerializedSharedDictionary;
@@ -4063,6 +4064,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = BrotliSerializedSharedDictionaryTransformProfile;
     _ = BrotliSerializedSharedDictionaryContextProfile;
     _ = BrotliSerializedSharedDictionaryWordSelectionProfile;
+    _ = BrotliSerializedSharedDictionaryWordBucketProfile;
     _ = BrotliSerializedSharedDictionaryTrainOptions;
     _ = BrotliOwnedTrainedSerializedSharedDictionary;
     _ = brParseSerializedSharedDictionary;
