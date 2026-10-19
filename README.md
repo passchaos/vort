@@ -2173,11 +2173,11 @@ address replay. A parsed view can be attached through
 caller-history, and allocator-owned or caller-history progressive decoding.
 The serialized RAW prefix follows explicit RAW attachments in Vort's compound
 address space. Planned one-shot, reusable, chunked, and incremental encoders
-use a bounded reusable contextual candidate index with a fixed LSB6 mode; the
-selected dictionary address and emitted meta-block mode therefore stay
-identical across block boundaries. The exhaustive matcher remains the oracle
-and oversized-descriptor fallback. Adaptive-mode matching remains performance
-work, and the experimental upstream format carries no stability promise.
+use a bounded reusable contextual candidate index. Context-varying descriptors
+build independent LSB6, MSB6, UTF8, and Signed command plans and retain the
+smallest complete wire; mode-invariant maps keep the single LSB6 fast path.
+The exhaustive matcher remains the oracle and oversized-descriptor fallback,
+and the experimental upstream format carries no stability promise.
 
 The `run-br-compound-dictionary-diff` gate passes in Debug and ReleaseFast
 against local libbrotli 1.2.0. It covers libbrotli encode to Vort decode for
@@ -2191,9 +2191,9 @@ dictionary symbols reports the whole runtime matrix as skipped instead of
 silently reducing coverage.
 
 With local upstream libbrotli 1.2.0 built using `BROTLI_EXPERIMENTAL`, the same
-gate additionally passes two serialized custom-static cases: Vort encode to
-libbrotli decode and libbrotli encode to Vort decode. A non-experimental build
-reports those cases as skipped explicitly.
+gate additionally passes four serialized custom-static cases: bidirectional
+non-contextual coverage plus a UTF8-context winner in each direction. A
+non-experimental build reports those cases as skipped explicitly.
 
 ### Brotli planned encoder controls
 

@@ -167,6 +167,7 @@ fn mixSerializedDictionaryAlloc(
     baseline: []const command_plan.Command,
     dictionary: *const SerializedSharedDictionary,
     matcher: ?*const serialized_dictionary_matcher.Matcher,
+    context_mode: u2,
     initial_previous: [2]u8,
 ) Error!command_plan.Plan {
     return command_plan.mixSerializedDictionaryWithMatcherAlloc(
@@ -175,7 +176,7 @@ fn mixSerializedDictionaryAlloc(
         baseline,
         dictionary,
         matcher,
-        literal_context.mode_lsb6,
+        context_mode,
         initial_previous,
     ) catch |err| switch (err) {
         error.OutOfMemory => error.OutOfMemory,
@@ -3370,20 +3371,33 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
         null;
     defer if (mixed) |plan| plan.deinit(allocator);
     const base_commands = if (mixed) |plan| plan.commands else baseline.commands;
-    const serialized_plan = if (options.shared_dictionary.hasSerializedStatic())
-        try mixSerializedDictionaryAlloc(
-            allocator,
-            input,
-            base_commands,
-            options.shared_dictionary.serialized.?,
-            active_serialized_matcher,
-            .{ 0, 0 },
-        )
-    else
-        null;
-    defer if (serialized_plan) |plan| plan.deinit(allocator);
+    var serialized_plans: [4]?command_plan.Plan = .{ null, null, null, null };
+    defer for (serialized_plans) |plan|
+        if (plan) |active| active.deinit(allocator);
+    var has_serialized_match = false;
+    if (options.shared_dictionary.hasSerializedStatic()) {
+        const serialized = options.shared_dictionary.serialized.?;
+        const mode_count: usize = if (serialized.needsContextModeSearch()) 4 else 1;
+        for (0..mode_count) |mode| {
+            const plan = try mixSerializedDictionaryAlloc(
+                allocator,
+                input,
+                base_commands,
+                serialized,
+                active_serialized_matcher,
+                @intCast(mode),
+                .{ 0, 0 },
+            );
+            if (plan.match_count == 0) {
+                plan.deinit(allocator);
+            } else {
+                serialized_plans[mode] = plan;
+                has_serialized_match = true;
+            }
+        }
+    }
     if ((mixed == null or mixed.?.match_count == 0) and
-        (serialized_plan == null or serialized_plan.?.match_count == 0) and
+        !has_serialized_match and
         lz_plan.stats.matches == 0)
         return encodeStoredStreamWithOptionsAlloc(allocator, input, stream_options);
 
@@ -3418,7 +3432,7 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
     };
     errdefer allocator.free(best);
 
-    if (serialized_plan) |plan| if (plan.match_count != 0) {
+    for (serialized_plans, 0..) |maybe_plan, mode| if (maybe_plan) |plan| {
         var serialized_stats: encoder_stats.PlannedEncodeStats = .{};
         const candidate = encodeCommandPlanWithOptionsAlloc(
             allocator,
@@ -3430,6 +3444,7 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
                 .window_bits = window_bits,
                 .metadata = options.metadata,
                 .compound_dictionary_size = compound_size,
+                .literal_context_mode = @intCast(mode),
             },
         ) catch |err| switch (err) {
             error.InvalidBlockPlan => null,
@@ -4719,6 +4734,10 @@ const CommandPlanEncodeOptions = struct {
     distance_split: ?distance_block_split.Result = null,
     adaptive_distance_split: ?*const block_split_plan.Plan = null,
     utf8_context_cutoff: u6 = 56,
+    /// Mode written even when the literal tree is context-independent. Static
+    /// dictionary selection still consumes this mode, so serialized dictionary
+    /// command plans must match it exactly.
+    literal_context_mode: u2 = literal_context.mode_lsb6,
     distance_parameters: encoder_distance.Parameters = encoder_distance.Parameters.init(0, 15),
     window_bits: u5 = default_window_bits,
     metadata: []const u8 = "",
@@ -4964,6 +4983,7 @@ fn encodeQ0OnePassMetaBlockCandidate(
         64,
         allocator,
         &writer,
+        literal_context.mode_lsb6,
         &literal_alphabet,
         &command_alphabet,
         null,
@@ -5187,6 +5207,7 @@ fn encodeQ1TwoPassMetaBlockCandidate(
         64,
         allocator,
         &writer,
+        literal_context.mode_lsb6,
         &literal_alphabet,
         &command_alphabet,
         null,
@@ -5496,6 +5517,7 @@ fn encodeQ23MetaBlockCandidate(
         64,
         allocator,
         &writer,
+        literal_context.mode_lsb6,
         &literal_alphabet,
         &command_alphabet,
         null,
@@ -5906,14 +5928,15 @@ fn considerPlannedMetaBlockCommands(
     }
 }
 
-/// Serialized dictionary addresses below are selected with LSB6 contexts, so
-/// this candidate deliberately uses the plain header writer whose literal
-/// context mode is also LSB6. Other safe baseline candidates may still use
-/// adaptive contexts because they contain no contextual static references.
+/// Serialized dictionary addresses below are selected with `context_mode`, so
+/// the plain single-tree header must emit that exact mode. Other safe baseline
+/// candidates may use adaptive literal contexts because they contain no
+/// contextual static references.
 fn considerSerializedMetaBlockCommands(
     allocator: std.mem.Allocator,
     input: []const u8,
     commands: []const command_plan.Command,
+    context_mode: u2,
     window_bits: u5,
     compound_dictionary_size: usize,
     start_byte: u8,
@@ -5934,6 +5957,7 @@ fn considerSerializedMetaBlockCommands(
         .{
             .window_bits = window_bits,
             .compound_dictionary_size = compound_dictionary_size,
+            .literal_context_mode = context_mode,
         },
     ) catch |err| switch (err) {
         error.InvalidBlockPlan => return,
@@ -6076,29 +6100,34 @@ fn considerPlannedMetaBlockPolicy(
             );
         if (has_serialized_static) {
             const serialized = state.shared_dictionary.serialized.?;
-            const with_serialized = try mixSerializedDictionaryAlloc(
-                allocator,
-                input,
-                commands,
-                serialized,
-                if (state.serialized_matcher) |*matcher| matcher else null,
-                state.context_previous,
-            );
-            defer with_serialized.deinit(allocator);
-            if (with_serialized.match_count != 0)
-                try considerSerializedMetaBlockCommands(
+            const mode_count: usize = if (serialized.needsContextModeSearch()) 4 else 1;
+            for (0..mode_count) |mode| {
+                const with_serialized = try mixSerializedDictionaryAlloc(
                     allocator,
                     input,
-                    with_serialized.commands,
-                    state.window_bits,
-                    state.compound_dictionary_size,
-                    start_byte,
-                    start_bit_index,
-                    state.wire_state,
-                    best,
-                    &state.candidate_wire,
-                    &state.best_wire,
+                    commands,
+                    serialized,
+                    if (state.serialized_matcher) |*matcher| matcher else null,
+                    @intCast(mode),
+                    state.context_previous,
                 );
+                defer with_serialized.deinit(allocator);
+                if (with_serialized.match_count != 0)
+                    try considerSerializedMetaBlockCommands(
+                        allocator,
+                        input,
+                        with_serialized.commands,
+                        @intCast(mode),
+                        state.window_bits,
+                        state.compound_dictionary_size,
+                        start_byte,
+                        start_bit_index,
+                        state.wire_state,
+                        best,
+                        &state.candidate_wire,
+                        &state.best_wire,
+                    );
+            }
         }
         if (!has_serialized_static and policy.dictionary.static_dictionary and
             input.len <= ratio_extended_static_dictionary_max_input_len)
@@ -9142,7 +9171,7 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
             );
     } else if (context_candidate) |candidate| {
         try writePlannedCompressedHeaderLiteralContexts(distance_capacity, allocator, writer, &literal_context_alphabets, &literal_context_lengths, candidate, options.distance_parameters, &command_alphabet, command_split_header, &distance_alphabet, distance_split_header, distance_alphabet_size, &command_lengths, &distance_lengths);
-    } else try writePlannedCompressedHeader(distance_capacity, allocator, writer, &literal_alphabet, &command_alphabet, command_split_header, &distance_alphabet, distance_split_header, options.distance_parameters, distance_alphabet_size, &literal_lengths, &command_lengths, &distance_lengths);
+    } else try writePlannedCompressedHeader(distance_capacity, allocator, writer, options.literal_context_mode, &literal_alphabet, &command_alphabet, command_split_header, &distance_alphabet, distance_split_header, options.distance_parameters, distance_alphabet_size, &literal_lengths, &command_lengths, &distance_lengths);
     if (io) |active| stats.header_ns = elapsedNs(header_start.?, active);
 
     const encoder_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
@@ -32025,18 +32054,22 @@ test "br serialized shared dictionary encodes across planned ownership models" {
     );
 }
 
-test "br serialized encoder retains LSB6 dictionary context across q0 blocks" {
+test "br serialized encoder retains every dictionary context mode across q0 blocks" {
     const first_word = "9876543210ZYXWVUTSRQPONMLKJIHGF";
     const contextual_word = "abcdefghijklmnopqrstuvwxyz12345";
     const first_block = "0123456789012345678901234567890a";
-    const payload = first_block ++ contextual_word;
+    const payload = first_block ++ contextual_word ++ "!";
     var serialized_bytes: std.ArrayList(u8) = .empty;
     defer serialized_bytes.deinit(std.testing.allocator);
     try serialized_bytes.appendSlice(std.testing.allocator, &.{ 0x91, 0, 0, 2 });
     var bits: [28]u8 = @splat(0);
-    bits[31 - serialized_dictionary.min_word_len] = 1;
+    bits[31 - serialized_dictionary.min_word_len] = 8;
     try serialized_bytes.appendSlice(std.testing.allocator, &bits);
-    try serialized_bytes.appendSlice(std.testing.allocator, first_word ** 2);
+    for (0..256) |_| try serialized_bytes.appendSlice(
+        std.testing.allocator,
+        first_word,
+    );
+    bits[31 - serialized_dictionary.min_word_len] = 1;
     try serialized_bytes.appendSlice(std.testing.allocator, &bits);
     try serialized_bytes.appendSlice(std.testing.allocator, contextual_word ** 2);
     try serialized_bytes.appendSlice(std.testing.allocator, &.{
@@ -32044,33 +32077,144 @@ test "br serialized encoder retains LSB6 dictionary context across q0 blocks" {
         2, 0, 0, 1, 0, // two custom/custom choices
         1, // context map enabled
     });
-    var context_map: [64]u8 = @splat(0);
-    context_map['a' & 0x3f] = 1;
-    try serialized_bytes.appendSlice(std.testing.allocator, &context_map);
-    const serialized = try parseSerializedSharedDictionary(serialized_bytes.items);
-    const shared = SharedDictionary{ .serialized = &serialized };
+    const context_map_offset = serialized_bytes.items.len;
+    try serialized_bytes.appendNTimes(std.testing.allocator, 0, 64);
     const chunks = [_][]const u8{payload};
-    const encoded = try encodePlannedStreamChunksWithOptionsAlloc(
+    const expected_contexts = [4]u6{ 33, 24, 58, 26 };
+    for (expected_contexts, 0..) |selected_context, selected_mode| {
+        @memset(serialized_bytes.items[context_map_offset..][0..64], 0);
+        serialized_bytes.items[context_map_offset + selected_context] = 1;
+        const serialized = try parseSerializedSharedDictionary(serialized_bytes.items);
+        const shared = SharedDictionary{ .serialized = &serialized };
+        const encoded = try encodePlannedStreamChunksWithOptionsAlloc(
+            std.testing.allocator,
+            &chunks,
+            .{
+                .quality = 0,
+                .block_len = first_block.len,
+                .shared_dictionary = shared,
+            },
+        );
+        defer std.testing.allocator.free(encoded);
+        const decode_options = DecodeOptions{ .shared_dictionary = shared };
+        const summary = try summarizeStreamWithOptions(encoded, decode_options);
+        try std.testing.expect(summary.shared_dictionary_copy_count > 0);
+        try std.testing.expect(summary.literal_context_mode_bytes[selected_mode] > 0);
+        const decoded = try decodeStreamAllocExactSizeWithOptions(
+            std.testing.allocator,
+            encoded,
+            payload.len,
+            decode_options,
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
+}
+
+test "br serialized encoder arbitrates every RFC dictionary context mode" {
+    const Test = struct {
+        const candidate_word_len: usize = 8;
+        const fallback_word_count: usize = 1 << 15;
+        const contextual_word_count: usize = 1 << 8;
+
+        fn word(index: usize) [candidate_word_len]u8 {
+            var value: u64 = @as(u64, index) *% 0x9e37_79b9_7f4a_7c15 +%
+                0xa5a5_5a5a_d3c1_b2e7;
+            var result: [candidate_word_len]u8 = undefined;
+            for (&result) |*byte| {
+                value ^= value >> 12;
+                value ^= value << 25;
+                value ^= value >> 27;
+                byte.* = @truncate(value);
+            }
+            result[0] |= 0x80;
+            return result;
+        }
+
+        fn appendWords(
+            allocator: std.mem.Allocator,
+            encoded: *std.ArrayList(u8),
+            count: usize,
+            contextual: bool,
+        ) !void {
+            var bits: [28]u8 = @splat(0);
+            bits[candidate_word_len - serialized_dictionary.min_word_len] =
+                if (contextual) 8 else 15;
+            try encoded.appendSlice(allocator, &bits);
+            for (0..count) |index| {
+                var bytes = word(index);
+                if (!contextual) bytes[0] &= 0x7f;
+                try encoded.appendSlice(allocator, &bytes);
+            }
+        }
+    };
+
+    var encoded_dictionary: std.ArrayList(u8) = .empty;
+    defer encoded_dictionary.deinit(std.testing.allocator);
+    try encoded_dictionary.appendSlice(
         std.testing.allocator,
-        &chunks,
-        .{
-            .quality = 0,
-            .block_len = first_block.len,
-            .shared_dictionary = shared,
-        },
+        &.{ 0x91, 0, 0, 2 },
     );
-    defer std.testing.allocator.free(encoded);
-    const decode_options = DecodeOptions{ .shared_dictionary = shared };
-    const summary = try summarizeStreamWithOptions(encoded, decode_options);
-    try std.testing.expect(summary.shared_dictionary_copy_count > 0);
-    const decoded = try decodeStreamAllocExactSizeWithOptions(
+    try Test.appendWords(
         std.testing.allocator,
-        encoded,
-        payload.len,
-        decode_options,
+        &encoded_dictionary,
+        Test.fallback_word_count,
+        false,
     );
-    defer std.testing.allocator.free(decoded);
-    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try Test.appendWords(
+        std.testing.allocator,
+        &encoded_dictionary,
+        Test.contextual_word_count,
+        true,
+    );
+    try encoded_dictionary.appendSlice(std.testing.allocator, &.{
+        1, 1, 0, 0, 1, 0, 0, 0, // one identity transform list
+        2, 0, 0, 1, 0, // fallback then contextual dictionary
+        1, // context map enabled
+    });
+    const context_map_offset = encoded_dictionary.items.len;
+    try encoded_dictionary.appendNTimes(std.testing.allocator, 0, 64);
+
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    for (0..Test.contextual_word_count) |index| {
+        try payload.appendSlice(std.testing.allocator, &.{ 0x30, 0x01 });
+        const bytes = Test.word(index);
+        try payload.appendSlice(std.testing.allocator, &bytes);
+    }
+    const expected_contexts = [4]u6{ 1, 0, 2, 10 };
+    for (expected_contexts, 0..) |selected_context, selected_mode| {
+        @memset(encoded_dictionary.items[context_map_offset..][0..64], 0);
+        encoded_dictionary.items[context_map_offset + selected_context] = 1;
+        const dictionary = try parseSerializedSharedDictionary(
+            encoded_dictionary.items,
+        );
+        const shared = SharedDictionary{ .serialized = &dictionary };
+        const options = DecodeOptions{ .shared_dictionary = shared };
+        const encoded = try encodePlannedStreamWithOptionsAlloc(
+            std.testing.allocator,
+            payload.items,
+            .{ .level = .fast, .shared_dictionary = shared },
+        );
+        defer std.testing.allocator.free(encoded);
+        const summary = try summarizeStreamWithOptions(encoded, options);
+        try std.testing.expect(summary.shared_dictionary_copy_count > 0);
+        try std.testing.expect(summary.literal_context_mode_bytes[selected_mode] > 0);
+        for (0..4) |mode|
+            if (mode != selected_mode)
+                try std.testing.expectEqual(
+                    @as(usize, 0),
+                    summary.literal_context_mode_bytes[mode],
+                );
+        const decoded = try decodeStreamAllocExactSizeWithOptions(
+            std.testing.allocator,
+            encoded,
+            payload.items.len,
+            options,
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload.items, decoded);
+    }
 }
 
 test "br RAW shared dictionary rejects invalid descriptors before output mutation" {
@@ -33432,6 +33576,7 @@ fn writePlannedCompressedHeader(
     comptime distance_capacity: usize,
     allocator: std.mem.Allocator,
     writer: *BitWriter,
+    literal_context_mode: u2,
     literal_alphabet: *const command_plan.PrefixAlphabetFor(256),
     command_alphabet: *const command_plan.PrefixAlphabet,
     command_split: ?CommandBlockSplitHeader,
@@ -33448,7 +33593,7 @@ fn writePlannedCompressedHeader(
     try writeDistanceBlockSwitchHeader(distance_capacity, allocator, writer, distance_split);
     try writer.writeBits(allocator, distance_parameters.npostfix, 2);
     try writer.writeBits(allocator, distance_parameters.ndirect_high, 4);
-    try writer.writeBits(allocator, 0, 2); // literal context mode
+    try writer.writeBits(allocator, literal_context_mode, 2);
     try writeBlockTypeCount(allocator, writer, 1);
     try writeDistanceTreeContextMap(distance_capacity, allocator, writer, distance_split);
     try writePrefixSymbolsWithLengths(allocator, writer, 256, literal_alphabet, literal_lengths);

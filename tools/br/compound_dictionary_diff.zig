@@ -281,7 +281,124 @@ fn validateSerializedDictionaryMatrix(
     defer allocator.free(vort_output);
     if (!std.mem.eql(u8, input, vort_output))
         return error.ReferenceDecodeFailed;
-    return 2;
+
+    var contextual_dictionary: std.ArrayList(u8) = .empty;
+    defer contextual_dictionary.deinit(allocator);
+    var contextual_input: std.ArrayList(u8) = .empty;
+    defer contextual_input.deinit(allocator);
+    try buildContextualSerializedDictionary(
+        allocator,
+        &contextual_dictionary,
+        &contextual_input,
+    );
+    const contextual_parsed = try vort.brParseSerializedSharedDictionary(
+        contextual_dictionary.items,
+    );
+    const contextual_shared = vort.BrotliSharedDictionary{
+        .serialized = &contextual_parsed,
+    };
+    const contextual_options = vort.BrotliDecodeOptions{
+        .shared_dictionary = contextual_shared,
+    };
+    const contextual_vort_wire = try vort.brEncodePlannedStreamWithOptionsAlloc(
+        allocator,
+        contextual_input.items,
+        .{ .quality = 5, .shared_dictionary = contextual_shared },
+    );
+    defer allocator.free(contextual_vort_wire);
+    const contextual_summary = try vort.brSummarizeStreamWithOptions(
+        contextual_vort_wire,
+        contextual_options,
+    );
+    if (contextual_summary.shared_dictionary_copy_count == 0 or
+        contextual_summary.literal_context_mode_bytes[2] == 0)
+    {
+        return error.ReferenceEncodeFailed;
+    }
+    const contextual_reference_output = try allocator.alloc(
+        u8,
+        contextual_input.items.len,
+    );
+    defer allocator.free(contextual_reference_output);
+    try runtime.decodeWithSerializedDictionary(
+        contextual_vort_wire,
+        contextual_reference_output,
+        contextual_dictionary.items,
+    );
+    if (!std.mem.eql(
+        u8,
+        contextual_input.items,
+        contextual_reference_output,
+    )) return error.ReferenceDecodeFailed;
+
+    const contextual_reference_wire = try runtime.encodeWithSerializedDictionaryAlloc(
+        allocator,
+        contextual_input.items,
+        contextual_dictionary.items,
+        reference_options,
+    );
+    defer allocator.free(contextual_reference_wire);
+    const contextual_vort_output = try vort.brDecodeStreamAllocExactSizeWithOptions(
+        allocator,
+        contextual_reference_wire,
+        contextual_input.items.len,
+        contextual_options,
+    );
+    defer allocator.free(contextual_vort_output);
+    if (!std.mem.eql(
+        u8,
+        contextual_input.items,
+        contextual_vort_output,
+    )) return error.ReferenceDecodeFailed;
+    return 4;
+}
+
+fn buildContextualSerializedDictionary(
+    allocator: std.mem.Allocator,
+    dictionary: *std.ArrayList(u8),
+    input: *std.ArrayList(u8),
+) !void {
+    try dictionary.appendSlice(allocator, &.{ 0x91, 0, 0, 2 });
+    var bits: [28]u8 = @splat(0);
+    bits[8 - 4] = 8;
+    try dictionary.appendSlice(allocator, &bits);
+    for (0..256) |index| {
+        var bytes = contextualSerializedWord(index);
+        bytes[0] &= 0x7f;
+        try dictionary.appendSlice(allocator, &bytes);
+    }
+    try dictionary.appendSlice(allocator, &bits);
+    for (0..256) |index| {
+        const bytes = contextualSerializedWord(index);
+        try dictionary.appendSlice(allocator, &bytes);
+    }
+    try dictionary.appendSlice(allocator, &.{
+        1, 1, 0, 0, 1, 0, 0, 0, // identity transform list
+        2, 0, 0, 1, 0, // fallback then contextual dictionary
+        1, // context map enabled
+    });
+    var context_map: [64]u8 = @splat(0);
+    context_map[2] = 1; // UTF8(0x01, '0'); other modes select dictionary 0.
+    try dictionary.appendSlice(allocator, &context_map);
+    for (0..64) |index| {
+        try input.appendSlice(allocator, &.{ 0x30, 0x01 });
+        const bytes = contextualSerializedWord(index);
+        try input.appendSlice(allocator, &bytes);
+    }
+}
+
+fn contextualSerializedWord(index: usize) [8]u8 {
+    var value: u64 = @as(u64, index) *% 0x9e37_79b9_7f4a_7c15 +%
+        0xa5a5_5a5a_d3c1_b2e7;
+    var result: [8]u8 = undefined;
+    for (&result) |*byte| {
+        value ^= value >> 12;
+        value ^= value << 25;
+        value ^= value >> 27;
+        byte.* = @truncate(value);
+    }
+    result[0] |= 0x80;
+    return result;
 }
 
 fn validateVortFixtureDecode(

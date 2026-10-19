@@ -190,6 +190,14 @@ pub const Dictionary = struct {
         return if (self.context_based) self.context_map[context] else 0;
     }
 
+    pub fn needsContextModeSearch(self: *const Dictionary) bool {
+        if (!self.context_based) return false;
+        const first = self.context_map[0];
+        for (self.context_map[1..]) |dictionary_id|
+            if (dictionary_id != first) return true;
+        return false;
+    }
+
     pub fn choice(self: *const Dictionary, dictionary_id: usize) ?DictionaryChoice {
         if (dictionary_id >= self.dictionary_count) return null;
         return self.dictionaries[dictionary_id];

@@ -66,5 +66,5 @@ borrowed descriptor; one-shot encoding prepares it per call.
 - Failed replacement preparation leaves the previous index usable.
 - Candidate spaces above 1,048,576 theoretical entries use the exhaustive
   matcher rather than silently dropping legal words or transforms.
-- Production one-shot, reusable, chunked, and incremental encoding retain the
-  same fixed-LSB6 address/mode invariant established before indexing.
+- Production one-shot, reusable, chunked, and incremental encoding preserve an
+  exact address/mode invariant independently for LSB6, MSB6, UTF8, and Signed.

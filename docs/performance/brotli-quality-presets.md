@@ -215,10 +215,10 @@ completing the current frame.
 Latest upstream still marks serialized shared dictionaries as
 `BROTLI_EXPERIMENTAL` and `DO NOT USE`. Vort exposes the container explicitly
 as a borrowed experimental descriptor and supports production decoding across
-its decode surfaces. Planned encoders use exhaustive contextual matching with
-a fixed LSB6 context mode across one-shot, reusable, chunked, and incremental
-surfaces. No stability promise is made for upstream's experimental container
-format.
+its decode surfaces. Planned encoders use indexed contextual matching and
+complete-wire arbitration across LSB6, MSB6, UTF8, and Signed on one-shot,
+reusable, chunked, and incremental surfaces. No stability promise is made for
+upstream's experimental container format.
 
 ## Large-input and API boundaries
 
@@ -331,10 +331,11 @@ The following are explicit gaps, not implied by the presence of the preset
 names:
 
 - real q10/q11 Zopfli/HQ cost refinement, including iterative model feedback;
-- adaptive-mode serialized-dictionary selection. Strict zero-copy parsing,
-  mixed built-in/custom address replay, production decode attachment, and
-  bounded reusable indexed LSB6 encoding across planned surfaces are
-  available; oversized descriptors retain exhaustive matching;
+- joint serialized-dictionary and multi-tree literal-context optimization.
+  Strict zero-copy parsing, mixed built-in/custom address replay, production
+  decode attachment, bounded reusable indexing, and complete-wire selection
+  across all four RFC context modes are available; oversized descriptors retain
+  exhaustive matching;
 - global multi-boundary segmentation and exact compressed-cost optimization
   beyond the current bounded midpoint entropy lookahead;
 - calibration and regression gates for compression ratio, throughput, peak

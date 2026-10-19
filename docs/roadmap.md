@@ -32,9 +32,10 @@ major gaps before Vort can claim broad industry-best parity:
   matcher, complete mixed built-in/custom transform/address replay, and
   production decode attachment across one-shot, chunked, summary, and both
   progressive ownership models. Planned one-shot, reusable, chunked, and
-  incremental encoders now use bounded reusable indexed LSB6 contextual
-  matching with an exhaustive oracle/fallback; adaptive context-mode matching
-  remains open.
+  incremental encoders now use bounded reusable indexed matching with an
+  exhaustive oracle/fallback and exact complete-wire selection across LSB6,
+  MSB6, UTF8, and Signed. Joint serialized-dictionary/multi-tree literal
+  context optimization remains open.
   q10/q11 Zopfli/HQ cost refinement and global exact-cost segmentation also
   remain open.
 - True byte-progressive Brotli decoding now covers stored data, metadata,

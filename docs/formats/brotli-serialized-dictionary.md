@@ -75,7 +75,9 @@ Production encode and decode are attached. Encoding currently uses the
 complete exhaustive matcher as a correctness oracle and bounded fallback.
 Ordinary descriptors use a reusable four-byte candidate index; combined
 addresses are computed from the active context without duplicating index data
-64 times. Encoding emits LSB6 literal context mode for every candidate
-containing contextual static references. Adaptive context-mode selection
-without breaking this address/mode invariant remains open. Vort does not
-promise stability for upstream's experimental container format.
+64 times. Context-varying descriptors generate independent command plans for
+LSB6, MSB6, UTF8, and Signed, emit the matching mode in each candidate header,
+and retain the smallest complete wire. Multi-block encoding carries the exact
+two-byte prefix history into every mode search. Joint optimization with
+multi-tree literal entropy contexts remains open. Vort does not promise
+stability for upstream's experimental container format.
