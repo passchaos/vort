@@ -60,8 +60,10 @@ major gaps before Vort can claim broad industry-best parity:
   minimum demanded identity/case/omit/affix profile per context dictionary and
   deduplicates equal transform lists; its locked mixed fixture improves 13,568
   baseline bytes to 7,680 frame bytes plus an 831-byte dictionary. SHIFT-family
-  learning, arbitrary transform synthesis, and broader corpus calibration
-  remain open.
+  learning now infers signed parameters for SHIFT_FIRST/ALL, stacks them over
+  every existing family, and improves a locked UTF-8 fixture from 3,513 baseline
+  bytes to 2,624 frame bytes plus a 184-byte dictionary. COVER/FastCover-class
+  word selection and broader corpus calibration remain open.
   q10/q11 Zopfli/HQ cost refinement and global exact-cost segmentation also
   remain open.
 - True byte-progressive Brotli decoding now covers stored data, metadata,

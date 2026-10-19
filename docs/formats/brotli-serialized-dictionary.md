@@ -89,7 +89,8 @@ contextual differential dictionary is produced through the public builder, and
 five additional bidirectional pairs use identity, case-transform,
 omit-transform, learned-prefix/suffix, and non-contiguous-context-cluster
 trainer results. Three more payloads exercise both directions of one clustered
-multi-transform-list result (`serialized_cases=20`).
+multi-transform-list result, and one learned UTF-8 SHIFT_FIRST/ALL dictionary
+adds the final pair (`serialized_cases=22`).
 Builder tests cover deterministic parse/serialize round trips, built-in/custom
 mixed choices, all output ownership forms, varint boundaries, invalid size
 buckets/transforms/context IDs, atomic caller output, and allocation failure.
@@ -117,8 +118,10 @@ phrase collector, then indexes each candidate's trained words and learns
 prefix-only, suffix-only, and observed prefix+suffix identity transforms from
 deterministically sampled corpus matches. Ranked transforms are reserialized
 independently with identity, case, omit-first/last, and combined case+omit base
-families before the same complete-wire arbitration. It does not claim
-COVER/FastCover equivalence or learned SHIFT transforms. For contextual
+families before the same complete-wire arbitration. A bounded shift learner
+infers signed 16-bit parameters from equal-width source/held-out sequences,
+verifies them through the byte-exact SHIFT_FIRST/ALL replay, and appends the
+ranked transforms to every existing family before the same arbitration. For contextual
 candidates, the richest enabled family acts as one held-out matcher oracle.
 Actual winning transform kinds are attributed to their resolved dictionary;
 each dictionary selects the smallest enabled capability profile covering that
@@ -141,7 +144,7 @@ shrinks from 627 to 523 bytes while retaining custom dictionary copies. Vort
 does not promise stability for upstream's experimental container format.
 The trainer is deterministic and complete-wire validated, with bounded multi-
 cutoff two-group maps, arbitrary non-contiguous context clustering, and bounded
-prefix/suffix stringlet and per-dictionary transform-profile clustering.
-SHIFT-family learning, arbitrary transform synthesis, COVER/FastCover-class
-candidate selection, and broad corpus calibration remain open. The builder also
-remains available for fully explicit caller-owned specifications.
+prefix/suffix stringlet, SHIFT parameter, and per-dictionary transform-profile
+learning. COVER/FastCover-class candidate selection and broad corpus calibration
+remain open. The builder also remains available for fully explicit caller-owned
+specifications.

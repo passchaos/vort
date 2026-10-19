@@ -128,8 +128,8 @@ pub const TransformList = struct {
         switch (spec.kind) {
             10 => uppercase(transformed, false),
             11 => uppercase(transformed, true),
-            21 => shiftUtf8(transformed, spec.parameter, false),
-            22 => shiftUtf8(transformed, spec.parameter, true),
+            21 => applyShiftUtf8(transformed, spec.parameter, false),
+            22 => applyShiftUtf8(transformed, spec.parameter, true),
             else => {},
         }
         @memcpy(output[prefix.len + kept .. output_len], suffix);
@@ -770,7 +770,7 @@ fn uppercaseScalar(bytes: []u8) usize {
     return @min(bytes.len, 3);
 }
 
-fn shiftUtf8(bytes: []u8, parameter: u16, all: bool) void {
+pub fn applyShiftUtf8(bytes: []u8, parameter: u16, all: bool) void {
     var cursor: usize = 0;
     while (cursor < bytes.len) {
         const step = shiftScalar(bytes[cursor..], parameter);

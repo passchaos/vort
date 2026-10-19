@@ -4,6 +4,7 @@ const serialized_dictionary = @import("serialized_dictionary.zig");
 const builder = @import("serialized_dictionary_builder.zig");
 const affix_trainer = @import("serialized_dictionary_affix_trainer.zig");
 const context_clusterer = @import("serialized_dictionary_context_clusterer.zig");
+const shift_trainer = @import("serialized_dictionary_shift_trainer.zig");
 const literal_context = @import("encoder/literal_context.zig");
 
 pub const DictionaryId = dictionary_train.DictionaryId;
@@ -16,6 +17,7 @@ pub const TransformProfile = enum {
     ascii_case_prefix_suffix,
     omit_prefix_suffix,
     ascii_case_omit_prefix_suffix,
+    shift,
     clustered,
 };
 
@@ -25,6 +27,12 @@ pub const max_learned_stringlet_len = affix_trainer.max_stringlet_len;
 pub const max_learned_prefix_suffix_transforms = affix_trainer.max_transforms;
 pub const max_learned_prefix_suffix_words = affix_trainer.max_dictionary_words;
 pub const max_learned_prefix_suffix_positions = affix_trainer.max_sampled_positions;
+pub const ShiftOptions = shift_trainer.Options;
+pub const ShiftPlan = shift_trainer.Plan;
+pub const max_learned_shift_transforms = shift_trainer.max_transforms;
+pub const max_learned_shift_candidates = shift_trainer.max_candidates;
+pub const max_learned_shift_words = shift_trainer.max_words;
+pub const max_learned_shift_positions = shift_trainer.max_positions;
 
 pub const ContextProfile = enum {
     global,
@@ -61,9 +69,12 @@ pub const Candidate = struct {
     context_profile: ContextProfile = .global,
     context_cluster_count: u7 = 1,
     transform_profile: TransformProfile = .identity,
+    transform_capabilities: u4 = 0,
     transform_list_count: u7 = 1,
     learned_stringlet_count: usize = 0,
     learned_prefix_suffix_transform_count: usize = 0,
+    learned_shift_parameter_count: usize = 0,
+    learned_shift_transform_count: usize = 0,
 
     pub fn deinit(self: Candidate, allocator: std.mem.Allocator) void {
         allocator.free(self.encoded);
@@ -159,9 +170,125 @@ pub fn withPrefixSuffixTransformsAlloc(
         .context_profile = source.context_profile,
         .context_cluster_count = source.context_cluster_count,
         .transform_profile = transform_profile,
+        .transform_capabilities = source.transform_capabilities | 4,
         .transform_list_count = 1,
         .learned_stringlet_count = plan.stringlet_count - 1,
         .learned_prefix_suffix_transform_count = plan.transformCount(),
+        .learned_shift_parameter_count = source.learned_shift_parameter_count,
+        .learned_shift_transform_count = source.learned_shift_transform_count,
+    };
+}
+
+pub fn learnShiftPlanAlloc(
+    allocator: std.mem.Allocator,
+    source: *const Candidate,
+    samples: []const []const u8,
+    options: ShiftOptions,
+) (Error || std.mem.Allocator.Error)!?ShiftPlan {
+    const parsed = try serialized_dictionary.parse(source.encoded);
+    return shift_trainer.learnAlloc(allocator, &parsed, samples, options) catch |err|
+        switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.IntegerOverflow => return error.IntegerOverflow,
+            else => return error.InvalidTrainingOptions,
+        };
+}
+
+pub fn withShiftTransformsAlloc(
+    allocator: std.mem.Allocator,
+    source: *const Candidate,
+    plan: *const ShiftPlan,
+) (Error || std.mem.Allocator.Error)!Candidate {
+    if (plan.specs.len == 0) return error.InvalidTrainingOptions;
+    for (plan.specs) |spec|
+        if (spec.kind != 21 and spec.kind != 22)
+            return error.InvalidTrainingOptions;
+    const parsed = try serialized_dictionary.parse(source.encoded);
+    if (parsed.transform_list_count != 1)
+        return error.InvalidTrainingOptions;
+    const source_transforms = &parsed.transform_lists[0];
+    if (source_transforms.params != null or source_transforms.string_count == 0)
+        return error.InvalidTrainingOptions;
+    const transform_count = std.math.add(
+        usize,
+        source_transforms.transformCount(),
+        plan.specs.len,
+    ) catch return error.IntegerOverflow;
+    if (transform_count > std.math.maxInt(u8))
+        return error.InvalidTrainingOptions;
+    const transform_bytes = try allocator.alloc(u8, transform_count * 3);
+    defer allocator.free(transform_bytes);
+    const params = try allocator.alloc(u8, transform_count * 2);
+    defer allocator.free(params);
+    @memcpy(
+        transform_bytes[0..source_transforms.transforms.len],
+        source_transforms.transforms,
+    );
+    @memset(params, 0);
+    const empty_id: u8 = @intCast(source_transforms.string_count - 1);
+    if ((source_transforms.string(empty_id) orelse
+        return error.InvalidTrainingOptions).len != 0)
+    {
+        return error.InvalidTrainingOptions;
+    }
+    const source_count = source_transforms.transformCount();
+    for (plan.specs, 0..) |spec, shift_index| {
+        const transform_index = source_count + shift_index;
+        const transform_base = transform_index * 3;
+        transform_bytes[transform_base] = empty_id;
+        transform_bytes[transform_base + 1] = spec.kind;
+        transform_bytes[transform_base + 2] = empty_id;
+        std.mem.writeInt(
+            u16,
+            params[transform_index * 2 ..][0..2],
+            spec.parameter,
+            .little,
+        );
+    }
+    var word_lists: [serialized_dictionary.max_contexts]builder.WordListSpec =
+        undefined;
+    for (word_lists[0..parsed.word_list_count], parsed.word_lists[0..parsed.word_list_count]) |*destination, words|
+        destination.* = builder.WordListSpec.fromParsed(words);
+    const transform_lists = [_]builder.TransformListSpec{.{
+        .prefix_suffix = source_transforms.prefix_suffix,
+        .transforms = transform_bytes,
+        .params = params,
+    }};
+    const encoded = try builder.serializeAlloc(allocator, .{
+        .raw_prefix = parsed.raw_prefix,
+        .word_lists = word_lists[0..parsed.word_list_count],
+        .transform_lists = &transform_lists,
+        .dictionaries = parsed.dictionaries[0..parsed.dictionary_count],
+        .context_map = if (parsed.context_based) &parsed.context_map else null,
+    });
+    var unique_parameters: [shift_trainer.max_transforms]u16 = undefined;
+    var unique_parameter_count: usize = 0;
+    for (plan.specs) |spec| {
+        var found = false;
+        for (unique_parameters[0..unique_parameter_count]) |parameter|
+            found = found or parameter == spec.parameter;
+        if (!found) {
+            unique_parameters[unique_parameter_count] = spec.parameter;
+            unique_parameter_count += 1;
+        }
+    }
+    return .{
+        .encoded = encoded,
+        .bucket_count = source.bucket_count,
+        .word_count = source.word_count,
+        .id = .fromBytes(encoded),
+        .context_based = source.context_based,
+        .context_mode = source.context_mode,
+        .context_cutoff = source.context_cutoff,
+        .context_profile = source.context_profile,
+        .context_cluster_count = source.context_cluster_count,
+        .transform_profile = .shift,
+        .transform_capabilities = source.transform_capabilities | 8,
+        .transform_list_count = 1,
+        .learned_stringlet_count = source.learned_stringlet_count,
+        .learned_prefix_suffix_transform_count = source.learned_prefix_suffix_transform_count,
+        .learned_shift_parameter_count = unique_parameter_count,
+        .learned_shift_transform_count = plan.specs.len,
     };
 }
 
@@ -200,6 +327,8 @@ fn withTransformProfileAlloc(
     profile: TransformProfile,
 ) (Error || std.mem.Allocator.Error)!Candidate {
     if (profile == .identity) return error.InvalidTrainingOptions;
+    const transform_capabilities = transformProfileCapabilities(profile) orelse
+        return error.InvalidTrainingOptions;
     const parsed = try serialized_dictionary.parse(source.encoded);
     var word_lists: [serialized_dictionary.max_contexts]builder.WordListSpec =
         undefined;
@@ -240,7 +369,22 @@ fn withTransformProfileAlloc(
         .context_profile = source.context_profile,
         .context_cluster_count = source.context_cluster_count,
         .transform_profile = profile,
+        .transform_capabilities = transform_capabilities,
         .transform_list_count = 1,
+    };
+}
+
+fn transformProfileCapabilities(profile: TransformProfile) ?u4 {
+    return switch (profile) {
+        .identity => 0,
+        .ascii_case => 1,
+        .omit => 2,
+        .ascii_case_omit => 3,
+        .prefix_suffix => 4,
+        .ascii_case_prefix_suffix => 5,
+        .omit_prefix_suffix => 6,
+        .ascii_case_omit_prefix_suffix => 7,
+        .shift, .clustered => null,
     };
 }
 
@@ -249,9 +393,9 @@ pub fn withClusteredTransformProfilesAlloc(
     sources: []const *const Candidate,
     profile_by_dictionary: []const u8,
 ) (Error || std.mem.Allocator.Error)!Candidate {
-    if (sources.len < 2 or sources.len > 8)
+    if (sources.len < 2 or sources.len > 16)
         return error.InvalidTrainingOptions;
-    var parsed_sources: [8]serialized_dictionary.Dictionary = undefined;
+    var parsed_sources: [16]serialized_dictionary.Dictionary = undefined;
     for (sources, 0..) |source, source_index|
         parsed_sources[source_index] = try serialized_dictionary.parse(source.encoded);
     const base = &parsed_sources[0];
@@ -260,13 +404,13 @@ pub fn withClusteredTransformProfilesAlloc(
     {
         return error.InvalidTrainingOptions;
     }
-    var used: [8]bool = @splat(false);
+    var used: [16]bool = @splat(false);
     for (profile_by_dictionary) |profile_index| {
         if (profile_index >= sources.len) return error.InvalidTrainingOptions;
         used[profile_index] = true;
     }
-    var transform_specs: [8]builder.TransformListSpec = undefined;
-    var transform_index_by_source: [8]u8 = @splat(0);
+    var transform_specs: [16]builder.TransformListSpec = undefined;
+    var transform_index_by_source: [16]u8 = @splat(0);
     var transform_list_count: usize = 0;
     for (parsed_sources[0..sources.len], 0..) |*parsed, source_index| {
         if (!used[source_index]) continue;
@@ -313,6 +457,9 @@ pub fn withClusteredTransformProfilesAlloc(
     });
     var learned_stringlet_count: usize = 0;
     var learned_transform_count: usize = 0;
+    var learned_shift_parameter_count: usize = 0;
+    var learned_shift_transform_count: usize = 0;
+    var transform_capabilities: u4 = 0;
     for (sources, 0..) |source, source_index| {
         if (!used[source_index]) continue;
         learned_stringlet_count = @max(
@@ -323,6 +470,15 @@ pub fn withClusteredTransformProfilesAlloc(
             learned_transform_count,
             source.learned_prefix_suffix_transform_count,
         );
+        learned_shift_parameter_count = @max(
+            learned_shift_parameter_count,
+            source.learned_shift_parameter_count,
+        );
+        learned_shift_transform_count = @max(
+            learned_shift_transform_count,
+            source.learned_shift_transform_count,
+        );
+        transform_capabilities |= source.transform_capabilities;
     }
     return .{
         .encoded = encoded,
@@ -335,9 +491,12 @@ pub fn withClusteredTransformProfilesAlloc(
         .context_profile = sources[0].context_profile,
         .context_cluster_count = sources[0].context_cluster_count,
         .transform_profile = .clustered,
+        .transform_capabilities = transform_capabilities,
         .transform_list_count = @intCast(transform_list_count),
         .learned_stringlet_count = learned_stringlet_count,
         .learned_prefix_suffix_transform_count = learned_transform_count,
+        .learned_shift_parameter_count = learned_shift_parameter_count,
+        .learned_shift_transform_count = learned_shift_transform_count,
     };
 }
 
@@ -942,6 +1101,44 @@ test "serialized trainer learns deterministic non-contiguous context clusters" {
     try std.testing.expectEqual(@as(u8, 0), parsed_mixed.dictionaries[0].transform_list_index);
     try std.testing.expectEqual(@as(u8, 1), parsed_mixed.dictionaries[1].transform_list_index);
     try std.testing.expectEqual(@as(u8, 2), parsed_mixed.dictionaries[2].transform_list_index);
+
+    var shift_specs = [_]shift_trainer.Spec{.{
+        .kind = 21,
+        .parameter = 1,
+        .count = 4,
+        .matched_bytes = 32,
+    }};
+    const shift_plan = ShiftPlan{ .specs = &shift_specs };
+    const shift_candidate = try withShiftTransformsAlloc(
+        std.testing.allocator,
+        &first,
+        &shift_plan,
+    );
+    defer shift_candidate.deinit(std.testing.allocator);
+    const shift_sources = [_]*const Candidate{
+        &first,
+        &case_candidate,
+        &omit_candidate,
+        &shift_candidate,
+    };
+    const mixed_shift = try withClusteredTransformProfilesAlloc(
+        std.testing.allocator,
+        &shift_sources,
+        &.{ 0, 1, 3 },
+    );
+    defer mixed_shift.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(u4, 9), mixed_shift.transform_capabilities);
+    try std.testing.expectEqual(@as(usize, 1), mixed_shift.learned_shift_parameter_count);
+    const parsed_mixed_shift = try serialized_dictionary.parse(mixed_shift.encoded);
+    const shift_list_index = parsed_mixed_shift.dictionaries[2].transform_list_index;
+    const shift_list = &parsed_mixed_shift.transform_lists[shift_list_index];
+    var saw_shift = false;
+    for (0..shift_list.transformCount()) |transform_index| {
+        const transform = shift_list.transform(transform_index).?;
+        saw_shift = saw_shift or
+            (transform.kind == 21 and transform.parameter == 1);
+    }
+    try std.testing.expect(saw_shift);
 }
 
 test "serialized trainer derives canonical transform families" {
@@ -1105,6 +1302,40 @@ test "serialized trainer derives canonical transform families" {
         TransformProfile.ascii_case_omit_prefix_suffix,
         combined_affix.transform_profile,
     );
+
+    var shift_specs = [_]shift_trainer.Spec{.{
+        .kind = 21,
+        .parameter = 1,
+        .count = 4,
+        .matched_bytes = 32,
+    }};
+    const shift_plan = ShiftPlan{ .specs = &shift_specs };
+    const shifted = try withShiftTransformsAlloc(
+        std.testing.allocator,
+        &identity,
+        &shift_plan,
+    );
+    defer shifted.deinit(std.testing.allocator);
+    try std.testing.expectEqual(TransformProfile.shift, shifted.transform_profile);
+    try std.testing.expectEqual(@as(u4, 8), shifted.transform_capabilities);
+    try std.testing.expectEqual(@as(usize, 1), shifted.learned_shift_parameter_count);
+    try std.testing.expectEqual(@as(usize, 1), shifted.learned_shift_transform_count);
+    const parsed_shifted = try serialized_dictionary.parse(shifted.encoded);
+    try std.testing.expectEqual(@as(usize, 2), parsed_shifted.transform_lists[0].transformCount());
+    const shifted_word = parsed_shifted.word_lists[0].word(8, 0).?;
+    var shifted_expected: [8]u8 = undefined;
+    @memcpy(&shifted_expected, shifted_word);
+    serialized_dictionary.applyShiftUtf8(&shifted_expected, 1, false);
+    try std.testing.expectEqualSlices(
+        u8,
+        &shifted_expected,
+        (try parsed_shifted.resolve(
+            0,
+            8,
+            parsed_shifted.word_lists[0].wordCount(8),
+            &scratch,
+        )).bytes,
+    );
 }
 
 test "serialized trainer releases every allocation failure path" {
@@ -1156,6 +1387,19 @@ test "serialized trainer releases every allocation failure path" {
                 &affix_plan,
             );
             defer affix_candidate.deinit(allocator);
+            var shift_specs = [_]shift_trainer.Spec{.{
+                .kind = 21,
+                .parameter = 1,
+                .count = 2,
+                .matched_bytes = 16,
+            }};
+            const shift_plan = ShiftPlan{ .specs = &shift_specs };
+            const shift_candidate = try withShiftTransformsAlloc(
+                allocator,
+                &candidate,
+                &shift_plan,
+            );
+            defer shift_candidate.deinit(allocator);
             const contextual = (try trainContextCandidateAlloc(
                 allocator,
                 &samples,

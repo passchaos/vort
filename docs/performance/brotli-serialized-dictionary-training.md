@@ -11,9 +11,8 @@ retains the largest legal power-of-two word bucket, emits one identity-transform
 custom dictionary, and validates profitability on held-out samples with the
 production Brotli encoder.
 
-This is not a COVER/FastCover-equivalent trainer. SHIFT-family learning,
-arbitrary transform synthesis, and representative corpus calibration remain
-future work.
+This is not a COVER/FastCover-equivalent trainer. Representative corpus
+calibration and COVER/FastCover-class word selection remain future work.
 
 ## Selection contract
 
@@ -28,8 +27,8 @@ total by at least `min_savings_bytes`. Deployments that distribute dictionaries
 out of band may disable the one-time dictionary charge explicitly. Every
 returned result includes both frame totals, the charged bytes, total savings,
 word and bucket counts, global/cutoff/clustered context profile, actual cluster
-count, selected transform profile/list count, and a stable content-derived
-dictionary ID.
+count, selected transform profile/list count, learned stringlet and SHIFT
+parameter/transform counts, and a stable content-derived dictionary ID.
 
 ## Locked fixture
 
@@ -204,3 +203,33 @@ second list. The regression requires at least a 35% baseline saving,
 byte-identical repeated training, exact 19/21 transform counts, and successful
 uppercase, omit, and identity replay. The experimental libbrotli matrix checks
 all three payload shapes in both directions.
+
+## Learned UTF-8 SHIFT evidence
+
+The bounded shift learner compares canonical trained words with deterministically
+sampled, equal-length held-out slices. It decodes the first scalar using
+Brotli's original byte-width masks, derives the smallest signed 16-bit delta,
+and accepts it only when byte-exact replay reproduces the complete target.
+SHIFT_FIRST and SHIFT_ALL are counted and ranked independently. Selected
+triplets carry little-endian parameters while every non-SHIFT transform receives
+the required zero parameter entry. The resulting family can be layered over
+identity, case, omit, and learned-affix candidates; the transform clusterer
+treats shift as a fourth capability bit.
+
+A locked fixture trains four 16-byte words made from eight two-byte UTF-8
+scalars. Two held-out words shift only their first scalar and two shift every
+scalar, all with signed delta `+1`:
+
+| Metric | Bytes |
+|---|---:|
+| Dictionary-free held-out frames | 3,513 |
+| SHIFT dictionary-backed frames | 2,624 |
+| Serialized dictionary | 184 |
+| Charged trained total | 2,808 |
+| Total saving | 705 (20.1%) |
+
+The regression requires at least a 20% complete-total saving, one learned
+parameter, two learned transforms, exact SHIFT_FIRST/ALL replay, and byte-
+identical repeated training. Allocation-failure enumeration covers both the
+learner and family builder. The experimental libbrotli matrix validates the
+trained dictionary in both directions.

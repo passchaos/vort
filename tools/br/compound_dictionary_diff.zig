@@ -380,7 +380,12 @@ fn validateSerializedDictionaryMatrix(
         runtime,
         reference_options,
     );
-    return 20;
+    try validateShiftTrainedSerializedDictionary(
+        allocator,
+        runtime,
+        reference_options,
+    );
+    return 22;
 }
 
 fn validateTrainedSerializedDictionary(
@@ -413,6 +418,7 @@ fn validateTrainedSerializedDictionary(
             .max_phrases_per_length = 64,
             .train_context_clustering = false,
             .train_prefix_suffix_transforms = false,
+            .train_shift_transforms = false,
             .quality = 5,
         },
     )) orelse return error.ReferenceEncodeFailed;
@@ -501,6 +507,7 @@ fn validateCaseTrainedSerializedDictionary(
             .max_phrases_per_length = 64,
             .train_context_map = false,
             .train_prefix_suffix_transforms = false,
+            .train_shift_transforms = false,
             .quality = 5,
         },
     )) orelse return error.ReferenceEncodeFailed;
@@ -563,6 +570,7 @@ fn validateOmitTrainedSerializedDictionary(
             .max_phrases_per_length = 64,
             .train_context_map = false,
             .train_prefix_suffix_transforms = false,
+            .train_shift_transforms = false,
             .quality = 5,
         },
     )) orelse return error.ReferenceEncodeFailed;
@@ -633,6 +641,7 @@ fn validatePrefixSuffixTrainedSerializedDictionary(
             .train_context_map = false,
             .train_case_transforms = false,
             .train_omit_transforms = false,
+            .train_shift_transforms = false,
             .max_prefix_suffix_len = 1,
             .max_prefix_suffix_transforms = 1,
             .max_prefix_suffix_candidates = 16,
@@ -708,6 +717,7 @@ fn validateClusteredTrainedSerializedDictionary(
             .train_case_transforms = false,
             .train_omit_transforms = false,
             .train_prefix_suffix_transforms = false,
+            .train_shift_transforms = false,
             .context_cluster_counts = &.{4},
             .max_context_positions_per_group = 1024,
             .max_context_signature_positions = 1024,
@@ -799,6 +809,7 @@ fn validateTransformClusteredSerializedDictionary(
             .max_words_per_length = 8,
             .max_phrases_per_length = 64,
             .train_prefix_suffix_transforms = false,
+            .train_shift_transforms = false,
             .context_modes = &.{0},
             .context_cluster_counts = &.{4},
             .max_context_positions_per_group = 1024,
@@ -821,6 +832,80 @@ fn validateTransformClusteredSerializedDictionary(
             &trained,
             validation_samples[sample_index],
         );
+}
+
+fn validateShiftTrainedSerializedDictionary(
+    allocator: std.mem.Allocator,
+    runtime: libbrotli.Runtime,
+    reference_options: libbrotli.Runtime.StreamingOptions,
+) !void {
+    const phrases = [_][]const u8{
+        "ĀāĂăĄąĆć",
+        "ĐđĒēĔĕĖė",
+        "ĠġĢģĤĥĦħ",
+        "İıĲĳĴĵĶķ",
+    };
+    const shifted_phrases = [_][]const u8{
+        "āāĂăĄąĆć",
+        "đđĒēĔĕĖė",
+        "ġĢģĤĥĦħĨ",
+        "ıĲĳĴĵĶķĸ",
+    };
+    var training_storage: [4][256]u8 = undefined;
+    var training_samples: [training_storage.len][]const u8 = undefined;
+    for (&training_storage, &training_samples, phrases) |*storage, *sample, phrase| {
+        var cursor: usize = 0;
+        for (0..16) |_| {
+            @memcpy(storage[cursor..][0..phrase.len], phrase);
+            cursor += phrase.len;
+        }
+        sample.* = storage;
+    }
+    var validation_storage: [64][68]u8 = undefined;
+    var validation_samples: [validation_storage.len][]const u8 = undefined;
+    for (&validation_storage, &validation_samples, 0..) |*storage, *sample, index| {
+        std.mem.writeInt(u32, storage[0..4], @intCast(0x5000 + index), .little);
+        var cursor: usize = 4;
+        for (shifted_phrases) |phrase| {
+            @memcpy(storage[cursor..][0..phrase.len], phrase);
+            cursor += phrase.len;
+        }
+        sample.* = storage[0..cursor];
+    }
+    const trained = (try vort.brTrainSerializedSharedDictionaryAlloc(
+        allocator,
+        &training_samples,
+        &validation_samples,
+        .{
+            .min_word_len = 16,
+            .max_word_len = 16,
+            .max_words_per_length = 8,
+            .max_phrases_per_length = 64,
+            .train_context_map = false,
+            .train_case_transforms = false,
+            .train_omit_transforms = false,
+            .train_prefix_suffix_transforms = false,
+            .max_shift_transforms = 2,
+            .max_shift_candidates = 64,
+            .max_shift_words = 16,
+            .max_shift_positions = 4096,
+            .quality = 5,
+        },
+    )) orelse return error.ReferenceEncodeFailed;
+    defer trained.deinit(allocator);
+    if (trained.transform_profile != .shift or
+        trained.learned_shift_parameter_count != 1 or
+        trained.learned_shift_transform_count != 2)
+    {
+        return error.ReferenceEncodeFailed;
+    }
+    try validateOwnedTrainedDictionaryInterop(
+        allocator,
+        runtime,
+        reference_options,
+        &trained,
+        validation_samples[0],
+    );
 }
 
 fn fillOmitTrainingSample(

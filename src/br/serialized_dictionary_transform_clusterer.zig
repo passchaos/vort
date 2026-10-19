@@ -4,7 +4,7 @@ const builder = @import("serialized_dictionary_builder.zig");
 const Matcher = @import("encoder/serialized_dictionary_matcher.zig").Matcher;
 const literal_context = @import("encoder/literal_context.zig");
 
-pub const max_profiles: usize = 8;
+pub const max_profiles: usize = 16;
 pub const max_dictionaries: usize = 16;
 pub const max_scoring_positions: usize = 1024 * 1024;
 
@@ -29,7 +29,7 @@ pub const Assignment = struct {
 pub fn assignAlloc(
     allocator: std.mem.Allocator,
     candidates: []const *const serialized_dictionary.Dictionary,
-    capabilities: []const u3,
+    capabilities: []const u4,
     validation_samples: []const []const u8,
     context_mode: u2,
     options: Options,
@@ -52,7 +52,7 @@ pub fn assignAlloc(
     for (candidates[1..]) |candidate|
         try validateEquivalentWordsAndMap(reference, candidate);
 
-    var all_capabilities: u3 = 0;
+    var all_capabilities: u4 = 0;
     for (capabilities) |profile| all_capabilities |= profile;
     var oracle_index: ?usize = null;
     for (capabilities, 0..) |profile, profile_index| {
@@ -78,7 +78,7 @@ pub fn assignAlloc(
     ) catch return error.IntegerOverflow;
     const stride = @max(@as(usize, 1), rounded / options.max_positions);
 
-    var demand: [max_dictionaries][3]u64 = @splat(@splat(0));
+    var demand: [max_dictionaries][4]u64 = @splat(@splat(0));
     var matcher = Matcher.init(allocator);
     defer matcher.deinit();
     try matcher.prepare(oracle);
@@ -110,8 +110,8 @@ pub fn assignAlloc(
                         resolved.dictionary_id,
                         resolved.transform_index,
                     );
-                    inline for (0..3) |bit| {
-                        if (capability & (@as(u3, 1) << bit) != 0)
+                    inline for (0..4) |bit| {
+                        if (capability & (@as(u4, 1) << bit) != 0)
                             demand[resolved.dictionary_id][bit] +|=
                                 match.output_len;
                     }
@@ -130,16 +130,16 @@ pub fn assignAlloc(
     };
     var used: [max_profiles]bool = @splat(false);
     for (0..reference.dictionary_count) |dictionary_id| {
-        var required: u3 = 0;
-        inline for (0..3) |bit| {
+        var required: u4 = 0;
+        inline for (0..4) |bit| {
             if (demand[dictionary_id][bit] != 0)
-                required |= @as(u3, 1) << bit;
+                required |= @as(u4, 1) << bit;
         }
         var best_profile: ?usize = null;
-        var best_extra: u3 = std.math.maxInt(u3);
+        var best_extra: u4 = std.math.maxInt(u4);
         for (capabilities, 0..) |profile, profile_index| {
             if (profile & required != required) continue;
-            const extra: u3 = @intCast(@popCount(profile ^ required));
+            const extra: u4 = @intCast(@popCount(profile ^ required));
             if (best_profile == null or extra < best_extra) {
                 best_profile = profile_index;
                 best_extra = extra;
@@ -160,7 +160,7 @@ fn transformCapability(
     dictionary: *const serialized_dictionary.Dictionary,
     dictionary_id: u6,
     transform_index: u8,
-) Error!u3 {
+) Error!u4 {
     const choice = dictionary.choice(dictionary_id) orelse
         return error.InvalidTrainingOptions;
     if (choice.transform_list_index >= dictionary.transform_list_count)
@@ -168,7 +168,7 @@ fn transformCapability(
     const list = &dictionary.transform_lists[choice.transform_list_index];
     const transform = list.transform(transform_index) orelse
         return error.InvalidTrainingOptions;
-    var capability: u3 = 0;
+    var capability: u4 = 0;
     if (transform.kind == 10 or transform.kind == 11)
         capability |= 1;
     if ((transform.kind >= 1 and transform.kind <= 9) or
@@ -181,6 +181,7 @@ fn transformCapability(
     const suffix = list.string(transform.suffix_id) orelse
         return error.InvalidTrainingOptions;
     if (prefix.len != 0 or suffix.len != 0) capability |= 4;
+    if (transform.kind == 21 or transform.kind == 22) capability |= 8;
     return capability;
 }
 
@@ -271,6 +272,16 @@ test "serialized transform clusterer assigns minimal profiles and releases failu
                 .prefix_suffix = &.{0},
                 .transforms = &.{ 0, 0, 0, 0, 10, 0, 0, 11, 0 },
             }};
+            const shift_transforms = [_]builder.TransformListSpec{.{
+                .prefix_suffix = &.{0},
+                .transforms = &.{ 0, 0, 0, 0, 21, 0 },
+                .params = &.{ 0, 0, 1, 0 },
+            }};
+            const combined_transforms = [_]builder.TransformListSpec{.{
+                .prefix_suffix = &.{0},
+                .transforms = &.{ 0, 0, 0, 0, 10, 0, 0, 11, 0, 0, 21, 0 },
+                .params = &.{ 0, 0, 0, 0, 0, 0, 1, 0 },
+            }};
             const choices = [_]serialized_dictionary.DictionaryChoice{
                 .{ .word_list_index = 0, .transform_list_index = 0 },
                 .{ .word_list_index = 1, .transform_list_index = 0 },
@@ -292,23 +303,41 @@ test "serialized transform clusterer assigns minimal profiles and releases failu
                 .context_map = &context_map,
             });
             defer allocator.free(case_encoded);
+            const shift_encoded = try builder.serializeAlloc(allocator, .{
+                .word_lists = &word_lists,
+                .transform_lists = &shift_transforms,
+                .dictionaries = &choices,
+                .context_map = &context_map,
+            });
+            defer allocator.free(shift_encoded);
+            const combined_encoded = try builder.serializeAlloc(allocator, .{
+                .word_lists = &word_lists,
+                .transform_lists = &combined_transforms,
+                .dictionaries = &choices,
+                .context_map = &context_map,
+            });
+            defer allocator.free(combined_encoded);
             const identity = try serialized_dictionary.parse(identity_encoded);
             const case = try serialized_dictionary.parse(case_encoded);
+            const shift = try serialized_dictionary.parse(shift_encoded);
+            const combined = try serialized_dictionary.parse(combined_encoded);
             const candidates = [_]*const serialized_dictionary.Dictionary{
                 &identity,
                 &case,
+                &shift,
+                &combined,
             };
             const assignment = (try assignAlloc(
                 allocator,
                 &candidates,
-                &.{ 0, 1 },
-                &.{ "\x08LOWERONE", "\x28otherone" },
+                &.{ 0, 1, 8, 9 },
+                &.{ "\x08LOWERONE", "\x28ptherone" },
                 literal_context.mode_lsb6,
                 .{ .max_positions = 64 },
             )) orelse return error.TestUnexpectedResult;
             try std.testing.expectEqual(@as(u7, 2), assignment.distinct_profile_count);
             try std.testing.expectEqual(@as(u8, 1), assignment.profile_by_dictionary[0]);
-            try std.testing.expectEqual(@as(u8, 0), assignment.profile_by_dictionary[1]);
+            try std.testing.expectEqual(@as(u8, 2), assignment.profile_by_dictionary[1]);
         }
     };
     try std.testing.checkAllAllocationFailures(

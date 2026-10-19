@@ -2195,12 +2195,12 @@ dictionary symbols reports the whole runtime matrix as skipped instead of
 silently reducing coverage.
 
 With local upstream libbrotli 1.2.0 built using `BROTLI_EXPERIMENTAL`, the same
-gate additionally passes twenty serialized custom-static cases:
+gate additionally passes twenty-two serialized custom-static cases:
 bidirectional non-contextual coverage, a UTF8-context winner, and identity-,
 case-, omit-, learned-prefix/suffix-, and non-contiguous-context-cluster-trained
-dictionaries, plus three payload shapes using a per-dictionary clustered
-transform-list result. A non-experimental build reports them as skipped
-explicitly.
+dictionaries, three payload shapes using a per-dictionary clustered transform-
+list result, and a learned UTF-8 SHIFT_FIRST/ALL dictionary. A non-experimental
+build reports them as skipped explicitly.
 
 `brTrainSerializedSharedDictionaryAlloc` provides deterministic bounded
 identity-word, multi-cutoff two-group, and arbitrary non-contiguous context-map
@@ -2229,8 +2229,13 @@ covers its demand, and equal profiles share one serialized transform list. The
 mixed result still competes by complete wire. The result reports
 global/cutoff/clustered context profile, actual context/transform-list counts,
 selected transform profile, learned stringlet/transform counts, stable content-
-derived ID, and exact byte accounting. It does not claim COVER/FastCover
-equivalence or learned SHIFT transforms.
+derived ID, and exact byte accounting. A bounded shift learner additionally
+infers canonical signed 16-bit deltas from equal-width UTF-8/byte sequences,
+verifies every SHIFT_FIRST/ALL candidate with byte-exact replay, and can append
+those transforms to each existing family before per-dictionary clustering.
+Defaults cap shift transforms at eight, parameter candidates at 4,096, indexed
+words at 256, and sampled positions at 4,096. It does not claim
+COVER/FastCover equivalence or broad-corpus calibration.
 
 ### Brotli planned encoder controls
 
