@@ -59,6 +59,21 @@ pub fn main(init: std.process.Init) !void {
         try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
         return;
     }
+    if (std.mem.eql(u8, mode, "q0-adaptive-trees")) {
+        var payload: [32 * 1024]u8 = undefined;
+        for (payload[0 .. 16 * 1024], 0..) |*byte, index|
+            byte.* = "abcd"[index & 3];
+        for (payload[16 * 1024 ..], 0..) |*byte, index|
+            byte.* = "0123456789abcdef"[index & 15];
+        const encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(
+            init.gpa,
+            &payload,
+            .{ .quality = 0 },
+        );
+        defer init.gpa.free(encoded);
+        try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
+        return;
+    }
     if (std.mem.eql(u8, mode, "chunked-multiblock")) {
         const first = "alpha beta gamma delta alpha beta gamma delta " ** 64;
         const middle = "qzxwvbnm1234567890QZXWVBNM!@#$%^&*";

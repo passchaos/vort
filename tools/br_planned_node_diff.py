@@ -28,13 +28,16 @@ def main() -> int:
                 raise SystemExit(f"{mode}: node output mismatch")
             print(f"brotli planned {mode} node diff: encoded={len(encoded)} decoded={len(actual)}")
     quality_modes = ("generic", "text", "font")
-    q1_sizes = {"generic": 69, "text": 95, "font": 92}
+    fast_quality_sizes = {
+        0: {"generic": 122, "text": 143, "font": 142},
+        1: {"generic": 69, "text": 95, "font": 92},
+    }
     for quality in range(12):
         for planned_mode, (name, expected) in zip(quality_modes, cases):
             mode = f"q{quality}-{planned_mode}-{name}"
             encoded = subprocess.check_output([sys.argv[1], mode])
-            if quality == 1 and len(encoded) != q1_sizes[planned_mode]:
-                raise SystemExit(f"{mode}: q1 wire size changed: {len(encoded)}")
+            if quality in fast_quality_sizes and len(encoded) != fast_quality_sizes[quality][planned_mode]:
+                raise SystemExit(f"{mode}: fast-quality wire size changed: {len(encoded)}")
             actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
             if actual != expected:
                 raise SystemExit(f"{mode}: node output mismatch")
@@ -47,6 +50,14 @@ def main() -> int:
     if actual != expected:
         raise SystemExit("q1-wide-literals: node output mismatch")
     print(f"brotli planned q1-wide-literals node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = (b"abcd" * 4096) + (b"0123456789abcdef" * 1024)
+    encoded = subprocess.check_output([sys.argv[1], "q0-adaptive-trees"])
+    if len(encoded) != 140:
+        raise SystemExit(f"q0-adaptive-trees: wire size changed: {len(encoded)}")
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("q0-adaptive-trees: node output mismatch")
+    print(f"brotli planned q0-adaptive-trees node diff: encoded={len(encoded)} decoded={len(actual)}")
     expected = (
         b"alpha beta gamma delta alpha beta gamma delta " * 64
         + b"qzxwvbnm1234567890QZXWVBNM!@#$%^&*"

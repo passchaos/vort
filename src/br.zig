@@ -12,6 +12,7 @@ const command_lut = @import("br/command_lut.zig");
 const pattern = @import("br/pattern.zig");
 const command_plan = @import("br/encoder/command_plan.zig");
 const fast_fragment = @import("br/encoder/fast_fragment.zig");
+const fast_fragment_one_pass = @import("br/encoder/fast_fragment_one_pass.zig");
 const fast_fragment_two_pass = @import("br/encoder/fast_fragment_two_pass.zig");
 const literal_context = @import("br/encoder/literal_context.zig");
 const literal_context_split = @import("br/encoder/literal_context_split.zig");
@@ -72,6 +73,7 @@ var test_external_literal_lookup_hits: usize = 0;
 var test_context_independent_literal_lookup_hits: usize = 0;
 var test_single_tree_external_lookup_hits: usize = 0;
 var test_wide_auxiliary_lookup10_hits: usize = 0;
+var test_q0_one_pass_writer_hits: usize = 0;
 var test_q1_two_pass_writer_hits: usize = 0;
 
 const large_window_text_section = code_sections.large_window;
@@ -553,6 +555,7 @@ const IncrementalPlannedEncoderCodec = struct {
         greedy_scratch: lz77.TinyGreedyScratch = .{},
         dictionary_greedy_scratch: lz77.DictionaryGreedyScratch = .{},
         fragment_scratch: fast_fragment.Scratch = .{},
+        q0_entropy_state: fast_fragment_one_pass.State = .{},
         compound_matcher: ?compound_dictionary_matcher.Matcher = null,
         compound_dictionary_size: usize = 0,
         wire_state: PlannedWireState = .{},
@@ -590,6 +593,7 @@ const IncrementalPlannedEncoderCodec = struct {
         state.history_snapshot.clearRetainingCapacity();
         state.compound_dictionary_size = 0;
         state.wire_state = .{};
+        state.q0_entropy_state.reset();
         state.greedy_scratch.head_initialized = @splat(0);
         state.greedy_scratch.prev.clearRetainingCapacity();
     }
@@ -947,6 +951,7 @@ test {
     _ = pattern;
     _ = command_plan;
     _ = fast_fragment;
+    _ = fast_fragment_one_pass;
     _ = fast_fragment_two_pass;
     _ = literal_context;
     _ = literal_context_split;
@@ -4631,6 +4636,201 @@ const PlannedMetaBlockCandidate = struct {
     wire_state: PlannedWireState = .{},
 };
 
+const Q0OnePassCandidate = struct {
+    meta_block: PlannedMetaBlockCandidate,
+    next_entropy_state: fast_fragment_one_pass.State,
+};
+
+const Q0OnePassPayloadWriter = struct {
+    allocator: std.mem.Allocator,
+    writer: *BitWriter,
+    literal_alphabet: *const command_plan.PrefixAlphabetFor(256),
+    command_alphabet: *const command_plan.PrefixAlphabet,
+    distance_alphabet: *const command_plan.PrefixAlphabetFor(64),
+    literal_encoder: *const huffman.HuffmanTable(256).Encoder,
+    command_encoder: *const huffman.HuffmanTable(704).Encoder,
+    distance_encoder: *const huffman.HuffmanTable(64).Encoder,
+    last_distances: [4]usize,
+    next_histogram: [128]u32 = fast_fragment_one_pass.initialHistogram(),
+
+    pub fn event(self: *@This(), value: fast_fragment_one_pass.Event) Error!void {
+        self.next_histogram[value.code] += 1;
+        if (value.code < 64) {
+            const symbol = fast_fragment_one_pass.commandSymbol(@intCast(value.code));
+            if (self.command_alphabet.len > 1) {
+                if (self.command_alphabet.len <= 4) {
+                    const code = self.command_alphabet.simpleCode(symbol) orelse
+                        return error.InvalidBlockPlan;
+                    try self.writer.writeHuffmanBits(self.allocator, code.code, code.bits);
+                } else {
+                    const bits = self.command_encoder.bits[symbol];
+                    if (bits == 0) return error.InvalidBlockPlan;
+                    try self.writer.writeHuffmanBits(
+                        self.allocator,
+                        self.command_encoder.codes[symbol],
+                        bits,
+                    );
+                }
+            }
+        } else {
+            const symbol: u6 = @intCast(value.code - 64);
+            if (self.distance_alphabet.len > 1) {
+                if (self.distance_alphabet.len <= 4) {
+                    const code = self.distance_alphabet.simpleCode(symbol) orelse
+                        return error.InvalidBlockPlan;
+                    try self.writer.writeHuffmanBits(self.allocator, code.code, code.bits);
+                } else {
+                    const bits = self.distance_encoder.bits[symbol];
+                    if (bits == 0) return error.InvalidBlockPlan;
+                    try self.writer.writeHuffmanBits(
+                        self.allocator,
+                        self.distance_encoder.codes[symbol],
+                        bits,
+                    );
+                }
+            }
+        }
+        if (value.extra_bits != 0)
+            try self.writer.writeBits(self.allocator, value.extra, value.extra_bits);
+    }
+
+    pub fn literals(self: *@This(), bytes: []const u8) Error!void {
+        if (self.literal_alphabet.len <= 1) return;
+        for (bytes) |literal| {
+            if (self.literal_alphabet.len <= 4) {
+                const code = self.literal_alphabet.simpleCode(literal) orelse
+                    return error.InvalidBlockPlan;
+                try self.writer.writeHuffmanBits(self.allocator, code.code, code.bits);
+            } else {
+                const bits = self.literal_encoder.bits[literal];
+                if (bits == 0) return error.InvalidBlockPlan;
+                try self.writer.writeHuffmanBits(
+                    self.allocator,
+                    self.literal_encoder.codes[literal],
+                    bits,
+                );
+            }
+        }
+    }
+
+    pub fn distance(self: *@This(), actual: usize, pushes_ring: bool) Error!void {
+        if (pushes_ring) pushLastDistance(&self.last_distances, actual);
+    }
+};
+
+fn encodeQ0OnePassMetaBlockCandidate(
+    allocator: std.mem.Allocator,
+    bytes: *std.ArrayList(u8),
+    start_byte: u8,
+    start_bit_index: u3,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    initial_wire_state: PlannedWireState,
+    entropy_state: *const fast_fragment_one_pass.State,
+) Error!Q0OnePassCandidate {
+    bytes.clearRetainingCapacity();
+    if (start_bit_index != 0) try bytes.append(allocator, start_byte);
+    var writer = BitWriter{ .out = bytes, .bit_index = start_bit_index };
+    const start_bit_position = writer.bitPosition();
+
+    const literal_frequencies = fast_fragment_one_pass.literalFrequencies(input) catch
+        return error.InvalidBlockPlan;
+    var literal_alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
+    try command_plan.alphabetFromFrequenciesInto(
+        256,
+        &literal_alphabet,
+        &literal_frequencies,
+    );
+    const command_alphabet = fast_fragment_one_pass.commandAlphabet(entropy_state);
+    const distance_alphabet = fast_fragment_one_pass.distanceAlphabet(entropy_state);
+    if (command_alphabet.len == 0 or distance_alphabet.len == 0)
+        return error.InvalidBlockPlan;
+    const literal_lengths = try q1TreeLengths(
+        256,
+        &literal_frequencies,
+        &literal_alphabet,
+        8,
+    );
+    const command_lengths = fast_fragment_one_pass.expandCommandLengths(
+        &entropy_state.command_lengths,
+    );
+
+    try writeCompressedMetaBlockHeader(allocator, &writer, input.len, false);
+    try writePlannedCompressedHeader(
+        64,
+        allocator,
+        &writer,
+        &literal_alphabet,
+        &command_alphabet,
+        null,
+        &distance_alphabet,
+        null,
+        encoder_distance.Parameters.init(0, 0),
+        64,
+        &literal_lengths,
+        &command_lengths,
+        &entropy_state.distance_lengths,
+    );
+
+    const literal_encoder = if (literal_alphabet.len <= 4)
+        huffman.HuffmanTable(256).Encoder{}
+    else if (literal_alphabet.len <= 64)
+        try huffman.HuffmanTable(256).Encoder.initSparseTrusted(
+            &literal_lengths,
+            literal_alphabet.symbols[0..literal_alphabet.len],
+        )
+    else
+        try huffman.HuffmanTable(256).Encoder.init(&literal_lengths);
+    const command_encoder = if (command_alphabet.len <= 4)
+        huffman.HuffmanTable(704).Encoder{}
+    else
+        try huffman.HuffmanTable(704).Encoder.initSparseTrusted(
+            &command_lengths,
+            command_alphabet.symbols[0..command_alphabet.len],
+        );
+    const distance_encoder = if (distance_alphabet.len <= 4)
+        huffman.HuffmanTable(64).Encoder{}
+    else
+        try huffman.HuffmanTable(64).Encoder.initSparseTrusted(
+            &entropy_state.distance_lengths,
+            distance_alphabet.symbols[0..distance_alphabet.len],
+        );
+    var payload_writer = Q0OnePassPayloadWriter{
+        .allocator = allocator,
+        .writer = &writer,
+        .literal_alphabet = &literal_alphabet,
+        .command_alphabet = &command_alphabet,
+        .distance_alphabet = &distance_alphabet,
+        .literal_encoder = &literal_encoder,
+        .command_encoder = &command_encoder,
+        .distance_encoder = &distance_encoder,
+        .last_distances = initial_wire_state.last_distances,
+    };
+    _ = fast_fragment_one_pass.walk(input, commands, &payload_writer) catch |err| switch (err) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.IntegerOverflow => return error.IntegerOverflow,
+        else => return error.InvalidBlockPlan,
+    };
+    var next_entropy_state = entropy_state.*;
+    next_entropy_state.update(&payload_writer.next_histogram);
+    if (builtin.is_test) test_q0_one_pass_writer_hits += 1;
+    return .{
+        .meta_block = .{
+            .bit_index = writer.bit_index,
+            .bit_count = writer.bitPosition() - start_bit_position,
+            .wire_state = .{
+                .last_distances = payload_writer.last_distances,
+                .output_pos = std.math.add(
+                    usize,
+                    initial_wire_state.output_pos,
+                    input.len,
+                ) catch return error.IntegerOverflow,
+            },
+        },
+        .next_entropy_state = next_entropy_state,
+    };
+}
+
 const Q1TwoPassPayloadWriter = struct {
     allocator: std.mem.Allocator,
     writer: *BitWriter,
@@ -4913,6 +5113,7 @@ fn retainSmallerMetaBlockCandidate(
 
 fn considerPlannedMetaBlockCommands(
     allocator: std.mem.Allocator,
+    state: *IncrementalPlannedEncoderCodec.State,
     input: []const u8,
     commands: []const command_plan.Command,
     policy: PlannedMetaBlockPolicy,
@@ -4925,6 +5126,33 @@ fn considerPlannedMetaBlockCommands(
     candidate_wire: *std.ArrayList(u8),
     best_wire: *std.ArrayList(u8),
 ) Error!void {
+    if (policy.fragment_variant == .q0 and !state.adaptive_blocks) {
+        if (encodeQ0OnePassMetaBlockCandidate(
+            allocator,
+            candidate_wire,
+            start_byte,
+            start_bit_index,
+            input,
+            commands,
+            wire_state,
+            &state.q0_entropy_state,
+        )) |candidate| {
+            try retainSmallerMetaBlockCandidate(
+                allocator,
+                best,
+                candidate_wire,
+                best_wire,
+                candidate.meta_block,
+            );
+            state.q0_entropy_state = candidate.next_entropy_state;
+            return;
+        } else |err| switch (err) {
+            // Compound-dictionary commands retain the general writer and do
+            // not perturb q0's learned local-LZ tree state.
+            error.InvalidBlockPlan => {},
+            else => return err,
+        }
+    }
     if (policy.fragment_variant == .q1) {
         if (encodeQ1TwoPassMetaBlockCandidate(
             allocator,
@@ -5207,8 +5435,9 @@ fn considerPlannedMetaBlockPolicy(
                 state.tokens.items,
             );
     }
+    const q0_one_pass = policy.fragment_variant == .q0 and !state.adaptive_blocks;
     if (match_count != 0 or state.compound_dictionary_size != 0 or
-        policy.dictionary.static_dictionary)
+        policy.dictionary.static_dictionary or q0_one_pass)
     {
         const mixed = if (state.compound_dictionary_size != 0)
             try command_plan.mixCompoundDictionaryAlloc(
@@ -5222,9 +5451,10 @@ fn considerPlannedMetaBlockPolicy(
             null;
         defer if (mixed) |plan| plan.deinit(allocator);
         const commands = if (mixed) |plan| plan.commands else state.commands.items;
-        if (match_count != 0 or (mixed != null and mixed.?.match_count != 0))
+        if (match_count != 0 or (mixed != null and mixed.?.match_count != 0) or q0_one_pass)
             try considerPlannedMetaBlockCommands(
                 allocator,
+                state,
                 input,
                 commands,
                 policy,
@@ -5260,6 +5490,7 @@ fn considerPlannedMetaBlockPolicy(
             if (with_static) |plan| if (plan.match_count != 0)
                 try considerPlannedMetaBlockCommands(
                     allocator,
+                    state,
                     input,
                     plan.commands,
                     policy,
@@ -5292,6 +5523,7 @@ fn considerPlannedMetaBlockPolicy(
             defer commands.deinit(allocator);
             try considerPlannedMetaBlockCommands(
                 allocator,
+                state,
                 input,
                 commands.commands,
                 policy,
@@ -5463,6 +5695,8 @@ fn writePlannedStreamMetaBlock(
     const stored_end_bits = try addStoredUncompressedMetaBlockBitsLen(start_bits, block.len);
     const stored_bit_count = stored_end_bits - start_bits;
     const start_wire_state = state.wire_state;
+    const start_q0_entropy_state = state.q0_entropy_state;
+    errdefer state.q0_entropy_state = start_q0_entropy_state;
     state.candidate_wire.clearRetainingCapacity();
     state.best_wire.clearRetainingCapacity();
     var best: ?PlannedMetaBlockCandidate = null;
@@ -21579,6 +21813,38 @@ test "br q1 compact two-pass writer crosses the 64-symbol literal boundary" {
     try std.testing.expect(test_q1_two_pass_writer_hits != 0);
     const summary = try summarizeStream(encoded);
     try std.testing.expectEqual(@as(usize, 1), summary.compressed_meta_block_count);
+    const decoded = try decodeStreamAllocExactSize(
+        std.testing.allocator,
+        encoded,
+        payload.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
+test "br q0 one-pass writer learns command trees across fragments" {
+    var payload: [32 * 1024]u8 = undefined;
+    for (payload[0 .. 16 * 1024], 0..) |*byte, index|
+        byte.* = "abcd"[index & 3];
+    for (payload[16 * 1024 ..], 0..) |*byte, index|
+        byte.* = "0123456789abcdef"[index & 15];
+    const chunks = [_][]const u8{&payload};
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    test_q0_one_pass_writer_hits = 0;
+    const encoded = try encoder.encodeChunksScratchWithOptions(
+        &chunks,
+        .{ .quality = 0 },
+    );
+    try std.testing.expectEqual(@as(usize, 2), test_q0_one_pass_writer_hits);
+    const initial: fast_fragment_one_pass.State = .{};
+    try std.testing.expect(!std.mem.eql(
+        u4,
+        &initial.command_lengths,
+        &encoder.stream_state.q0_entropy_state.command_lengths,
+    ));
+    const summary = try summarizeStream(encoded);
+    try std.testing.expectEqual(@as(usize, 2), summary.compressed_meta_block_count);
     const decoded = try decodeStreamAllocExactSize(
         std.testing.allocator,
         encoded,

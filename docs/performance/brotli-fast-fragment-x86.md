@@ -28,10 +28,9 @@ the same bounded block core as chunked and incremental encoding, so default
 Compressed-versus-stored arbitration remains exact.
 
 This completes the fragment parser and streaming-state slice. q1 subsequently
-gained a compact two-pass 128-symbol writer, documented in
-[the q1 writer evidence](brotli-q1-two-pass-x86.md); q0 still uses Vort's
-shared general command/tree writer. A specialized q0 one-pass writer remains
-the next fast-encoder gap.
+gained compact fast entropy writers: q1 is documented in
+[the q1 writer evidence](brotli-q1-two-pass-x86.md), and q0 in
+[the q0 writer evidence](brotli-q0-one-pass-x86.md).
 
 ## Correctness evidence
 
@@ -45,8 +44,8 @@ q0/q1 do not accidentally use earlier-fragment LZ history, while the legacy
 fast policy still does. Both q0 and q1 one-shot paths pass exhaustive
 allocation-failure injection.
 
-`zig build test-br --summary all` now passes 807/807 tests after the q1 writer
-follow-up. The complete
+`zig build test-br --summary all` now passes 812/812 tests after the q0/q1
+writer follow-ups. The complete
 `zig build run-br-planned-node-diff` matrix passes, including q0/q1 in
 generic/text/font modes, so Node/libbrotli decodes every selected wire. The
 benchmark itself also decodes Vort output through runtime libbrotli before
@@ -82,7 +81,7 @@ blanket ratio improvement.
 
 At this parser-only milestone the candidate remained only 0.0976x--0.1877x of
 libbrotli throughput. The later q1 writer raises its four rows to
-0.2405x--0.2863x; q0 still needs the corresponding one-pass direct writer.
+0.2405x--0.2863x, and the q0 writer raises its rows to 0.1485x--0.2139x.
 
 Reproduce the matrix with the following command, substituting quality 1 for
 the second run and running the baseline checkout in the same way:
