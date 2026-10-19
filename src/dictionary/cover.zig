@@ -20,6 +20,10 @@ pub const TrainOptions = struct {
     /// Base-two frequency-table size. The two working tables contain
     /// `2 ** hash_log` `u32` entries each.
     hash_log: u8 = 16,
+    /// Require every selected segment to contain exactly `segment_size`
+    /// bytes. Disabled for history dictionaries, whose final/epoch segment may
+    /// be shorter; fixed-record consumers such as Brotli word lists enable it.
+    require_full_segments: bool = false,
     /// Reject larger corpora before allocating the frequency tables.
     max_corpus_size: usize = default_max_corpus_size,
 };
@@ -84,6 +88,7 @@ pub fn trainAlloc(
         options.hash_log,
         frequencies,
         active_counts,
+        options.require_full_segments,
     );
 }
 
@@ -169,6 +174,7 @@ pub const Prepared = struct {
             self.hash_log,
             self.frequencies,
             self.active_counts,
+            false,
         );
     }
 };
@@ -183,6 +189,7 @@ fn buildDictionaryAlloc(
     hash_log: u8,
     frequencies: []u32,
     active_counts: []u32,
+    require_full_segments: bool,
 ) ![]u8 {
     std.debug.assert(target_size != 0);
     std.debug.assert(dmer_offsets[samples.len] != 0);
@@ -208,6 +215,7 @@ fn buildDictionaryAlloc(
             hash_log,
             frequencies,
             active_counts,
+            require_full_segments,
         );
         epoch_index = (epoch_index + 1) % epochs.count;
 
@@ -337,6 +345,7 @@ fn selectEpoch(
     hash_log: u8,
     frequencies: []const u32,
     active_counts: []u32,
+    require_full_segments: bool,
 ) Segment {
     std.debug.assert(epoch_begin < epoch_end);
     var best: Segment = .{};
@@ -355,6 +364,7 @@ fn selectEpoch(
             hash_log,
             frequencies,
             active_counts,
+            require_full_segments,
         );
         if (candidate.score > best.score) best = candidate;
     }
@@ -384,6 +394,7 @@ fn selectRange(
     hash_log: u8,
     frequencies: []const u32,
     active_counts: []u32,
+    require_full_segments: bool,
 ) Segment {
     const dmers_per_segment = segment_size - dmer_size + 1;
     var active: Segment = .{ .sample_index = sample_index, .begin = begin, .end = begin };
@@ -401,7 +412,12 @@ fn selectRange(
             if (active_counts[removed] == 0) active.score -= frequencies[removed];
             active.begin += 1;
         }
-        if (active.score > best.score) best = active;
+        if (active.score > best.score and
+            (!require_full_segments or
+                active.end - active.begin == dmers_per_segment))
+        {
+            best = active;
+        }
     }
 
     var clear_offset = active.begin;
@@ -509,6 +525,7 @@ test "COVER-class rolling scorer matches brute-force distinct-hash oracle" {
                 min_hash_log,
                 &frequencies,
                 &active_counts,
+                false,
             );
             const expected = bruteForceSelectEpoch(
                 &samples,
@@ -540,6 +557,32 @@ test "COVER-class trainer is deterministic and preserves sample boundaries" {
     defer std.testing.allocator.free(second);
     try std.testing.expectEqualSlices(u8, "AAAAAA", first);
     try std.testing.expectEqualSlices(u8, first, second);
+}
+
+test "COVER-class full segments preserve fixed-record alignment" {
+    const samples = [_][]const u8{
+        "alpha001-tail",
+        "beta0001-tail",
+        "gamma001-tail",
+        "delta001-tail",
+        "omega001-tail",
+    };
+    const selected = try trainAlloc(std.testing.allocator, &samples, .{
+        .target_size = 32,
+        .segment_size = 8,
+        .dmer_size = 6,
+        .hash_log = min_hash_log,
+        .require_full_segments = true,
+    });
+    defer std.testing.allocator.free(selected);
+    try std.testing.expect(selected.len != 0 and selected.len % 8 == 0);
+    var cursor: usize = 0;
+    while (cursor < selected.len) : (cursor += 8) {
+        var found = false;
+        for (samples) |sample|
+            found = found or std.mem.indexOf(u8, sample, selected[cursor..][0..8]) != null;
+        try std.testing.expect(found);
+    }
 }
 
 test "COVER-class trainer validates bounded parameters" {

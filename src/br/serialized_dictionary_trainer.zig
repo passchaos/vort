@@ -40,9 +40,16 @@ pub const ContextProfile = enum {
     clustered,
 };
 
+pub const WordSelectionProfile = enum {
+    heavy_hitter,
+    cover,
+};
+
 pub const max_context_signature_positions =
     context_clusterer.max_positions_per_context;
 pub const max_context_training_positions_per_group: usize = 1024 * 1024;
+pub const min_cover_hash_log = dictionary_train.cover.min_hash_log;
+pub const max_cover_hash_log = dictionary_train.cover.max_hash_log;
 
 pub const Options = struct {
     min_word_len: u5 = 4,
@@ -56,6 +63,10 @@ pub const Options = struct {
     context_cutoff: u6 = 32,
     max_context_positions_per_group: usize = 16 * 1024,
     max_context_signature_positions: usize = 4096,
+    word_selection: WordSelectionProfile = .heavy_hitter,
+    cover_dmer_size: u8 = 8,
+    cover_hash_log: u8 = 16,
+    max_cover_corpus_size: usize = 256 * 1024 * 1024,
 };
 
 pub const Candidate = struct {
@@ -63,6 +74,8 @@ pub const Candidate = struct {
     bucket_count: usize,
     word_count: usize,
     id: DictionaryId,
+    word_selection_profile: WordSelectionProfile = .heavy_hitter,
+    cover_dmer_size: ?u8 = null,
     context_based: bool = false,
     context_mode: ?u2 = null,
     context_cutoff: ?u6 = null,
@@ -164,6 +177,8 @@ pub fn withPrefixSuffixTransformsAlloc(
         .bucket_count = source.bucket_count,
         .word_count = source.word_count,
         .id = .fromBytes(encoded),
+        .word_selection_profile = source.word_selection_profile,
+        .cover_dmer_size = source.cover_dmer_size,
         .context_based = source.context_based,
         .context_mode = source.context_mode,
         .context_cutoff = source.context_cutoff,
@@ -277,6 +292,8 @@ pub fn withShiftTransformsAlloc(
         .bucket_count = source.bucket_count,
         .word_count = source.word_count,
         .id = .fromBytes(encoded),
+        .word_selection_profile = source.word_selection_profile,
+        .cover_dmer_size = source.cover_dmer_size,
         .context_based = source.context_based,
         .context_mode = source.context_mode,
         .context_cutoff = source.context_cutoff,
@@ -363,6 +380,8 @@ fn withTransformProfileAlloc(
         .bucket_count = source.bucket_count,
         .word_count = source.word_count,
         .id = .fromBytes(encoded),
+        .word_selection_profile = source.word_selection_profile,
+        .cover_dmer_size = source.cover_dmer_size,
         .context_based = source.context_based,
         .context_mode = source.context_mode,
         .context_cutoff = source.context_cutoff,
@@ -485,6 +504,8 @@ pub fn withClusteredTransformProfilesAlloc(
         .bucket_count = sources[0].bucket_count,
         .word_count = sources[0].word_count,
         .id = .fromBytes(encoded),
+        .word_selection_profile = sources[0].word_selection_profile,
+        .cover_dmer_size = sources[0].cover_dmer_size,
         .context_based = sources[0].context_based,
         .context_mode = sources[0].context_mode,
         .context_cutoff = sources[0].context_cutoff,
@@ -523,6 +544,70 @@ const OwnedBucket = struct {
     size_bits: u8,
 };
 
+fn trainWordsForLengthAlloc(
+    allocator: std.mem.Allocator,
+    samples: []const []const u8,
+    word_len: usize,
+    options: Options,
+) (Error || std.mem.Allocator.Error)!?[]u8 {
+    const target_size = std.math.mul(
+        usize,
+        word_len,
+        options.max_words_per_length,
+    ) catch return error.IntegerOverflow;
+    switch (options.word_selection) {
+        .heavy_hitter => {
+            const allocation = dictionary_train.trainAlloc(allocator, samples, .{
+                .target_size = target_size,
+                .min_phrase_len = word_len,
+                .max_phrase_len = word_len,
+                .max_phrases = options.max_phrases_per_length,
+            }) catch |err| switch (err) {
+                error.OutOfMemory => return error.OutOfMemory,
+                else => return error.InvalidTrainingOptions,
+            };
+            return allocation;
+        },
+        .cover => {
+            if (word_len < options.cover_dmer_size or samples.len < 5)
+                return null;
+            const allocation = dictionary_train.trainCoverAlloc(
+                allocator,
+                samples,
+                .{
+                    .target_size = target_size,
+                    .segment_size = word_len,
+                    .dmer_size = options.cover_dmer_size,
+                    .hash_log = options.cover_hash_log,
+                    .require_full_segments = true,
+                    .max_corpus_size = options.max_cover_corpus_size,
+                },
+            ) catch |err| switch (err) {
+                error.OutOfMemory => return error.OutOfMemory,
+                else => return null,
+            };
+            errdefer allocator.free(allocation);
+            if (allocation.len % word_len != 0)
+                return error.InvalidTrainingOptions;
+            reverseWordChunks(allocation, word_len);
+            return allocation;
+        },
+    }
+}
+
+fn reverseWordChunks(bytes: []u8, word_len: usize) void {
+    var temporary: [serialized_dictionary.max_word_len]u8 = undefined;
+    const word_count = bytes.len / word_len;
+    for (0..word_count / 2) |left| {
+        const right = word_count - left - 1;
+        const left_word = bytes[left * word_len ..][0..word_len];
+        const right_word = bytes[right * word_len ..][0..word_len];
+        @memcpy(temporary[0..word_len], left_word);
+        @memcpy(left_word, right_word);
+        @memcpy(right_word, temporary[0..word_len]);
+    }
+}
+
 /// Build one deterministic identity-transform custom static dictionary.
 /// Final codec-level profitability is intentionally evaluated by `br.zig`,
 /// which can measure complete Brotli wires on held-out samples.
@@ -542,20 +627,12 @@ pub fn trainCandidateAlloc(
     var word_count: usize = 0;
     var total_data_len: usize = 0;
     for (options.min_word_len..options.max_word_len + 1) |word_len| {
-        const target_size = std.math.mul(
-            usize,
+        const allocation = (try trainWordsForLengthAlloc(
+            allocator,
+            samples,
             word_len,
-            options.max_words_per_length,
-        ) catch return error.IntegerOverflow;
-        const allocation = dictionary_train.trainAlloc(allocator, samples, .{
-            .target_size = target_size,
-            .min_phrase_len = word_len,
-            .max_phrase_len = word_len,
-            .max_phrases = options.max_phrases_per_length,
-        }) catch |err| switch (err) {
-            error.OutOfMemory => return error.OutOfMemory,
-            else => return error.InvalidTrainingOptions,
-        };
+            options,
+        )) orelse continue;
         errdefer allocator.free(allocation);
         const available_words = allocation.len / word_len;
         const selected_words = floorPowerOfTwo(@min(
@@ -617,6 +694,11 @@ pub fn trainCandidateAlloc(
         .bucket_count = buckets.items.len,
         .word_count = word_count,
         .id = .fromBytes(encoded),
+        .word_selection_profile = options.word_selection,
+        .cover_dmer_size = if (options.word_selection == .cover)
+            options.cover_dmer_size
+        else
+            null,
     };
 }
 
@@ -752,6 +834,11 @@ fn trainMappedContextCandidateAlloc(
         .bucket_count = bucket_count,
         .word_count = word_count,
         .id = .fromBytes(encoded),
+        .word_selection_profile = options.word_selection,
+        .cover_dmer_size = if (options.word_selection == .cover)
+            options.cover_dmer_size
+        else
+            null,
         .context_based = true,
         .context_mode = mode,
         .context_cluster_count = cluster_count,
@@ -785,24 +872,12 @@ fn trainMappedContextWordListAlloc(
         );
         defer allocator.free(position_samples);
         if (position_samples.len == 0) continue;
-        const target_size = std.math.mul(
-            usize,
-            word_len,
-            options.max_words_per_length,
-        ) catch return error.IntegerOverflow;
-        const allocation = dictionary_train.trainAlloc(
+        const allocation = (try trainWordsForLengthAlloc(
             allocator,
             position_samples,
-            .{
-                .target_size = target_size,
-                .min_phrase_len = word_len,
-                .max_phrase_len = word_len,
-                .max_phrases = options.max_phrases_per_length,
-            },
-        ) catch |err| switch (err) {
-            error.OutOfMemory => return error.OutOfMemory,
-            else => return error.InvalidTrainingOptions,
-        };
+            word_len,
+            options,
+        )) orelse continue;
         errdefer allocator.free(allocation);
         const selected_words = floorPowerOfTwo(@min(
             allocation.len / word_len,
@@ -906,6 +981,11 @@ fn validateOptions(options: Options) Error!void {
         options.max_words_per_length < 2 or
         options.max_words_per_length > (@as(u16, 1) << serialized_dictionary.max_size_bits) or
         options.max_phrases_per_length < options.max_words_per_length or
+        (options.word_selection == .cover and
+            ((options.cover_dmer_size != 6 and options.cover_dmer_size != 8) or
+                options.cover_hash_log < dictionary_train.cover.min_hash_log or
+                options.cover_hash_log > dictionary_train.cover.max_hash_log or
+                options.max_cover_corpus_size == 0)) or
         (options.train_context_map and
             (options.context_cutoff == 0 or
                 options.context_cutoff >= 64 or
@@ -958,6 +1038,73 @@ test "serialized trainer is deterministic and emits power-of-two buckets" {
     }
 }
 
+test "serialized trainer builds deterministic fixed-word COVER buckets" {
+    const samples = [_][]const u8{
+        "alpha001 beta0001 gamma001 alpha001",
+        "alpha001 beta0001 delta001 beta0001",
+        "gamma001 delta001 alpha001 gamma001",
+        "beta0001 alpha001 gamma001 beta0001",
+        "delta001 gamma001 beta0001 delta001",
+        "alpha001 delta001 beta0001 gamma001",
+    };
+    const options = Options{
+        .min_word_len = 8,
+        .max_word_len = 8,
+        .max_words_per_length = 4,
+        .max_phrases_per_length = 16,
+        .word_selection = .cover,
+        .cover_dmer_size = 6,
+        .cover_hash_log = dictionary_train.cover.min_hash_log,
+    };
+    const first = (try trainCandidateAlloc(
+        std.testing.allocator,
+        &samples,
+        options,
+    )).?;
+    defer first.deinit(std.testing.allocator);
+    const second = (try trainCandidateAlloc(
+        std.testing.allocator,
+        &samples,
+        options,
+    )).?;
+    defer second.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, first.encoded, second.encoded);
+    try std.testing.expectEqual(WordSelectionProfile.cover, first.word_selection_profile);
+    try std.testing.expectEqual(@as(?u8, 6), first.cover_dmer_size);
+    const parsed = try serialized_dictionary.parse(first.encoded);
+    const word_count = parsed.word_lists[0].wordCount(8);
+    try std.testing.expect(word_count >= 2 and std.math.isPowerOfTwo(word_count));
+    for (0..word_count) |word_index| {
+        const word = parsed.word_lists[0].word(8, word_index).?;
+        var found = false;
+        for (samples) |sample|
+            found = found or std.mem.indexOf(u8, sample, word) != null;
+        try std.testing.expect(found);
+    }
+    const contextual = (try trainContextCandidateAlloc(
+        std.testing.allocator,
+        &samples,
+        .{
+            .min_word_len = 8,
+            .max_word_len = 8,
+            .max_words_per_length = 4,
+            .max_phrases_per_length = 16,
+            .word_selection = .cover,
+            .cover_dmer_size = 6,
+            .cover_hash_log = dictionary_train.cover.min_hash_log,
+            .context_cutoff = 32,
+            .max_context_positions_per_group = 256,
+        },
+        literal_context.mode_lsb6,
+    )).?;
+    defer contextual.deinit(std.testing.allocator);
+    try std.testing.expect(contextual.context_based);
+    try std.testing.expectEqual(
+        WordSelectionProfile.cover,
+        contextual.word_selection_profile,
+    );
+}
+
 test "serialized trainer validates bounds and handles empty corpora" {
     try std.testing.expectEqual(
         @as(?Candidate, null),
@@ -974,6 +1121,13 @@ test "serialized trainer validates bounds and handles empty corpora" {
         trainCandidateAlloc(std.testing.allocator, &.{"sample"}, .{
             .max_words_per_length = 32,
             .max_phrases_per_length = 16,
+        }),
+    );
+    try std.testing.expectError(
+        error.InvalidTrainingOptions,
+        trainCandidateAlloc(std.testing.allocator, &.{ "a", "b", "c", "d", "e" }, .{
+            .word_selection = .cover,
+            .cover_dmer_size = 7,
         }),
     );
 }
@@ -1352,6 +1506,28 @@ test "serialized trainer releases every allocation failure path" {
                 .max_phrases_per_length = 32,
             })) orelse return error.TestUnexpectedResult;
             defer candidate.deinit(allocator);
+            const cover_samples = [_][]const u8{
+                "cover001 cover002 cover003 cover001",
+                "cover002 cover003 cover004 cover002",
+                "cover003 cover004 cover001 cover003",
+                "cover004 cover001 cover002 cover004",
+                "cover001 cover003 cover002 cover004",
+                "cover004 cover002 cover003 cover001",
+            };
+            const cover_candidate = (try trainCandidateAlloc(
+                allocator,
+                &cover_samples,
+                .{
+                    .min_word_len = 8,
+                    .max_word_len = 8,
+                    .max_words_per_length = 4,
+                    .max_phrases_per_length = 16,
+                    .word_selection = .cover,
+                    .cover_dmer_size = 6,
+                    .cover_hash_log = dictionary_train.cover.min_hash_log,
+                },
+            )) orelse return error.TestUnexpectedResult;
+            defer cover_candidate.deinit(allocator);
             const case_candidate = try withCaseTransformsAlloc(
                 allocator,
                 &candidate,

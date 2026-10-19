@@ -2212,6 +2212,13 @@ a fixed 64-bin phrase signature; normalized integer L1 agglomeration produces
 stable maps without floating point or heap allocation. By default serialized
 bytes are charged once against the validation frame total; non-winning
 candidates return null.
+For every eligible word length, the trainer compares its bounded exact heavy-
+hitter bucket with a Vort-native COVER-class bucket. COVER uses `k == word_len`,
+requires full sample-boundary-safe segments, reverses the generic history order
+so the best segment receives the lowest Brotli word address, and retains the
+largest legal power-of-two prefix. The default uses `d=8` and `hash_log=16`;
+callers may select `d=6`. This reuses the shared COVER heuristic but does not
+claim byte-identical libzstd or libbrotli training output.
 The trainer also compares identity-only word lists with canonical
 identity/uppercase-first/uppercase-all transform families without retraining
 the words, plus independent omit-first/last and combined case+omit families.
@@ -2235,7 +2242,7 @@ verifies every SHIFT_FIRST/ALL candidate with byte-exact replay, and can append
 those transforms to each existing family before per-dictionary clustering.
 Defaults cap shift transforms at eight, parameter candidates at 4,096, indexed
 words at 256, and sampled positions at 4,096. It does not claim
-COVER/FastCover equivalence or broad-corpus calibration.
+optimized FastCover parameter search or broad-corpus calibration.
 
 ### Brotli planned encoder controls
 

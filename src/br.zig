@@ -107,6 +107,7 @@ pub const SerializedSharedDictionaryTransformListSpec = serialized_dictionary_bu
 pub const SerializedSharedDictionaryBuildError = serialized_dictionary_builder.Error;
 pub const SerializedSharedDictionaryTransformProfile = serialized_dictionary_trainer.TransformProfile;
 pub const SerializedSharedDictionaryContextProfile = serialized_dictionary_trainer.ContextProfile;
+pub const SerializedSharedDictionaryWordSelectionProfile = serialized_dictionary_trainer.WordSelectionProfile;
 pub const serializedSharedDictionaryEncodedSize = serialized_dictionary_builder.encodedSize;
 pub const serializeSharedDictionaryInto = serialized_dictionary_builder.serializeInto;
 pub const serializeSharedDictionaryAppend = serialized_dictionary_builder.serializeAppend;
@@ -116,6 +117,10 @@ pub const SerializedSharedDictionaryTrainOptions = struct {
     max_word_len: u5 = 16,
     max_words_per_length: u16 = 64,
     max_phrases_per_length: usize = 256,
+    train_cover_words: bool = true,
+    cover_dmer_size: u8 = 8,
+    cover_hash_log: u8 = 16,
+    max_cover_corpus_size: usize = 256 * 1024 * 1024,
     train_context_map: bool = true,
     train_context_clustering: bool = true,
     train_case_transforms: bool = true,
@@ -167,6 +172,8 @@ pub const OwnedTrainedSerializedSharedDictionary = struct {
     trained_frame_bytes: usize,
     charged_dictionary_bytes: usize,
     total_savings_bytes: usize,
+    word_selection_profile: SerializedSharedDictionaryWordSelectionProfile,
+    cover_dmer_size: ?u8,
     context_based: bool,
     trained_context_mode: ?u2,
     context_cutoff: ?u6,
@@ -307,6 +314,11 @@ pub fn trainSerializedSharedDictionaryAlloc(
 ) Error!?OwnedTrainedSerializedSharedDictionary {
     if (validation_samples.len == 0 or options.min_savings_bytes == 0 or
         options.quality > 11 or
+        (options.train_cover_words and
+            ((options.cover_dmer_size != 6 and options.cover_dmer_size != 8) or
+                options.cover_hash_log < serialized_dictionary_trainer.min_cover_hash_log or
+                options.cover_hash_log > serialized_dictionary_trainer.max_cover_hash_log or
+                options.max_cover_corpus_size == 0)) or
         (options.train_context_map and
             (!validSerializedTrainingCutoffs(options.context_cutoffs) or
                 !validSerializedTrainingModes(options.context_modes) or
@@ -349,6 +361,9 @@ pub fn trainSerializedSharedDictionaryAlloc(
         .max_word_len = options.max_word_len,
         .max_words_per_length = options.max_words_per_length,
         .max_phrases_per_length = options.max_phrases_per_length,
+        .cover_dmer_size = options.cover_dmer_size,
+        .cover_hash_log = options.cover_hash_log,
+        .max_cover_corpus_size = options.max_cover_corpus_size,
         .train_context_map = options.train_context_map,
         .context_cutoff = if (options.context_cutoffs.len == 0)
             32
@@ -365,59 +380,42 @@ pub fn trainSerializedSharedDictionaryAlloc(
     );
     var selection: SerializedTrainingSelection = .{};
     errdefer if (selection.candidate) |candidate| candidate.deinit(allocator);
-    if (serialized_dictionary_trainer.trainCandidateAlloc(
-        allocator,
-        training_samples,
-        core_options,
-    ) catch |err| switch (err) {
-        error.OutOfMemory => return error.OutOfMemory,
-        error.IntegerOverflow => return error.IntegerOverflow,
-        else => return error.InvalidDictionaryTraining,
-    }) |candidate| {
-        try considerSerializedTrainingCandidateFamily(
+    const word_selections: []const SerializedSharedDictionaryWordSelectionProfile =
+        if (options.train_cover_words)
+            &.{ .heavy_hitter, .cover }
+        else
+            &.{.heavy_hitter};
+    for (word_selections) |word_selection| {
+        var word_options = core_options;
+        word_options.word_selection = word_selection;
+        if (serialized_dictionary_trainer.trainCandidateAlloc(
             allocator,
             training_samples,
-            validation_samples,
-            options,
-            candidate,
-            &selection,
-        );
-    }
-    if (options.train_context_map) {
-        for (options.context_cutoffs) |cutoff| {
-            var context_options = core_options;
-            context_options.context_cutoff = cutoff;
-            for (options.context_modes) |mode| {
-                if (serialized_dictionary_trainer.trainContextCandidateAlloc(
-                    allocator,
-                    training_samples,
-                    context_options,
-                    mode,
-                ) catch |err| switch (err) {
-                    error.OutOfMemory => return error.OutOfMemory,
-                    error.IntegerOverflow => return error.IntegerOverflow,
-                    else => return error.InvalidDictionaryTraining,
-                }) |candidate| {
-                    try considerSerializedTrainingCandidateFamily(
-                        allocator,
-                        training_samples,
-                        validation_samples,
-                        options,
-                        candidate,
-                        &selection,
-                    );
-                }
-            }
+            word_options,
+        ) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.IntegerOverflow => return error.IntegerOverflow,
+            else => return error.InvalidDictionaryTraining,
+        }) |candidate| {
+            try considerSerializedTrainingCandidateFamily(
+                allocator,
+                training_samples,
+                validation_samples,
+                options,
+                candidate,
+                &selection,
+            );
         }
-        if (options.train_context_clustering) {
-            for (options.context_cluster_counts) |cluster_count| {
+        if (options.train_context_map) {
+            for (options.context_cutoffs) |cutoff| {
+                var context_options = word_options;
+                context_options.context_cutoff = cutoff;
                 for (options.context_modes) |mode| {
-                    if (serialized_dictionary_trainer.trainClusteredContextCandidateAlloc(
+                    if (serialized_dictionary_trainer.trainContextCandidateAlloc(
                         allocator,
                         training_samples,
-                        core_options,
+                        context_options,
                         mode,
-                        cluster_count,
                     ) catch |err| switch (err) {
                         error.OutOfMemory => return error.OutOfMemory,
                         error.IntegerOverflow => return error.IntegerOverflow,
@@ -431,6 +429,32 @@ pub fn trainSerializedSharedDictionaryAlloc(
                             candidate,
                             &selection,
                         );
+                    }
+                }
+            }
+            if (options.train_context_clustering) {
+                for (options.context_cluster_counts) |cluster_count| {
+                    for (options.context_modes) |mode| {
+                        if (serialized_dictionary_trainer.trainClusteredContextCandidateAlloc(
+                            allocator,
+                            training_samples,
+                            word_options,
+                            mode,
+                            cluster_count,
+                        ) catch |err| switch (err) {
+                            error.OutOfMemory => return error.OutOfMemory,
+                            error.IntegerOverflow => return error.IntegerOverflow,
+                            else => return error.InvalidDictionaryTraining,
+                        }) |candidate| {
+                            try considerSerializedTrainingCandidateFamily(
+                                allocator,
+                                training_samples,
+                                validation_samples,
+                                options,
+                                candidate,
+                                &selection,
+                            );
+                        }
                     }
                 }
             }
@@ -452,6 +476,8 @@ pub fn trainSerializedSharedDictionaryAlloc(
         .trained_frame_bytes = selection.frame_bytes,
         .charged_dictionary_bytes = selection.charged_dictionary_bytes,
         .total_savings_bytes = baseline_frame_bytes - selection.total_bytes,
+        .word_selection_profile = candidate.word_selection_profile,
+        .cover_dmer_size = candidate.cover_dmer_size,
         .context_based = candidate.context_based,
         .trained_context_mode = candidate.context_mode,
         .context_cutoff = candidate.context_cutoff,
@@ -33119,20 +33145,25 @@ test "br serialized dictionary trainer retains held-out complete-wire wins" {
         first.transform_profile,
     );
     try std.testing.expectEqual(
+        SerializedSharedDictionaryWordSelectionProfile.cover,
+        first.word_selection_profile,
+    );
+    try std.testing.expectEqual(@as(?u8, 8), first.cover_dmer_size);
+    try std.testing.expectEqual(
         SerializedSharedDictionaryContextProfile.global,
         first.context_profile,
     );
     try std.testing.expectEqual(@as(u7, 1), first.context_cluster_count);
     try std.testing.expect(first.bucket_count != 0 and first.word_count >= 2);
     try std.testing.expect(first.total_savings_bytes >= options.min_savings_bytes);
-    // Locked evidence: 4,608 baseline bytes versus 2,632 frame bytes plus a
+    // Locked evidence: 4,608 baseline bytes versus 2,527 frame bytes plus a
     // 172-byte dictionary. Keep a conservative complete-total improvement.
     try std.testing.expectEqual(@as(usize, 4_608), first.baseline_frame_bytes);
-    try std.testing.expectEqual(@as(usize, 2_632), first.trained_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 2_527), first.trained_frame_bytes);
     try std.testing.expectEqual(@as(usize, 172), first.charged_dictionary_bytes);
-    try std.testing.expectEqual(@as(usize, 1_804), first.total_savings_bytes);
+    try std.testing.expectEqual(@as(usize, 1_909), first.total_savings_bytes);
     try std.testing.expect(
-        first.total_savings_bytes * 100 >= first.baseline_frame_bytes * 30,
+        first.total_savings_bytes * 100 >= first.baseline_frame_bytes * 40,
     );
     try std.testing.expectEqual(
         first.baseline_frame_bytes - first.total_savings_bytes,
@@ -33140,6 +33171,23 @@ test "br serialized dictionary trainer retains held-out complete-wire wins" {
     );
     const parsed = try first.parse();
     try std.testing.expectEqual(@as(u7, 1), parsed.word_list_count);
+
+    var heavy_options = options;
+    heavy_options.train_cover_words = false;
+    const heavy = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        heavy_options,
+    )) orelse return error.TestUnexpectedResult;
+    defer heavy.deinit(std.testing.allocator);
+    try std.testing.expectEqual(
+        SerializedSharedDictionaryWordSelectionProfile.heavy_hitter,
+        heavy.word_selection_profile,
+    );
+    try std.testing.expectEqual(@as(usize, 2_632), heavy.trained_frame_bytes);
+    try std.testing.expectEqual(@as(usize, 172), heavy.charged_dictionary_bytes);
+    try std.testing.expectEqual(@as(usize, 1_804), heavy.total_savings_bytes);
 }
 
 test "br serialized dictionary trainer rejects non-wins and invalid evaluation" {
@@ -33183,6 +33231,33 @@ test "br serialized dictionary trainer rejects non-wins and invalid evaluation" 
             &samples,
             &samples,
             .{ .quality = 12 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .cover_dmer_size = 7 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .cover_hash_log = 7 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .max_cover_corpus_size = 0 },
         ),
     );
     try std.testing.expectError(
@@ -33455,6 +33530,7 @@ test "br serialized dictionary trainer selects profitable context maps" {
             .train_omit_transforms = false,
             .train_prefix_suffix_transforms = false,
             .train_shift_transforms = false,
+            .train_cover_words = false,
             .quality = 5,
         },
     )) orelse return error.TestUnexpectedResult;
@@ -33535,6 +33611,7 @@ test "br serialized dictionary trainer selects non-contiguous context clusters" 
         .train_omit_transforms = false,
         .train_prefix_suffix_transforms = false,
         .train_shift_transforms = false,
+        .train_cover_words = false,
         .context_modes = &.{literal_context.mode_lsb6},
         .context_cluster_counts = &.{4},
         .max_context_positions_per_group = 1024,
@@ -33650,6 +33727,7 @@ test "br serialized dictionary trainer clusters transform lists by context dicti
         .max_phrases_per_length = 64,
         .train_prefix_suffix_transforms = false,
         .train_shift_transforms = false,
+        .train_cover_words = false,
         .context_modes = &.{literal_context.mode_lsb6},
         .context_cluster_counts = &.{4},
         .max_context_positions_per_group = 1024,
@@ -33760,6 +33838,7 @@ test "br serialized dictionary trainer selects case transforms on held-out wire"
             .train_context_map = false,
             .train_prefix_suffix_transforms = false,
             .train_shift_transforms = false,
+            .train_cover_words = false,
             .quality = 5,
         },
     )) orelse return error.TestUnexpectedResult;
@@ -33822,6 +33901,7 @@ test "br serialized dictionary trainer selects omit transforms on held-out wire"
             .train_context_map = false,
             .train_prefix_suffix_transforms = false,
             .train_shift_transforms = false,
+            .train_cover_words = false,
             .quality = 5,
         },
     )) orelse return error.TestUnexpectedResult;
@@ -33884,6 +33964,7 @@ test "br serialized dictionary trainer learns UTF-8 shift transforms" {
         .train_context_map = false,
         .train_case_transforms = false,
         .train_omit_transforms = false,
+        .train_cover_words = false,
         .train_prefix_suffix_transforms = false,
         .max_shift_transforms = 2,
         .max_shift_candidates = 64,
@@ -34014,6 +34095,7 @@ test "br serialized dictionary trainer learns prefix suffix stringlets" {
         .train_case_transforms = false,
         .train_omit_transforms = false,
         .train_shift_transforms = false,
+        .train_cover_words = false,
         .max_prefix_suffix_len = 1,
         .max_prefix_suffix_transforms = 1,
         .max_prefix_suffix_candidates = 16,

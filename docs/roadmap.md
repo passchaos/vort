@@ -41,8 +41,10 @@ major gaps before Vort can claim broad industry-best parity:
   deterministic parse/serialize round trips. A bounded identity-word trainer
   selects power-of-two length buckets and retains candidates only after a
   held-out complete-wire win including dictionary storage by default; its
-  locked fixture improves 4,608 baseline bytes to 2,632 frame bytes plus a
-  172-byte dictionary. Bounded two-group context-map training compares all four
+  locked heavy-hitter fixture improves 4,608 baseline bytes to 2,632 frame bytes
+  plus a 172-byte dictionary. Fixed-word COVER selection now wins the same
+  complete-wire arbitration at 2,527 frame bytes with unchanged dictionary
+  size. Bounded two-group context-map training compares all four
   RFC modes across a caller-selected cutoff list; its locked contextual fixture
   selects MSB6/cutoff48 and improves 17,344 baseline bytes to 14,272 frame bytes
   plus a 266-byte dictionary.
@@ -62,8 +64,8 @@ major gaps before Vort can claim broad industry-best parity:
   baseline bytes to 7,680 frame bytes plus an 831-byte dictionary. SHIFT-family
   learning now infers signed parameters for SHIFT_FIRST/ALL, stacks them over
   every existing family, and improves a locked UTF-8 fixture from 3,513 baseline
-  bytes to 2,624 frame bytes plus a 184-byte dictionary. COVER/FastCover-class
-  word selection and broader corpus calibration remain open.
+  bytes to 2,624 frame bytes plus a 184-byte dictionary. Optimized COVER/
+  FastCover parameter search and broader corpus calibration remain open.
   q10/q11 Zopfli/HQ cost refinement and global exact-cost segmentation also
   remain open.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
