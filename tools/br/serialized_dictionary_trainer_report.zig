@@ -7,6 +7,12 @@ const Case = struct {
     path: []const u8,
 };
 
+const marginal_min_word_len: usize = 4;
+const marginal_max_word_len: usize = 16;
+const marginal_word_length_count = marginal_max_word_len - marginal_min_word_len + 1;
+const marginal_base_cap: u16 = 8;
+const marginal_pruned_cap: u16 = 4;
+
 const CountingAllocator = struct {
     child: std.mem.Allocator,
     live_bytes: usize = 0,
@@ -161,49 +167,22 @@ fn reportCase(
         .max_transform_cluster_dictionaries = 2,
         .quality = 5,
     };
+    var marginal_buckets: [marginal_word_length_count][marginal_word_length_count]vort.BrotliSerializedSharedDictionaryWordLengthBucketCap = undefined;
+    var marginal_profiles: [marginal_word_length_count]vort.BrotliSerializedSharedDictionarySparseWordProfile = undefined;
     if (std.mem.eql(u8, case.category, "structured")) {
-        train_options.sparse_word_profiles = &.{
-            .{ .buckets = &.{.{ .word_len = 4, .max_words = 2 }} },
-            .{ .buckets = &.{.{ .word_len = 4, .max_words = 4 }} },
-            .{ .buckets = &.{
-                .{ .word_len = 4, .max_words = 2 },
-                .{ .word_len = 5, .max_words = 2 },
-                .{ .word_len = 6, .max_words = 2 },
-            } },
-            .{ .buckets = &.{
-                .{ .word_len = 4, .max_words = 4 },
-                .{ .word_len = 5, .max_words = 4 },
-                .{ .word_len = 6, .max_words = 4 },
-            } },
-            .{ .buckets = &.{
-                .{ .word_len = 4, .max_words = 2 },
-                .{ .word_len = 5, .max_words = 2 },
-                .{ .word_len = 6, .max_words = 2 },
-                .{ .word_len = 7, .max_words = 2 },
-                .{ .word_len = 8, .max_words = 2 },
-            } },
-            .{ .buckets = &.{
-                .{ .word_len = 4, .max_words = 4 },
-                .{ .word_len = 5, .max_words = 4 },
-                .{ .word_len = 6, .max_words = 4 },
-                .{ .word_len = 7, .max_words = 4 },
-                .{ .word_len = 8, .max_words = 4 },
-            } },
-            .{ .buckets = &.{
-                .{ .word_len = 6, .max_words = 2 },
-                .{ .word_len = 7, .max_words = 2 },
-                .{ .word_len = 8, .max_words = 2 },
-                .{ .word_len = 9, .max_words = 2 },
-                .{ .word_len = 10, .max_words = 2 },
-            } },
-            .{ .buckets = &.{
-                .{ .word_len = 8, .max_words = 2 },
-                .{ .word_len = 9, .max_words = 2 },
-                .{ .word_len = 10, .max_words = 2 },
-                .{ .word_len = 11, .max_words = 2 },
-                .{ .word_len = 12, .max_words = 2 },
-            } },
-        };
+        for (&marginal_buckets, &marginal_profiles, marginal_min_word_len..) |*buckets, *profile, pruned_word_len| {
+            for (buckets, marginal_min_word_len..) |*bucket, word_len| {
+                bucket.* = .{
+                    .word_len = @intCast(word_len),
+                    .max_words = if (word_len == pruned_word_len)
+                        marginal_pruned_cap
+                    else
+                        marginal_base_cap,
+                };
+            }
+            profile.* = .{ .buckets = buckets };
+        }
+        train_options.sparse_word_profiles = &marginal_profiles;
     }
     var counting = CountingAllocator{ .child = init.gpa };
     const training_allocator = counting.allocator();

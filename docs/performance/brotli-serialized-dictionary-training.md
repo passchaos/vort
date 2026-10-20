@@ -254,19 +254,21 @@ matrix searches word lengths 4...16, eight words per length, two COVER d-mer
 widths at `hash_log=12`, global plus LSB6/UTF8 cutoff32 maps, and canonical
 case/omit families. Every case is trained twice to require identical null/result
 state, bytes, ID, sizes, and selected profiles. Structured JSON additionally
-searches eight explicit per-length sparse word-bucket profiles.
+searches thirteen single-step marginal profiles. Profile `s0...s12` maps to
+word length `4...16`; it retains cap eight for every other length and reduces
+only the mapped bucket to cap four.
 
 The current ReleaseFast baseline is deliberately recorded even though no
 dictionary wins after charging its bytes:
 
 | Category | Baseline | Charged total | Saving | Train ms (observed) | Logical peak MiB |
 |---|---:|---:|---:|---:|---:|
-| Source | 4,326 | 4,326 | 0 | 1,019 | 0.20 |
-| Documentation | 5,209 | 5,209 | 0 | 1,666 | 0.20 |
-| Structured JSON | 3,658 | 3,658 | 0 | 3,363 | 0.20 |
-| Binary | 3,015 | 3,015 | 0 | 648 | 0.20 |
+| Source | 4,323 | 4,323 | 0 | 1,020 | 0.20 |
+| Documentation | 5,209 | 5,209 | 0 | 1,658 | 0.20 |
+| Structured JSON | 3,658 | 3,658 | 0 | 11,289 | 0.20 |
+| Binary | 3,015 | 3,015 | 0 | 650 | 0.20 |
 
-Aggregate baseline/total is `16,208/16,208`: zero winners, zero regressions,
+Aggregate baseline/total is `16,205/16,205`: zero winners, zero regressions,
 and zero worst per-sample delta because every result is correctly null. Times
 are observational rather than gated; the gate enforces category/count/accounting
 integrity, deterministic reruns, a 1 GiB logical peak guard, and schema-versioned
@@ -274,14 +276,13 @@ JSON/Markdown artifacts. Improving this baseline is the next trainer
 performance target.
 
 The report also repeats training with `include_dictionary_size=false` to expose
-frame-only potential and calculate amortization honestly. Only structured JSON
-wins: frames fall from 3,658 to 3,642 with a 2,128-byte
-`d=6/hash_log=12` COVER dictionary. The 16-byte batch saving requires 133
-equivalent batches, or approximately 4,256 validation frames, to repay the
-dictionary; the worst individual frame grows by 12 bytes. Source also gains 4
-frame bytes with a 1,920-byte dictionary, requiring about 15,360 frames to
-break even and showing a worst `+31` delta. Aggregate shadow frames are 16,188,
-a 20-byte saving (99.88%). All eight explicit sparse structured profiles lose
-to base `4...16/max8`; documentation and binary return null out of band. These
-results show that hand-authored sparse masks are insufficient and motivate
-automatic per-length marginal selection.
+frame-only potential and calculate amortization honestly. Equal-frame ties
+prefer the smaller serialized dictionary in this mode. Only structured JSON
+wins: profile `s5` reduces the length-9 cap from eight to four, and frames fall
+from 3,658 to 3,638 with a 2,056-byte `d=6/hash_log=12` COVER dictionary. The
+20-byte batch saving requires 103 equivalent batches, or approximately 3,290
+validation frames, to repay the dictionary; the worst individual frame grows
+by 12 bytes. Aggregate shadow frames are 16,185, also a 20-byte saving (99.88%).
+Source, documentation, and binary return null out of band. This proves the
+single-step per-length search on the locked structured corpus; iterative
+multi-bucket pruning and broader corpus calibration remain open.

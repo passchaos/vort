@@ -121,7 +121,7 @@ pub const SerializedSharedDictionaryWordLengthBucketCap = struct {
 pub const SerializedSharedDictionarySparseWordProfile = struct {
     buckets: []const SerializedSharedDictionaryWordLengthBucketCap,
 };
-pub const max_serialized_sparse_word_profiles: usize = 8;
+pub const max_serialized_sparse_word_profiles: usize = 16;
 pub const serializedSharedDictionaryEncodedSize = serialized_dictionary_builder.encodedSize;
 pub const serializeSharedDictionaryInto = serialized_dictionary_builder.serializeInto;
 pub const serializeSharedDictionaryAppend = serialized_dictionary_builder.serializeAppend;
@@ -1004,7 +1004,15 @@ fn considerSerializedTrainingCandidate(
         frame_bytes,
         charged_dictionary_bytes,
     ) catch return error.IntegerOverflow;
-    if (total_bytes < selection.total_bytes) {
+    const prefers_smaller_uncharged_dictionary = if (!options.include_dictionary_size)
+        if (selection.candidate) |previous|
+            frame_bytes == selection.frame_bytes and
+                candidate.encoded.len < previous.encoded.len
+        else
+            false
+    else
+        false;
+    if (total_bytes < selection.total_bytes or prefers_smaller_uncharged_dictionary) {
         if (selection.candidate) |previous| previous.deinit(allocator);
         selection.* = .{
             .candidate = candidate,
@@ -33469,7 +33477,7 @@ test "br serialized dictionary trainer retains held-out complete-wire wins" {
     try std.testing.expectEqual(@as(usize, 1_804), heavy.total_savings_bytes);
 }
 
-test "br serialized dictionary trainer selects smaller word bucket profiles" {
+test "br serialized dictionary trainer selects smaller word bucket profiles and uncharged ties" {
     const words = [_][]const u8{
         "azbycxdw",
         "qwertyui",
@@ -33564,6 +33572,31 @@ test "br serialized dictionary trainer selects smaller word bucket profiles" {
     try std.testing.expectEqual(trained.trained_frame_bytes, baseline.trained_frame_bytes);
     try std.testing.expect(trained.charged_dictionary_bytes < baseline.charged_dictionary_bytes);
     try std.testing.expect(trained.total_savings_bytes > baseline.total_savings_bytes);
+
+    var marginal_caps: [13]SerializedSharedDictionaryWordLengthBucketCap = undefined;
+    for (&marginal_caps, 4..) |*bucket, word_len| {
+        bucket.* = .{
+            .word_len = @intCast(word_len),
+            .max_words = if (word_len == 8) 4 else 8,
+        };
+    }
+    const marginal_profiles = [_]SerializedSharedDictionarySparseWordProfile{
+        .{ .buckets = &marginal_caps },
+    };
+    var marginal_options = options;
+    marginal_options.sparse_word_profiles = &marginal_profiles;
+    marginal_options.include_dictionary_size = false;
+    const marginal = (try trainSerializedSharedDictionaryAlloc(
+        std.testing.allocator,
+        &training_samples,
+        &validation_samples,
+        marginal_options,
+    )) orelse return error.TestUnexpectedResult;
+    defer marginal.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(?u8, 0), marginal.selected_sparse_word_profile);
+    try std.testing.expectEqual(@as(usize, 0), marginal.charged_dictionary_bytes);
+    try std.testing.expectEqual(baseline.trained_frame_bytes, marginal.trained_frame_bytes);
+    try std.testing.expect(marginal.bytes.len < baseline.bytes.len);
 }
 
 test "br serialized dictionary trainer rejects non-wins and invalid evaluation" {
@@ -33755,6 +33788,20 @@ test "br serialized dictionary trainer rejects non-wins and invalid evaluation" 
             &samples,
             &samples,
             .{ .sparse_word_profiles = &.{.{ .buckets = &unordered_sparse_buckets }} },
+        ),
+    );
+    const sparse_profile = SerializedSharedDictionarySparseWordProfile{
+        .buckets = &.{.{ .word_len = 8, .max_words = 2 }},
+    };
+    const too_many_sparse_profiles: [max_serialized_sparse_word_profiles + 1]SerializedSharedDictionarySparseWordProfile =
+        @splat(sparse_profile);
+    try std.testing.expectError(
+        error.InvalidDictionaryTraining,
+        trainSerializedSharedDictionaryAlloc(
+            std.testing.allocator,
+            &samples,
+            &samples,
+            .{ .sparse_word_profiles = &too_many_sparse_profiles },
         ),
     );
     try std.testing.expectError(

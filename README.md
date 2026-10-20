@@ -2232,7 +2232,7 @@ context, and transform matrix, and results report the selected range/cap and
 evaluated profile count.
 For non-contiguous layouts, a sparse profile lists strictly increasing
 `(word_len,max_words)` entries; unlisted lengths are disabled, caps must be
-legal powers of two, and up to eight sparse profiles follow the base/range
+legal powers of two, and up to sixteen sparse profiles follow the base/range
 candidates in stable order. Results expose the selected sparse profile index.
 The trainer also compares identity-only word lists with canonical
 identity/uppercase-first/uppercase-all transform families without retraining
@@ -2264,17 +2264,17 @@ source, Markdown, structured JSON, and binary manifest cases into independent
 selection, and writes schema-versioned JSON/Markdown with complete-total bytes,
 profiles, time, logical peak allocation, and worst per-sample delta. The current
 four-category baseline has zero winners and zero regressions
-(`16208 -> 16208` aggregate); this is an explicit calibration gap, not a
+(`16205 -> 16205` aggregate); this is an explicit calibration gap, not a
 claimed ratio win.
 An out-of-band shadow run removes the one-time dictionary charge without
-changing candidate selection. Structured JSON is the only frame-only winner
-(`3658 -> 3642`) and uses a 2,128-byte `d=6/hash_log=12` COVER dictionary; it
-breaks even after 133 equivalent validation batches, about 4,256 frames, while
-its worst individual frame grows by 12 bytes. Source now has a separate
-4-byte frame saving behind a 1,920-byte dictionary, requiring roughly 15,360
-frames and showing a worst `+31` delta. Aggregate shadow frames are 16,188,
-saving 20 bytes. Eight explicit per-length sparse structured profiles still
-lose to base `4...16/max8`; documentation and binary have no shadow winner.
+changing primary frame-cost selection; equal-frame candidates now prefer the
+smaller distributed dictionary. Structured JSON is the only frame-only winner
+(`3658 -> 3638`) and uses a 2,056-byte `d=6/hash_log=12` COVER dictionary; it
+breaks even after 103 equivalent validation batches, about 3,290 frames, while
+its worst individual frame grows by 12 bytes. Thirteen single-length marginal
+neighbors retain the complete `4...16/max8` layout and reduce one cap to four;
+profile `s5` (length 9) wins. Source, documentation, and binary return null out
+of band. Aggregate shadow frames are 16,185, saving 20 bytes.
 
 ### Brotli planned encoder controls
 

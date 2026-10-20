@@ -13,6 +13,7 @@ import real_corpus_diff
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA = "vort.br_serialized_dictionary_trainer_report"
 SCHEMA_VERSION = 1
+MAX_SPARSE_WORD_PROFILES = 16
 HEADER = (
     "label", "category", "input_bytes", "training_samples", "validation_samples",
     "baseline_frames", "trained_frames", "dictionary_bytes", "total_bytes",
@@ -126,7 +127,9 @@ def validate_rows(rows: list[dict[str, object]], manifest: real_corpus_diff.Mani
                 raise RuntimeError(f"case {case.label} has an invalid word range")
             if int(row["max_words_per_length"]) < 2 or int(row["word_bucket_candidates"]) < 1:
                 raise RuntimeError(f"case {case.label} has invalid word bucket metadata")
-            if row["sparse_profile"] is not None and not (0 <= int(row["sparse_profile"]) < 8):
+            if row["sparse_profile"] is not None and not (
+                0 <= int(row["sparse_profile"]) < MAX_SPARSE_WORD_PROFILES
+            ):
                 raise RuntimeError(f"case {case.label} has invalid sparse profile metadata")
         shadow_winner = int(row["shadow_winner"])
         shadow_frames = int(row["shadow_frames"])
@@ -160,7 +163,9 @@ def validate_rows(rows: list[dict[str, object]], manifest: real_corpus_diff.Mani
                 raise RuntimeError(f"case {case.label} has an invalid shadow word range")
             if int(row["shadow_max_words_per_length"]) < 2 or int(row["shadow_word_bucket_candidates"]) < 1:
                 raise RuntimeError(f"case {case.label} has invalid shadow word bucket metadata")
-            if row["shadow_sparse_profile"] is not None and not (0 <= int(row["shadow_sparse_profile"]) < 8):
+            if row["shadow_sparse_profile"] is not None and not (
+                0 <= int(row["shadow_sparse_profile"]) < MAX_SPARSE_WORD_PROFILES
+            ):
                 raise RuntimeError(f"case {case.label} has invalid shadow sparse profile metadata")
             break_even_values.append(int(row["break_even_frames"]))
         if int(row["training_samples"]) < 5 or int(row["validation_samples"]) <= 0:
