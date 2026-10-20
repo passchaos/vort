@@ -117,6 +117,16 @@ major gaps before Vort can claim broad industry-best parity:
   529.8 ms (`1.324x`) with identical wire; seven default controls are neutral at
   `0.9987x`. This narrows but does not close the gap required to raise the
   default ceiling.
+  Ordinary hash candidates account for `97.9%` of the measured state
+  transitions. A lazy per-position length cache shares actually visited
+  ordinary matches between the two beam states without eagerly extending
+  filtered candidates. Search falls from about 40.5 ms to 39.4 ms; seven
+  fixed-CPU opt-in pairs improve `1.0053x` median with 6/7 wins, while seven
+  default controls remain neutral at `1.0004x`.
+  The warmed incremental gate now uses the median of seven alternating pairs
+  at 1,000 iterations. Fixed-CPU calibration spans `1.0902x`--`1.1077x`; an
+  explicit `1.08x` floor replaces the flaky 200-iteration `1.10x` edge while
+  retaining a meaningful required advantage.
   Borrowing beam states and classifying each pending insert once per state now
   reduce 32 KiB search from roughly 43--45 ms to about 40.5 ms. Five fixed-CPU
   opt-in pairs improve median end-to-end time from 528.34 ms to 519.68 ms

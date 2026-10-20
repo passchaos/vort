@@ -5046,6 +5046,8 @@ pub fn profileQualityCommandStateCandidateAlloc(
     profile.state_states_visited = state_plan.stats.states_visited;
     profile.state_match_candidates = state_plan.stats.match_candidates;
     profile.state_match_transitions = state_plan.stats.match_transitions;
+    profile.state_general_match_transitions = state_plan.stats.general_match_transitions;
+    profile.state_recent_match_transitions = state_plan.stats.recent_match_transitions;
     profile.state_beam_replacements = state_plan.stats.beam_replacements;
     profile.state_tokens = state_plan.lz.tokens.len;
 

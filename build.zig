@@ -4582,7 +4582,7 @@ pub fn build(b: *std.Build) void {
     const br_incremental_planned_bench_step = b.step("run-br-incremental-planned-bench", "Compare warmed incremental and one-shot Brotli planning");
     br_incremental_planned_bench_step.dependOn(&run_br_incremental_planned_bench.step);
     const run_br_incremental_planned_bench_csv = b.addRunArtifact(br_incremental_planned_bench_exe);
-    run_br_incremental_planned_bench_csv.addArg("200");
+    run_br_incremental_planned_bench_csv.addArg("1000");
     const br_incremental_planned_bench_gate = b.addSystemCommand(&.{ "python3", "tools/br/incremental_planned_bench_gate.py", "--csv" });
     br_incremental_planned_bench_gate.addFileArg(run_br_incremental_planned_bench_csv.captureStdOut(.{}));
     const br_incremental_planned_bench_gate_step = b.step("run-br-incremental-planned-bench-gate", "Validate warmed incremental Brotli planner reuse");

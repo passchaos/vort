@@ -171,6 +171,20 @@ roughly 43--45 ms to about 40.5 ms. Against `74d0b758`, five fixed-CPU opt-in
 pairs improve median end-to-end time from 528.34 ms to 519.68 ms (`1.0167x`,
 3/5 wins); seven default controls are neutral at 401.42/401.68 ms (`0.9993x`).
 The residual 40 ms search cost remains too high to change the default.
+Profiler shape counters show ordinary hash matches account for 778,251 of
+794,600 transitions (`97.9%`), while direct recent-distance probes contribute
+only 16,349. A small lazy cache now shares each actually visited ordinary
+candidate's match length between the two beam states without eagerly extending
+filtered candidates. It preserves all token/command counts and reduces the
+32 KiB search stage from about 40.5 ms to about 39.4 ms. Seven fixed-CPU opt-in
+pairs improve median end-to-end time from 867.67 ms to 863.08 ms (`1.0053x`,
+6/7 wins); seven default controls remain neutral at 669.34/669.09 ms
+(`1.0004x`).
+The unrelated warmed incremental gate was also made statistically repeatable:
+it now reports the median of seven alternating one-shot/reusable pairs over
+1,000 iterations. Three fixed-CPU calibrations measured `1.0902x`--`1.1077x`;
+the gate requires `1.08x`, preserving a material advantage without the former
+intermittent failures from a 200-iteration `1.10x` edge.
 
 Measure the opt-in path explicitly without changing the default gate:
 

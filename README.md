@@ -2353,6 +2353,11 @@ The state loop additionally borrows beam states and hoists pending-insert code
 classification out of individual match transitions. The 32 KiB stage profile
 falls from roughly 43--45 ms to about 40.5 ms; fixed-CPU end-to-end opt-in A/B
 improves `1.0167x` median with a `0.9993x` default control.
+Ordinary hash candidates account for 97.9% of measured state transitions. A
+lazy per-position match-length cache now shares only visited ordinary matches
+between both beam states, reducing the profiled search to about 39.4 ms and
+improving the opt-in end-to-end median by `1.0053x` with a neutral `1.0004x`
+default control.
 Inputs beyond the 16 MiB
 format limit keep one Brotli stream and apply the selected policy independently
 to bounded 16/32/64 KiB blocks. q2...q11 retain window-bounded LZ77 history and

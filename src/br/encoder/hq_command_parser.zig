@@ -24,6 +24,8 @@ pub const Stats = struct {
     states_visited: usize = 0,
     match_candidates: usize = 0,
     match_transitions: usize = 0,
+    general_match_transitions: usize = 0,
+    recent_match_transitions: usize = 0,
     beam_replacements: usize = 0,
     index_ns: u64 = 0,
     setup_ns: u64 = 0,
@@ -152,6 +154,7 @@ fn planAllocInternal(
     }
     const search_start = if (comptime profiled) std.Io.Clock.awake.now(io) else {};
     var candidate_distances: [lz77.max_optimal_candidates]u16 = undefined;
+    var cached_match_lengths: [lz77.max_optimal_candidates]u16 = undefined;
     const minimum_regular_distance_cost = std.mem.min(
         u16,
         model.distance_symbol[16..],
@@ -163,6 +166,10 @@ fn planAllocInternal(
             position,
             options,
             &candidate_distances,
+        );
+        @memset(
+            cached_match_lengths[0..candidate_count],
+            std.math.maxInt(u16),
         );
         stats.match_candidates += candidate_count;
         const current = states[position * beam_width ..][0..lengths[position]];
@@ -197,13 +204,18 @@ fn planAllocInternal(
                         continue;
                     }
                 }
-                const copy_len = matchLengthAtDistance(
-                    input,
-                    position,
-                    match_distance,
-                    @max(options.min_match, 3),
-                    @min(options.max_match, lz77.max_match_len),
-                ) orelse continue;
+                const cached_length = &cached_match_lengths[candidate_index];
+                if (cached_length.* == std.math.maxInt(u16)) {
+                    cached_length.* = @intCast(matchLengthAtDistance(
+                        input,
+                        position,
+                        match_distance,
+                        @max(options.min_match, 3),
+                        @min(options.max_match, lz77.max_match_len),
+                    ) orelse 0);
+                }
+                const copy_len: usize = cached_length.*;
+                if (copy_len == 0) continue;
                 const transition = transitionCost(
                     model,
                     state,
@@ -225,6 +237,7 @@ fn planAllocInternal(
                     } },
                 }, &stats);
                 stats.match_transitions += 1;
+                if (comptime profiled) stats.general_match_transitions += 1;
             }
 
             var recent_distances: [16]usize = undefined;
@@ -272,6 +285,7 @@ fn planAllocInternal(
                     } },
                 }, &stats);
                 stats.match_transitions += 1;
+                if (comptime profiled) stats.recent_match_transitions += 1;
             }
         }
     }
