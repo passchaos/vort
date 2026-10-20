@@ -188,6 +188,16 @@ profile keeps identical shape/wire while reducing search from about 36.0 ms to
 34.4 ms. Against `13d09d2d`, seven fixed-CPU opt-in pairs improve median time
 from 842.03 ms to 838.73 ms (`1.0039x`, 5/7 wins); seven default controls also
 remain positive/neutral at 672.42/669.45 ms (`1.0044x`, 5/7 wins).
+Before command/distance lookup, a second exact lower bound compares
+`state_cost + minimum_command_cost` against the full target beam. Distance and
+extra-bit lower bounds are zero, so rejection is conservative and cannot remove
+a winning transition. The 32 KiB profile moves 453,631 of 754,018 rejections
+ahead of the expensive transition calculation and reduces search from about
+34.4 ms to 32.9 ms. Against `774984d9`, seven fixed-CPU opt-in pairs improve
+median time from 841.71 ms to 828.37 ms (`1.0161x`); seven default controls are
+neutral at 668.87/668.29 ms (`1.0009x`). A richer early bound that also computed
+copy-code extras and distance cost rejected more candidates but regressed search
+to about 39.1 ms, so it was removed.
 An exact target-beam cost bound now rejects a transition before copying and
 rolling its four-entry recent-distance history whenever the target already has
 two states and the candidate cost cannot beat the more expensive slot. On the

@@ -64,6 +64,7 @@ pub const Stats = struct {
     match_transitions: usize = 0,
     general_match_transitions: usize = 0,
     recent_match_transitions: usize = 0,
+    early_cost_bound_rejections: usize = 0,
     cost_bound_rejections: usize = 0,
     beam_replacements: usize = 0,
     index_ns: u64 = 0,
@@ -198,6 +199,7 @@ fn planAllocInternal(
         u16,
         model.distance_symbol[16..],
     );
+    const minimum_command_cost = std.mem.min(u16, &model.command);
     for (0..input.len) |position| {
         stats.positions += 1;
         const candidate_count = try index.candidateDistancesAt(
@@ -254,6 +256,17 @@ fn planAllocInternal(
                 }
                 const copy_len: usize = cached_length.*;
                 if (copy_len == 0) continue;
+                stats.match_transitions += 1;
+                if (comptime profiled) stats.general_match_transitions += 1;
+                if (!canBeatBeamCost(
+                    states,
+                    lengths,
+                    position + copy_len,
+                    addCost(state.cost, minimum_command_cost),
+                )) {
+                    if (comptime profiled) stats.early_cost_bound_rejections += 1;
+                    continue;
+                }
                 const transition = transitionCost(
                     model,
                     state,
@@ -264,8 +277,6 @@ fn planAllocInternal(
                     recent_symbol,
                     null,
                 ) orelse continue;
-                stats.match_transitions += 1;
-                if (comptime profiled) stats.general_match_transitions += 1;
                 if (!canBeatBeamCost(
                     states,
                     lengths,
@@ -304,6 +315,17 @@ fn planAllocInternal(
                     @max(options.min_match, 3),
                     @min(options.max_match, lz77.max_match_len),
                 ) orelse continue;
+                stats.match_transitions += 1;
+                if (comptime profiled) stats.recent_match_transitions += 1;
+                if (!canBeatBeamCost(
+                    states,
+                    lengths,
+                    position + copy_len,
+                    addCost(state.cost, minimum_command_cost),
+                )) {
+                    if (comptime profiled) stats.early_cost_bound_rejections += 1;
+                    continue;
+                }
                 const transition = transitionCost(
                     model,
                     state,
@@ -314,8 +336,6 @@ fn planAllocInternal(
                     recent_symbol,
                     null,
                 ) orelse continue;
-                stats.match_transitions += 1;
-                if (comptime profiled) stats.recent_match_transitions += 1;
                 if (!canBeatBeamCost(
                     states,
                     lengths,

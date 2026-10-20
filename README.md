@@ -2362,6 +2362,10 @@ Each beam state now computes its ordered recent-distance table once and reuses
 it for ordinary lookup plus direct recent probing. The 32 KiB state search falls
 from about 36.0 ms to 34.4 ms; fixed-CPU opt-in/default medians improve
 `1.0039x`/`1.0044x` with identical wire.
+A conservative pre-lookup bound using only state cost plus the globally minimum
+command cost moves roughly 454k transition rejections ahead of command/distance
+work. The 32 KiB search falls to about 32.9 ms; fixed-CPU opt-in/default medians
+improve `1.0161x`/`1.0009x`. A more detailed but slower bound was rejected.
 An exact target-beam cost bound skips recent-history materialization for about
 95% of measured transitions that cannot enter the two-state beam. Isolating the
 opt-in branch in its own `noinline` text section keeps default layout neutral;

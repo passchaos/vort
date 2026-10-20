@@ -127,6 +127,11 @@ major gaps before Vort can claim broad industry-best parity:
   ordinary match lookup and direct recent probing. Search drops from about
   36.0 ms to 34.4 ms; seven fixed-CPU opt-in/default matrices improve
   `1.0039x`/`1.0044x` medians with identical wire.
+  A conservative `state_cost + min_command_cost` lower bound now moves 453,631
+  of 754,018 rejections ahead of command/distance lookup. Search falls from
+  about 34.4 ms to 32.9 ms; seven fixed-CPU opt-in pairs improve `1.0161x`
+  median with a neutral `1.0009x` default control. A richer distance-aware bound
+  regressed search to 39.1 ms and was removed.
   An exact target-beam cost bound rejects candidates that cannot beat either
   retained state before copying/rolling recent-distance history. The 32 KiB
   profile avoids that materialization for 754,706 of 794,600 transitions and
