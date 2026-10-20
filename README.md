@@ -2366,6 +2366,11 @@ A conservative pre-lookup bound using only state cost plus the globally minimum
 command cost moves roughly 454k transition rejections ahead of command/distance
 work. The 32 KiB search falls to about 32.9 ms; fixed-CPU opt-in/default medians
 improve `1.0161x`/`1.0009x`. A more detailed but slower bound was rejected.
+Because 97.0% of measured transitions target a full beam, a one-byte-per-
+position worst-slot cache now avoids loading both State costs for each bound.
+The 32 KiB search falls to about 31.05 ms; fixed-CPU opt-in/default medians
+improve `1.0063x`/`1.0022x` with identical wire. A larger u64 cost cache was
+rejected after regressing end-to-end throughput.
 An exact target-beam cost bound skips recent-history materialization for about
 95% of measured transitions that cannot enter the two-state beam. Isolating the
 opt-in branch in its own `noinline` text section keeps default layout neutral;

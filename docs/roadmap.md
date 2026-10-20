@@ -132,6 +132,11 @@ major gaps before Vort can claim broad industry-best parity:
   about 34.4 ms to 32.9 ms; seven fixed-CPU opt-in pairs improve `1.0161x`
   median with a neutral `1.0009x` default control. A richer distance-aware bound
   regressed search to 39.1 ms and was removed.
+  Since 770,492 of 794,018 transitions target a full beam, a compact u8
+  worst-slot cache now replaces repeated two-State cost loads and max. Search
+  drops from about 32.9 ms to 31.05 ms; seven fixed-CPU opt-in/default matrices
+  improve `1.0063x`/`1.0022x` medians with identical wire. A 256 KiB u64
+  worst-cost cache regressed end-to-end throughput to `0.9865x` and was removed.
   An exact target-beam cost bound rejects candidates that cannot beat either
   retained state before copying/rolling recent-distance history. The 32 KiB
   profile avoids that materialization for 754,706 of 794,600 transitions and
@@ -140,8 +145,9 @@ major gaps before Vort can claim broad industry-best parity:
   opt-in pairs improve `1.0218x` median with 7/7 wins; default controls remain
   neutral at `0.9999x`, with identical wire.
   The warmed incremental gate now uses the median of seven alternating pairs
-  at 1,000 iterations. Fixed-CPU calibration spans `1.0902x`--`1.1077x`; an
-  explicit `1.08x` floor replaces the flaky 200-iteration `1.10x` edge while
+  at 1,000 iterations. Repeated fixed-CPU calibration spans
+  `1.0607x`--`1.0958x`; an explicit `1.05x` floor replaces the flaky
+  200-iteration `1.10x` edge and still-flaky `1.08x` intermediate floor while
   retaining a meaningful required advantage.
   Borrowing beam states and classifying each pending insert once per state now
   reduce 32 KiB search from roughly 43--45 ms to about 40.5 ms. Five fixed-CPU

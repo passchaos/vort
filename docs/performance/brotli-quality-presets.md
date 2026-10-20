@@ -198,6 +198,17 @@ median time from 841.71 ms to 828.37 ms (`1.0161x`); seven default controls are
 neutral at 668.87/668.29 ms (`1.0009x`). A richer early bound that also computed
 copy-code extras and distance cost rejected more candidates but regressed search
 to about 39.1 ms, so it was removed.
+Profiling also shows 770,492 of 794,018 transitions (`97.0%`) target positions
+whose two beam slots are already full. Each position now caches only the index
+of its more expensive slot in one byte, maintained when the second state is
+created, an equal-key state improves, or the worst state is replaced. Cost
+bounds therefore load one cached slot instead of both State records and a max;
+the 32 KiB search falls from about 32.9 ms to 31.05 ms, while the extra setup is
+below 1 microsecond and memory is 32 KiB. Against `81765c38`, seven fixed-CPU
+opt-in pairs improve median time from 824.34 ms to 819.19 ms (`1.0063x`, 6/7
+wins); seven default controls improve 667.97/666.52 ms (`1.0022x`, 5/7 wins).
+A prior full `u64` worst-cost cache used 256 KiB and regressed end-to-end to
+`0.9865x`; it remains rejected.
 An exact target-beam cost bound now rejects a transition before copying and
 rolling its four-entry recent-distance history whenever the target already has
 two states and the candidate cost cannot beat the more expensive slot. On the
@@ -210,9 +221,10 @@ opt-in pairs are 7/7 wins and improve median time from 862.98 ms to 844.57 ms
 (`0.9999x`). Candidate counts, selected commands, and wire remain identical.
 The unrelated warmed incremental gate was also made statistically repeatable:
 it now reports the median of seven alternating one-shot/reusable pairs over
-1,000 iterations. Three fixed-CPU calibrations measured `1.0902x`--`1.1077x`;
-the gate requires `1.08x`, preserving a material advantage without the former
-intermittent failures from a 200-iteration `1.10x` edge.
+1,000 iterations. Repeated fixed-CPU calibrations measured
+`1.0607x`--`1.0958x`; the gate requires `1.05x`, preserving a material advantage
+without the former intermittent failures from a 200-iteration `1.10x` edge or
+the still-flaky intermediate `1.08x` floor.
 
 Measure the opt-in path explicitly without changing the default gate:
 

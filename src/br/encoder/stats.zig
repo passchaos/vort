@@ -36,6 +36,7 @@ pub const QualityCommandStateProfile = struct {
     state_general_match_transitions: usize = 0,
     state_recent_match_transitions: usize = 0,
     state_early_cost_bound_rejections: usize = 0,
+    state_full_target_transitions: usize = 0,
     state_cost_bound_rejections: usize = 0,
     state_beam_replacements: usize = 0,
     encoded_bytes: usize = 0,

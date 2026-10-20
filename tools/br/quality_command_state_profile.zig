@@ -67,10 +67,10 @@ pub fn main(init: std.process.Init) !void {
     var buffer: [2048]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
     try stdout.interface.writeAll(
-        "input_bytes,quality,iterations,baseline_bytes,encoded_bytes,compact_wire_bytes,seed_tokens,seed_commands,state_tokens,state_commands,state_positions,state_states_visited,state_match_candidates,state_match_transitions,state_general_match_transitions,state_recent_match_transitions,state_early_cost_bound_rejections,state_cost_bound_rejections,state_beam_replacements,seed_plan_ns,seed_command_ns,model_ns,state_index_ns,state_setup_ns,state_search_ns,state_reconstruct_ns,state_plan_ns,state_command_ns,compact_wire_ns,wire_ns,total_ns,accounted_ns,checksum\n",
+        "input_bytes,quality,iterations,baseline_bytes,encoded_bytes,compact_wire_bytes,seed_tokens,seed_commands,state_tokens,state_commands,state_positions,state_states_visited,state_match_candidates,state_match_transitions,state_general_match_transitions,state_recent_match_transitions,state_full_target_transitions,state_early_cost_bound_rejections,state_cost_bound_rejections,state_beam_replacements,seed_plan_ns,seed_command_ns,model_ns,state_index_ns,state_setup_ns,state_search_ns,state_reconstruct_ns,state_plan_ns,state_command_ns,compact_wire_ns,wire_ns,total_ns,accounted_ns,checksum\n",
     );
     try stdout.interface.print(
-        "{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}",
+        "{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}",
         .{
             input.len,
             quality,
@@ -88,6 +88,7 @@ pub fn main(init: std.process.Init) !void {
             aggregate.state_match_transitions / iterations,
             aggregate.state_general_match_transitions / iterations,
             aggregate.state_recent_match_transitions / iterations,
+            aggregate.state_full_target_transitions / iterations,
             aggregate.state_early_cost_bound_rejections / iterations,
             aggregate.state_cost_bound_rejections / iterations,
             aggregate.state_beam_replacements / iterations,
@@ -151,6 +152,7 @@ fn addProfile(
         "state_match_transitions",
         "state_general_match_transitions",
         "state_recent_match_transitions",
+        "state_full_target_transitions",
         "state_early_cost_bound_rejections",
         "state_cost_bound_rejections",
         "state_beam_replacements",

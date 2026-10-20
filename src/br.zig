@@ -5071,6 +5071,7 @@ pub fn profileQualityCommandStateCandidateAlloc(
     profile.state_general_match_transitions = state_plan.stats.general_match_transitions;
     profile.state_recent_match_transitions = state_plan.stats.recent_match_transitions;
     profile.state_early_cost_bound_rejections = state_plan.stats.early_cost_bound_rejections;
+    profile.state_full_target_transitions = state_plan.stats.full_target_transitions;
     profile.state_cost_bound_rejections = state_plan.stats.cost_bound_rejections;
     profile.state_beam_replacements = state_plan.stats.beam_replacements;
     profile.state_tokens = state_plan.lz.tokens.len;
