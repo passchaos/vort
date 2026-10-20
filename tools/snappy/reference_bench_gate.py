@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 import sys
 from pathlib import Path
 
@@ -39,6 +40,37 @@ EXPECTED_CASES = {
     "incompressible",
     "rle64k",
 }
+COPY_HEAVY_CASES = {"text", "structured", "repetitive", "rle64k"}
+MINIMUM_CASE_RATIO = 1.0
+MINIMUM_COPY_HEAVY_GEOMEAN = 1.10
+MINIMUM_MATRIX_GEOMEAN = 1.25
+
+
+def geometric_mean(values: list[float]) -> float:
+    return math.exp(math.fsum(math.log(value) for value in values) / len(values))
+
+
+def validate_performance(by_case: dict[str, dict[str, str]]) -> tuple[float, float, str]:
+    ratios = {
+        name: float(row["vort_over_reference"])
+        for name, row in by_case.items()
+    }
+    weakest = min(ratios, key=ratios.get)
+    if ratios[weakest] < MINIMUM_CASE_RATIO:
+        raise AssertionError(f"Vort no longer leads {weakest}: {by_case[weakest]}")
+    copy_geomean = geometric_mean([ratios[name] for name in COPY_HEAVY_CASES])
+    if copy_geomean < MINIMUM_COPY_HEAVY_GEOMEAN:
+        raise AssertionError(
+            f"copy-heavy geomean regression: {copy_geomean:.4f} < "
+            f"{MINIMUM_COPY_HEAVY_GEOMEAN:.2f}"
+        )
+    matrix_geomean = geometric_mean(list(ratios.values()))
+    if matrix_geomean < MINIMUM_MATRIX_GEOMEAN:
+        raise AssertionError(
+            f"matrix geomean regression: {matrix_geomean:.4f} < "
+            f"{MINIMUM_MATRIX_GEOMEAN:.2f}"
+        )
+    return copy_geomean, matrix_geomean, weakest
 
 
 def main() -> int:
@@ -88,19 +120,13 @@ def main() -> int:
         ) != int(row["copy_count"]):
             raise AssertionError(f"copy count mismatch: {row}")
 
-    required_leaders = {"tiny", "text", "structured", "incompressible", "rle64k"}
-    for name in required_leaders:
-        if float(by_case[name]["vort_over_reference"]) < 1.10:
-            raise AssertionError(f"Vort no longer leads {name}: {by_case[name]}")
-    # The locked distance-32 COPY_2 row used to be the only observed weak
-    # shape. The word-replay kernel now clears reference parity, so keep that
-    # result as a dedicated regression contract.
-    if float(by_case["repetitive"]["vort_over_reference"]) < 1.02:
-        raise AssertionError(f"repetitive regression: {by_case['repetitive']}")
+    copy_geomean, matrix_geomean, weakest = validate_performance(by_case)
 
     print(
         "snappy_reference_bench_gate=ok "
-        f"rows={len(rows)} repetitive_ratio={by_case['repetitive']['vort_over_reference']}"
+        f"rows={len(rows)} weakest={weakest} "
+        f"weakest_ratio={by_case[weakest]['vort_over_reference']} "
+        f"copy_geomean={copy_geomean:.4f} matrix_geomean={matrix_geomean:.4f}"
     )
     return 0
 

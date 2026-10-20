@@ -4117,8 +4117,15 @@ pub fn build(b: *std.Build) void {
     });
     snappy_reference_bench_gate.addArg("--executable");
     snappy_reference_bench_gate.addArtifactArg(snappy_reference_bench_exe);
+    const snappy_reference_bench_gate_smoke = b.addSystemCommand(&.{
+        "python3",
+        "tools/snappy/reference_bench_gate_smoke.py",
+    });
     snappy_reference_bench_gate.step.dependOn(
         &run_snappy_reference_bench_gate_csv.step,
+    );
+    snappy_reference_bench_gate.step.dependOn(
+        &snappy_reference_bench_gate_smoke.step,
     );
     const snappy_reference_bench_gate_step = b.step(
         "run-snappy-reference-bench-gate",
