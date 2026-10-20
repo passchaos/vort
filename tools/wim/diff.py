@@ -213,6 +213,7 @@ def main() -> None:
     writer_pipable_cases = 0
     writer_pipable_wimlib_cases = 0
     writer_pipable_integrity_cases = 0
+    writer_pipable_integrity_stream_cases = 0
     writer_pipable_integrity_wimlib_cases = 0
     writer_pipable_split_cases = 0
     writer_pipable_split_wimlib_cases = 0
@@ -1649,6 +1650,31 @@ def main() -> None:
             if integrity_output.read_bytes() != pipable_random:
                 raise AssertionError("Vort pipable integrity seekable mismatch")
             writer_pipable_integrity_cases += 1
+            integrity_stream_output = temp / (
+                f"writer-pipable-integrity-stream-{writer_compression}.out"
+            )
+            integrity_stream_result = run(
+                args.cli,
+                "extract-wim-pipable-stream-path",
+                integrity_image,
+                1,
+                "/random.bin",
+                integrity_stream_output,
+                len(pipable_random),
+                7,
+                11,
+                "default",
+                "verify-integrity",
+            )
+            if integrity_stream_output.read_bytes() != pipable_random:
+                raise AssertionError("Vort pipable integrity stream mismatch")
+            if (
+                b"verify_integrity=true" not in integrity_stream_result.stdout
+                or f"input_read={integrity_image.stat().st_size}".encode()
+                not in integrity_stream_result.stdout
+            ):
+                raise AssertionError("Vort pipable integrity stream stopped before the trailing header")
+            writer_pipable_integrity_stream_cases += 1
             if wimlib is not None:
                 run(wimlib, "verify", integrity_image)
                 writer_pipable_integrity_wimlib_cases += 1
@@ -2259,6 +2285,7 @@ def main() -> None:
         f"writer_pipable={writer_pipable_cases} "
         f"writer_pipable_wimlib={writer_pipable_wimlib_cases} "
         f"writer_pipable_integrity={writer_pipable_integrity_cases} "
+        f"writer_pipable_integrity_stream={writer_pipable_integrity_stream_cases} "
         f"writer_pipable_integrity_wimlib={writer_pipable_integrity_wimlib_cases} "
         f"writer_pipable_split={writer_pipable_split_cases} "
         f"writer_pipable_split_wimlib={writer_pipable_split_wimlib_cases} "

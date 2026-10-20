@@ -259,8 +259,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   Stored, XPRESS-Huffman, WIM-flavored LZX, and LZMS chunks are decoded across
   multi-chunk resources; LZMS metadata chunks and alternate-table solid LZMS
   resources support bounded individual-blob extraction without materializing
-  the whole solid stream. Pipable sequential extraction, caller-ordered SWM
-  sets, encrypted/reparse/ADS path selectors, encrypted-ESD reconstruction,
+  the whole solid stream. Pipable sequential extraction with optional bounded
+  terminal integrity-table verification, caller-ordered SWM sets,
+  encrypted/reparse/ADS path selectors, encrypted-ESD reconstruction,
   DOS short-name aliases, generic tagged metadata, typed object-ID/Unix/xattr
   helpers,
   and deterministic stored/XPRESS/LZX/LZMS one-/multi-image, packed LZMS/ESD,

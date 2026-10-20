@@ -429,6 +429,15 @@ pub fn extractPipablePathIncremental(
             return error.InvalidBlockPlan
     else
         .default;
+    const verify_integrity = if (args.next()) |text|
+        if (std.mem.eql(u8, text, "verify-integrity"))
+            true
+        else if (std.mem.eql(u8, text, "early-exit"))
+            false
+        else
+            return error.InvalidBlockPlan
+    else
+        false;
     if (input_step == 0 or output_step == 0 or output_step > max_file_size)
         return error.InvalidBlockPlan;
     const input = try readFile(init, input_path);
@@ -442,6 +451,7 @@ pub fn extractPipablePathIncremental(
         .path = entry_path,
         .stream = stream,
         .max_output_len = limit,
+        .verify_integrity = verify_integrity,
         .limits = .{
             .max_metadata_bytes = max_metadata_bytes,
             .max_directory_entries = max_directory_entries,
@@ -468,7 +478,7 @@ pub fn extractPipablePathIncremental(
         .data = decoded.items,
     });
     try stdout.print(
-        "image={d} entry={s} decoded_bytes={d} input_read={d} input_step={d} output_step={d} path={s}\n",
+        "image={d} entry={s} decoded_bytes={d} input_read={d} input_step={d} output_step={d} verify_integrity={} path={s}\n",
         .{
             image_index,
             entry_path,
@@ -476,6 +486,7 @@ pub fn extractPipablePathIncremental(
             input_offset,
             input_step,
             output_step,
+            verify_integrity,
             output_path,
         },
     );

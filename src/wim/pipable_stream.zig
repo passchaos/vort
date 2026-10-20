@@ -7,6 +7,7 @@ const codec = @import("codec.zig");
 const format = @import("format.zig");
 const image_metadata = @import("metadata.zig");
 const pipable = @import("pipable.zig");
+const pipable_integrity = @import("pipable_integrity.zig");
 
 pub const Error = archive_mod.Error;
 
@@ -15,6 +16,7 @@ pub const Limits = struct {
     max_directory_entries: usize = 1024 * 1024,
     max_path_depth: usize = 256,
     max_chunk_bytes: usize = 256 * 1024 * 1024,
+    max_integrity_chunks: usize = 1024 * 1024,
 };
 
 pub const Options = struct {
@@ -24,6 +26,9 @@ pub const Options = struct {
     /// Named-stream storage, when selected, is borrowed for the extractor lifetime.
     stream: archive_mod.StreamSelector = .default,
     max_output_len: usize,
+    /// Continue past the selected blob and validate the terminal integrity table
+    /// plus trailing header. The default preserves early-exit extraction.
+    verify_integrity: bool = false,
     limits: Limits = .{},
 };
 
@@ -39,21 +44,30 @@ pub const PathExtractor = struct {
     part_header_received: usize = 0,
     header_value: ?format.Header = null,
     current_part: u16 = 0,
+    part_bytes_consumed: u64 = 0,
     current_part_trailing_seen: bool = false,
     terminal_header_seen: bool = false,
     stream_stage: StreamStage = .extra_xml,
     metadata_seen: u32 = 0,
     metadata_bytes: std.ArrayList(u8) = .empty,
     target_sha1: ?[20]u8 = null,
+    target_complete: bool = false,
     expected_output_len: ?u64 = null,
     total_output_written: usize = 0,
     resource: ResourceState = .{},
+    part_extra_xml_pending: bool = false,
+    part_tail_metadata_seen: u2 = 0,
+    integrity: pipable_integrity.Verifier,
+    tail_prefix: [12]u8 = undefined,
+    tail_prefix_received: usize = 0,
 
     const Phase = enum {
         leading_header,
         blob_header,
         part_header,
         resource,
+        tail_prefix,
+        integrity_digests,
         done,
     };
 
@@ -69,6 +83,9 @@ pub const PathExtractor = struct {
         metadata_selected,
         file_skip,
         file_target,
+        part_extra_xml_skip,
+        lookup_skip,
+        final_xml_skip,
     };
 
     const ResourceMode = enum {
@@ -141,12 +158,21 @@ pub const PathExtractor = struct {
     };
 
     pub fn init(allocator: std.mem.Allocator, options: Options) PathExtractor {
-        return .{ .allocator = allocator, .options = options };
+        return .{
+            .allocator = allocator,
+            .options = options,
+            .integrity = pipable_integrity.Verifier.init(
+                allocator,
+                options.verify_integrity,
+                options.limits.max_integrity_chunks,
+            ),
+        };
     }
 
     pub fn deinit(self: *PathExtractor) void {
         self.resource.deinitBuffers(self.allocator);
         self.metadata_bytes.deinit(self.allocator);
+        self.integrity.deinit();
         self.* = undefined;
     }
 
@@ -176,11 +202,13 @@ pub const PathExtractor = struct {
         var output_written: usize = 0;
         while (true) switch (self.phase) {
             .leading_header => {
-                input_read += fillFixed(
+                const consumed = fillFixed(
                     &self.header_bytes,
                     &self.header_received,
                     input[input_read..],
                 );
+                input_read += consumed;
+                try self.addPartInput(consumed);
                 if (self.header_received != self.header_bytes.len)
                     return result(input_read, output_written, .need_input);
                 const parsed = try format.parsePipableLeadingHeader(&self.header_bytes);
@@ -193,14 +221,19 @@ pub const PathExtractor = struct {
                     return error.OutputLimitExceeded;
                 self.header_value = parsed;
                 self.current_part = 1;
+                try self.integrity.begin();
                 self.phase = .blob_header;
             },
             .blob_header => {
-                input_read += fillFixed(
+                const before = input_read;
+                const consumed = fillFixed(
                     &self.blob_header_bytes,
                     &self.blob_header_received,
                     input[input_read..],
                 );
+                input_read += consumed;
+                try self.addPartInput(consumed);
+                try self.integrity.update(input[before..input_read]);
                 if (self.blob_header_received != self.blob_header_bytes.len)
                     return result(input_read, output_written, .need_input);
                 if (std.mem.eql(
@@ -225,23 +258,30 @@ pub const PathExtractor = struct {
                 self.phase = .resource;
             },
             .part_header => {
-                input_read += fillFixed(
+                const consumed = fillFixed(
                     &self.part_header_bytes,
                     &self.part_header_received,
                     input[input_read..],
                 );
+                input_read += consumed;
+                try self.addPartInput(consumed);
                 if (self.part_header_received != self.part_header_bytes.len)
                     return result(input_read, output_written, .need_input);
                 try self.acceptPartHeader(&self.part_header_bytes);
                 self.part_header_received = 0;
+                if (self.phase == .done)
+                    return result(input_read, output_written, .done);
                 self.phase = .blob_header;
             },
             .resource => {
+                const before = input_read;
                 const stepped = try self.stepResource(
                     input[input_read..],
                     output[output_written..],
                 );
                 input_read += stepped.input_read;
+                try self.addPartInput(stepped.input_read);
+                try self.integrity.update(input[before..input_read]);
                 output_written += stepped.output_written;
                 switch (stepped.status) {
                     .need_input => return result(input_read, output_written, .need_input),
@@ -250,9 +290,46 @@ pub const PathExtractor = struct {
                         try self.finishResource();
                         if (self.phase == .done)
                             return result(input_read, output_written, .done);
-                        self.phase = .blob_header;
+                        if (self.phase == .resource) self.phase = .blob_header;
                     },
                 }
+            },
+            .tail_prefix => {
+                if (self.tail_prefix_received == 0)
+                    self.integrity.table_offset = self.part_bytes_consumed;
+                const consumed = fillFixed(
+                    &self.tail_prefix,
+                    &self.tail_prefix_received,
+                    input[input_read..],
+                );
+                input_read += consumed;
+                try self.addPartInput(consumed);
+                if (self.tail_prefix_received != self.tail_prefix.len)
+                    return result(input_read, output_written, .need_input);
+                if (std.mem.eql(u8, self.tail_prefix[0..8], &format.pipable_magic)) {
+                    @memcpy(self.part_header_bytes[0..self.tail_prefix.len], &self.tail_prefix);
+                    self.part_header_received = self.tail_prefix.len;
+                    self.tail_prefix_received = 0;
+                    self.integrity.table_len = null;
+                    self.integrity.table_offset = null;
+                    self.phase = .part_header;
+                    continue;
+                }
+                try self.integrity.startTable(
+                    &self.tail_prefix,
+                    self.integrity.table_offset.?,
+                );
+                self.tail_prefix_received = 0;
+                self.phase = .integrity_digests;
+            },
+            .integrity_digests => {
+                const consumed = try self.integrity.consumeTable(input[input_read..]);
+                input_read += consumed;
+                try self.addPartInput(consumed);
+                if (!self.integrity.tableComplete())
+                    return result(input_read, output_written, .need_input);
+                self.part_header_received = 0;
+                self.phase = .part_header;
             },
             .done => return result(input_read, output_written, .done),
         };
@@ -280,8 +357,18 @@ pub const PathExtractor = struct {
                     .metadata_skip;
             },
             .files => blk: {
+                if (blob.isMetadata()) {
+                    if (self.part_extra_xml_pending)
+                        break :blk .part_extra_xml_skip;
+                    break :blk switch (self.part_tail_metadata_seen) {
+                        0 => .lookup_skip,
+                        1 => .final_xml_skip,
+                        else => return error.InvalidWim,
+                    };
+                }
+                if (self.part_tail_metadata_seen != 0) return error.InvalidWim;
                 const target = self.target_sha1 orelse return error.InvalidWim;
-                if (!blob.isMetadata() and std.mem.eql(u8, &blob.sha1, &target))
+                if (!self.target_complete and std.mem.eql(u8, &blob.sha1, &target))
                     break :blk .file_target;
                 break :blk .file_skip;
             },
@@ -569,7 +656,17 @@ pub const PathExtractor = struct {
             .file_target => {
                 if (self.total_output_written != self.expected_output_len.?)
                     return error.SizeMismatch;
-                self.phase = .done;
+                self.target_complete = true;
+                if (!self.options.verify_integrity) self.phase = .done;
+            },
+            .part_extra_xml_skip => self.part_extra_xml_pending = false,
+            .lookup_skip => {
+                try self.integrity.finishCoverage();
+                self.part_tail_metadata_seen = 1;
+            },
+            .final_xml_skip => {
+                self.part_tail_metadata_seen = 2;
+                self.phase = .tail_prefix;
             },
         }
     }
@@ -598,7 +695,8 @@ pub const PathExtractor = struct {
         self.target_sha1 = hash;
         if (std.mem.allEqual(u8, &hash, 0)) {
             self.expected_output_len = 0;
-            self.phase = .done;
+            self.target_complete = true;
+            if (!self.options.verify_integrity) self.phase = .done;
         }
     }
 
@@ -619,17 +717,33 @@ pub const PathExtractor = struct {
         if (parsed.part_number == self.current_part) {
             if (self.current_part_trailing_seen or resourcesAllZero(parsed))
                 return error.InvalidWim;
+            try self.integrity.validateDeclaration(parsed.integrity_table);
             self.current_part_trailing_seen = true;
-            if (parsed.part_number == parsed.total_parts)
+            if (parsed.part_number == parsed.total_parts) {
                 self.terminal_header_seen = true;
+                if (self.target_complete and self.options.verify_integrity)
+                    self.phase = .done;
+            }
             return;
         }
         if (parsed.part_number != self.current_part + 1 or
             !self.current_part_trailing_seen or !resourcesAllZero(parsed))
             return error.InvalidWim;
         self.current_part = parsed.part_number;
+        self.part_bytes_consumed = format.header_size;
         self.current_part_trailing_seen = false;
         self.terminal_header_seen = false;
+        self.part_extra_xml_pending = true;
+        self.part_tail_metadata_seen = 0;
+        try self.integrity.begin();
+    }
+
+    fn addPartInput(self: *PathExtractor, count: usize) Error!void {
+        self.part_bytes_consumed = std.math.add(
+            u64,
+            self.part_bytes_consumed,
+            @intCast(count),
+        ) catch return error.IntegerOverflow;
     }
 };
 

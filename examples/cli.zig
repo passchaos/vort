@@ -2830,7 +2830,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  extract-wim-stream <image> <image_index> <entry> <stream> <out> [max_output]
         \\  extract-wim-reparse <image> <image_index> <entry> <out> [max_output]
         \\  extract-wim-encrypted-raw <image> <image_index> <entry> <out> [max_output]
-        \\  extract-wim-pipable-stream-path <image> <image_index> <entry> <out> <max_output> [input_step] [output_step] [default|reparse|encrypted-raw|stream:name]
+        \\  extract-wim-pipable-stream-path <image> <image_index> <entry> <out> <max_output> [input_step] [output_step] [default|reparse|encrypted-raw|stream:name] [early-exit|verify-integrity]
         \\  inspect-wim-encrypted-esd <image> [max_xml] [max_ranges]
         \\  decrypt-wim-encrypted-esd <image> <private_key_blob> <out> <max_output>
         \\  decrypt-wim-encrypted-esd-key <image> <aes256_key_hex> <out> <max_output>

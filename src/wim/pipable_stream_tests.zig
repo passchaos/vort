@@ -5,6 +5,7 @@ const format = @import("format.zig");
 const metadata = @import("metadata.zig");
 const pipable = @import("pipable.zig");
 const stream = @import("pipable_stream.zig");
+const writer = @import("writer.zig");
 
 const PathExtractor = stream.PathExtractor;
 
@@ -50,6 +51,46 @@ fn extractFixtureAlloc(
             return error.TestUnexpectedResult;
     }
     try std.testing.expect(input_offset < bytes.len);
+    return output.toOwnedSlice(allocator);
+}
+
+fn extractVerifiedAlloc(
+    allocator: std.mem.Allocator,
+    bytes: []const u8,
+    image_index: u32,
+    path: []const u8,
+    input_step: usize,
+    output_step: usize,
+    max_integrity_chunks: usize,
+) ![]u8 {
+    var extractor = PathExtractor.init(allocator, .{
+        .image_index = image_index,
+        .path = path,
+        .max_output_len = 64 * 1024,
+        .verify_integrity = true,
+        .limits = .{ .max_integrity_chunks = max_integrity_chunks },
+    });
+    defer extractor.deinit();
+    var output: std.ArrayList(u8) = .empty;
+    errdefer output.deinit(allocator);
+    const scratch = try allocator.alloc(u8, output_step);
+    defer allocator.free(scratch);
+    var input_offset: usize = 0;
+    while (true) {
+        const input_end = @min(bytes.len, input_offset + input_step);
+        const stepped = try extractor.step(bytes[input_offset..input_end], scratch);
+        input_offset += stepped.progress.input_read;
+        try output.appendSlice(allocator, scratch[0..stepped.progress.output_written]);
+        if (stepped.status == .done) break;
+        if (stepped.status == .need_input and input_offset == bytes.len) {
+            try extractor.finish();
+            return error.TestUnexpectedResult;
+        }
+        if (stepped.progress.input_read == 0 and stepped.progress.output_written == 0 and
+            stepped.status != .need_output)
+            return error.TestUnexpectedResult;
+    }
+    try std.testing.expectEqual(bytes.len, input_offset);
     return output.toOwnedSlice(allocator);
 }
 
@@ -183,6 +224,153 @@ test "WIM pipable stream reports truncation and missing target blob" {
         if (stepped.status == .need_output) return error.TestUnexpectedResult;
     }
     try std.testing.expectError(error.WimResourceNotFound, missing.finish());
+}
+
+test "WIM pipable stream verifies terminal integrity under fragmentation" {
+    const allocator = std.testing.allocator;
+    const payload = "pipable integrity payload\n" ** 1024;
+    const entries = [_]writer.Entry{.{
+        .path = "nested/payload.txt",
+        .data = payload,
+    }};
+    const bytes = try writer.encodePipableAlloc(
+        allocator,
+        &entries,
+        .{ .compression = .stored },
+        .{ .integrity = true },
+    );
+    defer allocator.free(bytes);
+    const output = try extractVerifiedAlloc(
+        allocator,
+        bytes,
+        1,
+        "/nested/payload.txt",
+        1,
+        3,
+        8,
+    );
+    defer allocator.free(output);
+    try std.testing.expectEqualStrings(payload, output);
+
+    const archive = try archive_mod.Archive.init(bytes);
+    const integrity_offset: usize = @intCast(archive.header.integrity_table.offset_in_wim);
+    try std.testing.expect(integrity_offset + 12 < bytes.len);
+
+    const corrupt_digest = try allocator.dupe(u8, bytes);
+    defer allocator.free(corrupt_digest);
+    corrupt_digest[integrity_offset + 12] ^= 1;
+    try std.testing.expectError(
+        error.ChecksumMismatch,
+        extractVerifiedAlloc(allocator, corrupt_digest, 1, "/nested/payload.txt", 7, 11, 8),
+    );
+
+    const corrupt_header = try allocator.dupe(u8, bytes);
+    defer allocator.free(corrupt_header);
+    std.mem.writeInt(u32, corrupt_header[integrity_offset..][0..4], 13, .little);
+    try std.testing.expectError(
+        error.InvalidWim,
+        extractVerifiedAlloc(allocator, corrupt_header, 1, "/nested/payload.txt", 13, 17, 8),
+    );
+
+    const unsupported_chunk = try allocator.dupe(u8, bytes);
+    defer allocator.free(unsupported_chunk);
+    std.mem.writeInt(
+        u32,
+        unsupported_chunk[integrity_offset + 8 ..][0..4],
+        4096,
+        .little,
+    );
+    try std.testing.expectError(
+        error.UnsupportedWimFeature,
+        extractVerifiedAlloc(allocator, unsupported_chunk, 1, "/nested/payload.txt", 11, 13, 8),
+    );
+
+    const bad_declaration = try allocator.dupe(u8, bytes);
+    defer allocator.free(bad_declaration);
+    bad_declaration[bad_declaration.len - format.header_size + 132] ^= 1;
+    try std.testing.expectError(
+        error.InvalidWim,
+        extractVerifiedAlloc(allocator, bad_declaration, 1, "/nested/payload.txt", 17, 19, 8),
+    );
+
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        extractVerifiedAlloc(allocator, bytes, 1, "/nested/payload.txt", 5, 7, 0),
+    );
+    try std.testing.expectError(
+        error.TruncatedFrame,
+        extractVerifiedAlloc(
+            allocator,
+            bytes[0 .. bytes.len - 1],
+            1,
+            "/nested/payload.txt",
+            19,
+            23,
+            8,
+        ),
+    );
+
+    const FailureTest = struct {
+        fn run(test_allocator: std.mem.Allocator, fixture: []const u8) !void {
+            const decoded = try extractVerifiedAlloc(
+                test_allocator,
+                fixture,
+                1,
+                "/nested/payload.txt",
+                7,
+                11,
+                8,
+            );
+            defer test_allocator.free(decoded);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        allocator,
+        FailureTest.run,
+        .{bytes},
+    );
+}
+
+test "WIM pipable stream verifies integrity across concatenated parts" {
+    const allocator = std.testing.allocator;
+    const large = "L" ** 700;
+    const shared = "S" ** 300;
+    const target = "T" ** 400;
+    const first_entries = [_]writer.Entry{
+        .{ .path = "large.bin", .data = large },
+        .{ .path = "shared.bin", .data = shared },
+    };
+    const second_entries = [_]writer.Entry{
+        .{ .path = "target.bin", .data = target },
+        .{ .path = "shared.bin", .data = shared },
+    };
+    const images = [_]writer.Image{
+        .{ .name = "first", .entries = &first_entries },
+        .{ .name = "second", .entries = &second_entries },
+    };
+    var split = try writer.encodeImagesPipableSplitAlloc(
+        allocator,
+        &images,
+        .{ .compression = .stored },
+        .{ .max_part_size = 600 },
+        .{ .integrity = true },
+    );
+    defer split.deinit();
+    try std.testing.expect(split.parts.len >= 3);
+    var concatenated: std.ArrayList(u8) = .empty;
+    defer concatenated.deinit(allocator);
+    for (split.parts) |part| try concatenated.appendSlice(allocator, part.bytes);
+    const output = try extractVerifiedAlloc(
+        allocator,
+        concatenated.items,
+        2,
+        "/target.bin",
+        1,
+        2,
+        8,
+    );
+    defer allocator.free(output);
+    try std.testing.expectEqualStrings(target, output);
 }
 
 test "WIM pipable stream path extraction releases every allocation failure" {

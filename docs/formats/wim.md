@@ -313,9 +313,16 @@ ordering contract.
 
 `WimPipableEncodeOptions.integrity` defaults to false. This is the true
 nonseekable-friendly form: after the final XML blob, the incremental reader sees
-the trailing header directly. Explicit integrity is supported for seekable and
-wimlib verification, but the raw table between final XML and trailing header is
-not consumed by `WimPipableStreamPathExtractor`. Pipable WIM remains a wimlib
+the trailing header directly. `WimPipableStreamPathExtractor` preserves its
+default early-exit behavior after the selected blob, while
+`verify_integrity=true` continues through local lookup/final XML blobs, the raw
+integrity table, and the trailing header. It hashes the standard 10 MiB covered
+regions while bytes arrive, retains only one 20-byte SHA-1 per chunk, validates
+table length/count/chunk size, every digest, and the trailing resource
+offset/size declaration, and repeats that state independently for concatenated
+SWM parts. `max_integrity_chunks` bounds retained digests. Unsupported chunk
+geometry, truncation, corrupt hashes, forged declarations, reversed/missing
+parts, and allocation failures are covered. Pipable WIM remains a wimlib
 extension and intentionally uses non-Microsoft magic.
 
 `encodeWimPipableSplitAlloc` and `encodeWimImagesPipableSplitAlloc` compose
@@ -541,7 +548,9 @@ part headers and cross-part errors, and keeps checked-in XPRESS/LZX/LZMS plus
 pipable XPRESS fixtures. The external matrix rebuilds none/XPRESS/LZX pipable
 WIMs, exercises multi-chunk extraction, and byte-compares a two-part pipable
 SWM set. The same generated images are fed through bounded incremental cuts for
-stored/XPRESS/LZX, empty, reparse, and concatenated split paths. Negative
+stored/XPRESS/LZX, empty, reparse, concatenated split, and terminal-integrity
+paths. Vort-generated stored/XPRESS/LZX/LZMS integrity streams must consume the
+complete input and match seekable/wimlib extraction. Negative
 coverage includes output limits, missing images/paths/hashes,
 directory extraction rejection, missing named streams, non-reparse selection,
 malformed headers, security lengths, UTF-16 name lengths, child offsets, stream

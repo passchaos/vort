@@ -21445,17 +21445,21 @@ reuse, so production keeps the simpler independently owned plans.
   data blobs, pipable lookup/final XML, optional raw integrity, and trailing
   complete header. Blob headers bind SHA-1/size/flags; compressed resources use
   per-chunk sizes and a tail cumulative table whose offsets deliberately exclude
-  those headers. The default omits integrity for true sequential consumption;
-  explicit integrity is documented as seekable-only for Vort's current stream
-  extractor. Unit tests cover deterministic standard conversion, boot metadata,
+  those headers. The default still exits after the selected blob. An opt-in
+  stream mode now continues through lookup/final XML, the raw integrity table,
+  and the trailing header; it incrementally hashes standard 10 MiB regions,
+  retains bounded 20-byte digests, validates every hash and the header's table
+  offset/size declaration, and resets the same state across concatenated SWM
+  parts. Unit tests cover deterministic standard conversion, boot metadata,
   compressed and raw-fallback chunks, seekable reads, one-byte-input progressive
   extraction, transactional buffers, invalid re-conversion and OOM. Stored and
   XPRESS multi-image probes pass Vort's 7/11-byte progressive schedule and
   wimlib verify/extract with boot image 2 (`writer_pipable=2`,
   `writer_pipable_wimlib=2`). Explicit-integrity stored/XPRESS variants also
-  pass seekable extraction and wimlib verify (`writer_pipable_integrity=2`,
-  `writer_pipable_integrity_wimlib=2`). This closes ordinary pipable output;
-  LZX/LZMS and in-place update remain open.
+  pass seekable extraction and wimlib verify. The stored/XPRESS/LZX/LZMS writer
+  matrix also passes verified stream extraction through the complete trailing
+  header (`writer_pipable_integrity_stream=4`). This closes ordinary pipable
+  output; in-place update remains open.
 
 - Added deterministic pipable SWM composition. One- and multi-image helpers run
   the standard soft-size planner, convert every local-lookup part to `WLPWM`,
