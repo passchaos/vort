@@ -246,6 +246,8 @@ def main() -> None:
     reference_rar4_encrypted_volumes = 0
     writer_rar4_unicode = 0
     writer_rar4_unicode_external = 0
+    writer_redirections = 0
+    writer_redirections_external = 0
     reference_rar4_unicode = 0
     reference_stored = 0
     reference_compressed = 0
@@ -296,6 +298,42 @@ def main() -> None:
                 if seven_zip_extract(seven_zip, first, temp / f"7z-vort-{version}") != payload:
                     raise AssertionError(f"7-Zip rejected Vort {version}")
                 writer_external += 1
+
+        if args.writer is not None:
+            redirection_archive = temp / "vort-rar5-redirections.rar"
+            run(
+                args.writer,
+                str(redirection_archive),
+                "rar5",
+                "rar5-redirections",
+            )
+            listing = run(args.cli, "list-rar-file", str(redirection_archive)).stdout
+            expected_fields = (
+                "redirection=unix_symlink redirection_directory=false "
+                "redirection_safe=true redirection_target=target.txt name=unix-link",
+                "redirection=hard_link redirection_directory=false "
+                "redirection_safe=true redirection_target=target.txt name=hard-link",
+                "redirection=unix_symlink redirection_directory=true "
+                "redirection_safe=true redirection_target=folder name=folder-link",
+            )
+            for expected in expected_fields:
+                if expected not in listing:
+                    raise AssertionError(f"RAR5 redirection listing mismatch: {listing}")
+                writer_redirections += 1
+            if seven_zip is not None:
+                run(seven_zip, "t", str(redirection_archive))
+                external_listing = run(
+                    seven_zip,
+                    "l",
+                    "-slt",
+                    str(redirection_archive),
+                ).stdout
+                for name in ("unix-link", "hard-link", "folder-link"):
+                    if f"Path = {name}" not in external_listing:
+                        raise AssertionError(
+                            f"7-Zip omitted RAR5 redirection {name!r}"
+                        )
+                writer_redirections_external = 3
 
         for version, compression in (("rar4", "rar29"), ("rar5", "rar50")):
             compressed_first = temp / f"vort-{compression}-compressed-first.rar"
@@ -1805,6 +1843,8 @@ def main() -> None:
         f"reference_rar4_encrypted_volumes={reference_rar4_encrypted_volumes} "
         f"writer_rar4_unicode={writer_rar4_unicode} "
         f"writer_rar4_unicode_external={writer_rar4_unicode_external} "
+        f"writer_redirections={writer_redirections} "
+        f"writer_redirections_external={writer_redirections_external} "
         f"reference_rar4_unicode={reference_rar4_unicode} "
         f"reference_stored={reference_stored} reference_compressed={reference_compressed} "
         f"reference_compressed_decoded={reference_compressed_decoded} "

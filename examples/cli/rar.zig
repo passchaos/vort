@@ -148,7 +148,7 @@ pub fn listFile(
     while (try iterator.next()) |entry| : (index += 1) {
         const name = try entry.name.alloc(init.gpa);
         defer init.gpa.free(name);
-        try stdout.print("index={d} method={s} method_id={d} compression_version={d} dictionary={?d} compressed={d} uncompressed={d} crc32={?d} directory={} encrypted={} kdf_count={?d} solid={} split_before={} split_after={} safe_path={} name={s}\n", .{
+        try stdout.print("index={d} method={s} method_id={d} compression_version={d} dictionary={?d} compressed={d} uncompressed={d} crc32={?d} directory={} encrypted={} kdf_count={?d} solid={} split_before={} split_after={} safe_path={} redirection={s} redirection_directory={} redirection_safe={} redirection_target={s} name={s}\n", .{
             index,
             @tagName(entry.method),
             entry.method_id,
@@ -164,6 +164,10 @@ pub fn listFile(
             entry.split_before,
             entry.split_after,
             entry.safe_path,
+            if (entry.redirection_info) |redirection| @tagName(redirection.kind) else "none",
+            if (entry.redirection_info) |redirection| redirection.target_is_directory else false,
+            if (entry.redirection_info) |redirection| redirection.target_safe_path else false,
+            if (entry.redirection_info) |redirection| redirection.target else "-",
             name,
         });
     }

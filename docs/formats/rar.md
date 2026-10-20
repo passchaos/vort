@@ -45,7 +45,10 @@ files and SFX-prefixed archives share the same API. It validates:
 Borrowed entry metadata includes the normalized name view, method and algorithm
 version, sizes, CRC, host OS, attributes, timestamp, directory/encryption/solid
 flags, split-before/split-after state, unknown-size state, redirection presence,
-and path-safety classification. RAR5 encrypted entries additionally expose the
+and path-safety classification. RAR5 redirections additionally expose the
+Unix/Windows symlink, junction, hard-link, or file-copy kind, directory-target
+flag, borrowed UTF-8 target, and a separate target-path safety classification.
+RAR5 encrypted entries additionally expose the
 version, flags, KDF count, salt, IV, and optional password-check record.
 RAR 1.5-4.x encrypted entries expose their selected RAR15, RAR20, or RAR30
 cipher generation and, for RAR30 AES, the optional 8-byte salt.
@@ -212,6 +215,14 @@ The writers emit standard header/data CRCs, Unix attributes, optional
 generation-native timestamps (DOS date/time for RAR4, Unix seconds for RAR5),
 RAR4 end blocks, and RAR5 end headers.
 
+`RarEncodeEntry.redirection` emits the RAR5 type-5 extra record for Unix or
+Windows symlinks, Windows junctions, hard links, and file copies. Redirected
+entries carry no data, reset a solid compression chain, and may mark their
+target as a directory. Targets must be non-empty, valid UTF-8, NUL-free, and
+safe relative archive paths; RAR4, payload-bearing, or data-encrypted
+redirections are rejected. Header encryption and split-volume writing remain
+available because the record is ordinary header metadata.
+
 RAR4 output accepts validated UTF-8 names, adds the custom Unicode field when
 needed, and converts `/` to the traditional `\` separator. RAR5 output accepts
 validated UTF-8 names. Both writers reject NUL,
@@ -219,7 +230,7 @@ absolute, empty-component, dot, and parent-component paths. RAR29 compression
 rejects unsupported filter/codec combinations instead of relabeling them.
 RAR50 dictionary sizes must be power-of-two
 multiples of 128 KiB. Pre-RAR29 RAR 1.3/1.5/2.0 encryption, recovery records,
-comments, and redirections remain future writer work.
+and comments remain future writer work.
 
 ## CLI
 
@@ -279,6 +290,12 @@ filters plus the solid and encrypted cases (`writer_ppmd_filtered=6`,
 independently authored PPMd-embedded VM fixture, 64-channel Delta, program reuse
 and unusual encoded integers. A checksum-valid generic-program mutation is
 compared with its canonical standard-program output. RAR5 checks cover
+three generated redirections (file symlink, directory symlink, and hard link)
+through Vort's structured listing (`writer_redirections=3`); when 7-Zip is
+available it must test the archive and list all three names
+(`writer_redirections_external=3`). Malformed type, flag, and target-length
+records plus RAR4, payload-bearing, and unsafe-target writer requests are
+required failures. RAR5 codec checks cover
 compression methods 1, 3, and 5,
 all four native filters, generated multi-block input, malformed first-block
 table reuse, and the legacy out-of-window zero-fill behavior. Solid

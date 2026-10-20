@@ -21,6 +21,12 @@ pub const Error = archive.Error || rar29_encoder.Error || rar50_encoder.Error ||
 
 pub const Kind = enum { regular, directory };
 pub const Compression = enum { stored, rar29, rar29_ppmd, rar50 };
+pub const RedirectionType = archive.RedirectionType;
+pub const RedirectionOptions = struct {
+    kind: RedirectionType,
+    target: []const u8,
+    target_is_directory: bool = false,
+};
 pub const Filter = union(enum) {
     delta: u8,
     e8,
@@ -68,6 +74,9 @@ pub const EncodeEntry = struct {
     encryption: ?EncryptionOptions = null,
     /// RAR 3.x/4.x AES-128 file-data encryption.
     rar4_encryption: ?Rar4EncryptionOptions = null,
+    /// RAR5 file-system redirection. The target is encoded in the type-5
+    /// extra record; redirected entries carry no file payload.
+    redirection: ?RedirectionOptions = null,
 };
 
 pub const EncodeOptions = struct {
@@ -186,7 +195,8 @@ pub fn encodeVolumesAlloc(
     for (entries) |entry| {
         var compressed: ?[]u8 = null;
         defer if (compressed) |bytes| allocator.free(bytes);
-        const use_compression = entry.kind == .regular and options.compression == .rar50;
+        const use_compression = entry.kind == .regular and entry.redirection == null and
+            options.compression == .rar50;
         if (!use_compression) encoder.reset();
         const solid_continuation = options.solid and encoder.canContinue();
         if (use_compression)
@@ -213,6 +223,8 @@ pub fn encodeVolumesAlloc(
         defer extra.deinit(allocator);
         if (encrypted) |value|
             try appendRar5EncryptionRecord(allocator, &extra, value.metadata);
+        if (entry.redirection) |redirection|
+            try appendRar5RedirectionRecord(allocator, &extra, redirection);
 
         var offset: usize = 0;
         var split_before = false;
@@ -514,7 +526,7 @@ fn validateEntries(
                 if (std.mem.eql(u8, &iv, &previous))
                     return error.InvalidRarHeaderEncryption;
         for (entries) |entry| {
-            if (entry.kind == .directory) continue;
+            if (entry.kind == .directory or entry.redirection != null) continue;
             const encryption = entry.encryption orelse
                 return error.InvalidRarHeaderEncryption;
             if (!std.mem.eql(u8, encryption.password, header_encryption.password))
@@ -541,6 +553,21 @@ fn validateEntries(
         if (entry.kind == .directory and entry.data.len != 0) return error.UnsupportedRarEntry;
         if (!std.unicode.utf8ValidateSlice(entry.name)) {
             return error.InvalidRarEntryName;
+        }
+        if (entry.redirection) |redirection| {
+            if (options.version != .rar5 or entry.kind != .regular or
+                entry.data.len != 0 or entry.encryption != null or
+                entry.rar4_encryption != null)
+            {
+                return error.UnsupportedRarEncodeOptions;
+            }
+            if (redirection.target.len == 0 or
+                !std.unicode.utf8ValidateSlice(redirection.target) or
+                std.mem.indexOfScalar(u8, redirection.target, 0) != null or
+                !archive.isSafePath(redirection.target))
+            {
+                return error.InvalidRarEntryName;
+            }
         }
         if (entry.encryption) |encryption| {
             if (options.version != .rar5 or entry.kind != .regular)
@@ -1047,7 +1074,8 @@ fn appendRar5File(
 ) !void {
     var compressed: ?[]u8 = null;
     defer if (compressed) |bytes| allocator.free(bytes);
-    const use_compression = entry.kind == .regular and options.compression == .rar50;
+    const use_compression = entry.kind == .regular and entry.redirection == null and
+        options.compression == .rar50;
     if (!use_compression) encoder.reset();
     const solid_continuation = options.solid and encoder.canContinue();
     if (use_compression)
@@ -1067,6 +1095,8 @@ fn appendRar5File(
     defer extra.deinit(allocator);
     if (encrypted) |value|
         try appendRar5EncryptionRecord(allocator, &extra, value.metadata);
+    if (entry.redirection) |redirection|
+        try appendRar5RedirectionRecord(allocator, &extra, redirection);
     try appendRar5FileFragment(
         allocator,
         output,
@@ -1098,7 +1128,15 @@ fn appendRar5FileFragment(
     if (entry.mtime != null) file_flags |= 0x0002;
     try appendVint(allocator, &specific, file_flags);
     try appendVint(allocator, &specific, entry.data.len);
-    const default_mode: u64 = if (entry.kind == .directory) 0o040755 else 0o100644;
+    const default_mode: u64 = if (entry.kind == .directory)
+        0o040755
+    else if (entry.redirection) |redirection|
+        switch (redirection.kind) {
+            .unix_symlink, .windows_symlink, .windows_junction => 0o120777,
+            .hard_link, .file_copy => 0o100644,
+        }
+    else
+        0o100644;
     try appendVint(allocator, &specific, entry.mode orelse default_mode);
     if (entry.mtime) |mtime| try appendLe32(allocator, &specific, mtime);
     try appendLe32(allocator, &specific, data_crc32);
@@ -1133,6 +1171,26 @@ fn appendRar5EncryptionRecord(
     try record.appendSlice(allocator, &metadata.salt);
     try record.appendSlice(allocator, &metadata.iv);
     if (metadata.password_check) |check| try record.appendSlice(allocator, &check);
+    try appendVint(allocator, output, record.items.len);
+    try output.appendSlice(allocator, record.items);
+}
+
+fn appendRar5RedirectionRecord(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    redirection: RedirectionOptions,
+) !void {
+    var record: std.ArrayList(u8) = .empty;
+    defer record.deinit(allocator);
+    try appendVint(allocator, &record, 5);
+    try appendVint(allocator, &record, @intFromEnum(redirection.kind));
+    try appendVint(
+        allocator,
+        &record,
+        @intFromBool(redirection.target_is_directory),
+    );
+    try appendVint(allocator, &record, redirection.target.len);
+    try record.appendSlice(allocator, redirection.target);
     try appendVint(allocator, output, record.items.len);
     try output.appendSlice(allocator, record.items);
 }
@@ -1257,6 +1315,116 @@ test "RAR4 and RAR5 stored writers round trip files and directories" {
             }
         }
     }
+}
+
+test "RAR5 writer emits structured file-system redirections" {
+    const allocator = std.testing.allocator;
+    const entries = [_]EncodeEntry{
+        .{ .name = "target.txt", .data = "redirection target" },
+        .{
+            .name = "unix-link",
+            .redirection = .{
+                .kind = .unix_symlink,
+                .target = "target.txt",
+            },
+        },
+        .{
+            .name = "hard-link",
+            .redirection = .{
+                .kind = .hard_link,
+                .target = "target.txt",
+            },
+        },
+        .{ .name = "folder", .kind = .directory },
+        .{
+            .name = "folder-link",
+            .redirection = .{
+                .kind = .unix_symlink,
+                .target = "folder",
+                .target_is_directory = true,
+            },
+        },
+    };
+    const encoded = try encodeAlloc(allocator, &entries, .{
+        .version = .rar5,
+        .compression = .rar50,
+        .solid = true,
+    });
+    defer allocator.free(encoded);
+    const parsed = try archive.parse(encoded);
+    try std.testing.expectEqual(entries.len, parsed.entry_count);
+    for (entries, 0..) |expected, index| {
+        const entry = try parsed.entryAt(index);
+        if (expected.redirection) |wanted| {
+            try std.testing.expect(entry.redirection);
+            const actual = entry.redirection_info orelse
+                return error.TestUnexpectedResult;
+            try std.testing.expectEqual(wanted.kind, actual.kind);
+            try std.testing.expectEqual(
+                wanted.target_is_directory,
+                actual.target_is_directory,
+            );
+            try std.testing.expectEqualSlices(u8, wanted.target, actual.target);
+            try std.testing.expect(actual.target_safe_path);
+            try std.testing.expectEqual(@as(usize, 0), entry.compressed_size);
+            try std.testing.expectEqual(@as(usize, 0), entry.uncompressed_size);
+            try std.testing.expectError(
+                error.UnsupportedRarFeature,
+                parsed.extractAlloc(allocator, entry),
+            );
+        } else {
+            try std.testing.expect(!entry.redirection);
+            try std.testing.expect(entry.redirection_info == null);
+        }
+    }
+
+    const link_entry = try parsed.entryAt(1);
+    const link_target = link_entry.redirection_info.?.target;
+    const target_offset = @intFromPtr(link_target.ptr) - @intFromPtr(encoded.ptr);
+    inline for (.{
+        .{ .back = @as(usize, 3), .value = @as(u8, 6) },
+        .{ .back = @as(usize, 2), .value = @as(u8, 2) },
+        .{ .back = @as(usize, 1), .value = @as(u8, 0) },
+    }) |corruption| {
+        const corrupt = try allocator.dupe(u8, encoded);
+        defer allocator.free(corrupt);
+        corrupt[target_offset - corruption.back] = corruption.value;
+        std.mem.writeInt(
+            u32,
+            corrupt[link_entry.header_offset..][0..4],
+            checksum.crc32(
+                corrupt[link_entry.header_offset + 4 ..][0 .. link_entry.header_size - 4],
+            ),
+            .little,
+        );
+        try std.testing.expectError(
+            error.InvalidRarArchive,
+            archive.parse(corrupt),
+        );
+    }
+
+    try std.testing.expectError(
+        error.UnsupportedRarEncodeOptions,
+        encodeAlloc(allocator, &.{.{
+            .name = "rar4-link",
+            .redirection = .{ .kind = .unix_symlink, .target = "target" },
+        }}, .{ .version = .rar4 }),
+    );
+    try std.testing.expectError(
+        error.UnsupportedRarEncodeOptions,
+        encodeAlloc(allocator, &.{.{
+            .name = "payload-link",
+            .data = "payload",
+            .redirection = .{ .kind = .unix_symlink, .target = "target" },
+        }}, .{ .version = .rar5 }),
+    );
+    try std.testing.expectError(
+        error.InvalidRarEntryName,
+        encodeAlloc(allocator, &.{.{
+            .name = "unsafe-link",
+            .redirection = .{ .kind = .unix_symlink, .target = "../target" },
+        }}, .{ .version = .rar5 }),
+    );
 }
 
 test "RAR29 writer emits deterministic multiblock LZ streams" {

@@ -33,6 +33,7 @@ pub const Entry = struct {
     encryption: ?archive_mod.Encryption,
     rar4_encryption: ?archive_mod.Rar4Encryption,
     redirection: bool,
+    redirection_info: ?archive_mod.Redirection = null,
     unknown_size: bool,
     safe_path: bool,
     fragment_index: usize,
@@ -131,6 +132,7 @@ pub const VolumeSet = struct {
                         .encryption = first.encryption,
                         .rar4_encryption = first.rar4_encryption,
                         .redirection = first.redirection,
+                        .redirection_info = first.redirection_info,
                         .unknown_size = first.unknown_size,
                         .safe_path = first.safe_path,
                         .fragment_index = start,
@@ -426,9 +428,21 @@ fn compatibleFragments(first: archive_mod.Entry, next: archive_mod.Entry) bool {
         first.uncompressed_size == next.uncompressed_size and
         first.solid == next.solid and first.directory == next.directory and
         first.encrypted == next.encrypted and first.redirection == next.redirection and
+        sameRedirection(first.redirection_info, next.redirection_info) and
         std.meta.eql(first.encryption, next.encryption) and
         std.meta.eql(first.rar4_encryption, next.rar4_encryption) and
         first.unknown_size == next.unknown_size;
+}
+
+fn sameRedirection(
+    a: ?archive_mod.Redirection,
+    b: ?archive_mod.Redirection,
+) bool {
+    if (a == null or b == null) return a == null and b == null;
+    return a.?.kind == b.?.kind and
+        a.?.target_is_directory == b.?.target_is_directory and
+        a.?.target_safe_path == b.?.target_safe_path and
+        std.mem.eql(u8, a.?.target, b.?.target);
 }
 
 fn sameEntry(a: Entry, b: Entry) bool {

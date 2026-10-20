@@ -22010,3 +22010,16 @@ reuse, so production keeps the simpler independently owned plans.
   method-20/93 frames backed by a generated standard dictionary: system `zstd`
   must reject each without `-D` and decode it byte-exactly with the dictionary
   (`incremental_zstd_dictionary_cases=4`).
+
+- Added structured RAR5 file-system redirections to the reader and writer.
+  Type-5 extra records now expose Unix/Windows symlink, junction, hard-link,
+  and file-copy kinds, the directory-target flag, borrowed UTF-8 target, and a
+  separate target path-safety result. `RarEncodeEntry.redirection` emits the
+  same record with deterministic Unix modes, zero payload, solid-chain reset,
+  header-encryption and volume compatibility. RAR4, payload-bearing,
+  data-encrypted, empty, invalid-UTF-8, NUL, absolute, and parent-component
+  targets are rejected. Focused mutations recompute the header CRC before
+  pinning invalid type, flags, and target length. The required RAR differential
+  lists three generated links through Vort (`writer_redirections=3`); optional
+  7-Zip validation tests the archive and names all three
+  (`writer_redirections_external=3` when available).

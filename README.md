@@ -474,7 +474,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   unsalted AES-128 data/header encryption with historical long-password KDF
   behavior, RAR15 byte-stream and RAR20/26 self-updating block decryption through
   Vail, and allocator-owned custom Unicode preferred names with deterministic
-  UTF-16 writer fields, explicit redirection/unknown-size errors, sequential
+  UTF-16 writer fields, structured RAR5 symlink/junction/hardlink/file-copy
+  metadata plus deterministic safe-target writing, explicit unknown-size
+  errors, sequential
   same-generation and mixed RAR15/RAR20 solid continuation, ordered RAR4/RAR5
   multi-volume reconstruction for stored/compressed/solid split entries, and
   deterministic RAR29 compatibility LZ writing with canonical tables,

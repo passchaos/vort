@@ -9,6 +9,40 @@ pub fn main(init: std.process.Init) !void {
     const version_text = args.next() orelse "rar5";
     const version: vort.RarVersion = if (std.mem.eql(u8, version_text, "rar4")) .rar4 else .rar5;
     const mode = args.next() orelse "stored";
+    if (std.mem.eql(u8, mode, "rar5-redirections")) {
+        if (version != .rar5) return error.UnsupportedRarVersion;
+        const entries = [_]vort.RarEncodeEntry{
+            .{ .name = "target.txt", .data = "RAR5 redirection target\n" },
+            .{
+                .name = "unix-link",
+                .redirection = .{ .kind = .unix_symlink, .target = "target.txt" },
+            },
+            .{
+                .name = "hard-link",
+                .redirection = .{ .kind = .hard_link, .target = "target.txt" },
+            },
+            .{ .name = "folder", .kind = .directory },
+            .{
+                .name = "folder-link",
+                .redirection = .{
+                    .kind = .unix_symlink,
+                    .target = "folder",
+                    .target_is_directory = true,
+                },
+            },
+        };
+        const bytes = try vort.encodeRarAlloc(init.gpa, &entries, .{
+            .version = .rar5,
+            .compression = .rar50,
+            .solid = true,
+        });
+        defer init.gpa.free(bytes);
+        try std.Io.Dir.cwd().writeFile(
+            init.io,
+            .{ .sub_path = output_path, .data = bytes },
+        );
+        return;
+    }
     if (std.mem.eql(u8, mode, "rar4-encrypted-volumes-stored") or
         std.mem.eql(u8, mode, "rar4-encrypted-volumes-rar29"))
     {

@@ -85,6 +85,21 @@ pub const Name = struct {
     }
 };
 
+pub const RedirectionType = enum(u8) {
+    unix_symlink = 1,
+    windows_symlink = 2,
+    windows_junction = 3,
+    hard_link = 4,
+    file_copy = 5,
+};
+
+pub const Redirection = struct {
+    kind: RedirectionType,
+    target_is_directory: bool,
+    target: []const u8,
+    target_safe_path: bool,
+};
+
 pub const Entry = struct {
     name: Name,
     rar4_ansi_name: ?Name,
@@ -115,6 +130,7 @@ pub const Entry = struct {
     split_after: bool,
     unknown_size: bool,
     redirection: bool,
+    redirection_info: ?Redirection = null,
     safe_path: bool,
 
     pub fn isDirectory(self: Entry) bool {
@@ -1412,6 +1428,7 @@ fn parseRar4BlockInternal(
             .split_after = raw.flags & rar4_file_split_after != 0,
             .unknown_size = false,
             .redirection = false,
+            .redirection_info = null,
             .safe_path = isSafePath(name_bytes),
         },
         .next_offset = next_offset,
@@ -1548,7 +1565,12 @@ fn parseRar5BlockInternal(
     const directory = file_flags & rar5_file_directory != 0;
     const encryption = try rar5EncryptionRecord(bytes, raw.extra_start, raw.extra_end);
     const encrypted = encryption != null;
-    const redirection = try rar5ExtraHasType(bytes, raw.extra_start, raw.extra_end, 5);
+    const redirection_info = try rar5RedirectionRecord(
+        bytes,
+        raw.extra_start,
+        raw.extra_end,
+    );
+    const redirection = redirection_info != null;
     if (directory and (raw.data_size != 0 or unpacked_size != 0)) return error.InvalidRarArchive;
     const method: Method = if (compression_version > 1)
         .unsupported
@@ -1594,6 +1616,7 @@ fn parseRar5BlockInternal(
             .split_after = raw.flags & rar5_header_split_after != 0,
             .unknown_size = file_flags & rar5_file_unknown_size != 0,
             .redirection = redirection,
+            .redirection_info = redirection_info,
             .safe_path = isSafePath(name_bytes),
         },
         .next_offset = raw.next_offset,
@@ -1658,12 +1681,12 @@ fn rar5EncryptionRecord(
     return result;
 }
 
-fn rar5ExtraHasType(
+fn rar5RedirectionRecord(
     bytes: []const u8,
     start: usize,
     end: usize,
-    wanted: u64,
-) Error!bool {
+) Error!?Redirection {
+    var result: ?Redirection = null;
     var cursor = start;
     while (cursor < end) {
         const record_size_u64 = try readVint(bytes, &cursor, end);
@@ -1671,10 +1694,43 @@ fn rar5ExtraHasType(
         if (record_size == 0) return error.InvalidRarArchive;
         const record_end = try checkedEnd(cursor, record_size, end);
         const record_type = try readVint(bytes, &cursor, record_end);
-        if (record_type == wanted) return true;
+        if (record_type == 5) {
+            if (result != null) return error.InvalidRarArchive;
+            const kind_raw = try readVint(bytes, &cursor, record_end);
+            const kind_u8 = std.math.cast(u8, kind_raw) orelse
+                return error.InvalidRarArchive;
+            const kind: RedirectionType = switch (kind_u8) {
+                1 => .unix_symlink,
+                2 => .windows_symlink,
+                3 => .windows_junction,
+                4 => .hard_link,
+                5 => .file_copy,
+                else => return error.InvalidRarArchive,
+            };
+            const flags = try readVint(bytes, &cursor, record_end);
+            if (flags & ~@as(u64, 1) != 0) return error.InvalidRarArchive;
+            const target_len_u64 = try readVint(bytes, &cursor, record_end);
+            const target_len = std.math.cast(usize, target_len_u64) orelse
+                return error.IntegerOverflow;
+            if (target_len == 0) return error.InvalidRarArchive;
+            const target_end = try checkedEnd(cursor, target_len, record_end);
+            if (target_end != record_end) return error.InvalidRarArchive;
+            const target = bytes[cursor..target_end];
+            if (!std.unicode.utf8ValidateSlice(target) or
+                std.mem.indexOfScalar(u8, target, 0) != null)
+            {
+                return error.InvalidRarArchive;
+            }
+            result = .{
+                .kind = kind,
+                .target_is_directory = flags & 1 != 0,
+                .target = target,
+                .target_safe_path = isSafePath(target),
+            };
+        }
         cursor = record_end;
     }
-    return false;
+    return result;
 }
 
 fn rar5DictionarySize(compression_info: u64, algorithm_version: u8) Error!usize {
@@ -1739,7 +1795,16 @@ fn sameEntry(a: Entry, b: Entry) bool {
         std.meta.eql(a.rar4_encryption, b.rar4_encryption) and
         a.split_before == b.split_before and a.split_after == b.split_after and
         a.unknown_size == b.unknown_size and a.redirection == b.redirection and
+        sameRedirection(a.redirection_info, b.redirection_info) and
         a.safe_path == b.safe_path and std.mem.eql(u8, a.name.bytes, b.name.bytes);
+}
+
+fn sameRedirection(a: ?Redirection, b: ?Redirection) bool {
+    if (a == null or b == null) return a == null and b == null;
+    return a.?.kind == b.?.kind and
+        a.?.target_is_directory == b.?.target_is_directory and
+        a.?.target_safe_path == b.?.target_safe_path and
+        std.mem.eql(u8, a.?.target, b.?.target);
 }
 
 fn normalizedSeparator(byte: u8) u8 {
