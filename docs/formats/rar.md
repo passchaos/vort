@@ -224,9 +224,9 @@ CRC-32 protected, stored without compression, and capped at the interoperable
 file-data salt/IV/KDF tuple for the CMT payload and uses Vail for PBKDF2,
 AES-256-CBC, password checks, and keyed CRCs. Header-encrypted archives require
 this payload encryption with the same password so the comment cannot leak.
-Multi-volume output writes CMT only in the first volume and accounts its wire
-payload against that volume's explicit payload budget; the complete comment
-must fit there because split CMT service records are not emitted yet.
+Multi-volume output writes the complete CMT only in the first volume. Matching
+RARLab's `-v` behavior, comment bytes do not consume the file-payload budget,
+so the first physical volume can exceed that budget by its CMT header and data.
 `encodeRarVolumesAlloc` splits logical RAR4/RAR5 members at an explicit maximum
 payload-per-volume budget and returns an owned `EncodedVolumes` collection. It
 writes numbered volume main headers, per-fragment split flags and CRCs, and

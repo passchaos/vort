@@ -9,6 +9,26 @@ pub fn main(init: std.process.Init) !void {
     const version_text = args.next() orelse "rar5";
     const version: vort.RarVersion = if (std.mem.eql(u8, version_text, "rar4")) .rar4 else .rar5;
     const mode = args.next() orelse "stored";
+    if (std.mem.eql(u8, mode, "rar5-comment-volumes")) {
+        if (version != .rar5) return error.UnsupportedRarVersion;
+        const entries = [_]vort.RarEncodeEntry{.{
+            .name = "comment-volume.txt",
+            .data = "RAR5 comment volume payload\n" ** 16,
+        }};
+        var volumes = try vort.encodeRarVolumesAlloc(init.gpa, &entries, .{
+            .comment = "Vort comment outside payload budget\n" ** 8,
+        }, 64);
+        defer volumes.deinit();
+        for (volumes.volumes, 1..) |volume, number| {
+            const path = try std.fmt.allocPrint(init.gpa, "{s}.part{d}.rar", .{
+                output_path,
+                number,
+            });
+            defer init.gpa.free(path);
+            try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = volume });
+        }
+        return;
+    }
     if (std.mem.eql(u8, mode, "rar5-comment-encrypted")) {
         if (version != .rar5) return error.UnsupportedRarVersion;
         const password = "rar5-comment-password";

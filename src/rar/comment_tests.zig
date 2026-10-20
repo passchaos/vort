@@ -261,9 +261,21 @@ test "RAR5 comments preserve empty values and encrypted multi-volume metadata" {
     try std.testing.expect(empty_archive.hasComment());
     try std.testing.expectEqual(@as(usize, 0), empty_archive.comment.?.len);
 
+    const oversized_comment = "comment-outside-file-payload-budget\n" ** 4;
+    var comment_only_volumes = try writer.encodeVolumesAlloc(
+        allocator,
+        &no_entries,
+        .{ .comment = oversized_comment },
+        16,
+    );
+    defer comment_only_volumes.deinit();
+    try std.testing.expectEqual(@as(usize, 1), comment_only_volumes.volumes.len);
+    const comment_only = try archive.parse(comment_only_volumes.volumes[0]);
+    try std.testing.expectEqualSlices(u8, oversized_comment, comment_only.comment.?);
+
     const volume_set = @import("volume_set.zig");
     const password = "volume comment password";
-    const comment = "volume comment 世界";
+    const comment = "volume comment 世界" ** 8;
     const payload = "0123456789abcdef" ** 12;
     const entries = [_]writer.EncodeEntry{.{
         .name = "split.bin",
@@ -287,6 +299,8 @@ test "RAR5 comments preserve empty values and encrypted multi-volume metadata" {
     const budget = 64;
     var baseline = try writer.encodeVolumesAlloc(allocator, &entries, options, budget);
     defer baseline.deinit();
+    const baseline_first = try archive.parse(baseline.volumes[0]);
+    try std.testing.expectEqual(budget, (try baseline_first.entryAt(0)).compressed_size);
     var fragment_count: usize = 0;
     for (baseline.volumes) |volume|
         fragment_count += (try archive.parse(volume)).entry_count;
@@ -313,6 +327,10 @@ test "RAR5 comments preserve empty values and encrypted multi-volume metadata" {
     defer set.deinit();
     try std.testing.expectEqualSlices(u8, comment, set.archives[0].archive.comment.?);
     try std.testing.expect(set.archives[0].archive.comment_encrypted);
+    try std.testing.expectEqual(
+        budget,
+        (try set.archives[0].archive.entryAt(0)).compressed_size,
+    );
     for (set.archives[1..]) |owned|
         try std.testing.expect(!owned.archive.hasComment());
     const decoded = try set.extractByNameAllocWithOptions(

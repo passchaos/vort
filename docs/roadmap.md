@@ -22031,11 +22031,15 @@ reuse, so production keeps the simpler independently owned plans.
   or owned comment bytes under the existing metadata limit. The writer adds bounded
   UTF-8 `comment` and independent `comment_encryption` options, reusing Vail
   for PBKDF2/AES/password-check/checksum primitives; header encryption requires
-  the same password and one additional header IV. Complete comments compose
-  with first-volume payload accounting; split CMT records remain follow-up
-  work. Fixed RAR 7.12 plain and `-hp` fixtures, plain,
+  the same password and one additional header IV. Matching RARLab, complete
+  comments stay in the first volume without consuming the file-payload budget,
+  even when that makes the physical volume larger. Fixed RAR 7.12 plain and
+  `-hp` fixtures, plain,
   payload-encrypted, header-encrypted and multi-volume round trips, plus
   duplicate/late/corrupt and input-limit rejections cover the wire. The RAR
   differential reports `writer_comments=2`, optionally validates plain and
   encrypted-header Vort output externally, and generates two plain/encrypted
-  reference comments when the RAR tool is available.
+  reference comments when the RAR tool is available. The volume probe reports
+  `writer_comment_volumes=1`, verifies a full-size first file fragment despite
+  an over-budget CMT, reconstructs the file, and optionally asks an external
+  tool to test the first volume.

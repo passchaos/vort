@@ -250,6 +250,8 @@ def main() -> None:
     writer_redirections_external = 0
     writer_comments = 0
     writer_comments_external = 0
+    writer_comment_volumes = 0
+    writer_comment_volumes_external = 0
     reference_comments = 0
     reference_rar4_unicode = 0
     reference_stored = 0
@@ -361,6 +363,62 @@ def main() -> None:
                     str(encrypted_comment_archive),
                 )
                 writer_comments_external += 1
+
+            comment_volume_prefix = temp / "vort-rar5-comment-volumes"
+            run(
+                args.writer,
+                str(comment_volume_prefix),
+                "rar5",
+                "rar5-comment-volumes",
+            )
+            comment_volumes = tuple(
+                sorted(temp.glob("vort-rar5-comment-volumes.part*.rar"))
+            )
+            if len(comment_volumes) < 2:
+                raise AssertionError("RAR5 comment volume probe did not split file data")
+            volume_comment = "Vort comment outside payload budget\n" * 8
+            first_listing = run(
+                args.cli,
+                "list-rar-file",
+                str(comment_volumes[0]),
+            ).stdout
+            if (
+                f"comment_bytes={len(volume_comment.encode('utf-8'))}" not in first_listing
+                or "compressed=64" not in first_listing
+                or comment_volumes[0].stat().st_size <= len(volume_comment.encode("utf-8"))
+            ):
+                raise AssertionError(
+                    f"RAR5 first-volume comment budget mismatch: {first_listing}"
+                )
+            for continuation in comment_volumes[1:]:
+                continuation_listing = run(
+                    args.cli,
+                    "list-rar-file",
+                    str(continuation),
+                ).stdout
+                if "has_comment=false" not in continuation_listing:
+                    raise AssertionError(
+                        f"RAR5 comment repeated in continuation volume: {continuation_listing}"
+                    )
+            comment_volume_output = temp / "vort-rar5-comment-volumes.out"
+            volume_payload = b"RAR5 comment volume payload\n" * 16
+            run(
+                args.cli,
+                "extract-rar-volumes",
+                "comment-volume.txt",
+                str(comment_volume_output),
+                str(len(volume_payload)),
+                *(str(volume) for volume in comment_volumes),
+            )
+            if comment_volume_output.read_bytes() != volume_payload:
+                raise AssertionError("RAR5 comment volume payload mismatch")
+            writer_comment_volumes = 1
+            if seven_zip is not None:
+                run(seven_zip, "t", str(comment_volumes[0]))
+                writer_comment_volumes_external = 1
+            elif rar_tool is not None:
+                run(rar_tool, "t", "-idq", "-p-", str(comment_volumes[0]))
+                writer_comment_volumes_external = 1
 
             redirection_archive = temp / "vort-rar5-redirections.rar"
             run(
@@ -1947,6 +2005,8 @@ def main() -> None:
         f"writer_redirections_external={writer_redirections_external} "
         f"writer_comments={writer_comments} "
         f"writer_comments_external={writer_comments_external} "
+        f"writer_comment_volumes={writer_comment_volumes} "
+        f"writer_comment_volumes_external={writer_comment_volumes_external} "
         f"reference_comments={reference_comments} "
         f"reference_rar4_unicode={reference_rar4_unicode} "
         f"reference_stored={reference_stored} reference_compressed={reference_compressed} "

@@ -194,18 +194,14 @@ pub fn encodeVolumesAlloc(
         options.solid,
         header_writer_ptr,
     );
-    if (options.comment) |comment| {
-        const comment_payload_size = try appendRar5Comment(
+    if (options.comment) |comment|
+        _ = try appendRar5Comment(
             allocator,
             &current,
             comment,
             options.comment_encryption,
             header_writer_ptr,
         );
-        if (comment_payload_size > max_payload_per_volume)
-            return error.InvalidRarVolumeSize;
-        payload_in_volume = comment_payload_size;
-    }
     var encoder = rar50_encoder.Encoder.init(allocator, .{
         .dictionary_size = options.dictionary_size,
         .block_size = options.block_size,
