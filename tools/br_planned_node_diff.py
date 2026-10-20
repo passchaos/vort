@@ -138,6 +138,21 @@ def main() -> int:
     if actual != expected:
         raise SystemExit("q10-command-state-extended: node output mismatch")
     print(f"brotli planned q10-command-state-extended node diff: encoded={len(encoded)} decoded={len(actual)}")
+    block_len = 64 * 1024
+    repeated_len = 8 * 1024
+    expected = bytearray(block_len + repeated_len)
+    state = 0x17B17B1D
+    for i in range(block_len):
+        state = (state * 1664525 + 1013904223) & 0xFFFFFFFF
+        expected[i] = (state >> 24) & 0xFF
+    expected[block_len:] = expected[:repeated_len]
+    encoded = subprocess.check_output([sys.argv[1], "q8-wide-history"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("q8-wide-history: node output mismatch")
+    if len(encoded) != 65_554:
+        raise SystemExit(f"q8-wide-history: cross-64-KiB wire changed: {len(encoded)} bytes")
+    print(f"brotli planned q8-wide-history node diff: encoded={len(encoded)} decoded={len(actual)}")
     expected = (
         b"alpha beta gamma delta alpha beta gamma delta " * 64
         + b"qzxwvbnm1234567890QZXWVBNM!@#$%^&*"

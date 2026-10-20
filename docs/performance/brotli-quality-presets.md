@@ -1,6 +1,6 @@
 # Brotli quality and mode preset status
 
-Date: 2026-10-15.
+Date: 2026-10-20.
 
 ## Scope
 
@@ -49,8 +49,13 @@ qualities keep exact
 compressed-versus-stored comparison. The default
 advertised window is 16 bits. q0...q5 accept 10...16-bit windows; q6...q11
 accept RFC windows 10...24. The quality path's ordinary LZ matcher is capped at
-`lz77.max_window_len`, currently 65,535 bytes, even when a wider window is
-advertised.
+`lz77.max_window_len`, currently 65,535 bytes. q6...q11 with an explicit
+17...24-bit window now layer the Brotli sparse long-distance matcher over its
+literal runs, so the emitted command plan can use the complete advertised
+distance range instead of merely writing a wider header. The stream core's
+ordinary dictionary matcher also consumes the complete 16-bit retained
+history, rather than truncating cross-meta-block search to the generic 32 KiB
+default.
 
 Bounded stream planning uses a quality-specific automatic block size: q0 uses
 16 KiB for lower latency; q1, q6, q7, and q11 use 32 KiB; q2...q5 and q8...q10
@@ -252,6 +257,22 @@ requested wire, incremental `nextStream` installs the new stream's value, and
 omitting it on the next stream restores the 8 KiB default. A 12,992-byte
 opt-in chunked fixture encodes to 65 bytes and independently decodes through
 Node/libbrotli.
+
+Wide-window ratio-family streams use the same exact-wire arbitration. The
+one-shot q6...q11 path augments its ordinary command plan directly; chunked and
+incremental paths augment each block against the retained suffix immediately
+preceding it. The matcher ignores history older than `2^WBITS-16`, preserves
+static/compound command sources, and handles a source match that crosses the
+history/current-block boundary. A locked q8 fixture copies 8 KiB from exactly
+65,536 bytes back: one-shot, chunked, and arbitrarily fragmented incremental
+surfaces all emit a 17-bit stream with `max_lz77_distance=65536`; chunked and
+incremental output are byte-identical, and Node/libbrotli independently decodes
+the 65,554-byte wire to 73,728 bytes. A separate 48 KiB fixture proves the
+stream dictionary parser now covers the upper half of the standard 16-bit
+history as well. The primary hash matcher remains 16-bit; sparse long-distance
+augmentation is a bounded additive candidate, not a claim of libbrotli's
+large-stream parsing strategy.
+
 Validation also corrected two stale pre-existing benchmark assertions against
 the already-shipped history-aware stream core. At baseline `c03ed3d1`, the
 multi-block row is 131 bytes versus 127 bytes for three separately finalized

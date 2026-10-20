@@ -155,6 +155,17 @@ major gaps before Vort can claim broad industry-best parity:
   (`1.0167x`), while seven default controls remain neutral at `0.9993x`. This is
   retained as a bounded hot-loop improvement, not evidence for raising the
   default ceiling.
+  Wide-window quality encoding is no longer header-only. q6...q11 one-shot
+  streams with explicit 17...24-bit windows now add the existing bounded sparse
+  long-distance candidate, while the shared chunked/incremental ratio-family
+  core searches retained history beyond 64 KiB. The ordinary history-backed
+  planner also uses the complete standard 16-bit distance range instead of the
+  generic 32 KiB dictionary default. Locked 48 KiB and 65,536-byte-distance
+  fixtures cover the two boundaries; the latter is byte-identical between
+  chunked and arbitrarily fragmented incremental schedules, and Node/libbrotli
+  decodes its 65,554-byte q8 wire to the exact 73,728-byte payload. The primary
+  matcher remains 16-bit and the long pass remains sparse, so broader
+  large-stream ratio parity is still open.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
   entropy block switching, static dictionaries, consecutive compressed
@@ -254,9 +265,9 @@ from neighboring checkouts add coverage without replacing the required set.
 
 The next highest-value deliverable is broader real-corpus and cross-platform
 Brotli decoder evidence, followed by the missing quality-specific Brotli
-encoder engines and large-stream planning listed below. Performance work should
-then resume on the profiled DEFLATE matcher/tree stages with pinned, interleaved
-A/B evidence.
+encoder engines and remaining large-stream planning listed below. Performance
+work should then resume on the profiled DEFLATE matcher/tree stages with pinned,
+interleaved A/B evidence.
 
 The planned Brotli one-shot encoder now exposes `quality = 0...11` and
 `mode = generic/text/font`, backed by a deterministic 12-by-3 policy matrix.

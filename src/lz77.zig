@@ -3019,7 +3019,7 @@ fn findBestCombinedScanMatch(
     const minimum = minMatch(options);
     if (input.len - pos < minimum or options.max_chain == 0) return .{};
     const current = dict.len + pos;
-    const start = current -| @min(options.window_len, default_window_len);
+    const start = current -| @min(options.window_len, max_window_len);
     const max_len = @min(maxMatch(options), input.len - pos);
     var best = MatchCandidate{};
     var checked: usize = 0;
@@ -3286,7 +3286,7 @@ fn byteAt(dict: []const u8, input: []const u8, pos: usize) u8 {
 }
 
 fn activeDictionary(dictionary: []const u8, options: GreedyOptions) []const u8 {
-    const max_len = @min(options.window_len, default_window_len);
+    const max_len = @min(options.window_len, max_window_len);
     return dictionary[dictionary.len - @min(dictionary.len, max_len) ..];
 }
 
@@ -4369,6 +4369,50 @@ test "dictionary-backed hash and lazy planners can emit preset-history matches" 
             },
             else => return error.TestExpectedEqual,
         }
+    }
+}
+
+test "dictionary-backed planners cover the complete 16-bit distance range" {
+    const history_len = 48 * 1024;
+    const match_len = max_match_len;
+    const history = try std.testing.allocator.alloc(u8, history_len);
+    defer std.testing.allocator.free(history);
+    var state: u32 = 0x16b1_7b1d;
+    for (history) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    const input = history[0..match_len];
+    const options: GreedyOptions = .{
+        .window_len = max_window_len,
+        .max_chain = 64,
+        .nice_len = match_len,
+        .min_match = 4,
+        .max_match = match_len,
+    };
+    const hash_plan = try hashGreedyPlanAllocWithDictionary(
+        std.testing.allocator,
+        input,
+        history,
+        options,
+    );
+    defer hash_plan.deinit(std.testing.allocator);
+    const lazy_plan = try lazyGreedyPlanAllocWithDictionary(
+        std.testing.allocator,
+        input,
+        history,
+        options,
+    );
+    defer lazy_plan.deinit(std.testing.allocator);
+
+    for ([_]GreedyPlan{ hash_plan, lazy_plan }) |plan| {
+        try std.testing.expectEqual(@as(usize, 1), plan.tokens.len);
+        const match = switch (plan.tokens[0]) {
+            .match => |value| value,
+            .literal => return error.TestExpectedEqual,
+        };
+        try std.testing.expectEqual(@as(u16, history_len), match.distance);
+        try std.testing.expectEqual(@as(u16, match_len), match.length);
     }
 }
 

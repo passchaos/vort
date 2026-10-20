@@ -180,6 +180,33 @@ pub fn main(init: std.process.Init) !void {
         try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
         return;
     }
+    if (std.mem.eql(u8, mode, "q8-wide-history")) {
+        const block_len = 64 * 1024;
+        const repeated_len = 8 * 1024;
+        const payload = try init.gpa.alloc(u8, block_len + repeated_len);
+        defer init.gpa.free(payload);
+        var state: u32 = 0x17b1_7b1d;
+        for (payload[0..block_len]) |*byte| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = @truncate(state >> 24);
+        }
+        @memcpy(payload[block_len..], payload[0..repeated_len]);
+        const chunks = [_][]const u8{
+            payload[0..block_len],
+            payload[block_len..],
+        };
+        const encoded = try vort.brEncodePlannedStreamChunksWithOptionsAlloc(
+            init.gpa,
+            &chunks,
+            .{ .quality = 8, .window_bits = 17 },
+        );
+        defer init.gpa.free(encoded);
+        const summary = try vort.brSummarizeStream(encoded);
+        if (summary.window_bits != 17 or summary.max_lz77_distance != block_len)
+            return error.InvalidBlockPlan;
+        try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
+        return;
+    }
     if (std.mem.eql(u8, mode, "chunked-multiblock")) {
         const first = "alpha beta gamma delta alpha beta gamma delta " ** 64;
         const middle = "qzxwvbnm1234567890QZXWVBNM!@#$%^&*";

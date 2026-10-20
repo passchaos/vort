@@ -101,6 +101,132 @@ test "incremental planned encoder matches across block history" {
     try std.testing.expectEqualSlices(u8, &input, decoded);
 }
 
+test "quality wide windows match beyond 64 KiB across every planned surface" {
+    const block_len = 64 * 1024;
+    const repeated_len = 8 * 1024;
+    const input = try std.testing.allocator.alloc(u8, block_len + repeated_len);
+    defer std.testing.allocator.free(input);
+    var state: u32 = 0x17b1_7b1d;
+    for (input[0..block_len]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(input[block_len..], input[0..repeated_len]);
+
+    const narrow_one_shot = try br.encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        input,
+        .{ .quality = 8, .window_bits = 16 },
+    );
+    defer std.testing.allocator.free(narrow_one_shot);
+    const wide_one_shot = try br.encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        input,
+        .{ .quality = 8, .window_bits = 17 },
+    );
+    defer std.testing.allocator.free(wide_one_shot);
+    try std.testing.expect(wide_one_shot.len + repeated_len / 2 < narrow_one_shot.len);
+
+    const chunks = [_][]const u8{
+        input[0..block_len],
+        input[block_len..],
+    };
+    const narrow_chunked = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 8, .window_bits = 16 },
+    );
+    defer std.testing.allocator.free(narrow_chunked);
+    const wide_chunked = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 8, .window_bits = 17 },
+    );
+    defer std.testing.allocator.free(wide_chunked);
+    try std.testing.expect(wide_chunked.len + repeated_len / 2 < narrow_chunked.len);
+
+    var encoder = br.IncrementalPlannedStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{
+            .stream = .{ .quality = 8, .window_bits = 17 },
+            .block_len = block_len,
+        },
+    );
+    defer encoder.deinit();
+    const incremental = try encodeIncremental(&encoder, input, 997, 17);
+    defer std.testing.allocator.free(incremental);
+    try std.testing.expectEqualSlices(u8, wide_chunked, incremental);
+
+    for ([_][]const u8{ wide_one_shot, wide_chunked, incremental }) |wire| {
+        const summary = try br.summarizeStream(wire);
+        try std.testing.expectEqual(@as(u5, 17), summary.window_bits);
+        try std.testing.expectEqual(block_len, summary.max_lz77_distance);
+        const decoded = try br.decodeStreamAllocExactSize(
+            std.testing.allocator,
+            wire,
+            input.len,
+        );
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, input, decoded);
+    }
+}
+
+test "quality streams use the complete standard 16-bit history" {
+    const block_len = 48 * 1024;
+    const repeated_len = 8 * 1024;
+    const input = try std.testing.allocator.alloc(u8, block_len + repeated_len);
+    defer std.testing.allocator.free(input);
+    var state: u32 = 0x16b1_7b1d;
+    for (input[0..block_len]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(input[block_len..], input[0..repeated_len]);
+    const chunks = [_][]const u8{
+        input[0..block_len],
+        input[block_len..],
+    };
+    const narrow = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 8, .window_bits = 15, .block_len = block_len },
+    );
+    defer std.testing.allocator.free(narrow);
+    const complete = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 8, .window_bits = 16, .block_len = block_len },
+    );
+    defer std.testing.allocator.free(complete);
+    try std.testing.expect(complete.len + repeated_len / 2 < narrow.len);
+
+    var encoder = br.IncrementalPlannedStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{
+            .stream = .{
+                .quality = 8,
+                .window_bits = 16,
+                .block_len = block_len,
+            },
+            .block_len = block_len,
+        },
+    );
+    defer encoder.deinit();
+    const incremental = try encodeIncremental(&encoder, input, 509, 19);
+    defer std.testing.allocator.free(incremental);
+    try std.testing.expectEqualSlices(u8, complete, incremental);
+
+    const summary = try br.summarizeStream(complete);
+    try std.testing.expectEqual(block_len, summary.max_lz77_distance);
+    const decoded = try br.decodeStreamAllocExactSize(
+        std.testing.allocator,
+        complete,
+        input.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
 test "incremental planned encoder bounds history to the advertised window" {
     const block_len = 8 * 1024;
     const input_len = block_len * 2;

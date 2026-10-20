@@ -2336,6 +2336,15 @@ cost model and command beam with the committed four-entry recent-distance ring;
 the required Node/libbrotli differential includes a two-block 8 KiB q10 stream,
 while internal tests require chunked and fragmented incremental schedules to
 produce identical wire.
+Explicit 17...24-bit windows at q6...q11 now drive actual sparse
+long-distance matching rather than only a wider stream header. The one-shot
+path augments literal runs in its ordinary command plan, while chunked and
+incremental encoders match against the immediately preceding retained history;
+all candidates remain subject to complete-wire and stored arbitration. The
+stream dictionary matcher also covers the upper 32...64 KiB half of a standard
+16-bit window. A locked q8 stream copies 8 KiB from exactly 65,536 bytes back,
+is byte-identical between chunked and fragmented incremental schedules, and is
+independently decoded by Node/libbrotli (`65,554 -> 73,728` bytes).
 `BrotliPlannedEncodeOptions.command_state_max_input_kib` and the corresponding
 chunked/incremental stream option expose the complete stateful search range for
 callers willing to pay for it: omission keeps the measured 8 KiB default, zero

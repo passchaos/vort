@@ -4576,18 +4576,39 @@ fn encodePlannedStreamWithPreparedSharedDictionaryAlloc(
         }
     }
 
-    if (schedule == null and options.level == .ratio and
+    const use_long_distance = if (schedule) |active|
+        active.family == .ratio
+    else
+        options.level == .ratio;
+    const long_distance_window = if (schedule != null)
+        window_bits >= 17
+    else
+        options.window_bits == null or window_bits >= 17;
+    if (use_long_distance and
         input.len > long_distance.min_distance and
-        (options.window_bits == null or window_bits >= 17))
+        long_distance_window)
     {
-        const long_window_bits: u5 = options.window_bits orelse 17;
+        const long_window_bits: u5 = if (schedule != null)
+            window_bits
+        else
+            options.window_bits orelse 17;
         const long_max_distance = (@as(usize, 1) << long_window_bits) - 16;
-        if (try long_distance.augmentAllocWithMaxDistance(
-            allocator,
-            input,
-            base_commands,
-            long_max_distance,
-        )) |long_commands| {
+        const literal_commands = [_]command_plan.Command{.{
+            .insert_start = 0,
+            .insert_len = input.len,
+        }};
+        const proposal_count: usize = if (commandPlanHasCopy(base_commands)) 2 else 1;
+        for (0..proposal_count) |proposal_index| {
+            const proposal = if (proposal_index == 0)
+                base_commands
+            else
+                &literal_commands;
+            const long_commands = try long_distance.augmentAllocWithMaxDistance(
+                allocator,
+                input,
+                proposal,
+                long_max_distance,
+            ) orelse continue;
             defer allocator.free(long_commands);
             var long_stats: encoder_stats.PlannedEncodeStats = .{};
             const candidate = encodeCommandPlanWithOptionsAlloc(
@@ -4762,6 +4783,39 @@ fn encodePlannedStreamQualityWithOptionsAlloc(
     if (inherited_q10) |q10| {
         retainSmallerOwnedWire(allocator, &best, q10);
         inherited_q10 = null;
+    }
+
+    if (schedule.family == .ratio and window_bits >= 17 and
+        input.len > long_distance.min_distance)
+    {
+        const max_backward_distance = (@as(usize, 1) << window_bits) - 16;
+        const literal_commands = [_]command_plan.Command{.{
+            .insert_start = 0,
+            .insert_len = input.len,
+        }};
+        const proposal_count: usize = if (commandPlanHasCopy(command_stream.commands)) 2 else 1;
+        for (0..proposal_count) |proposal_index| {
+            const proposal = if (proposal_index == 0)
+                command_stream.commands
+            else
+                &literal_commands;
+            const long_commands = try long_distance.augmentAllocWithMaxDistance(
+                allocator,
+                input,
+                proposal,
+                max_backward_distance,
+            ) orelse continue;
+            defer allocator.free(long_commands);
+            var long_stats: encoder_stats.PlannedEncodeStats = .{};
+            const long_candidate = try encodeLazyCommandPlanAlloc(
+                allocator,
+                input,
+                long_commands,
+                &long_stats,
+                wire_options,
+            );
+            retainSmallerOwnedWire(allocator, &best, long_candidate);
+        }
     }
 
     const search_distance_parameters = options.distance_parameter_search orelse schedule.search_distance_parameters;
@@ -5128,6 +5182,12 @@ fn retainSmallerOwnedWire(allocator: std.mem.Allocator, best: *[]u8, candidate: 
         allocator.free(best.*);
         best.* = candidate;
     } else allocator.free(candidate);
+}
+
+fn commandPlanHasCopy(commands: []const command_plan.Command) bool {
+    for (commands) |command|
+        if (command.has_copy) return true;
+    return false;
 }
 
 /// Conservative bound for a planned stream with one policy-selected
@@ -7260,6 +7320,58 @@ fn considerPlannedMetaBlockCommands(
     }
 }
 
+fn considerPlannedLongDistanceMetaBlockCommands(
+    allocator: std.mem.Allocator,
+    state: *IncrementalPlannedEncoderCodec.State,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    policy: PlannedMetaBlockPolicy,
+    start_byte: u8,
+    start_bit_index: u3,
+    best: *?PlannedMetaBlockCandidate,
+) Error!void {
+    if (policy.family != .ratio or state.window_bits < 17 or
+        state.history.items.len == 0)
+    {
+        return;
+    }
+    const max_backward_distance = (@as(usize, 1) << state.window_bits) - 16;
+    const literal_commands = [_]command_plan.Command{.{
+        .insert_start = 0,
+        .insert_len = input.len,
+    }};
+    const proposal_count: usize = if (commandPlanHasCopy(commands)) 2 else 1;
+    for (0..proposal_count) |proposal_index| {
+        const proposal = if (proposal_index == 0)
+            commands
+        else
+            &literal_commands;
+        const augmented = try long_distance.augmentAllocWithHistoryAndMaxDistance(
+            allocator,
+            state.history.items,
+            input,
+            proposal,
+            max_backward_distance,
+        ) orelse continue;
+        defer allocator.free(augmented);
+        try considerPlannedMetaBlockCommands(
+            allocator,
+            state,
+            input,
+            augmented,
+            policy,
+            state.window_bits,
+            state.compound_dictionary_size,
+            start_byte,
+            start_bit_index,
+            state.wire_state,
+            best,
+            &state.candidate_wire,
+            &state.best_wire,
+        );
+    }
+}
+
 /// Serialized dictionary addresses below are selected with `context_mode`, so
 /// the plain single-tree header must emit that exact mode. Other safe baseline
 /// candidates may use adaptive literal contexts because they contain no
@@ -7370,10 +7482,13 @@ fn considerPlannedMetaBlockPolicy(
 ) Error!void {
     const max_backward_distance = (@as(usize, 1) << state.window_bits) - 16;
     const parser_options = lz77.GreedyOptions{
-        .window_len = if (state.history.items.len == 0)
-            @min(input.len, max_backward_distance)
-        else
-            max_backward_distance,
+        .window_len = @min(
+            if (state.history.items.len == 0)
+                @min(input.len, max_backward_distance)
+            else
+                max_backward_distance,
+            lz77.max_window_len,
+        ),
         .max_chain = policy.lazy.max_chain,
         .nice_len = policy.lazy.nice_len,
         .max_candidates = if (policy.family == .fast) policy.hash_candidates else 1,
@@ -7485,6 +7600,16 @@ fn considerPlannedMetaBlockPolicy(
                 &state.candidate_wire,
                 &state.best_wire,
             );
+        try considerPlannedLongDistanceMetaBlockCommands(
+            allocator,
+            state,
+            input,
+            commands,
+            policy,
+            start_byte,
+            start_bit_index,
+            best,
+        );
         if (has_serialized_static) {
             const serialized = state.shared_dictionary.serialized.?;
             const mode_count: usize = if (serialized.needsContextModeSearch()) 4 else 1;
