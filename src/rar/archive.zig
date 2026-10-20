@@ -9,9 +9,11 @@ const rar50 = @import("rar50.zig");
 const rar4_encryption = @import("rar4_encryption.zig");
 const rar4_name = @import("rar4_name.zig");
 const rar5_encryption = @import("rar5_encryption.zig");
+const rar5_service = @import("rar5_service.zig");
 
 pub const Error = core.Error || rar15.Error || rar20.Error || rar29.Error || rar50.Error ||
-    legacy_solid.Error || rar4_encryption.Error || rar4_name.Error || rar5_encryption.Error || error{
+    legacy_solid.Error || rar4_encryption.Error || rar4_name.Error || rar5_encryption.Error ||
+    rar5_service.Error || error{
     InvalidRarArchive,
     UnsupportedRarCompression,
     UnsupportedRarEntry,
@@ -151,6 +153,12 @@ pub const Archive = struct {
     has_next_volume: bool,
     solid: bool,
     locked: bool,
+    /// UTF-8 RAR5 archive comment. Plain archives borrow this slice from
+    /// `bytes`; owned encrypted-header parses retain an owned copy.
+    comment: ?[]const u8 = null,
+    /// True when the CMT service payload was encrypted on the wire. A plain
+    /// borrowed parse cannot expose its bytes, while an owned parse can.
+    comment_encrypted: bool = false,
     header_encryption: ?HeaderEncryption = null,
     rar4_encrypted_headers: bool = false,
     cached_entries: ?[]const Entry = null,
@@ -162,6 +170,10 @@ pub const Archive = struct {
             .remaining = self.entry_count,
             .cached_entries = self.cached_entries,
         };
+    }
+
+    pub fn hasComment(self: Archive) bool {
+        return self.comment != null or self.comment_encrypted;
     }
 
     pub fn extractSession(
@@ -472,17 +484,20 @@ pub const Archive = struct {
     }
 };
 
-/// Parsed archive view that owns copied entry names and cached entry metadata
-/// while continuing to borrow the original archive bytes. Encrypted-header
-/// archives require this surface because names do not exist in plaintext in
-/// the input. Keep this value alive while using `archive` or any entry name.
+/// Parsed archive view that owns copied entry names, an optional archive
+/// comment, and cached entry metadata while continuing to borrow the original
+/// archive bytes. Encrypted-header archives require this surface because names
+/// do not exist in plaintext in the input. Keep this value alive while using
+/// `archive`, its comment, or any entry name.
 pub const OwnedHeaderArchive = struct {
     allocator: std.mem.Allocator,
     archive: Archive,
     entries: []Entry,
     names: [][]u8,
+    comment: ?[]u8 = null,
 
     pub fn deinit(self: *OwnedHeaderArchive) void {
+        if (self.comment) |comment| self.allocator.free(comment);
         for (self.names) |name| self.allocator.free(name);
         self.allocator.free(self.names);
         self.allocator.free(self.entries);
@@ -708,6 +723,8 @@ fn copyBorrowedArchiveAlloc(
     defer names.deinit(allocator);
     errdefer freeNames(allocator, names.items);
     var metadata_size: usize = 0;
+    var owned_comment: ?[]u8 = null;
+    errdefer if (owned_comment) |comment| allocator.free(comment);
     var iterator = borrowed.iterator();
     while (try iterator.next()) |entry|
         try appendOwnedEntry(
@@ -718,7 +735,43 @@ fn copyBorrowedArchiveAlloc(
             options,
             entry,
         );
-    return finishOwnedHeaderArchive(allocator, borrowed, &entries, &names);
+    if (borrowed.comment) |comment|
+        owned_comment = try ownRar5CommentAlloc(
+            allocator,
+            &metadata_size,
+            options,
+            comment,
+        )
+    else if (borrowed.comment_encrypted) {
+        const comment = (try findRar5ArchiveComment(borrowed)) orelse
+            return error.InvalidRarArchive;
+        owned_comment = try decodeRar5CommentAlloc(
+            allocator,
+            borrowed.bytes,
+            comment,
+            options,
+            &metadata_size,
+        );
+    }
+    return finishOwnedHeaderArchive(
+        allocator,
+        borrowed,
+        &entries,
+        &names,
+        owned_comment,
+    );
+}
+
+fn findRar5ArchiveComment(rar_archive: Archive) Error!?Rar5ArchiveComment {
+    if (rar_archive.version != .rar5) return null;
+    var offset = rar_archive.entries_offset;
+    while (offset < rar_archive.archive_end) {
+        const block = try parseRar5Block(rar_archive.bytes, offset);
+        if (block.comment) |comment| return comment;
+        offset = block.next_offset;
+        if (block.end_archive) break;
+    }
+    return null;
 }
 
 fn appendOwnedEntry(
@@ -766,6 +819,7 @@ fn finishOwnedHeaderArchive(
     borrowed: Archive,
     entries: *std.ArrayList(Entry),
     names: *std.ArrayList([]u8),
+    comment: ?[]u8,
 ) Error!OwnedHeaderArchive {
     const owned_entries = try entries.toOwnedSlice(allocator);
     errdefer allocator.free(owned_entries);
@@ -773,11 +827,13 @@ fn finishOwnedHeaderArchive(
     var archive = borrowed;
     archive.entry_count = owned_entries.len;
     archive.cached_entries = owned_entries;
+    archive.comment = comment;
     return .{
         .allocator = allocator,
         .archive = archive,
         .entries = owned_entries,
         .names = owned_names,
+        .comment = comment,
     };
 }
 
@@ -921,7 +977,7 @@ fn parseEncryptedRar4HeadersAlloc(
         .locked = main.flags & rar4_main_locked != 0,
         .rar4_encrypted_headers = true,
     };
-    return finishOwnedHeaderArchive(allocator, borrowed, &entries, &names);
+    return finishOwnedHeaderArchive(allocator, borrowed, &entries, &names, null);
 }
 
 const Rar4HeaderCipherCache = struct {
@@ -1015,9 +1071,23 @@ fn parseRar5Archive(bytes: []const u8, prefix: usize) Error!Archive {
     var count: usize = 0;
     var end_offset: ?usize = null;
     var end_flags: u64 = 0;
+    var comment: ?[]const u8 = null;
+    var comment_encrypted = false;
+    var have_comment = false;
+    var saw_file = false;
     while (offset < bytes.len) {
         const block = try parseRar5Block(bytes, offset);
-        if (block.entry != null) count += 1;
+        if (block.comment) |parsed_comment| {
+            if (have_comment or saw_file) return error.InvalidRarArchive;
+            have_comment = true;
+            comment_encrypted = parsed_comment.encryption != null;
+            if (!comment_encrypted)
+                comment = try validatePlainRar5Comment(bytes, parsed_comment);
+        }
+        if (block.entry != null) {
+            count += 1;
+            saw_file = true;
+        }
         offset = block.next_offset;
         if (block.end_archive) {
             var end_cursor = block.type_specific_start;
@@ -1040,7 +1110,76 @@ fn parseRar5Archive(bytes: []const u8, prefix: usize) Error!Archive {
         .has_next_volume = end_flags & 1 != 0,
         .solid = archive_flags & rar5_main_solid != 0,
         .locked = archive_flags & rar5_main_locked != 0,
+        .comment = comment,
+        .comment_encrypted = comment_encrypted,
     };
+}
+
+fn validatePlainRar5Comment(
+    bytes: []const u8,
+    comment: Rar5ArchiveComment,
+) Error![]const u8 {
+    if (comment.encryption != null or comment.packed_size != comment.unpacked_size)
+        return error.InvalidRarArchive;
+    const data_end = try checkedEnd(comment.data_offset, comment.unpacked_size, bytes.len);
+    if (data_end != comment.next_offset) return error.InvalidRarArchive;
+    const payload = bytes[comment.data_offset..data_end];
+    if (comment.crc32) |expected|
+        if (checksum.crc32(payload) != expected) return error.ChecksumMismatch;
+    return rar5_service.commentText(payload);
+}
+
+fn ownRar5CommentAlloc(
+    allocator: std.mem.Allocator,
+    metadata_size: *usize,
+    options: ParseOptions,
+    comment: []const u8,
+) Error![]u8 {
+    const new_metadata_size = std.math.add(usize, metadata_size.*, comment.len) catch
+        return error.IntegerOverflow;
+    if (new_metadata_size > options.max_metadata_size)
+        return error.RarMetadataLimitExceeded;
+    const owned = try allocator.dupe(u8, comment);
+    metadata_size.* = new_metadata_size;
+    return owned;
+}
+
+fn decodeRar5CommentAlloc(
+    allocator: std.mem.Allocator,
+    bytes: []const u8,
+    comment: Rar5ArchiveComment,
+    options: ParseOptions,
+    metadata_size: *usize,
+) Error![]u8 {
+    if (comment.unpacked_size > options.max_metadata_size -| metadata_size.*)
+        return error.RarMetadataLimitExceeded;
+    if (comment.encryption) |encryption| {
+        const password = options.password orelse return error.RarPasswordRequired;
+        const data_end = try checkedEnd(comment.data_offset, comment.packed_size, bytes.len);
+        if (data_end != comment.next_offset) return error.InvalidRarArchive;
+        var decrypted = try rar5_encryption.decryptAlloc(
+            allocator,
+            bytes[comment.data_offset..data_end],
+            password,
+            encryption,
+            options.max_rar5_kdf_count,
+        );
+        defer decrypted.deinit();
+        if (decrypted.bytes.len < comment.unpacked_size or
+            decrypted.bytes.len - comment.unpacked_size >= 16)
+        {
+            return error.InvalidRarArchive;
+        }
+        const stored_payload = decrypted.bytes[0..comment.unpacked_size];
+        if (comment.crc32) |expected| {
+            const actual = checksum.crc32(stored_payload);
+            if (!decrypted.crcMatches(actual, expected)) return error.ChecksumMismatch;
+        }
+        const payload = try rar5_service.encryptedCommentText(stored_payload);
+        return ownRar5CommentAlloc(allocator, metadata_size, options, payload);
+    }
+    const payload = try validatePlainRar5Comment(bytes, comment);
+    return ownRar5CommentAlloc(allocator, metadata_size, options, payload);
 }
 
 fn parseEncryptedRar5HeadersAlloc(
@@ -1065,6 +1204,11 @@ fn parseEncryptedRar5HeadersAlloc(
     defer names.deinit(allocator);
     errdefer freeNames(allocator, names.items);
     var metadata_size: usize = 0;
+    var owned_comment: ?[]u8 = null;
+    errdefer if (owned_comment) |comment| allocator.free(comment);
+    var have_comment = false;
+    var comment_wire_encrypted = false;
+    var saw_file = false;
 
     var main_header = try decryptRar5HeaderAlloc(
         allocator,
@@ -1107,7 +1251,23 @@ fn parseEncryptedRar5HeadersAlloc(
         const data_offset = try checkedAdd(offset, decrypted.physical_size);
         const next_offset = try checkedEnd(data_offset, raw.data_size, bytes.len);
         const block = try parseRar5Header(clear);
+        if (block.comment) |parsed_comment| {
+            if (have_comment or saw_file) return error.InvalidRarArchive;
+            have_comment = true;
+            comment_wire_encrypted = parsed_comment.encryption != null;
+            var comment = parsed_comment;
+            comment.data_offset = data_offset;
+            comment.next_offset = next_offset;
+            owned_comment = try decodeRar5CommentAlloc(
+                allocator,
+                bytes,
+                comment,
+                options,
+                &metadata_size,
+            );
+        }
         if (block.entry) |parsed_entry| {
+            saw_file = true;
             var entry = parsed_entry;
             entry.header_offset = offset;
             entry.header_size = decrypted.physical_size;
@@ -1145,9 +1305,17 @@ fn parseEncryptedRar5HeadersAlloc(
         .has_next_volume = end_flags & 1 != 0,
         .solid = archive_flags & rar5_main_solid != 0,
         .locked = archive_flags & rar5_main_locked != 0,
+        .comment = owned_comment,
+        .comment_encrypted = comment_wire_encrypted,
         .header_encryption = metadata,
     };
-    return finishOwnedHeaderArchive(allocator, borrowed, &entries, &names);
+    return finishOwnedHeaderArchive(
+        allocator,
+        borrowed,
+        &entries,
+        &names,
+        owned_comment,
+    );
 }
 
 const DecryptedRar5Header = struct {
@@ -1246,10 +1414,20 @@ fn parseRar5HeaderEncryption(
 
 const ParsedBlock = struct {
     entry: ?Entry,
+    comment: ?Rar5ArchiveComment = null,
     next_offset: usize,
     end_archive: bool,
     type_specific_start: usize = 0,
     type_specific_end: usize = 0,
+};
+
+const Rar5ArchiveComment = struct {
+    packed_size: usize,
+    unpacked_size: usize,
+    crc32: ?u32,
+    encryption: ?Encryption,
+    data_offset: usize,
+    next_offset: usize,
 };
 
 const Rar4RawBlock = struct {
@@ -1533,38 +1711,46 @@ fn parseRar5BlockInternal(
         };
     }
     if (raw.header_type == rar5_crypt_header) return error.EncryptedRarHeaders;
-    if (raw.header_type != rar5_file_header)
+    if (raw.header_type != rar5_file_header and raw.header_type != rar5_service_header)
         return .{ .entry = null, .next_offset = raw.next_offset, .end_archive = false };
 
-    var cursor = raw.type_specific_start;
-    const file_flags = try readVint(bytes, &cursor, raw.type_specific_end);
-    const unpacked_u64 = try readVint(bytes, &cursor, raw.type_specific_end);
-    const attributes = try readVint(bytes, &cursor, raw.type_specific_end);
-    const mtime = if (file_flags & rar5_file_mtime != 0) blk: {
-        _ = try checkedEnd(cursor, 4, raw.type_specific_end);
-        const value = readLe32(bytes, cursor);
-        cursor += 4;
-        break :blk value;
-    } else null;
-    const data_crc = if (file_flags & rar5_file_crc32 != 0) blk: {
-        _ = try checkedEnd(cursor, 4, raw.type_specific_end);
-        const value = readLe32(bytes, cursor);
-        cursor += 4;
-        break :blk value;
-    } else null;
-    const compression_info = try readVint(bytes, &cursor, raw.type_specific_end);
-    const host_os = try readVint(bytes, &cursor, raw.type_specific_end);
-    const name_size_u64 = try readVint(bytes, &cursor, raw.type_specific_end);
-    const name_size = std.math.cast(usize, name_size_u64) orelse return error.IntegerOverflow;
-    const name_end = try checkedEnd(cursor, name_size, raw.type_specific_end);
-    const name_bytes = bytes[cursor..name_end];
-    if (name_bytes.len == 0) return error.InvalidRarArchive;
-    const method_id: u8 = @intCast((compression_info >> 7) & 7);
-    const compression_version: u8 = @intCast(compression_info & 0x3f);
-    const unpacked_size = std.math.cast(usize, unpacked_u64) orelse return error.IntegerOverflow;
-    const directory = file_flags & rar5_file_directory != 0;
+    const fields = try rar5_service.parse(
+        bytes,
+        raw.type_specific_start,
+        raw.type_specific_end,
+    );
     const encryption = try rar5EncryptionRecord(bytes, raw.extra_start, raw.extra_end);
     const encrypted = encryption != null;
+    if (raw.header_type == rar5_service_header) {
+        if (!rar5_service.isComment(fields))
+            return .{ .entry = null, .next_offset = raw.next_offset, .end_archive = false };
+        try rar5_service.validateCommentHeader(
+            fields,
+            raw.flags,
+            raw.data_size,
+            encrypted,
+        );
+        return .{
+            .entry = null,
+            .comment = .{
+                .packed_size = raw.data_size,
+                .unpacked_size = fields.unpacked_size,
+                .crc32 = fields.data_crc32,
+                .encryption = encryption,
+                .data_offset = raw.data_offset,
+                .next_offset = raw.next_offset,
+            },
+            .next_offset = raw.next_offset,
+            .end_archive = false,
+        };
+    }
+
+    const name_bytes = fields.name;
+    if (name_bytes.len == 0) return error.InvalidRarArchive;
+    const method_id = fields.methodId();
+    const compression_version = fields.compressionVersion();
+    const unpacked_size = fields.unpacked_size;
+    const directory = fields.file_flags & rar5_file_directory != 0;
     const redirection_info = try rar5RedirectionRecord(
         bytes,
         raw.extra_start,
@@ -1584,7 +1770,7 @@ fn parseRar5BlockInternal(
     if (method == .stored and !encrypted and !split and raw.data_size != unpacked_size)
         return error.InvalidRarArchive;
     const dictionary_size = if (method == .rar50)
-        try rar5DictionarySize(compression_info, compression_version)
+        try rar5DictionarySize(fields.compression_info, compression_version)
     else
         null;
     return .{
@@ -1597,24 +1783,24 @@ fn parseRar5BlockInternal(
             .method_id = method_id,
             .compression_version = compression_version,
             .dictionary_size = dictionary_size,
-            .crc32 = data_crc,
+            .crc32 = fields.data_crc32,
             .compressed_size = raw.data_size,
             .uncompressed_size = unpacked_size,
             .header_offset = offset,
             .header_size = raw.header_size,
             .data_offset = raw.data_offset,
             .next_offset = raw.next_offset,
-            .host_os = host_os,
-            .attributes = attributes,
-            .mtime = mtime,
+            .host_os = fields.host_os,
+            .attributes = fields.attributes,
+            .mtime = fields.mtime,
             .directory = directory,
             .encrypted = encrypted,
             .encryption = encryption,
             .rar4_encryption = null,
-            .solid = compression_info & 0x40 != 0,
+            .solid = fields.compression_info & 0x40 != 0,
             .split_before = raw.flags & rar5_header_split_before != 0,
             .split_after = raw.flags & rar5_header_split_after != 0,
-            .unknown_size = file_flags & rar5_file_unknown_size != 0,
+            .unknown_size = fields.file_flags & rar5_file_unknown_size != 0,
             .redirection = redirection,
             .redirection_info = redirection_info,
             .safe_path = isSafePath(name_bytes),
@@ -1853,6 +2039,7 @@ const rar4_directory_mask: u16 = 0x00e0;
 
 const rar5_main_header: u64 = 1;
 const rar5_file_header: u64 = 2;
+const rar5_service_header: u64 = 3;
 const rar5_crypt_header: u64 = 4;
 const rar5_end_header: u64 = 5;
 const rar5_header_extra: u64 = 0x0001;

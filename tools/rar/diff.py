@@ -248,6 +248,9 @@ def main() -> None:
     writer_rar4_unicode_external = 0
     writer_redirections = 0
     writer_redirections_external = 0
+    writer_comments = 0
+    writer_comments_external = 0
+    reference_comments = 0
     reference_rar4_unicode = 0
     reference_stored = 0
     reference_compressed = 0
@@ -300,6 +303,65 @@ def main() -> None:
                 writer_external += 1
 
         if args.writer is not None:
+            comment_archive = temp / "vort-rar5-comment.rar"
+            run(args.writer, str(comment_archive), "rar5", "rar5-comment")
+            listing = run(args.cli, "list-rar-file", str(comment_archive)).stdout
+            if (
+                "has_comment=true" not in listing
+                or "comment_bytes=24" not in listing
+                or "comment_encrypted=false" not in listing
+            ):
+                raise AssertionError(f"RAR5 comment listing mismatch: {listing}")
+            writer_comments += 1
+            if seven_zip is not None:
+                run(seven_zip, "t", str(comment_archive))
+                writer_comments_external += 1
+            elif rar_tool is not None:
+                run(rar_tool, "t", "-idq", "-p-", str(comment_archive))
+                writer_comments_external += 1
+
+            encrypted_comment_archive = temp / "vort-rar5-comment-encrypted.rar"
+            comment_password = "rar5-comment-password"
+            run(
+                args.writer,
+                str(encrypted_comment_archive),
+                "rar5",
+                "rar5-comment-encrypted",
+            )
+            encrypted_listing = run(
+                args.cli,
+                "list-rar-file",
+                str(encrypted_comment_archive),
+                comment_password,
+            ).stdout
+            if (
+                "has_comment=true" not in encrypted_listing
+                or "comment_bytes=29" not in encrypted_listing
+                or "comment_encrypted=true" not in encrypted_listing
+                or "encrypted_headers=true" not in encrypted_listing
+            ):
+                raise AssertionError(
+                    f"RAR5 encrypted comment listing mismatch: {encrypted_listing}"
+                )
+            writer_comments += 1
+            if seven_zip is not None:
+                run(
+                    seven_zip,
+                    "t",
+                    f"-p{comment_password}",
+                    str(encrypted_comment_archive),
+                )
+                writer_comments_external += 1
+            elif rar_tool is not None:
+                run(
+                    rar_tool,
+                    "t",
+                    "-idq",
+                    f"-p{comment_password}",
+                    str(encrypted_comment_archive),
+                )
+                writer_comments_external += 1
+
             redirection_archive = temp / "vort-rar5-redirections.rar"
             run(
                 args.writer,
@@ -334,6 +396,44 @@ def main() -> None:
                             f"7-Zip omitted RAR5 redirection {name!r}"
                         )
                 writer_redirections_external = 3
+
+        if rar_tool is not None:
+            comment_source = temp / "reference-comment.txt"
+            comment_source.write_text("RAR reference payload\n", encoding="utf-8")
+            comment_file = temp / "reference-comment-body.txt"
+            comment_file.write_text("Reference comment 世界", encoding="utf-8")
+            for encrypted_headers in (False, True):
+                suffix = "secret" if encrypted_headers else "plain"
+                reference_comment_archive = temp / f"reference-comment-{suffix}.rar"
+                password_args = ("-hpcomment-password",) if encrypted_headers else ()
+                run(
+                    rar_tool,
+                    "a",
+                    "-idq",
+                    "-ma5",
+                    "-m0",
+                    "-ep",
+                    *password_args,
+                    f"-z{comment_file}",
+                    str(reference_comment_archive),
+                    str(comment_source),
+                )
+                cli_password = ("comment-password",) if encrypted_headers else ()
+                listing = run(
+                    args.cli,
+                    "list-rar-file",
+                    str(reference_comment_archive),
+                    *cli_password,
+                ).stdout
+                if (
+                    "has_comment=true" not in listing
+                    or "comment_bytes=24" not in listing
+                    or f"comment_encrypted={str(encrypted_headers).lower()}" not in listing
+                ):
+                    raise AssertionError(
+                        f"Vort rejected RAR5 {suffix} reference comment: {listing}"
+                    )
+                reference_comments += 1
 
         for version, compression in (("rar4", "rar29"), ("rar5", "rar50")):
             compressed_first = temp / f"vort-{compression}-compressed-first.rar"
@@ -1845,6 +1945,9 @@ def main() -> None:
         f"writer_rar4_unicode_external={writer_rar4_unicode_external} "
         f"writer_redirections={writer_redirections} "
         f"writer_redirections_external={writer_redirections_external} "
+        f"writer_comments={writer_comments} "
+        f"writer_comments_external={writer_comments_external} "
+        f"reference_comments={reference_comments} "
         f"reference_rar4_unicode={reference_rar4_unicode} "
         f"reference_stored={reference_stored} reference_compressed={reference_compressed} "
         f"reference_compressed_decoded={reference_compressed_decoded} "

@@ -475,7 +475,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   behavior, RAR15 byte-stream and RAR20/26 self-updating block decryption through
   Vail, and allocator-owned custom Unicode preferred names with deterministic
   UTF-16 writer fields, structured RAR5 symlink/junction/hardlink/file-copy
-  metadata plus deterministic safe-target writing, explicit unknown-size
+  metadata plus deterministic safe-target writing, standard UTF-8 RAR5 archive
+  comments through CRC-checked `CMT` service blocks (including Vail-backed
+  encrypted payloads and encrypted headers), explicit unknown-size
   errors, sequential
   same-generation and mixed RAR15/RAR20 solid continuation, ordered RAR4/RAR5
   multi-volume reconstruction for stored/compressed/solid split entries, and

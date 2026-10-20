@@ -9,6 +9,65 @@ pub fn main(init: std.process.Init) !void {
     const version_text = args.next() orelse "rar5";
     const version: vort.RarVersion = if (std.mem.eql(u8, version_text, "rar4")) .rar4 else .rar5;
     const mode = args.next() orelse "stored";
+    if (std.mem.eql(u8, mode, "rar5-comment-encrypted")) {
+        if (version != .rar5) return error.UnsupportedRarVersion;
+        const password = "rar5-comment-password";
+        const header_ivs = [_][16]u8{
+            [_]u8{0x11} ** 16,
+            [_]u8{0x12} ** 16,
+            [_]u8{0x13} ** 16,
+            [_]u8{0x14} ** 16,
+        };
+        const entries = [_]vort.RarEncodeEntry{.{
+            .name = "hidden-comment.txt",
+            .data = "encrypted RAR5 archive comment interoperability\n",
+            .encryption = .{
+                .password = password,
+                .salt = [_]u8{0x21} ** 16,
+                .iv = [_]u8{0x22} ** 16,
+                .kdf_count = 2,
+            },
+        }};
+        const bytes = try vort.encodeRarAlloc(init.gpa, &entries, .{
+            .version = .rar5,
+            .comment = "Encrypted Vort comment 世界",
+            .comment_encryption = .{
+                .password = password,
+                .salt = [_]u8{0x31} ** 16,
+                .iv = [_]u8{0x32} ** 16,
+                .kdf_count = 2,
+            },
+            .header_encryption = .{
+                .password = password,
+                .salt = [_]u8{0x41} ** 16,
+                .kdf_count = 2,
+                .ivs = &header_ivs,
+            },
+        });
+        defer init.gpa.free(bytes);
+        try std.Io.Dir.cwd().writeFile(
+            init.io,
+            .{ .sub_path = output_path, .data = bytes },
+        );
+        return;
+    }
+    if (std.mem.eql(u8, mode, "rar5-comment")) {
+        if (version != .rar5) return error.UnsupportedRarVersion;
+        const entries = [_]vort.RarEncodeEntry{.{
+            .name = "commented.txt",
+            .data = "RAR5 archive comment interoperability\n",
+        }};
+        const bytes = try vort.encodeRarAlloc(init.gpa, &entries, .{
+            .version = .rar5,
+            .comment = "Vort RAR5 comment 世界",
+        });
+        defer init.gpa.free(bytes);
+        try std.Io.Dir.cwd().writeFile(
+            init.io,
+            .{ .sub_path = output_path, .data = bytes },
+        );
+        return;
+    }
     if (std.mem.eql(u8, mode, "rar5-redirections")) {
         if (version != .rar5) return error.UnsupportedRarVersion;
         const entries = [_]vort.RarEncodeEntry{

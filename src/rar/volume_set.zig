@@ -409,7 +409,8 @@ fn validateVolumes(archives: []const archive_mod.OwnedHeaderArchive) Error!void 
         if (rar_archive.version != version or !rar_archive.multi_volume or
             rar_archive.solid != solid or
             !std.meta.eql(rar_archive.header_encryption, header_encryption) or
-            rar_archive.rar4_encrypted_headers != rar4_encrypted_headers)
+            rar_archive.rar4_encrypted_headers != rar4_encrypted_headers or
+            (index != 0 and rar_archive.hasComment()))
             return error.InvalidRarVolumeSet;
         const expected_next = index + 1 < archives.len;
         if (rar_archive.has_next_volume != expected_next)

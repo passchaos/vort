@@ -7,11 +7,14 @@ const rar50_encoder = @import("rar50_encoder.zig");
 const rar4_encryption = @import("rar4_encryption.zig");
 const rar4_name = @import("rar4_name.zig");
 const rar5_encryption = @import("rar5_encryption.zig");
+const rar5_service = @import("rar5_service.zig");
 
 pub const Error = archive.Error || rar29_encoder.Error || rar50_encoder.Error ||
     rar4_encryption.Error || rar4_name.Error || rar5_encryption.Error ||
     std.mem.Allocator.Error || error{
     InvalidRarEntryName,
+    InvalidRarComment,
+    RarCommentTooLarge,
     RarFileTooLarge,
     RarHeaderTooLarge,
     UnsupportedRarEncodeOptions,
@@ -47,8 +50,9 @@ pub const HeaderEncryptionOptions = struct {
     salt: [rar5_encryption.salt_len]u8,
     kdf_count: u8 = 15,
     include_password_check: bool = true,
-    /// One unique unpredictable IV for main, every file/directory, and end
-    /// header, in wire order. Its length must equal `entries.len + 2`.
+    /// One unique unpredictable IV for main, the optional archive comment,
+    /// every file/directory, and end header, in wire order. Without a comment
+    /// its length must equal `entries.len + 2`; a comment adds one.
     ivs: []const [rar5_encryption.iv_len]u8,
 
     fn cryptoOptions(self: HeaderEncryptionOptions) rar5_encryption.HeaderOptions {
@@ -88,6 +92,11 @@ pub const EncodeOptions = struct {
     solid: bool = false,
     ppmd_order: u8 = 8,
     ppmd_memory_size: usize = 25 * 1024 * 1024,
+    /// RAR5 archive comment encoded as the standard UTF-8 CMT service block.
+    comment: ?[]const u8 = null,
+    /// Optional RAR5 CMT payload encryption. Header-encrypted archives require
+    /// this when a comment is present so its bytes are not leaked in plaintext.
+    comment_encryption: ?EncryptionOptions = null,
     header_encryption: ?HeaderEncryptionOptions = null,
     rar4_header_encryption: ?Rar4HeaderEncryptionOptions = null,
 };
@@ -185,6 +194,18 @@ pub fn encodeVolumesAlloc(
         options.solid,
         header_writer_ptr,
     );
+    if (options.comment) |comment| {
+        const comment_payload_size = try appendRar5Comment(
+            allocator,
+            &current,
+            comment,
+            options.comment_encryption,
+            header_writer_ptr,
+        );
+        if (comment_payload_size > max_payload_per_volume)
+            return error.InvalidRarVolumeSize;
+        payload_in_volume = comment_payload_size;
+    }
     var encoder = rar50_encoder.Encoder.init(allocator, .{
         .dictionary_size = options.dictionary_size,
         .block_size = options.block_size,
@@ -512,12 +533,29 @@ fn validateEntries(
                 return error.UnsupportedRarEncodeOptions;
         },
     }
+    if (options.comment) |comment| {
+        if (options.version != .rar5) return error.UnsupportedRarEncodeOptions;
+        if (!rar5_service.validCommentText(comment)) return error.InvalidRarComment;
+        if (comment.len > rar5_service.max_writer_comment_size)
+            return error.RarCommentTooLarge;
+        if (options.comment_encryption) |encryption| {
+            if (comment.len == 0) return error.InvalidRarComment;
+            try rar5_encryption.validateOptions(encryption);
+        }
+    } else if (options.comment_encryption != null) {
+        return error.UnsupportedRarEncodeOptions;
+    }
     if (options.header_encryption) |header_encryption| {
         if (options.version != .rar5) return error.InvalidRarHeaderEncryption;
         try rar5_encryption.validateHeaderOptions(header_encryption.cryptoOptions());
         if (!volume_mode) {
-            const expected_iv_count = std.math.add(usize, entries.len, 2) catch
+            const base_iv_count = std.math.add(usize, entries.len, 2) catch
                 return error.IntegerOverflow;
+            const expected_iv_count = std.math.add(
+                usize,
+                base_iv_count,
+                @intFromBool(options.comment != null),
+            ) catch return error.IntegerOverflow;
             if (header_encryption.ivs.len != expected_iv_count)
                 return error.InvalidRarHeaderEncryption;
         }
@@ -528,6 +566,12 @@ fn validateEntries(
         for (entries) |entry| {
             if (entry.kind == .directory or entry.redirection != null) continue;
             const encryption = entry.encryption orelse
+                return error.InvalidRarHeaderEncryption;
+            if (!std.mem.eql(u8, encryption.password, header_encryption.password))
+                return error.InvalidRarHeaderEncryption;
+        }
+        if (options.comment != null) {
+            const encryption = options.comment_encryption orelse
                 return error.InvalidRarHeaderEncryption;
             if (!std.mem.eql(u8, encryption.password, header_encryption.password))
                 return error.InvalidRarHeaderEncryption;
@@ -968,6 +1012,14 @@ fn encodeRar5(
         "",
         header_writer_ptr,
     );
+    if (options.comment) |comment|
+        _ = try appendRar5Comment(
+            allocator,
+            output,
+            comment,
+            options.comment_encryption,
+            header_writer_ptr,
+        );
     for (entries) |entry| try appendRar5File(
         allocator,
         output,
@@ -1062,6 +1114,52 @@ fn finishRar5Volume(
         "",
         header_writer,
     );
+}
+
+fn appendRar5Comment(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    comment: []const u8,
+    encryption_options: ?EncryptionOptions,
+    header_writer: ?*HeaderWriter,
+) !usize {
+    const plain_crc = checksum.crc32(comment);
+    var encrypted: ?rar5_encryption.Encrypted = if (encryption_options) |encryption|
+        try rar5_encryption.encryptAlloc(allocator, comment, plain_crc, encryption)
+    else
+        null;
+    defer if (encrypted) |*value| value.deinit();
+    const payload = if (encrypted) |value| value.bytes else comment;
+    const wire_crc = if (encrypted) |value| value.wire_crc32 else plain_crc;
+
+    var extra: std.ArrayList(u8) = .empty;
+    defer extra.deinit(allocator);
+    if (encrypted) |value|
+        try appendRar5EncryptionRecord(allocator, &extra, value.metadata);
+
+    var specific: std.ArrayList(u8) = .empty;
+    defer specific.deinit(allocator);
+    try appendVint(allocator, &specific, rar5_service.file_crc32);
+    try appendVint(allocator, &specific, comment.len);
+    try appendVint(allocator, &specific, 0); // Reserved service attributes.
+    try appendLe32(allocator, &specific, wire_crc);
+    try appendVint(allocator, &specific, 0); // Stored method, algorithm version 0.
+    try appendVint(allocator, &specific, 1); // Unix host.
+    try appendVint(allocator, &specific, rar5_service.comment_name.len);
+    try specific.appendSlice(allocator, rar5_service.comment_name);
+    try appendRar5BlockInternal(
+        allocator,
+        output,
+        3,
+        rar5_service.header_data |
+            (if (extra.items.len != 0) @as(u64, 0x0001) else 0),
+        payload.len,
+        specific.items,
+        extra.items,
+        payload,
+        header_writer,
+    );
+    return payload.len;
 }
 
 fn appendRar5File(

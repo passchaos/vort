@@ -130,7 +130,7 @@ pub fn listFile(
     );
     defer owned.deinit();
     const archive = owned.archive;
-    try stdout.print("rar_entries={d} version={s} prefix_bytes={d} trailer_bytes={d} volume={} volume_number={?d} next_volume={} solid={} locked={} encrypted_headers={} header_kdf_count={?d}\n", .{
+    try stdout.print("rar_entries={d} version={s} prefix_bytes={d} trailer_bytes={d} volume={} volume_number={?d} next_volume={} solid={} locked={} has_comment={} comment_bytes={?d} comment_encrypted={} encrypted_headers={} header_kdf_count={?d}\n", .{
         archive.entry_count,
         @tagName(archive.version),
         archive.prefix_size,
@@ -140,6 +140,9 @@ pub fn listFile(
         archive.has_next_volume,
         archive.solid,
         archive.locked,
+        archive.hasComment(),
+        if (archive.comment) |comment| comment.len else null,
+        archive.comment_encrypted,
         archive.header_encryption != null or archive.rar4_encrypted_headers,
         if (archive.header_encryption) |encryption| encryption.kdf_count else null,
     });

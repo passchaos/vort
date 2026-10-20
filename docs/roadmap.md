@@ -22023,3 +22023,19 @@ reuse, so production keeps the simpler independently owned plans.
   lists three generated links through Vort (`writer_redirections=3`); optional
   7-Zip validation tests the archive and names all three
   (`writer_redirections_external=3` when available).
+
+- Added standard RAR5 archive comments without inventing the removed file-
+  comment feature. The reader recognizes one `CMT` service header only between
+  main and file headers, validates stored sizes, CRC/keyed CRC, UTF-8 and the
+  RARLab encrypted NUL-terminated/full-block convention, and exposes borrowed
+  or owned comment bytes under the existing metadata limit. The writer adds bounded
+  UTF-8 `comment` and independent `comment_encryption` options, reusing Vail
+  for PBKDF2/AES/password-check/checksum primitives; header encryption requires
+  the same password and one additional header IV. Complete comments compose
+  with first-volume payload accounting; split CMT records remain follow-up
+  work. Fixed RAR 7.12 plain and `-hp` fixtures, plain,
+  payload-encrypted, header-encrypted and multi-volume round trips, plus
+  duplicate/late/corrupt and input-limit rejections cover the wire. The RAR
+  differential reports `writer_comments=2`, optionally validates plain and
+  encrypted-header Vort output externally, and generates two plain/encrypted
+  reference comments when the RAR tool is available.
