@@ -99,6 +99,21 @@ def main() -> int:
         raise SystemExit(f"q2-grid-segmentation: 24-KiB-cut wire changed: {len(encoded)} bytes")
     print(f"brotli planned q2-grid-segmentation node diff: encoded={len(encoded)} decoded={len(actual)}")
     input_len = 64 * 1024
+    boundary = 20 * 1024
+    expected = bytearray(input_len)
+    state = 0x4F1E7E12
+    for i in range(input_len):
+        state = (state * 1664525 + 1013904223) & 0xFFFFFFFF
+        nibble = (state >> 28) & 15
+        expected[i] = nibble if i < boundary else 240 + nibble
+    encoded = subprocess.check_output([sys.argv[1], "q2-fine-grid-segmentation"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("q2-fine-grid-segmentation: node output mismatch")
+    if len(encoded) != 38_735:
+        raise SystemExit(f"q2-fine-grid-segmentation: 20-KiB-cut wire changed: {len(encoded)} bytes")
+    print(f"brotli planned q2-fine-grid-segmentation node diff: encoded={len(encoded)} decoded={len(actual)}")
+    input_len = 64 * 1024
     first_boundary = 16 * 1024
     second_boundary = 40 * 1024
     expected = bytearray(input_len)

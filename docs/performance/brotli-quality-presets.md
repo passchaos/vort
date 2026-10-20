@@ -66,18 +66,17 @@ outer `block_len` takes precedence when non-zero; otherwise the stream option
 or automatic policy is used. q6/q7/q11 therefore keep every automatic block
 inside their deepest optimal-search ceiling.
 
-Legacy balanced/ratio plus q2...q5 and q8...q10 inspect eight 8 KiB cells in
+Legacy balanced/ratio plus q2...q5 and q8...q10 inspect sixteen 4 KiB cells in
 each automatic 64 KiB lookahead. A deterministic allocation-free Q8
 byte-histogram search selects one through four segments, charging a conservative
 2,048-bit allowance per additional meta-block. It retains each new proxy-cost
 minimum reached at 2/3/4 segments plus that depth's second-best distinct layout
 while it still beats the shallower frontier, producing at most six grid plans.
-The fixed search enumerates only 63 boundary combinations. Ties retain fewer
+The fixed search enumerates only 575 boundary combinations. Ties retain fewer
 segments and lexicographically earlier boundaries, so reconstruction is
 target-independent. The writer compares every frontier plan with the exact
 single-block and midpoint wires and retains only a strictly smaller bit count.
-Homogeneous data
-therefore keeps the larger block, while profitable non-quarter boundaries
+Homogeneous data therefore keeps the larger block, while profitable boundaries
 receive independently modeled blocks without losing cross-block LZ77 history
 or the recent-distance ring.
 `adaptive_blocks = false` disables this policy; `true` forces it for a 64 KiB
@@ -85,8 +84,8 @@ configured block. A non-zero explicit `block_len` is fixed by default.
 Automatic lookahead is
 disabled above the standard 16-bit window to keep branch snapshots bounded;
 forcing it there is rejected. Conservative encoded bounds assume every
-adaptive 64 KiB block may be partitioned at every 8 KiB grid point, which is
-strictly more conservative than the DP's four-segment limit.
+adaptive 64 KiB block may be partitioned at every 4 KiB grid point, which is
+strictly more conservative than the search's four-segment limit.
 
 | Quality | Family | Current Vort behavior |
 | ---: | --- | --- |
@@ -457,7 +456,7 @@ output backpressure, and static addressing after a saturated compound region.
 The same run retains four upstream decode fixtures and three descriptor-error
 cases. System libbrotli 1.0.9 lacks the optional shared-dictionary symbols, so
 the tool explicitly reports the complete runtime matrix as skipped there.
-The current Debug `zig build test-br` passes all 962 tests, including q0...q11,
+The current Debug `zig build test-br` passes all 964 tests, including q0...q11,
 legacy level, retained-index, empty-dictionary wire, static-address shift,
 incremental rollback, cross-API quality wire equality, and 16 MiB+ q0/q2
 coverage. The upstream differential passes in both build modes with 7,056
@@ -482,6 +481,9 @@ plans, selects three exact data meta-blocks, and locks the public/Node wire at
 The 24 KiB-cut oracle also requires a second distinct two-segment layout to
 survive whenever it remains below the unsplit proxy, pinning same-depth top-2
 retention independently of the final wire winner.
+The 4 KiB-grid extension adds a 20 KiB-cut fixture at `38,735 -> 65,536` bytes,
+with the same one-shot/chunked/incremental equality and Node/libbrotli decode
+requirements.
 
 The planned encode benchmark accepts independent Vort selectors:
 

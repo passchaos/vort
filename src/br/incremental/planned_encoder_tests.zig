@@ -975,6 +975,64 @@ test "entropy-aware planned stream segmentation follows a non-quarter grid chang
     try std.testing.expectEqualSlices(u8, input, decoded);
 }
 
+test "entropy-aware planned stream segmentation follows a 4 KiB grid change" {
+    const input_len = 64 * 1024;
+    const boundary = 20 * 1024;
+    const input = try std.testing.allocator.alloc(u8, input_len);
+    defer std.testing.allocator.free(input);
+    var random_state: u32 = 0x4f1e_7e12;
+    for (input, 0..) |*byte, index| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        const nibble: u8 = @truncate(random_state >> 28);
+        byte.* = if (index < boundary) nibble else 240 + nibble;
+    }
+    const chunks = [_][]const u8{input};
+    const options = br.PlannedStreamChunksOptions{ .quality = 2 };
+    const adaptive = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        options,
+    );
+    defer std.testing.allocator.free(adaptive);
+    const fixed = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 2, .adaptive_blocks = false },
+    );
+    defer std.testing.allocator.free(fixed);
+    try expectDataBlockCount(adaptive, 2);
+    try expectDataBlockCount(fixed, 1);
+    try std.testing.expect(adaptive.len < fixed.len);
+
+    const one_shot = try br.encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        input,
+        .{ .quality = 2 },
+    );
+    defer std.testing.allocator.free(one_shot);
+    try std.testing.expectEqualSlices(u8, adaptive, one_shot);
+    var incremental = br.IncrementalPlannedStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{ .stream = options },
+    );
+    defer incremental.deinit();
+    const incremental_wire = try encodeIncremental(
+        &incremental,
+        input,
+        619,
+        31,
+    );
+    defer std.testing.allocator.free(incremental_wire);
+    try std.testing.expectEqualSlices(u8, adaptive, incremental_wire);
+    const decoded = try br.decodeStreamAllocExactSize(
+        std.testing.allocator,
+        adaptive,
+        input.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
 test "entropy-aware planned stream segmentation arbitrates the proxy frontier" {
     const input_len = 64 * 1024;
     const first_boundary = 16 * 1024;

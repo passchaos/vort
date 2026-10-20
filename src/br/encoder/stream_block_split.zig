@@ -4,7 +4,7 @@ const histogram_model = @import("histogram_model.zig");
 pub const full_block_len: usize = 64 * 1024;
 pub const half_block_len: usize = full_block_len / 2;
 pub const quarter_block_len: usize = full_block_len / 4;
-pub const grid_block_len: usize = 8 * 1024;
+pub const grid_block_len: usize = 4 * 1024;
 pub const conservative_bound_block_len: usize = grid_block_len;
 const grid_block_count = full_block_len / grid_block_len;
 const max_segments = 4;
@@ -54,9 +54,9 @@ pub const Plan = struct {
 };
 
 /// Screen whether a complete 64 KiB planning window has strong distribution
-/// changes on an 8 KiB grid. The caller performs final exact-wire arbitration
+/// changes on a 4 KiB grid. The caller performs final exact-wire arbitration
 /// across the shapes selected by `Plan`. The integer Q8 model is deterministic
-/// on every target and searches all 63 layouts with at most four segments.
+/// on every target and searches all 575 layouts with at most four segments.
 pub fn shouldSplit64(input: []const u8) bool {
     return plan64(input).any();
 }
@@ -238,7 +238,7 @@ test "stream block split detects alternating quarter distributions" {
 
 test "stream block split detects a non-quarter grid boundary" {
     var changed: [full_block_len]u8 = undefined;
-    const boundary = 3 * grid_block_len;
+    const boundary = 24 * 1024;
     for (&changed, 0..) |*byte, index|
         byte.* = if (index < boundary)
             @intCast(index & 15)
@@ -253,6 +253,23 @@ test "stream block split detects a non-quarter grid boundary" {
     );
     try std.testing.expect(
         plan.gridPlans().len + @intFromBool(plan.halves) >= 2,
+    );
+}
+
+test "stream block split detects a boundary outside the 8 KiB grid" {
+    var changed: [full_block_len]u8 = undefined;
+    const boundary = 5 * grid_block_len;
+    for (&changed, 0..) |*byte, index|
+        byte.* = if (index < boundary)
+            @intCast(index & 15)
+        else
+            @intCast(240 + (index & 15));
+    const plan = plan64(&changed);
+    try std.testing.expect(plan.gridPlans().len >= 1);
+    try std.testing.expectEqualSlices(
+        u16,
+        &.{@as(u16, @intCast(boundary))},
+        plan.gridPlans()[0].slice(),
     );
 }
 
