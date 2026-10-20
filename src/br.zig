@@ -94,6 +94,8 @@ var test_hq_command_candidate_attempts: usize = 0;
 var test_hq_command_candidate_selections: usize = 0;
 var test_hq_command_pre_bytes: usize = 0;
 var test_hq_command_bytes: usize = 0;
+var test_stream_hq_command_candidate_attempts: usize = 0;
+var test_stream_hq_command_candidate_selections: usize = 0;
 
 const large_window_text_section = code_sections.large_window;
 const adaptive_split_text_section = code_sections.adaptive_split;
@@ -2041,6 +2043,19 @@ test {
 pub const IncrementalTestSupport = struct {
     pub const complete_static_dictionary_transform_count =
         static_dictionary.transform_count;
+
+    pub fn resetStreamHqCommandCounters() void {
+        test_stream_hq_command_candidate_attempts = 0;
+        test_stream_hq_command_candidate_selections = 0;
+    }
+
+    pub fn streamHqCommandAttempts() usize {
+        return test_stream_hq_command_candidate_attempts;
+    }
+
+    pub fn streamHqCommandSelections() usize {
+        return test_stream_hq_command_candidate_selections;
+    }
 
     pub fn completeStaticDictionaryTransformCase(
         transform_index: usize,
@@ -7355,7 +7370,120 @@ fn considerPlannedMetaBlockPolicy(
                 &state.candidate_wire,
                 &state.best_wire,
             );
+            if (policy.optimal.entropy_feedback)
+                try considerPlannedMetaBlockOptimalFeedback(
+                    allocator,
+                    state,
+                    input,
+                    commands.commands,
+                    policy,
+                    @min(input.len, @min(max_backward_distance, lz77.default_window_len)),
+                    start_byte,
+                    start_bit_index,
+                    best,
+                );
         }
+    }
+}
+
+fn considerPlannedMetaBlockOptimalFeedback(
+    allocator: std.mem.Allocator,
+    state: *IncrementalPlannedEncoderCodec.State,
+    input: []const u8,
+    seed_commands: []const command_plan.Command,
+    policy: PlannedMetaBlockPolicy,
+    search_window: usize,
+    start_byte: u8,
+    start_bit_index: u3,
+    best: *?PlannedMetaBlockCandidate,
+) Error!void {
+    var model = try entropy_feedback.buildWithStartingDistances(
+        allocator,
+        input,
+        seed_commands,
+        search_window,
+        state.wire_state.last_distances,
+    );
+    defer model.deinit(allocator);
+    const parser_options = lz77.GreedyOptions{
+        .window_len = search_window,
+        .max_chain = policy.optimal.max_chain,
+        .nice_len = policy.optimal.nice_len,
+        .max_candidates = policy.optimal.max_candidates,
+        .min_match = 4,
+        .max_match = lz77.max_match_len,
+    };
+    const modeled = try lz77.optimalPlanAllocWithCostModel(
+        allocator,
+        input,
+        parser_options,
+        model.lz77Model(),
+    );
+    defer modeled.deinit(allocator);
+    if (modeled.stats.matches != 0) {
+        const commands = try command_plan.buildAlloc(allocator, input, modeled.tokens);
+        defer commands.deinit(allocator);
+        try considerPlannedMetaBlockCommands(
+            allocator,
+            state,
+            input,
+            commands.commands,
+            policy,
+            state.window_bits,
+            state.compound_dictionary_size,
+            start_byte,
+            start_bit_index,
+            state.wire_state,
+            best,
+            &state.candidate_wire,
+            &state.best_wire,
+        );
+    }
+
+    if (policy.optimal.command_state_max_input_len == 0 or
+        input.len > policy.optimal.command_state_max_input_len)
+    {
+        return;
+    }
+    const hq = try hq_command_parser.planAllocWithStartingDistances(
+        allocator,
+        input,
+        .{
+            .window_len = search_window,
+            .max_chain = @min(policy.optimal.max_chain, 64),
+            .nice_len = policy.optimal.nice_len,
+            .max_candidates = @min(policy.optimal.max_candidates, 8),
+            .min_match = 4,
+            .max_match = lz77.max_match_len,
+        },
+        &model,
+        state.wire_state.last_distances,
+    );
+    defer hq.deinit(allocator);
+    if (hq.lz.stats.matches == 0) return;
+    const commands = try command_plan.buildAlloc(allocator, input, hq.lz.tokens);
+    defer commands.deinit(allocator);
+    const before_bits = if (best.*) |candidate| candidate.bit_count else std.math.maxInt(usize);
+    try considerPlannedMetaBlockCommands(
+        allocator,
+        state,
+        input,
+        commands.commands,
+        policy,
+        state.window_bits,
+        state.compound_dictionary_size,
+        start_byte,
+        start_bit_index,
+        state.wire_state,
+        best,
+        &state.candidate_wire,
+        &state.best_wire,
+    );
+    if (builtin.is_test) {
+        test_stream_hq_command_candidate_attempts += 1;
+        test_stream_hq_command_candidate_selections += @intFromBool(
+            best.*.?.bit_count < before_bits,
+        );
     }
 }
 
@@ -23902,6 +24030,24 @@ test "br q10 command-state candidate improves complete wire" {
     const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, payload.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &payload, decoded);
+
+    IncrementalTestSupport.resetStreamHqCommandCounters();
+    const chunks = [_][]const u8{&payload};
+    const chunked = try encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 10, .block_len = payload.len },
+    );
+    defer std.testing.allocator.free(chunked);
+    try std.testing.expectEqual(@as(usize, 1), IncrementalTestSupport.streamHqCommandAttempts());
+    try std.testing.expectEqual(@as(usize, 1), IncrementalTestSupport.streamHqCommandSelections());
+    const chunked_decoded = try decodeStreamAllocExactSize(
+        std.testing.allocator,
+        chunked,
+        payload.len,
+    );
+    defer std.testing.allocator.free(chunked_decoded);
+    try std.testing.expectEqualSlices(u8, &payload, chunked_decoded);
 }
 
 test "br q10 command-state work limit preserves larger entropy feedback" {

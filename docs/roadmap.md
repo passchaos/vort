@@ -93,6 +93,13 @@ major gaps before Vort can claim broad industry-best parity:
   6,427-byte source wire at 395.53/394.18 ms. Scaling the stateful search,
   broader iterative refinement, and global exact-cost segmentation remain
   open.
+  The shared planned meta-block core now applies both feedback stages to
+  chunk-list and caller-driven incremental q10/q11 encoding as well. Cost
+  training inherits the committed four-entry recent-distance ring across block
+  boundaries; a two-block 8 KiB q10 fixture is byte-identical under chunked and
+  fragmented incremental schedules, and Node/libbrotli independently decodes
+  its 493-byte stream. This closes the former one-shot versus streaming quality
+  policy mismatch.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
   entropy block switching, static dictionaries, consecutive compressed

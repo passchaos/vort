@@ -112,6 +112,26 @@ def main() -> int:
     if len(encoded) > 231:
         raise SystemExit(f"q10-command-state: expected the retained stateful wire, got {len(encoded)} bytes")
     print(f"brotli planned q10-command-state node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = bytearray(8192)
+    state = 0x7F4A7C15
+    position = 0
+    distances = (4, 7, 11, 16, 31, 64, 127, 257)
+    while position < len(expected):
+        state = (state * 1664525 + 1013904223) & 0xFFFFFFFF
+        selected_distance = distances[(state >> 16) % len(distances)]
+        if position >= selected_distance and state & 3:
+            copy_len = min(len(expected) - position, 4 + ((state >> 8) % 61))
+            for i in range(copy_len):
+                expected[position + i] = expected[position + i - selected_distance]
+            position += copy_len
+        else:
+            expected[position] = (state >> 24) & 31
+            position += 1
+    encoded = subprocess.check_output([sys.argv[1], "q10-command-state-chunked"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("q10-command-state-chunked: node output mismatch")
+    print(f"brotli planned q10-command-state-chunked node diff: encoded={len(encoded)} decoded={len(actual)}")
     expected = (
         b"alpha beta gamma delta alpha beta gamma delta " * 64
         + b"qzxwvbnm1234567890QZXWVBNM!@#$%^&*"

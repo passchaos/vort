@@ -45,6 +45,22 @@ pub fn planAlloc(
     options: lz77.GreedyOptions,
     model: *const entropy_feedback.Model,
 ) !Plan {
+    return planAllocWithStartingDistances(
+        allocator,
+        input,
+        options,
+        model,
+        initial_last_distances,
+    );
+}
+
+pub fn planAllocWithStartingDistances(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: lz77.GreedyOptions,
+    model: *const entropy_feedback.Model,
+    starting_last_distances: [4]usize,
+) !Plan {
     if (input.len == 0 or input.len > std.math.maxInt(u32) or
         options.window_len == 0 or options.window_len > lz77.default_window_len or
         options.min_match < 3 or options.min_match > options.max_match or
@@ -54,6 +70,8 @@ pub fn planAlloc(
         return error.InvalidBlockPlan;
     }
     if (model.distance.len <= options.window_len) return error.InvalidBlockPlan;
+    for (starting_last_distances) |value|
+        if (value == 0) return error.InvalidBlockPlan;
 
     var index: lz77.HashIndex = .{};
     defer index.deinit(allocator);
@@ -70,7 +88,7 @@ pub fn planAlloc(
     @memset(lengths, 0);
     states[0] = .{
         .cost = 0,
-        .last_distances = initial_last_distances,
+        .last_distances = starting_last_distances,
         .pending_insert = 0,
         .previous_position = 0,
         .previous_slot = 0,

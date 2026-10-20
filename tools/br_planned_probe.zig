@@ -136,6 +136,34 @@ pub fn main(init: std.process.Init) !void {
         try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
         return;
     }
+    if (std.mem.eql(u8, mode, "q10-command-state-chunked")) {
+        var payload: [8192]u8 = undefined;
+        var state: u32 = 0x7f4a_7c15;
+        var position: usize = 0;
+        while (position < payload.len) {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            const distances = [_]usize{ 4, 7, 11, 16, 31, 64, 127, 257 };
+            const selected_distance = distances[(state >> 16) % distances.len];
+            if (position >= selected_distance and state & 3 != 0) {
+                const copy_len = @min(payload.len - position, 4 + ((state >> 8) % 61));
+                for (0..copy_len) |i|
+                    payload[position + i] = payload[position + i - selected_distance];
+                position += copy_len;
+            } else {
+                payload[position] = @truncate((state >> 24) & 31);
+                position += 1;
+            }
+        }
+        const chunks = [_][]const u8{ payload[0..4096], payload[4096..] };
+        const encoded = try vort.brEncodePlannedStreamChunksWithOptionsAlloc(
+            init.gpa,
+            &chunks,
+            .{ .quality = 10, .block_len = 4096 },
+        );
+        defer init.gpa.free(encoded);
+        try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
+        return;
+    }
     if (std.mem.eql(u8, mode, "chunked-multiblock")) {
         const first = "alpha beta gamma delta alpha beta gamma delta " ** 64;
         const middle = "qzxwvbnm1234567890QZXWVBNM!@#$%^&*";

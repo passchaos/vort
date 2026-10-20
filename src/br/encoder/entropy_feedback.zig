@@ -45,15 +45,33 @@ pub fn build(
     commands: []const command_plan.Command,
     window_len: usize,
 ) (std.mem.Allocator.Error || error{InvalidBlockPlan})!Model {
+    return buildWithStartingDistances(
+        allocator,
+        input,
+        commands,
+        window_len,
+        .{ 16, 15, 11, 4 },
+    );
+}
+
+pub fn buildWithStartingDistances(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    commands: []const command_plan.Command,
+    window_len: usize,
+    starting_last_distances: [4]usize,
+) (std.mem.Allocator.Error || error{InvalidBlockPlan})!Model {
     if (input.len == 0 or window_len == 0 or window_len > lz77.default_window_len)
         return error.InvalidBlockPlan;
+    for (starting_last_distances) |value|
+        if (value == 0) return error.InvalidBlockPlan;
 
     var literals: LiteralHistogram = .{};
     var copy_codes: CopyCodeHistogram = .{};
     var regular_distances: DistanceHistogram = .{};
     var wire_distances: DistanceHistogram = .{};
     var command_symbols: CommandHistogram = .{};
-    var last_distances = [_]usize{ 16, 15, 11, 4 };
+    var last_distances = starting_last_distances;
     var cursor: usize = 0;
     var match_count: usize = 0;
     for (commands) |command| {
@@ -190,5 +208,42 @@ test "entropy feedback rejects incomplete and non-lz77 plans" {
     try std.testing.expectError(
         error.InvalidBlockPlan,
         build(std.testing.allocator, "abcdef", &compound, 6),
+    );
+}
+
+test "entropy feedback inherits the caller recent-distance ring" {
+    const input = "abcdabcd";
+    const tokens = [_]lz77.Token{
+        .{ .literal = 'a' },
+        .{ .literal = 'b' },
+        .{ .literal = 'c' },
+        .{ .literal = 'd' },
+        .{ .match = .{ .length = 4, .distance = 4 } },
+    };
+    const commands = try command_plan.buildAlloc(std.testing.allocator, input, &tokens);
+    defer commands.deinit(std.testing.allocator);
+    var implicit = try buildWithStartingDistances(
+        std.testing.allocator,
+        input,
+        commands.commands,
+        input.len,
+        .{ 16, 15, 11, 4 },
+    );
+    defer implicit.deinit(std.testing.allocator);
+    var explicit = try buildWithStartingDistances(
+        std.testing.allocator,
+        input,
+        commands.commands,
+        input.len,
+        .{ 16, 15, 11, 99 },
+    );
+    defer explicit.deinit(std.testing.allocator);
+    const implicit_encoding = command_encoding.forLengths(4, 4, true).?;
+    const explicit_encoding = command_encoding.forLengths(4, 4, false).?;
+    try std.testing.expect(
+        implicit.command[implicit_encoding.symbol] < explicit.command[implicit_encoding.symbol],
+    );
+    try std.testing.expect(
+        explicit.command[explicit_encoding.symbol] < implicit.command[explicit_encoding.symbol],
     );
 }

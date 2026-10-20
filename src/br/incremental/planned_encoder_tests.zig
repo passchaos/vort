@@ -157,12 +157,14 @@ test "chunked and incremental planned encoders honor quality policies" {
         .{ .quality = 8, .mode = .text },
     );
     defer std.testing.allocator.free(q8);
+    br.IncrementalTestSupport.resetStreamHqCommandCounters();
     const q10 = try br.encodePlannedStreamChunksWithOptionsAlloc(
         std.testing.allocator,
         &chunks,
         .{ .quality = 10, .mode = .font },
     );
     defer std.testing.allocator.free(q10);
+    try std.testing.expect(br.IncrementalTestSupport.streamHqCommandAttempts() != 0);
     const q11 = try br.encodePlannedStreamChunksWithOptionsAlloc(
         std.testing.allocator,
         &chunks,
@@ -193,6 +195,25 @@ test "chunked and incremental planned encoders honor quality policies" {
     const incremental_q8 = try encodeIncremental(&incremental, input, 257, 13);
     defer std.testing.allocator.free(incremental_q8);
     try std.testing.expectEqualSlices(u8, q8, incremental_q8);
+
+    br.IncrementalTestSupport.resetStreamHqCommandCounters();
+    var incremental_q10 = br.IncrementalPlannedStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{
+            .stream = .{ .quality = 10, .mode = .font },
+            .block_len = block_len,
+        },
+    );
+    defer incremental_q10.deinit();
+    const incremental_q10_bytes = try encodeIncremental(
+        &incremental_q10,
+        input,
+        257,
+        13,
+    );
+    defer std.testing.allocator.free(incremental_q10_bytes);
+    try std.testing.expectEqualSlices(u8, q10, incremental_q10_bytes);
+    try std.testing.expect(br.IncrementalTestSupport.streamHqCommandAttempts() != 0);
 }
 
 test "q0 and q1 fragment surfaces share one deterministic block core" {

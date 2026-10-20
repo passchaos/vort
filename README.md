@@ -2330,6 +2330,12 @@ both additions monotonic. This is still not libbrotli HQ parity: scaling the
 stateful search through the complete q10/q11 ceilings, additional refinement,
 contextual dictionary encoding, and global exact-cost segmentation remain
 future work.
+One-shot, chunk-list, reusable, and caller-driven incremental planned encoders
+share these q10/q11 feedback stages. Multi-meta-block encoding seeds each new
+cost model and command beam with the committed four-entry recent-distance ring;
+the required Node/libbrotli differential includes a two-block 8 KiB q10 stream,
+while internal tests require chunked and fragmented incremental schedules to
+produce identical wire.
 Inputs beyond the 16 MiB
 format limit keep one Brotli stream and apply the selected policy independently
 to bounded 16/32/64 KiB blocks. q2...q11 retain window-bounded LZ77 history and

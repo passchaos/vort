@@ -126,6 +126,26 @@ limit, independent baseline/current binaries on CPU 8 measured 395.53 ms versus
 394.18 ms (`1.0034x`) with identical 6,427-byte output. Wider command-state
 search therefore remains future optimization rather than an unbounded default.
 
+The same two feedback stages now run inside the shared meta-block policy used
+by one-shot chunk lists and `BrotliIncrementalPlannedStreamEncoder`; they are no
+longer one-shot-only quality behavior. Each block trains from its first optimal
+proposal while inheriting the caller-visible four-entry recent-distance ring
+from the preceding committed meta-block. A two-block 8 KiB q10 fixture is
+byte-identical between chunked and arbitrarily fragmented incremental encoding,
+and Node/libbrotli independently decodes its 493-byte stream. The locked 4 KiB
+strict-win fixture also observes the stateful candidate winning inside the
+non-final meta-block bit-cost arbiter, not only in the standalone stream writer.
+Validation also corrected two stale pre-existing benchmark assertions against
+the already-shipped history-aware stream core. At baseline `c03ed3d1`, the
+multi-block row is 131 bytes versus 127 bytes for three separately finalized
+frames and about `0.47x` their aggregate encode throughput; its gate now records
+an explicit at-most-eight-byte delta and a conservative `0.40x` regression
+floor rather than implying leadership. The cross-block incremental row now
+requires one-shot chunked and reusable encoders to agree within two bytes and
+requires the 4,113-byte wire to remain less than roughly half of its 8 KiB
+input. These changes align the gates with existing public behavior; they do not
+claim a new multi-block performance win.
+
 ## Mode effects
 
 Generic, text, and font use exactly the same parser budgets, UTF-8 literal

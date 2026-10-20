@@ -43,8 +43,8 @@ fn writeCrossBlockRow(io: std.Io, allocator: std.mem.Allocator, writer: *std.Io.
     }
     const input = first ++ first;
     const chunks = [_][]const u8{ &first, &first };
-    const independent = try vort.brEncodePlannedStreamChunksAlloc(allocator, &chunks);
-    defer allocator.free(independent);
+    const one_shot_chunked = try vort.brEncodePlannedStreamChunksAlloc(allocator, &chunks);
+    defer allocator.free(one_shot_chunked);
 
     var encoder = vort.BrotliIncrementalPlannedStreamEncoder.initWithOptions(allocator, .{ .block_len = first.len });
     defer encoder.deinit();
@@ -71,7 +71,7 @@ fn writeCrossBlockRow(io: std.Io, allocator: std.mem.Allocator, writer: *std.Io.
             checksum = run_checksum;
         }
     }
-    try writer.print("cross_block,{d},{d},{d},{d},{d},{d},{d:.4},{d},{d},{d}\n", .{ input.len, iterations, independent.len, encoded_len, best_ns, best_ns, 1.0, checksum, checksum, encoder.retainedCapacity() });
+    try writer.print("cross_block,{d},{d},{d},{d},{d},{d},{d:.4},{d},{d},{d}\n", .{ input.len, iterations, one_shot_chunked.len, encoded_len, best_ns, best_ns, 1.0, checksum, checksum, encoder.retainedCapacity() });
 }
 
 fn encodeCrossBlock(encoder: *vort.BrotliIncrementalPlannedStreamEncoder, input: []const u8, output: []u8) !usize {

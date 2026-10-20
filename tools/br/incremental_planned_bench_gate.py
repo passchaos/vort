@@ -31,7 +31,11 @@ def main() -> int:
     assert float(single["speedup"]) >= 1.10, single
     cross = by_case["cross_block"]
     assert int(cross["input_bytes"]) == 8192, cross
-    assert int(cross["reusable_bytes"]) * 2 < int(cross["one_shot_bytes"]) + 64, cross
+    # Both public surfaces now share the history-aware block core and should
+    # emit the same deterministic wire. Compression is checked against the
+    # 8 KiB input rather than against the obsolete independent-block baseline.
+    assert abs(int(cross["reusable_bytes"]) - int(cross["one_shot_bytes"])) <= 2, cross
+    assert int(cross["reusable_bytes"]) * 2 < int(cross["input_bytes"]) + 64, cross
     assert cross["one_shot_checksum"] == cross["reusable_checksum"], cross
     print("br_incremental_planned_bench_gate=ok rows=2")
     return 0
