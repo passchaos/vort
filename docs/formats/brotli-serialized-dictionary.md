@@ -157,10 +157,10 @@ available; FastCover-style acceleration, wider calibration, and broad corpus
 evidence remain open. The builder also remains available for fully explicit
 caller-owned specifications.
 The repository-owned four-category trainer report currently records zero
-charged winners and zero regressions (`16,205 -> 16,205` aggregate), making
+charged winners and zero regressions (`16,170 -> 16,170` aggregate), making
 real-corpus profitability an explicit tracked gap.
-The out-of-band shadow finds one structured-JSON frame winner. A thirteen-way
-single-length marginal search selects length 9 at cap four, reducing frames
-from 3,658 to 3,638 with a 2,056-byte dictionary and lowering amortization to
-roughly 3,290 frames. Source, documentation, and binary have no frame-only
-winner.
+The out-of-band shadow finds two frame winners. Bounded iterative marginal
+search reduces structured JSON lengths 8 and 9 to cap four, taking frames from
+3,658 to 3,636 with a 1,992-byte dictionary and lowering amortization to roughly
+2,898 frames. Source falls from 4,288 to 4,250 behind a 2,128-byte base-layout
+dictionary; documentation and binary have no frame-only winner.

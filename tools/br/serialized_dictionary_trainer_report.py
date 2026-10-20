@@ -12,13 +12,15 @@ import real_corpus_diff
 
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA = "vort.br_serialized_dictionary_trainer_report"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 MAX_SPARSE_WORD_PROFILES = 16
+MAX_WORD_BUCKET_PRUNING_STEPS = 4
 HEADER = (
     "label", "category", "input_bytes", "training_samples", "validation_samples",
     "baseline_frames", "trained_frames", "dictionary_bytes", "total_bytes",
     "savings", "ratio_ppm", "winner", "word_profile", "word_min", "word_max",
     "max_words_per_length", "word_bucket_candidates", "sparse_profile",
+    "word_pruning_steps", "word_caps",
     "cover_d", "cover_hash_log",
     "context_profile", "context_mode", "context_cutoff", "context_clusters",
     "transform_profile", "transform_lists", "shift_parameters",
@@ -26,7 +28,8 @@ HEADER = (
     "shadow_frame_savings", "break_even_batches", "break_even_frames",
     "shadow_word_profile", "shadow_word_min", "shadow_word_max",
     "shadow_max_words_per_length", "shadow_word_bucket_candidates",
-    "shadow_sparse_profile", "shadow_cover_d", "shadow_cover_hash_log",
+    "shadow_sparse_profile", "shadow_word_pruning_steps", "shadow_word_caps",
+    "shadow_cover_d", "shadow_cover_hash_log",
     "train_ns", "shadow_train_ns", "peak_bytes", "worst_sample_delta",
     "shadow_worst_sample_delta",
 )
@@ -35,11 +38,11 @@ INTEGER_FIELDS = {
     "trained_frames", "dictionary_bytes", "total_bytes", "savings", "winner",
     "ratio_ppm",
     "word_min", "word_max", "max_words_per_length", "word_bucket_candidates",
-    "context_clusters", "transform_lists", "shift_parameters", "shadow_winner",
+    "word_pruning_steps", "context_clusters", "transform_lists", "shift_parameters", "shadow_winner",
     "shadow_frames", "shadow_dictionary_bytes", "shadow_frame_savings",
     "break_even_batches", "break_even_frames", "train_ns", "shadow_train_ns",
     "shadow_word_min", "shadow_word_max", "shadow_max_words_per_length",
-    "shadow_word_bucket_candidates",
+    "shadow_word_bucket_candidates", "shadow_word_pruning_steps",
     "peak_bytes", "worst_sample_delta", "shadow_worst_sample_delta",
 }
 OPTIONAL_INTEGER_FIELDS = {
@@ -67,6 +70,56 @@ def parse_rows(output: str) -> list[dict[str, object]]:
             raise RuntimeError(f"report line {line_number} has a malformed integer") from error
         rows.append(row)
     return rows
+
+
+def parse_word_caps(value: object, label: str) -> dict[int, int] | None:
+    text = str(value)
+    if text == "-":
+        return None
+    result: dict[int, int] = {}
+    try:
+        for entry in text.split(","):
+            word_len_text, cap_text = entry.split(":", 1)
+            word_len = int(word_len_text, 10)
+            cap = int(cap_text, 10)
+            if word_len in result:
+                raise ValueError
+            result[word_len] = cap
+    except ValueError as error:
+        raise RuntimeError(f"case {label} has malformed word caps") from error
+    return result
+
+
+def validate_word_layout(row: dict[str, object], prefix: str, label: str) -> None:
+    field = lambda name: f"{prefix}_{name}" if prefix else name
+    word_min = int(row[field("word_min")])
+    word_max = int(row[field("word_max")])
+    max_words = int(row[field("max_words_per_length")])
+    sparse_profile = row[field("sparse_profile")]
+    pruning_steps = int(row[field("word_pruning_steps")])
+    caps = parse_word_caps(row[field("word_caps")], label)
+    if sparse_profile is not None and not (
+        0 <= int(sparse_profile) < MAX_SPARSE_WORD_PROFILES
+    ):
+        raise RuntimeError(f"case {label} has invalid {prefix} sparse profile metadata")
+    if not (0 <= pruning_steps <= MAX_WORD_BUCKET_PRUNING_STEPS):
+        raise RuntimeError(f"case {label} has invalid {prefix} pruning steps")
+    if pruning_steps != 0 and sparse_profile is not None:
+        raise RuntimeError(f"case {label} mixes sparse and automatic word profiles")
+    expects_caps = sparse_profile is not None or pruning_steps != 0
+    if expects_caps != (caps is not None):
+        raise RuntimeError(f"case {label} has incomplete {prefix} word cap metadata")
+    if caps is None:
+        return
+    if tuple(caps) != tuple(range(word_min, word_max + 1)):
+        raise RuntimeError(f"case {label} has a discontinuous {prefix} word cap report")
+    if max(caps.values()) != max_words:
+        raise RuntimeError(f"case {label} has inconsistent {prefix} maximum word cap")
+    for cap in caps.values():
+        if cap != 0 and (cap < 2 or cap & (cap - 1) != 0):
+            raise RuntimeError(f"case {label} has an invalid {prefix} word cap")
+        if pruning_steps != 0 and cap == 0:
+            raise RuntimeError(f"case {label} automatically disabled a word bucket")
 
 
 def validate_rows(rows: list[dict[str, object]], manifest: real_corpus_diff.Manifest, limit: int) -> dict[str, int]:
@@ -116,7 +169,8 @@ def validate_rows(rows: list[dict[str, object]], manifest: real_corpus_diff.Mani
         if winner == 0 and (
             savings != 0 or row["dictionary_bytes"] != 0 or row["word_profile"] != "none" or
             row["word_min"] != 0 or row["word_max"] != 0 or row["max_words_per_length"] != 0 or
-            row["word_bucket_candidates"] != 0 or row["sparse_profile"] is not None
+            row["word_bucket_candidates"] != 0 or row["sparse_profile"] is not None or
+            row["word_pruning_steps"] != 0 or row["word_caps"] != "-"
         ):
             raise RuntimeError(f"case {case.label} reports a synthetic non-winner")
         if winner == 1:
@@ -127,10 +181,7 @@ def validate_rows(rows: list[dict[str, object]], manifest: real_corpus_diff.Mani
                 raise RuntimeError(f"case {case.label} has an invalid word range")
             if int(row["max_words_per_length"]) < 2 or int(row["word_bucket_candidates"]) < 1:
                 raise RuntimeError(f"case {case.label} has invalid word bucket metadata")
-            if row["sparse_profile"] is not None and not (
-                0 <= int(row["sparse_profile"]) < MAX_SPARSE_WORD_PROFILES
-            ):
-                raise RuntimeError(f"case {case.label} has invalid sparse profile metadata")
+            validate_word_layout(row, "", case.label)
         shadow_winner = int(row["shadow_winner"])
         shadow_frames = int(row["shadow_frames"])
         shadow_dictionary = int(row["shadow_dictionary_bytes"])
@@ -145,7 +196,8 @@ def validate_rows(rows: list[dict[str, object]], manifest: real_corpus_diff.Mani
                     row["shadow_word_profile"] != "none" or row["shadow_word_min"] != 0 or
                     row["shadow_word_max"] != 0 or row["shadow_max_words_per_length"] != 0 or
                     row["shadow_word_bucket_candidates"] != 0 or
-                    row["shadow_sparse_profile"] is not None):
+                    row["shadow_sparse_profile"] is not None or
+                    row["shadow_word_pruning_steps"] != 0 or row["shadow_word_caps"] != "-"):
                 raise RuntimeError(f"case {case.label} reports a synthetic shadow non-winner")
         else:
             shadow_winners += 1
@@ -163,10 +215,7 @@ def validate_rows(rows: list[dict[str, object]], manifest: real_corpus_diff.Mani
                 raise RuntimeError(f"case {case.label} has an invalid shadow word range")
             if int(row["shadow_max_words_per_length"]) < 2 or int(row["shadow_word_bucket_candidates"]) < 1:
                 raise RuntimeError(f"case {case.label} has invalid shadow word bucket metadata")
-            if row["shadow_sparse_profile"] is not None and not (
-                0 <= int(row["shadow_sparse_profile"]) < MAX_SPARSE_WORD_PROFILES
-            ):
-                raise RuntimeError(f"case {case.label} has invalid shadow sparse profile metadata")
+            validate_word_layout(row, "shadow", case.label)
             break_even_values.append(int(row["break_even_frames"]))
         if int(row["training_samples"]) < 5 or int(row["validation_samples"]) <= 0:
             raise RuntimeError(f"case {case.label} has an invalid partition")
@@ -204,6 +253,20 @@ def write_json(path: Path, rows: list[dict[str, object]], summary: dict[str, int
     path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def pruning_label(row: dict[str, object], prefix: str) -> str:
+    field = lambda name: f"{prefix}_{name}" if prefix else name
+    steps = int(row[field("word_pruning_steps")])
+    if steps == 0:
+        return ""
+    caps = parse_word_caps(row[field("word_caps")], str(row["label"]))
+    assert caps is not None
+    maximum = int(row[field("max_words_per_length")])
+    reduced = ",".join(
+        f"{word_len}:{cap}" for word_len, cap in caps.items() if cap < maximum
+    )
+    return f"#p{steps}[{reduced}]"
+
+
 def write_markdown(path: Path, rows: list[dict[str, object]], summary: dict[str, int]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = [
@@ -220,6 +283,7 @@ def write_markdown(path: Path, rows: list[dict[str, object]], summary: dict[str,
             charged_word += f"[{row['word_min']}..{row['word_max']}×{row['max_words_per_length']}]"
             if row["sparse_profile"] is not None:
                 charged_word += f"#s{row['sparse_profile']}"
+            charged_word += pruning_label(row, "")
         shadow_word = str(row["shadow_word_profile"])
         if shadow_word != "none":
             shadow_word += (
@@ -228,6 +292,7 @@ def write_markdown(path: Path, rows: list[dict[str, object]], summary: dict[str,
             )
             if row["shadow_sparse_profile"] is not None:
                 shadow_word += f"#s{row['shadow_sparse_profile']}"
+            shadow_word += pruning_label(row, "shadow")
         profiles = (
             f"{charged_word}/{row['context_profile']}/{row['transform_profile']}"
             f"; shadow={shadow_word}"

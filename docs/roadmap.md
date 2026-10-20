@@ -71,14 +71,14 @@ major gaps before Vort can claim broad industry-best parity:
   structured JSON, and binary prefixes with deterministic reruns, training
   time, logical peak allocation, and worst-sample evidence. Its first bounded
   16 KiB/chunked baseline correctly returns null for all four categories and
-  holds aggregate complete total at `16,205 -> 16,205`; producing real-corpus
+  holds aggregate complete total at `16,170 -> 16,170`; producing real-corpus
   wins without regressions is now an explicit measured target. An out-of-band
-  shadow now searches all thirteen single-length `8 -> 4` neighbors and selects
-  length 9: structured JSON falls from 3,658 to 3,638 frames with a 2,056-byte
-  COVER dictionary, requiring about 3,290 frames to break even. Source,
-  documentation, and binary do not improve even before charging dictionary
-  bytes. Iterative multi-bucket pruning and broader calibration are the next
-  measured ratio targets.
+  shadow now performs bounded iterative half-cap search: structured JSON
+  selects lengths 9 then 8, falling from 3,658 to 3,636 frames with a 1,992-byte
+  COVER dictionary and about 2,898 break-even frames. Source separately falls
+  from 4,288 to 4,250 behind 2,128 dictionary bytes; documentation and binary do
+  not improve. Broader calibration and charged wins are the next measured ratio
+  targets.
   q10/q11 Zopfli/HQ cost refinement and global exact-cost segmentation also
   remain open.
 - True byte-progressive Brotli decoding now covers stored data, metadata,

@@ -2234,6 +2234,12 @@ For non-contiguous layouts, a sparse profile lists strictly increasing
 `(word_len,max_words)` entries; unlisted lengths are disabled, caps must be
 legal powers of two, and up to sixteen sparse profiles follow the base/range
 candidates in stable order. Results expose the selected sparse profile index.
+Callers may instead enable bounded automatic cap optimization. Each round
+generates every single-length half-cap neighbor from the previous complete-wire
+winner, evaluates the full heavy/COVER/context/transform matrix, and stops when
+no neighbor improves. The default bound is two rounds and the public hard limit
+is four; results expose the selected 32-entry cap array, accepted round count,
+and `u16` candidate counters.
 The trainer also compares identity-only word lists with canonical
 identity/uppercase-first/uppercase-all transform families without retraining
 the words, plus independent omit-first/last and combined case+omit families.
@@ -2264,17 +2270,18 @@ source, Markdown, structured JSON, and binary manifest cases into independent
 selection, and writes schema-versioned JSON/Markdown with complete-total bytes,
 profiles, time, logical peak allocation, and worst per-sample delta. The current
 four-category baseline has zero winners and zero regressions
-(`16205 -> 16205` aggregate); this is an explicit calibration gap, not a
+(`16170 -> 16170` aggregate); this is an explicit calibration gap, not a
 claimed ratio win.
 An out-of-band shadow run removes the one-time dictionary charge without
 changing primary frame-cost selection; equal-frame candidates now prefer the
-smaller distributed dictionary. Structured JSON is the only frame-only winner
-(`3658 -> 3638`) and uses a 2,056-byte `d=6/hash_log=12` COVER dictionary; it
-breaks even after 103 equivalent validation batches, about 3,290 frames, while
-its worst individual frame grows by 12 bytes. Thirteen single-length marginal
-neighbors retain the complete `4...16/max8` layout and reduce one cap to four;
-profile `s5` (length 9) wins. Source, documentation, and binary return null out
-of band. Aggregate shadow frames are 16,185, saving 20 bytes.
+smaller distributed dictionary. Structured JSON accepts two greedy rounds,
+reducing the length-9 and length-8 caps from eight to four. Its frames fall
+`3658 -> 3636` with a 1,992-byte `d=6/hash_log=12` COVER dictionary; it breaks
+even after 91 equivalent validation batches, about 2,898 frames, while its
+worst individual frame grows by 12 bytes. Source separately falls from 4,288 to
+4,250 behind a 2,128-byte base-layout dictionary and breaks even around 1,792
+frames, with worst delta `+43`. Documentation and binary return null out of
+band. Aggregate shadow frames are 16,110, saving 60 bytes.
 
 ### Brotli planned encoder controls
 

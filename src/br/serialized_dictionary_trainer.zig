@@ -1062,8 +1062,8 @@ fn validateOptions(options: Options) Error!void {
     {
         return error.InvalidTrainingOptions;
     }
-    if ((options.word_count_caps_by_length == null) !=
-        (options.sparse_word_profile_index == null))
+    if (options.word_count_caps_by_length == null and
+        options.sparse_word_profile_index != null)
     {
         return error.InvalidTrainingOptions;
     }

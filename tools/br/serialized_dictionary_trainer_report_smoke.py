@@ -51,6 +51,8 @@ def row(label: str, category: str, winner: int = 1, shadow_winner: int = 1) -> d
         "max_words_per_length": 8 if winner else 0,
         "word_bucket_candidates": 1 if winner else 0,
         "sparse_profile": None,
+        "word_pruning_steps": 0,
+        "word_caps": "-",
         "cover_d": 6 if winner else None,
         "cover_hash_log": 12 if winner else None,
         "context_profile": "global" if winner else "none",
@@ -72,6 +74,10 @@ def row(label: str, category: str, winner: int = 1, shadow_winner: int = 1) -> d
         "shadow_max_words_per_length": 4 if shadow_winner else 0,
         "shadow_word_bucket_candidates": 3 if shadow_winner else 0,
         "shadow_sparse_profile": 0 if shadow_winner else None,
+        "shadow_word_pruning_steps": 0,
+        "shadow_word_caps": (
+            "4:4,5:4,6:4,7:4,8:4,9:4,10:4" if shadow_winner else "-"
+        ),
         "shadow_cover_d": 6 if shadow_winner else None,
         "shadow_cover_hash_log": 12 if shadow_winner else None,
         "train_ns": 1_000_000,
@@ -112,10 +118,27 @@ class ReportSmoke(unittest.TestCase):
         summary = report.validate_rows(rows, manifest(), 32768)
         self.assertEqual(0, summary["winners"])
 
+    def test_accepts_automatic_word_caps(self) -> None:
+        automatic = row("source", "source")
+        automatic["shadow_max_words_per_length"] = 8
+        automatic["shadow_word_bucket_candidates"] = 27
+        automatic["shadow_sparse_profile"] = None
+        automatic["shadow_word_pruning_steps"] = 2
+        automatic["shadow_word_caps"] = "4:8,5:8,6:8,7:8,8:4,9:4,10:8"
+        rows = [automatic, row("binary", "binary", 0, 0)]
+        summary = report.validate_rows(rows, manifest(), 32768)
+        self.assertEqual(1, summary["shadow_winners"])
+
     def test_rejects_bad_break_even(self) -> None:
         rows = [row("source", "source"), row("binary", "binary", 0, 0)]
         rows[0]["break_even_frames"] = 8
         with self.assertRaisesRegex(RuntimeError, "break-even"):
+            report.validate_rows(rows, manifest(), 32768)
+
+    def test_rejects_bad_word_caps(self) -> None:
+        rows = [row("source", "source"), row("binary", "binary", 0, 0)]
+        rows[0]["shadow_word_caps"] = "4:3,5:4,6:4,7:4,8:4,9:4,10:4"
+        with self.assertRaisesRegex(RuntimeError, "word cap"):
             report.validate_rows(rows, manifest(), 32768)
 
     def test_parser_rejects_bad_header(self) -> None:
