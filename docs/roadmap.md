@@ -18061,6 +18061,14 @@ reuse, so production keeps the simpler independently owned plans.
   and consumption checks, and all seven auxiliary-stream codecs. The
   differential pins a system-generated mtime plus Unix attributes and validates all seven Vort
   external-metadata modes through 7-Zip.
+  Optional per-entry StartPos is now preserved as a sparse 64-bit definition
+  vector across inline/external metadata, encoded/encrypted headers, one-shot,
+  incremental, borrowed, and source-backed APIs. Zero and values beyond 32 bits
+  remain defined, while truncated/duplicate/trailing external values are
+  rejected. 7-Zip 21.07 reports `Position = 4294967297` for both Vort writer
+  surfaces (`start_position_cases=2`). The reserved Comment NID still lacks a
+  stable upstream read/write value representation and remains intentionally
+  skipped rather than assigned a Vort-only encoding.
   FilesInfo Anti vectors are now parsed and emitted across one-shot and
   incremental writers. The public entry model preserves anti-file versus
   anti-directory kind, rejects payload-bearing anti entries and malformed or
@@ -18161,8 +18169,8 @@ reuse, so production keeps the simpler independently owned plans.
   variants: fourteen linear main-codec variants, fourteen terminal-codec
   variants, and fourteen BCJ2 variants, alongside metadata values,
   self-decoding, determinism, and non-empty CALL/JUMP streams.
-  Deeper LZMA parsing, other branching or multi-packed-stream graphs,
-  comments, and start-position properties remain follow-up work. See
+  Deeper LZMA parsing, other branching or multi-packed-stream graphs, and
+  comments remain follow-up work. See
   `docs/formats/7z.md`.
 
 - Added dependency-free QCOW2 v2/v3 reading and deterministic writing. The

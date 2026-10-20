@@ -358,6 +358,7 @@ test "7z writer and reader preserve inline and external file metadata" {
             .creation_time = filetime_epoch + 10_000_000,
             .access_time = filetime_epoch + 20_000_000,
             .modification_time = filetime_epoch + 30_000_000,
+            .start_position = 0,
             .attributes = 0x81a4_0020,
         },
         .{
@@ -368,6 +369,7 @@ test "7z writer and reader preserve inline and external file metadata" {
             .name = "目录",
             .kind = .directory,
             .creation_time = filetime_epoch + 50_000_000,
+            .start_position = 0x1_0000_0001,
             .attributes = 0x41ed_0010,
         },
         .{
@@ -390,6 +392,7 @@ test "7z writer and reader preserve inline and external file metadata" {
         try std.testing.expectEqual(expected.creation_time, actual.creation_time);
         try std.testing.expectEqual(expected.access_time, actual.access_time);
         try std.testing.expectEqual(expected.modification_time, actual.modification_time);
+        try std.testing.expectEqual(expected.start_position, actual.start_position);
         try std.testing.expectEqual(expected.attributes, actual.attributes);
     }
 
@@ -421,6 +424,7 @@ test "7z writer and reader preserve inline and external file metadata" {
             try std.testing.expectEqual(expected.creation_time, actual.creation_time);
             try std.testing.expectEqual(expected.access_time, actual.access_time);
             try std.testing.expectEqual(expected.modification_time, actual.modification_time);
+            try std.testing.expectEqual(expected.start_position, actual.start_position);
             try std.testing.expectEqual(expected.attributes, actual.attributes);
         }
         try std.testing.expectError(

@@ -80,6 +80,32 @@ def verify_with_seven_zip_anti(
             raise AssertionError(f"7-Zip did not recognize anti-item {name!r}")
 
 
+def verify_with_seven_zip_position(
+    tool: str,
+    archive: Path,
+    expected: int,
+    password: str | None = None,
+) -> None:
+    password_args = [f"-p{password}"] if password is not None else []
+    listing = subprocess.run(
+        [tool, "l", "-slt", "-bd", *password_args, str(archive)],
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ).stdout.splitlines()
+    starts = [index for index, line in enumerate(listing) if line == "Path = plain.txt"]
+    if len(starts) != 1:
+        raise AssertionError("7-Zip listing omitted start-position entry")
+    start = starts[0]
+    end = next(
+        (index for index in range(start + 1, len(listing)) if listing[index].startswith("Path = ")),
+        len(listing),
+    )
+    if f"Position = {expected}" not in listing[start:end]:
+        raise AssertionError("7-Zip did not recognize Vort StartPos metadata")
+
+
 def create_reference(tool: str, tree: Path, archive: Path, options: list[str]) -> None:
     names = ["hello.txt", "second.txt", "empty.txt", "folder", "数据.txt"]
     subprocess.run(
@@ -367,6 +393,7 @@ def main() -> None:
     source_variants = 1
     stream_variants = 1
     volume_variants = 1
+    start_position_cases = 0
 
     with tempfile.TemporaryDirectory(prefix="vort-seven-zip-diff-") as temp_text:
         temp = Path(temp_text)
@@ -417,6 +444,7 @@ def main() -> None:
                 "creation": filetime_epoch + 10_000_000,
                 "access": filetime_epoch + 20_000_000,
                 "modification": filetime_epoch + 30_000_000,
+                "start_position": 0x1_0000_0001,
                 "attributes": 0x81A4_0020,
             },
         )
@@ -424,6 +452,8 @@ def main() -> None:
         if seven_zip_tool is not None:
             verify_with_seven_zip(seven_zip_tool, first, expected_vort)
             verify_with_seven_zip_anti(seven_zip_tool, first)
+            verify_with_seven_zip_position(seven_zip_tool, first, 0x1_0000_0001)
+            start_position_cases += 1
             anti_tree = temp / "reference-anti"
             anti_tree.mkdir()
             reference_anti = anti_tree / "reference-anti.7z"
@@ -475,6 +505,12 @@ def main() -> None:
                     if compression == "copy" and mode == "independent" and password is None:
                         verify_with_vort_anti(args.cli, archive)
                         verify_with_seven_zip_anti(seven_zip_tool, archive)
+                        verify_with_seven_zip_position(
+                            seven_zip_tool,
+                            archive,
+                            0x1_0000_0001,
+                        )
+                        start_position_cases += 1
                     incremental_writer_variants += 1
 
             for terminal_compression in (
@@ -526,6 +562,7 @@ def main() -> None:
                             "creation": filetime_epoch + 10_000_000,
                             "access": filetime_epoch + 20_000_000,
                             "modification": filetime_epoch + 30_000_000,
+                            "start_position": 0x1_0000_0001,
                             "attributes": 0x81A4_0020,
                         },
                         password=password,
@@ -581,6 +618,7 @@ def main() -> None:
                             "creation": filetime_epoch + 10_000_000,
                             "access": filetime_epoch + 20_000_000,
                             "modification": filetime_epoch + 30_000_000,
+                            "start_position": 0x1_0000_0001,
                             "attributes": 0x81A4_0020,
                         },
                         password=password,
@@ -816,6 +854,7 @@ def main() -> None:
                         "creation": filetime_epoch + 10_000_000,
                         "access": filetime_epoch + 20_000_000,
                         "modification": filetime_epoch + 30_000_000,
+                        "start_position": 0x1_0000_0001,
                         "attributes": 0x81A4_0020,
                     },
                 )
@@ -1439,6 +1478,7 @@ def main() -> None:
     print(
         f"seven_zip_diff=ok writer_entries={len(expected_vort) + 3} "
         f"anti_items={len(ANTI_NAMES)} "
+        f"start_position_cases={start_position_cases} "
         f"external_variants={external_variants} "
         f"vort_writer_variants={vort_writer_variants} "
         f"incremental_writer_variants={incremental_writer_variants} "

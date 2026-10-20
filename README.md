@@ -413,7 +413,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   BCJ2 packed branches,
   compressed Next Header reading and writing, solid substream reading and
   writing, bounded AdditionalStreamsInfo decoding, external folder/name
-  references, inline/external FILETIME and platform attributes, optional
+  references, inline/external FILETIME, StartPos, and platform attributes, optional
   seven-codec external name/metadata writing, 7zAES/SHA-256 data and encoded
   header reading/writing backed by Vail crypto with explicit password/KDF
   limits and caller-supplied IV material, CRC validation, UTF-16LE names,

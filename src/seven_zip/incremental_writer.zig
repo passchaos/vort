@@ -41,6 +41,7 @@ pub const EntryOptions = struct {
     creation_time: ?u64 = null,
     access_time: ?u64 = null,
     modification_time: ?u64 = null,
+    start_position: ?u64 = null,
     attributes: ?u32 = null,
 };
 
@@ -79,6 +80,7 @@ const CurrentEntry = struct {
     creation_time: ?u64,
     access_time: ?u64,
     modification_time: ?u64,
+    start_position: ?u64,
     attributes: ?u32,
     codec: ?codecs.Encoder = null,
     bcj2: ?bcj2_spool.Stream = null,
@@ -213,6 +215,7 @@ pub const Writer = struct {
             .creation_time = entry_options.creation_time,
             .access_time = entry_options.access_time,
             .modification_time = entry_options.modification_time,
+            .start_position = entry_options.start_position,
             .attributes = entry_options.attributes,
             .encode_options = self.options.encode,
         };
@@ -815,6 +818,7 @@ pub const Writer = struct {
             .creation_time = current.creation_time,
             .access_time = current.access_time,
             .modification_time = current.modification_time,
+            .start_position = current.start_position,
             .attributes = current.attributes,
         };
         if (has_stream) {
@@ -1395,12 +1399,14 @@ test "7z incremental writer emits external metadata and encoded headers" {
             .creation_time = filetime_epoch + 10_000_000,
             .access_time = filetime_epoch + 20_000_000,
             .modification_time = filetime_epoch + 30_000_000,
+            .start_position = 0x1_0000_0001,
             .attributes = 0x81a4_0020,
         }, payload },
         .{ .{
             .name = "empty.txt",
             .expected_size = 0,
             .modification_time = filetime_epoch + 40_000_000,
+            .start_position = 0,
         }, "" },
     };
     inline for (.{
@@ -1434,6 +1440,7 @@ test "7z incremental writer emits external metadata and encoded headers" {
         try std.testing.expectEqual(expected[0][0].creation_time, entry.creation_time);
         try std.testing.expectEqual(expected[0][0].access_time, entry.access_time);
         try std.testing.expectEqual(expected[0][0].modification_time, entry.modification_time);
+        try std.testing.expectEqual(expected[0][0].start_position, entry.start_position);
         try std.testing.expectEqual(expected[0][0].attributes, entry.attributes);
         const decoded = try parsed.extractEntryAlloc(std.testing.allocator, entry);
         defer std.testing.allocator.free(decoded);

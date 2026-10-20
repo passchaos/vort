@@ -114,6 +114,7 @@ pub fn createFile(
         args.next(),
     );
     const encrypt_header = try parseHeaderEncryption(args.next());
+    const start_position = try parseOptionalU64(args.next());
     const input = try readFile(init, input_path);
     defer init.gpa.free(input);
     const entries = [_]vort.SevenZipEncodeEntry{.{
@@ -122,6 +123,7 @@ pub fn createFile(
         .creation_time = creation_time,
         .access_time = access_time,
         .modification_time = modification_time,
+        .start_position = start_position,
         .attributes = attributes,
     }};
     const encoded = try vort.encodeSevenZipAlloc(init.gpa, &entries, .{
@@ -306,7 +308,7 @@ pub fn listSourceFile(
 fn writeListing(stdout: *std.Io.Writer, entries: []const vort.SevenZipEntry) !void {
     try stdout.print("seven_zip_entries={d}\n", .{entries.len});
     for (entries, 0..) |entry, index|
-        try stdout.print("index={d} kind={s} anti={} method={s} size={d} creation_defined={} creation={d} access_defined={} access={d} modification_defined={} modification={d} attributes_defined={} attributes={d} name={s}\n", .{
+        try stdout.print("index={d} kind={s} anti={} method={s} size={d} creation_defined={} creation={d} access_defined={} access={d} modification_defined={} modification={d} start_position_defined={} start_position={d} attributes_defined={} attributes={d} name={s}\n", .{
             index,
             @tagName(entry.kind),
             entry.is_anti,
@@ -318,6 +320,8 @@ fn writeListing(stdout: *std.Io.Writer, entries: []const vort.SevenZipEntry) !vo
             entry.access_time orelse 0,
             entry.modification_time != null,
             entry.modification_time orelse 0,
+            entry.start_position != null,
+            entry.start_position orelse 0,
             entry.attributes != null,
             entry.attributes orelse 0,
             entry.name,

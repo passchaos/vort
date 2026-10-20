@@ -2940,7 +2940,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  size-lzop-file <path> [max_output] [max_block]
         \\                              Decode and report a verified LZOP stream's size
         \\  inspect-lzop-file <path>    Parse and print structural LZOP metadata
-        \\  create-7z-file <out> <entry> <in> [copy|deflate|bzip2|lzma|lzma2|lzma2-stored|ppmd7] [filters] [solid|non-solid] [header-codec|plain] [bcj2|classic] [start_ip] [external-CODEC|inline-names] [external-metadata-CODEC|inline-metadata] [ctime|-] [atime|-] [mtime|-] [attributes|-] [password|-] [iv_hex] [salt_hex|-] [cycles] [encrypted-header|plain-header]
+        \\  create-7z-file <out> <entry> <in> [copy|deflate|bzip2|lzma|lzma2|lzma2-stored|ppmd7] [filters] [solid|non-solid] [header-codec|plain] [bcj2|classic] [start_ip] [external-CODEC|inline-names] [external-metadata-CODEC|inline-metadata] [ctime|-] [atime|-] [mtime|-] [attributes|-] [password|-] [iv_hex] [salt_hex|-] [cycles] [encrypted-header|plain-header] [start_position|-]
         \\                              Create a deterministic 7z archive; filters are comma-separated
         \\  list-7z-file <path> [password|-]
         \\  list-7z-source-file <path> [password|-]

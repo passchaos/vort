@@ -357,3 +357,56 @@ test "7z file properties preserve anti files and directories" {
         parse(std.testing.allocator, &missing_empty_reader, &streams, &.{}, 1),
     );
 }
+
+test "7z file properties parse sparse StartPos and reject truncation" {
+    const streams = streams_mod.Streams{ .allocator = std.testing.allocator };
+    const body = [_]u8{
+        2,
+        Nid.empty_stream,
+        1,
+        0xc0,
+        file_properties.id(.start_position),
+        11,
+        0,
+        0x80,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        Nid.end,
+    };
+    var reader = number.Reader.init(&body);
+    const parsed = try parse(std.testing.allocator, &reader, &streams, &.{}, 2);
+    defer parsed.deinit();
+    try std.testing.expectEqual(@as(?u64, 0x1_0000_0001), parsed.entries[0].start_position);
+    try std.testing.expectEqual(@as(?u64, null), parsed.entries[1].start_position);
+
+    const truncated = [_]u8{
+        1,
+        Nid.empty_stream,
+        1,
+        0x80,
+        file_properties.id(.start_position),
+        9,
+        1,
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        Nid.end,
+    };
+    var truncated_reader = number.Reader.init(&truncated);
+    try std.testing.expectError(
+        error.TruncatedFrame,
+        parse(std.testing.allocator, &truncated_reader, &streams, &.{}, 1),
+    );
+}

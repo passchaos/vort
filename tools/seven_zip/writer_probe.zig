@@ -133,11 +133,13 @@ pub fn main(init: std.process.Init) !void {
             .creation_time = filetime_epoch + 10_000_000,
             .access_time = filetime_epoch + 20_000_000,
             .modification_time = filetime_epoch + 30_000_000,
+            .start_position = 0x1_0000_0001,
             .attributes = 0x81a4_0020,
         },
         .{
             .name = "empty.txt",
             .modification_time = filetime_epoch + 40_000_000,
+            .start_position = 0,
             .attributes = 0x81a4_0020,
         },
         .{

@@ -5,10 +5,11 @@ const types = @import("types.zig");
 
 pub const Error = core.Error || number.Error || error{Invalid7zArchive};
 
-pub const Kind = enum(u2) {
+pub const Kind = enum(u3) {
     creation_time,
     access_time,
     modification_time,
+    start_position,
     attributes,
 };
 
@@ -20,6 +21,7 @@ pub fn id(kind: Kind) u8 {
         .creation_time => 0x12,
         .access_time => 0x13,
         .modification_time => 0x14,
+        .start_position => 0x18,
         .attributes => 0x15,
     };
 }
@@ -29,6 +31,7 @@ pub fn kindFromId(property_id: u8) ?Kind {
         0x12 => .creation_time,
         0x13 => .access_time,
         0x14 => .modification_time,
+        0x18 => .start_position,
         0x15 => .attributes,
         else => null,
     };
@@ -67,6 +70,7 @@ pub fn parse(
             .creation_time => entry.creation_time = try value_reader.readU64(),
             .access_time => entry.access_time = try value_reader.readU64(),
             .modification_time => entry.modification_time = try value_reader.readU64(),
+            .start_position => entry.start_position = try value_reader.readU64(),
             .attributes => entry.attributes = try value_reader.readU32(),
         }
     }
@@ -85,6 +89,8 @@ pub fn appendValues(
         .access_time => if (entry.access_time) |value|
             try appendU64(allocator, output, value),
         .modification_time => if (entry.modification_time) |value|
+            try appendU64(allocator, output, value),
+        .start_position => if (entry.start_position) |value|
             try appendU64(allocator, output, value),
         .attributes => if (entry.attributes) |value|
             try appendU32(allocator, output, value),
@@ -161,6 +167,7 @@ fn isDefined(entry: types.EncodeEntry, kind: Kind) bool {
         .creation_time => entry.creation_time != null,
         .access_time => entry.access_time != null,
         .modification_time => entry.modification_time != null,
+        .start_position => entry.start_position != null,
         .attributes => entry.attributes != null,
     };
 }

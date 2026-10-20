@@ -16,6 +16,8 @@ pub const EncodeEntry = struct {
     access_time: ?u64 = null,
     /// Windows FILETIME ticks: 100 ns intervals since 1601-01-01 UTC.
     modification_time: ?u64 = null,
+    /// Optional application-defined start position (`kStartPos` / `kpidPosition`).
+    start_position: ?u64 = null,
     /// Raw 7z WinAttributes value, including encoded POSIX mode bits when present.
     attributes: ?u32 = null,
 };
@@ -57,6 +59,8 @@ pub const Entry = struct {
     access_time: ?u64 = null,
     /// Windows FILETIME ticks: 100 ns intervals since 1601-01-01 UTC.
     modification_time: ?u64 = null,
+    /// Optional application-defined start position (`kStartPos` / `kpidPosition`).
+    start_position: ?u64 = null,
     /// Raw 7z WinAttributes value, including encoded POSIX mode bits when present.
     attributes: ?u32 = null,
 };
