@@ -336,6 +336,7 @@ pub fn decodeEntryFromInputAlloc(
     input: packed_input.Input,
     options: DecodeOptions,
 ) ![]u8 {
+    if (entry.is_anti) return error.EntryHasNoStream;
     const folder_index = entry.folder_index orelse {
         if (entry.kind == .file and entry.size == 0) return allocator.alloc(u8, 0);
         return error.EntryHasNoStream;

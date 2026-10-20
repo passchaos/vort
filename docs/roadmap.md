@@ -18061,6 +18061,13 @@ reuse, so production keeps the simpler independently owned plans.
   and consumption checks, and all seven auxiliary-stream codecs. The
   differential pins a system-generated mtime plus Unix attributes and validates all seven Vort
   external-metadata modes through 7-Zip.
+  FilesInfo Anti vectors are now parsed and emitted across one-shot and
+  incremental writers. The public entry model preserves anti-file versus
+  anti-directory kind, rejects payload-bearing anti entries and malformed or
+  duplicate bitmaps, and refuses to extract deletion records as synthetic empty
+  files. Vort output is recognized as `Anti = +` by 7-Zip 21.07, while a
+  7-Zip-generated two-item anti archive passes borrowed and source-backed Vort
+  parsing; the required differential reports `writer_entries=6 anti_items=2`.
   Common linear and four-branch BCJ2 7zAES/SHA-256 folders are now supported
   in both directions. The reader accepts AES-only encoded headers and AES followed by
   Copy/Deflate/Bzip2/LZMA/LZMA2/PPMd7 plus classic filters, converts UTF-8

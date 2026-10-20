@@ -7,7 +7,6 @@ const types = @import("types.zig");
 
 pub const Error = core.Error || number.Error || file_properties.Error || error{
     Invalid7zArchive,
-    Unsupported7zFeature,
 };
 
 const Nid = struct {
@@ -59,6 +58,8 @@ pub fn parse(
     @memset(empty_streams, false);
     var empty_files: ?[]bool = null;
     defer if (empty_files) |values| allocator.free(values);
+    var anti_items: ?[]bool = null;
+    defer if (anti_items) |values| allocator.free(values);
     var names_seen = false;
     var empty_streams_seen = false;
     var metadata_seen: [file_properties.kind_count]bool = @splat(false);
@@ -86,14 +87,14 @@ pub fn parse(
                 empty_files = values;
             },
             Nid.anti => {
-                if (!empty_streams_seen) return error.Invalid7zArchive;
+                if (!empty_streams_seen or anti_items != null) return error.Invalid7zArchive;
                 var empty_count: usize = 0;
                 for (empty_streams) |empty| empty_count += @intFromBool(empty);
                 if (property_size != (empty_count + 7) / 8) return error.Invalid7zArchive;
-                const ignored = try allocator.alloc(bool, empty_count);
-                defer allocator.free(ignored);
-                try readBitVector(&data, ignored);
-                for (ignored) |anti| if (anti) return error.Unsupported7zFeature;
+                const values = try allocator.alloc(bool, empty_count);
+                errdefer allocator.free(values);
+                try readBitVector(&data, values);
+                anti_items = values;
             },
             Nid.name => {
                 if (names_seen) return error.Invalid7zArchive;
@@ -146,6 +147,7 @@ pub fn parse(
     for (entries, 0..) |*entry, index| {
         if (empty_streams[index]) {
             const is_empty_file = if (empty_files) |values| values[empty_index] else false;
+            entry.is_anti = if (anti_items) |values| values[empty_index] else false;
             empty_index += 1;
             entry.kind = if (is_empty_file) .file else .directory;
             continue;
@@ -298,5 +300,60 @@ test "7z file properties reject malformed definitions and external values" {
     try std.testing.expectError(
         error.TruncatedFrame,
         parse(std.testing.allocator, &truncated_inline_reader, &empty_streams, &.{}, 8),
+    );
+}
+
+test "7z file properties preserve anti files and directories" {
+    const streams = streams_mod.Streams{ .allocator = std.testing.allocator };
+    const body = [_]u8{
+        4,
+        Nid.empty_stream,
+        1,
+        0xf0,
+        Nid.empty_file,
+        1,
+        0xa0,
+        Nid.anti,
+        1,
+        0x30,
+        Nid.end,
+    };
+    var reader = number.Reader.init(&body);
+    const parsed = try parse(std.testing.allocator, &reader, &streams, &.{}, 4);
+    defer parsed.deinit();
+    try std.testing.expectEqual(@as(usize, 4), parsed.entries.len);
+    try std.testing.expectEqual(types.Kind.file, parsed.entries[0].kind);
+    try std.testing.expect(!parsed.entries[0].is_anti);
+    try std.testing.expectEqual(types.Kind.directory, parsed.entries[1].kind);
+    try std.testing.expect(!parsed.entries[1].is_anti);
+    try std.testing.expectEqual(types.Kind.file, parsed.entries[2].kind);
+    try std.testing.expect(parsed.entries[2].is_anti);
+    try std.testing.expectEqual(types.Kind.directory, parsed.entries[3].kind);
+    try std.testing.expect(parsed.entries[3].is_anti);
+
+    const duplicate_anti = [_]u8{
+        1,
+        Nid.empty_stream,
+        1,
+        0x80,
+        Nid.anti,
+        1,
+        0x80,
+        Nid.anti,
+        1,
+        0,
+        Nid.end,
+    };
+    var duplicate_reader = number.Reader.init(&duplicate_anti);
+    try std.testing.expectError(
+        error.Invalid7zArchive,
+        parse(std.testing.allocator, &duplicate_reader, &streams, &.{}, 1),
+    );
+
+    const anti_without_empty_stream = [_]u8{ 1, Nid.anti, 1, 0x80, Nid.end };
+    var missing_empty_reader = number.Reader.init(&anti_without_empty_stream);
+    try std.testing.expectError(
+        error.Invalid7zArchive,
+        parse(std.testing.allocator, &missing_empty_reader, &streams, &.{}, 1),
     );
 }

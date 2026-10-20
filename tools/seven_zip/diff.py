@@ -10,6 +10,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+ANTI_NAMES = ("deleted.txt", "deleted-folder")
+
 
 def run(
     program: Path, *args: str, check: bool = True, cwd: Path | None = None
@@ -54,6 +56,30 @@ def verify_with_seven_zip(
             raise AssertionError(f"7-Zip could not extract Vort entry {name!r}")
 
 
+def verify_with_seven_zip_anti(
+    tool: str, archive: Path, password: str | None = None
+) -> None:
+    password_args = [f"-p{password}"] if password is not None else []
+    listing = subprocess.run(
+        [tool, "l", "-slt", "-bd", *password_args, str(archive)],
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ).stdout.splitlines()
+    for name in ANTI_NAMES:
+        starts = [index for index, line in enumerate(listing) if line == f"Path = {name}"]
+        if len(starts) != 1:
+            raise AssertionError(f"7-Zip listing omitted anti-item {name!r}")
+        start = starts[0]
+        end = next(
+            (index for index in range(start + 1, len(listing)) if listing[index].startswith("Path = ")),
+            len(listing),
+        )
+        if "Anti = +" not in listing[start:end]:
+            raise AssertionError(f"7-Zip did not recognize anti-item {name!r}")
+
+
 def create_reference(tool: str, tree: Path, archive: Path, options: list[str]) -> None:
     names = ["hello.txt", "second.txt", "empty.txt", "folder", "数据.txt"]
     subprocess.run(
@@ -89,6 +115,45 @@ def create_reference_payload(
     )
 
 
+def create_reference_anti(tool: str, tree: Path, archive: Path) -> None:
+    (tree / "deleted-folder").mkdir()
+    (tree / "deleted.txt").write_bytes(b"")
+    base = tree / "anti-base.7z"
+    subprocess.run(
+        [
+            tool,
+            "a",
+            "-bd",
+            "-y",
+            "-t7z",
+            str(base),
+            "deleted.txt",
+            "deleted-folder",
+        ],
+        check=True,
+        cwd=tree,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    (tree / "deleted.txt").rename(tree / "deleted.txt.gone")
+    (tree / "deleted-folder").rename(tree / "deleted-folder.gone")
+    subprocess.run(
+        [
+            tool,
+            "u",
+            "-bd",
+            "-y",
+            str(base),
+            "-u-",
+            f"-up0q3r0x0y0z0w0!{archive.name}",
+        ],
+        check=True,
+        cwd=tree,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+
 def verify_with_vort(
     cli: Path,
     archive: Path,
@@ -114,6 +179,32 @@ def verify_with_vort(
         run(cli, *extract_args)
         if output.read_bytes() != payload:
             raise AssertionError(f"Vort 7z extraction mismatch for {name!r}")
+
+
+def verify_with_vort_anti(
+    cli: Path, archive: Path, password: str | None = None, source: bool = False
+) -> None:
+    command = "list-7z-source-file" if source else "list-7z-file"
+    extract_command = "extract-7z-source-stream-file" if source else "extract-7z-file"
+    list_args = (str(archive), password) if password is not None else (str(archive),)
+    listing = run(cli, command, *list_args).stdout
+    for name in ANTI_NAMES:
+        line = next((item for item in listing.splitlines() if f"name={name}" in item), None)
+        if line is None or "anti=true" not in line:
+            raise AssertionError(f"Vort listing omitted anti-item semantics for {name!r}")
+        output = archive.with_name(f"{archive.stem}-{name}.out")
+        extracted = run(
+            cli,
+            extract_command,
+            str(archive),
+            name,
+            str(output),
+            "0",
+            *(() if password is None else ("536870912", "536870912", password)),
+            check=False,
+        )
+        if extracted.returncode == 0:
+            raise AssertionError(f"Vort extracted anti-item {name!r} as an empty file")
 
 
 def verify_with_vort_source(
@@ -292,6 +383,8 @@ def main() -> None:
         }
         verify_with_vort(args.cli, first, expected_vort)
         verify_with_vort_source(args.cli, first, expected_vort)
+        verify_with_vort_anti(args.cli, first)
+        verify_with_vort_anti(args.cli, first, source=True)
         verify_with_vort_source_stream(args.cli, first, expected_vort)
         first_parts = split_bytes(first, temp, "vort-first.7z", 31)
         verify_with_vort_volumes(args.cli, first_parts, expected_vort)
@@ -330,6 +423,15 @@ def main() -> None:
 
         if seven_zip_tool is not None:
             verify_with_seven_zip(seven_zip_tool, first, expected_vort)
+            verify_with_seven_zip_anti(seven_zip_tool, first)
+            anti_tree = temp / "reference-anti"
+            anti_tree.mkdir()
+            reference_anti = anti_tree / "reference-anti.7z"
+            create_reference_anti(seven_zip_tool, anti_tree, reference_anti)
+            verify_with_seven_zip_anti(seven_zip_tool, reference_anti)
+            verify_with_vort_anti(args.cli, reference_anti)
+            verify_with_vort_anti(args.cli, reference_anti, source=True)
+            external_variants += 1
             for compression in ("deflate", "bzip2", "lzma", "lzma2", "ppmd7"):
                 archive = temp / f"vort-{compression}-multi.7z"
                 run(args.writer, str(archive), compression)
@@ -370,6 +472,9 @@ def main() -> None:
                         expected_vort,
                         password,
                     )
+                    if compression == "copy" and mode == "independent" and password is None:
+                        verify_with_vort_anti(args.cli, archive)
+                        verify_with_seven_zip_anti(seven_zip_tool, archive)
                     incremental_writer_variants += 1
 
             for terminal_compression in (
@@ -1332,7 +1437,8 @@ def main() -> None:
                 raise AssertionError("7z output limit was not enforced")
 
     print(
-        f"seven_zip_diff=ok writer_entries={len(expected_vort) + 1} "
+        f"seven_zip_diff=ok writer_entries={len(expected_vort) + 3} "
+        f"anti_items={len(ANTI_NAMES)} "
         f"external_variants={external_variants} "
         f"vort_writer_variants={vort_writer_variants} "
         f"incremental_writer_variants={incremental_writer_variants} "

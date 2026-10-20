@@ -79,6 +79,8 @@ test "7z stored writer round trips files directories and UTF-8 names" {
         .{ .name = "empty.txt" },
         .{ .name = "folder", .kind = .directory },
         .{ .name = "utf8-数据.txt", .data = "payload" },
+        .{ .name = "deleted.txt", .is_anti = true },
+        .{ .name = "deleted-folder", .kind = .directory, .is_anti = true },
     };
     const encoded = try encodeStoredAlloc(std.testing.allocator, &entries, .{});
     defer std.testing.allocator.free(encoded);
@@ -88,6 +90,7 @@ test "7z stored writer round trips files directories and UTF-8 names" {
     for (entries, parsed.entries) |expected, actual| {
         try std.testing.expectEqualStrings(expected.name, actual.name);
         try std.testing.expectEqual(expected.kind, actual.kind);
+        try std.testing.expectEqual(expected.is_anti, actual.is_anti);
         if (actual.folder_index) |_| {
             const decoded = try parsed.extractEntryAlloc(std.testing.allocator, actual);
             defer std.testing.allocator.free(decoded);
@@ -104,6 +107,14 @@ test "7z stored writer round trips files directories and UTF-8 names" {
     try std.testing.expectError(
         error.EntryHasNoStream,
         parsed.extractEntryAlloc(std.testing.allocator, parsed.entries[2]),
+    );
+    try std.testing.expectError(
+        error.EntryHasNoStream,
+        parsed.extractEntryAlloc(std.testing.allocator, parsed.entries[4]),
+    );
+    try std.testing.expectError(
+        error.EntryHasNoStream,
+        parsed.extractEntryAlloc(std.testing.allocator, parsed.entries[5]),
     );
 
     var bad_start_crc = try std.testing.allocator.dupe(u8, encoded);

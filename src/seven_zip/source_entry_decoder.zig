@@ -94,6 +94,7 @@ pub const LinearDecoder = struct {
         entry: types.Entry,
         options: Options,
     ) Error!LinearDecoder {
+        if (entry.is_anti) return error.EntryHasNoStream;
         const entry_size = std.math.cast(usize, entry.size) orelse
             return error.OutputLimitExceeded;
         if (entry_size > options.max_output_len) return error.OutputLimitExceeded;

@@ -24,6 +24,7 @@ pub const Nid = struct {
     pub const num_unpack_stream: u8 = 0x0d;
     pub const empty_stream: u8 = 0x0e;
     pub const empty_file: u8 = 0x0f;
+    pub const anti: u8 = 0x10;
     pub const name: u8 = 0x11;
     pub const encoded_header: u8 = 0x17;
 };
@@ -78,11 +79,12 @@ pub fn validateEntries(entries: []const types.EncodeEntry) !void {
             return error.Invalid7zEntry;
         if (!std.unicode.utf8ValidateSlice(entry.name)) return error.Invalid7zEntry;
         if (entry.kind == .directory and entry.data.len != 0) return error.Invalid7zEntry;
+        if (entry.is_anti and entry.data.len != 0) return error.Invalid7zEntry;
     }
 }
 
 pub fn hasStream(entry: types.EncodeEntry) bool {
-    return entry.kind == .file and entry.data.len != 0;
+    return !entry.is_anti and entry.kind == .file and entry.data.len != 0;
 }
 
 pub fn appendNames(
@@ -266,7 +268,11 @@ fn writeFilesInfo(
     try number.append(allocator, output, entries.len);
 
     var empty_count: usize = 0;
-    for (entries) |entry| empty_count += @intFromBool(!hasStream(entry));
+    var has_anti = false;
+    for (entries) |entry| {
+        empty_count += @intFromBool(!hasStream(entry));
+        has_anti = has_anti or entry.is_anti;
+    }
     if (empty_count != 0) {
         try output.append(allocator, Nid.empty_stream);
         try number.append(allocator, output, (entries.len + 7) / 8);
@@ -284,6 +290,15 @@ fn writeFilesInfo(
         for (entries) |entry| if (!hasStream(entry))
             bits.appendAssumeCapacity(entry.kind == .file);
         try appendBools(allocator, output, bits.items);
+
+        if (has_anti) {
+            try output.append(allocator, Nid.anti);
+            try number.append(allocator, output, (empty_count + 7) / 8);
+            bits.clearRetainingCapacity();
+            for (entries) |entry| if (!hasStream(entry))
+                bits.appendAssumeCapacity(entry.is_anti);
+            try appendBools(allocator, output, bits.items);
+        }
     }
 
     try output.append(allocator, Nid.name);

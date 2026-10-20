@@ -35,6 +35,8 @@ pub const Options = struct {
 pub const EntryOptions = struct {
     name: []const u8,
     kind: types.Kind = .file,
+    /// Anti-items describe removals in differential archives and accept no data.
+    is_anti: bool = false,
     expected_size: ?u64 = null,
     creation_time: ?u64 = null,
     access_time: ?u64 = null,
@@ -72,6 +74,7 @@ const stream_marker = [_]u8{0};
 const CurrentEntry = struct {
     name: []u8,
     kind: types.Kind,
+    is_anti: bool,
     expected_size: ?u64,
     creation_time: ?u64,
     access_time: ?u64,
@@ -205,6 +208,7 @@ pub const Writer = struct {
         self.current = .{
             .name = name,
             .kind = entry_options.kind,
+            .is_anti = entry_options.is_anti,
             .expected_size = entry_options.expected_size,
             .creation_time = entry_options.creation_time,
             .access_time = entry_options.access_time,
@@ -403,6 +407,7 @@ pub const Writer = struct {
                     if (current.finish_requested) return error.InvalidBlockPlan;
                     if (input_read == input.len)
                         return result(input_read, output_written, .need_input);
+                    if (current.is_anti) return error.Invalid7zEntry;
                     if (current.kind != .file) return error.Invalid7zEntry;
                     if (output_written == output.len)
                         return result(input_read, output_written, .need_output);
@@ -806,6 +811,7 @@ pub const Writer = struct {
             .name = name,
             .data = if (has_stream) &stream_marker else "",
             .kind = current.kind,
+            .is_anti = current.is_anti,
             .creation_time = current.creation_time,
             .access_time = current.access_time,
             .modification_time = current.modification_time,
@@ -955,6 +961,8 @@ fn validateEntry(entry: EntryOptions) Error!void {
         return error.Invalid7zEntry;
     if (entry.kind == .directory and (entry.expected_size orelse 0) != 0)
         return error.Invalid7zEntry;
+    if (entry.is_anti and (entry.expected_size orelse 0) != 0)
+        return error.Invalid7zEntry;
 }
 
 fn primaryCodecOptions(folder_options: EncodeOptions) EncodeOptions {
@@ -1034,6 +1042,8 @@ test "7z incremental writer streams copy entries and exposes a final patch" {
         .{ .{ .name = "empty.txt", .expected_size = 0 }, "" },
         .{ .{ .name = "folder", .kind = .directory }, "" },
         .{ .{ .name = "utf8-数据.txt", .expected_size = 7 }, "payload" },
+        .{ .{ .name = "deleted.txt", .is_anti = true, .expected_size = 0 }, "" },
+        .{ .{ .name = "deleted-folder", .kind = .directory, .is_anti = true }, "" },
     };
     const encoded = try encodeTestArchive(std.testing.allocator, .{}, &expected, 3, 1);
     defer std.testing.allocator.free(encoded);
@@ -1044,6 +1054,7 @@ test "7z incremental writer streams copy entries and exposes a final patch" {
     for (expected, parsed.entries) |item, entry| {
         try std.testing.expectEqualStrings(item[0].name, entry.name);
         try std.testing.expectEqual(item[0].kind, entry.kind);
+        try std.testing.expectEqual(item[0].is_anti, entry.is_anti);
         if (item[1].len != 0) {
             const decoded = try parsed.extractEntryAlloc(std.testing.allocator, entry);
             defer std.testing.allocator.free(decoded);
@@ -1052,6 +1063,11 @@ test "7z incremental writer streams copy entries and exposes a final patch" {
             try std.testing.expectEqual(@as(?usize, null), entry.folder_index);
         }
     }
+    const deleted = parsed.find("deleted.txt") orelse return error.EntryNotFound;
+    try std.testing.expectError(
+        error.EntryHasNoStream,
+        parsed.extractEntryAlloc(std.testing.allocator, deleted),
+    );
 }
 
 test "7z incremental writer streams common compression methods" {
@@ -1503,6 +1519,14 @@ test "7z incremental writer enforces lifecycle and metadata limits" {
         limited.beginEntry(.{ .name = "b", .expected_size = 0 }),
     );
     try std.testing.expectError(error.Invalid7zWriterState, limited.finishArchive());
+    try std.testing.expectError(
+        error.Invalid7zEntry,
+        limited.beginEntry(.{
+            .name = "invalid-anti",
+            .is_anti = true,
+            .expected_size = 1,
+        }),
+    );
     while (limited.snapshot().phase == .start_header) {
         var output: [7]u8 = undefined;
         _ = try limited.step(&.{}, &output);

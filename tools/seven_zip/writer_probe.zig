@@ -153,6 +153,17 @@ pub fn main(init: std.process.Init) !void {
             .modification_time = filetime_epoch + 70_000_000,
             .attributes = 0x81a4_0020,
         },
+        .{
+            .name = "deleted.txt",
+            .is_anti = true,
+            .attributes = 0x81a4_0020,
+        },
+        .{
+            .name = "deleted-folder",
+            .kind = .directory,
+            .is_anti = true,
+            .attributes = 0x41ed_0010,
+        },
     };
     const bytes = try vort.encodeSevenZipAlloc(init.gpa, &entries, .{
         .compression = compression,

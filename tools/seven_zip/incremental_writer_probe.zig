@@ -111,6 +111,24 @@ pub fn main(init: std.process.Init) !void {
             },
             .data = second,
         },
+        .{
+            .options = .{
+                .name = "deleted.txt",
+                .is_anti = true,
+                .expected_size = 0,
+                .attributes = 0x81a4_0020,
+            },
+            .data = "",
+        },
+        .{
+            .options = .{
+                .name = "deleted-folder",
+                .kind = .directory,
+                .is_anti = true,
+                .attributes = 0x41ed_0010,
+            },
+            .data = "",
+        },
     };
     const encryption: ?vort.SevenZipEncryptionOptions = if (encrypted) .{
         .password = "vort-password-密码",

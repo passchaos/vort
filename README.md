@@ -417,7 +417,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   seven-codec external name/metadata writing, 7zAES/SHA-256 data and encoded
   header reading/writing backed by Vail crypto with explicit password/KDF
   limits and caller-supplied IV material, CRC validation, UTF-16LE names,
-  directories, empty files, and bounded extraction, plus source-backed
+  directories, empty files, anti-file/anti-directory deletion records, and
+  bounded extraction, plus source-backed
   positional parsing that avoids loading the complete archive and fetches only
   tail/auxiliary metadata plus selected-folder packed ranges, and a
   symbol-progressive source entry decoder for Copy/Deflate/Bzip2/LZMA/LZMA2/PPMd7,

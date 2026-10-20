@@ -349,6 +349,16 @@ test "7z stored writer emits deterministic signature and metadata" {
         encodeStoredAppend(std.testing.allocator, &appended, &invalid, .{}),
     );
     try std.testing.expectEqualSlices(u8, before, appended.items);
+    const invalid_anti = [_]EncodeEntry{.{
+        .name = "deleted.txt",
+        .data = "anti items cannot carry data",
+        .is_anti = true,
+    }};
+    try std.testing.expectError(
+        error.Invalid7zEntry,
+        encodeStoredAppend(std.testing.allocator, &appended, &invalid_anti, .{}),
+    );
+    try std.testing.expectEqualSlices(u8, before, appended.items);
     try std.testing.expectError(
         error.Invalid7zOptions,
         encodeStoredAppend(std.testing.allocator, &appended, &entries, .{ .compression = .deflate }),

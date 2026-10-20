@@ -306,9 +306,10 @@ pub fn listSourceFile(
 fn writeListing(stdout: *std.Io.Writer, entries: []const vort.SevenZipEntry) !void {
     try stdout.print("seven_zip_entries={d}\n", .{entries.len});
     for (entries, 0..) |entry, index|
-        try stdout.print("index={d} kind={s} method={s} size={d} creation_defined={} creation={d} access_defined={} access={d} modification_defined={} modification={d} attributes_defined={} attributes={d} name={s}\n", .{
+        try stdout.print("index={d} kind={s} anti={} method={s} size={d} creation_defined={} creation={d} access_defined={} access={d} modification_defined={} modification={d} attributes_defined={} attributes={d} name={s}\n", .{
             index,
             @tagName(entry.kind),
+            entry.is_anti,
             if (entry.method) |method| @tagName(method) else "none",
             entry.size,
             entry.creation_time != null,
