@@ -166,7 +166,7 @@ fn planAllocInternal(
         );
         stats.match_candidates += candidate_count;
         const current = states[position * beam_width ..][0..lengths[position]];
-        for (current, 0..) |state, slot| {
+        for (current, 0..) |*state, slot| {
             stats.states_visited += 1;
             insertState(states, lengths, position + 1, .{
                 .cost = addCost(state.cost, model.literal[input[position]]),
@@ -176,6 +176,11 @@ fn planAllocInternal(
                 .previous_slot = @intCast(slot),
                 .token = .{ .literal = input[position] },
             }, &stats);
+            const insert_code = length.codeForValue(
+                state.pending_insert,
+                true,
+            ) orelse continue;
+            const insert_extra_bits = length.insertSpec(insert_code).extra_bits;
 
             for (candidate_distances[0..candidate_count], 0..) |match_distance, candidate_index| {
                 if (candidate_index >= options.max_candidates and distance_history.symbolForDistance(
@@ -202,6 +207,8 @@ fn planAllocInternal(
                 const transition = transitionCost(
                     model,
                     state,
+                    insert_code,
+                    insert_extra_bits,
                     @intCast(copy_len),
                     match_distance,
                     null,
@@ -247,6 +254,8 @@ fn planAllocInternal(
                 const transition = transitionCost(
                     model,
                     state,
+                    insert_code,
+                    insert_extra_bits,
                     @intCast(copy_len),
                     @intCast(match_distance),
                     null,
@@ -326,16 +335,16 @@ const Transition = struct {
 
 fn transitionCost(
     model: *const entropy_feedback.Model,
-    state: State,
+    state: *const State,
+    insert_code: u5,
+    insert_extra_bits: u5,
     copy_len: u16,
     match_distance: u16,
     prepared_regular: ?distance.Encoding,
 ) ?Transition {
-    const insert_code = length.codeForValue(state.pending_insert, true) orelse return null;
     const copy_code = length.codeForValue(copy_len, false) orelse return null;
-    const insert_spec = length.insertSpec(insert_code);
     const copy_spec = length.copySpec(copy_code);
-    const extras = (@as(u64, insert_spec.extra_bits) + copy_spec.extra_bits) * q8;
+    const extras = (@as(u64, insert_extra_bits) + copy_spec.extra_bits) * q8;
     const recent_symbol = distance_history.symbolForDistance(
         match_distance,
         &state.last_distances,

@@ -163,6 +163,14 @@ Against parent `a2c96b1e`, five fixed-CPU-8 opt-in pairs preserved the identical
 (`1.324x`, 5/5 wins). Seven default-path pairs were neutral at approximately
 401.15/401.68 ms (`0.9987x`). Full opt-in is still materially slower than the
 8 KiB default, so this evidence does not justify widening the default ceiling.
+A follow-up state-loop change keeps each beam state borrowed instead of copying
+the full recent-distance array into every transition call, and classifies the
+pending insert length once per state rather than once per match. The 32 KiB
+profile keeps identical token/command counts while reducing state search from
+roughly 43--45 ms to about 40.5 ms. Against `74d0b758`, five fixed-CPU opt-in
+pairs improve median end-to-end time from 528.34 ms to 519.68 ms (`1.0167x`,
+3/5 wins); seven default controls are neutral at 401.42/401.68 ms (`0.9993x`).
+The residual 40 ms search cost remains too high to change the default.
 
 Measure the opt-in path explicitly without changing the default gate:
 

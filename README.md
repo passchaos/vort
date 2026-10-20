@@ -2349,6 +2349,10 @@ to separate state-search work from compact and complete wire construction. A
 avoiding most uncompetitive full-wire trials on the measured real-source
 prefixes; the complete 32 KiB opt-in A/B improves about `1.324x` with unchanged
 wire, while the default path remains neutral.
+The state loop additionally borrows beam states and hoists pending-insert code
+classification out of individual match transitions. The 32 KiB stage profile
+falls from roughly 43--45 ms to about 40.5 ms; fixed-CPU end-to-end opt-in A/B
+improves `1.0167x` median with a `0.9993x` default control.
 Inputs beyond the 16 MiB
 format limit keep one Brotli stream and apply the selected policy independently
 to bounded 16/32/64 KiB blocks. q2...q11 retain window-bounded LZ77 history and

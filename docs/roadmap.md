@@ -117,6 +117,12 @@ major gaps before Vort can claim broad industry-best parity:
   529.8 ms (`1.324x`) with identical wire; seven default controls are neutral at
   `0.9987x`. This narrows but does not close the gap required to raise the
   default ceiling.
+  Borrowing beam states and classifying each pending insert once per state now
+  reduce 32 KiB search from roughly 43--45 ms to about 40.5 ms. Five fixed-CPU
+  opt-in pairs improve median end-to-end time from 528.34 ms to 519.68 ms
+  (`1.0167x`), while seven default controls remain neutral at `0.9993x`. This is
+  retained as a bounded hot-loop improvement, not evidence for raising the
+  default ceiling.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
   entropy block switching, static dictionaries, consecutive compressed
