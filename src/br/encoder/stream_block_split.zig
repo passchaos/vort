@@ -9,7 +9,8 @@ pub const conservative_bound_block_len: usize = grid_block_len;
 const grid_block_count = full_block_len / grid_block_len;
 const max_segments = 4;
 const max_boundaries = max_segments - 1;
-const max_grid_plans = max_segments - 1;
+const ranked_plans_per_depth = 2;
+const max_grid_plans = (max_segments - 1) * ranked_plans_per_depth;
 
 // One extra meta-block needs its own header and entropy descriptions. Require
 // a conservative raw-literal entropy gain before materializing the split
@@ -41,7 +42,7 @@ pub const BoundaryPlan = struct {
 pub const Plan = struct {
     halves: bool = false,
     grid_plans: [max_grid_plans]BoundaryPlan = @splat(.{}),
-    grid_plan_count: u2 = 0,
+    grid_plan_count: u3 = 0,
 
     pub fn any(self: Plan) bool {
         return self.halves or self.grid_plan_count != 0;
@@ -55,7 +56,7 @@ pub const Plan = struct {
 /// Screen whether a complete 64 KiB planning window has strong distribution
 /// changes on an 8 KiB grid. The caller performs final exact-wire arbitration
 /// across the shapes selected by `Plan`. The integer Q8 model is deterministic
-/// on every target and uses eight fixed histograms plus a four-segment DP.
+/// on every target and searches all 63 layouts with at most four segments.
 pub fn shouldSplit64(input: []const u8) bool {
     return plan64(input).any();
 }
@@ -78,75 +79,128 @@ pub fn plan64(input: []const u8) Plan {
         }
     }
 
-    var costs: [max_segments + 1][grid_block_count + 1]u64 =
-        @splat(@splat(invalid_cost));
-    var previous: [max_segments + 1][grid_block_count + 1]u8 =
-        @splat(@splat(std.math.maxInt(u8)));
-    costs[0][0] = 0;
-    for (1..max_segments + 1) |segment_count| {
-        for (segment_count..grid_block_count + 1) |end| {
-            for (segment_count - 1..end) |start| {
-                const prior = costs[segment_count - 1][start];
-                if (prior == invalid_cost) continue;
-                var candidate = std.math.add(
-                    u64,
-                    prior,
-                    segment_costs[start][end],
-                ) catch continue;
-                if (segment_count > 1) {
-                    candidate = std.math.add(
-                        u64,
-                        candidate,
-                        min_split_savings_q8,
-                    ) catch continue;
-                }
-                if (candidate < costs[segment_count][end]) {
-                    costs[segment_count][end] = candidate;
-                    previous[segment_count][end] = @intCast(start);
-                }
-            }
-        }
-    }
-
     var result: Plan = .{};
-    var frontier_cost = costs[1][grid_block_count];
+    var frontier_cost = segment_costs[0][grid_block_count];
     for (2..max_segments + 1) |segment_count| {
-        const candidate_cost = costs[segment_count][grid_block_count];
-        if (candidate_cost >= frontier_cost) continue;
-        frontier_cost = candidate_cost;
-        const candidate = reconstructBoundaryPlan(
-            &previous,
-            segment_count,
-        ) orelse return .{};
-        if (candidate.isHalves()) {
-            result.halves = true;
-        } else {
-            result.grid_plans[result.grid_plan_count] = candidate;
-            result.grid_plan_count += 1;
+        const ranked = rankBoundaryPlans(&segment_costs, segment_count);
+        const previous_frontier = frontier_cost;
+        if (ranked[0].cost >= previous_frontier) continue;
+        frontier_cost = ranked[0].cost;
+        for (ranked) |candidate| {
+            if (candidate.cost >= previous_frontier) continue;
+            if (candidate.plan.isHalves()) {
+                result.halves = true;
+            } else {
+                result.grid_plans[result.grid_plan_count] = candidate.plan;
+                result.grid_plan_count += 1;
+            }
         }
     }
     return result;
 }
 
-fn reconstructBoundaryPlan(
-    previous: *const [max_segments + 1][grid_block_count + 1]u8,
-    selected_segment_count: usize,
-) ?BoundaryPlan {
-    var reversed: [max_boundaries]u16 = undefined;
-    var reversed_count: usize = 0;
-    var end = grid_block_count;
-    var segment_count = selected_segment_count;
-    while (segment_count > 1) : (segment_count -= 1) {
-        const start = previous[segment_count][end];
-        if (start == std.math.maxInt(u8) or start == 0) return null;
-        reversed[reversed_count] = @intCast(@as(usize, start) * grid_block_len);
-        reversed_count += 1;
-        end = start;
+const RankedPlan = struct {
+    cost: u64 = std.math.maxInt(u64),
+    plan: BoundaryPlan = .{},
+};
+
+fn rankBoundaryPlans(
+    segment_costs: *const [grid_block_count][grid_block_count + 1]u64,
+    segment_count: usize,
+) [ranked_plans_per_depth]RankedPlan {
+    var ranked: [ranked_plans_per_depth]RankedPlan = @splat(.{});
+    var boundary_cells: [max_boundaries]u8 = undefined;
+    enumerateBoundaryPlans(
+        segment_costs,
+        segment_count,
+        &boundary_cells,
+        0,
+        1,
+        &ranked,
+    );
+    return ranked;
+}
+
+fn enumerateBoundaryPlans(
+    segment_costs: *const [grid_block_count][grid_block_count + 1]u64,
+    segment_count: usize,
+    boundary_cells: *[max_boundaries]u8,
+    depth: usize,
+    next_cell: usize,
+    ranked: *[ranked_plans_per_depth]RankedPlan,
+) void {
+    const boundary_count = segment_count - 1;
+    if (depth == boundary_count) {
+        const candidate = rankedPlan(segment_costs, boundary_cells, boundary_count) orelse
+            return;
+        retainRankedPlan(ranked, candidate);
+        return;
     }
-    var result: BoundaryPlan = .{ .boundary_count = @intCast(reversed_count) };
-    for (0..reversed_count) |index|
-        result.boundaries[index] = reversed[reversed_count - index - 1];
-    return result;
+    const remaining_boundaries = boundary_count - depth;
+    const last_cell = grid_block_count - remaining_boundaries;
+    for (next_cell..last_cell + 1) |cell| {
+        boundary_cells[depth] = @intCast(cell);
+        enumerateBoundaryPlans(
+            segment_costs,
+            segment_count,
+            boundary_cells,
+            depth + 1,
+            cell + 1,
+            ranked,
+        );
+    }
+}
+
+fn rankedPlan(
+    segment_costs: *const [grid_block_count][grid_block_count + 1]u64,
+    boundary_cells: *const [max_boundaries]u8,
+    boundary_count: usize,
+) ?RankedPlan {
+    var cost: u64 = 0;
+    var start: usize = 0;
+    var plan: BoundaryPlan = .{ .boundary_count = @intCast(boundary_count) };
+    for (boundary_cells[0..boundary_count], 0..) |cell_u8, index| {
+        const cell: usize = cell_u8;
+        cost = std.math.add(u64, cost, segment_costs[start][cell]) catch
+            return null;
+        plan.boundaries[index] = @intCast(cell * grid_block_len);
+        start = cell;
+    }
+    cost = std.math.add(
+        u64,
+        cost,
+        segment_costs[start][grid_block_count],
+    ) catch return null;
+    const header_allowance = std.math.mul(
+        u64,
+        min_split_savings_q8,
+        boundary_count,
+    ) catch return null;
+    cost = std.math.add(u64, cost, header_allowance) catch return null;
+    return .{ .cost = cost, .plan = plan };
+}
+
+fn retainRankedPlan(
+    ranked: *[ranked_plans_per_depth]RankedPlan,
+    candidate: RankedPlan,
+) void {
+    if (rankedPlanLess(candidate, ranked[0])) {
+        ranked[1] = ranked[0];
+        ranked[0] = candidate;
+    } else if (rankedPlanLess(candidate, ranked[1])) {
+        ranked[1] = candidate;
+    }
+}
+
+fn rankedPlanLess(left: RankedPlan, right: RankedPlan) bool {
+    if (left.cost != right.cost) return left.cost < right.cost;
+    const left_boundaries = left.plan.slice();
+    const right_boundaries = right.plan.slice();
+    for (left_boundaries, right_boundaries) |left_boundary, right_boundary| {
+        if (left_boundary != right_boundary)
+            return left_boundary < right_boundary;
+    }
+    return left_boundaries.len < right_boundaries.len;
 }
 
 test "stream block split keeps homogeneous distributions together" {
@@ -162,7 +216,6 @@ test "stream block split detects a strong midpoint distribution change" {
     @memset(changed[half_block_len..], 'z');
     const plan = plan64(&changed);
     try std.testing.expect(plan.halves);
-    try std.testing.expectEqual(@as(usize, 0), plan.gridPlans().len);
     try std.testing.expect(!shouldSplit64(changed[0 .. full_block_len - 1]));
 }
 
@@ -176,11 +229,11 @@ test "stream block split detects alternating quarter distributions" {
             @intCast(240 + (index & 15));
     }
     const plan = plan64(&changed);
-    try std.testing.expect(!plan.halves);
     try std.testing.expect(plan.gridPlans().len >= 1);
-    try std.testing.expect(
-        plan.gridPlans()[plan.gridPlans().len - 1].isQuarters(),
-    );
+    var found_quarters = false;
+    for (plan.gridPlans()) |*candidate|
+        found_quarters = found_quarters or candidate.isQuarters();
+    try std.testing.expect(found_quarters);
 }
 
 test "stream block split detects a non-quarter grid boundary" {
@@ -192,12 +245,14 @@ test "stream block split detects a non-quarter grid boundary" {
         else
             @intCast(240 + (index & 15));
     const plan = plan64(&changed);
-    try std.testing.expect(!plan.halves);
     try std.testing.expect(plan.gridPlans().len >= 1);
     try std.testing.expectEqualSlices(
         u16,
         &.{@as(u16, @intCast(boundary))},
         plan.gridPlans()[0].slice(),
+    );
+    try std.testing.expect(
+        plan.gridPlans().len + @intFromBool(plan.halves) >= 2,
     );
 }
 
@@ -212,12 +267,15 @@ test "stream block split retains a multi-depth proxy frontier" {
             @intCast(240 + (index & 15));
     }
     const plan = plan64(&changed);
-    try std.testing.expect(!plan.halves);
-    try std.testing.expectEqual(@as(usize, 2), plan.gridPlans().len);
+    try std.testing.expect(plan.gridPlans().len >= 4);
     try std.testing.expectEqual(@as(usize, 1), plan.gridPlans()[0].slice().len);
-    try std.testing.expectEqualSlices(
-        u16,
-        &.{ @as(u16, 16 * 1024), @as(u16, 40 * 1024) },
-        plan.gridPlans()[1].slice(),
-    );
+    var found_three_regions = false;
+    for (plan.gridPlans()) |*candidate| {
+        found_three_regions = found_three_regions or std.mem.eql(
+            u16,
+            &.{ @as(u16, 16 * 1024), @as(u16, 40 * 1024) },
+            candidate.slice(),
+        );
+    }
+    try std.testing.expect(found_three_regions);
 }

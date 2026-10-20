@@ -20124,14 +20124,16 @@ reuse, so production keeps the simpler independently owned plans.
 - Added deterministic entropy-aware stream segmentation on top of the
   quality-sized Brotli block policy. Legacy balanced/ratio plus q2...q5 and
   q8...q10 inspect eight fixed 8 KiB histograms for every automatic 64 KiB
-  lookahead. A deterministic Q8 entropy DP chooses one through four segments,
+  lookahead. A deterministic Q8 entropy search chooses one through four segments,
   charging a conservative 2,048-bit allowance per additional meta-block. Each
-  new proxy minimum reached at 2/3/4 segments is retained, for at most three
-  grid plans. Ties retain fewer segments and earlier predecessor boundaries.
-  The shared writer compares every frontier plan with exact single-block and
-  midpoint wires and retains only a strictly smaller bit count. Homogeneous
-  data stays at 64 KiB. The screening decision allocates no memory; retained
-  branch/history scratch keeps LZ77 history plus recent distances continuous
+  new proxy minimum reached at 2/3/4 segments and that depth's second-best
+  distinct layout are retained while below the shallower frontier, for at most
+  six grid plans. The complete 8 KiB-grid search has only 63 combinations and
+  allocates no memory. Ties retain fewer segments and lexicographically earlier
+  boundaries. The shared writer compares every frontier plan with exact
+  single-block and midpoint wires and retains only a strictly smaller bit
+  count. Homogeneous data stays at 64 KiB. Retained branch/history scratch
+  keeps LZ77 history plus recent distances continuous
   across every selected cut. `adaptive_blocks = false` disables the
   policy, `true` forces it for configured 64 KiB blocks, and any explicit
   `block_len` is fixed by default. Chunked and incremental encoders call the
@@ -20139,8 +20141,9 @@ reuse, so production keeps the simpler independently owned plans.
   bounds conservatively reserve an all-8-KiB partition. Unit tests cover
   homogeneous, midpoint, alternating-quarter, 24 KiB non-quarter, and
   three-distribution proxy-frontier plans; deterministic boundary
-  reconstruction; q2 automatic vs disabled behavior; balanced default vs
-  forced behavior; invalid non-64-KiB forcing; round trips; cross-API equality;
+  reconstruction; same-depth top-2 retention; q2 automatic vs disabled
+  behavior; balanced default vs forced behavior; invalid non-64-KiB forcing;
+  round trips; cross-API equality;
   caller-buffer bounds; and warmed zero-allocation scratch reuse. Current Debug
   `test-br` passes 962/962; the
   upstream differential independently decodes both segmentation policies in

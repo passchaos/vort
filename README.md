@@ -2318,10 +2318,11 @@ one-pass writer with cross-fragment adaptive command/distance trees; q1 uses a
 compact two-pass 128-symbol writer; q2 uses static/dynamic bounded trees and q3
 uses a trivial dynamic three-tree writer for ordinary LZ plans. Dictionary
 command plans retain the general writer. Automatic 64 KiB stream blocks now
-run a deterministic Q8 entropy DP over eight 8 KiB histograms, selecting at
+run a deterministic Q8 entropy search over eight 8 KiB histograms, selecting at
 most four segments. It retains every new proxy minimum reached at 2/3/4
-segments, then compares all of those plans with the exact single and midpoint
-wires. Locked q2 fixtures cover four
+segments plus the second-best distinct layout at that depth while it still
+beats the shallower frontier. At most six grid plans are compared with the
+exact single and midpoint wires. Locked q2 fixtures cover four
 alternating quarters (`39,169 -> 65,536`) and a non-quarter 24 KiB cut
 (`38,753 -> 65,536`). A three-distribution fixture exercises the two- and
 three-segment proxy frontier before selecting `38,513 -> 65,536`. All stay

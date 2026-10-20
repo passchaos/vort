@@ -68,13 +68,15 @@ inside their deepest optimal-search ceiling.
 
 Legacy balanced/ratio plus q2...q5 and q8...q10 inspect eight 8 KiB cells in
 each automatic 64 KiB lookahead. A deterministic allocation-free Q8
-byte-histogram DP selects one through four segments, charging a conservative
+byte-histogram search selects one through four segments, charging a conservative
 2,048-bit allowance per additional meta-block. It retains each new proxy-cost
-minimum reached at 2/3/4 segments, producing at most three grid plans. Ties
-retain fewer segments and equal-cost predecessor ties retain the earlier
-boundary, so reconstruction is target-independent. The writer compares every
-frontier plan with the exact single-block and midpoint wires and retains only a
-strictly smaller bit count. Homogeneous data
+minimum reached at 2/3/4 segments plus that depth's second-best distinct layout
+while it still beats the shallower frontier, producing at most six grid plans.
+The fixed search enumerates only 63 boundary combinations. Ties retain fewer
+segments and lexicographically earlier boundaries, so reconstruction is
+target-independent. The writer compares every frontier plan with the exact
+single-block and midpoint wires and retains only a strictly smaller bit count.
+Homogeneous data
 therefore keeps the larger block, while profitable non-quarter boundaries
 receive independently modeled blocks without losing cross-block LZ77 history
 or the recent-distance ring.
@@ -477,6 +479,9 @@ surface and independent-decode coverage.
 A three-distribution fixture exposes both two- and three-segment proxy-frontier
 plans, selects three exact data meta-blocks, and locks the public/Node wire at
 `38,513 -> 65,536` bytes.
+The 24 KiB-cut oracle also requires a second distinct two-segment layout to
+survive whenever it remains below the unsplit proxy, pinning same-depth top-2
+retention independently of the final wire winner.
 
 The planned encode benchmark accepts independent Vort selectors:
 
