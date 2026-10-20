@@ -539,6 +539,38 @@ pub fn main(init: std.process.Init) !void {
         },
     };
 
+    const zstd_dictionary_content = "external ZIP Zstandard dictionary alpha beta gamma\n" ** 8;
+    const zstd_dictionary_mode = if (entry_mode) |value|
+        std.mem.eql(u8, value, "zstd-dictionary")
+    else
+        false;
+    const owned_zstd_dictionary: ?vort.ZstdOwnedStandardDictionary = if (zstd_dictionary_mode)
+        try vort.zstdStandardDictionaryFromContentAlloc(
+            init.gpa,
+            zstd_dictionary_content,
+            0x5a49_5044,
+        )
+    else
+        null;
+    defer if (owned_zstd_dictionary) |dictionary| dictionary.deinit(init.gpa);
+    const zstd_dictionary: ?vort.ZstdDictionary = if (owned_zstd_dictionary) |dictionary|
+        dictionary.asDictionary()
+    else
+        null;
+    const zstd_dictionary_entries = [_]Entry{
+        .{
+            .name = "dictionary-known.zst",
+            .data = "external ZIP Zstandard dictionary alpha beta gamma\n" ** 23,
+            .method = .zstandard,
+            .expected_size = ("external ZIP Zstandard dictionary alpha beta gamma\n" ** 23).len,
+        },
+        .{
+            .name = "dictionary-unknown.zst",
+            .data = "external ZIP Zstandard dictionary alpha beta delta\n" ** 19,
+            .method = .zstandard_legacy,
+            .expected_size = null,
+        },
+    };
     const selected_entries: []const Entry = if (entry_mode) |value|
         if (std.mem.eql(u8, value, "zipcrypto"))
             &encrypted_entries
@@ -550,6 +582,8 @@ pub fn main(init: std.process.Init) !void {
             &unicode_entries
         else if (std.mem.eql(u8, value, "archive-extra"))
             &archive_extra_entries
+        else if (std.mem.eql(u8, value, "zstd-dictionary"))
+            &zstd_dictionary_entries
         else if (std.mem.eql(u8, value, "split"))
             entries[0..6]
         else
@@ -594,9 +628,22 @@ pub fn main(init: std.process.Init) !void {
             zip64,
             output_pattern,
             archive_extra_data,
+            zstd_dictionary,
         );
         defer init.gpa.free(encoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+        if (owned_zstd_dictionary) |dictionary| {
+            const dictionary_path = try std.fmt.allocPrint(
+                init.gpa,
+                "{s}.dict",
+                .{output_path},
+            );
+            defer init.gpa.free(dictionary_path);
+            try std.Io.Dir.cwd().writeFile(init.io, .{
+                .sub_path = dictionary_path,
+                .data = dictionary.bytes,
+            });
+        }
     }
 }
 
@@ -743,6 +790,7 @@ fn encodeArchive(
     zip64: vort.Zip64Mode,
     output_pattern: OutputPattern,
     archive_extra_data: []const u8,
+    zstd_dictionary: ?vort.ZstdDictionary,
 ) ![]u8 {
     var writer = try vort.ZipIncrementalWriter.initWithOptions(allocator, .{
         .archive_comment = "vort incremental writer interop",
@@ -753,8 +801,9 @@ fn encodeArchive(
         .zstd_options = .{
             .content_checksum = true,
             .block_size_max = 4096,
-            .selection = .raw_or_rle,
+            .selection = if (zstd_dictionary != null) .auto else .raw_or_rle,
         },
+        .zstd_dictionary = zstd_dictionary,
         .lzma_options = .{
             .dictionary_size = 4096,
             .mode = .literal_only,

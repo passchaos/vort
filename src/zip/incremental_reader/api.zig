@@ -1,6 +1,7 @@
 const std = @import("std");
 const core = @import("../../core.zig");
 const types = @import("../types.zig");
+const zstd = @import("../../zstd.zig");
 
 pub const CompressionMethod = types.CompressionMethod;
 pub const CreatorSystem = types.CreatorSystem;
@@ -26,6 +27,9 @@ pub const Options = struct {
     max_bzip2_compressed_block_len: usize = 4 * 1024 * 1024,
     max_bzip2_decoded_block_len: usize = 64 * 1024 * 1024,
     max_zstd_compressed_buffer_len: usize = 1024 * 1024,
+    /// Borrowed preset history for Zstandard methods 20 and 93. The descriptor
+    /// and bytes must remain stable until the reader is reset or deinitialized.
+    zstd_dictionary: ?zstd.NativeDictionary = null,
     max_lzma_dictionary_size: usize = 64 * 1024 * 1024,
     max_lzma_compressed_buffer_len: usize = 1024 * 1024,
     max_xz_dictionary_size: usize = 64 * 1024 * 1024,

@@ -5,6 +5,7 @@ const zip = @import("../zip.zig");
 const incremental = @import("incremental_reader.zig");
 const descriptor = @import("incremental_reader/descriptor.zig");
 const wire = @import("wire.zig");
+const zstd = @import("../zstd.zig");
 
 const ExpectedEntry = struct {
     name: []const u8,
@@ -74,6 +75,60 @@ fn decodeArchiveFragmented(
         try std.testing.expectEqual(parsed.central_directory_size, snapshot.central_size.?);
         try std.testing.expectEqualStrings(parsed.comment, reader.archiveComment());
     }
+}
+
+test "ZIP incremental reader streams Zstandard preset dictionaries" {
+    const allocator = std.testing.allocator;
+    const dictionary_content = "streaming ZIP Zstandard dictionary alpha beta gamma\n" ** 8;
+    const dictionary = zstd.NativeDictionary.init(0x5354_524d, dictionary_content);
+    const first = "streaming ZIP Zstandard dictionary alpha beta gamma\n" ** 23;
+    const second = "streaming ZIP Zstandard dictionary alpha beta delta\n" ** 19;
+    const entries = [_]zip.EncodeEntry{
+        .{ .name = "current.zst", .data = first, .method = .zstandard },
+        .{ .name = "legacy.zst", .data = second, .method = .zstandard_legacy },
+    };
+    const archive = try zip.encodeAlloc(allocator, &entries, .{
+        .data_descriptor = true,
+        .zstd_dictionary = dictionary,
+    });
+    defer allocator.free(archive);
+    const expected = [_]ExpectedEntry{
+        .{ .name = "current.zst", .data = first },
+        .{ .name = "legacy.zst", .data = second },
+    };
+    try std.testing.expectError(
+        error.NeedDictionary,
+        decodeArchiveFragmented(
+            allocator,
+            archive,
+            &expected,
+            .{},
+            1,
+            1,
+        ),
+    );
+    try std.testing.expectError(
+        error.NeedDictionary,
+        decodeArchiveFragmented(
+            allocator,
+            archive,
+            &expected,
+            .{ .zstd_dictionary = zstd.NativeDictionary.init(
+                dictionary.id + 1,
+                dictionary.content,
+            ) },
+            7,
+            5,
+        ),
+    );
+    try decodeArchiveFragmented(
+        allocator,
+        archive,
+        &expected,
+        .{ .zstd_dictionary = dictionary },
+        1,
+        1,
+    );
 }
 
 test "ZIP incremental reader retains entry comments timestamps and Unix attributes" {

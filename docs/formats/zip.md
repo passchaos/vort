@@ -438,6 +438,10 @@ Bzip2 block's working storage; `max_zstd_compressed_buffer_len` selects whole-
 frame buffering versus the Zstandard block-streaming path. Both codecs expose
 container stop modes that retain accepted bytes after the first stream/frame;
 the ZIP reader limits descriptor probing to 12/20-byte increments.
+`zstd_dictionary` on `ZipDecodeOptions`, `ZipIncrementalReaderOptions`, or the
+owned entry decoder's `codec_limits` supplies the corresponding borrowed
+preset history. Missing or mismatched non-zero Dictionary_IDs return
+`NeedDictionary`; ZIP never copies the dictionary bytes.
 `max_lzma_dictionary_size`/`max_lzma_compressed_buffer_len` and the corresponding
 XZ dictionary, compressed-block, decoded-block, Index/Footer, and block-count
 limits bound those codec states independently. XZ descriptor mode stops before
@@ -482,7 +486,10 @@ uncompressed input, and emitted archive bytes. `bzip2_options` independently sel
 100...900 KiB block size plus total-input and pending-output limits.
 `zstd_options` selects standard block/window/parser/checksum policy; the writer
 forces content-size presence for pledged entries and absence for unknown-size
-entries. This initial ZIP surface does not attach preset Zstandard dictionaries.
+entries. `zstd_dictionary` borrows one raw-content or standard-full preset
+dictionary for every method-20/93 entry; the descriptor and bytes must outlive
+the incremental writer. The one-shot `ZipEncodeOptions` exposes the same
+borrowed field.
 `lzma_options` selects properties, a 4...65,535-byte dictionary, literal/greedy
 mode, bounded input/lookahead and pending output. ZIP always uses an EOS marker:
 the adapter streams the 9-byte ZIP properties prefix, validates/discards the
@@ -744,7 +751,10 @@ signature payload bytes, Deflate, Bzip2, LZMA, force-ZIP64 local metadata with a
 64-bit descriptor, empty Stored, central records and the archive comment
 (`incremental_archive_reader_cases=6`). Two system-zstd frames wrapped as
 legacy method 20 and current method 93 also pass the sequential path
-(`incremental_archive_zstd_cases=2`). An independently generated XZ method-95
+(`incremental_archive_zstd_cases=2`). Four additional ZIP32/ZIP64 known/unknown
+incremental-writer frames require a generated standard dictionary: system
+`zstd` must reject them without `-D` and decode them byte-exactly with it
+(`incremental_zstd_dictionary_cases=4`). An independently generated XZ method-95
 member passes the same path (`incremental_archive_xz_cases=1`). A fixed 7-Zip
 Deflate64 payload wrapped as method 9 passes the required sequential path
 (`incremental_archive_deflate64_cases=1`). A fixed zlib-blast method-10 payload

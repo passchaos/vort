@@ -42,6 +42,7 @@ pub const Options = struct {
     implode: ImplodeOptions,
     bzip2: Bzip2Options,
     zstd: ZstdOptions,
+    zstd_dictionary: ?zstd.NativeDictionary,
     lzma: LzmaOptions,
     xz: XzOptions,
     ppmd: PpmdOptions,
@@ -130,9 +131,23 @@ pub const State = union(enum) {
                     options.bzip2,
                 ) },
             .zstandard_legacy, .zstandard => zstd_state: {
-                var zstd_options = options.zstd;
+                var zstd_options = try resolvedZstdOptions(options);
                 zstd_options.include_content_size = expected_size != null;
-                break :zstd_state .{ .zstd = if (expected_size) |expected|
+                break :zstd_state .{ .zstd = if (options.zstd_dictionary) |dictionary|
+                    if (expected_size) |expected|
+                        try zstd.NativeIncrementalFrameEncoder.initExactSizeWithPresetDictionary(
+                            allocator,
+                            zstd_options,
+                            @intCast(expected),
+                            dictionary,
+                        )
+                    else
+                        try zstd.NativeIncrementalFrameEncoder.initWithPresetDictionary(
+                            allocator,
+                            zstd_options,
+                            dictionary,
+                        )
+                else if (expected_size) |expected|
                     try zstd.NativeIncrementalFrameEncoder.initExactSize(
                         allocator,
                         zstd_options,
@@ -286,7 +301,7 @@ pub fn validate(
             try validateExpectedSize(expected_size, options.bzip2.max_input_len);
         },
         .zstandard_legacy, .zstandard => {
-            if (options.zstd.dictionary_id != 0) return error.InvalidBlockPlan;
+            _ = try resolvedZstdOptions(options);
             try validateExpectedSize(expected_size, std.math.maxInt(usize));
         },
         .lzma => {
@@ -313,6 +328,21 @@ pub fn validate(
         },
         else => return error.UnsupportedZipCompressionMethod,
     }
+}
+
+fn resolvedZstdOptions(options: Options) Error!ZstdOptions {
+    var resolved = options.zstd;
+    if (options.zstd_dictionary) |dictionary| {
+        if (resolved.dictionary_id != 0 and
+            resolved.dictionary_id != dictionary.id)
+        {
+            return error.InvalidBlockPlan;
+        }
+        resolved.dictionary_id = dictionary.id;
+    } else if (resolved.dictionary_id != 0) {
+        return error.InvalidBlockPlan;
+    }
+    return resolved;
 }
 
 pub fn inputLimit(method: CompressionMethod, options: Options) ?usize {

@@ -2180,6 +2180,67 @@ def validate_incremental_writer_archive(
     return len(raw), unzip_checked, seven_zip_checked
 
 
+def validate_incremental_zstd_dictionary_writer(
+    writer: Path,
+    temp: Path,
+    zstd_tool: str,
+) -> int:
+    payloads = {
+        "dictionary-known.zst": b"external ZIP Zstandard dictionary alpha beta gamma\n" * 23,
+        "dictionary-unknown.zst": b"external ZIP Zstandard dictionary alpha beta delta\n" * 19,
+    }
+    methods = {
+        "dictionary-known.zst": 93,
+        "dictionary-unknown.zst": 20,
+    }
+    cases = 0
+    for force_zip64 in (False, True):
+        suffix = "zip64" if force_zip64 else "zip32"
+        one_path = temp / f"incremental-zstd-dictionary-{suffix}-one.zip"
+        micro_path = temp / f"incremental-zstd-dictionary-{suffix}-micro.zip"
+        run(writer, str(one_path), suffix, "one", "zstd-dictionary")
+        run(writer, str(micro_path), suffix, "micro", "zstd-dictionary")
+        raw = one_path.read_bytes()
+        if raw != micro_path.read_bytes():
+            raise AssertionError(
+                f"incremental Zstd dictionary {suffix} output is not deterministic"
+            )
+        dictionary_path = Path(f"{one_path}.dict")
+        micro_dictionary_path = Path(f"{micro_path}.dict")
+        dictionary = dictionary_path.read_bytes()
+        if dictionary != micro_dictionary_path.read_bytes():
+            raise AssertionError("incremental Zstd dictionary bytes changed by output schedule")
+        with zipfile.ZipFile(one_path) as archive:
+            if archive.namelist() != list(payloads):
+                raise AssertionError("incremental Zstd dictionary entry order mismatch")
+            for name, expected in payloads.items():
+                info = archive.getinfo(name)
+                if info.compress_type != methods[name]:
+                    raise AssertionError(f"incremental Zstd dictionary method mismatch for {name}")
+                name_len, extra_len = struct.unpack_from("<HH", raw, info.header_offset + 26)
+                data_offset = info.header_offset + 30 + name_len + extra_len
+                frame = raw[data_offset : data_offset + info.compress_size]
+                missing = subprocess.run(
+                    [zstd_tool, "-q", "-d", "-c"],
+                    input=frame,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+                if missing.returncode == 0:
+                    raise AssertionError("dictionary-requiring Zstd frame decoded without -D")
+                actual = subprocess.run(
+                    [zstd_tool, "-q", "-D", str(dictionary_path), "-d", "-c"],
+                    input=frame,
+                    check=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                ).stdout
+                if actual != expected:
+                    raise AssertionError(f"Zstd dictionary decode mismatch for {name}")
+                cases += 1
+    return cases
+
+
 INCREMENTAL_ZIPCRYPTO_PAYLOADS = {
     "encrypted-known.bin": b"incremental ZipCrypto stored payload\n" * 31,
     "encrypted-unknown.txt": b"incremental ZipCrypto Deflate payload\n" * 89,
@@ -3144,10 +3205,13 @@ def main() -> None:
     unzip_tool = shutil.which("unzip")
     zip_tool = shutil.which("zip")
     openssl_tool = shutil.which("openssl")
+    zstd_tool = shutil.which("zstd")
     if unzip_tool is None or zip_tool is None:
         raise AssertionError("Info-ZIP zip and unzip CLIs are required for ZipCrypto differential")
     if openssl_tool is None:
         raise AssertionError("OpenSSL is required for WinZip AES differential")
+    if zstd_tool is None:
+        raise AssertionError("zstd CLI is required for ZIP Zstandard differential")
 
     with tempfile.TemporaryDirectory(prefix="vort-zip-diff-") as temp_text:
         temp = Path(temp_text)
@@ -3203,6 +3267,11 @@ def main() -> None:
             validate_incremental_writer_archive(
                 args.cli, args.incremental_writer, temp, True, unzip_tool, seven_zip_tool
             )
+        )
+        incremental_zstd_dictionary_cases = validate_incremental_zstd_dictionary_writer(
+            args.incremental_writer,
+            temp,
+            zstd_tool,
         )
         incremental_unicode_zip32_bytes, incremental_unicode_zip32_cases = (
             validate_incremental_unicode_archive(
@@ -3392,6 +3461,7 @@ def main() -> None:
         f"incremental_reader_cases={incremental_reader_cases} "
         f"incremental_archive_reader_cases={incremental_archive_reader_cases} "
         f"incremental_archive_zstd_cases={incremental_archive_zstd_cases} "
+        f"incremental_zstd_dictionary_cases={incremental_zstd_dictionary_cases} "
         f"incremental_archive_xz_cases={incremental_archive_xz_cases} "
         f"incremental_archive_deflate64_cases={incremental_archive_deflate64_cases} "
         f"incremental_archive_dcl_cases={incremental_archive_dcl_cases} "

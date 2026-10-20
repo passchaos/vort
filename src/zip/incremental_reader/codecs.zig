@@ -564,13 +564,24 @@ pub const ZstdState = struct {
         expected_uncompressed_size: ?usize,
         descriptor_layout: ?descriptor.Layout,
     ) Self {
+        const decoder_options: zstd.NativeIncrementalFrameDecoder.Options = .{
+            .max_compressed_buffer_len = reader_options.max_zstd_compressed_buffer_len,
+            .max_decoded_buffer_len = entry_limit,
+            .expected_output_len = expected_uncompressed_size,
+            .stop_after_first_frame = true,
+        };
         return .{
-            .decoder = zstd.NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
-                .max_compressed_buffer_len = reader_options.max_zstd_compressed_buffer_len,
-                .max_decoded_buffer_len = entry_limit,
-                .expected_output_len = expected_uncompressed_size,
-                .stop_after_first_frame = true,
-            }),
+            .decoder = if (reader_options.zstd_dictionary) |dictionary|
+                zstd.NativeIncrementalFrameDecoder.initWithDictionaryAndOptions(
+                    allocator,
+                    dictionary,
+                    decoder_options,
+                )
+            else
+                zstd.NativeIncrementalFrameDecoder.initWithOptions(
+                    allocator,
+                    decoder_options,
+                ),
             .descriptor_layout = descriptor_layout,
             .expected_compressed_size = expected_compressed_size,
         };

@@ -3,6 +3,7 @@ const checksum = @import("../checksum.zig");
 const deflate = @import("../deflate.zig");
 const zip = @import("../zip.zig");
 const incremental = @import("incremental_entry_decoder.zig");
+const zstd = @import("../zstd.zig");
 
 const DecodeResult = struct {
     bytes: []u8,
@@ -83,6 +84,60 @@ test "ZIP incremental entry decoder streams Stored data and leaves suffix uncons
     try std.testing.expectEqual(payload.len, decoded.input_read);
     try std.testing.expectEqual(.done, decoder.snapshot().phase);
     try decoder.finish();
+}
+
+test "ZIP incremental entry decoder streams Zstandard preset dictionaries" {
+    const allocator = std.testing.allocator;
+    const dictionary_content = "random-access ZIP Zstandard dictionary alpha beta\n" ** 8;
+    const dictionary = zstd.NativeDictionary.init(0x5241_4e44, dictionary_content);
+    const payload = "random-access ZIP Zstandard dictionary alpha gamma\n" ** 29;
+    const compressed = try zstd.encodeFrameWithDictionaryAlloc(
+        allocator,
+        payload,
+        dictionary,
+    );
+    defer allocator.free(compressed);
+    const entry = testEntry(
+        "dictionary.zst",
+        .zstandard,
+        compressed.len,
+        payload,
+    );
+
+    var missing = try incremental.OwnedDecoder.init(allocator, entry);
+    defer missing.deinit();
+    var scratch: [31]u8 = undefined;
+    try std.testing.expectError(
+        error.NeedDictionary,
+        missing.step(compressed, &scratch),
+    );
+
+    var wrong = try incremental.OwnedDecoder.initWithOptions(allocator, entry, .{
+        .codec_limits = .{ .zstd_dictionary = zstd.NativeDictionary.init(
+            dictionary.id + 1,
+            dictionary.content,
+        ) },
+    });
+    defer wrong.deinit();
+    try std.testing.expectError(
+        error.NeedDictionary,
+        wrong.step(compressed, &scratch),
+    );
+
+    var decoder = try incremental.OwnedDecoder.initWithOptions(allocator, entry, .{
+        .codec_limits = .{ .zstd_dictionary = dictionary },
+    });
+    defer decoder.deinit();
+    const decoded = try decodeFragmented(
+        allocator,
+        &decoder,
+        compressed,
+        3,
+        2,
+    );
+    defer allocator.free(decoded.bytes);
+    try std.testing.expectEqualSlices(u8, payload, decoded.bytes);
+    try std.testing.expectEqual(compressed.len, decoded.input_read);
 }
 
 test "ZIP incremental entry decoder streams dynamic Deflate under tiny backpressure" {

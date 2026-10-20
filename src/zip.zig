@@ -66,6 +66,7 @@ pub const unixExternalAttributes = types.unixExternalAttributes;
 pub const Zip64Mode = writer.Zip64Mode;
 pub const EncodeEntry = writer.EncodeEntry;
 pub const EncodeOptions = writer.EncodeOptions;
+pub const ZstdDictionary = zstd.NativeDictionary;
 pub const TraditionalEncryptionOptions = traditional_encryption.Options;
 pub const WinZipAesOptions = writer.WinZipAesOptions;
 pub const WinZipAesStrength = types.WinZipAesStrength;
@@ -187,6 +188,8 @@ pub const DecodeOptions = struct {
     max_output_len: usize = std.math.maxInt(usize),
     max_dictionary_size: usize = 64 * 1024 * 1024,
     password: ?[]const u8 = null,
+    /// Borrowed preset history for Zstandard methods 20 and 93.
+    zstd_dictionary: ?zstd.NativeDictionary = null,
 };
 
 pub const Entry = types.Entry;
@@ -400,7 +403,15 @@ pub const Archive = struct {
                 );
             },
             .zstandard_legacy, .zstandard => {
-                const written = try zstd.decodeFrameIntoExactSize(compressed, target, target.len);
+                const written = if (options.zstd_dictionary) |dictionary|
+                    try zstd.decodeFrameIntoWithDictionaryExactSize(
+                        compressed,
+                        target,
+                        dictionary,
+                        target.len,
+                    )
+                else
+                    try zstd.decodeFrameIntoExactSize(compressed, target, target.len);
                 if (written != target.len) return error.SizeMismatch;
             },
             else => return error.UnsupportedZipCompressionMethod,

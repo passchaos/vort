@@ -289,6 +289,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   Deflate64 output with the extended 64 KiB distance alphabet),
   transactional one-shot prefix append plus caller-output incremental
   writing for every listed method, including per-entry Traditional ZipCrypto,
+  borrowed raw/standard Zstandard preset dictionaries across one-shot and
+  incremental writing plus one-shot, sequential, split, and random-access
+  decoding,
   signed data descriptors, known or unknown size pledges, ZIP32/ZIP64 policy,
   SFX offsets, and payload-bounded memory;
   archive/entry comments, opaque Archive Extra Data Records with correct
@@ -1872,7 +1875,10 @@ ZIP32 `.never` and ZIP64 `.always` modes. Python raw-wire checks, `zipfile`, and
 system Info-ZIP validate their supported members, including known,
 unknown-size, and empty Bzip2 method-12 entries with version-needed 4.6.
 System `zstd` independently decodes known method-93, unknown-size legacy
-method-20, and empty method-93 frames with version-needed 6.3. Python `zipfile`
+method-20, and empty method-93 frames with version-needed 6.3. Four extra
+ZIP32/ZIP64 method-20/93 frames advertise a Vort-generated standard dictionary;
+system `zstd` must reject them without `-D` and decode them byte-exactly with
+that dictionary (`incremental_zstd_dictionary_cases=4`). Python `zipfile`
 independently reads known, unknown-size, and empty LZMA method-14 entries and verifies their bit-1
 EOS flag plus version-needed 6.3. Python `lzma.FORMAT_XZ` and system `xz`
 independently agree on known, unknown-size, and empty XZ method-95 streams.

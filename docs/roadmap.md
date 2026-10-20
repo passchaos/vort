@@ -21997,3 +21997,16 @@ reuse, so production keeps the simpler independently owned plans.
   8, 16 and 32 MiB boundary frames, raising the matrix to 279 cases with
   `far_window_encode_cases=3`, `unsupported=0`. Invalid no-window, sub-1-KiB and
   over-64-MiB budgets are rejected before encoding.
+
+- Added borrowed Zstandard preset dictionaries across ZIP method 20/93
+  one-shot and incremental writers plus one-shot, sequential, split, and
+  random-access incremental decoding. Raw-content and standard-full
+  `NativeDictionary` views remain caller-owned; ZIP stores only the ordinary
+  Zstd frame Dictionary_ID and never copies history bytes. Known and unknown
+  sizes share the same path, content-size signaling remains descriptor-aware,
+  and missing, wrong-ID, or conflicting option IDs fail before successful
+  extraction. Tiny 1-byte input/output schedules are byte-identical to
+  coalesced output. The required ZIP differential adds four ZIP32/ZIP64
+  method-20/93 frames backed by a generated standard dictionary: system `zstd`
+  must reject each without `-D` and decode it byte-exactly with the dictionary
+  (`incremental_zstd_dictionary_cases=4`).

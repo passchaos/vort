@@ -180,6 +180,99 @@ test "ZIP incremental writer handles one-byte input and output and is determinis
     }
 }
 
+test "ZIP Zstandard writers borrow preset dictionaries" {
+    const allocator = std.testing.allocator;
+    const dictionary_content = "shared ZIP Zstandard dictionary record alpha beta gamma\n" ** 8;
+    const dictionary = zstd.NativeDictionary.init(0x5a49_5044, dictionary_content);
+    const known_payload = "shared ZIP Zstandard dictionary record alpha beta gamma\n" ** 24;
+    const unknown_payload = "shared ZIP Zstandard dictionary record alpha beta delta\n" ** 21;
+    const entries = [_]TestEntry{
+        .{
+            .name = "dictionary-known.zst",
+            .data = known_payload,
+            .method = .zstandard,
+            .expected_size = known_payload.len,
+        },
+        .{
+            .name = "dictionary-unknown.zst",
+            .data = unknown_payload,
+            .method = .zstandard_legacy,
+            .expected_size = null,
+        },
+    };
+    const tiny = try encodeEntries(allocator, &entries, .{
+        .zstd_dictionary = dictionary,
+    }, 1, 1);
+    defer allocator.free(tiny);
+    const coalesced = try encodeEntries(allocator, &entries, .{
+        .zstd_dictionary = dictionary,
+    }, 4096, 8192);
+    defer allocator.free(coalesced);
+    try std.testing.expectEqualSlices(u8, coalesced, tiny);
+
+    const archive = try zip.parse(tiny);
+    for (entries, 0..) |expected, index| {
+        const entry = try archive.entryAt(index);
+        const frame = try archive.compressedData(entry);
+        try std.testing.expectEqual(
+            dictionary.id,
+            (try zstd.inspectNativeFrameHeader(frame)).dictionary_id,
+        );
+        try std.testing.expectError(
+            error.NeedDictionary,
+            archive.extractAlloc(allocator, entry),
+        );
+        try std.testing.expectError(
+            error.NeedDictionary,
+            archive.extractAllocWithOptions(allocator, entry, .{
+                .zstd_dictionary = zstd.NativeDictionary.init(
+                    dictionary.id + 1,
+                    dictionary.content,
+                ),
+            }),
+        );
+        const decoded = try archive.extractAllocWithOptions(allocator, entry, .{
+            .zstd_dictionary = dictionary,
+        });
+        defer allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, expected.data, decoded);
+    }
+
+    const one_shot_entries = [_]zip.EncodeEntry{.{
+        .name = "one-shot-dictionary.zst",
+        .data = known_payload,
+        .method = .zstandard,
+    }};
+    const one_shot = try zip.encodeAlloc(allocator, &one_shot_entries, .{
+        .data_descriptor = true,
+        .zstd_dictionary = dictionary,
+    });
+    defer allocator.free(one_shot);
+    const one_shot_archive = try zip.parse(one_shot);
+    const one_shot_entry = try one_shot_archive.entryAt(0);
+    const one_shot_decoded = try one_shot_archive.extractAllocWithOptions(
+        allocator,
+        one_shot_entry,
+        .{ .zstd_dictionary = dictionary },
+    );
+    defer allocator.free(one_shot_decoded);
+    try std.testing.expectEqualSlices(u8, known_payload, one_shot_decoded);
+
+    var mismatched = try incremental.Writer.initWithOptions(allocator, .{
+        .zstd_options = .{ .dictionary_id = dictionary.id + 1 },
+        .zstd_dictionary = dictionary,
+    });
+    defer mismatched.deinit();
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        mismatched.beginEntry(.{
+            .name = "mismatched-dictionary.zst",
+            .method = .zstandard,
+        }),
+    );
+    try std.testing.expectEqual(incremental.Phase.ready, mismatched.snapshot().phase);
+}
+
 test "ZIP incremental writer streams Traditional ZipCrypto entries" {
     const allocator = std.testing.allocator;
     const password = "incremental-zip-password";

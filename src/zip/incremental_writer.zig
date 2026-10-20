@@ -9,6 +9,7 @@ const traditional_encryption = @import("vail_archive_crypto").zipcrypto;
 const winzip_aes = @import("vail_archive_crypto").winzip_aes;
 const wire = @import("wire.zig");
 const zip_writer = @import("writer.zig");
+const zstd = @import("../zstd.zig");
 
 pub const CompressionMethod = types.CompressionMethod;
 pub const CreatorSystem = types.CreatorSystem;
@@ -53,8 +54,11 @@ pub const Options = struct {
     /// Bzip2 block size, total-input limit, and pending encoded-output limit.
     bzip2_options: codecs.Bzip2Options = .{},
     /// Zstandard block/window/parser policy. Content-size signaling is derived
-    /// from each entry's `expected_size`; preset dictionaries are not yet used.
+    /// from each entry's `expected_size`.
     zstd_options: codecs.ZstdOptions = .{},
+    /// Borrowed preset history used by every Zstandard entry. The descriptor
+    /// and its bytes must remain stable until `deinit`.
+    zstd_dictionary: ?zstd.NativeDictionary = null,
     /// ZIP LZMA properties/dictionary/buffering policy. Method 14 always uses
     /// an end marker; `size_mode` is normalized accordingly.
     lzma_options: codecs.LzmaOptions = .{},
@@ -957,6 +961,7 @@ pub const Writer = struct {
             .implode = self.options.implode_options,
             .bzip2 = self.options.bzip2_options,
             .zstd = self.options.zstd_options,
+            .zstd_dictionary = self.options.zstd_dictionary,
             .lzma = self.options.lzma_options,
             .xz = self.options.xz_options,
             .ppmd = self.options.ppmd_options,

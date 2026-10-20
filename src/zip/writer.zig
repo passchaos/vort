@@ -85,6 +85,8 @@ pub const EncodeOptions = struct {
     xz_options: xz.EncodeOptions = .{},
     zstd_level: c_int = zstd.default_compression_level,
     zstd_options: zstd.FrameOptions = .{},
+    /// Borrowed preset history for every Zstandard entry in this archive.
+    zstd_dictionary: ?zstd.NativeDictionary = null,
 };
 
 /// Encode a deterministic single-disk ZIP archive.
@@ -191,12 +193,21 @@ pub fn encodeAppend(
                 break :blk bytes;
             },
             .zstandard_legacy, .zstandard => blk: {
-                const bytes = try zstd.encodeFrameWithLevelAndOptionsAlloc(
-                    allocator,
-                    entry.data,
-                    options.zstd_level,
-                    options.zstd_options,
-                );
+                const bytes = if (options.zstd_dictionary) |dictionary|
+                    try zstd.encodeFrameWithLevelAndOptionsAndDictionaryAlloc(
+                        allocator,
+                        entry.data,
+                        options.zstd_level,
+                        options.zstd_options,
+                        dictionary,
+                    )
+                else
+                    try zstd.encodeFrameWithLevelAndOptionsAlloc(
+                        allocator,
+                        entry.data,
+                        options.zstd_level,
+                        options.zstd_options,
+                    );
                 owned_compressed = bytes;
                 break :blk bytes;
             },
