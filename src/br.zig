@@ -1598,7 +1598,7 @@ const IncrementalPlannedEncoderCodec = struct {
         best_wire: std.ArrayList(u8) = .empty,
         adaptive_single_wire: std.ArrayList(u8) = .empty,
         adaptive_split_wire: std.ArrayList(u8) = .empty,
-        adaptive_quarter_wire: std.ArrayList(u8) = .empty,
+        adaptive_grid_wire: std.ArrayList(u8) = .empty,
         history_snapshot: std.ArrayList(u8) = .empty,
         adaptive_split_history: std.ArrayList(u8) = .empty,
         greedy_scratch: lz77.TinyGreedyScratch = .{},
@@ -1626,7 +1626,7 @@ const IncrementalPlannedEncoderCodec = struct {
         state.best_wire.deinit(allocator);
         state.adaptive_single_wire.deinit(allocator);
         state.adaptive_split_wire.deinit(allocator);
-        state.adaptive_quarter_wire.deinit(allocator);
+        state.adaptive_grid_wire.deinit(allocator);
         state.history_snapshot.deinit(allocator);
         state.adaptive_split_history.deinit(allocator);
     }
@@ -1646,7 +1646,7 @@ const IncrementalPlannedEncoderCodec = struct {
         state.best_wire.clearRetainingCapacity();
         state.adaptive_single_wire.clearRetainingCapacity();
         state.adaptive_split_wire.clearRetainingCapacity();
-        state.adaptive_quarter_wire.clearRetainingCapacity();
+        state.adaptive_grid_wire.clearRetainingCapacity();
         state.history_snapshot.clearRetainingCapacity();
         state.adaptive_split_history.clearRetainingCapacity();
         state.compound_dictionary_size = 0;
@@ -1666,7 +1666,7 @@ const IncrementalPlannedEncoderCodec = struct {
             state.best_wire.capacity +
             state.adaptive_single_wire.capacity +
             state.adaptive_split_wire.capacity +
-            state.adaptive_quarter_wire.capacity +
+            state.adaptive_grid_wire.capacity +
             state.history_snapshot.capacity +
             state.adaptive_split_history.capacity +
             state.greedy_scratch.retainedCapacity() +
@@ -1736,7 +1736,7 @@ const IncrementalPlannedEncoderCodec = struct {
                     out,
                     state,
                     block,
-                    split_plan.quarters,
+                    split_plan,
                 );
         }
         try writePlannedStreamMetaBlock(allocator, out, state, block, true);
@@ -5216,7 +5216,7 @@ pub fn encodedPlannedStreamChunksBound(chunks: []const []const u8) Error!usize {
 fn encodedPlannedChunkedStreamBoundForInputLen(input_len: usize, options: PlannedStreamChunksOptions) Error!usize {
     const configured_block_len = try plannedStreamBlockLen(options);
     const block_len = if (try plannedStreamAdaptiveBlocks(options))
-        stream_block_split.quarter_block_len
+        stream_block_split.conservative_bound_block_len
     else
         configured_block_len;
     var bit_count = try storedWindowBitsLen(options.window_bits);
@@ -5235,7 +5235,7 @@ fn encodedPlannedChunkedStreamBoundForInputLen(input_len: usize, options: Planne
 pub fn encodedPlannedStreamChunksBoundWithOptions(chunks: []const []const u8, options: PlannedStreamChunksOptions) Error!usize {
     const configured_block_len = try plannedStreamBlockLen(options);
     const block_len = if (try plannedStreamAdaptiveBlocks(options))
-        stream_block_split.quarter_block_len
+        stream_block_split.conservative_bound_block_len
     else
         configured_block_len;
     var bit_count = try storedWindowBitsLen(options.window_bits);
@@ -7952,9 +7952,9 @@ fn writeAdaptivePlannedStreamBlock(
     out: *std.ArrayList(u8),
     state: *IncrementalPlannedEncoderCodec.State,
     block: []const u8,
-    evaluate_quarters: bool,
+    split_plan: stream_block_split.Plan,
 ) Error!void {
-    const Choice = enum { single, halves, quarters };
+    const Choice = enum { single, halves, grid };
     std.debug.assert(block.len == stream_block_split.full_block_len);
     const start_len = out.items.len;
     const start_bit_index = state.bit_index;
@@ -8029,13 +8029,14 @@ fn writeAdaptivePlannedStreamBlock(
         state.adaptive_split_wire.items.len,
         split_bit_index,
     ) - start_bit_index;
-    var quarter_bits: ?usize = null;
-    if (evaluate_quarters) {
+    const grid_boundaries = split_plan.gridBoundaries();
+    var grid_bits: ?usize = null;
+    if (grid_boundaries.len != 0) {
         state.adaptive_split_history.clearRetainingCapacity();
         try state.adaptive_split_history.appendSlice(allocator, state.history.items);
         try prepareAdaptiveBranch(
             allocator,
-            &state.adaptive_quarter_wire,
+            &state.adaptive_grid_wire,
             start_byte,
             start_bit_index,
         );
@@ -8044,18 +8045,27 @@ fn writeAdaptivePlannedStreamBlock(
         state.wire_state = start_wire_state;
         state.context_previous = start_context_previous;
         state.q0_entropy_state = start_q0_entropy_state;
-        for (0..4) |quarter_index| {
-            const quarter_start = quarter_index * stream_block_split.quarter_block_len;
+        var segment_start: usize = 0;
+        for (grid_boundaries) |boundary_u16| {
+            const boundary: usize = boundary_u16;
             try writePlannedStreamMetaBlock(
                 allocator,
-                &state.adaptive_quarter_wire,
+                &state.adaptive_grid_wire,
                 state,
-                block[quarter_start..][0..stream_block_split.quarter_block_len],
+                block[segment_start..boundary],
                 true,
             );
+            segment_start = boundary;
         }
-        quarter_bits = IncrementalPlannedEncoderCodec.startBitPosition(
-            state.adaptive_quarter_wire.items.len,
+        try writePlannedStreamMetaBlock(
+            allocator,
+            &state.adaptive_grid_wire,
+            state,
+            block[segment_start..],
+            true,
+        );
+        grid_bits = IncrementalPlannedEncoderCodec.startBitPosition(
+            state.adaptive_grid_wire.items.len,
             state.bit_index,
         ) - start_bit_index;
     }
@@ -8066,13 +8076,13 @@ fn writeAdaptivePlannedStreamBlock(
         choice = .halves;
         selected_bits = split_bits;
     }
-    if (quarter_bits) |bits| {
-        if (bits < selected_bits) choice = .quarters;
+    if (grid_bits) |bits| {
+        if (bits < selected_bits) choice = .grid;
     }
     const selected = switch (choice) {
         .single => state.adaptive_single_wire.items,
         .halves => state.adaptive_split_wire.items,
-        .quarters => state.adaptive_quarter_wire.items,
+        .grid => state.adaptive_grid_wire.items,
     };
     const shared_byte_count: usize = @intFromBool(start_bit_index != 0);
     try out.ensureUnusedCapacity(allocator, selected.len - shared_byte_count);
@@ -8094,7 +8104,7 @@ fn writeAdaptivePlannedStreamBlock(
             }
         },
         .halves => {
-            if (evaluate_quarters) {
+            if (grid_boundaries.len != 0) {
                 state.history.clearRetainingCapacity();
                 try state.history.appendSlice(
                     allocator,
@@ -8106,7 +8116,7 @@ fn writeAdaptivePlannedStreamBlock(
             state.context_previous = split_context_previous;
             state.q0_entropy_state = split_q0_entropy_state;
         },
-        .quarters => {},
+        .grid => {},
     }
     try commitPlannedMetaBlockCandidate(
         allocator,

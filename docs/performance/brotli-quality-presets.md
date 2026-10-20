@@ -66,23 +66,24 @@ outer `block_len` takes precedence when non-zero; otherwise the stream option
 or automatic policy is used. q6/q7/q11 therefore keep every automatic block
 inside their deepest optimal-search ceiling.
 
-Legacy balanced/ratio plus q2...q5 and q8...q10 inspect all four 16 KiB
-quarters of each automatic 64 KiB lookahead. A deterministic allocation-free
-Q8 byte-histogram model screens both the midpoint and four-quarter candidates.
-Separate literal entropy must beat the combined distribution by a conservative
-2,048-bit allowance per additional meta-block; four quarters must also beat the
-two-half proxy after charging their two additional headers. A midpoint-only
-screen compares exact single-block and two-half wires, while a quarter screen
-compares all three shapes and keeps only a strictly smaller bit count.
-Homogeneous data therefore keeps the larger block, while one or three
-profitable boundaries receive independently modeled blocks without losing
-cross-block LZ77 history or the recent-distance ring.
+Legacy balanced/ratio plus q2...q5 and q8...q10 inspect eight 8 KiB cells in
+each automatic 64 KiB lookahead. A deterministic allocation-free Q8
+byte-histogram DP selects one through four segments, charging a conservative
+2,048-bit allowance per additional meta-block. Ties retain fewer segments and
+equal-cost predecessor ties retain the earlier boundary, so reconstruction is
+target-independent. The writer always compares the exact single-block and
+midpoint wires; when the DP chooses a distinct 8 KiB-grid plan it also encodes
+that plan and retains only a strictly smaller bit count. Homogeneous data
+therefore keeps the larger block, while profitable non-quarter boundaries
+receive independently modeled blocks without losing cross-block LZ77 history
+or the recent-distance ring.
 `adaptive_blocks = false` disables this policy; `true` forces it for a 64 KiB
 configured block. A non-zero explicit `block_len` is fixed by default.
 Automatic lookahead is
 disabled above the standard 16-bit window to keep branch snapshots bounded;
 forcing it there is rejected. Conservative encoded bounds assume every
-adaptive 64 KiB block may split into four 16 KiB meta-blocks.
+adaptive 64 KiB block may be partitioned at every 8 KiB grid point, which is
+strictly more conservative than the DP's four-segment limit.
 
 | Quality | Family | Current Vort behavior |
 | ---: | --- | --- |
@@ -453,7 +454,7 @@ output backpressure, and static addressing after a saturated compound region.
 The same run retains four upstream decode fixtures and three descriptor-error
 cases. System libbrotli 1.0.9 lacks the optional shared-dictionary symbols, so
 the tool explicitly reports the complete runtime matrix as skipped there.
-The current Debug `zig build test-br` passes all 958 tests, including q0...q11,
+The current Debug `zig build test-br` passes all 960 tests, including q0...q11,
 legacy level, retained-index, empty-dictionary wire, static-address shift,
 incremental rollback, cross-API quality wire equality, and 16 MiB+ q0/q2
 coverage. The upstream differential passes in both build modes with 7,056
@@ -469,7 +470,9 @@ disable path to decode through libbrotli
 The required Node/libbrotli matrix separately locks an alternating-quarter q2
 stream at four data meta-blocks and `39,169 -> 65,536` bytes; one-shot,
 chunked, caller-buffer, and arbitrarily fragmented incremental tests require
-the same wire and a conservative bound.
+the same wire and a conservative bound. A second q2 fixture locks the DP's
+24 KiB non-quarter boundary at `38,753 -> 65,536` bytes with the same public
+surface and independent-decode coverage.
 
 The planned encode benchmark accepts independent Vort selectors:
 
@@ -544,8 +547,8 @@ names:
   Strict parsing, canonical construction, mixed replay, production decode
   attachment, bounded indexing, all four RFC modes, and joint multi-tree
   selection are available; oversized descriptors retain exhaustive matching;
-- global non-quarter boundary search and exact compressed-cost segmentation DP
-  beyond the current bounded single/two/four candidate set;
+- sub-8-KiB boundary search and global exact compressed-cost segmentation DP
+  beyond the current bounded four-segment entropy proxy;
 - calibration and regression gates for compression ratio, throughput, peak
   memory, and output-size monotonicity across representative corpora and
   platforms.

@@ -2318,13 +2318,13 @@ one-pass writer with cross-fragment adaptive command/distance trees; q1 uses a
 compact two-pass 128-symbol writer; q2 uses static/dynamic bounded trees and q3
 uses a trivial dynamic three-tree writer for ordinary LZ plans. Dictionary
 command plans retain the general writer. Automatic 64 KiB stream blocks now
-screen midpoint and quarter-boundary entropy from four 16 KiB histograms,
-comparing exact single/two wires and adding the four-quarter wire only when its
-proxy also beats the halves. A locked alternating-quarter q2 fixture selects
-four data meta-blocks, stays byte-identical across one-shot, chunked,
-incremental, and caller-buffer surfaces, and independently decodes through
-Node/libbrotli (`39,169 -> 65,536` bytes). Arbitrary non-quarter segmentation
-remains open.
+run a deterministic Q8 entropy DP over eight 8 KiB histograms, selecting at
+most four segments. The writer compares the proxy winner with the exact single
+and midpoint wires before committing it. Locked q2 fixtures cover four
+alternating quarters (`39,169 -> 65,536`) and a non-quarter 24 KiB cut
+(`38,753 -> 65,536`); both stay byte-identical across one-shot, chunked,
+incremental, and caller-buffer surfaces and decode through Node/libbrotli.
+Sub-8-KiB and unrestricted exact-cost segmentation remain open.
 q10/q11 now add a deterministic
 second shortest-path proposal whose Q8 literal, copy-length, and
 distance-prefix costs are learned from the first optimal command plan. Complete

@@ -20123,32 +20123,32 @@ reuse, so production keeps the simpler independently owned plans.
 
 - Added deterministic entropy-aware stream segmentation on top of the
   quality-sized Brotli block policy. Legacy balanced/ratio plus q2...q5 and
-  q8...q10 inspect four 16 KiB quarters of every automatic 64 KiB lookahead
-  using four fixed 256-symbol Q8 histograms. The proxy screens both midpoint
-  and four-quarter candidates only when separate raw-literal entropy beats the
-  combined distribution by a conservative 2,048-bit allowance per additional
-  meta-block. Four quarters must additionally beat the two-half proxy after
-  charging their two extra headers. Midpoint-only screens encode single and
-  two-half branches; quarter screens encode all three and retain only a
-  strictly smaller exact bit count. Homogeneous data stays at 64 KiB. The
-  screening decision allocates no memory; retained
+  q8...q10 inspect eight fixed 8 KiB histograms for every automatic 64 KiB
+  lookahead. A deterministic Q8 entropy DP chooses one through four segments,
+  charging a conservative 2,048-bit allowance per additional meta-block. Ties
+  retain fewer segments and earlier predecessor boundaries. The shared writer
+  always compares exact single-block and midpoint wires, adds the DP grid plan
+  when distinct, and retains only a strictly smaller bit count. Homogeneous
+  data stays at 64 KiB. The screening decision allocates no memory; retained
   branch/history scratch keeps LZ77 history plus recent distances continuous
   across every selected cut. `adaptive_blocks = false` disables the
   policy, `true` forces it for configured 64 KiB blocks, and any explicit
   `block_len` is fixed by default. Chunked and incremental encoders call the
   same codec-level splitter, producing byte-identical wires, while encoded
-  bounds conservatively reserve the all-16-KiB header case. Unit tests cover
-  homogeneous, midpoint, and alternating-quarter histograms; q2 automatic vs
-  disabled behavior; balanced default vs forced behavior; invalid non-64-KiB
-  forcing; round trips; cross-API equality; caller-buffer bounds; and warmed
-  zero-allocation scratch reuse. Current Debug `test-br` passes 958/958; the
+  bounds conservatively reserve an all-8-KiB partition. Unit tests cover
+  homogeneous, midpoint, alternating-quarter, and 24 KiB non-quarter plans;
+  deterministic boundary reconstruction; q2 automatic vs disabled behavior;
+  balanced default vs forced behavior; invalid non-64-KiB forcing; round
+  trips; cross-API equality; caller-buffer bounds; and warmed zero-allocation
+  scratch reuse. Current Debug `test-br` passes 960/960; the
   upstream differential independently decodes both segmentation policies in
   both modes (`planned_stream_segmentation_cases=2`). The required real-corpus
   gate passes 16/16 one-shot and 16/16 progressive cases, the full repository
-  graph passes 2607/2607, and `zig build check` passes all 113 steps. Global
-  non-quarter boundary DP and exact compressed-cost segmentation remain open.
+  graph passes 2607/2607, and `zig build check` passes all 113 steps. Sub-grid
+  boundary search and global exact compressed-cost segmentation remain open.
   The required Node/libbrotli matrix additionally decodes a four-data-block q2
-  alternating-quarter wire at `39,169 -> 65,536` bytes.
+  alternating-quarter wire at `39,169 -> 65,536` bytes and a 24 KiB-cut wire at
+  `38,753 -> 65,536` bytes.
 
 - Added Zig-native `partialFlush()` with zlib `Z_PARTIAL_FLUSH` semantics to
   raw stored/fixed/best and zlib/gzip fixed/best incremental encoders. After
