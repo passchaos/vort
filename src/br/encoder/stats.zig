@@ -19,6 +19,43 @@ pub const PlannedEncodeStats = struct {
     wire_ns: u64 = 0,
 };
 
+/// Explicit q10/q11 command-state candidate diagnostics. Normal encoding does
+/// not populate this structure or read clocks; the dedicated profiling API
+/// compiles a separate timed parser specialization.
+pub const QualityCommandStateProfile = struct {
+    input_bytes: usize = 0,
+    quality: u4 = 0,
+    seed_tokens: usize = 0,
+    seed_commands: usize = 0,
+    state_tokens: usize = 0,
+    state_commands: usize = 0,
+    state_positions: usize = 0,
+    state_states_visited: usize = 0,
+    state_match_candidates: usize = 0,
+    state_match_transitions: usize = 0,
+    state_beam_replacements: usize = 0,
+    encoded_bytes: usize = 0,
+    compact_wire_bytes: usize = 0,
+    seed_plan_ns: u64 = 0,
+    seed_command_ns: u64 = 0,
+    model_ns: u64 = 0,
+    state_index_ns: u64 = 0,
+    state_setup_ns: u64 = 0,
+    state_search_ns: u64 = 0,
+    state_reconstruct_ns: u64 = 0,
+    state_plan_ns: u64 = 0,
+    state_command_ns: u64 = 0,
+    compact_wire_ns: u64 = 0,
+    wire_ns: u64 = 0,
+    total_ns: u64 = 0,
+
+    pub fn accountedNs(self: QualityCommandStateProfile) u64 {
+        return self.seed_plan_ns + self.seed_command_ns + self.model_ns +
+            self.state_plan_ns + self.state_command_ns + self.compact_wire_ns +
+            self.wire_ns;
+    }
+};
+
 /// Timed diagnostics for the bounded 4...64 KiB Brotli ratio pipeline. These
 /// fields are populated only by the explicit profiling API; normal encoders do
 /// not carry counters or clock reads through their hot paths.

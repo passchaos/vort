@@ -134,6 +134,7 @@ Actual boundary tests execute and round-trip q10 at 64 KiB and both inherited
 q10 plus deeper q11 beams at 32 KiB; the option is therefore a real full-range
 capability rather than a range-only validator. Default throughput policy stays
 unchanged until the wider search is optimized.
+
 The public override is stored as a one-byte KiB value so adding the opt-in does
 not enlarge the hot stream state. An initial `?u32` prototype caused a fixed-
 CPU reusable regression of about 5.8% and was rejected. Against parent
@@ -143,6 +144,26 @@ for current one-shot/reusable versus 2.048/1.775 ms for the parent, with the
 cross-block row within about 1%. Treat this as regression clearance rather than
 a new speed claim.
 
+`run-br-quality-command-state-profile` now separates seed planning, command
+construction, model training, state index/setup/search/reconstruction, compact
+wire, and complete wire. On the locked 32 KiB `src/br.zig` prefix, the initial
+profile attributed roughly 5.1 ms to the seed plan, 44.6 ms to state search,
+0.46 ms to one compact wire, and 57.7--60.0 ms to the complete wire candidate;
+index construction was only about 0.17 ms. A prototype that precomputed match
+lengths for both beam states reduced transitions by only 1.6% and made search
+slightly slower, so it was removed rather than retained as nominal index reuse.
+
+The retained optimization writes one compact state candidate first and runs the
+full context/split matrix only when that wire is within 128 bytes of the current
+winner. Five real 32 KiB source/Markdown prefixes all selected their existing
+non-state winner; four avoided the roughly 60 ms full-wire work. The locked
+strict-win fixture remains eligible (`233` baseline, `235` compact, `231` full).
+Against parent `a2c96b1e`, five fixed-CPU-8 opt-in pairs preserved the identical
+6,511-byte output and improved median time from about 701.5 ms to 529.8 ms
+(`1.324x`, 5/5 wins). Seven default-path pairs were neutral at approximately
+401.15/401.68 ms (`0.9987x`). Full opt-in is still materially slower than the
+8 KiB default, so this evidence does not justify widening the default ceiling.
+
 Measure the opt-in path explicitly without changing the default gate:
 
 ```sh
@@ -151,6 +172,8 @@ taskset -c 8 zig build -Doptimize=ReleaseFast \
   --case source32k --iterations 5 --quality 10 \
   --planned-quality 10 --planned-mode generic \
   --command-state-max-input-kib 32
+taskset -c 8 zig build run-br-quality-command-state-profile -- \
+  3 10 src/br.zig 32768
 ```
 
 The same two feedback stages now run inside the shared meta-block policy used

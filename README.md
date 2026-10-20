@@ -2343,6 +2343,12 @@ disables the command beam, q10 accepts up to 64 KiB, and q11 up to 32 KiB.
 Reusable encoding preserves the option and incremental `nextStream` replaces
 it transactionally with the next stream's options. Boundary tests execute both
 maximums; Node/libbrotli also decodes a 12,992-byte opt-in chunked fixture.
+Use `zig build run-br-quality-command-state-profile -- 3 10 src/br.zig 32768`
+to separate state-search work from compact and complete wire construction. A
+128-byte compact-wire prefilter preserves the locked 231-byte winner while
+avoiding most uncompetitive full-wire trials on the measured real-source
+prefixes; the complete 32 KiB opt-in A/B improves about `1.324x` with unchanged
+wire, while the default path remains neutral.
 Inputs beyond the 16 MiB
 format limit keep one Brotli stream and apply the selected policy independently
 to bounded 16/32/64 KiB blocks. q2...q11 retain window-bounded LZ77 history and

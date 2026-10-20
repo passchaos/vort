@@ -2349,6 +2349,26 @@ pub fn build(b: *std.Build) void {
     const run_br_planned_stage_profile = b.addRunArtifact(br_planned_stage_profile_exe);
     const br_planned_stage_profile_step = b.step("run-br-planned-stage-profile", "Report planner-backed Brotli token/command/alphabet shape");
     br_planned_stage_profile_step.dependOn(&run_br_planned_stage_profile.step);
+    const br_quality_command_state_profile_exe = b.addExecutable(.{
+        .name = "vort-br-quality-command-state-profile",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/quality_command_state_profile.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const run_br_quality_command_state_profile = b.addRunArtifact(
+        br_quality_command_state_profile_exe,
+    );
+    if (b.args) |args| run_br_quality_command_state_profile.addArgs(args);
+    const br_quality_command_state_profile_step = b.step(
+        "run-br-quality-command-state-profile",
+        "Profile q10/q11 command-state seed, search, and wire stages",
+    );
+    br_quality_command_state_profile_step.dependOn(
+        &run_br_quality_command_state_profile.step,
+    );
     const br_ratio_stage_profile_exe = b.addExecutable(.{
         .name = "vort-br-ratio-stage-profile",
         .root_module = b.createModule(.{
@@ -5904,6 +5924,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&br_context_tree_report_exe.step);
     check_step.dependOn(&br_planned_chunks_bench_exe.step);
     check_step.dependOn(&br_planned_stage_profile_exe.step);
+    check_step.dependOn(&br_quality_command_state_profile_exe.step);
     check_step.dependOn(&br_ratio_stage_profile_exe.step);
     check_step.dependOn(&br_literal_context_profile_exe.step);
     check_step.dependOn(&br_record_optimal_audit_exe.step);

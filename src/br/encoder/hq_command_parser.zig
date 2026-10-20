@@ -25,6 +25,11 @@ pub const Stats = struct {
     match_candidates: usize = 0,
     match_transitions: usize = 0,
     beam_replacements: usize = 0,
+    index_ns: u64 = 0,
+    setup_ns: u64 = 0,
+    search_ns: u64 = 0,
+    reconstruct_ns: u64 = 0,
+    total_ns: u64 = 0,
 };
 
 pub const Plan = struct {
@@ -61,6 +66,46 @@ pub fn planAllocWithStartingDistances(
     model: *const entropy_feedback.Model,
     starting_last_distances: [4]usize,
 ) !Plan {
+    return planAllocInternal(
+        false,
+        allocator,
+        input,
+        options,
+        model,
+        starting_last_distances,
+        undefined,
+    );
+}
+
+pub fn planAllocProfiledWithStartingDistances(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: lz77.GreedyOptions,
+    model: *const entropy_feedback.Model,
+    starting_last_distances: [4]usize,
+    io: std.Io,
+) !Plan {
+    return planAllocInternal(
+        true,
+        allocator,
+        input,
+        options,
+        model,
+        starting_last_distances,
+        io,
+    );
+}
+
+fn planAllocInternal(
+    comptime profiled: bool,
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: lz77.GreedyOptions,
+    model: *const entropy_feedback.Model,
+    starting_last_distances: [4]usize,
+    io: if (profiled) std.Io else void,
+) !Plan {
+    const total_start = if (comptime profiled) std.Io.Clock.awake.now(io) else {};
     if (input.len == 0 or input.len > std.math.maxInt(u32) or
         options.window_len == 0 or options.window_len > lz77.default_window_len or
         options.min_match < 3 or options.min_match > options.max_match or
@@ -73,9 +118,13 @@ pub fn planAllocWithStartingDistances(
     for (starting_last_distances) |value|
         if (value == 0) return error.InvalidBlockPlan;
 
+    const index_start = if (comptime profiled) std.Io.Clock.awake.now(io) else {};
     var index: lz77.HashIndex = .{};
     defer index.deinit(allocator);
     try index.build(allocator, input);
+    const index_ns = if (comptime profiled) elapsedNs(index_start, io) else {};
+
+    const setup_start = if (comptime profiled) std.Io.Clock.awake.now(io) else {};
 
     const position_count = std.math.add(usize, input.len, 1) catch
         return error.IntegerOverflow;
@@ -97,6 +146,11 @@ pub fn planAllocWithStartingDistances(
     lengths[0] = 1;
 
     var stats: Stats = .{};
+    if (comptime profiled) {
+        stats.index_ns = index_ns;
+        stats.setup_ns = elapsedNs(setup_start, io);
+    }
+    const search_start = if (comptime profiled) std.Io.Clock.awake.now(io) else {};
     var candidate_distances: [lz77.max_optimal_candidates]u16 = undefined;
     const minimum_regular_distance_cost = std.mem.min(
         u16,
@@ -150,6 +204,7 @@ pub fn planAllocWithStartingDistances(
                     state,
                     @intCast(copy_len),
                     match_distance,
+                    null,
                 ) orelse continue;
                 insertState(states, lengths, position + copy_len, .{
                     .cost = transition.cost,
@@ -194,6 +249,7 @@ pub fn planAllocWithStartingDistances(
                     state,
                     @intCast(copy_len),
                     @intCast(match_distance),
+                    null,
                 ) orelse continue;
                 insertState(states, lengths, position + copy_len, .{
                     .cost = transition.cost,
@@ -211,6 +267,8 @@ pub fn planAllocWithStartingDistances(
         }
     }
 
+    if (comptime profiled) stats.search_ns = elapsedNs(search_start, io);
+    const reconstruct_start = if (comptime profiled) std.Io.Clock.awake.now(io) else {};
     const final_states = states[input.len * beam_width ..][0..lengths[input.len]];
     var best_slot: ?usize = null;
     var best_cost: u64 = std.math.maxInt(u64);
@@ -243,6 +301,10 @@ pub fn planAllocWithStartingDistances(
             plan_stats.matched_bytes += match.length;
         },
     };
+    if (comptime profiled) {
+        stats.reconstruct_ns = elapsedNs(reconstruct_start, io);
+        stats.total_ns = elapsedNs(total_start, io);
+    }
     return .{
         .lz = .{
             .tokens = try reversed.toOwnedSlice(allocator),
@@ -250,6 +312,11 @@ pub fn planAllocWithStartingDistances(
         },
         .stats = stats,
     };
+}
+
+fn elapsedNs(start: std.Io.Timestamp, io: std.Io) u64 {
+    const ns = start.durationTo(std.Io.Clock.awake.now(io)).nanoseconds;
+    return if (ns <= 0) 0 else @intCast(ns);
 }
 
 const Transition = struct {
@@ -262,6 +329,7 @@ fn transitionCost(
     state: State,
     copy_len: u16,
     match_distance: u16,
+    prepared_regular: ?distance.Encoding,
 ) ?Transition {
     const insert_code = length.codeForValue(state.pending_insert, true) orelse return null;
     const copy_code = length.codeForValue(copy_len, false) orelse return null;
@@ -274,10 +342,13 @@ fn transitionCost(
     );
     const explicit_command = command_encoding.forCodes(insert_code, copy_code, false) orelse
         return null;
-    const regular_distance = distance.encodeWithParameters(
-        match_distance,
-        distance.Parameters.init(0, 0),
-    ) orelse return null;
+    const regular_distance = if (recent_symbol == null)
+        prepared_regular orelse distance.encodeWithParameters(
+            match_distance,
+            distance.Parameters.init(0, 0),
+        ) orelse return null
+    else
+        undefined;
     const distance_symbol: usize = recent_symbol orelse regular_distance.symbol;
     var best_edge = @as(u64, model.command[explicit_command.symbol]) + extras +
         model.distance_symbol[distance_symbol] +

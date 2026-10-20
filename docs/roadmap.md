@@ -108,6 +108,15 @@ major gaps before Vort can claim broad industry-best parity:
   independently decodes a 65-byte stream generated from the 12,992-byte opt-in
   fixture. Making those full ceilings fast enough to become defaults remains
   open; the wire functionality itself is no longer missing.
+  A dedicated stage profiler shows the 32 KiB state path is dominated by search
+  and complete wire construction rather than index setup. Rejected match-length
+  precomputation reduced transitions by only 1.6% and slowed the search. The
+  retained compact-wire prefilter skips full context/split trials more than 128
+  bytes behind the current winner, while preserving the 233/235/231-byte strict
+  winner. Five fixed-CPU opt-in pairs improve median time from about 701.5 ms to
+  529.8 ms (`1.324x`) with identical wire; seven default controls are neutral at
+  `0.9987x`. This narrows but does not close the gap required to raise the
+  default ceiling.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
   entropy block switching, static dictionaries, consecutive compressed
