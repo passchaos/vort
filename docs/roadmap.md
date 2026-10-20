@@ -123,6 +123,10 @@ major gaps before Vort can claim broad industry-best parity:
   filtered candidates. Search falls from about 40.5 ms to 39.4 ms; seven
   fixed-CPU opt-in pairs improve `1.0053x` median with 6/7 wins, while seven
   default controls remain neutral at `1.0004x`.
+  Per-state recent-distance tables now share RFC delta resolution between
+  ordinary match lookup and direct recent probing. Search drops from about
+  36.0 ms to 34.4 ms; seven fixed-CPU opt-in/default matrices improve
+  `1.0039x`/`1.0044x` medians with identical wire.
   An exact target-beam cost bound rejects candidates that cannot beat either
   retained state before copying/rolling recent-distance history. The 32 KiB
   profile avoids that materialization for 754,706 of 794,600 transitions and

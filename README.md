@@ -2358,6 +2358,10 @@ lazy per-position match-length cache now shares only visited ordinary matches
 between both beam states, reducing the profiled search to about 39.4 ms and
 improving the opt-in end-to-end median by `1.0053x` with a neutral `1.0004x`
 default control.
+Each beam state now computes its ordered recent-distance table once and reuses
+it for ordinary lookup plus direct recent probing. The 32 KiB state search falls
+from about 36.0 ms to 34.4 ms; fixed-CPU opt-in/default medians improve
+`1.0039x`/`1.0044x` with identical wire.
 An exact target-beam cost bound skips recent-history materialization for about
 95% of measured transitions that cannot enter the two-state beam. Isolating the
 opt-in branch in its own `noinline` text section keeps default layout neutral;

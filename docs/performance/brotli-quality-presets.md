@@ -180,6 +180,14 @@ filtered candidates. It preserves all token/command counts and reduces the
 pairs improve median end-to-end time from 867.67 ms to 863.08 ms (`1.0053x`,
 6/7 wins); seven default controls remain neutral at 669.34/669.09 ms
 (`1.0004x`).
+Ordinary candidates still dominate transition work, so each beam state now
+materializes its ordered/deduplicated 16-entry recent-distance table once and
+shares it between ordinary-symbol lookup and direct recent probing. This avoids
+recomputing RFC delta arithmetic for every ordinary candidate. The 32 KiB
+profile keeps identical shape/wire while reducing search from about 36.0 ms to
+34.4 ms. Against `13d09d2d`, seven fixed-CPU opt-in pairs improve median time
+from 842.03 ms to 838.73 ms (`1.0039x`, 5/7 wins); seven default controls also
+remain positive/neutral at 672.42/669.45 ms (`1.0044x`, 5/7 wins).
 An exact target-beam cost bound now rejects a transition before copying and
 rolling its four-entry recent-distance history whenever the target already has
 two states and the candidate cost cannot beat the more expensive slot. On the

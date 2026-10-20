@@ -10,6 +10,44 @@ const beam_width = 2;
 const initial_last_distances = [_]usize{ 16, 15, 11, 4 };
 const q8: u64 = 256;
 
+const RecentCandidates = struct {
+    distances: [16]u16 = undefined,
+    symbols: [16]u4 = undefined,
+    len: u5 = 0,
+
+    fn init(last_distances: *const [4]usize) RecentCandidates {
+        var result: RecentCandidates = .{};
+        for (0..16) |symbol| {
+            var match_distance: usize = undefined;
+            distance_history.resolveShortInto(
+                @intCast(symbol),
+                last_distances,
+                &match_distance,
+            ) catch continue;
+            if (match_distance == 0 or match_distance > std.math.maxInt(u16))
+                continue;
+            var duplicate = false;
+            for (result.distances[0..result.len]) |existing| {
+                duplicate = duplicate or existing == match_distance;
+            }
+            if (duplicate) continue;
+            result.distances[result.len] = @intCast(match_distance);
+            result.symbols[result.len] = @intCast(symbol);
+            result.len += 1;
+        }
+        return result;
+    }
+
+    fn symbolFor(self: *const RecentCandidates, match_distance: usize) ?u4 {
+        if (match_distance > std.math.maxInt(u16)) return null;
+        const narrowed: u16 = @intCast(match_distance);
+        for (self.distances[0..self.len], self.symbols[0..self.len]) |candidate, symbol| {
+            if (candidate == narrowed) return symbol;
+        }
+        return null;
+    }
+};
+
 const State = struct {
     cost: u64,
     last_distances: [4]usize,
@@ -189,12 +227,11 @@ fn planAllocInternal(
                 true,
             ) orelse continue;
             const insert_extra_bits = length.insertSpec(insert_code).extra_bits;
+            const recent_candidates = RecentCandidates.init(&state.last_distances);
 
             for (candidate_distances[0..candidate_count], 0..) |match_distance, candidate_index| {
-                if (candidate_index >= options.max_candidates and distance_history.symbolForDistance(
-                    match_distance,
-                    &state.last_distances,
-                ) == null) {
+                const recent_symbol = recent_candidates.symbolFor(match_distance);
+                if (candidate_index >= options.max_candidates and recent_symbol == null) {
                     const regular = distance.encodeWithParameters(
                         match_distance,
                         distance.Parameters.init(0, 0),
@@ -224,6 +261,7 @@ fn planAllocInternal(
                     insert_extra_bits,
                     @intCast(copy_len),
                     match_distance,
+                    recent_symbol,
                     null,
                 ) orelse continue;
                 stats.match_transitions += 1;
@@ -254,23 +292,11 @@ fn planAllocInternal(
                 }, &stats);
             }
 
-            var recent_distances: [16]usize = undefined;
-            var recent_count: usize = 0;
-            for (0..16) |symbol| {
-                var match_distance: usize = undefined;
-                distance_history.resolveShortInto(
-                    @intCast(symbol),
-                    &state.last_distances,
-                    &match_distance,
-                ) catch continue;
-                if (match_distance == 0 or match_distance > position) continue;
-                var duplicate = false;
-                for (recent_distances[0..recent_count]) |existing| {
-                    duplicate = duplicate or existing == match_distance;
-                }
-                if (duplicate) continue;
-                recent_distances[recent_count] = match_distance;
-                recent_count += 1;
+            for (
+                recent_candidates.distances[0..recent_candidates.len],
+                recent_candidates.symbols[0..recent_candidates.len],
+            ) |match_distance, recent_symbol| {
+                if (match_distance > position) continue;
                 const copy_len = matchLengthAtDistance(
                     input,
                     position,
@@ -284,7 +310,8 @@ fn planAllocInternal(
                     insert_code,
                     insert_extra_bits,
                     @intCast(copy_len),
-                    @intCast(match_distance),
+                    match_distance,
+                    recent_symbol,
                     null,
                 ) orelse continue;
                 stats.match_transitions += 1;
@@ -302,7 +329,7 @@ fn planAllocInternal(
                     .cost = transition.cost,
                     .last_distances = transitionLastDistances(
                         state,
-                        @intCast(match_distance),
+                        match_distance,
                         transition.recent_symbol,
                     ),
                     .pending_insert = 0,
@@ -310,7 +337,7 @@ fn planAllocInternal(
                     .previous_slot = @intCast(slot),
                     .token = .{ .match = .{
                         .length = @intCast(copy_len),
-                        .distance = @intCast(match_distance),
+                        .distance = match_distance,
                     } },
                 }, &stats);
             }
@@ -381,15 +408,12 @@ fn transitionCost(
     insert_extra_bits: u5,
     copy_len: u16,
     match_distance: u16,
+    recent_symbol: ?u4,
     prepared_regular: ?distance.Encoding,
 ) ?Transition {
     const copy_code = length.codeForValue(copy_len, false) orelse return null;
     const copy_spec = length.copySpec(copy_code);
     const extras = (@as(u64, insert_extra_bits) + copy_spec.extra_bits) * q8;
-    const recent_symbol = distance_history.symbolForDistance(
-        match_distance,
-        &state.last_distances,
-    );
     const explicit_command = command_encoding.forCodes(insert_code, copy_code, false) orelse
         return null;
     const regular_distance = if (recent_symbol == null)
@@ -563,4 +587,29 @@ test "beam cost bound rejects only candidates that cannot enter" {
     try std.testing.expect(!canBeatBeamCost(&states, &lengths, 0, 300));
     lengths[0] = 1;
     try std.testing.expect(canBeatBeamCost(&states, &lengths, 0, 300));
+}
+
+test "recent candidate table preserves first-symbol RFC mapping" {
+    const histories = [_][4]usize{
+        .{ 16, 15, 11, 4 },
+        .{ 4, 4, 4, 4 },
+        .{ 128, 64, 32, 16 },
+    };
+    for (histories) |history| {
+        const candidates = RecentCandidates.init(&history);
+        for (0..16) |symbol| {
+            var match_distance: usize = undefined;
+            distance_history.resolveShortInto(
+                @intCast(symbol),
+                &history,
+                &match_distance,
+            ) catch continue;
+            if (match_distance == 0 or match_distance > std.math.maxInt(u16))
+                continue;
+            try std.testing.expectEqual(
+                distance_history.symbolForDistance(match_distance, &history),
+                candidates.symbolFor(match_distance),
+            );
+        }
+    }
 }
