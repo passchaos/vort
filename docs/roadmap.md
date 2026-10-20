@@ -79,8 +79,14 @@ major gaps before Vort can claim broad industry-best parity:
   from 4,288 to 4,250 behind 2,128 dictionary bytes; documentation and binary do
   not improve. Broader calibration and charged wins are the next measured ratio
   targets.
-  q10/q11 Zopfli/HQ cost refinement and global exact-cost segmentation also
-  remain open.
+  q10/q11 now run a second bounded shortest-path proposal using deterministic
+  Q8 literal, copy-length, and distance-prefix costs learned from the first
+  optimal command plan. Complete-wire arbitration keeps the new pass
+  size-monotonic; a locked 4 KiB ambiguous-match fixture improves 230 to 221
+  bytes and independently decodes through Node/libbrotli. Full HQ parity still
+  remains open because command-pair/insert-run state, recent-distance-aware
+  path state, broader iterative refinement, and global exact-cost segmentation
+  are not yet modeled.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
   entropy block switching, static dictionaries, consecutive compressed

@@ -324,6 +324,39 @@ pub const OptimalScratch = struct {
     }
 };
 
+/// Caller-supplied token costs for the bounded optimal parser. Costs use an
+/// arbitrary common fixed-point scale; only their relative values matter.
+/// The Brotli encoder uses Q8 entropy estimates while the established generic
+/// parser keeps its compile-time fixed-Huffman proxy.
+pub const OptimalCostModel = struct {
+    literal: *const [256]u16,
+    length: *const [max_match_len + 1]u16,
+    /// Entry zero is unused. The slice must cover every distance permitted by
+    /// the matching window supplied to the parser.
+    distance: []const u16,
+
+    fn validate(self: OptimalCostModel, window_len: usize, input_len: usize) Error!void {
+        if (self.distance.len <= window_len) return error.InvalidBlockPlan;
+        for (self.literal) |cost| if (cost == 0) return error.InvalidBlockPlan;
+        for (self.length[min_match_len..]) |cost| if (cost == 0) return error.InvalidBlockPlan;
+        for (self.distance[1 .. window_len + 1]) |cost| if (cost == 0) return error.InvalidBlockPlan;
+
+        const max_literal = std.mem.max(u16, self.literal);
+        const max_length = std.mem.max(u16, self.length[min_match_len..]);
+        const max_distance = std.mem.max(u16, self.distance[1 .. window_len + 1]);
+        const literal_bound = std.math.mul(usize, input_len, max_literal) catch
+            return error.InvalidBlockPlan;
+        const match_edge_bound = @as(usize, max_length) + max_distance;
+        const maximum_cost = std.math.add(usize, literal_bound, match_edge_bound) catch
+            return error.InvalidBlockPlan;
+        const representable = if (comptime packed_optimal_length_choices)
+            std.math.maxInt(usize) >> optimal_length_bits
+        else
+            std.math.maxInt(usize);
+        if (maximum_cost > representable) return error.InvalidBlockPlan;
+    }
+};
+
 const optimal_compact_index_empty = std.math.maxInt(u32);
 
 fn buildOptimalCompactHashIndex(
@@ -1117,6 +1150,22 @@ pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options
     return .{ .tokens = try allocator.dupe(Token, scratch.tokens.items), .stats = stats };
 }
 
+/// Run the same bounded hash-chain search as `optimalPlanAlloc`, but score its
+/// literal, match-length, and match-distance choices with a caller model. This
+/// is a proposal API: format encoders should still arbitrate the resulting
+/// plan using their complete wire cost.
+pub fn optimalPlanAllocWithCostModel(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    model: OptimalCostModel,
+) !GreedyPlan {
+    var scratch: OptimalScratch = .{};
+    defer scratch.deinit(allocator);
+    const stats = try optimalPlanReuseWithCostModel(&scratch, allocator, input, options, model);
+    return .{ .tokens = try allocator.dupe(Token, scratch.tokens.items), .stats = stats };
+}
+
 const rep_beam_width = 2;
 const rep_beam_match_candidates = 1;
 const rep_beam_input_max = std.math.maxInt(u16);
@@ -1339,7 +1388,18 @@ inline fn insertRepBeamState(states: []RepBeamState, lengths: []u8, position: us
 }
 
 pub fn optimalPlanReuse(scratch: *OptimalScratch, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
-    return optimalPlanReuseInternalProfiled(scratch, allocator, input, options, true, false, undefined, undefined);
+    return optimalPlanReuseInternalProfiled(scratch, allocator, input, options, true, false, false, undefined, undefined, undefined);
+}
+
+pub fn optimalPlanReuseWithCostModel(
+    scratch: *OptimalScratch,
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    model: OptimalCostModel,
+) !PlanStats {
+    try model.validate(options.window_len, input.len);
+    return optimalPlanReuseInternalProfiled(scratch, allocator, input, options, false, false, true, undefined, undefined, model);
 }
 
 fn optimalPlanReuseInternal(
@@ -1349,7 +1409,7 @@ fn optimalPlanReuseInternal(
     options: GreedyOptions,
     comptime enable_prefix_bound: bool,
 ) !PlanStats {
-    return optimalPlanReuseInternalProfiled(scratch, allocator, input, options, enable_prefix_bound, false, undefined, undefined);
+    return optimalPlanReuseInternalProfiled(scratch, allocator, input, options, enable_prefix_bound, false, false, undefined, undefined, undefined);
 }
 
 pub fn optimalPlanAllocProfiled(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, io: std.Io, profile: *OptimalSearchProfile) !GreedyPlan {
@@ -1357,7 +1417,7 @@ pub fn optimalPlanAllocProfiled(allocator: std.mem.Allocator, input: []const u8,
     const total_start = std.Io.Clock.awake.now(io);
     var scratch: OptimalScratch = .{};
     defer scratch.deinit(allocator);
-    const stats = try optimalPlanReuseInternalProfiled(&scratch, allocator, input, options, true, true, io, profile);
+    const stats = try optimalPlanReuseInternalProfiled(&scratch, allocator, input, options, true, true, false, io, profile, undefined);
     const tokens = try allocator.dupe(Token, scratch.tokens.items);
     profile.total_ns = elapsedNs(total_start, io);
     return .{ .tokens = tokens, .stats = stats };
@@ -1366,7 +1426,7 @@ pub fn optimalPlanAllocProfiled(allocator: std.mem.Allocator, input: []const u8,
 pub fn optimalPlanReuseProfiled(scratch: *OptimalScratch, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, io: std.Io, profile: *OptimalSearchProfile) !PlanStats {
     profile.* = .{ .input_bytes = input.len };
     const total_start = std.Io.Clock.awake.now(io);
-    const stats = try optimalPlanReuseInternalProfiled(scratch, allocator, input, options, true, true, io, profile);
+    const stats = try optimalPlanReuseInternalProfiled(scratch, allocator, input, options, true, true, false, io, profile, undefined);
     profile.total_ns = elapsedNs(total_start, io);
     return stats;
 }
@@ -1378,8 +1438,10 @@ fn optimalPlanReuseInternalProfiled(
     options: GreedyOptions,
     comptime enable_prefix_bound: bool,
     comptime collect_profile: bool,
+    comptime modeled: bool,
     io: if (collect_profile) std.Io else void,
     profile: if (collect_profile) *OptimalSearchProfile else void,
+    model: if (modeled) OptimalCostModel else void,
 ) !PlanStats {
     const n = input.len;
     // A literal-only path costs at most nine bits per byte. This bound is far
@@ -1403,7 +1465,7 @@ fn optimalPlanReuseInternalProfiled(
             profile.index_ns = elapsedNs(index_start, io);
             profile.index_bytes = (scratch.compact_head.items.len + scratch.compact_prev.items.len) * @sizeOf(u32) + @sizeOf(@FieldType(HashIndex, "head_initialized"));
         }
-        return optimalPlanReuseWithIndex(scratch, allocator, input, options, scratch.compact_prev.items, optimal_compact_index_empty, enable_prefix_bound, collect_profile, io, profile);
+        return optimalPlanReuseWithIndex(scratch, allocator, input, options, scratch.compact_prev.items, optimal_compact_index_empty, enable_prefix_bound, collect_profile, modeled, io, profile, model);
     }
     const index_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
     try scratch.index.build(allocator, input);
@@ -1411,7 +1473,7 @@ fn optimalPlanReuseInternalProfiled(
         profile.index_ns = elapsedNs(index_start, io);
         profile.index_bytes = (scratch.index.head.items.len + scratch.index.prev.items.len) * @sizeOf(isize) + @sizeOf(@FieldType(HashIndex, "head_initialized"));
     }
-    return optimalPlanReuseWithIndex(scratch, allocator, input, options, scratch.index.prev.items, @as(isize, -1), enable_prefix_bound, collect_profile, io, profile);
+    return optimalPlanReuseWithIndex(scratch, allocator, input, options, scratch.index.prev.items, @as(isize, -1), enable_prefix_bound, collect_profile, modeled, io, profile, model);
 }
 
 inline fn optimalPlanReuseWithIndex(
@@ -1423,8 +1485,10 @@ inline fn optimalPlanReuseWithIndex(
     comptime empty: @TypeOf(prev[0]),
     comptime enable_prefix_bound: bool,
     comptime collect_profile: bool,
+    comptime modeled: bool,
     io: if (collect_profile) std.Io else void,
     profile: if (collect_profile) *OptimalSearchProfile else void,
+    model: if (modeled) OptimalCostModel else void,
 ) !PlanStats {
     const n = input.len;
     const costs = scratch.costs.items;
@@ -1434,13 +1498,13 @@ inline fn optimalPlanReuseWithIndex(
     var rev_i: usize = n;
     const minimum = minMatch(options);
     const candidate_limit = normalizedMaxCandidates(options);
-    const distance_costs = &fixed_distance_costs;
+    const distance_costs = if (comptime modeled) model.distance else &fixed_distance_costs;
     const search_start = if (comptime collect_profile) std.Io.Clock.awake.now(io) else {};
 
     while (rev_i > 0) {
         rev_i -= 1;
         if (comptime collect_profile) profile.positions += 1;
-        costs[rev_i] = fixedLiteralCost(input[rev_i]) + costs[rev_i + 1];
+        costs[rev_i] = (if (comptime modeled) model.literal[input[rev_i]] else fixedLiteralCost(input[rev_i])) + costs[rev_i + 1];
         steps[rev_i] = .{ .literal = input[rev_i] };
 
         if (rev_i + minimum > n) continue;
@@ -1504,15 +1568,28 @@ inline fn optimalPlanReuseWithIndex(
                     profile.length_choices_built += added_choices;
                     profile.length_extension_histogram[optimalLengthExtensionBucket(added_choices)] += 1;
                 }
-                extendOptimalLengthChoices(
-                    costs,
-                    rev_i,
-                    minimum,
-                    choices_built_through,
-                    length,
-                    &scratch.index.best_length_choices,
-                    &scratch.index.best_lengths,
-                );
+                if (comptime modeled) {
+                    extendModeledOptimalLengthChoices(
+                        costs,
+                        rev_i,
+                        minimum,
+                        choices_built_through,
+                        length,
+                        model.length,
+                        &scratch.index.best_length_choices,
+                        &scratch.index.best_lengths,
+                    );
+                } else {
+                    extendOptimalLengthChoices(
+                        costs,
+                        rev_i,
+                        minimum,
+                        choices_built_through,
+                        length,
+                        &scratch.index.best_length_choices,
+                        &scratch.index.best_lengths,
+                    );
+                }
                 choices_built_through = @max(choices_built_through, length);
                 const choice = scratch.index.best_length_choices[length];
                 const cost = optimalLengthChoiceCost(choice) + distance_cost;
@@ -1613,6 +1690,34 @@ fn extendOptimalLengthChoices(
             const choice = optimalLengthChoice(cost, length);
             // The low bits rank longer lengths first, so one unsigned
             // comparison preserves minimum-cost / longest-on-tie ordering.
+            if (choice < best_choice) best_choice = choice;
+        } else if (cost < best_choice or (cost == best_choice and length > best_length)) {
+            best_choice = cost;
+            best_length = @intCast(length);
+        }
+        best_choices[length] = best_choice;
+        if (comptime !packed_optimal_length_choices) best_lengths[length] = best_length;
+    }
+}
+
+fn extendModeledOptimalLengthChoices(
+    costs: []const usize,
+    position: usize,
+    minimum: usize,
+    built_through: usize,
+    maximum: usize,
+    length_costs: *const [max_match_len + 1]u16,
+    best_choices: *[max_match_len + 1]usize,
+    best_lengths: *[max_match_len + 1]u16,
+) void {
+    if (maximum <= built_through) return;
+    var best_choice = if (built_through >= minimum) best_choices[built_through] else std.math.maxInt(usize);
+    var best_length: u16 = if (comptime packed_optimal_length_choices) 0 else if (built_through >= minimum) best_lengths[built_through] else 0;
+    var length = @max(minimum, built_through + 1);
+    while (length <= maximum) : (length += 1) {
+        const cost = @as(usize, length_costs[length]) + costs[position + length];
+        if (comptime packed_optimal_length_choices) {
+            const choice = optimalLengthChoice(cost, length);
             if (choice < best_choice) best_choice = choice;
         } else if (cost < best_choice or (cost == best_choice and length > best_length)) {
             best_choice = cost;
@@ -3335,6 +3440,73 @@ test "optimal LZ77 prototype round trips and is no worse by fixed bit cost" {
     // The hash-chain-based optimal parser may find different matches than greedy,
     // but must produce a valid round-trip and a reasonable token count.
     try std.testing.expect(optimal.stats.tokenCount() <= greedy.stats.tokenCount() + 2);
+}
+
+test "modeled optimal parser follows caller entropy costs" {
+    const input = "abcabcabcabcabcabcabcabc";
+    const options = GreedyOptions{
+        .window_len = input.len,
+        .max_chain = 64,
+        .nice_len = max_match_len,
+        .max_candidates = 32,
+        .min_match = 3,
+        .max_match = max_match_len,
+    };
+    var literal_costs: [256]u16 = @splat(1);
+    var length_costs: [max_match_len + 1]u16 = @splat(1000);
+    var distance_costs: [input.len + 1]u16 = @splat(1000);
+    distance_costs[0] = 1;
+
+    const literal_plan = try optimalPlanAllocWithCostModel(std.testing.allocator, input, options, .{
+        .literal = &literal_costs,
+        .length = &length_costs,
+        .distance = &distance_costs,
+    });
+    defer literal_plan.deinit(std.testing.allocator);
+    try std.testing.expectEqual(input.len, literal_plan.stats.literals);
+    try std.testing.expectEqual(@as(usize, 0), literal_plan.stats.matches);
+
+    literal_costs = @splat(1000);
+    length_costs = @splat(1);
+    distance_costs = @splat(1);
+    const match_plan = try optimalPlanAllocWithCostModel(std.testing.allocator, input, options, .{
+        .literal = &literal_costs,
+        .length = &length_costs,
+        .distance = &distance_costs,
+    });
+    defer match_plan.deinit(std.testing.allocator);
+    try std.testing.expect(match_plan.stats.matches != 0);
+    try std.testing.expect(match_plan.stats.literals < literal_plan.stats.literals);
+
+    const replayed = try replayAlloc(std.testing.allocator, match_plan.tokens);
+    defer std.testing.allocator.free(replayed);
+    try std.testing.expectEqualSlices(u8, input, replayed);
+}
+
+test "modeled optimal parser validates complete nonzero costs" {
+    var literal_costs: [256]u16 = @splat(1);
+    var length_costs: [max_match_len + 1]u16 = @splat(1);
+    var distance_costs: [8]u16 = @splat(1);
+    literal_costs['x'] = 0;
+    try std.testing.expectError(error.InvalidBlockPlan, optimalPlanAllocWithCostModel(std.testing.allocator, "xxxxxxxx", .{
+        .window_len = 7,
+        .min_match = 3,
+    }, .{
+        .literal = &literal_costs,
+        .length = &length_costs,
+        .distance = &distance_costs,
+    }));
+
+    literal_costs['x'] = 1;
+    length_costs[3] = 0;
+    try std.testing.expectError(error.InvalidBlockPlan, optimalPlanAllocWithCostModel(std.testing.allocator, "xxxxxxxx", .{
+        .window_len = 7,
+        .min_match = 3,
+    }, .{
+        .literal = &literal_costs,
+        .length = &length_costs,
+        .distance = &distance_costs,
+    }));
 }
 
 test "reusable optimal parser preserves tokens and capacities" {

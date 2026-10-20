@@ -88,8 +88,8 @@ split.
 | 7 | ratio | Lazy chain 96 and nice length 160; adds clustered contexts, adaptive distance splitting, and extended static-dictionary probing through 4 KiB in every mode. |
 | 8 | ratio | Lazy chain 128 and nice length 192; expands the optimal-input ceiling to 64 KiB with a 128-chain/64-candidate budget and enables adaptive literal splitting. |
 | 9 | ratio | Lazy chain 256 and nice length 258; uses a 192-chain/128-candidate optimal search through 64 KiB and enables adaptive command splitting in addition to the q8 candidates. |
-| 10 | ratio | Lazy chain 384 plus a 256-chain/128-candidate optimal search through 64 KiB and the bounded fixed-record candidate; joint literal block/context clustering is eligible. No Zopfli/HQ cost-refinement engine or placeholder HQ claim is attached to this preset. |
-| 11 | ratio | Lazy chain 512, plus a deeper 512-chain/256-candidate optimal search limited to 32 KiB. It recursively retains the complete q10 winner before considering q11 candidates, guaranteeing q11 size is no larger than q10 for identical options. This remains bounded Vort optimal search, not libbrotli-style HQ Zopfli. |
+| 10 | ratio | Lazy chain 384 plus a 256-chain/128-candidate optimal search through 64 KiB and the bounded fixed-record candidate; joint literal block/context clustering is eligible. Its first optimal command plan trains a deterministic Q8 literal/copy-length/distance-prefix model, then a second shortest-path proposal competes by complete wire size. |
+| 11 | ratio | Lazy chain 512, plus the same entropy-feedback pass over a deeper 512-chain/256-candidate search limited to 32 KiB. It recursively retains the complete q10 winner before considering q11 candidates, guaranteeing q11 size is no larger than q10 for identical options. This remains bounded Vort optimal search, not libbrotli-style HQ Zopfli parity. |
 
 The bounded optimal candidate is considered only for inputs from 4 KiB through
 32 KiB at q6/q7, through 64 KiB at q8...q10, and through 32 KiB for q11's
@@ -99,6 +99,16 @@ decisions remain eligible. The q10/q11 fixed-record candidate is limited to
 4--64 KiB, advertised windows of at least 16 bits, and the recognized
 newline-terminated record shape. These are extra Vort candidates, not the
 general libbrotli HQ parser.
+
+The q10/q11 feedback pass learns separable Q8 costs from the first complete LZ
+command proposal. Active symbols cost at least one bit; unseen symbols retain a
+deterministic penalty, and length/distance extra bits are charged explicitly.
+The second pass reuses the same match-search budget and is retained only when
+the complete Brotli stream is strictly smaller. A locked 4 KiB ambiguous-match
+fixture reduces the optimal candidate from 230 to 221 bytes; both Vort and
+Node/libbrotli decode the 221-byte public q10 stream byte-exactly. This proves a
+real iterative model-feedback increment while deliberately not claiming the
+stateful command-pair/recent-distance model used by libbrotli HQ.
 
 ## Mode effects
 
@@ -330,7 +340,10 @@ multi-corpus performance claim.
 The following are explicit gaps, not implied by the presence of the preset
 names:
 
-- real q10/q11 Zopfli/HQ cost refinement, including iterative model feedback;
+- full libbrotli-class q10/q11 Zopfli/HQ refinement. Vort now performs one
+  deterministic command-derived entropy-feedback pass, but its proposal model
+  remains separable: command pairing, insert-run state, recent-distance state,
+  iterative match-set reuse, and libbrotli's complete HQ cost model remain open;
 - FastCover-style acceleration and broad serialized-dictionary corpus
   calibration. Deterministic heavy-hitter/COVER fixed-word selection plus an
   actual-wire `(d, hash_log)` grid, bounded multi-cutoff two-group and arbitrary

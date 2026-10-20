@@ -82,6 +82,33 @@ pub fn main(init: std.process.Init) !void {
         try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
         return;
     }
+    if (std.mem.eql(u8, mode, "q10-entropy-feedback")) {
+        var payload: [4096]u8 = undefined;
+        var state: u32 = @as(u32, 2) *% @as(u32, 0x9e37_79b9);
+        var position: usize = 0;
+        while (position < payload.len) {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            const distances = [_]usize{ 7, 16, 31, 64, 127, 257 };
+            const selected_distance = distances[(state >> 16) % distances.len];
+            if (position >= selected_distance and state & 3 != 0) {
+                const copy_len = @min(payload.len - position, 3 + ((state >> 8) % 61));
+                for (0..copy_len) |i|
+                    payload[position + i] = payload[position + i - selected_distance];
+                position += copy_len;
+            } else {
+                payload[position] = @truncate((state >> 24) & 15);
+                position += 1;
+            }
+        }
+        const encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(
+            init.gpa,
+            &payload,
+            .{ .quality = 10 },
+        );
+        defer init.gpa.free(encoded);
+        try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
+        return;
+    }
     if (std.mem.eql(u8, mode, "chunked-multiblock")) {
         const first = "alpha beta gamma delta alpha beta gamma delta " ** 64;
         const middle = "qzxwvbnm1234567890QZXWVBNM!@#$%^&*";

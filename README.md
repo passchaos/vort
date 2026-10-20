@@ -2317,9 +2317,14 @@ fixed-hash fragment parsers and reusable streaming scratch. q0 uses a compact
 one-pass writer with cross-fragment adaptive command/distance trees; q1 uses a
 compact two-pass 128-symbol writer; q2 uses static/dynamic bounded trees and q3
 uses a trivial dynamic three-tree writer for ordinary LZ plans. Dictionary
-command plans retain the general writer. q10/q11 Zopfli/HQ cost refinement,
-contextual dictionary encoding and global exact-cost segmentation remain
-future work.
+command plans retain the general writer. q10/q11 now add a deterministic
+second shortest-path proposal whose Q8 literal, copy-length, and
+distance-prefix costs are learned from the first optimal command plan. Complete
+wire arbitration makes the pass size-monotonic; a locked 4 KiB fixture improves
+230 to 221 bytes and is independently decoded by Node/libbrotli. This is still
+not libbrotli HQ parity: stateful command-pair/recent-distance modeling,
+additional HQ refinement, contextual dictionary encoding, and global
+exact-cost segmentation remain future work.
 Inputs beyond the 16 MiB
 format limit keep one Brotli stream and apply the selected policy independently
 to bounded 16/32/64 KiB blocks. q2...q11 retain window-bounded LZ77 history and

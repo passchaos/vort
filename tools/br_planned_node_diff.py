@@ -68,6 +68,28 @@ def main() -> int:
     if actual != expected:
         raise SystemExit("q2-dynamic-commands: node output mismatch")
     print(f"brotli planned q2-dynamic-commands node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = bytearray(4096)
+    state = (2 * 0x9E3779B9) & 0xFFFFFFFF
+    position = 0
+    distances = (7, 16, 31, 64, 127, 257)
+    while position < len(expected):
+        state = (state * 1664525 + 1013904223) & 0xFFFFFFFF
+        selected_distance = distances[(state >> 16) % len(distances)]
+        if position >= selected_distance and state & 3:
+            copy_len = min(len(expected) - position, 3 + ((state >> 8) % 61))
+            for i in range(copy_len):
+                expected[position + i] = expected[position + i - selected_distance]
+            position += copy_len
+        else:
+            expected[position] = (state >> 24) & 15
+            position += 1
+    encoded = subprocess.check_output([sys.argv[1], "q10-entropy-feedback"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("q10-entropy-feedback: node output mismatch")
+    if len(encoded) > 221:
+        raise SystemExit(f"q10-entropy-feedback: expected the retained feedback wire, got {len(encoded)} bytes")
+    print(f"brotli planned q10-entropy-feedback node diff: encoded={len(encoded)} decoded={len(actual)}")
     expected = (
         b"alpha beta gamma delta alpha beta gamma delta " * 64
         + b"qzxwvbnm1234567890QZXWVBNM!@#$%^&*"

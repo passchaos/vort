@@ -73,6 +73,7 @@ pub const LazyBudget = struct {
 
 pub const OptimalBudget = struct {
     enabled: bool,
+    entropy_feedback: bool = false,
     max_chain: u16,
     nice_len: u16,
     max_candidates: u16,
@@ -154,7 +155,7 @@ pub const Schedule = struct {
             {
                 return error.InvalidSchedule;
             }
-        } else if (self.optimal.max_chain != 0 or self.optimal.nice_len != 0 or
+        } else if (self.optimal.entropy_feedback or self.optimal.max_chain != 0 or self.optimal.nice_len != 0 or
             self.optimal.max_candidates != 0 or self.optimal.max_input_len != 0)
         {
             return error.InvalidSchedule;
@@ -201,8 +202,9 @@ const BaseRow = struct {
 
 /// Budgets follow the current Vort parser limits: match length tops out at
 /// 258, optimal candidates at 512, and the present full optimal table is used
-/// only through 64 KiB. No field here models libbrotli's q10/q11 Zopfli/HQ
-/// engines because Vort does not implement them yet.
+/// only through 64 KiB. q10/q11 add a second shortest-path proposal learned
+/// from the first plan's literal, copy-length, and distance-prefix entropy;
+/// this remains a bounded Vort engine rather than libbrotli algorithm parity.
 const base_rows = [12]BaseRow{
     .{ .lazy = .{ .max_chain = 1, .nice_len = 16, .min_gain = 4 }, .dictionary_probes = 0 },
     .{ .lazy = .{ .max_chain = 2, .nice_len = 24, .min_gain = 3 }, .dictionary_probes = 0 },
@@ -232,12 +234,12 @@ const base_rows = [12]BaseRow{
     },
     .{
         .lazy = .{ .max_chain = 384, .nice_len = 258, .min_gain = 1 },
-        .optimal = .{ .enabled = true, .max_chain = 256, .nice_len = 258, .max_candidates = 128, .max_input_len = 64 * 1024 },
+        .optimal = .{ .enabled = true, .entropy_feedback = true, .max_chain = 256, .nice_len = 258, .max_candidates = 128, .max_input_len = 64 * 1024 },
         .dictionary_probes = 3072,
     },
     .{
         .lazy = .{ .max_chain = 512, .nice_len = 258, .min_gain = 1 },
-        .optimal = .{ .enabled = true, .max_chain = 512, .nice_len = 258, .max_candidates = 256, .max_input_len = 32 * 1024 },
+        .optimal = .{ .enabled = true, .entropy_feedback = true, .max_chain = 512, .nice_len = 258, .max_candidates = 256, .max_input_len = 32 * 1024 },
         .dictionary_probes = 4096,
     },
 };
@@ -414,6 +416,7 @@ test "quality schedules increase budgets and never retract enabled work" {
             try std.testing.expect(current.dictionary.max_probes >= previous.dictionary.max_probes);
             try std.testing.expect(current.window.max_bits >= previous.window.max_bits);
             try std.testing.expect(flagDoesNotRegress(previous.optimal.enabled, current.optimal.enabled));
+            try std.testing.expect(flagDoesNotRegress(previous.optimal.entropy_feedback, current.optimal.entropy_feedback));
             try std.testing.expect(flagDoesNotRegress(previous.context.literal_contexts, current.context.literal_contexts));
             try std.testing.expect(flagDoesNotRegress(previous.context.cluster_contexts, current.context.cluster_contexts));
             try std.testing.expect(flagDoesNotRegress(previous.context.joint_block_contexts, current.context.joint_block_contexts));
@@ -439,9 +442,11 @@ test "quality ten and eleven use distinct bounded optimal searches" {
         try std.testing.expectEqual(@as(u16, 256), q10.optimal.max_chain);
         try std.testing.expectEqual(@as(u16, 128), q10.optimal.max_candidates);
         try std.testing.expectEqual(@as(u32, 64 * 1024), q10.optimal.max_input_len);
+        try std.testing.expect(q10.optimal.entropy_feedback);
         try std.testing.expectEqual(@as(u16, 512), q11.optimal.max_chain);
         try std.testing.expectEqual(@as(u16, 256), q11.optimal.max_candidates);
         try std.testing.expectEqual(@as(u32, 32 * 1024), q11.optimal.max_input_len);
+        try std.testing.expect(q11.optimal.entropy_feedback);
     }
 }
 
