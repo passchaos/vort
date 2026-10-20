@@ -36,6 +36,7 @@ const Options = struct {
     adaptive_literal_split: bool = false,
     adaptive_distance_split: ?bool = null,
     distance_parameter_search: ?bool = null,
+    command_state_max_input_kib: ?u8 = null,
     path_limit: usize = 128 * 1024,
     paths: std.ArrayList([]const u8) = .empty,
 
@@ -117,6 +118,7 @@ pub fn main(init: std.process.Init) !void {
             .level = .fast,
             .quality = options.planned_quality,
             .mode = options.planned_mode,
+            .command_state_max_input_kib = options.command_state_max_input_kib orelse std.math.maxInt(u8),
         });
         defer init.gpa.free(vort_encoded);
         const reference_encoded = try reference.encodeAlloc(init.gpa, case.payload, quality);
@@ -247,6 +249,7 @@ fn measureVort(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, op
         .level = .fast,
         .quality = options.planned_quality,
         .mode = options.planned_mode,
+        .command_state_max_input_kib = options.command_state_max_input_kib orelse std.math.maxInt(u8),
     };
     const warmup = try vort.brEncodePlannedStreamWithOptionsAlloc(allocator, payload, encode_options);
     allocator.free(warmup);
@@ -345,11 +348,32 @@ fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) 
             options.planned_mode = try parsePlannedMode(arg["--planned-mode=".len..]);
             continue;
         }
+        if (std.mem.eql(u8, arg, "--command-state-max-input-kib")) {
+            options.command_state_max_input_kib = try std.fmt.parseInt(
+                u8,
+                args.next() orelse return error.MissingLimit,
+                10,
+            );
+            continue;
+        }
+        if (std.mem.startsWith(u8, arg, "--command-state-max-input-kib=")) {
+            options.command_state_max_input_kib = try std.fmt.parseInt(
+                u8,
+                arg["--command-state-max-input-kib=".len..],
+                10,
+            );
+            continue;
+        }
         if (std.mem.eql(u8, arg, "--iterations")) options.iterations = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--case")) options.case_filter = args.next() orelse return error.MissingCorpusPath else if (std.mem.eql(u8, arg, "--quality")) options.quality_override = try std.fmt.parseInt(c_int, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--extended-dictionary-probes")) options.extended_dictionary_probes = try std.fmt.parseInt(u16, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--adaptive-command-split")) options.adaptive_command_split = true else if (std.mem.eql(u8, arg, "--adaptive-literal-split")) options.adaptive_literal_split = true else if (std.mem.eql(u8, arg, "--adaptive-distance-split")) options.adaptive_distance_split = true else if (std.mem.eql(u8, arg, "--no-adaptive-distance-split")) options.adaptive_distance_split = false else if (std.mem.eql(u8, arg, "--distance-parameter-search")) options.distance_parameter_search = true else if (std.mem.eql(u8, arg, "--no-distance-parameter-search")) options.distance_parameter_search = false else if (std.mem.eql(u8, arg, "--csv")) options.csv_path = args.next() orelse return error.MissingCorpusPath else if (std.mem.eql(u8, arg, "--limit")) options.path_limit = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--path")) try options.paths.append(allocator, try allocator.dupe(u8, args.next() orelse return error.MissingCorpusPath)) else return error.UnknownArgument;
     }
     if (options.iterations == 0 or options.path_limit == 0) return error.InvalidBlockPlan;
     if (options.quality_override) |quality| if (quality < 0 or quality > 11) return error.InvalidBlockPlan;
     if (options.planned_quality == null and options.planned_mode != .generic) return error.InvalidBlockPlan;
+    if (options.command_state_max_input_kib != null and
+        (options.planned_quality == null or options.planned_quality.? < 10))
+    {
+        return error.InvalidBlockPlan;
+    }
     if (options.extended_dictionary_probes > vort.brotliMaxExtendedDictionaryProbes) return error.InvalidBlockPlan;
     return options;
 }

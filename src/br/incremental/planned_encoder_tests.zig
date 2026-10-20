@@ -216,6 +216,84 @@ test "chunked and incremental planned encoders honor quality policies" {
     try std.testing.expect(br.IncrementalTestSupport.streamHqCommandAttempts() != 0);
 }
 
+test "command-state work override propagates across chunked and next stream" {
+    const payload = "streaming command-state override payload 0123456789abcdef\n" ** 224;
+    try std.testing.expect(payload.len > 8 * 1024 and payload.len < 32 * 1024);
+    const chunks = [_][]const u8{payload};
+
+    br.IncrementalTestSupport.resetStreamHqCommandCounters();
+    const baseline = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 10, .block_len = payload.len },
+    );
+    defer std.testing.allocator.free(baseline);
+    try std.testing.expectEqual(
+        @as(usize, 0),
+        br.IncrementalTestSupport.streamHqCommandAttempts(),
+    );
+
+    const stream_options: br.PlannedStreamChunksOptions = .{
+        .quality = 10,
+        .block_len = payload.len,
+        .command_state_max_input_kib = @intCast(
+            std.math.divCeil(usize, payload.len, 1024) catch unreachable,
+        ),
+    };
+    br.IncrementalTestSupport.resetStreamHqCommandCounters();
+    const extended = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        stream_options,
+    );
+    defer std.testing.allocator.free(extended);
+    try std.testing.expectEqual(
+        @as(usize, 1),
+        br.IncrementalTestSupport.streamHqCommandAttempts(),
+    );
+    try std.testing.expect(extended.len <= baseline.len);
+
+    var incremental = br.IncrementalPlannedStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{
+            .stream = stream_options,
+            .block_len = payload.len,
+        },
+    );
+    defer incremental.deinit();
+    br.IncrementalTestSupport.resetStreamHqCommandCounters();
+    const incremental_extended = try encodeIncremental(
+        &incremental,
+        payload,
+        257,
+        13,
+    );
+    defer std.testing.allocator.free(incremental_extended);
+    try std.testing.expectEqualSlices(u8, extended, incremental_extended);
+    try std.testing.expectEqual(
+        @as(usize, 1),
+        br.IncrementalTestSupport.streamHqCommandAttempts(),
+    );
+
+    try incremental.nextStream(.{
+        .stream = .{ .quality = 10, .block_len = payload.len },
+        .block_len = payload.len,
+    });
+    br.IncrementalTestSupport.resetStreamHqCommandCounters();
+    const incremental_default = try encodeIncremental(
+        &incremental,
+        payload,
+        509,
+        17,
+    );
+    defer std.testing.allocator.free(incremental_default);
+    try std.testing.expectEqualSlices(u8, baseline, incremental_default);
+    try std.testing.expectEqual(
+        @as(usize, 0),
+        br.IncrementalTestSupport.streamHqCommandAttempts(),
+    );
+}
+
 test "q0 and q1 fragment surfaces share one deterministic block core" {
     const phrase = "fast fragment surfaces keep exact caller progress 0123456789\n";
     const payload = phrase ** 1024;
@@ -428,6 +506,30 @@ test "planned stream quality options reject invalid chunked combinations before 
             std.testing.allocator,
             &chunks,
             .{ .quality = 4, .window_bits = 24 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        br.encodePlannedStreamChunksWithOptionsAlloc(
+            std.testing.allocator,
+            &chunks,
+            .{ .command_state_max_input_kib = 0 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        br.encodePlannedStreamChunksWithOptionsAlloc(
+            std.testing.allocator,
+            &chunks,
+            .{ .quality = 9, .command_state_max_input_kib = 0 },
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        br.encodePlannedStreamChunksWithOptionsAlloc(
+            std.testing.allocator,
+            &chunks,
+            .{ .quality = 10, .command_state_max_input_kib = 65 },
         ),
     );
 }

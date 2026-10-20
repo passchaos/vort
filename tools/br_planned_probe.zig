@@ -164,6 +164,22 @@ pub fn main(init: std.process.Init) !void {
         try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
         return;
     }
+    if (std.mem.eql(u8, mode, "q10-command-state-extended")) {
+        const payload = "streaming command-state override payload 0123456789abcdef\n" ** 224;
+        const chunks = [_][]const u8{payload};
+        const encoded = try vort.brEncodePlannedStreamChunksWithOptionsAlloc(
+            init.gpa,
+            &chunks,
+            .{
+                .quality = 10,
+                .block_len = payload.len,
+                .command_state_max_input_kib = 13,
+            },
+        );
+        defer init.gpa.free(encoded);
+        try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
+        return;
+    }
     if (std.mem.eql(u8, mode, "chunked-multiblock")) {
         const first = "alpha beta gamma delta alpha beta gamma delta " ** 64;
         const middle = "qzxwvbnm1234567890QZXWVBNM!@#$%^&*";

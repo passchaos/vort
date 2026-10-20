@@ -125,6 +125,33 @@ source prefix regressed q10 from about 395.53 ms to about 697.16 ms. With the
 limit, independent baseline/current binaries on CPU 8 measured 395.53 ms versus
 394.18 ms (`1.0034x`) with identical 6,427-byte output. Wider command-state
 search therefore remains future optimization rather than an unbounded default.
+Callers that deliberately accept the work can override this policy through
+`PlannedEncodeOptions.command_state_max_input_kib` or the matching
+`PlannedStreamChunksOptions` field. Omitting it retains 8 KiB, zero disables the
+stateful candidate, q10 accepts values through 64 KiB, and q11 through 32 KiB.
+The override is rejected for q0...q9 and above the quality-specific ceiling.
+Actual boundary tests execute and round-trip q10 at 64 KiB and both inherited
+q10 plus deeper q11 beams at 32 KiB; the option is therefore a real full-range
+capability rather than a range-only validator. Default throughput policy stays
+unchanged until the wider search is optimized.
+The public override is stored as a one-byte KiB value so adding the opt-in does
+not enlarge the hot stream state. An initial `?u32` prototype caused a fixed-
+CPU reusable regression of about 5.8% and was rejected. Against parent
+`03bb4d8c`, the final layout preserved 120-byte/4,113-byte wires and 37,404/
+333,775 retained-byte metrics; representative CPU-8 samples were 1.985/1.746 ms
+for current one-shot/reusable versus 2.048/1.775 ms for the parent, with the
+cross-block row within about 1%. Treat this as regression clearance rather than
+a new speed claim.
+
+Measure the opt-in path explicitly without changing the default gate:
+
+```sh
+taskset -c 8 zig build -Doptimize=ReleaseFast \
+  run-br-planned-encode-bench -- \
+  --case source32k --iterations 5 --quality 10 \
+  --planned-quality 10 --planned-mode generic \
+  --command-state-max-input-kib 32
+```
 
 The same two feedback stages now run inside the shared meta-block policy used
 by one-shot chunk lists and `BrotliIncrementalPlannedStreamEncoder`; they are no
@@ -135,6 +162,11 @@ byte-identical between chunked and arbitrarily fragmented incremental encoding,
 and Node/libbrotli independently decodes its 493-byte stream. The locked 4 KiB
 strict-win fixture also observes the stateful candidate winning inside the
 non-final meta-block bit-cost arbiter, not only in the standalone stream writer.
+The override follows the same ownership path: reusable calls preserve the
+requested wire, incremental `nextStream` installs the new stream's value, and
+omitting it on the next stream restores the 8 KiB default. A 12,992-byte
+opt-in chunked fixture encodes to 65 bytes and independently decodes through
+Node/libbrotli.
 Validation also corrected two stale pre-existing benchmark assertions against
 the already-shipped history-aware stream core. At baseline `c03ed3d1`, the
 multi-block row is 131 bytes versus 127 bytes for three separately finalized
@@ -378,10 +410,10 @@ names:
 
 - full libbrotli-class q10/q11 Zopfli/HQ refinement. Vort now performs one
   deterministic command-derived entropy-feedback pass and a bounded 8 KiB
-  command/recent-distance beam. Scaling that stateful search to the complete
-  q10/q11 input ceilings without throughput regression, reusing match sets
-  across iterations, wider beam arbitration, and libbrotli's complete HQ cost
-  model remain open;
+  command/recent-distance beam by default, with an explicit full-range opt-in.
+  Making the 32/64 KiB ceilings fast enough to become defaults, reusing match
+  sets across iterations, wider beam arbitration, and libbrotli's complete HQ
+  cost model remain open;
 - FastCover-style acceleration and broad serialized-dictionary corpus
   calibration. Deterministic heavy-hitter/COVER fixed-word selection plus an
   actual-wire `(d, hash_log)` grid, bounded multi-cutoff two-group and arbitrary

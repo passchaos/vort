@@ -132,6 +132,12 @@ def main() -> int:
     if actual != expected:
         raise SystemExit("q10-command-state-chunked: node output mismatch")
     print(f"brotli planned q10-command-state-chunked node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = b"streaming command-state override payload 0123456789abcdef\n" * 224
+    encoded = subprocess.check_output([sys.argv[1], "q10-command-state-extended"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("q10-command-state-extended: node output mismatch")
+    print(f"brotli planned q10-command-state-extended node diff: encoded={len(encoded)} decoded={len(actual)}")
     expected = (
         b"alpha beta gamma delta alpha beta gamma delta " * 64
         + b"qzxwvbnm1234567890QZXWVBNM!@#$%^&*"

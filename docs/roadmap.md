@@ -100,6 +100,14 @@ major gaps before Vort can claim broad industry-best parity:
   fragmented incremental schedules, and Node/libbrotli independently decodes
   its 493-byte stream. This closes the former one-shot versus streaming quality
   policy mismatch.
+  Callers can now override the evidence-backed 8 KiB default command-state
+  ceiling across one-shot, reusable, chunk-list, and incremental APIs. Zero
+  disables the candidate; q10 accepts and actually executes through 64 KiB,
+  while q11 accepts and executes through 32 KiB. Incremental `nextStream`
+  replaces the override rather than leaking it across streams. Node/libbrotli
+  independently decodes a 65-byte stream generated from the 12,992-byte opt-in
+  fixture. Making those full ceilings fast enough to become defaults remains
+  open; the wire functionality itself is no longer missing.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
   entropy block switching, static dictionaries, consecutive compressed

@@ -876,6 +876,7 @@ pub const brSerializeSharedDictionaryAlloc = br.serializeSharedDictionaryAlloc;
 pub const brTrainSerializedSharedDictionaryAlloc = br.trainSerializedSharedDictionaryAlloc;
 pub const BrotliPlannedEncodeOptions = br.PlannedEncodeOptions;
 pub const brotliMaxExtendedDictionaryProbes = br.max_extended_dictionary_probes;
+pub const brotliCommandStateDefaultMaxInputKiB = br.command_state_default_max_input_kib;
 pub const BrotliPlannedStreamChunksOptions = br.PlannedStreamChunksOptions;
 pub const BrotliPlannedParserOptions = br.PlannedParserOptions;
 pub const brEncodePlannedStreamWithOptionsAlloc = br.encodePlannedStreamWithOptionsAlloc;

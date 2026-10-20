@@ -2336,6 +2336,13 @@ cost model and command beam with the committed four-entry recent-distance ring;
 the required Node/libbrotli differential includes a two-block 8 KiB q10 stream,
 while internal tests require chunked and fragmented incremental schedules to
 produce identical wire.
+`BrotliPlannedEncodeOptions.command_state_max_input_kib` and the corresponding
+chunked/incremental stream option expose the complete stateful search range for
+callers willing to pay for it: omission keeps the measured 8 KiB default, zero
+disables the command beam, q10 accepts up to 64 KiB, and q11 up to 32 KiB.
+Reusable encoding preserves the option and incremental `nextStream` replaces
+it transactionally with the next stream's options. Boundary tests execute both
+maximums; Node/libbrotli also decodes a 12,992-byte opt-in chunked fixture.
 Inputs beyond the 16 MiB
 format limit keep one Brotli stream and apply the selected policy independently
 to bounded 16/32/64 KiB blocks. q2...q11 retain window-bounded LZ77 history and

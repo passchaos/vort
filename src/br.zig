@@ -252,6 +252,7 @@ pub const OwnedTrainedSerializedSharedDictionary = struct {
     }
 };
 pub const max_extended_dictionary_probes: u16 = 4096;
+pub const command_state_default_max_input_kib: u8 = std.math.maxInt(u8);
 pub const PlannedEncodeOptions = struct {
     level: PlannedCompressionLevel = .fast,
     /// Optional Vort-native Brotli quality preset. When present, `level` must
@@ -294,6 +295,11 @@ pub const PlannedEncodeOptions = struct {
     /// automatically for stable record-optimal plans, false disables it, and
     /// true also enables it for the general bounded optimal candidate.
     distance_parameter_search: ?bool = null,
+    /// Override q10/q11's bounded command-state work ceiling. The default
+    /// sentinel uses the evidence-backed 8 KiB policy limit, zero disables
+    /// the candidate, and a non-zero KiB value may extend it through that
+    /// quality's optimal-input ceiling (64 for q10, 32 for q11).
+    command_state_max_input_kib: u8 = command_state_default_max_input_kib,
     /// Borrowed RAW shared-prefix attachments used by the Brotli compound
     /// dictionary. The descriptor and bytes must remain alive for the call.
     shared_dictionary: SharedDictionary = .{},
@@ -1582,6 +1588,7 @@ const IncrementalPlannedEncoderCodec = struct {
         quality: ?u4 = null,
         mode: PlannedMode = .generic,
         adaptive_blocks: bool = false,
+        command_state_max_input_kib: u8 = command_state_default_max_input_kib,
         tokens: std.ArrayList(lz77.Token) = .empty,
         commands: std.ArrayList(command_plan.Command) = .empty,
         history: std.ArrayList(u8) = .empty,
@@ -1625,6 +1632,7 @@ const IncrementalPlannedEncoderCodec = struct {
         state.quality = null;
         state.mode = .generic;
         state.adaptive_blocks = false;
+        state.command_state_max_input_kib = command_state_default_max_input_kib;
         state.tokens.clearRetainingCapacity();
         state.commands.clearRetainingCapacity();
         state.history.clearRetainingCapacity();
@@ -1706,6 +1714,7 @@ const IncrementalPlannedEncoderCodec = struct {
         state.quality = options.quality;
         state.mode = options.mode;
         state.adaptive_blocks = adaptive_blocks;
+        state.command_state_max_input_kib = options.command_state_max_input_kib;
     }
 
     pub fn writeBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, block: []const u8) br.Error!void {
@@ -3271,6 +3280,9 @@ pub const PlannedStreamChunksOptions = struct {
     /// Null follows the level/quality policy. True enables entropy lookahead
     /// for 64 KiB blocks; false keeps every configured boundary unchanged.
     adaptive_blocks: ?bool = null,
+    /// Same q10/q11 command-state work override, in KiB, as
+    /// `PlannedEncodeOptions`.
+    command_state_max_input_kib: u8 = command_state_default_max_input_kib,
     window_bits: u5 = default_window_bits,
     metadata: []const u8 = "",
     shared_dictionary: SharedDictionary = .{},
@@ -3280,14 +3292,14 @@ fn validatePlannedStreamChunksOptions(options: PlannedStreamChunksOptions) Error
     _ = try plannedSharedDictionarySize(options.shared_dictionary);
     if (options.window_bits < 10 or options.window_bits > 24)
         return error.InvalidBlockPlan;
-    if (options.quality) |quality| {
+    if (options.quality != null) {
         if (options.level != .fast) return error.InvalidBlockPlan;
-        const schedule = quality_schedule.getInt(quality, options.mode) catch
-            return error.InvalidBlockPlan;
-        schedule.validate() catch return error.InvalidBlockPlan;
+        const schedule = try resolvedStreamQualitySchedule(options);
         _ = schedule.window.resolve(options.window_bits) catch
             return error.InvalidBlockPlan;
     } else if (options.mode != .generic) {
+        return error.InvalidBlockPlan;
+    } else if (options.command_state_max_input_kib != command_state_default_max_input_kib) {
         return error.InvalidBlockPlan;
     }
     if (options.block_len > planned_chunk_max_input_len)
@@ -4618,11 +4630,32 @@ pub fn encodedPlannedStreamBoundWithOptions(input_len: usize, options: PlannedEn
 
 fn resolvedQualitySchedule(options: PlannedEncodeOptions) Error!quality_schedule.Schedule {
     const raw_quality = options.quality orelse return error.InvalidBlockPlan;
-    const schedule = quality_schedule.getInt(raw_quality, options.mode) catch
+    var schedule = quality_schedule.getInt(raw_quality, options.mode) catch
         return error.InvalidBlockPlan;
+    try applyCommandStateLimit(&schedule, options.command_state_max_input_kib);
     schedule.validate() catch return error.InvalidBlockPlan;
     _ = schedule.window.resolve(options.window_bits) catch return error.InvalidBlockPlan;
     return schedule;
+}
+
+fn resolvedStreamQualitySchedule(options: PlannedStreamChunksOptions) Error!quality_schedule.Schedule {
+    const raw_quality = options.quality orelse return error.InvalidBlockPlan;
+    var schedule = quality_schedule.getInt(raw_quality, options.mode) catch
+        return error.InvalidBlockPlan;
+    try applyCommandStateLimit(&schedule, options.command_state_max_input_kib);
+    schedule.validate() catch return error.InvalidBlockPlan;
+    return schedule;
+}
+
+fn applyCommandStateLimit(
+    schedule: *quality_schedule.Schedule,
+    requested_kib: u8,
+) Error!void {
+    if (requested_kib == command_state_default_max_input_kib) return;
+    const limit = @as(u32, requested_kib) * 1024;
+    if (!schedule.optimal.entropy_feedback or limit > schedule.optimal.max_input_len)
+        return error.InvalidBlockPlan;
+    schedule.optimal.command_state_max_input_len = limit;
 }
 
 fn resolvedPlannedWindowBits(options: PlannedEncodeOptions) Error!u5 {
@@ -4640,6 +4673,7 @@ fn plannedStreamChunksOptionsFromEncodeOptions(options: PlannedEncodeOptions) Er
         .mode = options.mode,
         .window_bits = try resolvedPlannedWindowBits(options),
         .metadata = options.metadata,
+        .command_state_max_input_kib = options.command_state_max_input_kib,
         .shared_dictionary = options.shared_dictionary,
     };
 }
@@ -5666,6 +5700,8 @@ fn validatePlannedEncodeOptions(input_len: usize, options: PlannedEncodeOptions)
             return error.InvalidBlockPlan;
         return;
     }
+    if (options.command_state_max_input_kib != command_state_default_max_input_kib)
+        return error.InvalidBlockPlan;
     if (options.mode != .generic) return error.InvalidBlockPlan;
     const window_bits = options.window_bits orelse default_window_bits;
     _ = try plannedWindowLen(options.level, window_bits);
@@ -7655,11 +7691,13 @@ fn writePlannedStreamMetaBlock(
     var retain_match_history = true;
 
     if (state.quality) |quality| {
-        const schedule = quality_schedule.getInt(quality, state.mode) catch
+        var schedule = quality_schedule.getInt(quality, state.mode) catch
             return error.InvalidBlockPlan;
+        try applyCommandStateLimit(&schedule, state.command_state_max_input_kib);
         retain_match_history = schedule.fragment_parser == null;
         if (schedule.quality == .q11) {
-            const q10 = quality_schedule.get(.q10, schedule.mode);
+            var q10 = quality_schedule.get(.q10, schedule.mode);
+            try applyCommandStateLimit(&q10, state.command_state_max_input_kib);
             try considerPlannedMetaBlockPolicy(
                 allocator,
                 state,
@@ -23747,6 +23785,30 @@ test "br planned quality options validate selector mode level and window contrac
         payload.len,
         .{ .quality = 7, .extended_dictionary_probes = 1 },
     )) >= payload.len);
+    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(
+        payload.len,
+        .{ .command_state_max_input_kib = 0 },
+    ));
+    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(
+        payload.len,
+        .{ .quality = 9, .command_state_max_input_kib = 0 },
+    ));
+    try std.testing.expect((try encodedPlannedStreamBoundWithOptions(
+        payload.len,
+        .{ .quality = 10, .command_state_max_input_kib = 64 },
+    )) >= payload.len);
+    try std.testing.expect((try encodedPlannedStreamBoundWithOptions(
+        payload.len,
+        .{ .quality = 11, .command_state_max_input_kib = 32 },
+    )) >= payload.len);
+    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(
+        payload.len,
+        .{ .quality = 10, .command_state_max_input_kib = 65 },
+    ));
+    try std.testing.expectError(error.InvalidBlockPlan, encodedPlannedStreamBoundWithOptions(
+        payload.len,
+        .{ .quality = 11, .command_state_max_input_kib = 33 },
+    ));
     const oversized_len = max_uncompressed_meta_block_len + 1;
     const oversized_quality_bound = try encodedPlannedStreamBoundWithOptions(oversized_len, .{ .quality = 8 });
     const oversized_single_block_bound = try encodedStoredStreamBound(oversized_len);
@@ -24048,6 +24110,22 @@ test "br q10 command-state candidate improves complete wire" {
     );
     defer std.testing.allocator.free(chunked_decoded);
     try std.testing.expectEqualSlices(u8, &payload, chunked_decoded);
+
+    test_hq_command_candidate_attempts = 0;
+    const disabled = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        &payload,
+        .{ .quality = 10, .command_state_max_input_kib = 0 },
+    );
+    defer std.testing.allocator.free(disabled);
+    try std.testing.expectEqual(@as(usize, 0), test_hq_command_candidate_attempts);
+    const disabled_decoded = try decodeStreamAllocExactSize(
+        std.testing.allocator,
+        disabled,
+        payload.len,
+    );
+    defer std.testing.allocator.free(disabled_decoded);
+    try std.testing.expectEqualSlices(u8, &payload, disabled_decoded);
 }
 
 test "br q10 command-state work limit preserves larger entropy feedback" {
@@ -24065,6 +24143,86 @@ test "br q10 command-state work limit preserves larger entropy feedback" {
     const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, payload.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "br q10 command-state work override extends one-shot and reusable search" {
+    const payload = "command-state opt-in extends bounded HQ search 0123456789\n" ** 224;
+    try std.testing.expect(payload.len > 8 * 1024 and payload.len < 32 * 1024);
+
+    test_hq_command_candidate_attempts = 0;
+    const baseline = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{ .quality = 10 },
+    );
+    defer std.testing.allocator.free(baseline);
+    try std.testing.expectEqual(@as(usize, 0), test_hq_command_candidate_attempts);
+
+    test_hq_command_candidate_attempts = 0;
+    const options = PlannedEncodeOptions{
+        .quality = 10,
+        .command_state_max_input_kib = @intCast(
+            std.math.divCeil(usize, payload.len, 1024) catch unreachable,
+        ),
+    };
+    const extended = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        options,
+    );
+    defer std.testing.allocator.free(extended);
+    try std.testing.expectEqual(@as(usize, 1), test_hq_command_candidate_attempts);
+    try std.testing.expect(extended.len <= baseline.len);
+
+    var reusable = PlannedStreamEncoder.init(std.testing.allocator);
+    defer reusable.deinit();
+    const retained = try reusable.encodeScratchWithOptions(payload, options);
+    try std.testing.expectEqualSlices(u8, extended, retained);
+    const decoded = try decodeStreamAllocExactSize(
+        std.testing.allocator,
+        extended,
+        payload.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "br command-state override reaches q10 and q11 input ceilings" {
+    const q10_payload = "abcdefghijklmnopqrstuvwxyz012345" ** 2048;
+    const q11_payload = q10_payload[0 .. 32 * 1024];
+    try std.testing.expectEqual(@as(usize, 64 * 1024), q10_payload.len);
+
+    test_hq_command_candidate_attempts = 0;
+    const q10 = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        q10_payload,
+        .{ .quality = 10, .command_state_max_input_kib = 64 },
+    );
+    defer std.testing.allocator.free(q10);
+    try std.testing.expectEqual(@as(usize, 1), test_hq_command_candidate_attempts);
+    const q10_decoded = try decodeStreamAllocExactSize(
+        std.testing.allocator,
+        q10,
+        q10_payload.len,
+    );
+    defer std.testing.allocator.free(q10_decoded);
+    try std.testing.expectEqualSlices(u8, q10_payload, q10_decoded);
+
+    test_hq_command_candidate_attempts = 0;
+    const q11 = try encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        q11_payload,
+        .{ .quality = 11, .command_state_max_input_kib = 32 },
+    );
+    defer std.testing.allocator.free(q11);
+    try std.testing.expectEqual(@as(usize, 2), test_hq_command_candidate_attempts);
+    const q11_decoded = try decodeStreamAllocExactSize(
+        std.testing.allocator,
+        q11,
+        q11_payload.len,
+    );
+    defer std.testing.allocator.free(q11_decoded);
+    try std.testing.expectEqualSlices(u8, q11_payload, q11_decoded);
 }
 
 test "br quality optimal candidate honors the advertised small window" {
