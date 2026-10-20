@@ -68,6 +68,21 @@ def main() -> int:
     if actual != expected:
         raise SystemExit("q2-dynamic-commands: node output mismatch")
     print(f"brotli planned q2-dynamic-commands node diff: encoded={len(encoded)} decoded={len(actual)}")
+    input_len = 64 * 1024
+    quarter_len = input_len // 4
+    expected = bytearray(input_len)
+    state = 0x4A117E12
+    for i in range(input_len):
+        state = (state * 1664525 + 1013904223) & 0xFFFFFFFF
+        nibble = (state >> 28) & 15
+        expected[i] = nibble if (i // quarter_len) & 1 == 0 else 240 + nibble
+    encoded = subprocess.check_output([sys.argv[1], "q2-quarter-segmentation"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("q2-quarter-segmentation: node output mismatch")
+    if len(encoded) != 39_169:
+        raise SystemExit(f"q2-quarter-segmentation: four-block wire changed: {len(encoded)} bytes")
+    print(f"brotli planned q2-quarter-segmentation node diff: encoded={len(encoded)} decoded={len(actual)}")
     expected = bytearray(4096)
     state = (2 * 0x9E3779B9) & 0xFFFFFFFF
     position = 0

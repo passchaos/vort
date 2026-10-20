@@ -834,6 +834,136 @@ test "entropy-aware planned stream segmentation follows midpoint changes" {
     );
 }
 
+test "entropy-aware planned stream segmentation follows quarter changes" {
+    const input_len = 64 * 1024;
+    const quarter_len = input_len / 4;
+    const input = try std.testing.allocator.alloc(u8, input_len);
+    defer std.testing.allocator.free(input);
+    var random_state: u32 = 0x4a11_7e12;
+    for (input, 0..) |*byte, index| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        const nibble: u8 = @truncate(random_state >> 28);
+        byte.* = if ((index / quarter_len) & 1 == 0)
+            nibble
+        else
+            240 + nibble;
+    }
+    const chunks = [_][]const u8{input};
+    const options = br.PlannedStreamChunksOptions{ .quality = 2 };
+    const adaptive = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        options,
+    );
+    defer std.testing.allocator.free(adaptive);
+    const fixed = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        .{ .quality = 2, .adaptive_blocks = false },
+    );
+    defer std.testing.allocator.free(fixed);
+    try expectDataBlockCount(adaptive, 4);
+    try expectDataBlockCount(fixed, 1);
+    try std.testing.expect(adaptive.len < fixed.len);
+
+    const one_shot = try br.encodePlannedStreamWithOptionsAlloc(
+        std.testing.allocator,
+        input,
+        .{ .quality = 2 },
+    );
+    defer std.testing.allocator.free(one_shot);
+    try std.testing.expectEqualSlices(u8, adaptive, one_shot);
+
+    var incremental = br.IncrementalPlannedStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{ .stream = options },
+    );
+    defer incremental.deinit();
+    const incremental_wire = try encodeIncremental(
+        &incremental,
+        input,
+        509,
+        17,
+    );
+    defer std.testing.allocator.free(incremental_wire);
+    try std.testing.expectEqualSlices(u8, adaptive, incremental_wire);
+
+    const bound = try br.encodedPlannedStreamChunksBoundWithOptions(
+        &chunks,
+        options,
+    );
+    try std.testing.expect(bound >= adaptive.len);
+    const output = try std.testing.allocator.alloc(u8, bound);
+    defer std.testing.allocator.free(output);
+    const written = try br.encodePlannedStreamChunksWithOptionsInto(
+        &chunks,
+        output,
+        options,
+    );
+    try std.testing.expectEqualSlices(u8, adaptive, output[0..written]);
+
+    const decoded = try br.decodeStreamAllocExactSize(
+        std.testing.allocator,
+        adaptive,
+        input.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "entropy-aware planned stream segmentation retains the two-half winner" {
+    const input_len = 64 * 1024;
+    const quarter_len = input_len / 4;
+    const input = try std.testing.allocator.alloc(u8, input_len);
+    defer std.testing.allocator.free(input);
+    for (0..4) |quarter_index| {
+        const quarter = input[quarter_index * quarter_len ..][0..quarter_len];
+        const base: u8 = if (quarter_index < 2) 0 else 240;
+        for (quarter, 0..) |*byte, index|
+            byte.* = base + @as(u8, @intCast(index & 15));
+        var random_state: u32 = 0x51ed_270b ^ @as(u32, @intCast(quarter_index * 0x1021));
+        var remaining = quarter.len;
+        while (remaining > 1) {
+            random_state = random_state *% 1_664_525 +% 1_013_904_223;
+            const swap_index: usize = @intCast(
+                random_state % @as(u32, @intCast(remaining)),
+            );
+            remaining -= 1;
+            std.mem.swap(u8, &quarter[remaining], &quarter[swap_index]);
+        }
+    }
+    const chunks = [_][]const u8{input};
+    const options = br.PlannedStreamChunksOptions{ .quality = 4 };
+    const chunked = try br.encodePlannedStreamChunksWithOptionsAlloc(
+        std.testing.allocator,
+        &chunks,
+        options,
+    );
+    defer std.testing.allocator.free(chunked);
+    try expectDataBlockCount(chunked, 2);
+
+    var incremental = br.IncrementalPlannedStreamEncoder.initWithOptions(
+        std.testing.allocator,
+        .{ .stream = options },
+    );
+    defer incremental.deinit();
+    const incremental_wire = try encodeIncremental(
+        &incremental,
+        input,
+        997,
+        19,
+    );
+    defer std.testing.allocator.free(incremental_wire);
+    try std.testing.expectEqualSlices(u8, chunked, incremental_wire);
+    const decoded = try br.decodeStreamAllocExactSize(
+        std.testing.allocator,
+        chunked,
+        input.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
 test "warmed entropy-aware incremental segmentation reuses retained scratch" {
     const input_len = 64 * 1024;
     const input = try std.testing.allocator.alloc(u8, input_len);
@@ -842,7 +972,10 @@ test "warmed entropy-aware incremental segmentation reuses retained scratch" {
     for (input, 0..) |*byte, index| {
         random_state = random_state *% 1_664_525 +% 1_013_904_223;
         const nibble: u8 = @truncate(random_state >> 28);
-        byte.* = if (index < input.len / 2) nibble else 240 + nibble;
+        byte.* = if ((index / (input.len / 4)) & 1 == 0)
+            nibble
+        else
+            240 + nibble;
     }
     var encoder = br.IncrementalPlannedStreamEncoder.initWithOptions(
         std.testing.allocator,

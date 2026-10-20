@@ -2317,7 +2317,15 @@ fixed-hash fragment parsers and reusable streaming scratch. q0 uses a compact
 one-pass writer with cross-fragment adaptive command/distance trees; q1 uses a
 compact two-pass 128-symbol writer; q2 uses static/dynamic bounded trees and q3
 uses a trivial dynamic three-tree writer for ordinary LZ plans. Dictionary
-command plans retain the general writer. q10/q11 now add a deterministic
+command plans retain the general writer. Automatic 64 KiB stream blocks now
+screen midpoint and quarter-boundary entropy from four 16 KiB histograms,
+comparing exact single/two wires and adding the four-quarter wire only when its
+proxy also beats the halves. A locked alternating-quarter q2 fixture selects
+four data meta-blocks, stays byte-identical across one-shot, chunked,
+incremental, and caller-buffer surfaces, and independently decodes through
+Node/libbrotli (`39,169 -> 65,536` bytes). Arbitrary non-quarter segmentation
+remains open.
+q10/q11 now add a deterministic
 second shortest-path proposal whose Q8 literal, copy-length, and
 distance-prefix costs are learned from the first optimal command plan. Complete
 wire arbitration makes the pass size-monotonic; a locked 4 KiB fixture improves
