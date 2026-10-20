@@ -180,6 +180,16 @@ filtered candidates. It preserves all token/command counts and reduces the
 pairs improve median end-to-end time from 867.67 ms to 863.08 ms (`1.0053x`,
 6/7 wins); seven default controls remain neutral at 669.34/669.09 ms
 (`1.0004x`).
+An exact target-beam cost bound now rejects a transition before copying and
+rolling its four-entry recent-distance history whenever the target already has
+two states and the candidate cost cannot beat the more expensive slot. On the
+32 KiB profile this removes history materialization for 754,706 of 794,600
+transitions (`95.0%`) and lowers search from about 39.4 ms to 36.0 ms. The
+entire opt-in branch is also `noinline` in a dedicated text section so its code
+layout cannot perturb the default q10 path. Against `3ca8702a`, seven fixed-CPU
+opt-in pairs are 7/7 wins and improve median time from 862.98 ms to 844.57 ms
+(`1.0218x`); seven default controls are neutral at 667.88/667.97 ms
+(`0.9999x`). Candidate counts, selected commands, and wire remain identical.
 The unrelated warmed incremental gate was also made statistically repeatable:
 it now reports the median of seven alternating one-shot/reusable pairs over
 1,000 iterations. Three fixed-CPU calibrations measured `1.0902x`--`1.1077x`;

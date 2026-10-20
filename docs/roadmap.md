@@ -123,6 +123,13 @@ major gaps before Vort can claim broad industry-best parity:
   filtered candidates. Search falls from about 40.5 ms to 39.4 ms; seven
   fixed-CPU opt-in pairs improve `1.0053x` median with 6/7 wins, while seven
   default controls remain neutral at `1.0004x`.
+  An exact target-beam cost bound rejects candidates that cannot beat either
+  retained state before copying/rolling recent-distance history. The 32 KiB
+  profile avoids that materialization for 754,706 of 794,600 transitions and
+  reduces search from about 39.4 ms to 36.0 ms. A dedicated `noinline` text
+  section isolates the opt-in branch from default layout. Seven fixed-CPU
+  opt-in pairs improve `1.0218x` median with 7/7 wins; default controls remain
+  neutral at `0.9999x`, with identical wire.
   The warmed incremental gate now uses the median of seven alternating pairs
   at 1,000 iterations. Fixed-CPU calibration spans `1.0902x`--`1.1077x`; an
   explicit `1.08x` floor replaces the flaky 200-iteration `1.10x` edge while

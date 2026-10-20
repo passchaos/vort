@@ -2358,6 +2358,11 @@ lazy per-position match-length cache now shares only visited ordinary matches
 between both beam states, reducing the profiled search to about 39.4 ms and
 improving the opt-in end-to-end median by `1.0053x` with a neutral `1.0004x`
 default control.
+An exact target-beam cost bound skips recent-history materialization for about
+95% of measured transitions that cannot enter the two-state beam. Isolating the
+opt-in branch in its own `noinline` text section keeps default layout neutral;
+seven fixed-CPU opt-in pairs improve `1.0218x` median with 7/7 wins and a
+`0.9999x` default control.
 Inputs beyond the 16 MiB
 format limit keep one Brotli stream and apply the selected policy independently
 to bounded 16/32/64 KiB blocks. q2...q11 retain window-bounded LZ77 history and

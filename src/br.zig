@@ -100,6 +100,7 @@ var test_stream_hq_command_candidate_selections: usize = 0;
 const large_window_text_section = code_sections.large_window;
 const adaptive_split_text_section = code_sections.adaptive_split;
 const distance_parameter_text_section = code_sections.distance_parameters;
+const command_state_text_section = code_sections.command_state;
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 pub const default_incremental_compressed_header_bytes: usize = 16 * 1024;
@@ -4912,55 +4913,76 @@ fn encodeQualityOptimalCandidateAlloc(
     if (budget.command_state_max_input_len != 0 and
         input.len <= budget.command_state_max_input_len)
     {
-        const hq = try hq_command_parser.planAlloc(allocator, input, .{
-            .window_len = search_window,
-            .max_chain = @min(budget.max_chain, 64),
-            .nice_len = budget.nice_len,
-            .max_candidates = @min(budget.max_candidates, 8),
-            .min_match = 4,
-            .max_match = lz77.max_match_len,
-        }, &model);
-        defer hq.deinit(allocator);
-        if (hq.lz.stats.matches != 0) {
-            const hq_commands = try command_plan.buildAlloc(allocator, input, hq.lz.tokens);
-            defer hq_commands.deinit(allocator);
-            var compact_stats: encoder_stats.PlannedEncodeStats = .{};
-            const compact = try encodeCommandPlanWithOptionsAlloc(
-                allocator,
-                input,
-                hq_commands.commands,
-                null,
-                &compact_stats,
-                commandStateCompactEncodeOptions(wire_options),
-            );
-            var compact_owned = true;
-            errdefer if (compact_owned) allocator.free(compact);
-            const run_full_wire = commandStateFullWireEligible(compact.len, best.len);
-            if (!run_full_wire) {
-                compact_owned = false;
-                retainSmallerOwnedWire(allocator, &best, compact);
-                return best;
-            }
-            var hq_stats: encoder_stats.PlannedEncodeStats = .{};
-            const hq_candidate = try encodeLazyCommandPlanAlloc(
-                allocator,
-                input,
-                hq_commands.commands,
-                &hq_stats,
-                wire_options,
-            );
-            if (builtin.is_test) {
-                test_hq_command_candidate_attempts += 1;
-                test_hq_command_pre_bytes = best.len;
-                test_hq_command_bytes = hq_candidate.len;
-                test_hq_command_candidate_selections += @intFromBool(hq_candidate.len < best.len);
-            }
-            compact_owned = false;
-            retainSmallerOwnedWire(allocator, &best, compact);
-            retainSmallerOwnedWire(allocator, &best, hq_candidate);
-        }
+        try selectQualityCommandStateCandidate(
+            allocator,
+            input,
+            budget,
+            search_window,
+            wire_options,
+            &model,
+            &best,
+        );
     }
     return best;
+}
+
+noinline fn selectQualityCommandStateCandidate(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    budget: quality_schedule.OptimalBudget,
+    search_window: usize,
+    wire_options: LazyWireOptions,
+    model: *const entropy_feedback.Model,
+    best: *[]u8,
+) linksection(command_state_text_section) Error!void {
+    const hq = try hq_command_parser.planAlloc(allocator, input, .{
+        .window_len = search_window,
+        .max_chain = @min(budget.max_chain, 64),
+        .nice_len = budget.nice_len,
+        .max_candidates = @min(budget.max_candidates, 8),
+        .min_match = 4,
+        .max_match = lz77.max_match_len,
+    }, model);
+    defer hq.deinit(allocator);
+    if (hq.lz.stats.matches == 0) return;
+    const hq_commands = try command_plan.buildAlloc(allocator, input, hq.lz.tokens);
+    defer hq_commands.deinit(allocator);
+    var compact_stats: encoder_stats.PlannedEncodeStats = .{};
+    const compact = try encodeCommandPlanWithOptionsAlloc(
+        allocator,
+        input,
+        hq_commands.commands,
+        null,
+        &compact_stats,
+        commandStateCompactEncodeOptions(wire_options),
+    );
+    var compact_owned = true;
+    errdefer if (compact_owned) allocator.free(compact);
+    const run_full_wire = commandStateFullWireEligible(compact.len, best.*.len);
+    if (!run_full_wire) {
+        compact_owned = false;
+        retainSmallerOwnedWire(allocator, best, compact);
+        return;
+    }
+    var hq_stats: encoder_stats.PlannedEncodeStats = .{};
+    const hq_candidate = try encodeLazyCommandPlanAlloc(
+        allocator,
+        input,
+        hq_commands.commands,
+        &hq_stats,
+        wire_options,
+    );
+    if (builtin.is_test) {
+        test_hq_command_candidate_attempts += 1;
+        test_hq_command_pre_bytes = best.*.len;
+        test_hq_command_bytes = hq_candidate.len;
+        test_hq_command_candidate_selections += @intFromBool(
+            hq_candidate.len < best.*.len,
+        );
+    }
+    compact_owned = false;
+    retainSmallerOwnedWire(allocator, best, compact);
+    retainSmallerOwnedWire(allocator, best, hq_candidate);
 }
 
 /// Profile one q10/q11 command-state proposal in isolation. The production
@@ -5048,6 +5070,7 @@ pub fn profileQualityCommandStateCandidateAlloc(
     profile.state_match_transitions = state_plan.stats.match_transitions;
     profile.state_general_match_transitions = state_plan.stats.general_match_transitions;
     profile.state_recent_match_transitions = state_plan.stats.recent_match_transitions;
+    profile.state_cost_bound_rejections = state_plan.stats.cost_bound_rejections;
     profile.state_beam_replacements = state_plan.stats.beam_replacements;
     profile.state_tokens = state_plan.lz.tokens.len;
 
@@ -7636,6 +7659,30 @@ fn considerPlannedMetaBlockOptimalFeedback(
     {
         return;
     }
+    try considerPlannedMetaBlockCommandState(
+        allocator,
+        state,
+        input,
+        policy,
+        search_window,
+        start_byte,
+        start_bit_index,
+        best,
+        &model,
+    );
+}
+
+noinline fn considerPlannedMetaBlockCommandState(
+    allocator: std.mem.Allocator,
+    state: *IncrementalPlannedEncoderCodec.State,
+    input: []const u8,
+    policy: PlannedMetaBlockPolicy,
+    search_window: usize,
+    start_byte: u8,
+    start_bit_index: u3,
+    best: *?PlannedMetaBlockCandidate,
+    model: *const entropy_feedback.Model,
+) linksection(command_state_text_section) Error!void {
     const hq = try hq_command_parser.planAllocWithStartingDistances(
         allocator,
         input,
@@ -7647,7 +7694,7 @@ fn considerPlannedMetaBlockOptimalFeedback(
             .min_match = 4,
             .max_match = lz77.max_match_len,
         },
-        &model,
+        model,
         state.wire_state.last_distances,
     );
     defer hq.deinit(allocator);

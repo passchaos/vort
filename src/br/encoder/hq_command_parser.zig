@@ -26,6 +26,7 @@ pub const Stats = struct {
     match_transitions: usize = 0,
     general_match_transitions: usize = 0,
     recent_match_transitions: usize = 0,
+    cost_bound_rejections: usize = 0,
     beam_replacements: usize = 0,
     index_ns: u64 = 0,
     setup_ns: u64 = 0,
@@ -225,9 +226,24 @@ fn planAllocInternal(
                     match_distance,
                     null,
                 ) orelse continue;
+                stats.match_transitions += 1;
+                if (comptime profiled) stats.general_match_transitions += 1;
+                if (!canBeatBeamCost(
+                    states,
+                    lengths,
+                    position + copy_len,
+                    transition.cost,
+                )) {
+                    if (comptime profiled) stats.cost_bound_rejections += 1;
+                    continue;
+                }
                 insertState(states, lengths, position + copy_len, .{
                     .cost = transition.cost,
-                    .last_distances = transition.last_distances,
+                    .last_distances = transitionLastDistances(
+                        state,
+                        match_distance,
+                        transition.recent_symbol,
+                    ),
                     .pending_insert = 0,
                     .previous_position = @intCast(position),
                     .previous_slot = @intCast(slot),
@@ -236,8 +252,6 @@ fn planAllocInternal(
                         .distance = match_distance,
                     } },
                 }, &stats);
-                stats.match_transitions += 1;
-                if (comptime profiled) stats.general_match_transitions += 1;
             }
 
             var recent_distances: [16]usize = undefined;
@@ -273,9 +287,24 @@ fn planAllocInternal(
                     @intCast(match_distance),
                     null,
                 ) orelse continue;
+                stats.match_transitions += 1;
+                if (comptime profiled) stats.recent_match_transitions += 1;
+                if (!canBeatBeamCost(
+                    states,
+                    lengths,
+                    position + copy_len,
+                    transition.cost,
+                )) {
+                    if (comptime profiled) stats.cost_bound_rejections += 1;
+                    continue;
+                }
                 insertState(states, lengths, position + copy_len, .{
                     .cost = transition.cost,
-                    .last_distances = transition.last_distances,
+                    .last_distances = transitionLastDistances(
+                        state,
+                        @intCast(match_distance),
+                        transition.recent_symbol,
+                    ),
                     .pending_insert = 0,
                     .previous_position = @intCast(position),
                     .previous_slot = @intCast(slot),
@@ -284,8 +313,6 @@ fn planAllocInternal(
                         .distance = @intCast(match_distance),
                     } },
                 }, &stats);
-                stats.match_transitions += 1;
-                if (comptime profiled) stats.recent_match_transitions += 1;
             }
         }
     }
@@ -344,7 +371,7 @@ fn elapsedNs(start: std.Io.Timestamp, io: std.Io) u64 {
 
 const Transition = struct {
     cost: u64,
-    last_distances: [4]usize,
+    recent_symbol: ?u4,
 };
 
 fn transitionCost(
@@ -385,12 +412,36 @@ fn transitionCost(
         }
     }
 
-    var last_distances = state.last_distances;
-    if (recent_symbol != 0) distance_history.push(&last_distances, match_distance);
     return .{
         .cost = addCost(state.cost, best_edge),
-        .last_distances = last_distances,
+        .recent_symbol = recent_symbol,
     };
+}
+
+fn canBeatBeamCost(
+    states: []const State,
+    lengths: []const u8,
+    position: usize,
+    cost: u64,
+) bool {
+    const len = lengths[position];
+    if (len < beam_width) return true;
+    const slots = states[position * beam_width ..][0..beam_width];
+    var worst = slots[0].cost;
+    for (slots[1..]) |state| {
+        worst = @max(worst, state.cost);
+    }
+    return cost < worst;
+}
+
+fn transitionLastDistances(
+    state: *const State,
+    match_distance: u16,
+    recent_symbol: ?u4,
+) [4]usize {
+    var last_distances = state.last_distances;
+    if (recent_symbol != 0) distance_history.push(&last_distances, match_distance);
+    return last_distances;
 }
 
 fn terminalCost(model: *const entropy_feedback.Model, state: State) ?u64 {
@@ -500,4 +551,16 @@ test "HQ command parser round trips and visits stateful matches" {
     const replayed = try lz77.replayAlloc(std.testing.allocator, plan.lz.tokens);
     defer std.testing.allocator.free(replayed);
     try std.testing.expectEqualSlices(u8, input, replayed);
+}
+
+test "beam cost bound rejects only candidates that cannot enter" {
+    var states: [beam_width]State = undefined;
+    states[0].cost = 100;
+    states[1].cost = 200;
+    var lengths = [_]u8{beam_width};
+    try std.testing.expect(canBeatBeamCost(&states, &lengths, 0, 199));
+    try std.testing.expect(!canBeatBeamCost(&states, &lengths, 0, 200));
+    try std.testing.expect(!canBeatBeamCost(&states, &lengths, 0, 300));
+    lengths[0] = 1;
+    try std.testing.expect(canBeatBeamCost(&states, &lengths, 0, 300));
 }

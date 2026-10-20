@@ -21,6 +21,13 @@ pub const distance_parameters = switch (builtin.object_format) {
     else => ".text",
 };
 
+pub const command_state = switch (builtin.object_format) {
+    .elf => ".vort_br_command_state",
+    .macho => "__TEXT,__vort_br_cmdst",
+    .coff => ".text$vort_br_command_state",
+    else => ".text",
+};
+
 pub const wide_literal_lookup9 = switch (builtin.object_format) {
     .elf => ".vort_br_wide_lookup9",
     .macho => "__TEXT,__vort_br_w9",
