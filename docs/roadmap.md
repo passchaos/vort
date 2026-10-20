@@ -84,9 +84,15 @@ major gaps before Vort can claim broad industry-best parity:
   optimal command plan. Complete-wire arbitration keeps the new pass
   size-monotonic; a locked 4 KiB ambiguous-match fixture improves 230 to 221
   bytes and independently decodes through Node/libbrotli. Full HQ parity still
-  remains open because command-pair/insert-run state, recent-distance-aware
-  path state, broader iterative refinement, and global exact-cost segmentation
-  are not yet modeled.
+  remains open, but inputs through 8 KiB now add a two-state command beam that
+  carries pending insert length and the complete four-entry recent-distance
+  history. Its independent locked fixture improves the already-refined wire
+  from 233 to 231 bytes and also decodes through Node/libbrotli. The explicit
+  8 KiB work limit avoids a measured 32 KiB regression from roughly 395.53 ms
+  to 697.16 ms; with the limit, baseline/current binaries retain the identical
+  6,427-byte source wire at 395.53/394.18 ms. Scaling the stateful search,
+  broader iterative refinement, and global exact-cost segmentation remain
+  open.
 - True byte-progressive Brotli decoding now covers stored data, metadata,
   insert-only Huffman literals, compressed RLE, copy commands, context maps,
   entropy block switching, static dictionaries, consecutive compressed

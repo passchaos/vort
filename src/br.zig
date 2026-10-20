@@ -10,6 +10,7 @@ const single_command_lookup = @import("br/single_command_lookup.zig");
 const static_dictionary = @import("br/static_dictionary.zig");
 const command_lut = @import("br/command_lut.zig");
 const br_length = @import("br/length.zig");
+const command_encoding = @import("br/encoder/command_encoding.zig");
 const pattern = @import("br/pattern.zig");
 const command_plan = @import("br/encoder/command_plan.zig");
 const fast_fragment = @import("br/encoder/fast_fragment.zig");
@@ -31,6 +32,7 @@ const code_length_rle = @import("br/encoder/code_length_rle.zig");
 const small_huffman = @import("br/encoder/small_huffman.zig");
 const encoder_stats = @import("br/encoder/stats.zig");
 const entropy_feedback = @import("br/encoder/entropy_feedback.zig");
+const hq_command_parser = @import("br/encoder/hq_command_parser.zig");
 const quality_schedule = @import("br/encoder/quality_schedule.zig");
 const stream_block_split = @import("br/encoder/stream_block_split.zig");
 const static_dictionary_matcher = @import("br/encoder/static_dictionary_matcher.zig");
@@ -76,6 +78,7 @@ const code_length_decoder_mod = @import("br/code_length_decoder.zig");
 const distanceWithDelta = distance_history.withDelta;
 const pushLastDistance = distance_history.push;
 const resolveShortDistanceInto = distance_history.resolveShortInto;
+const recentDistanceSymbol = distance_history.symbolForDistance;
 
 var test_external_literal_lookup_hits: usize = 0;
 var test_context_independent_literal_lookup_hits: usize = 0;
@@ -87,6 +90,10 @@ var test_q2_fast_writer_hits: usize = 0;
 var test_q2_static_tree_hits: usize = 0;
 var test_q2_dynamic_tree_hits: usize = 0;
 var test_q3_trivial_writer_hits: usize = 0;
+var test_hq_command_candidate_attempts: usize = 0;
+var test_hq_command_candidate_selections: usize = 0;
+var test_hq_command_pre_bytes: usize = 0;
+var test_hq_command_bytes: usize = 0;
 
 const large_window_text_section = code_sections.large_window;
 const adaptive_split_text_section = code_sections.adaptive_split;
@@ -2014,7 +2021,9 @@ test {
     _ = small_huffman;
     _ = encoder_stats;
     _ = entropy_feedback;
+    _ = hq_command_parser;
     _ = br_length;
+    _ = command_encoding;
     _ = static_dictionary_matcher;
     _ = serialized_dictionary_matcher;
     _ = literal_block_split;
@@ -4849,6 +4858,39 @@ fn encodeQualityOptimalCandidateAlloc(
         wire_options,
     );
     retainSmallerOwnedWire(allocator, &best, candidate);
+
+    if (budget.command_state_max_input_len != 0 and
+        input.len <= budget.command_state_max_input_len)
+    {
+        const hq = try hq_command_parser.planAlloc(allocator, input, .{
+            .window_len = search_window,
+            .max_chain = @min(budget.max_chain, 64),
+            .nice_len = budget.nice_len,
+            .max_candidates = @min(budget.max_candidates, 8),
+            .min_match = 4,
+            .max_match = lz77.max_match_len,
+        }, &model);
+        defer hq.deinit(allocator);
+        if (hq.lz.stats.matches != 0) {
+            const hq_commands = try command_plan.buildAlloc(allocator, input, hq.lz.tokens);
+            defer hq_commands.deinit(allocator);
+            var hq_stats: encoder_stats.PlannedEncodeStats = .{};
+            const hq_candidate = try encodeLazyCommandPlanAlloc(
+                allocator,
+                input,
+                hq_commands.commands,
+                &hq_stats,
+                wire_options,
+            );
+            if (builtin.is_test) {
+                test_hq_command_candidate_attempts += 1;
+                test_hq_command_pre_bytes = best.len;
+                test_hq_command_bytes = hq_candidate.len;
+                test_hq_command_candidate_selections += @intFromBool(hq_candidate.len < best.len);
+            }
+            retainSmallerOwnedWire(allocator, &best, hq_candidate);
+        }
+    }
     return best;
 }
 
@@ -8308,46 +8350,18 @@ fn alternatingLength(input: []const u8) ?usize {
     return input.len;
 }
 
-const CommandEncoding = struct { symbol: u16, command: command_lut.Entry };
-
-const explicit_command_symbol_index = blk: {
-    @setEvalBranchQuota(100_000);
-    var index: [24][24]u16 = @splat(@splat(std.math.maxInt(u16)));
-    for (command_lut.entries, 0..) |entry, symbol| {
-        if (entry.distance_code != -1) continue;
-        const insert_code = lengthCodeForValue(entry.insert_base, true) orelse continue;
-        const copy_code = lengthCodeForValue(entry.copy_base, false) orelse continue;
-        if (index[insert_code][copy_code] == std.math.maxInt(u16)) index[insert_code][copy_code] = @intCast(symbol);
-    }
-    break :blk index;
-};
-const last_distance_command_symbol_index = blk: {
-    @setEvalBranchQuota(100_000);
-    var index: [24][24]u16 = @splat(@splat(std.math.maxInt(u16)));
-    for (command_lut.entries, 0..) |entry, symbol| {
-        if (entry.distance_code != 0) continue;
-        const insert_code = lengthCodeForValue(entry.insert_base, true) orelse continue;
-        const copy_code = lengthCodeForValue(entry.copy_base, false) orelse continue;
-        if (index[insert_code][copy_code] == std.math.maxInt(u16)) index[insert_code][copy_code] = @intCast(symbol);
-    }
-    break :blk index;
-};
+const CommandEncoding = command_encoding.Encoding;
 
 fn commandEntryForLengths(insert_len: usize, copy_len: usize) ?CommandEncoding {
     return commandEntryForLengthsAndDistance(insert_len, copy_len, false);
 }
 
 fn commandEntryForLengthsAndDistance(insert_len: usize, copy_len: usize, use_last_distance: bool) ?CommandEncoding {
-    const insert_code = lengthCodeForValue(insert_len, true) orelse return null;
-    const copy_code = lengthCodeForValue(copy_len, false) orelse return null;
-    return commandEntryForCodes(insert_code, copy_code, use_last_distance);
+    return command_encoding.forLengths(insert_len, copy_len, use_last_distance);
 }
 
 fn commandEntryForCodes(insert_code: u5, copy_code: u5, use_last_distance: bool) ?CommandEncoding {
-    const index = if (use_last_distance) &last_distance_command_symbol_index else &explicit_command_symbol_index;
-    const symbol = index[insert_code][copy_code];
-    if (symbol == std.math.maxInt(u16)) return null;
-    return .{ .symbol = symbol, .command = command_lut.entries[symbol] };
+    return command_encoding.forCodes(insert_code, copy_code, use_last_distance);
 }
 
 const SameLastDistancePlan = struct {
@@ -9459,21 +9473,6 @@ fn recentDistanceStats(commands: []const command_plan.Command) RecentDistanceSta
         if (symbol != 0) pushLastDistance(&last_distances, command.distance);
     }
     return stats;
-}
-
-fn recentDistanceSymbol(distance: usize, last_distances: *const [4]usize) ?u4 {
-    const deltas = [_]i8{ -1, 1, -2, 2, -3, 3 };
-    if (distance == last_distances[3]) return 0;
-    if (distance == last_distances[2]) return 1;
-    if (distance == last_distances[1]) return 2;
-    if (distance == last_distances[0]) return 3;
-    for (deltas, 4..) |delta, symbol| {
-        if (distanceWithDelta(last_distances[3], delta) catch null == distance) return @intCast(symbol);
-    }
-    for (deltas, 10..) |delta, symbol| {
-        if (distanceWithDelta(last_distances[2], delta) catch null == distance) return @intCast(symbol);
-    }
-    return null;
 }
 
 fn encodeCommandPlanWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error![]u8 {
@@ -23865,6 +23864,61 @@ test "br q10 entropy feedback releases every candidate on allocation failure" {
     };
     const payload = "entropy feedback allocation cleanup abcabcabcabc\n" ** 4;
     try std.testing.checkAllAllocationFailures(std.testing.allocator, Test.run, .{payload});
+}
+
+test "br q10 command-state candidate improves complete wire" {
+    var payload: [4096]u8 = undefined;
+    const schedule = quality_schedule.get(.q10, .generic);
+    const wire_options = qualityWireOptions(schedule, .{ .quality = 10 }, default_window_bits);
+    var state: u32 = 0x9e37_79b9;
+    var position: usize = 0;
+    while (position < payload.len) {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        const distances = [_]usize{ 4, 7, 11, 16, 31, 64, 127, 257 };
+        const selected_distance = distances[(state >> 16) % distances.len];
+        if (position >= selected_distance and state & 3 != 0) {
+            const copy_len = @min(payload.len - position, 4 + ((state >> 8) % 61));
+            for (0..copy_len) |i| payload[position + i] = payload[position + i - selected_distance];
+            position += copy_len;
+        } else {
+            payload[position] = @truncate((state >> 24) & 31);
+            position += 1;
+        }
+    }
+    test_hq_command_candidate_attempts = 0;
+    test_hq_command_candidate_selections = 0;
+    const encoded = (try encodeQualityOptimalCandidateAlloc(
+        std.testing.allocator,
+        &payload,
+        schedule.optimal,
+        wire_options,
+    )).?;
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expectEqual(@as(usize, 1), test_hq_command_candidate_attempts);
+    try std.testing.expectEqual(@as(usize, 1), test_hq_command_candidate_selections);
+    try std.testing.expectEqual(@as(usize, 233), test_hq_command_pre_bytes);
+    try std.testing.expectEqual(@as(usize, 231), test_hq_command_bytes);
+    try std.testing.expectEqual(@as(usize, 231), encoded.len);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
+test "br q10 command-state work limit preserves larger entropy feedback" {
+    const payload = ("abcd" ** 2048) ++ "x";
+    const schedule = quality_schedule.get(.q10, .generic);
+    test_hq_command_candidate_attempts = 0;
+    const encoded = (try encodeQualityOptimalCandidateAlloc(
+        std.testing.allocator,
+        payload,
+        schedule.optimal,
+        qualityWireOptions(schedule, .{ .quality = 10 }, default_window_bits),
+    )).?;
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expectEqual(@as(usize, 0), test_hq_command_candidate_attempts);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
 test "br quality optimal candidate honors the advertised small window" {

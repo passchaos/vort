@@ -2322,9 +2322,14 @@ second shortest-path proposal whose Q8 literal, copy-length, and
 distance-prefix costs are learned from the first optimal command plan. Complete
 wire arbitration makes the pass size-monotonic; a locked 4 KiB fixture improves
 230 to 221 bytes and is independently decoded by Node/libbrotli. This is still
-not libbrotli HQ parity: stateful command-pair/recent-distance modeling,
-additional HQ refinement, contextual dictionary encoding, and global
-exact-cost segmentation remain future work.
+followed, for inputs through 8 KiB, by a two-state command beam carrying pending
+insert length and the complete four-entry recent-distance history. Its locked
+fixture improves the already-refined candidate from 233 to 231 bytes and is
+also independently decoded by Node/libbrotli. Complete-wire arbitration keeps
+both additions monotonic. This is still not libbrotli HQ parity: scaling the
+stateful search through the complete q10/q11 ceilings, additional refinement,
+contextual dictionary encoding, and global exact-cost segmentation remain
+future work.
 Inputs beyond the 16 MiB
 format limit keep one Brotli stream and apply the selected policy independently
 to bounded 16/32/64 KiB blocks. q2...q11 retain window-bounded LZ77 history and

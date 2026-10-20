@@ -523,7 +523,10 @@ pub const HashIndex = struct {
         return .{ .length = @intCast(best.length), .distance = @intCast(best.distance) };
     }
 
-    fn matchesAt(self: *const HashIndex, input: []const u8, pos: usize, options: GreedyOptions, out: []Token.Match) Error!usize {
+    /// Enumerate bounded same-hash match candidates in nearest-first chain
+    /// order. Format-specific optimal parsers may attach their own stateful
+    /// entropy costs while reusing the validated shared match index.
+    pub fn matchesAt(self: *const HashIndex, input: []const u8, pos: usize, options: GreedyOptions, out: []Token.Match) Error!usize {
         if (input.len != self.input_len or pos > input.len) return error.InvalidBlockPlan;
         if (pos + minMatch(options) > input.len or out.len == 0) return 0;
         const maximum = @min(maxMatch(options), input.len - pos);
@@ -541,6 +544,42 @@ pub const HashIndex = struct {
             const length = matchLength(input, candidate, pos, maximum);
             if (length >= minMatch(options)) {
                 out[count] = .{ .length = @intCast(length), .distance = @intCast(distance) };
+                count += 1;
+            }
+            chain_i = self.prev.items[candidate];
+        }
+        return count;
+    }
+
+    /// Enumerate prefix-validated candidate distances without extending each
+    /// match. Stateful format parsers can cheaply inspect a deeper hash chain,
+    /// then spend full match-length work only on candidates favored by their
+    /// own entropy or recent-distance model.
+    pub fn candidateDistancesAt(
+        self: *const HashIndex,
+        input: []const u8,
+        pos: usize,
+        options: GreedyOptions,
+        out: []u16,
+    ) Error!usize {
+        if (input.len != self.input_len or pos > input.len) return error.InvalidBlockPlan;
+        if (options.window_len > max_window_len) return error.InvalidBlockPlan;
+        const minimum = minMatch(options);
+        if (pos + minimum > input.len or out.len == 0) return 0;
+        var chain_i = self.prev.items[pos];
+        var checked: usize = 0;
+        var count: usize = 0;
+        while (chain_i >= 0 and checked < options.max_chain and count < out.len) : (checked += 1) {
+            const candidate: usize = @intCast(chain_i);
+            const distance = pos - candidate;
+            if (distance == 0 or distance > options.window_len) break;
+            const prefix_matches = if (minimum >= 4)
+                std.mem.readInt(u32, input[candidate..][0..4], .little) ==
+                    std.mem.readInt(u32, input[pos..][0..4], .little)
+            else
+                std.mem.eql(u8, input[candidate..][0..minimum], input[pos..][0..minimum]);
+            if (prefix_matches) {
+                out[count] = @intCast(distance);
                 count += 1;
             }
             chain_i = self.prev.items[candidate];
@@ -3690,6 +3729,29 @@ test "reusable hash index exposes deterministic position matches" {
     try std.testing.expectEqual(@as(u16, 17), match.length);
     try std.testing.expectEqual(@as(u16, @intCast(second - "prefix-".len)), match.distance);
     try std.testing.expectError(error.InvalidBlockPlan, index.bestMatch(input[0 .. input.len - 1], second, .{}));
+}
+
+test "hash index candidate distances preserve validated match order" {
+    const input = "abcd-abcX-abcd-abcdY-abcd-abcd";
+    var index: HashIndex = .{};
+    defer index.deinit(std.testing.allocator);
+    try index.build(std.testing.allocator, input);
+    const position = std.mem.lastIndexOf(u8, input, "abcd") orelse
+        return error.InvalidMatch;
+    const options = GreedyOptions{
+        .window_len = input.len,
+        .max_chain = 64,
+        .nice_len = 258,
+        .max_candidates = 8,
+        .min_match = 4,
+    };
+    var matches: [8]Token.Match = undefined;
+    var distances: [8]u16 = undefined;
+    const match_count = try index.matchesAt(input, position, options, &matches);
+    const distance_count = try index.candidateDistancesAt(input, position, options, &distances);
+    try std.testing.expectEqual(match_count, distance_count);
+    for (matches[0..match_count], distances[0..distance_count]) |match, distance_value|
+        try std.testing.expectEqual(match.distance, distance_value);
 }
 
 test "optimal LZ77 considers multiple match distances" {

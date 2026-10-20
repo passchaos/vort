@@ -1,13 +1,16 @@
 const std = @import("std");
 const lz77 = @import("../../lz77.zig");
 const command_plan = @import("command_plan.zig");
+const command_encoding = @import("command_encoding.zig");
 const distance = @import("distance.zig");
+const distance_history = @import("../decoder/distance_history.zig");
 const histogram_model = @import("histogram_model.zig");
 const length = @import("../length.zig");
 
 const LiteralHistogram = histogram_model.Histogram(256);
 const CopyCodeHistogram = histogram_model.Histogram(24);
 const DistanceHistogram = histogram_model.Histogram(64);
+const CommandHistogram = histogram_model.Histogram(704);
 const q8 = histogram_model.cost_scale;
 
 /// Allocator-owned entropy costs learned from one complete Brotli command
@@ -19,6 +22,8 @@ pub const Model = struct {
     literal: [256]u16,
     length: [lz77.max_match_len + 1]u16,
     distance: []u16,
+    command: [704]u16,
+    distance_symbol: [64]u16,
 
     pub fn deinit(self: *Model, allocator: std.mem.Allocator) void {
         allocator.free(self.distance);
@@ -45,7 +50,10 @@ pub fn build(
 
     var literals: LiteralHistogram = .{};
     var copy_codes: CopyCodeHistogram = .{};
-    var distances: DistanceHistogram = .{};
+    var regular_distances: DistanceHistogram = .{};
+    var wire_distances: DistanceHistogram = .{};
+    var command_symbols: CommandHistogram = .{};
+    var last_distances = [_]usize{ 16, 15, 11, 4 };
     var cursor: usize = 0;
     var match_count: usize = 0;
     for (commands) |command| {
@@ -54,7 +62,12 @@ pub fn build(
         for (input[cursor..][0..command.insert_len]) |byte|
             literals.add(byte) catch return error.InvalidBlockPlan;
         cursor += command.insert_len;
-        if (!command.has_copy) continue;
+        if (!command.has_copy) {
+            const encoding = command_encoding.forLengths(command.insert_len, 2, false) orelse
+                return error.InvalidBlockPlan;
+            command_symbols.add(encoding.symbol) catch return error.InvalidBlockPlan;
+            continue;
+        }
         if (!command.isLz77() or command.copy_len < lz77.min_match_len or
             command.distance == 0 or
             command.distance > @min(window_len, cursor) or command.copy_len > input.len - cursor)
@@ -68,7 +81,23 @@ pub fn build(
             distance.Parameters.init(0, 0),
         ) orelse return error.InvalidBlockPlan;
         copy_codes.add(copy_code) catch return error.InvalidBlockPlan;
-        distances.add(encoded_distance.symbol) catch return error.InvalidBlockPlan;
+        regular_distances.add(encoded_distance.symbol) catch return error.InvalidBlockPlan;
+        const recent_symbol = distance_history.symbolForDistance(command.distance, &last_distances);
+        const command_encoding_value = command_encoding.forLengths(
+            command.insert_len,
+            command.copy_len,
+            recent_symbol == 0,
+        ) orelse command_encoding.forLengths(
+            command.insert_len,
+            command.copy_len,
+            false,
+        ) orelse return error.InvalidBlockPlan;
+        command_symbols.add(command_encoding_value.symbol) catch return error.InvalidBlockPlan;
+        if (command_encoding_value.command.distance_code == -1) {
+            const symbol: usize = recent_symbol orelse encoded_distance.symbol;
+            wire_distances.add(symbol) catch return error.InvalidBlockPlan;
+        }
+        if (recent_symbol != 0) distance_history.push(&last_distances, command.distance);
         cursor += command.copy_len;
         match_count += 1;
     }
@@ -76,15 +105,23 @@ pub fn build(
 
     const literal_model = literals.costModel();
     const copy_model = copy_codes.costModel();
-    const distance_model = distances.costModel();
+    const distance_model = regular_distances.costModel();
+    const command_model = command_symbols.costModel();
+    const wire_distance_model = wire_distances.costModel();
     var result = Model{
         .literal = undefined,
         .length = @splat(q8),
         .distance = try allocator.alloc(u16, window_len + 1),
+        .command = undefined,
+        .distance_symbol = undefined,
     };
     errdefer allocator.free(result.distance);
 
     for (&result.literal, literal_model.symbol_costs_q8) |*cost, learned|
+        cost.* = @max(q8, learned);
+    for (&result.command, command_model.symbol_costs_q8) |*cost, learned|
+        cost.* = @max(q8, learned);
+    for (&result.distance_symbol, wire_distance_model.symbol_costs_q8) |*cost, learned|
         cost.* = @max(q8, learned);
     for (lz77.min_match_len..lz77.max_match_len + 1) |copy_len| {
         const code = length.codeForValue(copy_len, false) orelse unreachable;

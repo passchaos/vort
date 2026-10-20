@@ -74,6 +74,7 @@ pub const LazyBudget = struct {
 pub const OptimalBudget = struct {
     enabled: bool,
     entropy_feedback: bool = false,
+    command_state_max_input_len: u32 = 0,
     max_chain: u16,
     nice_len: u16,
     max_candidates: u16,
@@ -155,8 +156,15 @@ pub const Schedule = struct {
             {
                 return error.InvalidSchedule;
             }
+            if ((self.optimal.command_state_max_input_len != 0 and
+                (!self.optimal.entropy_feedback or
+                    self.optimal.command_state_max_input_len > self.optimal.max_input_len)))
+            {
+                return error.InvalidSchedule;
+            }
         } else if (self.optimal.entropy_feedback or self.optimal.max_chain != 0 or self.optimal.nice_len != 0 or
-            self.optimal.max_candidates != 0 or self.optimal.max_input_len != 0)
+            self.optimal.max_candidates != 0 or self.optimal.max_input_len != 0 or
+            self.optimal.command_state_max_input_len != 0)
         {
             return error.InvalidSchedule;
         }
@@ -234,12 +242,12 @@ const base_rows = [12]BaseRow{
     },
     .{
         .lazy = .{ .max_chain = 384, .nice_len = 258, .min_gain = 1 },
-        .optimal = .{ .enabled = true, .entropy_feedback = true, .max_chain = 256, .nice_len = 258, .max_candidates = 128, .max_input_len = 64 * 1024 },
+        .optimal = .{ .enabled = true, .entropy_feedback = true, .command_state_max_input_len = 8 * 1024, .max_chain = 256, .nice_len = 258, .max_candidates = 128, .max_input_len = 64 * 1024 },
         .dictionary_probes = 3072,
     },
     .{
         .lazy = .{ .max_chain = 512, .nice_len = 258, .min_gain = 1 },
-        .optimal = .{ .enabled = true, .entropy_feedback = true, .max_chain = 512, .nice_len = 258, .max_candidates = 256, .max_input_len = 32 * 1024 },
+        .optimal = .{ .enabled = true, .entropy_feedback = true, .command_state_max_input_len = 8 * 1024, .max_chain = 512, .nice_len = 258, .max_candidates = 256, .max_input_len = 32 * 1024 },
         .dictionary_probes = 4096,
     },
 };
@@ -417,6 +425,10 @@ test "quality schedules increase budgets and never retract enabled work" {
             try std.testing.expect(current.window.max_bits >= previous.window.max_bits);
             try std.testing.expect(flagDoesNotRegress(previous.optimal.enabled, current.optimal.enabled));
             try std.testing.expect(flagDoesNotRegress(previous.optimal.entropy_feedback, current.optimal.entropy_feedback));
+            try std.testing.expect(flagDoesNotRegress(
+                previous.optimal.command_state_max_input_len != 0,
+                current.optimal.command_state_max_input_len != 0,
+            ));
             try std.testing.expect(flagDoesNotRegress(previous.context.literal_contexts, current.context.literal_contexts));
             try std.testing.expect(flagDoesNotRegress(previous.context.cluster_contexts, current.context.cluster_contexts));
             try std.testing.expect(flagDoesNotRegress(previous.context.joint_block_contexts, current.context.joint_block_contexts));
@@ -443,10 +455,12 @@ test "quality ten and eleven use distinct bounded optimal searches" {
         try std.testing.expectEqual(@as(u16, 128), q10.optimal.max_candidates);
         try std.testing.expectEqual(@as(u32, 64 * 1024), q10.optimal.max_input_len);
         try std.testing.expect(q10.optimal.entropy_feedback);
+        try std.testing.expectEqual(@as(u32, 8 * 1024), q10.optimal.command_state_max_input_len);
         try std.testing.expectEqual(@as(u16, 512), q11.optimal.max_chain);
         try std.testing.expectEqual(@as(u16, 256), q11.optimal.max_candidates);
         try std.testing.expectEqual(@as(u32, 32 * 1024), q11.optimal.max_input_len);
         try std.testing.expect(q11.optimal.entropy_feedback);
+        try std.testing.expectEqual(@as(u32, 8 * 1024), q11.optimal.command_state_max_input_len);
     }
 }
 

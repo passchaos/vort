@@ -88,8 +88,8 @@ split.
 | 7 | ratio | Lazy chain 96 and nice length 160; adds clustered contexts, adaptive distance splitting, and extended static-dictionary probing through 4 KiB in every mode. |
 | 8 | ratio | Lazy chain 128 and nice length 192; expands the optimal-input ceiling to 64 KiB with a 128-chain/64-candidate budget and enables adaptive literal splitting. |
 | 9 | ratio | Lazy chain 256 and nice length 258; uses a 192-chain/128-candidate optimal search through 64 KiB and enables adaptive command splitting in addition to the q8 candidates. |
-| 10 | ratio | Lazy chain 384 plus a 256-chain/128-candidate optimal search through 64 KiB and the bounded fixed-record candidate; joint literal block/context clustering is eligible. Its first optimal command plan trains a deterministic Q8 literal/copy-length/distance-prefix model, then a second shortest-path proposal competes by complete wire size. |
-| 11 | ratio | Lazy chain 512, plus the same entropy-feedback pass over a deeper 512-chain/256-candidate search limited to 32 KiB. It recursively retains the complete q10 winner before considering q11 candidates, guaranteeing q11 size is no larger than q10 for identical options. This remains bounded Vort optimal search, not libbrotli-style HQ Zopfli parity. |
+| 10 | ratio | Lazy chain 384 plus a 256-chain/128-candidate optimal search through 64 KiB and the bounded fixed-record candidate; joint literal block/context clustering is eligible. Its first optimal command plan trains a deterministic Q8 literal/copy-length/distance-prefix model, then a second shortest-path proposal competes by complete wire size. Inputs through 8 KiB add a two-state command beam carrying pending insert length and the four recent distances. |
+| 11 | ratio | Lazy chain 512, plus the same entropy-feedback and bounded command-state proposals over a deeper 512-chain/256-candidate search limited to 32 KiB. It recursively retains the complete q10 winner before considering q11 candidates, guaranteeing q11 size is no larger than q10 for identical options. This remains bounded Vort optimal search, not libbrotli-style HQ Zopfli parity. |
 
 The bounded optimal candidate is considered only for inputs from 4 KiB through
 32 KiB at q6/q7, through 64 KiB at q8...q10, and through 32 KiB for q11's
@@ -109,6 +109,22 @@ fixture reduces the optimal candidate from 230 to 221 bytes; both Vort and
 Node/libbrotli decode the 221-byte public q10 stream byte-exactly. This proves a
 real iterative model-feedback increment while deliberately not claiming the
 stateful command-pair/recent-distance model used by libbrotli HQ.
+
+q10/q11 inputs through 8 KiB now add that stateful layer. A two-state beam
+tracks the pending insert run and all four RFC recent distances at every byte.
+Transitions pay the learned 704-symbol command cost, exact insert/copy extra
+bits, the learned 64-symbol distance cost, and regular-distance extra bits.
+The match finder walks at most 64 hash predecessors, fully extends the first
+eight general candidates, probes all 16 recent-distance forms directly, and
+also retains deeper candidates whose learned regular-distance prefix is within
+one bit of the cheapest prefix. A second locked 4 KiB ambiguous-match fixture
+improves the already-refined candidate from 233 to 231 bytes; Node/libbrotli
+independently decodes the public 231-byte q10 stream. The 8 KiB work limit is
+evidence-driven: running the first unbounded command beam on a shared 32 KiB
+source prefix regressed q10 from about 395.53 ms to about 697.16 ms. With the
+limit, independent baseline/current binaries on CPU 8 measured 395.53 ms versus
+394.18 ms (`1.0034x`) with identical 6,427-byte output. Wider command-state
+search therefore remains future optimization rather than an unbounded default.
 
 ## Mode effects
 
@@ -341,9 +357,11 @@ The following are explicit gaps, not implied by the presence of the preset
 names:
 
 - full libbrotli-class q10/q11 Zopfli/HQ refinement. Vort now performs one
-  deterministic command-derived entropy-feedback pass, but its proposal model
-  remains separable: command pairing, insert-run state, recent-distance state,
-  iterative match-set reuse, and libbrotli's complete HQ cost model remain open;
+  deterministic command-derived entropy-feedback pass and a bounded 8 KiB
+  command/recent-distance beam. Scaling that stateful search to the complete
+  q10/q11 input ceilings without throughput regression, reusing match sets
+  across iterations, wider beam arbitration, and libbrotli's complete HQ cost
+  model remain open;
 - FastCover-style acceleration and broad serialized-dictionary corpus
   calibration. Deterministic heavy-hitter/COVER fixed-word selection plus an
   actual-wire `(d, hash_log)` grid, bounded multi-cutoff two-group and arbitrary
