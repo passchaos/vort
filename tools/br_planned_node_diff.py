@@ -98,6 +98,27 @@ def main() -> int:
     if len(encoded) != 38_753:
         raise SystemExit(f"q2-grid-segmentation: 24-KiB-cut wire changed: {len(encoded)} bytes")
     print(f"brotli planned q2-grid-segmentation node diff: encoded={len(encoded)} decoded={len(actual)}")
+    input_len = 64 * 1024
+    first_boundary = 16 * 1024
+    second_boundary = 40 * 1024
+    expected = bytearray(input_len)
+    state = 0x70F01E12
+    for i in range(input_len):
+        state = (state * 1664525 + 1013904223) & 0xFFFFFFFF
+        nibble = (state >> 28) & 15
+        if i < first_boundary:
+            expected[i] = nibble
+        elif i < second_boundary:
+            expected[i] = 96 + nibble
+        else:
+            expected[i] = 240 + nibble
+    encoded = subprocess.check_output([sys.argv[1], "q2-frontier-segmentation"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("q2-frontier-segmentation: node output mismatch")
+    if len(encoded) != 38_513:
+        raise SystemExit(f"q2-frontier-segmentation: three-region wire changed: {len(encoded)} bytes")
+    print(f"brotli planned q2-frontier-segmentation node diff: encoded={len(encoded)} decoded={len(actual)}")
     expected = bytearray(4096)
     state = (2 * 0x9E3779B9) & 0xFFFFFFFF
     position = 0

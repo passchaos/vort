@@ -69,11 +69,12 @@ inside their deepest optimal-search ceiling.
 Legacy balanced/ratio plus q2...q5 and q8...q10 inspect eight 8 KiB cells in
 each automatic 64 KiB lookahead. A deterministic allocation-free Q8
 byte-histogram DP selects one through four segments, charging a conservative
-2,048-bit allowance per additional meta-block. Ties retain fewer segments and
-equal-cost predecessor ties retain the earlier boundary, so reconstruction is
-target-independent. The writer always compares the exact single-block and
-midpoint wires; when the DP chooses a distinct 8 KiB-grid plan it also encodes
-that plan and retains only a strictly smaller bit count. Homogeneous data
+2,048-bit allowance per additional meta-block. It retains each new proxy-cost
+minimum reached at 2/3/4 segments, producing at most three grid plans. Ties
+retain fewer segments and equal-cost predecessor ties retain the earlier
+boundary, so reconstruction is target-independent. The writer compares every
+frontier plan with the exact single-block and midpoint wires and retains only a
+strictly smaller bit count. Homogeneous data
 therefore keeps the larger block, while profitable non-quarter boundaries
 receive independently modeled blocks without losing cross-block LZ77 history
 or the recent-distance ring.
@@ -454,7 +455,7 @@ output backpressure, and static addressing after a saturated compound region.
 The same run retains four upstream decode fixtures and three descriptor-error
 cases. System libbrotli 1.0.9 lacks the optional shared-dictionary symbols, so
 the tool explicitly reports the complete runtime matrix as skipped there.
-The current Debug `zig build test-br` passes all 960 tests, including q0...q11,
+The current Debug `zig build test-br` passes all 962 tests, including q0...q11,
 legacy level, retained-index, empty-dictionary wire, static-address shift,
 incremental rollback, cross-API quality wire equality, and 16 MiB+ q0/q2
 coverage. The upstream differential passes in both build modes with 7,056
@@ -473,6 +474,9 @@ chunked, caller-buffer, and arbitrarily fragmented incremental tests require
 the same wire and a conservative bound. A second q2 fixture locks the DP's
 24 KiB non-quarter boundary at `38,753 -> 65,536` bytes with the same public
 surface and independent-decode coverage.
+A three-distribution fixture exposes both two- and three-segment proxy-frontier
+plans, selects three exact data meta-blocks, and locks the public/Node wire at
+`38,513 -> 65,536` bytes.
 
 The planned encode benchmark accepts independent Vort selectors:
 

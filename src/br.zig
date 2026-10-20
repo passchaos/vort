@@ -1599,8 +1599,10 @@ const IncrementalPlannedEncoderCodec = struct {
         adaptive_single_wire: std.ArrayList(u8) = .empty,
         adaptive_split_wire: std.ArrayList(u8) = .empty,
         adaptive_grid_wire: std.ArrayList(u8) = .empty,
+        adaptive_grid_candidate_wire: std.ArrayList(u8) = .empty,
         history_snapshot: std.ArrayList(u8) = .empty,
         adaptive_split_history: std.ArrayList(u8) = .empty,
+        adaptive_grid_history: std.ArrayList(u8) = .empty,
         greedy_scratch: lz77.TinyGreedyScratch = .{},
         dictionary_greedy_scratch: lz77.DictionaryGreedyScratch = .{},
         fragment_scratch: fast_fragment.Scratch = .{},
@@ -1627,8 +1629,10 @@ const IncrementalPlannedEncoderCodec = struct {
         state.adaptive_single_wire.deinit(allocator);
         state.adaptive_split_wire.deinit(allocator);
         state.adaptive_grid_wire.deinit(allocator);
+        state.adaptive_grid_candidate_wire.deinit(allocator);
         state.history_snapshot.deinit(allocator);
         state.adaptive_split_history.deinit(allocator);
+        state.adaptive_grid_history.deinit(allocator);
     }
 
     pub fn resetState(state: *State) void {
@@ -1647,8 +1651,10 @@ const IncrementalPlannedEncoderCodec = struct {
         state.adaptive_single_wire.clearRetainingCapacity();
         state.adaptive_split_wire.clearRetainingCapacity();
         state.adaptive_grid_wire.clearRetainingCapacity();
+        state.adaptive_grid_candidate_wire.clearRetainingCapacity();
         state.history_snapshot.clearRetainingCapacity();
         state.adaptive_split_history.clearRetainingCapacity();
+        state.adaptive_grid_history.clearRetainingCapacity();
         state.compound_dictionary_size = 0;
         state.shared_dictionary = .{};
         state.context_previous = .{ 0, 0 };
@@ -1667,8 +1673,10 @@ const IncrementalPlannedEncoderCodec = struct {
             state.adaptive_single_wire.capacity +
             state.adaptive_split_wire.capacity +
             state.adaptive_grid_wire.capacity +
+            state.adaptive_grid_candidate_wire.capacity +
             state.history_snapshot.capacity +
             state.adaptive_split_history.capacity +
+            state.adaptive_grid_history.capacity +
             state.greedy_scratch.retainedCapacity() +
             state.dictionary_greedy_scratch.retainedCapacity() +
             state.fragment_scratch.retainedCapacity() +
@@ -8029,45 +8037,70 @@ fn writeAdaptivePlannedStreamBlock(
         state.adaptive_split_wire.items.len,
         split_bit_index,
     ) - start_bit_index;
-    const grid_boundaries = split_plan.gridBoundaries();
+    const grid_plans = split_plan.gridPlans();
     var grid_bits: ?usize = null;
-    if (grid_boundaries.len != 0) {
+    var grid_bit_index: u3 = undefined;
+    var grid_wire_state: PlannedWireState = undefined;
+    var grid_context_previous: [2]u8 = undefined;
+    var grid_q0_entropy_state: fast_fragment_one_pass.State = undefined;
+    if (grid_plans.len != 0) {
         state.adaptive_split_history.clearRetainingCapacity();
         try state.adaptive_split_history.appendSlice(allocator, state.history.items);
-        try prepareAdaptiveBranch(
-            allocator,
-            &state.adaptive_grid_wire,
-            start_byte,
-            start_bit_index,
-        );
-        try restorePlannedHistory(allocator, state);
-        state.bit_index = start_bit_index;
-        state.wire_state = start_wire_state;
-        state.context_previous = start_context_previous;
-        state.q0_entropy_state = start_q0_entropy_state;
-        var segment_start: usize = 0;
-        for (grid_boundaries) |boundary_u16| {
-            const boundary: usize = boundary_u16;
+        state.adaptive_grid_wire.clearRetainingCapacity();
+        state.adaptive_grid_history.clearRetainingCapacity();
+        for (grid_plans) |*grid_plan| {
+            try prepareAdaptiveBranch(
+                allocator,
+                &state.adaptive_grid_candidate_wire,
+                start_byte,
+                start_bit_index,
+            );
+            try restorePlannedHistory(allocator, state);
+            state.bit_index = start_bit_index;
+            state.wire_state = start_wire_state;
+            state.context_previous = start_context_previous;
+            state.q0_entropy_state = start_q0_entropy_state;
+            var segment_start: usize = 0;
+            for (grid_plan.slice()) |boundary_u16| {
+                const boundary: usize = boundary_u16;
+                try writePlannedStreamMetaBlock(
+                    allocator,
+                    &state.adaptive_grid_candidate_wire,
+                    state,
+                    block[segment_start..boundary],
+                    true,
+                );
+                segment_start = boundary;
+            }
             try writePlannedStreamMetaBlock(
                 allocator,
-                &state.adaptive_grid_wire,
+                &state.adaptive_grid_candidate_wire,
                 state,
-                block[segment_start..boundary],
+                block[segment_start..],
                 true,
             );
-            segment_start = boundary;
+            const candidate_bits = IncrementalPlannedEncoderCodec.startBitPosition(
+                state.adaptive_grid_candidate_wire.items.len,
+                state.bit_index,
+            ) - start_bit_index;
+            if (grid_bits == null or candidate_bits < grid_bits.?) {
+                grid_bits = candidate_bits;
+                state.adaptive_grid_wire.clearRetainingCapacity();
+                try state.adaptive_grid_wire.appendSlice(
+                    allocator,
+                    state.adaptive_grid_candidate_wire.items,
+                );
+                state.adaptive_grid_history.clearRetainingCapacity();
+                try state.adaptive_grid_history.appendSlice(
+                    allocator,
+                    state.history.items,
+                );
+                grid_bit_index = state.bit_index;
+                grid_wire_state = state.wire_state;
+                grid_context_previous = state.context_previous;
+                grid_q0_entropy_state = state.q0_entropy_state;
+            }
         }
-        try writePlannedStreamMetaBlock(
-            allocator,
-            &state.adaptive_grid_wire,
-            state,
-            block[segment_start..],
-            true,
-        );
-        grid_bits = IncrementalPlannedEncoderCodec.startBitPosition(
-            state.adaptive_grid_wire.items.len,
-            state.bit_index,
-        ) - start_bit_index;
     }
 
     var choice: Choice = .single;
@@ -8104,7 +8137,7 @@ fn writeAdaptivePlannedStreamBlock(
             }
         },
         .halves => {
-            if (grid_boundaries.len != 0) {
+            if (grid_plans.len != 0) {
                 state.history.clearRetainingCapacity();
                 try state.history.appendSlice(
                     allocator,
@@ -8116,7 +8149,17 @@ fn writeAdaptivePlannedStreamBlock(
             state.context_previous = split_context_previous;
             state.q0_entropy_state = split_q0_entropy_state;
         },
-        .grid => {},
+        .grid => {
+            state.history.clearRetainingCapacity();
+            try state.history.appendSlice(
+                allocator,
+                state.adaptive_grid_history.items,
+            );
+            state.bit_index = grid_bit_index;
+            state.wire_state = grid_wire_state;
+            state.context_previous = grid_context_previous;
+            state.q0_entropy_state = grid_q0_entropy_state;
+        },
     }
     try commitPlannedMetaBlockCandidate(
         allocator,

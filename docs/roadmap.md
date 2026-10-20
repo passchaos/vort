@@ -20125,10 +20125,11 @@ reuse, so production keeps the simpler independently owned plans.
   quality-sized Brotli block policy. Legacy balanced/ratio plus q2...q5 and
   q8...q10 inspect eight fixed 8 KiB histograms for every automatic 64 KiB
   lookahead. A deterministic Q8 entropy DP chooses one through four segments,
-  charging a conservative 2,048-bit allowance per additional meta-block. Ties
-  retain fewer segments and earlier predecessor boundaries. The shared writer
-  always compares exact single-block and midpoint wires, adds the DP grid plan
-  when distinct, and retains only a strictly smaller bit count. Homogeneous
+  charging a conservative 2,048-bit allowance per additional meta-block. Each
+  new proxy minimum reached at 2/3/4 segments is retained, for at most three
+  grid plans. Ties retain fewer segments and earlier predecessor boundaries.
+  The shared writer compares every frontier plan with exact single-block and
+  midpoint wires and retains only a strictly smaller bit count. Homogeneous
   data stays at 64 KiB. The screening decision allocates no memory; retained
   branch/history scratch keeps LZ77 history plus recent distances continuous
   across every selected cut. `adaptive_blocks = false` disables the
@@ -20136,11 +20137,12 @@ reuse, so production keeps the simpler independently owned plans.
   `block_len` is fixed by default. Chunked and incremental encoders call the
   same codec-level splitter, producing byte-identical wires, while encoded
   bounds conservatively reserve an all-8-KiB partition. Unit tests cover
-  homogeneous, midpoint, alternating-quarter, and 24 KiB non-quarter plans;
-  deterministic boundary reconstruction; q2 automatic vs disabled behavior;
-  balanced default vs forced behavior; invalid non-64-KiB forcing; round
-  trips; cross-API equality; caller-buffer bounds; and warmed zero-allocation
-  scratch reuse. Current Debug `test-br` passes 960/960; the
+  homogeneous, midpoint, alternating-quarter, 24 KiB non-quarter, and
+  three-distribution proxy-frontier plans; deterministic boundary
+  reconstruction; q2 automatic vs disabled behavior; balanced default vs
+  forced behavior; invalid non-64-KiB forcing; round trips; cross-API equality;
+  caller-buffer bounds; and warmed zero-allocation scratch reuse. Current Debug
+  `test-br` passes 962/962; the
   upstream differential independently decodes both segmentation policies in
   both modes (`planned_stream_segmentation_cases=2`). The required real-corpus
   gate passes 16/16 one-shot and 16/16 progressive cases, the full repository
@@ -20148,7 +20150,8 @@ reuse, so production keeps the simpler independently owned plans.
   boundary search and global exact compressed-cost segmentation remain open.
   The required Node/libbrotli matrix additionally decodes a four-data-block q2
   alternating-quarter wire at `39,169 -> 65,536` bytes and a 24 KiB-cut wire at
-  `38,753 -> 65,536` bytes.
+  `38,753 -> 65,536` bytes. Its three-distribution frontier fixture selects
+  three data blocks at `38,513 -> 65,536` bytes.
 
 - Added Zig-native `partialFlush()` with zlib `Z_PARTIAL_FLUSH` semantics to
   raw stored/fixed/best and zlib/gzip fixed/best incremental encoders. After

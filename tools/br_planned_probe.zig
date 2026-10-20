@@ -139,6 +139,39 @@ pub fn main(init: std.process.Init) !void {
         try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
         return;
     }
+    if (std.mem.eql(u8, mode, "q2-frontier-segmentation")) {
+        const input_len = 64 * 1024;
+        const first_boundary = 16 * 1024;
+        const second_boundary = 40 * 1024;
+        const payload = try init.gpa.alloc(u8, input_len);
+        defer init.gpa.free(payload);
+        var state: u32 = 0x70f0_1e12;
+        for (payload, 0..) |*byte, index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            const nibble: u8 = @truncate(state >> 28);
+            byte.* = if (index < first_boundary)
+                nibble
+            else if (index < second_boundary)
+                96 + nibble
+            else
+                240 + nibble;
+        }
+        const chunks = [_][]const u8{payload};
+        const encoded = try vort.brEncodePlannedStreamChunksWithOptionsAlloc(
+            init.gpa,
+            &chunks,
+            .{ .quality = 2 },
+        );
+        defer init.gpa.free(encoded);
+        const summary = try vort.brSummarizeStream(encoded);
+        if (summary.compressed_meta_block_count +
+            summary.uncompressed_meta_block_count != 3)
+        {
+            return error.InvalidBlockPlan;
+        }
+        try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
+        return;
+    }
     if (std.mem.eql(u8, mode, "q10-entropy-feedback")) {
         var payload: [4096]u8 = undefined;
         var state: u32 = @as(u32, 2) *% @as(u32, 0x9e37_79b9);
