@@ -73,7 +73,9 @@ pub const Archive = struct {
             },
         );
         errdefer parsed.deinit(allocator);
-        try validateManifest(input, data_offset, parsed, options);
+        try validateManifestGeometry(input.len - data_offset, parsed, options);
+        if (options.verify_data_hashes)
+            try verifyDataHashesSlice(input, data_offset, parsed);
         return .{
             .allocator = allocator,
             .bytes = input,
@@ -236,7 +238,7 @@ pub const Archive = struct {
         options: DecodeOptions,
     ) Error!void {
         return decoder.readPartitionRangeInto(.{
-            .bytes = self.bytes,
+            .payload = .{ .bytes = self.bytes },
             .data_offset = self.header.data_offset,
             .block_size = self.manifest.block_size,
             .partitions = self.partitions,
@@ -246,13 +248,11 @@ pub const Archive = struct {
     }
 };
 
-fn validateManifest(
-    input: []const u8,
-    data_offset: usize,
+pub fn validateManifestGeometry(
+    data_size: u64,
     parsed: manifest_mod.Parsed,
     options: OpenOptions,
 ) Error!void {
-    const data_size = input.len - data_offset;
     var previous_blob_end: u64 = 0;
     var hash_bytes: u64 = 0;
     for (parsed.partitions) |partition| {
@@ -336,13 +336,6 @@ fn validateManifest(
                 ) catch return error.IntegerOverflow;
                 if (hash_bytes > options.max_data_hash_bytes)
                     return error.OutputLimitExceeded;
-                if (options.verify_data_hashes) {
-                    const start = data_offset + @as(usize, @intCast(operation.data_offset));
-                    try verifySha256(
-                        input[start..][0..@intCast(operation.data_length)],
-                        operation.data_sha256_hash,
-                    );
-                }
             }
         }
     }
@@ -352,6 +345,25 @@ fn validateManifest(
             return error.IntegerOverflow;
         if (offset < previous_blob_end or end > data_size)
             return error.TruncatedFrame;
+    }
+}
+
+fn verifyDataHashesSlice(
+    input: []const u8,
+    data_offset: usize,
+    parsed: manifest_mod.Parsed,
+) Error!void {
+    for (parsed.operations) |operation| {
+        if (operation.data_sha256_hash.len == 0) continue;
+        const relative = std.math.cast(usize, operation.data_offset) orelse
+            return error.OutputLimitExceeded;
+        const length = std.math.cast(usize, operation.data_length) orelse
+            return error.OutputLimitExceeded;
+        const start = std.math.add(usize, data_offset, relative) catch
+            return error.IntegerOverflow;
+        if (start > input.len or length > input.len - start)
+            return error.TruncatedFrame;
+        try verifySha256(input[start..][0..length], operation.data_sha256_hash);
     }
 }
 

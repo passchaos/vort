@@ -365,8 +365,12 @@ pub fn main(init: std.process.Init) !void {
         try android_sparse_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-android-ota")) {
         try android_ota_cli.inspect(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "inspect-android-ota-source")) {
+        try android_ota_cli.inspectSource(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-android-ota")) {
         try android_ota_cli.extract(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-android-ota-source")) {
+        try android_ota_cli.extractSource(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-android-ota-range")) {
         try android_ota_cli.extractRange(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-android-ota")) {
@@ -2814,7 +2818,9 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  decode-android-sparse-range <in> <out> <offset> <length>
         \\  encode-android-sparse <in> <out> [block_size] [sparse|store-zero] [fill|raw-fill] [crc|no-crc] [checksum|no-checksum]
         \\  inspect-android-ota <payload.bin>
+        \\  inspect-android-ota-source <payload.bin>
         \\  extract-android-ota <payload> <partition> <out> [max_output] [source|-]
+        \\  extract-android-ota-source <payload> <partition> <out> <chunk_size> [source|-]
         \\  extract-android-ota-range <payload> <partition> <out> <offset> <length> [source|-]
         \\  encode-android-ota <in> <out> <partition> [auto|raw|bzip2|xz] [block_size] [operation_size]
         \\  puff-android-deflate <in> <out> [bit_offset] [bit_length]

@@ -116,6 +116,36 @@ const lz4diff_patched = try vort.applyAndroidLz4diffAlloc(
 defer allocator.free(lz4diff_patched);
 ```
 
+Large seekable payloads and old partition images can remain outside memory.
+`AndroidOtaSource` is a stable caller-owned length plus short-read-capable
+`read_at` callback. `AndroidOtaSourceArchive` copies only the bounded header,
+manifest, and metadata signature; operation blobs and old-image extents are
+read on demand. The same range engine covers every supported operation and
+retains at most one explicitly limited operation blob/output plus the caller's
+requested range. Opening verifies operation-data hashes by streaming each blob;
+callers may disable that pass explicitly, while decode still enforces source,
+operation, and final partition hashes according to `AndroidOtaDecodeOptions`.
+
+```zig
+var source_archive = try vort.parseAndroidOtaSourceAlloc(
+    allocator,
+    .{ .context = ctx, .len = payload_len, .read_at = readAt },
+    .{},
+);
+defer source_archive.deinit();
+
+const index = source_archive.findPartition("system") orelse
+    return error.RangeOutOfBounds;
+try source_archive.readPartitionRangeInto(
+    allocator,
+    index,
+    null, // or a second AndroidOtaSource for delta payloads
+    range_offset,
+    output,
+    .{ .max_output_len = output.len, .verify_partition_hash = false },
+);
+```
+
 The deterministic full-payload writer accepts multiple named, block-aligned
 partition images. It divides them into bounded operations, emits ZERO operations
 for all-zero chunks, and can force raw, Bzip2, or XZ storage. Automatic mode
@@ -144,7 +174,9 @@ CLI and validation surface:
 
 ```sh
 zig build run -- inspect-android-ota payload.bin
+zig build run -- inspect-android-ota-source payload.bin
 zig build run -- extract-android-ota payload.bin system system.img 8589934592
+zig build run -- extract-android-ota-source payload.bin system system.img 1048576 old-system.img
 zig build run -- extract-android-ota-range payload.bin system range.bin 1048576 65536
 zig build run -- encode-android-ota system.img payload.bin system auto 4096 1048576
 zig build run -- puff-android-deflate input.deflate output.puff
@@ -181,6 +213,14 @@ When Python's Brotli module is available, the same driver independently emits
 a canonical Zucchini v1 NoOp patch with equivalences and raw deltas plus an
 `EA64` patch that retargets an AArch64 branch, wraps both in Brotli, and verifies
 whole-partition and bounded-range OTA extraction.
+The required source-backed matrix uses real positional file callbacks for all
+four writer modes, the independent Python mixed payload, SOURCE_COPY,
+SOURCE_BSDIFF, PUFFDIFF, six LZ4/LZ4HC diff variants, and two Zucchini variants.
+It writes outputs in 257-byte chunks, checks final bytes and SHA-256, reports
+physical read counts, and currently requires `source_reader=16` plus
+`source_inspect=4`. Supplying the local AOSP update-engine corpus additionally
+requires both full and both delta kernel/root partitions through this path,
+raising the result to `source_reader=20`, `source_aosp=4`.
 
 Current explicit limitations are major-version-1 payloads, cryptographic
 verification of vendor metadata/payload signatures, and architecture-specific
@@ -189,4 +229,5 @@ elements. DISCARD is
 likewise rejected by default
 because Android defines its read-back contents as undefined; callers may opt
 into deterministic zero interpretation through `DecodeOptions.discard_as_zero`.
-Streaming file I/O remains future work.
+Non-seekable network input, streaming payload writing, and the remaining
+architecture-specific Zucchini reference models remain future work.

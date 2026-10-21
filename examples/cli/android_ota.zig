@@ -3,6 +3,32 @@ const vort = @import("vort");
 
 const max_file_size = 32 * 1024 * 1024 * 1024;
 
+const FileSource = struct {
+    file: std.Io.File,
+    io: std.Io,
+    read_calls: usize = 0,
+    bytes_read: usize = 0,
+
+    fn source(self: *FileSource, len: u64) vort.AndroidOtaSource {
+        return .{ .context = self, .len = len, .read_at = readAt };
+    }
+
+    fn readAt(
+        raw_context: *anyopaque,
+        offset: u64,
+        output: []u8,
+    ) error{SourceReadFailed}!usize {
+        const self: *FileSource = @ptrCast(@alignCast(raw_context));
+        const amount = self.file.readPositional(self.io, &.{output}, offset) catch
+            return error.SourceReadFailed;
+        self.read_calls = std.math.add(usize, self.read_calls, 1) catch
+            return error.SourceReadFailed;
+        self.bytes_read = std.math.add(usize, self.bytes_read, amount) catch
+            return error.SourceReadFailed;
+        return amount;
+    }
+};
+
 pub fn inspect(
     init: std.process.Init,
     args: *std.process.Args.Iterator,
@@ -57,6 +83,42 @@ pub fn inspect(
             },
         );
     }
+}
+
+pub fn inspectSource(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    var file = try std.Io.Dir.cwd().openFile(init.io, input_path, .{});
+    defer file.close(init.io);
+    const stat = try file.stat(init.io);
+    var context = FileSource{ .file = file, .io = init.io };
+    var ota = try vort.parseAndroidOtaSourceAlloc(
+        init.gpa,
+        context.source(stat.size),
+        .{},
+    );
+    defer ota.deinit();
+    try stdout.print(
+        "format=android-ota-source major={d} minor={d} physical_bytes={d} manifest_bytes={d} block_bytes={d} partitions={d} reads={d} bytes_read={d}\n",
+        .{
+            ota.header.major,
+            ota.manifest.minor_version,
+            ota.header.physical_size,
+            ota.header.manifest_size,
+            ota.manifest.block_size,
+            ota.partitions.len,
+            context.read_calls,
+            context.bytes_read,
+        },
+    );
+    for (ota.partitions, 0..) |partition, index|
+        try stdout.print(
+            "partition={d} name={s} bytes={d} operations={d}\n",
+            .{ index, partition.name, partition.new_info.size, partition.operation_count },
+        );
 }
 
 pub fn extract(
@@ -139,6 +201,104 @@ pub fn extractRange(
     try stdout.print(
         "partition={s} offset={d} decoded_bytes={d} path={s}\n",
         .{ partition_name, offset, decoded.len, output_path },
+    );
+}
+
+pub fn extractSource(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const partition_name = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const chunk_size = try std.fmt.parseInt(
+        usize,
+        args.next() orelse return error.MissingCorpusPath,
+        0,
+    );
+    if (chunk_size == 0 or chunk_size > max_file_size)
+        return error.OutputLimitExceeded;
+    const old_path = args.next();
+
+    var payload_file = try std.Io.Dir.cwd().openFile(init.io, input_path, .{});
+    defer payload_file.close(init.io);
+    const payload_stat = try payload_file.stat(init.io);
+    var payload_context = FileSource{ .file = payload_file, .io = init.io };
+    var ota = try vort.parseAndroidOtaSourceAlloc(
+        init.gpa,
+        payload_context.source(payload_stat.size),
+        .{},
+    );
+    defer ota.deinit();
+    const partition_index = ota.findPartition(partition_name) orelse
+        return error.RangeOutOfBounds;
+    const partition = ota.partitions[partition_index];
+
+    var old_file: ?std.Io.File = null;
+    defer if (old_file) |file| file.close(init.io);
+    var old_context: FileSource = undefined;
+    var old_source: ?vort.AndroidOtaSource = null;
+    if (old_path) |path| if (!std.mem.eql(u8, path, "-")) {
+        const file = try std.Io.Dir.cwd().openFile(init.io, path, .{});
+        old_file = file;
+        const stat = try file.stat(init.io);
+        old_context = .{ .file = file, .io = init.io };
+        old_source = old_context.source(stat.size);
+    };
+    if (partition.old_info) |old_info| {
+        const source = old_source orelse return error.MissingAndroidOtaSource;
+        if (source.len != old_info.size) return error.SizeMismatch;
+        if (old_info.hash.len != 0)
+            try source.verifySha256(0, source.len, old_info.hash);
+    }
+
+    var output_file = try std.Io.Dir.cwd().createFile(init.io, output_path, .{});
+    defer output_file.close(init.io);
+    const buffer = try init.gpa.alloc(u8, chunk_size);
+    defer init.gpa.free(buffer);
+    var hash = std.crypto.hash.sha2.Sha256.init(.{});
+    var offset: u64 = 0;
+    while (offset < partition.new_info.size) {
+        const remaining = partition.new_info.size - offset;
+        const amount = @min(
+            buffer.len,
+            std.math.cast(usize, remaining) orelse buffer.len,
+        );
+        try ota.readPartitionRangeInto(
+            init.gpa,
+            partition_index,
+            old_source,
+            offset,
+            buffer[0..amount],
+            .{
+                .max_output_len = amount,
+                .verify_partition_hash = false,
+                .verify_source_hashes = false,
+            },
+        );
+        try output_file.writePositionalAll(init.io, buffer[0..amount], offset);
+        hash.update(buffer[0..amount]);
+        offset += amount;
+    }
+    if (partition.new_info.hash.len != 0) {
+        var actual: [32]u8 = undefined;
+        hash.final(&actual);
+        if (!std.mem.eql(u8, &actual, partition.new_info.hash))
+            return error.ChecksumMismatch;
+    }
+    try stdout.print(
+        "partition={s} decoded_bytes={d} chunk_bytes={d} payload_reads={d} payload_bytes_read={d} old_reads={d} old_bytes_read={d} path={s}\n",
+        .{
+            partition_name,
+            partition.new_info.size,
+            chunk_size,
+            payload_context.read_calls,
+            payload_context.bytes_read,
+            if (old_source != null) old_context.read_calls else 0,
+            if (old_source != null) old_context.bytes_read else 0,
+            output_path,
+        },
     );
 }
 

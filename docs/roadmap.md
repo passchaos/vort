@@ -22096,3 +22096,18 @@ reuse, so production keeps the simpler independently owned plans.
   fixtures in the reverse direction (`writer_rar4_comments=2`,
   `writer_rar4_comments_external=2`, `writer_rar4_comment_volumes=1`,
   `writer_rar4_comment_volumes_external=1`, `reference_rar4_comments=2`).
+
+- Added source-backed Android OTA parsing and extraction for seekable files.
+  `AndroidOtaSourceArchive` owns only bounded header/manifest metadata while
+  payload blobs and delta old-image extents remain behind caller `read_at`
+  callbacks with exact short-read completion. Every existing operation shares
+  the same engine; source mode retains at most one caller-limited operation and
+  requested output range, streams data-hash validation, and exposes read/byte
+  accounting in the CLI. Unit tests cover 3/5/7/17-byte reads, raw/Bzip2/XZ/
+  ZERO, SOURCE_COPY, operation limits, corrupt old-image hashes and exhaustive
+  OOM. The independent differential adds four writer, Python mixed,
+  SOURCE_COPY, SOURCE_BSDIFF, PUFFDIFF, six LZ4DIFF and two Zucchini file-source
+  extractions (`source_reader=16`, `source_inspect=4`), while Rust
+  `payload_dumper` independently retains all four writer checks. The optional
+  AOSP official full/delta corpus raises source coverage to 20 with four real
+  kernel/root cases, including genuine BROTLI_BSDIFF (`source_aosp=4`).

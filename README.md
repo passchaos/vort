@@ -230,7 +230,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   LZ4HC reconstruction plus postfix correction, bounded Zucchini v1 NoOp/raw
   and AArch64 ELF elements behind the Android Brotli envelope,
   BSDIFF40/BSDF2/PUF1 patch
-  streams, SHA-256 checks, bounded range reads, fuzzing, independent
+  streams, SHA-256 checks, bounded range reads, source-backed seekable payload
+  and old-partition callbacks with operation-bounded memory, fuzzing, independent
   Python/liblz4 validation, and Rust
   `payload_dumper` interoperability;
 - dependency-free zchunk v1 parsing, verification, deterministic none/Zstd

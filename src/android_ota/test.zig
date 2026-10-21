@@ -2,6 +2,8 @@ const std = @import("std");
 const bzip2 = @import("../bzip2.zig");
 const br = @import("../br.zig");
 const archive_mod = @import("archive.zig");
+const source_archive = @import("source_archive.zig");
+const source_mod = @import("source.zig");
 const format = @import("format.zig");
 const lz4diff = @import("lz4diff.zig");
 const zucchini = @import("zucchini.zig");
@@ -10,6 +12,42 @@ const puffin_mod = @import("puffin.zig");
 const writer = @import("writer.zig");
 
 const allocator = std.testing.allocator;
+
+const TestSource = struct {
+    bytes: []const u8,
+    max_chunk: usize,
+    read_calls: usize = 0,
+    bytes_read: usize = 0,
+    fail: bool = false,
+
+    fn source(self: *TestSource) source_mod.Source {
+        return .{
+            .context = self,
+            .len = self.bytes.len,
+            .read_at = readAt,
+        };
+    }
+
+    fn readAt(
+        raw_context: *anyopaque,
+        offset: u64,
+        output: []u8,
+    ) error{SourceReadFailed}!usize {
+        const self: *TestSource = @ptrCast(@alignCast(raw_context));
+        if (self.fail) return error.SourceReadFailed;
+        const start = std.math.cast(usize, offset) orelse
+            return error.SourceReadFailed;
+        if (start >= self.bytes.len) return 0;
+        const amount = @min(
+            output.len,
+            @min(self.max_chunk, self.bytes.len - start),
+        );
+        @memcpy(output[0..amount], self.bytes[start..][0..amount]);
+        self.read_calls += 1;
+        self.bytes_read += amount;
+        return amount;
+    }
+};
 
 test "Android OTA full payload round trips raw Bzip2 XZ and automatic operations" {
     const block_size = 4096;
@@ -91,6 +129,177 @@ test "Android OTA full payload round trips raw Bzip2 XZ and automatic operations
             range,
         );
     }
+}
+
+test "Android OTA source archive reads full payload blobs through short callbacks" {
+    const block_size = 4096;
+    const input = try allocator.alloc(u8, 4 * block_size);
+    defer allocator.free(input);
+    for (input, 0..) |*byte, index| byte.* = @truncate(index * 37 + index / 13);
+    @memset(input[3 * block_size ..], 0);
+
+    inline for (.{
+        writer.Compression.raw,
+        writer.Compression.bzip2,
+        writer.Compression.xz,
+        writer.Compression.auto,
+    }) |compression| {
+        const encoded = try writer.encodeAlloc(
+            allocator,
+            &.{.{ .name = "system", .data = input }},
+            .{
+                .block_size = block_size,
+                .operation_size = block_size,
+                .compression = compression,
+            },
+        );
+        defer allocator.free(encoded);
+        var context = TestSource{ .bytes = encoded, .max_chunk = 3 };
+        var ota = try source_archive.Archive.initAlloc(
+            allocator,
+            context.source(),
+            .{},
+        );
+        defer ota.deinit();
+        try std.testing.expectEqual(@as(?usize, 0), ota.findPartition("system"));
+        const borrowed_name_offset = std.mem.indexOf(u8, encoded, "system") orelse
+            unreachable;
+        encoded[borrowed_name_offset] = 'X';
+        try std.testing.expectEqual(@as(?usize, 0), ota.findPartition("system"));
+        const decoded = try ota.decodePartitionAllocLimited(
+            allocator,
+            0,
+            null,
+            input.len,
+        );
+        defer allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, input, decoded);
+        var range: [257]u8 = undefined;
+        try ota.readPartitionRangeInto(
+            allocator,
+            0,
+            null,
+            block_size - 31,
+            &range,
+            .{ .max_output_len = range.len, .verify_partition_hash = false },
+        );
+        try std.testing.expectEqualSlices(
+            u8,
+            input[block_size - 31 ..][0..range.len],
+            &range,
+        );
+        try std.testing.expect(context.read_calls > 1);
+        try std.testing.expect(context.bytes_read >= encoded.len);
+        if (compression == .bzip2 or compression == .xz)
+            try std.testing.expectError(
+                error.OutputLimitExceeded,
+                ota.readPartitionRangeInto(
+                    allocator,
+                    0,
+                    null,
+                    0,
+                    range[0..1],
+                    .{
+                        .max_output_len = 1,
+                        .max_operation_blob_len = 1,
+                        .verify_partition_hash = false,
+                    },
+                ),
+            );
+    }
+}
+
+test "Android OTA source archive reads delta old-image extents on demand" {
+    const old = [_]u8{0x5a} ** 4096;
+    var old_hash: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(&old, &old_hash, .{});
+    const payload = try sourceCopyPayloadAlloc(allocator, &old_hash);
+    defer allocator.free(payload);
+    var payload_context = TestSource{ .bytes = payload, .max_chunk = 5 };
+    var old_context = TestSource{ .bytes = &old, .max_chunk = 7 };
+    var ota = try source_archive.Archive.initAlloc(
+        allocator,
+        payload_context.source(),
+        .{},
+    );
+    defer ota.deinit();
+    const decoded = try ota.decodePartitionAllocLimited(
+        allocator,
+        0,
+        old_context.source(),
+        old.len,
+    );
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &old, decoded);
+    try std.testing.expect(old_context.read_calls > 1);
+    try std.testing.expectError(
+        error.MissingAndroidOtaSource,
+        ota.decodePartitionAllocLimited(allocator, 0, null, old.len),
+    );
+    var corrupt = old;
+    corrupt[0] ^= 1;
+    var corrupt_context = TestSource{ .bytes = &corrupt, .max_chunk = 11 };
+    try std.testing.expectError(
+        error.ChecksumMismatch,
+        ota.decodePartitionAllocLimited(
+            allocator,
+            0,
+            corrupt_context.source(),
+            old.len,
+        ),
+    );
+}
+
+test "Android OTA source archive releases every allocation failure" {
+    const input = [_]u8{0x41} ** 8192;
+    const encoded = try writer.encodeAlloc(
+        allocator,
+        &.{.{ .name = "system", .data = &input }},
+        .{ .compression = .xz, .operation_size = 4096 },
+    );
+    defer allocator.free(encoded);
+    const Test = struct {
+        fn run(failing_allocator: std.mem.Allocator, bytes: []const u8) !void {
+            var context = TestSource{ .bytes = bytes, .max_chunk = 17 };
+            var ota = try source_archive.Archive.initAlloc(
+                failing_allocator,
+                context.source(),
+                .{},
+            );
+            defer ota.deinit();
+            var range: [97]u8 = undefined;
+            try ota.readPartitionRangeInto(
+                failing_allocator,
+                0,
+                null,
+                31,
+                &range,
+                .{ .max_output_len = range.len, .verify_partition_hash = false },
+            );
+        }
+    };
+    try std.testing.checkAllAllocationFailures(allocator, Test.run, .{encoded});
+
+    var failed_context = TestSource{
+        .bytes = encoded,
+        .max_chunk = 17,
+        .fail = true,
+    };
+    try std.testing.expectError(
+        error.SourceReadFailed,
+        source_archive.Archive.initAlloc(
+            allocator,
+            failed_context.source(),
+            .{},
+        ),
+    );
+    var truncated_context = TestSource{ .bytes = encoded, .max_chunk = 17 };
+    var truncated_source = truncated_context.source();
+    truncated_source.len -= 1;
+    try std.testing.expectError(
+        error.TruncatedFrame,
+        source_archive.Archive.initAlloc(allocator, truncated_source, .{}),
+    );
 }
 
 test "Android OTA writer supports multiple and empty partitions" {

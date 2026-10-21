@@ -67,6 +67,30 @@ def expect_failure(*args: object, error_name: str) -> None:
         )
 
 
+def source_extract(
+    cli: Path,
+    payload: Path,
+    partition: str,
+    output: Path,
+    expected: bytes,
+    old_image: Path | None = None,
+    chunk_size: int = 257,
+) -> None:
+    result = run(
+        cli,
+        "extract-android-ota-source",
+        payload,
+        partition,
+        output,
+        chunk_size,
+        old_image if old_image is not None else "-",
+    )
+    if output.read_bytes() != expected:
+        raise AssertionError(f"source-backed extraction mismatch for {partition}")
+    if b"payload_reads=" not in result.stdout or b"payload_bytes_read=" not in result.stdout:
+        raise AssertionError("source-backed extraction omitted I/O accounting")
+
+
 def varint(value: int) -> bytes:
     output = bytearray()
     while value >= 0x80:
@@ -744,6 +768,9 @@ def main() -> None:
     puff_codec_cases = 0
     lz4diff_cases = 0
     zucchini_cases = 0
+    source_reader_cases = 0
+    source_inspect_cases = 0
+    source_aosp_cases = 0
     with tempfile.TemporaryDirectory(prefix="vort-android-ota-") as temp_text:
         temp = Path(temp_text)
         source = temp / "system.img"
@@ -780,6 +807,23 @@ def main() -> None:
             summary = run(args.cli, "inspect-android-ota", payload_path).stdout
             if b"format=android-ota" not in summary or b"name=system" not in summary:
                 raise AssertionError(f"inspect mismatch for {compression}")
+            source_summary = run(
+                args.cli,
+                "inspect-android-ota-source",
+                payload_path,
+            ).stdout
+            if b"format=android-ota-source" not in source_summary or b"reads=" not in source_summary:
+                raise AssertionError(f"source inspect mismatch for {compression}")
+            source_inspect_cases += 1
+            source_output = temp / f"source-{compression}.img"
+            source_extract(
+                args.cli,
+                payload_path,
+                "system",
+                source_output,
+                source_bytes,
+            )
+            source_reader_cases += 1
             writer_cases += 1
             if oracle is not None:
                 output_dir = temp / f"oracle-{compression}"
@@ -813,6 +857,14 @@ def main() -> None:
         if decoded.read_bytes() != reference_data:
             raise AssertionError("Vort decode mismatch for Python payload")
         reader_cases += 1
+        source_extract(
+            args.cli,
+            reference,
+            "system",
+            temp / "reference-source-decoded.img",
+            reference_data,
+        )
+        source_reader_cases += 1
         for index, (offset, length) in enumerate(
             (
                 (0, 137),
@@ -857,6 +909,15 @@ def main() -> None:
         if source_copy_output.read_bytes() != source_copy_expected:
             raise AssertionError("SOURCE_COPY decode mismatch")
         reader_cases += 1
+        source_extract(
+            args.cli,
+            source_copy_path,
+            "vendor",
+            temp / "source-copy-source.img",
+            source_copy_expected,
+            old_image,
+        )
+        source_reader_cases += 1
         source_copy_range = temp / "source-copy-range.img"
         run(
             args.cli,
@@ -893,6 +954,15 @@ def main() -> None:
         if bsdiff_output.read_bytes() != source_bsdiff_expected:
             raise AssertionError("SOURCE_BSDIFF decode mismatch")
         reader_cases += 1
+        source_extract(
+            args.cli,
+            source_bsdiff_path,
+            "product",
+            temp / "source-bsdiff-source.img",
+            source_bsdiff_expected,
+            bsdiff_old,
+        )
+        source_reader_cases += 1
         bsdiff_range = temp / "source-bsdiff-range.img"
         run(
             args.cli,
@@ -934,6 +1004,15 @@ def main() -> None:
         if puff_output.read_bytes() != puff_expected:
             raise AssertionError("PUFFDIFF OTA decode mismatch")
         reader_cases += 1
+        source_extract(
+            args.cli,
+            puff_payload_path,
+            "puffin",
+            temp / "puffin-source-new.img",
+            puff_expected,
+            puff_source_path,
+        )
+        source_reader_cases += 1
         puff_range = temp / "puffin-range.img"
         run(
             args.cli,
@@ -1062,6 +1141,15 @@ def main() -> None:
                 )
                 if lz4_output.read_bytes() != lz4_expected:
                     raise AssertionError(f"LZ4DIFF {name} decode mismatch")
+                source_extract(
+                    args.cli,
+                    lz4_payload_path,
+                    "lz4diff",
+                    temp / f"lz4diff-{name}-source-new.img",
+                    lz4_expected,
+                    lz4_source_path,
+                )
+                source_reader_cases += 1
                 lz4_range = temp / f"lz4diff-{name}-range.img"
                 run(
                     args.cli,
@@ -1100,6 +1188,16 @@ def main() -> None:
                 )
                 if zucchini_output.read_bytes() != zucchini_expected:
                     raise AssertionError(f"ZUCCHINI {name} decode mismatch")
+                partition_name = f"zucchini{'-aarch64' if name == 'aarch64' else ''}"
+                source_extract(
+                    args.cli,
+                    zucchini_payload_path,
+                    partition_name,
+                    temp / f"zucchini-{name}-source-new.img",
+                    zucchini_expected,
+                    zucchini_source_path,
+                )
+                source_reader_cases += 1
                 zucchini_range = temp / f"zucchini-{name}-range.img"
                 run(
                     args.cli,
@@ -1119,6 +1217,13 @@ def main() -> None:
         short = temp / "short.bin"
         short.write_bytes(MAGIC)
         expect_failure(args.cli, "inspect-android-ota", short, error_name="TruncatedFrame")
+        malformed += 1
+        expect_failure(
+            args.cli,
+            "inspect-android-ota-source",
+            short,
+            error_name="TruncatedFrame",
+        )
         malformed += 1
         corrupt = bytearray(reference_payload)
         corrupt[0] ^= 1
@@ -1140,6 +1245,13 @@ def main() -> None:
         bad_hash.write_bytes(corrupt)
         expect_failure(
             args.cli, "inspect-android-ota", bad_hash, error_name="ChecksumMismatch"
+        )
+        malformed += 1
+        expect_failure(
+            args.cli,
+            "inspect-android-ota-source",
+            bad_hash,
+            error_name="ChecksumMismatch",
         )
         malformed += 1
         expect_failure(
@@ -1203,6 +1315,16 @@ def main() -> None:
                 if output.read_bytes() != expected:
                     raise AssertionError(f"AOSP full {partition} mismatch")
                 aosp_full += 1
+                source_extract(
+                    args.cli,
+                    full_payload,
+                    partition,
+                    temp / f"aosp-full-source-{partition}.img",
+                    expected,
+                    chunk_size=1024 * 1024,
+                )
+                source_reader_cases += 1
+                source_aosp_cases += 1
             expected_root = (aosp_images / "disk_sqfs_default.img").read_bytes()
             output_root = temp / "aosp-delta-root.img"
             run(
@@ -1217,6 +1339,17 @@ def main() -> None:
             if output_root.read_bytes() != expected_root:
                 raise AssertionError("AOSP delta root mismatch")
             aosp_delta += 1
+            source_extract(
+                args.cli,
+                delta_payload,
+                "root",
+                temp / "aosp-delta-source-root.img",
+                expected_root,
+                aosp_images / "disk_sqfs_empty.img",
+                chunk_size=1024 * 1024,
+            )
+            source_reader_cases += 1
+            source_aosp_cases += 1
             expected_kernel = (aosp_images / "disk_ext2_4k.img").read_bytes()
             output_kernel = temp / "aosp-delta-kernel.img"
             run(
@@ -1231,6 +1364,17 @@ def main() -> None:
             if output_kernel.read_bytes() != expected_kernel:
                 raise AssertionError("AOSP BROTLI_BSDIFF kernel mismatch")
             aosp_delta += 1
+            source_extract(
+                args.cli,
+                delta_payload,
+                "kernel",
+                temp / "aosp-delta-source-kernel.img",
+                expected_kernel,
+                aosp_images / "disk_ext2_4k_empty.img",
+                chunk_size=1024 * 1024,
+            )
+            source_reader_cases += 1
+            source_aosp_cases += 1
             kernel_range = temp / "aosp-delta-kernel-range.img"
             run(
                 args.cli,
@@ -1257,7 +1401,8 @@ def main() -> None:
         f"lz4={lz4_oracle is not None} lz4diff_cases={lz4diff_cases} "
         f"python_brotli={python_brotli is not None} zucchini_cases={zucchini_cases} "
         f"aosp={args.aosp_update_engine is not None} aosp_full={aosp_full} "
-        f"aosp_delta={aosp_delta}"
+        f"aosp_delta={aosp_delta} source_reader={source_reader_cases} "
+        f"source_inspect={source_inspect_cases} source_aosp={source_aosp_cases}"
     )
 
 
