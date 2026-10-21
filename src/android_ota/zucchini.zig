@@ -2,6 +2,7 @@ const std = @import("std");
 const checksum = @import("../checksum.zig");
 const format = @import("format.zig");
 const aarch64 = @import("zucchini/aarch64.zig");
+const intel = @import("zucchini/intel.zig");
 
 pub const Error = format.Error || std.mem.Allocator.Error;
 
@@ -120,6 +121,24 @@ pub const Patch = struct {
                     element.pool_count != 0)
                     return error.InvalidZucchiniPatch,
                 .elf_aarch64 => try applyAarch64References(
+                    allocator,
+                    old_element,
+                    new_element,
+                    element,
+                    self.target_pools[element.pool_start..][0..element.pool_count],
+                    options,
+                ),
+                .elf_x86 => try applyExecutableReferences(
+                    intel.X86,
+                    allocator,
+                    old_element,
+                    new_element,
+                    element,
+                    self.target_pools[element.pool_start..][0..element.pool_count],
+                    options,
+                ),
+                .elf_x64 => try applyExecutableReferences(
+                    intel.X64,
                     allocator,
                     old_element,
                     new_element,
@@ -444,15 +463,35 @@ fn applyAarch64References(
     encoded_pools: []const TargetPool,
     options: ApplyOptions,
 ) Error!void {
-    var old_elf = aarch64.Elf.initAlloc(allocator, source, .{
+    return applyExecutableReferences(
+        aarch64,
+        allocator,
+        source,
+        output,
+        element,
+        encoded_pools,
+        options,
+    );
+}
+
+fn applyExecutableReferences(
+    comptime architecture: type,
+    allocator: std.mem.Allocator,
+    source: []const u8,
+    output: []u8,
+    element: Element,
+    encoded_pools: []const TargetPool,
+    options: ApplyOptions,
+) Error!void {
+    var old_elf = architecture.Elf.initAlloc(allocator, source, .{
         .max_sections = options.max_elf_sections,
         .max_references = options.max_references,
-    }) catch |err| return mapAarch64Error(err);
+    }) catch |err| return mapExecutableError(err);
     defer old_elf.deinit();
-    var new_elf = aarch64.Elf.initAlloc(allocator, output, .{
+    var new_elf = architecture.Elf.initAlloc(allocator, output, .{
         .max_sections = options.max_elf_sections,
         .max_references = options.max_references,
-    }) catch |err| return mapAarch64Error(err);
+    }) catch |err| return mapExecutableError(err);
     defer new_elf.deinit();
 
     var equivalences = try collectEquivalencesAlloc(
@@ -468,10 +507,10 @@ fn applyAarch64References(
     defer allocator.free(source_sorted);
     var reference_deltas = Stream{ .bytes = element.reference_deltas };
 
-    for (0..3) |pool_tag| {
+    for (0..architecture.pool_count) |pool_tag| {
         var targets: std.ArrayList(u32) = .empty;
         defer targets.deinit(allocator);
-        for (std.enums.values(aarch64.ReferenceType)) |reference_type| {
+        for (std.enums.values(architecture.ReferenceType)) |reference_type| {
             if (reference_type.pool() != pool_tag) continue;
             for (old_elf.references[@intFromEnum(reference_type)]) |reference| {
                 if (targets.items.len >= options.max_targets)
@@ -499,7 +538,7 @@ fn applyAarch64References(
             sortUniqueU32(&targets);
         }
 
-        for (std.enums.values(aarch64.ReferenceType)) |reference_type| {
+        for (std.enums.values(architecture.ReferenceType)) |reference_type| {
             if (reference_type.pool() != pool_tag) continue;
             for (equivalences.items) |equivalence| {
                 const source_start: u32 = @intCast(equivalence.source_offset);
@@ -538,7 +577,7 @@ fn applyAarch64References(
                     new_elf.writeReference(output, reference_type, .{
                         .location = @intCast(destination_location),
                         .target = targets.items[@intCast(key_i64)],
-                    }) catch |err| return mapAarch64Error(err);
+                    }) catch |err| return mapExecutableError(err);
                 }
             }
         }
@@ -703,7 +742,7 @@ fn lessEquivalenceSource(_: void, left: Equivalence, right: Equivalence) bool {
     return left.source_offset < right.source_offset;
 }
 
-fn mapAarch64Error(err: aarch64.Error) Error {
+fn mapExecutableError(err: anytype) Error {
     return switch (err) {
         error.OutOfMemory => error.OutOfMemory,
         error.OutputLimitExceeded => error.OutputLimitExceeded,
@@ -848,7 +887,7 @@ test "Android OTA Zucchini rejects bounds CRC truncation and unsupported executa
     @memcpy(corrupt, encoded);
     @memcpy(corrupt[44..48], "Ex64");
     try std.testing.expectError(
-        error.UnsupportedZucchiniPatch,
+        error.InvalidZucchiniPatch,
         applyAlloc(allocator, source, corrupt, expected.len, .{}),
     );
     @memcpy(corrupt, encoded);
@@ -973,6 +1012,75 @@ test "Android OTA Zucchini AArch64 releases every allocation failure" {
         std.testing.allocator,
         &source,
         &expected,
+    );
+    defer std.testing.allocator.free(encoded);
+    const Test = struct {
+        fn run(
+            allocator: std.mem.Allocator,
+            source_bytes: []const u8,
+            patch_bytes: []const u8,
+            expected_bytes: []const u8,
+        ) !void {
+            const output = try applyAlloc(
+                allocator,
+                source_bytes,
+                patch_bytes,
+                expected_bytes.len,
+                .{},
+            );
+            defer allocator.free(output);
+            try std.testing.expectEqualSlices(u8, expected_bytes, output);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{ &source, encoded, &expected },
+    );
+}
+
+test "Android OTA Zucchini corrects Intel ELF32 and ELF64 references" {
+    const allocator = std.testing.allocator;
+    inline for (.{ false, true }) |is_64| {
+        const source = testIntelElf(is_64, 0x108);
+        const expected = testIntelElf(is_64, 0x10c);
+        const encoded = try testIntelPatchAlloc(
+            allocator,
+            &source,
+            &expected,
+            is_64,
+        );
+        defer allocator.free(encoded);
+        const output = try applyAlloc(
+            allocator,
+            &source,
+            encoded,
+            expected.len,
+            .{},
+        );
+        defer allocator.free(output);
+        try std.testing.expectEqualSlices(u8, &expected, output);
+        try std.testing.expectError(
+            error.OutputLimitExceeded,
+            applyAlloc(
+                allocator,
+                &source,
+                encoded,
+                expected.len,
+                .{ .max_references = 0 },
+            ),
+        );
+    }
+}
+
+test "Android OTA Zucchini Intel ELF releases every allocation failure" {
+    const source = testIntelElf(true, 0x108);
+    const expected = testIntelElf(true, 0x10c);
+    const encoded = try testIntelPatchAlloc(
+        std.testing.allocator,
+        &source,
+        &expected,
+        true,
     );
     defer std.testing.allocator.free(encoded);
     const Test = struct {
@@ -1143,6 +1251,140 @@ fn testAarch64PatchAlloc(
     try appendBuffer(allocator, &output, "");
     try appendBuffer(allocator, &output, "");
     try appendBuffer(allocator, &output, &.{2});
+    try appendU32(allocator, &output, 1);
+    try output.append(allocator, 2);
+    try appendBuffer(allocator, &output, &.{ 0x8c, 0x02 });
+    return output.toOwnedSlice(allocator);
+}
+
+fn testIntelElf(
+    comptime is_64: bool,
+    target_offset: u32,
+) [if (is_64) 0x300 else 0x2a0]u8 {
+    var output: [if (is_64) 0x300 else 0x2a0]u8 = @splat(0);
+    @memcpy(output[0..4], "\x7fELF");
+    output[4] = if (is_64) 2 else 1;
+    output[5] = 1;
+    output[6] = 1;
+    std.mem.writeInt(u16, output[16..18], 2, .little);
+    std.mem.writeInt(u16, output[18..20], if (is_64) 62 else 3, .little);
+    std.mem.writeInt(u32, output[20..24], 1, .little);
+    if (is_64) {
+        std.mem.writeInt(u64, output[40..48], 0x200, .little);
+        std.mem.writeInt(u16, output[52..54], 64, .little);
+        std.mem.writeInt(u16, output[54..56], 56, .little);
+        std.mem.writeInt(u16, output[58..60], 64, .little);
+        std.mem.writeInt(u16, output[60..62], 4, .little);
+    } else {
+        std.mem.writeInt(u32, output[32..36], 0x200, .little);
+        std.mem.writeInt(u16, output[40..42], 52, .little);
+        std.mem.writeInt(u16, output[42..44], 32, .little);
+        std.mem.writeInt(u16, output[46..48], 40, .little);
+        std.mem.writeInt(u16, output[48..50], 4, .little);
+    }
+    writeIntelTestSection(&output, is_64, 1, 1, 6, 0x10000, 0x100, 0x20, 0);
+    writeIntelTestSection(
+        &output,
+        is_64,
+        2,
+        1,
+        3,
+        0x20000,
+        0x140,
+        if (is_64) 0x10 else 0x08,
+        0,
+    );
+    writeIntelTestSection(
+        &output,
+        is_64,
+        3,
+        9,
+        2,
+        0x30000,
+        0x160,
+        if (is_64) 0x10 else 0x08,
+        if (is_64) 16 else 8,
+    );
+    output[0x100] = 0xe8;
+    std.mem.writeInt(
+        u32,
+        output[0x101..0x105],
+        target_offset - 0x105,
+        .little,
+    );
+    if (is_64) {
+        std.mem.writeInt(u64, output[0x140..0x148], 0x10008, .little);
+        std.mem.writeInt(u64, output[0x160..0x168], 0x20000, .little);
+        std.mem.writeInt(u64, output[0x168..0x170], 8, .little);
+    } else {
+        std.mem.writeInt(u32, output[0x140..0x144], 0x10008, .little);
+        std.mem.writeInt(u32, output[0x160..0x164], 0x20000, .little);
+        std.mem.writeInt(u32, output[0x164..0x168], 8, .little);
+    }
+    return output;
+}
+
+fn writeIntelTestSection(
+    output: []u8,
+    comptime is_64: bool,
+    index: usize,
+    kind: u32,
+    flags: u64,
+    address: u64,
+    offset: u64,
+    size: u64,
+    entry_size: u64,
+) void {
+    const base = 0x200 + index * (if (is_64) 64 else 40);
+    std.mem.writeInt(u32, output[base + 4 ..][0..4], kind, .little);
+    if (is_64) {
+        std.mem.writeInt(u64, output[base + 8 ..][0..8], flags, .little);
+        std.mem.writeInt(u64, output[base + 16 ..][0..8], address, .little);
+        std.mem.writeInt(u64, output[base + 24 ..][0..8], offset, .little);
+        std.mem.writeInt(u64, output[base + 32 ..][0..8], size, .little);
+        std.mem.writeInt(u64, output[base + 56 ..][0..8], entry_size, .little);
+    } else {
+        std.mem.writeInt(u32, output[base + 8 ..][0..4], @intCast(flags), .little);
+        std.mem.writeInt(u32, output[base + 12 ..][0..4], @intCast(address), .little);
+        std.mem.writeInt(u32, output[base + 16 ..][0..4], @intCast(offset), .little);
+        std.mem.writeInt(u32, output[base + 20 ..][0..4], @intCast(size), .little);
+        std.mem.writeInt(u32, output[base + 36 ..][0..4], @intCast(entry_size), .little);
+    }
+}
+
+fn testIntelPatchAlloc(
+    allocator: std.mem.Allocator,
+    source: []const u8,
+    expected: []const u8,
+    comptime is_64: bool,
+) ![]u8 {
+    var output: std.ArrayList(u8) = .empty;
+    errdefer output.deinit(allocator);
+    try output.appendSlice(allocator, magic);
+    try appendU16(allocator, &output, major_version);
+    try appendU16(allocator, &output, 0);
+    try appendU32(allocator, &output, @intCast(source.len));
+    try appendU32(allocator, &output, checksum.crc32(source));
+    try appendU32(allocator, &output, @intCast(expected.len));
+    try appendU32(allocator, &output, checksum.crc32(expected));
+    try appendU32(allocator, &output, 1);
+    try appendU32(allocator, &output, 0);
+    try appendU32(allocator, &output, @intCast(source.len));
+    try appendU32(allocator, &output, 0);
+    try appendU32(allocator, &output, @intCast(expected.len));
+    try output.appendSlice(allocator, if (is_64) "Ex64" else "Ex86");
+    try appendU16(allocator, &output, 1);
+    try appendBuffer(allocator, &output, &.{0});
+    try appendBuffer(allocator, &output, &.{0});
+    try appendBuffer(
+        allocator,
+        &output,
+        if (is_64) &.{ 0x80, 0x06 } else &.{ 0xa0, 0x05 },
+    );
+    try appendBuffer(allocator, &output, "");
+    try appendBuffer(allocator, &output, "");
+    try appendBuffer(allocator, &output, "");
+    try appendBuffer(allocator, &output, &.{ 0, 0, 2 });
     try appendU32(allocator, &output, 1);
     try output.append(allocator, 2);
     try appendBuffer(allocator, &output, &.{ 0x8c, 0x02 });

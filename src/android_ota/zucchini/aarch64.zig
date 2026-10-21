@@ -23,6 +23,8 @@ pub const ReferenceType = enum(u3) {
     }
 };
 
+pub const pool_count: usize = 3;
+
 pub const Reference = struct {
     location: u32,
     target: u32,

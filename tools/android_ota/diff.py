@@ -684,6 +684,124 @@ def zucchini_aarch64_payload() -> tuple[bytes, bytes, bytes]:
     return payload, source, target
 
 
+def test_intel_elf(is_64: bool, target_offset: int) -> bytes:
+    image = bytearray(BLOCK_SIZE)
+    image[:4] = b"\x7fELF"
+    image[4:7] = bytes((2 if is_64 else 1, 1, 1))
+    struct.pack_into("<HHI", image, 16, 2, 62 if is_64 else 3, 1)
+    section_offset = BLOCK_SIZE - (4 * (64 if is_64 else 40))
+    if is_64:
+        struct.pack_into("<Q", image, 40, section_offset)
+        struct.pack_into("<HHHHH", image, 52, 64, 56, 0, 64, 4)
+    else:
+        struct.pack_into("<I", image, 32, section_offset)
+        struct.pack_into("<HHHHH", image, 40, 52, 32, 0, 40, 4)
+
+    def section(
+        index: int,
+        kind: int,
+        flags: int,
+        address: int,
+        offset: int,
+        size: int,
+        entry_size: int,
+    ) -> None:
+        base = section_offset + index * (64 if is_64 else 40)
+        if is_64:
+            struct.pack_into(
+                "<IIQQQQIIQQ",
+                image,
+                base,
+                0,
+                kind,
+                flags,
+                address,
+                offset,
+                size,
+                0,
+                0,
+                1,
+                entry_size,
+            )
+        else:
+            struct.pack_into(
+                "<IIIIIIIIII",
+                image,
+                base,
+                0,
+                kind,
+                flags,
+                address,
+                offset,
+                size,
+                0,
+                0,
+                1,
+                entry_size,
+            )
+
+    section(1, 1, 6, 0x10000, 0x100, 0x20, 0)
+    section(2, 1, 3, 0x20000, 0x140, 0x10 if is_64 else 0x08, 0)
+    section(3, 9, 2, 0x30000, 0x160, 0x10 if is_64 else 0x08, 16 if is_64 else 8)
+    image[0x100] = 0xE8
+    struct.pack_into("<I", image, 0x101, target_offset - 0x105)
+    if is_64:
+        struct.pack_into("<QQ", image, 0x140, 0x10008, 0)
+        struct.pack_into("<QQ", image, 0x160, 0x20000, 8)
+    else:
+        struct.pack_into("<II", image, 0x140, 0x10008, 0)
+        struct.pack_into("<II", image, 0x160, 0x20000, 8)
+    return bytes(image)
+
+
+def zucchini_intel_payload(is_64: bool) -> tuple[bytes, bytes, bytes]:
+    if python_brotli is None:
+        raise AssertionError("python brotli module is unavailable")
+    source = test_intel_elf(is_64, 0x108)
+    target = test_intel_elf(is_64, 0x10C)
+    patch = bytearray(b"Zucc")
+    patch += struct.pack(
+        "<HHIIII",
+        1,
+        0,
+        len(source),
+        zlib.crc32(source) & 0xFFFFFFFF,
+        len(target),
+        zlib.crc32(target) & 0xFFFFFFFF,
+    )
+    patch += struct.pack("<I", 1)
+    patch += struct.pack(
+        "<IIII4sH",
+        0,
+        len(source),
+        0,
+        len(target),
+        b"Ex64" if is_64 else b"Ex86",
+        1,
+    )
+    patch += struct.pack("<I", 1) + b"\0"
+    patch += struct.pack("<I", 1) + b"\0"
+    encoded_length = varint(len(source))
+    patch += struct.pack("<I", len(encoded_length)) + encoded_length
+    patch += struct.pack("<I", 0) * 3
+    patch += struct.pack("<I", 3) + b"\0\0\2"
+    patch += struct.pack("<I", 1) + b"\2" + struct.pack("<I", 2) + b"\x8c\2"
+    compressed_patch = python_brotli.compress(bytes(patch), quality=9)
+    operation_message = bytearray(vfield(1, ZUCCHINI))
+    operation_message += vfield(2, 0) + vfield(3, len(compressed_patch))
+    operation_message += bfield(4, extent(0, 1)) + bfield(6, extent(0, 1))
+    operation_message += bfield(8, hashlib.sha256(compressed_patch).digest())
+    operation_message += bfield(9, hashlib.sha256(source).digest())
+    partition_name = b"zucchini-x64" if is_64 else b"zucchini-x86"
+    partition = bytearray(bfield(1, partition_name))
+    partition += bfield(6, partition_info(source))
+    partition += bfield(7, partition_info(target))
+    partition += bfield(8, bytes(operation_message))
+    manifest = vfield(3, BLOCK_SIZE) + vfield(12, 5) + bfield(13, bytes(partition))
+    payload = MAGIC + struct.pack(">QQI", 2, len(manifest), 0) + manifest + compressed_patch
+    return payload, source, target
+
+
 def source_bsdiff_payload(source: bytes) -> tuple[bytes, bytes, bytes]:
     if len(source) != 2 * BLOCK_SIZE:
         raise AssertionError("SOURCE_BSDIFF fixture must be two blocks")
@@ -1412,9 +1530,11 @@ def main() -> None:
                 ranges += 1
 
         if python_brotli is not None:
-            for name, fixture in (
-                ("noop", zucchini_payload),
-                ("aarch64", zucchini_aarch64_payload),
+            for name, partition_name, fixture in (
+                ("noop", "zucchini", zucchini_payload),
+                ("aarch64", "zucchini-aarch64", zucchini_aarch64_payload),
+                ("x86", "zucchini-x86", lambda: zucchini_intel_payload(False)),
+                ("x64", "zucchini-x64", lambda: zucchini_intel_payload(True)),
             ):
                 zucchini_data, zucchini_source, zucchini_expected = fixture()
                 zucchini_payload_path = temp / f"zucchini-{name}.bin"
@@ -1426,14 +1546,13 @@ def main() -> None:
                     args.cli,
                     "extract-android-ota",
                     zucchini_payload_path,
-                    f"zucchini{'-aarch64' if name == 'aarch64' else ''}",
+                    partition_name,
                     zucchini_output,
                     len(zucchini_expected),
                     zucchini_source_path,
                 )
                 if zucchini_output.read_bytes() != zucchini_expected:
                     raise AssertionError(f"ZUCCHINI {name} decode mismatch")
-                partition_name = f"zucchini{'-aarch64' if name == 'aarch64' else ''}"
                 source_extract(
                     args.cli,
                     zucchini_payload_path,
@@ -1448,7 +1567,7 @@ def main() -> None:
                     args.cli,
                     "extract-android-ota-range",
                     zucchini_payload_path,
-                    f"zucchini{'-aarch64' if name == 'aarch64' else ''}",
+                    partition_name,
                     zucchini_range,
                     197,
                     907,
