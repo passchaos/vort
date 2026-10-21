@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import random
 import shutil
@@ -12,7 +13,24 @@ import tempfile
 from pathlib import Path
 
 
-def run(program: Path | str, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+REPOSITORY = Path(__file__).resolve().parents[2]
+ARJ_TESTDATA = REPOSITORY / "src" / "arj" / "testdata"
+
+
+def decode_fixture(name: str, output: Path, expected_sha256: str) -> None:
+    encoded = (ARJ_TESTDATA / name).read_text(encoding="ascii")
+    data = base64.b64decode("".join(encoded.split()), validate=True)
+    actual_sha256 = hashlib.sha256(data).hexdigest()
+    if actual_sha256 != expected_sha256:
+        raise AssertionError(
+            f"ARJ fixture digest mismatch for {name}: {actual_sha256}"
+        )
+    output.write_bytes(data)
+
+
+def run(
+    program: Path | str, *args: str, check: bool = True
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [str(program), *args],
         check=check,
@@ -58,8 +76,12 @@ def main() -> None:
     writer_encrypted = 0
     writer_encrypted_arj = 0
     writer_encrypted_unarc = 0
+    writer_volumes = 0
+    writer_volumes_arj = 0
+    writer_volumes_unarc = 0
     reader_fixtures = 0
     reader_encrypted = 0
+    reader_multivolume = 0
 
     with tempfile.TemporaryDirectory(prefix="vort-arj-diff-") as temp_text:
         temp = Path(temp_text)
@@ -184,13 +206,164 @@ def main() -> None:
                 raise AssertionError("unarc-rs rejected Vort Garble ARJ output")
             writer_encrypted_unarc = 1
 
+        volume_prefix = temp / "vort-volume"
+        run(
+            args.cli,
+            "create-arj-volumes",
+            str(volume_prefix),
+            "payload.bin",
+            str(source),
+            "4096",
+            "method1",
+            encrypted_password,
+            "40",
+        )
+        writer_volumes_paths = (volume_prefix.with_suffix(".arj"),) + tuple(
+            sorted(temp.glob("vort-volume.a[0-9][0-9]"))
+        )
+        if len(writer_volumes_paths) < 2:
+            raise AssertionError("Vort ARJ volume writer did not split")
+        volume_output = temp / "vort-volume.out"
+        run(
+            args.cli,
+            "extract-arj-volumes",
+            "payload.bin",
+            str(volume_output),
+            str(len(payload)),
+            encrypted_password,
+            *(str(path) for path in writer_volumes_paths),
+        )
+        if volume_output.read_bytes() != payload:
+            raise AssertionError("Vort ARJ volume round trip mismatch")
+        writer_volumes = 1
+        if arj_tool is not None:
+            tested = subprocess.run(
+                [
+                    arj_tool,
+                    "t",
+                    str(writer_volumes_paths[0]),
+                    f"-g{encrypted_password}",
+                    "-i",
+                    "-y",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            if tested.returncode != 0:
+                raise AssertionError(
+                    f"ARJ rejected Vort volume set: {tested.stdout!r}"
+                )
+            writer_volumes_arj = 1
+        if unarc is not None:
+            unarc_volume_output = temp / "unarc-vort-volume"
+            run(
+                unarc,
+                "extract",
+                str(writer_volumes_paths[0]),
+                "payload.bin",
+                "--output",
+                str(unarc_volume_output),
+                "--password",
+                encrypted_password,
+                "--force",
+            )
+            if (unarc_volume_output / "payload.bin").read_bytes() != payload:
+                raise AssertionError("unarc-rs rejected Vort ARJ volume set")
+            writer_volumes_unarc = 1
+
+        encrypted = temp / "unarc-rs-license-garble.arj"
+        decode_fixture(
+            "unarc-rs-license-garble.arj.b64",
+            encrypted,
+            "29b1c579452f5b6ef2c731be8c3be4d788926a1fbf5691f9b1940d895ffcfe65",
+        )
+        encrypted_listing = run(args.cli, "list-arj-file", str(encrypted)).stdout
+        if "encryption=garble" not in encrypted_listing:
+            raise AssertionError("Vort failed to report ARJ encryption")
+        encrypted_fixture_output = temp / "encrypted-fixture.out"
+        run(
+            args.cli,
+            "extract-arj-file",
+            str(encrypted),
+            "LICENSE",
+            str(encrypted_fixture_output),
+            str(1024 * 1024),
+            "secret",
+        )
+        if hashlib.sha256(encrypted_fixture_output.read_bytes()).hexdigest() != (
+            "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        ):
+            raise AssertionError("Vort Garble ARJ fixture payload digest mismatch")
+        reader_encrypted = 1
+
+        multi_names_and_digests = (
+            (
+                "unarc-rs-multi-test_file.arj.b64",
+                "f33c9bea36e8b6fd7ebf7f8c144c0bf542528af3e3ef86ee08e69815fd98a404",
+            ),
+            (
+                "unarc-rs-multi-test_file.a01.b64",
+                "80c1a51a509eddc9296a904be1f89f0b150aa7d5eb0ff8baa425fda61e552bf6",
+            ),
+            (
+                "unarc-rs-multi-test_file.a02.b64",
+                "caf74286c0b424e38ac7bc03d4176d103ae9e394efcb70372c8898b7d0525f70",
+            ),
+        )
+        multi_paths = tuple(
+            temp
+            / (
+                "fixture-multi.arj"
+                if index == 0
+                else f"fixture-multi.a{index:02d}"
+            )
+            for index in range(len(multi_names_and_digests))
+        )
+        for (name, digest), path in zip(multi_names_and_digests, multi_paths):
+            decode_fixture(name, path, digest)
+        multi_listing = run(args.cli, "list-arj-file", str(multi_paths[0])).stdout
+        if "name=TEST.ICY" not in multi_listing:
+            raise AssertionError("Vort failed to list the ARJ multi-volume entry")
+        multi_extract = run(
+            args.cli,
+            "extract-arj-file",
+            str(multi_paths[0]),
+            "TEST.ICY",
+            str(temp / "multi-incomplete.out"),
+            check=False,
+        )
+        if multi_extract.returncode == 0:
+            raise AssertionError("Vort accepted incomplete ARJ multi-volume data")
+        multi_output = temp / "multi-complete.out"
+        run(
+            args.cli,
+            "extract-arj-volumes",
+            "TEST.ICY",
+            str(multi_output),
+            str(1024 * 1024),
+            "-",
+            *(str(path) for path in multi_paths),
+        )
+        multi_payload = multi_output.read_bytes()
+        if (
+            len(multi_payload) != 29813
+            or hashlib.sha256(multi_payload).hexdigest()
+            != "be8a087b4563b116bd79d2f8b1f0544c2709a70c4787e05a57b7e11ec33a7f74"
+        ):
+            raise AssertionError("Vort ARJ volume fixture payload mismatch")
+        reader_multivolume = 1
+
         if args.fixtures is not None:
             for method in ("stored", "method1", "method2", "method3", "method4"):
                 fixture = args.fixtures / f"{method}.arj"
                 if not fixture.is_file():
                     raise AssertionError(f"missing ARJ fixture: {fixture}")
                 listing = run(args.cli, "list-arj-file", str(fixture)).stdout
-                expected_method = "stored" if method == "stored" else method.replace("method", "method_")
+                expected_method = (
+                    "stored"
+                    if method == "stored"
+                    else method.replace("method", "method_")
+                )
                 if f"method={expected_method}" not in listing:
                     raise AssertionError(f"Vort misparsed {fixture.name}: {listing}")
                 output = temp / f"fixture-{method}.out"
@@ -220,41 +393,6 @@ def main() -> None:
             if failed.returncode == 0:
                 raise AssertionError("Vort accepted an ARJ entry with a bad data CRC")
 
-            encrypted = args.fixtures / "license_crypted.arj"
-            encrypted_listing = run(args.cli, "list-arj-file", str(encrypted)).stdout
-            if "encryption=garble" not in encrypted_listing:
-                raise AssertionError("Vort failed to report ARJ encryption")
-            encrypted_output = temp / "encrypted.out"
-            run(
-                args.cli,
-                "extract-arj-file",
-                str(encrypted),
-                "LICENSE",
-                str(encrypted_output),
-                str(1024 * 1024),
-                "secret",
-            )
-            if hashlib.sha256(encrypted_output.read_bytes()).hexdigest() != (
-                "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
-            ):
-                raise AssertionError("Vort Garble ARJ fixture digest mismatch")
-            reader_encrypted = 1
-
-            multivolume = args.fixtures / "multi" / "test_file.arj"
-            multi_listing = run(args.cli, "list-arj-file", str(multivolume)).stdout
-            if "name=TEST.ICY" not in multi_listing:
-                raise AssertionError("Vort failed to list the ARJ multi-volume entry")
-            multi_extract = run(
-                args.cli,
-                "extract-arj-file",
-                str(multivolume),
-                "TEST.ICY",
-                str(temp / "multi.out"),
-                check=False,
-            )
-            if multi_extract.returncode == 0:
-                raise AssertionError("Vort accepted incomplete ARJ multi-volume data")
-
     print(
         "arj_diff=ok methods=5 self_writer_cases=5 "
         f"seven_zip={seven_zip is not None} writer_7zip={writer_7zip} "
@@ -262,7 +400,10 @@ def main() -> None:
         f"unarc={unarc is not None} writer_encrypted={writer_encrypted} "
         f"writer_encrypted_arj={writer_encrypted_arj} "
         f"writer_encrypted_unarc={writer_encrypted_unarc} "
+        f"writer_volumes={writer_volumes} writer_volumes_arj={writer_volumes_arj} "
+        f"writer_volumes_unarc={writer_volumes_unarc} "
         f"reader_fixtures={reader_fixtures} reader_encrypted={reader_encrypted} "
+        f"reader_multivolume={reader_multivolume} "
         "corrupt_crc=True encrypted=True multivolume=True"
     )
 

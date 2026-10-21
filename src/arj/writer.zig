@@ -9,6 +9,7 @@ pub const Error = archive.Error || arj_crypto.Error || error{
     InvalidArjEntryName,
     InvalidArjEncryption,
     ArjFileTooLarge,
+    InvalidArjVolumeSize,
 };
 
 pub const EntryKind = enum { file, directory };
@@ -24,6 +25,17 @@ pub const EncodeEntry = struct {
     method: archive.Method = .method_1,
     kind: EntryKind = .file,
     encryption: ?EncryptionOptions = null,
+};
+
+pub const EncodedVolumes = struct {
+    allocator: std.mem.Allocator,
+    volumes: [][]u8,
+
+    pub fn deinit(self: *EncodedVolumes) void {
+        for (self.volumes) |volume| self.allocator.free(volume);
+        self.allocator.free(self.volumes);
+        self.* = undefined;
+    }
 };
 
 const deterministic_timestamp: u32 = 0;
@@ -52,7 +64,7 @@ pub fn encodeAppend(
     var encrypted_archive = false;
     for (entries) |entry|
         encrypted_archive = encrypted_archive or entry.encryption != null;
-    try appendMainHeader(allocator, &archive_bytes, encrypted_archive);
+    try appendMainHeader(allocator, &archive_bytes, encrypted_archive, false);
     for (entries) |entry| {
         var owned: ?[]u8 = null;
         defer if (owned) |bytes| allocator.free(bytes);
@@ -104,14 +116,245 @@ pub fn encodeInto(
     return encoded.len;
 }
 
+pub fn encodeVolumesAlloc(
+    allocator: std.mem.Allocator,
+    entries: []const EncodeEntry,
+    max_payload_per_volume: usize,
+) Error!EncodedVolumes {
+    if (max_payload_per_volume == 0) return error.InvalidArjVolumeSize;
+    try validateEntries(entries);
+    var fragments: std.ArrayList(EncodedFragment) = .empty;
+    defer {
+        for (fragments.items) |fragment| allocator.free(fragment.payload);
+        fragments.deinit(allocator);
+    }
+    var encrypted_archive = false;
+    for (entries) |entry| {
+        if (entry.data.len > std.math.maxInt(u32)) return error.ArjFileTooLarge;
+        encrypted_archive = encrypted_archive or entry.encryption != null;
+        try appendEntryFragments(
+            allocator,
+            &fragments,
+            entry,
+            max_payload_per_volume,
+        );
+    }
+
+    var volumes: std.ArrayList([]u8) = .empty;
+    errdefer {
+        for (volumes.items) |volume| allocator.free(volume);
+        volumes.deinit(allocator);
+    }
+    if (fragments.items.len == 0) {
+        const empty = try buildVolume(
+            allocator,
+            &.{},
+            encrypted_archive,
+            false,
+        );
+        volumes.append(allocator, empty) catch |err| {
+            allocator.free(empty);
+            return err;
+        };
+    } else {
+        var first_fragment: usize = 0;
+        while (first_fragment < fragments.items.len) {
+            var end = first_fragment;
+            var payload_size: usize = 0;
+            while (end < fragments.items.len) : (end += 1) {
+                const fragment_size = fragments.items[end].payload.len;
+                if (end != first_fragment) {
+                    if (fragments.items[end].split_flags & 0x08 != 0 or
+                        fragment_size > max_payload_per_volume - payload_size)
+                        break;
+                }
+                payload_size += fragment_size;
+            }
+            if (end == first_fragment) return error.InvalidArjVolumeSize;
+            const has_next = end < fragments.items.len;
+            const volume = try buildVolume(
+                allocator,
+                fragments.items[first_fragment..end],
+                encrypted_archive,
+                has_next,
+            );
+            volumes.append(allocator, volume) catch |err| {
+                allocator.free(volume);
+                return err;
+            };
+            first_fragment = end;
+        }
+    }
+    return .{
+        .allocator = allocator,
+        .volumes = try volumes.toOwnedSlice(allocator),
+    };
+}
+
+const EncodedFragment = struct {
+    entry: EncodeEntry,
+    payload: []u8,
+    uncompressed_size: usize,
+    crc32: u32,
+    extended_file_position: usize,
+    total_uncompressed_size: usize,
+    split_flags: u8,
+    password_modifier: u8,
+};
+
+fn appendEntryFragments(
+    allocator: std.mem.Allocator,
+    fragments: *std.ArrayList(EncodedFragment),
+    entry: EncodeEntry,
+    max_payload_per_volume: usize,
+) Error!void {
+    if (entry.kind == .directory or entry.method == .no_data or entry.data.len == 0) {
+        const payload = try encodeFragmentAlloc(
+            allocator,
+            entry,
+            entry.data,
+            if (entry.encryption) |encryption| encryption.modifier else 0,
+        );
+        errdefer allocator.free(payload);
+        if (payload.len > max_payload_per_volume)
+            return error.InvalidArjVolumeSize;
+        try fragments.append(allocator, .{
+            .entry = entry,
+            .payload = payload,
+            .uncompressed_size = entry.data.len,
+            .crc32 = checksum.crc32Best(entry.data),
+            .extended_file_position = 0,
+            .total_uncompressed_size = entry.data.len,
+            .split_flags = 0,
+            .password_modifier = if (entry.encryption) |encryption|
+                encryption.modifier
+            else
+                0,
+        });
+        return;
+    }
+
+    var offset: usize = 0;
+    var fragment_index: usize = 0;
+    while (offset < entry.data.len) : (fragment_index += 1) {
+        var plain_len = @min(entry.data.len - offset, max_payload_per_volume);
+        var payload: []u8 = undefined;
+        while (true) {
+            const modifier = if (entry.encryption) |encryption|
+                encryption.modifier +% @as(u8, @truncate(fragment_index))
+            else
+                0;
+            payload = try encodeFragmentAlloc(
+                allocator,
+                entry,
+                entry.data[offset .. offset + plain_len],
+                modifier,
+            );
+            if (payload.len <= max_payload_per_volume) break;
+            allocator.free(payload);
+            if (plain_len == 1) return error.InvalidArjVolumeSize;
+            plain_len = @max(@as(usize, 1), plain_len / 2);
+        }
+        errdefer allocator.free(payload);
+        const next_offset = std.math.add(usize, offset, plain_len) catch
+            return error.IntegerOverflow;
+        const split_before = offset != 0;
+        const split_after = next_offset < entry.data.len;
+        try fragments.append(allocator, .{
+            .entry = entry,
+            .payload = payload,
+            .uncompressed_size = plain_len,
+            .crc32 = checksum.crc32Best(entry.data[offset..next_offset]),
+            .extended_file_position = offset,
+            .total_uncompressed_size = entry.data.len,
+            .split_flags = @as(u8, @intFromBool(split_before)) * 0x08 |
+                @as(u8, @intFromBool(split_after)) * 0x04,
+            .password_modifier = if (entry.encryption) |encryption|
+                encryption.modifier +% @as(u8, @truncate(fragment_index))
+            else
+                0,
+        });
+        offset = next_offset;
+    }
+}
+
+fn encodeFragmentAlloc(
+    allocator: std.mem.Allocator,
+    entry: EncodeEntry,
+    plain: []const u8,
+    password_modifier: u8,
+) Error![]u8 {
+    const payload = switch (entry.method) {
+        .stored => try allocator.dupe(u8, plain),
+        .method_1, .method_2, .method_3 => try lha.encodeLhAlloc(
+            allocator,
+            plain,
+            .lh6,
+        ),
+        .method_4 => try method4.encodeAlloc(allocator, plain),
+        .no_data => try allocator.alloc(u8, 0),
+        .unsupported => unreachable,
+    };
+    errdefer allocator.free(payload);
+    if (payload.len > std.math.maxInt(u32)) return error.ArjFileTooLarge;
+    if (entry.encryption) |encryption|
+        try arj_crypto.crypt(payload, encryption.password, password_modifier);
+    return payload;
+}
+
+fn buildVolume(
+    allocator: std.mem.Allocator,
+    fragments: []const EncodedFragment,
+    encrypted_archive: bool,
+    has_next_volume: bool,
+) Error![]u8 {
+    var output: std.ArrayList(u8) = .empty;
+    errdefer output.deinit(allocator);
+    try appendMainHeader(
+        allocator,
+        &output,
+        encrypted_archive,
+        has_next_volume,
+    );
+    for (fragments) |fragment| {
+        try appendLocalHeaderFields(
+            allocator,
+            &output,
+            fragment.entry,
+            fragment.payload.len,
+            fragment.uncompressed_size,
+            fragment.crc32,
+            fragment.extended_file_position,
+            fragment.total_uncompressed_size,
+            fragment.split_flags,
+            fragment.password_modifier,
+            true,
+        );
+        try output.appendSlice(allocator, fragment.payload);
+    }
+    try output.appendSlice(allocator, &.{ 0x60, 0xea, 0, 0 });
+    return output.toOwnedSlice(allocator);
+}
+
 fn appendMainHeader(
     allocator: std.mem.Allocator,
     output: *std.ArrayList(u8),
     encrypted: bool,
+    has_next_volume: bool,
 ) !void {
     var data: std.ArrayList(u8) = .empty;
     defer data.deinit(allocator);
-    try data.appendSlice(allocator, &.{ 34, 11, 1, 2, @as(u8, 0x10) | @as(u8, @intFromBool(encrypted)), 0, 2, 0 });
+    try data.appendSlice(allocator, &.{
+        34,
+        11,
+        1,
+        2,
+        @as(u8, 0x10) | @as(u8, @intFromBool(encrypted)) |
+            (@as(u8, @intFromBool(has_next_volume)) << 2),
+        0,
+        2,
+        0,
+    });
     try appendLe32(allocator, &data, deterministic_timestamp);
     try appendLe32(allocator, &data, 0);
     try appendLe32(allocator, &data, 0);
@@ -130,23 +373,51 @@ fn appendLocalHeader(
     entry: EncodeEntry,
     compressed_size: usize,
 ) !void {
+    return appendLocalHeaderFields(
+        allocator,
+        output,
+        entry,
+        compressed_size,
+        entry.data.len,
+        checksum.crc32Best(entry.data),
+        0,
+        entry.data.len,
+        0,
+        if (entry.encryption) |encryption| encryption.modifier else 0,
+        false,
+    );
+}
+
+fn appendLocalHeaderFields(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    entry: EncodeEntry,
+    compressed_size: usize,
+    uncompressed_size: usize,
+    crc32: u32,
+    extended_file_position: usize,
+    total_uncompressed_size: usize,
+    split_flags: u8,
+    password_modifier: u8,
+    extended: bool,
+) !void {
     var data: std.ArrayList(u8) = .empty;
     defer data.deinit(allocator);
     const directory = entry.kind == .directory;
     try data.appendSlice(allocator, &.{
-        30,
+        if (extended) 46 else 30,
         11,
         1,
         2,
-        0x10 | @as(u8, @intFromBool(entry.encryption != null)),
+        0x10 | @as(u8, @intFromBool(entry.encryption != null)) | split_flags,
         if (directory) 0 else methodId(entry.method),
         if (directory) 3 else 0,
-        if (entry.encryption) |encryption| encryption.modifier else 0,
+        password_modifier,
     });
     try appendLe32(allocator, &data, deterministic_timestamp);
     try appendLe32(allocator, &data, @intCast(compressed_size));
-    try appendLe32(allocator, &data, @intCast(entry.data.len));
-    try appendLe32(allocator, &data, checksum.crc32Best(entry.data));
+    try appendLe32(allocator, &data, @intCast(uncompressed_size));
+    try appendLe32(allocator, &data, crc32);
     const spec_position = if (std.mem.lastIndexOfScalar(u8, entry.name, '/')) |index|
         index + 1
     else
@@ -154,6 +425,12 @@ fn appendLocalHeader(
     try appendLe16(allocator, &data, @intCast(spec_position));
     try appendLe16(allocator, &data, if (directory) 0x21ed else 0x11a4);
     try data.appendSlice(allocator, &.{ 0, 0 });
+    if (extended) {
+        try appendLe32(allocator, &data, @intCast(extended_file_position));
+        try appendLe32(allocator, &data, 0);
+        try appendLe32(allocator, &data, 0);
+        try appendLe32(allocator, &data, @intCast(total_uncompressed_size));
+    }
     try data.appendSlice(allocator, entry.name);
     try data.appendSlice(allocator, &.{ 0, 0 });
     try appendHeader(allocator, output, data.items);

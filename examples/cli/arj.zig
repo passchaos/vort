@@ -12,17 +12,7 @@ pub fn createFile(
     const entry_name = args.next() orelse return error.MissingCorpusPath;
     const input_path = args.next() orelse return error.MissingCorpusPath;
     const method = try parseMethod(args.next());
-    const encryption: ?vort.ArjEncodeEncryptionOptions = if (args.next()) |password|
-        .{
-            .password = password,
-            .modifier = try std.fmt.parseInt(
-                u8,
-                args.next() orelse return error.MissingCorpusPath,
-                16,
-            ),
-        }
-    else
-        null;
+    const encryption = try parseEncryption(args);
     const input = try readFile(init, input_path);
     defer init.gpa.free(input);
     const entries = [_]vort.ArjEncodeEntry{.{
@@ -40,6 +30,65 @@ pub fn createFile(
         encoded.len,
         output_path,
     });
+}
+
+pub fn createVolumes(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const output_prefix = args.next() orelse return error.MissingCorpusPath;
+    const entry_name = args.next() orelse return error.MissingCorpusPath;
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const max_payload = try std.fmt.parseInt(
+        usize,
+        args.next() orelse return error.MissingCorpusPath,
+        10,
+    );
+    const method = try parseMethod(args.next());
+    const encryption = try parseEncryption(args);
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    const entries = [_]vort.ArjEncodeEntry{.{
+        .name = entry_name,
+        .data = input,
+        .method = method,
+        .encryption = encryption,
+    }};
+    var encoded = try vort.encodeArjVolumesAlloc(
+        init.gpa,
+        &entries,
+        max_payload,
+    );
+    defer encoded.deinit();
+    if (encoded.volumes.len > 100) return error.OutputLimitExceeded;
+    var archive_bytes: usize = 0;
+    for (encoded.volumes, 0..) |volume, index| {
+        const path = if (index == 0)
+            try std.fmt.allocPrint(init.gpa, "{s}.arj", .{output_prefix})
+        else
+            try std.fmt.allocPrint(init.gpa, "{s}.a{d:0>2}", .{
+                output_prefix,
+                index,
+            });
+        defer init.gpa.free(path);
+        try std.Io.Dir.cwd().writeFile(init.io, .{
+            .sub_path = path,
+            .data = volume,
+        });
+        archive_bytes = std.math.add(usize, archive_bytes, volume.len) catch
+            return error.IntegerOverflow;
+    }
+    try stdout.print(
+        "arj_volumes={d} method={s} input_bytes={d} archive_bytes={d} prefix={s}\n",
+        .{
+            encoded.volumes.len,
+            @tagName(method),
+            input.len,
+            archive_bytes,
+            output_prefix,
+        },
+    );
 }
 
 pub fn listFile(
@@ -107,6 +156,60 @@ pub fn extractFile(
     });
 }
 
+pub fn extractVolumes(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const entry_name = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const max_output_len = try std.fmt.parseInt(
+        usize,
+        args.next() orelse return error.MissingCorpusPath,
+        10,
+    );
+    const password_text = args.next() orelse return error.MissingCorpusPath;
+    const password: ?[]const u8 = if (std.mem.eql(u8, password_text, "-"))
+        null
+    else
+        password_text;
+    var volumes: std.ArrayList([]u8) = .empty;
+    defer freeVolumes(init.gpa, &volumes);
+    while (args.next()) |path|
+        try volumes.append(init.gpa, try readFile(init, path));
+    if (volumes.items.len == 0) return error.MissingCorpusPath;
+    var set = try vort.parseArjVolumeSetAlloc(init.gpa, volumes.items);
+    defer set.deinit();
+    const decoded = try set.extractByNameAllocWithOptions(
+        init.gpa,
+        entry_name,
+        .{ .max_output_len = max_output_len, .password = password },
+    );
+    defer init.gpa.free(decoded);
+    try std.Io.Dir.cwd().writeFile(init.io, .{
+        .sub_path = output_path,
+        .data = decoded,
+    });
+    try stdout.print(
+        "arj_volumes={d} decoded_bytes={d} entry={s} path={s}\n",
+        .{ volumes.items.len, decoded.len, entry_name, output_path },
+    );
+}
+
+fn parseEncryption(
+    args: *std.process.Args.Iterator,
+) !?vort.ArjEncodeEncryptionOptions {
+    const password = args.next() orelse return null;
+    return .{
+        .password = password,
+        .modifier = try std.fmt.parseInt(
+            u8,
+            args.next() orelse return error.MissingCorpusPath,
+            16,
+        ),
+    };
+}
+
 fn parseMethod(value: ?[]const u8) !vort.ArjMethod {
     const name = value orelse return .method_1;
     if (std.mem.eql(u8, name, "stored") or std.mem.eql(u8, name, "method0")) return .stored;
@@ -119,4 +222,12 @@ fn parseMethod(value: ?[]const u8) !vort.ArjMethod {
 
 fn readFile(init: std.process.Init, path: []const u8) ![]u8 {
     return std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(max_file_size));
+}
+
+fn freeVolumes(
+    allocator: std.mem.Allocator,
+    volumes: *std.ArrayList([]u8),
+) void {
+    for (volumes.items) |bytes| allocator.free(bytes);
+    volumes.deinit(allocator);
 }

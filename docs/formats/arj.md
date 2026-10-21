@@ -43,6 +43,22 @@ valid literal new-style LH baseline; method 4 uses valid fixed-code literals.
 Match planning remains later ratio work, but every writer mode handles arbitrary
 input and is interoperable with ARJ and 7-Zip.
 
+Ordered multi-volume continuation is supported in both directions. `ArjVolumeSet`
+validates the main-header continuation chain, encryption generation, normalized
+name, method, type, cumulative uncompressed offset, and optional total logical
+size before exposing logical entries. Extraction decrypts, decompresses, and
+checks CRC-32 for every fragment independently; compressed fragment bytes are
+never concatenated into a synthetic stream. Missing, reordered, or inconsistent
+volumes fail as `InvalidArjVolumeSet`. The set borrows each supplied volume, so
+callers keep those byte slices alive until `ArjVolumeSet.deinit`.
+
+`encodeArjVolumesAlloc` accepts a maximum compressed-payload budget per volume
+and returns an owning `ArjEncodedVolumes`. Split members are independently
+compressed with their own sizes and CRC-32 values. Garble state restarts for
+each fragment and advances its password modifier, matching classic ARJ tools.
+The budget excludes headers, trailers, and metadata, so it is not a hard limit
+on the physical volume size.
+
 ```zig
 const entries = [_]vort.ArjEncodeEntry{
     .{ .name = "plain.bin", .data = plain, .method = .stored },
@@ -64,6 +80,17 @@ const decoded = try archive.extractAllocWithOptions(allocator, entry, .{
     .max_output_len = 64 * 1024 * 1024,
 });
 defer allocator.free(decoded);
+
+var volumes = try vort.encodeArjVolumesAlloc(allocator, &entries, 64 * 1024);
+defer volumes.deinit();
+
+var set = try vort.parseArjVolumeSetAlloc(allocator, volumes.volumes);
+defer set.deinit();
+const joined = try set.extractByNameAllocWithOptions(allocator, "compressed.txt", .{
+    .password = "secret",
+    .max_output_len = 64 * 1024 * 1024,
+});
+defer allocator.free(joined);
 ```
 
 CLI validation surfaces:
@@ -71,19 +98,25 @@ CLI validation surfaces:
 ```sh
 zig build run -- create-arj-file archive.arj payload.bin input.bin method1
 zig build run -- create-arj-file secret.arj payload.bin input.bin method1 secret a7
+zig build run -- create-arj-volumes backup payload.bin input.bin 65536 method1 secret 40
 zig build run -- list-arj-file archive.arj
 zig build run -- extract-arj-file secret.arj payload.bin output.bin 67108864 secret
+zig build run -- extract-arj-volumes payload.bin output.bin 67108864 secret backup.arj backup.a01
 zig build test-arj
 zig build run-arj-diff
 ```
 
 The differential checks deterministic Vort writing and self-extraction for all
-five methods plus deterministic Garble output. With external tools and fixtures
-supplied, Debian ARJ validates all five ordinary methods and Garble, unarc-rs
-extracts Garble output, 7-Zip validates ordinary output, and five unarc-rs
-fixtures validate the reverse direction. The independent encrypted fixture is
-decoded with password `secret` and pinned by its plaintext SHA-256; missing and
-wrong passwords plus unsupported GOST dispatch are explicit failures:
+five methods plus deterministic Garble and size-limited multi-volume output.
+Repository-pinned unarc-rs fixtures always validate encrypted reading and a
+three-volume method-1 continuation chain. With optional external tools and
+ordinary method fixtures supplied, Debian ARJ validates all five ordinary
+methods, Garble, and encrypted volume output; unarc-rs extracts Garble and
+multi-volume output; 7-Zip validates ordinary output; and five method fixtures
+validate the reverse direction. The encrypted fixture is decoded with password
+`secret` and pinned by its archive and plaintext SHA-256. Missing and wrong
+passwords, incomplete/reordered volumes, bad fragment CRCs, and unsupported GOST
+dispatch are explicit failures:
 
 ```sh
 zig build run-arj-diff -- \
@@ -93,6 +126,5 @@ zig build run-arj-diff -- \
   --fixtures path/to/unarc-rs/crates/unarc-rs/tests/arj
 ```
 
-GOST40/GOST256 encryption, recovery records, chapter labels, and multi-volume
-continuation are not yet implemented. Their flags are detected and extraction
-fails explicitly rather than treating partial data as an ordinary file.
+GOST40/GOST256 encryption, recovery records, and chapter labels are not yet
+implemented. Their flags are detected and extraction fails explicitly.

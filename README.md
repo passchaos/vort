@@ -391,8 +391,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - dependency-free ARJ/SFX reading and deterministic writing with CRC-validated
   main/local/extended headers, stored and methods 1–4, no-data and directory
   entries, bounded extraction, Vail-backed legacy Garble encryption with
-  per-entry modifiers, explicit GOST/multi-volume rejection, and external ARJ,
-  unarc-rs, plus 7-Zip interoperability;
+  per-fragment modifiers, ordered multi-volume continuation reading and
+  compressed-payload-budgeted writing with independent fragment streams/CRCs,
+  explicit GOST rejection, and external ARJ, unarc-rs, plus 7-Zip
+  interoperability;
 - dependency-free ARC/PAK/SFX reading and deterministic ARC writing for stored,
   packed RLE90, Squeeze, old fixed-12-bit Crunch, dynamic Crunch, and Squash
   plus PAK Crushed and Distilled methods 1–11, including PAK trailers, CRC-16,

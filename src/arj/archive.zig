@@ -75,6 +75,8 @@ pub const Entry = struct {
     crc32: u32,
     compressed_size: usize,
     uncompressed_size: usize,
+    extended_file_position: usize,
+    total_uncompressed_size: ?usize,
     header_offset: usize,
     data_offset: usize,
 
@@ -84,6 +86,14 @@ pub const Entry = struct {
 
     pub fn isEncrypted(self: Entry) bool {
         return self.encryption != null;
+    }
+
+    pub fn splitBefore(self: Entry) bool {
+        return self.flags & 0x08 != 0;
+    }
+
+    pub fn splitAfter(self: Entry) bool {
+        return self.flags & 0x04 != 0;
     }
 };
 
@@ -122,7 +132,7 @@ pub const Archive = struct {
     }
 
     pub fn extractInto(self: Archive, entry: Entry, output: []u8) Error!usize {
-        return self.extractIntoOptionalAllocator(null, entry, output, .{});
+        return self.extractIntoOptionalAllocator(null, entry, output, .{}, false);
     }
 
     pub fn extractIntoWithOptions(
@@ -132,7 +142,17 @@ pub const Archive = struct {
         output: []u8,
         options: DecodeOptions,
     ) Error!usize {
-        return self.extractIntoOptionalAllocator(allocator, entry, output, options);
+        return self.extractIntoOptionalAllocator(allocator, entry, output, options, false);
+    }
+
+    pub fn extractFragmentIntoWithOptions(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        entry: Entry,
+        output: []u8,
+        options: DecodeOptions,
+    ) Error!usize {
+        return self.extractIntoOptionalAllocator(allocator, entry, output, options, true);
     }
 
     fn extractIntoOptionalAllocator(
@@ -141,6 +161,7 @@ pub const Archive = struct {
         entry: Entry,
         output: []u8,
         options: DecodeOptions,
+        allow_split: bool,
     ) Error!usize {
         const parsed = try parseLocalEntry(
             self.bytes,
@@ -152,8 +173,8 @@ pub const Archive = struct {
         if (canonical.uncompressed_size > options.max_output_len)
             return error.OutputLimitExceeded;
         if (output.len < canonical.uncompressed_size) return error.OutputTooSmall;
-        if (self.flags & 0x04 != 0) return error.UnsupportedArjFeature;
-        if (canonical.flags & 0x0c != 0) return error.UnsupportedArjFeature;
+        if (!allow_split and (self.flags & 0x04 != 0 or canonical.flags & 0x0c != 0))
+            return error.UnsupportedArjFeature;
         const target = output[0..canonical.uncompressed_size];
         const compressed_end = try checkedEnd(
             canonical.data_offset,
@@ -416,6 +437,15 @@ fn parseLocalEntryFromHeader(
     if (strings.name.len == 0) return error.InvalidArjArchive;
     const compressed_size: usize = readLe32(header.data, 12);
     const uncompressed_size: usize = readLe32(header.data, 16);
+    if (first_size > 30 and first_size < 34) return error.InvalidArjArchive;
+    const extended_file_position: usize = if (first_size >= 34)
+        readLe32(header.data, 30)
+    else
+        0;
+    const total_uncompressed_size: ?usize = if (first_size >= 46)
+        readLe32(header.data, 42)
+    else
+        null;
     const data_end = try checkedEnd(header.next_offset, compressed_size, bytes.len);
     const method_id = header.data[5];
     const flags = header.data[4];
@@ -431,6 +461,8 @@ fn parseLocalEntryFromHeader(
             .crc32 = readLe32(header.data, 20),
             .compressed_size = compressed_size,
             .uncompressed_size = uncompressed_size,
+            .extended_file_position = extended_file_position,
+            .total_uncompressed_size = total_uncompressed_size,
             .header_offset = offset,
             .data_offset = header.next_offset,
         },
@@ -464,6 +496,8 @@ fn sameEntry(a: Entry, b: Entry) bool {
         a.data_offset == b.data_offset and
         a.compressed_size == b.compressed_size and
         a.uncompressed_size == b.uncompressed_size and
+        a.extended_file_position == b.extended_file_position and
+        a.total_uncompressed_size == b.total_uncompressed_size and
         a.crc32 == b.crc32 and
         a.method_id == b.method_id and
         a.file_type == b.file_type and

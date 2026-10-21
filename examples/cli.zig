@@ -591,10 +591,14 @@ pub fn main(init: std.process.Init) !void {
         try rpm_cli.extractPayload(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "create-arj-file")) {
         try arj_cli.createFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "create-arj-volumes")) {
+        try arj_cli.createVolumes(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "list-arj-file")) {
         try arj_cli.listFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-arj-file")) {
         try arj_cli.extractFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "extract-arj-volumes")) {
+        try arj_cli.extractVolumes(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "create-arc-file")) {
         try arc_cli.createFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "list-arc-file")) {
@@ -2906,9 +2910,13 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode the raw RPM CPIO payload
         \\  create-arj-file <out> <entry> <in> [stored|method1|method2|method3|method4] [password modifier_hex]
         \\                              Create a deterministic ARJ archive
+        \\  create-arj-volumes <prefix> <entry> <in> <max_payload> [method] [password modifier_hex]
+        \\                              Create deterministic compressed-payload-limited ARJ volumes
         \\  list-arj-file <path>        List ARJ entries and methods
         \\  extract-arj-file <arj> <entry> <out> [max_output] [password]
-        \\                              Extract ARJ methods 0 through 4
+        \\                              Extract one ARJ methods 0 through 4 entry
+        \\  extract-arj-volumes <entry> <out> <max_output> <password|-> <volume.arj> [volume.a01...]
+        \\                              Extract an ordered ARJ continuation set
         \\  create-arc-file <out> <entry> <in> [stored|packed|squeezed|crunched|squashed|crushed|distilled]
         \\                              Create a deterministic ARC/PAK archive
         \\  list-arc-file <path>        List ARC/PAK entries and methods

@@ -22069,3 +22069,16 @@ reuse, so production keeps the simpler independently owned plans.
   unarc-rs 0.8.0 independently accept Vort output
   (`writer_encrypted=1`, `writer_encrypted_arj=1`,
   `writer_encrypted_unarc=1`, `reader_encrypted=1`).
+
+- Added real ARJ multi-volume continuation reading and deterministic,
+  compressed-payload-budgeted writing. `ArjVolumeSet` validates ordered main
+  flags, fragment identity, cumulative uncompressed offsets, logical sizes,
+  and missing/reordered volumes before exposing logical members. Every fragment
+  remains an independent compression and Garble stream with its own sizes and
+  plaintext CRC-32; extraction never concatenates compressed bytes. The owning
+  `ArjEncodedVolumes` API, CLI `.arj`/`.a01` output, bounded logical extraction,
+  deterministic round trips, exhaustive allocation failures, and a pinned
+  three-volume unarc-rs fixture cover the library surface. Debian ARJ 3.10 and
+  unarc-rs 0.8.0 independently accept encrypted Vort volume sets when available
+  (`writer_volumes=1`, `writer_volumes_arj=1`,
+  `writer_volumes_unarc=1`, `reader_multivolume=1`).

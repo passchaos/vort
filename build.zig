@@ -1900,7 +1900,7 @@ pub fn build(b: *std.Build) void {
     const arj_diff = b.addSystemCommand(&.{ "python3", "tools/arj/diff.py", "--cli" });
     arj_diff.addArtifactArg(cli_exe);
     if (b.args) |args| arj_diff.addArgs(args);
-    const arj_diff_step = b.step("run-arj-diff", "Validate ARJ methods 0-4 against optional ARJ and 7-Zip tools");
+    const arj_diff_step = b.step("run-arj-diff", "Validate ARJ methods, Garble, and volumes against optional external tools");
     arj_diff_step.dependOn(&arj_diff.step);
 
     const arc_diff = b.addSystemCommand(&.{ "python3", "tools/arc/diff.py", "--cli" });
