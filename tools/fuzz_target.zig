@@ -1881,6 +1881,11 @@ pub fn main(init: std.process.Init) !void {
     );
     defer init.gpa.free(zucchini_aarch64_sample);
     try fuzzOne(init.gpa, zucchini_aarch64_sample);
+    const zucchini_pe_sample = try vort.fuzz.androidOtaZucchiniPeFuzzSampleAlloc(
+        init.gpa,
+    );
+    defer init.gpa.free(zucchini_pe_sample);
+    try fuzzOne(init.gpa, zucchini_pe_sample);
     inline for (.{
         .{ vort.WiaContainer.wia, vort.WiaCompression.bzip2, @as(u32, 2 * 1024 * 1024) },
         .{ vort.WiaContainer.rvz, vort.WiaCompression.zstd, @as(u32, 128 * 1024) },

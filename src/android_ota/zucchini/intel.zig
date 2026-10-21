@@ -1,4 +1,4 @@
-//! Zucchini Intel ELF reference extraction and rewriting.
+//! Zucchini Intel reference primitives and ELF extraction/rewriting.
 
 const std = @import("std");
 
@@ -31,8 +31,8 @@ pub const Options = struct {
     max_references: usize = 1 << 24,
 };
 
-const Kind = enum { x86, x64 };
-const offset_bound = std.math.maxInt(u32) / 2;
+pub const Kind = enum { x86, x64 };
+pub const offset_bound = std.math.maxInt(u32) / 2;
 const image_size_bound = 0x7fff_0000;
 
 pub const X86 = Architecture(.x86);
@@ -42,7 +42,7 @@ fn Architecture(comptime kind: Kind) type {
     return struct {
         pub const ReferenceType = @import("intel.zig").ReferenceType;
         pub const pool_count = @import("intel.zig").pool_count;
-        pub const Elf = ElfImpl(kind);
+        pub const Executable = ElfImpl(kind);
     };
 }
 
@@ -56,7 +56,7 @@ const Section = struct {
     useful: bool,
 };
 
-const Unit = struct {
+pub const Unit = struct {
     offset: u32,
     size: u32,
     rva: u32,
@@ -69,20 +69,24 @@ const Unit = struct {
     fn rvaEnd(self: Unit) u32 {
         return self.rva + self.rva_size;
     }
+
+    fn hasDanglingRva(self: Unit) bool {
+        return self.rva_size > self.size;
+    }
 };
 
-const Translator = struct {
+pub const Translator = struct {
     by_offset: []Unit,
     by_rva: []Unit,
     fake_offset_begin: u32,
 
-    fn deinit(self: *Translator, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *Translator, allocator: std.mem.Allocator) void {
         allocator.free(self.by_offset);
         allocator.free(self.by_rva);
         self.* = undefined;
     }
 
-    fn offsetToRva(self: Translator, offset: u32) ?u32 {
+    pub fn offsetToRva(self: Translator, offset: u32) ?u32 {
         if (offset >= self.fake_offset_begin) {
             const rva = offset - self.fake_offset_begin;
             const unit = findUnitRva(self.by_rva, rva) orelse return null;
@@ -94,7 +98,7 @@ const Translator = struct {
         return offset - unit.offset + unit.rva;
     }
 
-    fn rvaToOffset(self: Translator, rva: u32) ?u32 {
+    pub fn rvaToOffset(self: Translator, rva: u32) ?u32 {
         const unit = findUnitRva(self.by_rva, rva) orelse return null;
         const delta = rva - unit.rva;
         return if (delta < unit.size)
@@ -397,7 +401,7 @@ fn collectRelative(
         const end = start + section.size;
         var cursor = start;
         while (cursor < end) {
-            const candidate = findIntelRelative(kind, image, cursor, end) orelse {
+            const candidate = findRelative(kind, image, cursor, end) orelse {
                 cursor += 1;
                 continue;
             };
@@ -432,13 +436,13 @@ fn collectRelative(
     std.mem.sort(Reference, output.items, {}, lessReference);
 }
 
-const RelativeCandidate = struct {
+pub const RelativeCandidate = struct {
     location: u32,
     instruction_len: usize,
     can_leave_section: bool,
 };
 
-fn findIntelRelative(
+pub fn findRelative(
     comptime kind: Kind,
     image: []const u8,
     cursor: usize,
@@ -475,7 +479,7 @@ fn overlapsAny(
     return false;
 }
 
-fn initTranslatorAlloc(
+pub fn initTranslatorAlloc(
     allocator: std.mem.Allocator,
     input: []const Unit,
 ) Error!Translator {
@@ -483,10 +487,12 @@ fn initTranslatorAlloc(
     errdefer allocator.free(by_rva);
     std.mem.sort(Unit, by_rva, {}, lessUnitRva);
     var count: usize = 0;
-    for (by_rva) |unit| {
+    for (by_rva) |raw_unit| {
+        var unit = raw_unit;
         if (!rangeFitsU32(unit.offset, unit.size, offset_bound) or
             !rangeFitsU32(unit.rva, unit.rva_size, offset_bound))
             return error.InvalidElf;
+        unit.size = @min(unit.size, unit.rva_size);
         if (count != 0 and std.meta.eql(by_rva[count - 1], unit)) continue;
         by_rva[count] = unit;
         count += 1;
@@ -509,6 +515,14 @@ fn initTranslatorAlloc(
         const same_shift = unit.offset >= previous.offset and
             unit.offset - previous.offset == unit.rva - previous.rva;
         if (!same_shift) {
+            if (!tangent) return error.InvalidElf;
+            by_rva[merged] = unit;
+            merged += 1;
+            continue;
+        }
+        if ((unit.hasDanglingRva() and unit.offsetEnd() < previous.offsetEnd()) or
+            (previous.hasDanglingRva() and previous.offsetEnd() < unit.offsetEnd()))
+        {
             if (!tangent) return error.InvalidElf;
             by_rva[merged] = unit;
             merged += 1;
@@ -620,7 +634,7 @@ test "Zucchini Intel ELF32 and ELF64 extract and rewrite all reference groups" {
     inline for (.{ Kind.x86, Kind.x64 }) |kind| {
         const image = testElf(kind);
         const Engine = if (kind == .x86) X86 else X64;
-        var elf = try Engine.Elf.initAlloc(allocator, &image, .{});
+        var elf = try Engine.Executable.initAlloc(allocator, &image, .{});
         defer elf.deinit();
         try std.testing.expectEqualSlices(
             Reference,
@@ -701,23 +715,23 @@ test "Zucchini Intel ELF rejects malformed and quota-exceeding images" {
         // headers, while e_shentsize remains mandatory.
         const program_size_offset: usize = if (kind == .x64) 54 else 42;
         std.mem.writeInt(u16, image[program_size_offset..][0..2], 0, .little);
-        var elf = try Engine.Elf.initAlloc(allocator, &image, .{});
+        var elf = try Engine.Executable.initAlloc(allocator, &image, .{});
         elf.deinit();
 
         try std.testing.expectError(
             error.InvalidElf,
-            Engine.Elf.initAlloc(allocator, &image, .{ .max_sections = 3 }),
+            Engine.Executable.initAlloc(allocator, &image, .{ .max_sections = 3 }),
         );
         try std.testing.expectError(
             error.OutputLimitExceeded,
-            Engine.Elf.initAlloc(allocator, &image, .{ .max_references = 0 }),
+            Engine.Executable.initAlloc(allocator, &image, .{ .max_references = 0 }),
         );
 
         var malformed = image;
         malformed[5] = 2;
         try std.testing.expectError(
             error.InvalidElf,
-            Engine.Elf.initAlloc(allocator, &malformed, .{}),
+            Engine.Executable.initAlloc(allocator, &malformed, .{}),
         );
 
         malformed = image;
@@ -728,9 +742,19 @@ test "Zucchini Intel ELF rejects malformed and quota-exceeding images" {
             std.mem.writeInt(u32, malformed[section_offset_offset..][0..4], std.math.maxInt(u32), .little);
         try std.testing.expectError(
             error.InvalidElf,
-            Engine.Elf.initAlloc(allocator, &malformed, .{}),
+            Engine.Executable.initAlloc(allocator, &malformed, .{}),
         );
     }
+}
+
+test "Zucchini address translator rejects inconsistent dangling RVA overlap" {
+    try std.testing.expectError(
+        error.InvalidElf,
+        initTranslatorAlloc(std.testing.allocator, &.{
+            .{ .offset = 0, .size = 10, .rva = 100, .rva_size = 20 },
+            .{ .offset = 5, .size = 20, .rva = 105, .rva_size = 20 },
+        }),
+    );
 }
 
 fn expectRelativeCandidates(
@@ -741,7 +765,7 @@ fn expectRelativeCandidates(
     var cursor: usize = 0;
     var index: usize = 0;
     while (cursor < code.len) {
-        const candidate = findIntelRelative(kind, code, cursor, code.len) orelse {
+        const candidate = findRelative(kind, code, cursor, code.len) orelse {
             cursor += 1;
             continue;
         };

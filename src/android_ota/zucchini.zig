@@ -3,6 +3,7 @@ const checksum = @import("../checksum.zig");
 const format = @import("format.zig");
 const aarch64 = @import("zucchini/aarch64.zig");
 const intel = @import("zucchini/intel.zig");
+const pe = @import("zucchini/pe.zig");
 
 pub const Error = format.Error || std.mem.Allocator.Error;
 
@@ -62,6 +63,8 @@ pub const ParseOptions = struct {
     max_equivalences: usize = 1 << 24,
     max_target_pools: usize = 1 << 20,
     max_elf_sections: usize = 1 << 20,
+    max_pe_sections: usize = 1 << 20,
+    max_pe_reloc_blocks: usize = 1 << 20,
     max_references: usize = 1 << 24,
     max_targets: usize = 1 << 24,
 };
@@ -130,6 +133,10 @@ pub const Patch = struct {
                 ),
                 .elf_x86 => try applyExecutableReferences(
                     intel.X86,
+                    intel.Options{
+                        .max_sections = options.max_elf_sections,
+                        .max_references = options.max_references,
+                    },
                     allocator,
                     old_element,
                     new_element,
@@ -139,6 +146,38 @@ pub const Patch = struct {
                 ),
                 .elf_x64 => try applyExecutableReferences(
                     intel.X64,
+                    intel.Options{
+                        .max_sections = options.max_elf_sections,
+                        .max_references = options.max_references,
+                    },
+                    allocator,
+                    old_element,
+                    new_element,
+                    element,
+                    self.target_pools[element.pool_start..][0..element.pool_count],
+                    options,
+                ),
+                .win32_x86 => try applyExecutableReferences(
+                    pe.X86,
+                    pe.Options{
+                        .max_sections = options.max_pe_sections,
+                        .max_reloc_blocks = options.max_pe_reloc_blocks,
+                        .max_references = options.max_references,
+                    },
+                    allocator,
+                    old_element,
+                    new_element,
+                    element,
+                    self.target_pools[element.pool_start..][0..element.pool_count],
+                    options,
+                ),
+                .win32_x64 => try applyExecutableReferences(
+                    pe.X64,
+                    pe.Options{
+                        .max_sections = options.max_pe_sections,
+                        .max_reloc_blocks = options.max_pe_reloc_blocks,
+                        .max_references = options.max_references,
+                    },
                     allocator,
                     old_element,
                     new_element,
@@ -465,6 +504,10 @@ fn applyAarch64References(
 ) Error!void {
     return applyExecutableReferences(
         aarch64,
+        aarch64.Options{
+            .max_sections = options.max_elf_sections,
+            .max_references = options.max_references,
+        },
         allocator,
         source,
         output,
@@ -476,6 +519,7 @@ fn applyAarch64References(
 
 fn applyExecutableReferences(
     comptime architecture: type,
+    executable_options: anytype,
     allocator: std.mem.Allocator,
     source: []const u8,
     output: []u8,
@@ -483,16 +527,18 @@ fn applyExecutableReferences(
     encoded_pools: []const TargetPool,
     options: ApplyOptions,
 ) Error!void {
-    var old_elf = architecture.Elf.initAlloc(allocator, source, .{
-        .max_sections = options.max_elf_sections,
-        .max_references = options.max_references,
-    }) catch |err| return mapExecutableError(err);
-    defer old_elf.deinit();
-    var new_elf = architecture.Elf.initAlloc(allocator, output, .{
-        .max_sections = options.max_elf_sections,
-        .max_references = options.max_references,
-    }) catch |err| return mapExecutableError(err);
-    defer new_elf.deinit();
+    var old_executable = architecture.Executable.initAlloc(
+        allocator,
+        source,
+        executable_options,
+    ) catch |err| return mapExecutableError(err);
+    defer old_executable.deinit();
+    var new_executable = architecture.Executable.initAlloc(
+        allocator,
+        output,
+        executable_options,
+    ) catch |err| return mapExecutableError(err);
+    defer new_executable.deinit();
 
     var equivalences = try collectEquivalencesAlloc(
         allocator,
@@ -512,7 +558,7 @@ fn applyExecutableReferences(
         defer targets.deinit(allocator);
         for (std.enums.values(architecture.ReferenceType)) |reference_type| {
             if (reference_type.pool() != pool_tag) continue;
-            for (old_elf.references[@intFromEnum(reference_type)]) |reference| {
+            for (old_executable.references[@intFromEnum(reference_type)]) |reference| {
                 if (targets.items.len >= options.max_targets)
                     return error.OutputLimitExceeded;
                 try targets.append(allocator, reference.target);
@@ -545,7 +591,7 @@ fn applyExecutableReferences(
                 const source_end: u32 = @intCast(
                     equivalence.source_offset + equivalence.length,
                 );
-                for (old_elf.referencesInRange(
+                for (old_executable.referencesInRange(
                     reference_type,
                     source_start,
                     source_end,
@@ -574,7 +620,7 @@ fn applyExecutableReferences(
                     ) catch return error.IntegerOverflow;
                     if (destination_location > std.math.maxInt(u32))
                         return error.InvalidZucchiniPatch;
-                    new_elf.writeReference(output, reference_type, .{
+                    new_executable.writeReference(output, reference_type, .{
                         .location = @intCast(destination_location),
                         .target = targets.items[@intCast(key_i64)],
                     }) catch |err| return mapExecutableError(err);
@@ -747,7 +793,7 @@ fn mapExecutableError(err: anytype) Error {
         error.OutOfMemory => error.OutOfMemory,
         error.OutputLimitExceeded => error.OutputLimitExceeded,
         error.IntegerOverflow => error.IntegerOverflow,
-        error.InvalidElf, error.InvalidReference => error.InvalidZucchiniPatch,
+        else => error.InvalidZucchiniPatch,
     };
 }
 
@@ -1108,6 +1154,86 @@ test "Android OTA Zucchini Intel ELF releases every allocation failure" {
     );
 }
 
+test "Android OTA Zucchini corrects PE32 and PE32+ references" {
+    const allocator = std.testing.allocator;
+    inline for (.{ false, true }) |is_64| {
+        const kind: intel.Kind = if (is_64) .x64 else .x86;
+        const source = pe.testPe(kind, 0x208);
+        const expected = pe.testPe(kind, 0x20c);
+        const encoded = try testPePatchAlloc(
+            allocator,
+            &source,
+            &expected,
+            is_64,
+        );
+        defer allocator.free(encoded);
+        const output = try applyAlloc(
+            allocator,
+            &source,
+            encoded,
+            expected.len,
+            .{},
+        );
+        defer allocator.free(output);
+        try std.testing.expectEqualSlices(u8, &expected, output);
+        try std.testing.expectError(
+            error.InvalidZucchiniPatch,
+            applyAlloc(
+                allocator,
+                &source,
+                encoded,
+                expected.len,
+                .{ .max_pe_sections = 1 },
+            ),
+        );
+        try std.testing.expectError(
+            error.OutputLimitExceeded,
+            applyAlloc(
+                allocator,
+                &source,
+                encoded,
+                expected.len,
+                .{ .max_pe_reloc_blocks = 0 },
+            ),
+        );
+    }
+}
+
+test "Android OTA Zucchini PE releases every allocation failure" {
+    const source = pe.testPe(.x64, 0x208);
+    const expected = pe.testPe(.x64, 0x20c);
+    const encoded = try testPePatchAlloc(
+        std.testing.allocator,
+        &source,
+        &expected,
+        true,
+    );
+    defer std.testing.allocator.free(encoded);
+    const Test = struct {
+        fn run(
+            allocator: std.mem.Allocator,
+            source_bytes: []const u8,
+            patch_bytes: []const u8,
+            expected_bytes: []const u8,
+        ) !void {
+            const output = try applyAlloc(
+                allocator,
+                source_bytes,
+                patch_bytes,
+                expected_bytes.len,
+                .{},
+            );
+            defer allocator.free(output);
+            try std.testing.expectEqualSlices(u8, expected_bytes, output);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{ &source, encoded, &expected },
+    );
+}
+
 pub const test_aosp_reader_fixture = [_]u8{
     0x5a, 0x75, 0x63, 0x63, 0x01, 0x00, 0x00, 0x00,
     0x10, 0x32, 0x54, 0x76, 0x00, 0x11, 0x22, 0x33,
@@ -1388,6 +1514,41 @@ fn testIntelPatchAlloc(
     try appendU32(allocator, &output, 1);
     try output.append(allocator, 2);
     try appendBuffer(allocator, &output, &.{ 0x8c, 0x02 });
+    return output.toOwnedSlice(allocator);
+}
+
+pub fn testPePatchAlloc(
+    allocator: std.mem.Allocator,
+    source: []const u8,
+    expected: []const u8,
+    comptime is_64: bool,
+) ![]u8 {
+    var output: std.ArrayList(u8) = .empty;
+    errdefer output.deinit(allocator);
+    try output.appendSlice(allocator, magic);
+    try appendU16(allocator, &output, major_version);
+    try appendU16(allocator, &output, 0);
+    try appendU32(allocator, &output, @intCast(source.len));
+    try appendU32(allocator, &output, checksum.crc32(source));
+    try appendU32(allocator, &output, @intCast(expected.len));
+    try appendU32(allocator, &output, checksum.crc32(expected));
+    try appendU32(allocator, &output, 1);
+    try appendU32(allocator, &output, 0);
+    try appendU32(allocator, &output, @intCast(source.len));
+    try appendU32(allocator, &output, 0);
+    try appendU32(allocator, &output, @intCast(expected.len));
+    try output.appendSlice(allocator, if (is_64) "Px64" else "Px86");
+    try appendU16(allocator, &output, 1);
+    try appendBuffer(allocator, &output, &.{0});
+    try appendBuffer(allocator, &output, &.{0});
+    try appendBuffer(allocator, &output, &.{ 0x80, 0x08 });
+    try appendBuffer(allocator, &output, "");
+    try appendBuffer(allocator, &output, "");
+    try appendBuffer(allocator, &output, "");
+    try appendBuffer(allocator, &output, &.{ 0, 0, 2 });
+    try appendU32(allocator, &output, 1);
+    try output.append(allocator, 2);
+    try appendBuffer(allocator, &output, &.{ 0x8c, 0x04 });
     return output.toOwnedSlice(allocator);
 }
 

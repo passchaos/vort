@@ -18465,9 +18465,14 @@ reuse, so production keeps the simpler independently owned plans.
   targets, x86 rel32 branches, and x86-64 RIP-relative references behind the
   same bounded application engine. Independent `Ex86` / `Ex64` OTA generators,
   upstream-derived opcode vectors, malformed/quota cases, and exhaustive OOM
-  checks cover the new path. PE, AArch32 ELF, DEX, and ZTF reference correction
-  remain explicit follow-ups rather than silently treating unsupported
-  executable elements as raw data. See `docs/formats/android-ota.md`.
+  checks cover the new path. PE32/PE32+ support adds bounded DOS/COFF/optional
+  headers, section and image-base mapping, HIGHLOW/DIR64 base-relocation units,
+  absolute pointers, and the shared Intel rel32 scanner. Independent `Px86` /
+  `Px64` OTA generators cover whole, source-backed, and range extraction;
+  malformed relocation tables, quotas, and exhaustive OOM are also pinned.
+  AArch32 ELF, DEX, and ZTF reference correction remain explicit follow-ups
+  rather than silently treating unsupported executable elements as raw data.
+  See `docs/formats/android-ota.md`.
 
 - Promoted the previously internal LZ4DIFF high-compression engine into public
   pure-Zig LZ4HC block and independent-frame APIs. Raw blocks reproduce
@@ -22110,10 +22115,10 @@ reuse, so production keeps the simpler independently owned plans.
   accounting in the CLI. Unit tests cover 3/5/7/17-byte reads, raw/Bzip2/XZ/
   ZERO, SOURCE_COPY, operation limits, corrupt old-image hashes and exhaustive
   OOM. The independent differential adds four writer, Python mixed,
-  SOURCE_COPY, SOURCE_BSDIFF, PUFFDIFF, six LZ4DIFF and four Zucchini file-source
-  extractions (`source_reader=18`, `source_inspect=4`), while Rust
+  SOURCE_COPY, SOURCE_BSDIFF, PUFFDIFF, six LZ4DIFF and six Zucchini file-source
+  extractions (`source_reader=20`, `source_inspect=4`), while Rust
   `payload_dumper` independently retains all four writer checks. The optional
-  AOSP official full/delta corpus raises source coverage to 22 with four real
+  AOSP official full/delta corpus raises source coverage to 24 with four real
   kernel/root cases, including genuine BROTLI_BSDIFF (`source_aosp=4`).
 
 - Added a two-pass Android OTA writer over stable seekable partition sources

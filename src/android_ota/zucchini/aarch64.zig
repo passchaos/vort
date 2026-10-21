@@ -301,6 +301,8 @@ pub const Elf = struct {
     }
 };
 
+pub const Executable = Elf;
+
 fn initTranslatorAlloc(
     allocator: std.mem.Allocator,
     input_units: []const Unit,

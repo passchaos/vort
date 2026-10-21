@@ -29,8 +29,9 @@ BSDIFF40/BSDF2, PUF1/PUFFDIFF, LZ4DIFF, and Zucchini v1 application. Valid
 seeds exercise each nested patch surface rather than only malformed header
 rejection; the LZ4DIFF seed reaches a complete BSDIFF application and LZ4HC
 level-5 target reconstruction, while the Zucchini seed reaches CRC-checked
-NoOp literal application and a second seed reaches AArch64 ELF target-pool and
-branch-reference correction.
+NoOp literal application, a second seed reaches AArch64 ELF target-pool and
+branch-reference correction, and a third reaches PE32+ base-relocation,
+absolute-pointer, and rel32 correction.
 
 The `tools/fuzz_corpus.zig` command is intentionally hex-sample based so corpus
 reducers can feed minimized byte strings without inventing a file format.

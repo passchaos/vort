@@ -196,8 +196,11 @@ a `B` immediate. AOSP-derived fixed vectors cover all three AArch64 branch
 immediate encodings, while focused tests cover relocation and 64-bit absolute
 reference groups. Separate ELF32 and ELF64 generators emit `Ex86` and `Ex64`
 patches that jointly exercise relative relocations, absolute pointers, and
-Intel rel32 correction. All four Zucchini fixtures must match through complete,
-source-backed, and bounded-range OTA extraction.
+Intel rel32 correction. Independent PE32 and PE32+ generators exercise the
+same three reference pools through `Px86` and `Px64` base-relocation tables,
+image-base-adjusted pointers, and executable sections. All six Zucchini
+fixtures must match through complete, source-backed, and bounded-range OTA
+extraction.
 
 `run-br-real-corpus-diff` reads the repository-owned
 `tools/br/real_corpus_manifest.json` and requires source, documentation,

@@ -802,6 +802,106 @@ def zucchini_intel_payload(is_64: bool) -> tuple[bytes, bytes, bytes]:
     return payload, source, target
 
 
+def test_pe(is_64: bool, target_offset: int) -> bytes:
+    image = bytearray(BLOCK_SIZE)
+    image[:2] = b"MZ"
+    struct.pack_into("<I", image, 0x3C, 0x80)
+    image[0x80:0x84] = b"PE\0\0"
+    optional_length = 0xF0 if is_64 else 0xE0
+    struct.pack_into("<HH", image, 0x84, 0x8664 if is_64 else 0x14C, 2)
+    struct.pack_into("<H", image, 0x94, optional_length)
+    optional = 0x98
+    struct.pack_into("<H", image, optional, 0x20B if is_64 else 0x10B)
+    image_base = 0x140000000 if is_64 else 0x400000
+    if is_64:
+        struct.pack_into("<Q", image, optional + 0x18, image_base)
+    else:
+        struct.pack_into("<I", image, optional + 0x1C, image_base)
+    struct.pack_into("<I", image, optional + 0x38, 0x4000)
+    struct.pack_into("<I", image, optional + (0x6C if is_64 else 0x5C), 16)
+    directory = optional + (0x70 if is_64 else 0x60) + 5 * 8
+    struct.pack_into("<II", image, directory, 0x2020, 12)
+
+    def section(
+        index: int,
+        virtual_size: int,
+        virtual_address: int,
+        raw_size: int,
+        raw_offset: int,
+        characteristics: int,
+    ) -> None:
+        base = optional + optional_length + index * 40
+        struct.pack_into(
+            "<IIII",
+            image,
+            base + 8,
+            virtual_size,
+            virtual_address,
+            raw_size,
+            raw_offset,
+        )
+        struct.pack_into("<I", image, base + 36, characteristics)
+
+    section(0, 0x40, 0x1000, 0x40, 0x200, 0x60000000)
+    section(1, BLOCK_SIZE - 0x300, 0x2000, BLOCK_SIZE - 0x300, 0x300, 0x40000000)
+    image[0x200] = 0xE8
+    struct.pack_into("<I", image, 0x201, target_offset - 0x205)
+    if is_64:
+        struct.pack_into("<Q", image, 0x300, image_base + 0x1008)
+    else:
+        struct.pack_into("<I", image, 0x300, image_base + 0x1008)
+    struct.pack_into("<IIH", image, 0x320, 0x2000, 12, 0xA000 if is_64 else 0x3000)
+    return bytes(image)
+
+
+def zucchini_pe_payload(is_64: bool) -> tuple[bytes, bytes, bytes]:
+    if python_brotli is None:
+        raise AssertionError("python brotli module is unavailable")
+    source = test_pe(is_64, 0x208)
+    target = test_pe(is_64, 0x20C)
+    patch = bytearray(b"Zucc")
+    patch += struct.pack(
+        "<HHIIII",
+        1,
+        0,
+        len(source),
+        zlib.crc32(source) & 0xFFFFFFFF,
+        len(target),
+        zlib.crc32(target) & 0xFFFFFFFF,
+    )
+    patch += struct.pack("<I", 1)
+    patch += struct.pack(
+        "<IIII4sH",
+        0,
+        len(source),
+        0,
+        len(target),
+        b"Px64" if is_64 else b"Px86",
+        1,
+    )
+    patch += struct.pack("<I", 1) + b"\0"
+    patch += struct.pack("<I", 1) + b"\0"
+    encoded_length = varint(len(source))
+    patch += struct.pack("<I", len(encoded_length)) + encoded_length
+    patch += struct.pack("<I", 0) * 3
+    patch += struct.pack("<I", 3) + b"\0\0\2"
+    patch += struct.pack("<I", 1) + b"\2" + struct.pack("<I", 2) + b"\x8c\x04"
+    compressed_patch = python_brotli.compress(bytes(patch), quality=9)
+    operation_message = bytearray(vfield(1, ZUCCHINI))
+    operation_message += vfield(2, 0) + vfield(3, len(compressed_patch))
+    operation_message += bfield(4, extent(0, 1)) + bfield(6, extent(0, 1))
+    operation_message += bfield(8, hashlib.sha256(compressed_patch).digest())
+    operation_message += bfield(9, hashlib.sha256(source).digest())
+    partition_name = b"zucchini-pe-x64" if is_64 else b"zucchini-pe-x86"
+    partition = bytearray(bfield(1, partition_name))
+    partition += bfield(6, partition_info(source))
+    partition += bfield(7, partition_info(target))
+    partition += bfield(8, bytes(operation_message))
+    manifest = vfield(3, BLOCK_SIZE) + vfield(12, 5) + bfield(13, bytes(partition))
+    payload = MAGIC + struct.pack(">QQI", 2, len(manifest), 0) + manifest + compressed_patch
+    return payload, source, target
+
+
 def source_bsdiff_payload(source: bytes) -> tuple[bytes, bytes, bytes]:
     if len(source) != 2 * BLOCK_SIZE:
         raise AssertionError("SOURCE_BSDIFF fixture must be two blocks")
@@ -1535,6 +1635,8 @@ def main() -> None:
                 ("aarch64", "zucchini-aarch64", zucchini_aarch64_payload),
                 ("x86", "zucchini-x86", lambda: zucchini_intel_payload(False)),
                 ("x64", "zucchini-x64", lambda: zucchini_intel_payload(True)),
+                ("pe-x86", "zucchini-pe-x86", lambda: zucchini_pe_payload(False)),
+                ("pe-x64", "zucchini-pe-x64", lambda: zucchini_pe_payload(True)),
             ):
                 zucchini_data, zucchini_source, zucchini_expected = fixture()
                 zucchini_payload_path = temp / f"zucchini-{name}.bin"
