@@ -22111,3 +22111,13 @@ reuse, so production keeps the simpler independently owned plans.
   `payload_dumper` independently retains all four writer checks. The optional
   AOSP official full/delta corpus raises source coverage to 20 with four real
   kernel/root cases, including genuine BROTLI_BSDIFF (`source_aosp=4`).
+
+- Added a two-pass Android OTA writer over stable seekable partition sources
+  and short-write-capable sinks. Pass one retains only operation kind, geometry,
+  length and SHA-256 plus partition metadata; pass two re-reads and
+  deterministically recompresses one operation at a time. Source changes are
+  detected before changed blob emission, and output/operation/allocation/sink
+  failures are explicit. Raw, Bzip2, XZ and automatic output remain byte-exact
+  with the one-shot writer under 3/5-byte file I/O schedules, and Rust
+  `payload_dumper` independently extracts all four (`source_writer=4`,
+  `source_writer_oracle=4`).

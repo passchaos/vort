@@ -30,27 +30,29 @@ pub const EncodeOptions = struct {
     max_operations: usize = 1 << 24,
     max_partition_name_bytes: usize = 4096,
     max_block_size: usize = 64 * 1024 * 1024,
-    max_output_len: usize = std.math.maxInt(usize),
+    max_output_len: u64 = std.math.maxInt(u64),
 };
 
-const PlannedPartition = struct {
-    source: EncodePartition,
+pub const PlannedPartition = struct {
+    name: []const u8,
+    size: u64,
     operation_start: usize,
     operation_count: usize,
     sha256: [32]u8,
 };
 
-const PlannedOperation = struct {
+pub const PlannedOperation = struct {
     kind: format.OperationType,
     first_block: u64,
     block_count: u64,
     data_offset: u64,
+    data_len: usize,
     data: []const u8,
     owned_data: ?[]u8,
     sha256: [32]u8,
 };
 
-const SelectedBlob = struct {
+pub const SelectedBlob = struct {
     kind: format.OperationType,
     data: []const u8,
     owned_data: ?[]u8,
@@ -61,15 +63,7 @@ pub fn encodeAlloc(
     partitions: []const EncodePartition,
     options: EncodeOptions,
 ) Error![]u8 {
-    const block_size: usize = options.block_size;
-    if (block_size == 0 or block_size % 4 != 0 or
-        block_size > options.max_block_size)
-        return error.InvalidAndroidOta;
-    if (options.operation_size == 0 or
-        options.operation_size % block_size != 0)
-        return error.InvalidAndroidOta;
-    if (partitions.len > options.max_partitions)
-        return error.OutputLimitExceeded;
+    const block_size = try validateOptions(partitions.len, options);
 
     var planned_partitions: std.ArrayList(PlannedPartition) = .empty;
     defer planned_partitions.deinit(allocator);
@@ -111,6 +105,7 @@ pub fn encodeAlloc(
                 .first_block = input_offset / block_size,
                 .block_count = block_count,
                 .data_offset = data_offset,
+                .data_len = selected.data.len,
                 .data = selected.data,
                 .owned_data = selected.owned_data,
                 .sha256 = digest,
@@ -119,7 +114,7 @@ pub fn encodeAlloc(
             data_offset = std.math.add(
                 u64,
                 data_offset,
-                operations.items[operations.items.len - 1].data.len,
+                operations.items[operations.items.len - 1].data_len,
             ) catch return error.IntegerOverflow;
             input_offset += length;
         }
@@ -130,7 +125,8 @@ pub fn encodeAlloc(
             .{},
         );
         try planned_partitions.append(allocator, .{
-            .source = partition,
+            .name = partition.name,
+            .size = partition.data.len,
             .operation_start = operation_start,
             .operation_count = operations.items.len - operation_start,
             .sha256 = partition_digest,
@@ -151,9 +147,9 @@ pub fn encodeAlloc(
     ) catch return error.IntegerOverflow;
     const total_size_u64 = std.math.add(u64, metadata_size, data_offset) catch
         return error.IntegerOverflow;
-    const total_size = std.math.cast(usize, total_size_u64) orelse
+    if (total_size_u64 > options.max_output_len)
         return error.OutputLimitExceeded;
-    if (total_size > options.max_output_len)
+    const total_size = std.math.cast(usize, total_size_u64) orelse
         return error.OutputLimitExceeded;
     var output: std.ArrayList(u8) = .empty;
     errdefer output.deinit(allocator);
@@ -169,7 +165,23 @@ pub fn encodeAlloc(
     return output.toOwnedSlice(allocator);
 }
 
-fn selectBlob(
+pub fn validateOptions(
+    partition_count: usize,
+    options: EncodeOptions,
+) Error!usize {
+    const block_size: usize = options.block_size;
+    if (block_size == 0 or block_size % 4 != 0 or
+        block_size > options.max_block_size)
+        return error.InvalidAndroidOta;
+    if (options.operation_size == 0 or
+        options.operation_size % block_size != 0)
+        return error.InvalidAndroidOta;
+    if (partition_count > options.max_partitions)
+        return error.OutputLimitExceeded;
+    return block_size;
+}
+
+pub fn selectBlob(
     allocator: std.mem.Allocator,
     input: []const u8,
     options: EncodeOptions,
@@ -230,7 +242,7 @@ fn selectSmallestBlob(
     return .{ .kind = .replace, .data = input, .owned_data = null };
 }
 
-fn encodeManifestAlloc(
+pub fn encodeManifestAlloc(
     allocator: std.mem.Allocator,
     partitions: []const PlannedPartition,
     operations: []const PlannedOperation,
@@ -247,7 +259,7 @@ fn encodeManifestAlloc(
             allocator,
             &partition_message,
             1,
-            partition.source.name,
+            partition.name,
         );
         var info_message: std.ArrayList(u8) = .empty;
         defer info_message.deinit(allocator);
@@ -255,7 +267,7 @@ fn encodeManifestAlloc(
             allocator,
             &info_message,
             1,
-            partition.source.data.len,
+            partition.size,
         );
         try protobuf.appendBytesField(
             allocator,
@@ -278,7 +290,7 @@ fn encodeManifestAlloc(
                 1,
                 @intFromEnum(operation.kind),
             );
-            if (operation.data.len != 0) {
+            if (operation.data_len != 0) {
                 try protobuf.appendVarintField(
                     allocator,
                     &operation_message,
@@ -289,7 +301,7 @@ fn encodeManifestAlloc(
                     allocator,
                     &operation_message,
                     3,
-                    operation.data.len,
+                    operation.data_len,
                 );
             }
             var extent_message: std.ArrayList(u8) = .empty;
@@ -312,7 +324,7 @@ fn encodeManifestAlloc(
                 6,
                 extent_message.items,
             );
-            if (operation.data.len != 0)
+            if (operation.data_len != 0)
                 try protobuf.appendBytesField(
                     allocator,
                     &operation_message,

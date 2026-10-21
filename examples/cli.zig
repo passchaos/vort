@@ -375,6 +375,8 @@ pub fn main(init: std.process.Init) !void {
         try android_ota_cli.extractRange(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-android-ota")) {
         try android_ota_cli.encode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-android-ota-source")) {
+        try android_ota_cli.encodeSource(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "puff-android-deflate")) {
         try android_ota_cli.puffDeflate(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "huff-android-deflate")) {
@@ -2823,6 +2825,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  extract-android-ota-source <payload> <partition> <out> <chunk_size> [source|-]
         \\  extract-android-ota-range <payload> <partition> <out> <offset> <length> [source|-]
         \\  encode-android-ota <in> <out> <partition> [auto|raw|bzip2|xz] [block_size] [operation_size]
+        \\  encode-android-ota-source <in> <out> <partition> [mode] [block_size] [operation_size] [input_step] [output_step]
         \\  puff-android-deflate <in> <out> [bit_offset] [bit_length]
         \\  huff-android-deflate <in> <out> <bit_offset> <bit_length>
         \\  encode-zchunk-file <in> <out> [chunk_size] [zstd|none] [normal|source-hashes]

@@ -8,6 +8,7 @@ const FileSource = struct {
     io: std.Io,
     read_calls: usize = 0,
     bytes_read: usize = 0,
+    max_chunk: usize = std.math.maxInt(usize),
 
     fn source(self: *FileSource, len: u64) vort.AndroidOtaSource {
         return .{ .context = self, .len = len, .read_at = readAt };
@@ -19,12 +20,43 @@ const FileSource = struct {
         output: []u8,
     ) error{SourceReadFailed}!usize {
         const self: *FileSource = @ptrCast(@alignCast(raw_context));
-        const amount = self.file.readPositional(self.io, &.{output}, offset) catch
+        const target = output[0..@min(output.len, self.max_chunk)];
+        const amount = self.file.readPositional(self.io, &.{target}, offset) catch
             return error.SourceReadFailed;
         self.read_calls = std.math.add(usize, self.read_calls, 1) catch
             return error.SourceReadFailed;
         self.bytes_read = std.math.add(usize, self.bytes_read, amount) catch
             return error.SourceReadFailed;
+        return amount;
+    }
+};
+
+const FileSink = struct {
+    file: std.Io.File,
+    io: std.Io,
+    offset: u64 = 0,
+    write_calls: usize = 0,
+    max_chunk: usize = std.math.maxInt(usize),
+
+    fn sink(self: *FileSink) vort.AndroidOtaEncodeSink {
+        return .{ .context = self, .write = write };
+    }
+
+    fn write(
+        raw_context: *anyopaque,
+        input: []const u8,
+    ) error{SinkWriteFailed}!usize {
+        const self: *FileSink = @ptrCast(@alignCast(raw_context));
+        const target = input[0..@min(input.len, self.max_chunk)];
+        const amount = self.file.writePositional(
+            self.io,
+            &.{target},
+            self.offset,
+        ) catch return error.SinkWriteFailed;
+        self.offset = std.math.add(u64, self.offset, amount) catch
+            return error.SinkWriteFailed;
+        self.write_calls = std.math.add(usize, self.write_calls, 1) catch
+            return error.SinkWriteFailed;
         return amount;
     }
 };
@@ -345,6 +377,79 @@ pub fn encode(
             block_size,
             operation_size,
             encoded.len,
+            output_path,
+        },
+    );
+}
+
+pub fn encodeSource(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const partition_name = args.next() orelse return error.MissingCorpusPath;
+    const compression = try parseCompression(args.next() orelse "auto");
+    const block_size = if (args.next()) |text|
+        try std.fmt.parseInt(u32, text, 0)
+    else
+        4096;
+    const operation_size = if (args.next()) |text|
+        try std.fmt.parseInt(usize, text, 0)
+    else
+        1024 * 1024;
+    const input_step = if (args.next()) |text|
+        try std.fmt.parseInt(usize, text, 0)
+    else
+        std.math.maxInt(usize);
+    const output_step = if (args.next()) |text|
+        try std.fmt.parseInt(usize, text, 0)
+    else
+        std.math.maxInt(usize);
+    if (input_step == 0 or output_step == 0) return error.OutputLimitExceeded;
+
+    var input_file = try std.Io.Dir.cwd().openFile(init.io, input_path, .{});
+    defer input_file.close(init.io);
+    const stat = try input_file.stat(init.io);
+    var input_context = FileSource{
+        .file = input_file,
+        .io = init.io,
+        .max_chunk = input_step,
+    };
+    var output_file = try std.Io.Dir.cwd().createFile(init.io, output_path, .{});
+    defer output_file.close(init.io);
+    var output_context = FileSink{
+        .file = output_file,
+        .io = init.io,
+        .max_chunk = output_step,
+    };
+    const result = try vort.encodeAndroidOtaSourcesTo(
+        init.gpa,
+        &.{.{
+            .name = partition_name,
+            .source = input_context.source(stat.size),
+        }},
+        .{
+            .block_size = block_size,
+            .operation_size = operation_size,
+            .compression = compression,
+            .max_output_len = max_file_size,
+        },
+        output_context.sink(),
+    );
+    if (output_context.offset != result.bytes_written) return error.SizeMismatch;
+    try stdout.print(
+        "format=android-ota-source-writer partition={s} input_bytes={d} compression={s} operations={d} payload_bytes={d} input_reads={d} input_bytes_read={d} output_writes={d} path={s}\n",
+        .{
+            partition_name,
+            stat.size,
+            @tagName(compression),
+            result.operation_count,
+            result.bytes_written,
+            input_context.read_calls,
+            input_context.bytes_read,
+            output_context.write_calls,
             output_path,
         },
     );

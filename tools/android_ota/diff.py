@@ -771,6 +771,8 @@ def main() -> None:
     source_reader_cases = 0
     source_inspect_cases = 0
     source_aosp_cases = 0
+    source_writer_cases = 0
+    source_writer_oracle = 0
     with tempfile.TemporaryDirectory(prefix="vort-android-ota-") as temp_text:
         temp = Path(temp_text)
         source = temp / "system.img"
@@ -789,6 +791,32 @@ def main() -> None:
                 2 * BLOCK_SIZE,
             )
             payload = payload_path.read_bytes()
+            source_payload_path = temp / f"vort-source-writer-{compression}.bin"
+            source_writer_summary = run(
+                args.cli,
+                "encode-android-ota-source",
+                source,
+                source_payload_path,
+                "system",
+                compression,
+                BLOCK_SIZE,
+                2 * BLOCK_SIZE,
+                3,
+                5,
+            ).stdout
+            if source_payload_path.read_bytes() != payload:
+                raise AssertionError(
+                    f"source writer wire mismatch for {compression}"
+                )
+            if (
+                b"format=android-ota-source-writer" not in source_writer_summary
+                or b"input_reads=" not in source_writer_summary
+                or b"output_writes=" not in source_writer_summary
+            ):
+                raise AssertionError(
+                    f"source writer accounting mismatch for {compression}"
+                )
+            source_writer_cases += 1
             decoded = decode_reference(payload)
             if decoded != {"system": source_bytes}:
                 raise AssertionError(f"reference decode mismatch for {compression}")
@@ -840,6 +868,22 @@ def main() -> None:
                 if (output_dir / "system.img").read_bytes() != source_bytes:
                     raise AssertionError(f"payload_dumper mismatch for {compression}")
                 oracle_decode += 1
+                source_output_dir = temp / f"oracle-source-writer-{compression}"
+                run(
+                    oracle,
+                    source_payload_path,
+                    "-o",
+                    source_output_dir,
+                    "-i",
+                    "system",
+                    "-P",
+                    "-q",
+                )
+                if (source_output_dir / "system.img").read_bytes() != source_bytes:
+                    raise AssertionError(
+                        f"payload_dumper source writer mismatch for {compression}"
+                    )
+                source_writer_oracle += 1
 
         reference_data = mixed_payload_data()
         reference_payload = reference_mixed_payload(reference_data)
@@ -1402,7 +1446,9 @@ def main() -> None:
         f"python_brotli={python_brotli is not None} zucchini_cases={zucchini_cases} "
         f"aosp={args.aosp_update_engine is not None} aosp_full={aosp_full} "
         f"aosp_delta={aosp_delta} source_reader={source_reader_cases} "
-        f"source_inspect={source_inspect_cases} source_aosp={source_aosp_cases}"
+        f"source_inspect={source_inspect_cases} source_aosp={source_aosp_cases} "
+        f"source_writer={source_writer_cases} "
+        f"source_writer_oracle={source_writer_oracle}"
     )
 
 

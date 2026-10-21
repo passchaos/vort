@@ -4,6 +4,7 @@ const br = @import("../br.zig");
 const archive_mod = @import("archive.zig");
 const source_archive = @import("source_archive.zig");
 const source_mod = @import("source.zig");
+const source_writer = @import("source_writer.zig");
 const format = @import("format.zig");
 const lz4diff = @import("lz4diff.zig");
 const zucchini = @import("zucchini.zig");
@@ -45,6 +46,34 @@ const TestSource = struct {
         @memcpy(output[0..amount], self.bytes[start..][0..amount]);
         self.read_calls += 1;
         self.bytes_read += amount;
+        return amount;
+    }
+};
+
+const TestSink = struct {
+    allocator: std.mem.Allocator,
+    bytes: std.ArrayList(u8) = .empty,
+    max_chunk: usize,
+    write_calls: usize = 0,
+
+    fn deinit(self: *TestSink) void {
+        self.bytes.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    fn sink(self: *TestSink) source_writer.Sink {
+        return .{ .context = self, .write = write };
+    }
+
+    fn write(
+        raw_context: *anyopaque,
+        input: []const u8,
+    ) error{SinkWriteFailed}!usize {
+        const self: *TestSink = @ptrCast(@alignCast(raw_context));
+        const amount = @min(input.len, self.max_chunk);
+        self.bytes.appendSlice(self.allocator, input[0..amount]) catch
+            return error.SinkWriteFailed;
+        self.write_calls += 1;
         return amount;
     }
 };
@@ -207,6 +236,229 @@ test "Android OTA source archive reads full payload blobs through short callback
                 ),
             );
     }
+}
+
+test "Android OTA two-pass source writer is byte-identical under short I/O" {
+    const block_size = 4096;
+    const system = try allocator.alloc(u8, 5 * block_size);
+    defer allocator.free(system);
+    @memset(system, 0);
+    for (system[0 .. 2 * block_size], 0..) |*byte, index|
+        byte.* = @truncate(index * 17 + index / 31);
+    const phrase = "source writer deterministic compression ";
+    for (system[2 * block_size .. 4 * block_size], 0..) |*byte, index|
+        byte.* = phrase[index % phrase.len];
+    const boot = [_]u8{0xa5} ** block_size;
+
+    inline for (.{
+        writer.Compression.raw,
+        writer.Compression.bzip2,
+        writer.Compression.xz,
+        writer.Compression.auto,
+    }) |compression| {
+        const options = writer.EncodeOptions{
+            .block_size = block_size,
+            .operation_size = 2 * block_size,
+            .compression = compression,
+        };
+        const expected = try writer.encodeAlloc(
+            allocator,
+            &.{
+                .{ .name = "system", .data = system },
+                .{ .name = "boot", .data = &boot },
+                .{ .name = "empty", .data = "" },
+            },
+            options,
+        );
+        defer allocator.free(expected);
+        var system_source = TestSource{ .bytes = system, .max_chunk = 3 };
+        var boot_source = TestSource{ .bytes = &boot, .max_chunk = 5 };
+        var empty_source = TestSource{ .bytes = "", .max_chunk = 1 };
+        var sink = TestSink{
+            .allocator = allocator,
+            .max_chunk = 7,
+        };
+        defer sink.deinit();
+        const result = try source_writer.encodeTo(
+            allocator,
+            &.{
+                .{ .name = "system", .source = system_source.source() },
+                .{ .name = "boot", .source = boot_source.source() },
+                .{ .name = "empty", .source = empty_source.source() },
+            },
+            options,
+            sink.sink(),
+        );
+        try std.testing.expectEqualSlices(u8, expected, sink.bytes.items);
+        try std.testing.expectEqual(@as(u64, expected.len), result.bytes_written);
+        try std.testing.expectEqual(@as(usize, 4), result.operation_count);
+        try std.testing.expectEqual(2 * system.len, system_source.bytes_read);
+        try std.testing.expectEqual(2 * boot.len, boot_source.bytes_read);
+        try std.testing.expect(sink.write_calls > 2);
+    }
+}
+
+test "Android OTA two-pass writer rejects changing sources and releases failures" {
+    const input = [_]u8{0x41} ** 8192;
+    const Changing = struct {
+        bytes: []const u8,
+        calls: usize = 0,
+
+        fn readAt(
+            raw_context: *anyopaque,
+            offset: u64,
+            output: []u8,
+        ) error{SourceReadFailed}!usize {
+            const self: *@This() = @ptrCast(@alignCast(raw_context));
+            const start = std.math.cast(usize, offset) orelse
+                return error.SourceReadFailed;
+            if (start >= self.bytes.len) return 0;
+            const amount = @min(output.len, self.bytes.len - start);
+            @memcpy(output[0..amount], self.bytes[start..][0..amount]);
+            if (self.calls != 0 and amount != 0) output[0] ^= 1;
+            self.calls += 1;
+            return amount;
+        }
+    };
+    var changing = Changing{ .bytes = &input };
+    var changing_output: [16 * 1024]u8 = undefined;
+    var changing_written: usize = 0;
+    const Fixed = struct {
+        const State = struct { output: []u8, written: *usize };
+
+        fn write(
+            raw_context: *anyopaque,
+            bytes: []const u8,
+        ) error{SinkWriteFailed}!usize {
+            const state: *State = @ptrCast(@alignCast(raw_context));
+            if (bytes.len > state.output.len - state.written.*)
+                return error.SinkWriteFailed;
+            @memcpy(state.output[state.written.*..][0..bytes.len], bytes);
+            state.written.* += bytes.len;
+            return bytes.len;
+        }
+    };
+    var changing_state = Fixed.State{
+        .output = changing_output[0..],
+        .written = &changing_written,
+    };
+    try std.testing.expectError(
+        error.UnstableAndroidOtaSource,
+        source_writer.encodeTo(
+            allocator,
+            &.{.{
+                .name = "system",
+                .source = .{
+                    .context = &changing,
+                    .len = input.len,
+                    .read_at = Changing.readAt,
+                },
+            }},
+            .{ .compression = .raw },
+            .{ .context = &changing_state, .write = Fixed.write },
+        ),
+    );
+
+    const AllocationTest = struct {
+        fn run(failing_allocator: std.mem.Allocator, bytes: []const u8) !void {
+            var input_source = TestSource{ .bytes = bytes, .max_chunk = 31 };
+            var output: [32 * 1024]u8 = undefined;
+            var written: usize = 0;
+            var state = Fixed.State{ .output = output[0..], .written = &written };
+            _ = try source_writer.encodeTo(
+                failing_allocator,
+                &.{.{ .name = "system", .source = input_source.source() }},
+                .{ .compression = .xz, .operation_size = 4096 },
+                .{ .context = &state, .write = Fixed.write },
+            );
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        allocator,
+        AllocationTest.run,
+        .{input[0..]},
+    );
+
+    var stable_source = TestSource{ .bytes = &input, .max_chunk = 19 };
+    var output: [32 * 1024]u8 = undefined;
+    var written: usize = 0;
+    var state = Fixed.State{ .output = output[0..], .written = &written };
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        source_writer.encodeTo(
+            allocator,
+            &.{.{ .name = "system", .source = stable_source.source() }},
+            .{ .max_output_len = 1 },
+            .{ .context = &state, .write = Fixed.write },
+        ),
+    );
+
+    var failed_source = TestSource{
+        .bytes = &input,
+        .max_chunk = 19,
+        .fail = true,
+    };
+    try std.testing.expectError(
+        error.SourceReadFailed,
+        source_writer.encodeTo(
+            allocator,
+            &.{.{ .name = "system", .source = failed_source.source() }},
+            .{},
+            .{ .context = &state, .write = Fixed.write },
+        ),
+    );
+    var duplicate_source = TestSource{ .bytes = "", .max_chunk = 1 };
+    try std.testing.expectError(
+        error.DuplicateAndroidOtaPartition,
+        source_writer.encodeTo(
+            allocator,
+            &.{
+                .{ .name = "same", .source = duplicate_source.source() },
+                .{ .name = "same", .source = duplicate_source.source() },
+            },
+            .{},
+            .{ .context = &state, .write = Fixed.write },
+        ),
+    );
+    var unaligned_source = TestSource{ .bytes = "x", .max_chunk = 1 };
+    try std.testing.expectError(
+        error.InvalidAndroidOta,
+        source_writer.encodeTo(
+            allocator,
+            &.{.{ .name = "bad", .source = unaligned_source.source() }},
+            .{},
+            .{ .context = &state, .write = Fixed.write },
+        ),
+    );
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        source_writer.encodeTo(
+            allocator,
+            &.{.{ .name = "system", .source = stable_source.source() }},
+            .{ .max_operations = 0 },
+            .{ .context = &state, .write = Fixed.write },
+        ),
+    );
+
+    const Stalled = struct {
+        fn write(
+            context: *anyopaque,
+            bytes: []const u8,
+        ) error{SinkWriteFailed}!usize {
+            _ = context;
+            _ = bytes;
+            return 0;
+        }
+    };
+    try std.testing.expectError(
+        error.SinkWriteFailed,
+        source_writer.encodeTo(
+            allocator,
+            &.{.{ .name = "system", .source = stable_source.source() }},
+            .{},
+            .{ .context = &state, .write = Stalled.write },
+        ),
+    );
 }
 
 test "Android OTA source archive reads delta old-image extents on demand" {

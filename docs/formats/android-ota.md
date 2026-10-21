@@ -146,6 +146,28 @@ try source_archive.readPartitionRangeInto(
 );
 ```
 
+The symmetric seekable writer is `encodeAndroidOtaSourcesTo`. Its first pass
+reads one operation at a time, selects compression, hashes the partition and
+wire blob, and retains only the manifest plan. Its second pass re-reads and
+deterministically recompresses each operation into a short-write-capable caller
+sink. A changed source is rejected as `UnstableAndroidOtaSource` before its
+changed blob is emitted. Memory is bounded by one input operation, the codec's
+candidate buffers, manifest metadata, and the sink's own state; neither whole
+partitions nor the complete payload are retained. For identical stable inputs,
+all four compression policies are byte-identical to `encodeAndroidOtaAlloc`.
+
+```zig
+const result = try vort.encodeAndroidOtaSourcesTo(
+    allocator,
+    &.{.{
+        .name = "system",
+        .source = .{ .context = input_ctx, .len = image_len, .read_at = readAt },
+    }},
+    .{ .compression = .auto },
+    .{ .context = output_ctx, .write = write },
+);
+```
+
 The deterministic full-payload writer accepts multiple named, block-aligned
 partition images. It divides them into bounded operations, emits ZERO operations
 for all-zero chunks, and can force raw, Bzip2, or XZ storage. Automatic mode
@@ -179,6 +201,7 @@ zig build run -- extract-android-ota payload.bin system system.img 8589934592
 zig build run -- extract-android-ota-source payload.bin system system.img 1048576 old-system.img
 zig build run -- extract-android-ota-range payload.bin system range.bin 1048576 65536
 zig build run -- encode-android-ota system.img payload.bin system auto 4096 1048576
+zig build run -- encode-android-ota-source system.img payload.bin system auto 4096 1048576 65536 65536
 zig build run -- puff-android-deflate input.deflate output.puff
 zig build run -- huff-android-deflate output.puff restored.deflate 0 12345
 zig build test-android-ota
@@ -221,6 +244,10 @@ physical read counts, and currently requires `source_reader=16` plus
 `source_inspect=4`. Supplying the local AOSP update-engine corpus additionally
 requires both full and both delta kernel/root partitions through this path,
 raising the result to `source_reader=20`, `source_aosp=4`.
+The source writer differential forces three-byte input reads and five-byte sink
+writes for raw, Bzip2, XZ, and automatic policies, requires exact equality with
+the corresponding one-shot payloads, and independently decodes all four with
+Rust `payload_dumper` (`source_writer=4`, `source_writer_oracle=4`).
 
 Current explicit limitations are major-version-1 payloads, cryptographic
 verification of vendor metadata/payload signatures, and architecture-specific
@@ -229,5 +256,6 @@ elements. DISCARD is
 likewise rejected by default
 because Android defines its read-back contents as undefined; callers may opt
 into deterministic zero interpretation through `DecodeOptions.discard_as_zero`.
-Non-seekable network input, streaming payload writing, and the remaining
-architecture-specific Zucchini reference models remain future work.
+Non-seekable network input, a single-pass writer for callers unable to replay
+input, and the remaining architecture-specific Zucchini reference models
+remain future work.
