@@ -3,19 +3,27 @@ const archive = @import("archive.zig");
 const checksum = @import("../checksum.zig");
 const lha = @import("../lha.zig");
 const method4 = @import("method4.zig");
+const arj_crypto = @import("vail_archive_crypto").arj;
 
-pub const Error = archive.Error || error{
+pub const Error = archive.Error || arj_crypto.Error || error{
     InvalidArjEntryName,
+    InvalidArjEncryption,
     ArjFileTooLarge,
 };
 
 pub const EntryKind = enum { file, directory };
+
+pub const EncryptionOptions = struct {
+    password: []const u8,
+    modifier: u8,
+};
 
 pub const EncodeEntry = struct {
     name: []const u8,
     data: []const u8 = "",
     method: archive.Method = .method_1,
     kind: EntryKind = .file,
+    encryption: ?EncryptionOptions = null,
 };
 
 const deterministic_timestamp: u32 = 0;
@@ -41,7 +49,10 @@ pub fn encodeAppend(
     var archive_bytes: std.ArrayList(u8) = .empty;
     defer archive_bytes.deinit(allocator);
 
-    try appendMainHeader(allocator, &archive_bytes);
+    var encrypted_archive = false;
+    for (entries) |entry|
+        encrypted_archive = encrypted_archive or entry.encryption != null;
+    try appendMainHeader(allocator, &archive_bytes, encrypted_archive);
     for (entries) |entry| {
         var owned: ?[]u8 = null;
         defer if (owned) |bytes| allocator.free(bytes);
@@ -62,10 +73,18 @@ pub fn encodeAppend(
             .no_data => "",
             .unsupported => unreachable,
         };
+        const encrypted: ?[]u8 = if (entry.encryption) |encryption| blk: {
+            const bytes = try allocator.dupe(u8, compressed);
+            errdefer allocator.free(bytes);
+            try arj_crypto.crypt(bytes, encryption.password, encryption.modifier);
+            break :blk bytes;
+        } else null;
+        defer if (encrypted) |bytes| allocator.free(bytes);
+        const payload = encrypted orelse compressed;
         if (compressed.len > std.math.maxInt(u32) or entry.data.len > std.math.maxInt(u32))
             return error.ArjFileTooLarge;
-        try appendLocalHeader(allocator, &archive_bytes, entry, compressed.len);
-        try archive_bytes.appendSlice(allocator, compressed);
+        try appendLocalHeader(allocator, &archive_bytes, entry, payload.len);
+        try archive_bytes.appendSlice(allocator, payload);
     }
     try archive_bytes.appendSlice(allocator, &.{ 0x60, 0xea, 0, 0 });
     try output.ensureUnusedCapacity(allocator, archive_bytes.items.len);
@@ -88,17 +107,18 @@ pub fn encodeInto(
 fn appendMainHeader(
     allocator: std.mem.Allocator,
     output: *std.ArrayList(u8),
+    encrypted: bool,
 ) !void {
     var data: std.ArrayList(u8) = .empty;
     defer data.deinit(allocator);
-    try data.appendSlice(allocator, &.{ 34, 11, 1, 2, 0x10, 0, 2, 0 });
+    try data.appendSlice(allocator, &.{ 34, 11, 1, 2, @as(u8, 0x10) | @as(u8, @intFromBool(encrypted)), 0, 2, 0 });
     try appendLe32(allocator, &data, deterministic_timestamp);
     try appendLe32(allocator, &data, 0);
     try appendLe32(allocator, &data, 0);
     try appendLe32(allocator, &data, 0);
     try appendLe16(allocator, &data, 0);
     try appendLe16(allocator, &data, 0);
-    try data.appendSlice(allocator, &.{ 0, 0, 0, 0 });
+    try data.appendSlice(allocator, &.{ @intFromBool(encrypted), 0, 0, 0 });
     try appendLe16(allocator, &data, 0);
     try data.appendSlice(allocator, "vort.arj\x00\x00");
     try appendHeader(allocator, output, data.items);
@@ -118,10 +138,10 @@ fn appendLocalHeader(
         11,
         1,
         2,
-        0x10,
+        0x10 | @as(u8, @intFromBool(entry.encryption != null)),
         if (directory) 0 else methodId(entry.method),
         if (directory) 3 else 0,
-        0,
+        if (entry.encryption) |encryption| encryption.modifier else 0,
     });
     try appendLe32(allocator, &data, deterministic_timestamp);
     try appendLe32(allocator, &data, @intCast(compressed_size));
@@ -162,6 +182,11 @@ fn validateEntries(entries: []const EncodeEntry) Error!void {
         if (entry.method == .unsupported) return error.UnsupportedArjMethod;
         if (entry.method == .no_data and entry.data.len != 0)
             return error.InvalidArjEntryName;
+        if (entry.encryption) |encryption| {
+            if (entry.kind != .file or entry.method == .no_data or
+                encryption.password.len == 0)
+                return error.InvalidArjEncryption;
+        }
     }
 }
 
@@ -225,6 +250,89 @@ test "ARJ writer round trips methods zero through four and directories" {
     }
 }
 
+test "ARJ Garble encryption round trips stored and compressed entries" {
+    const allocator = std.testing.allocator;
+    const password = "ARJ-password";
+    const entries = [_]EncodeEntry{
+        .{
+            .name = "stored.bin",
+            .data = "encrypted stored ARJ payload",
+            .method = .stored,
+            .encryption = .{ .password = password, .modifier = 0x31 },
+        },
+        .{
+            .name = "compressed.txt",
+            .data = "encrypted compressed ARJ payload\n" ** 64,
+            .method = .method_1,
+            .encryption = .{ .password = password, .modifier = 0xa7 },
+        },
+        .{
+            .name = "fastest.txt",
+            .data = "encrypted fastest ARJ payload\n" ** 32,
+            .method = .method_4,
+            .encryption = .{ .password = password, .modifier = 0x5c },
+        },
+        .{ .name = "plain.txt", .data = "plain member in garbled archive", .method = .stored },
+    };
+    const encoded = try encodeAlloc(allocator, &entries);
+    defer allocator.free(encoded);
+    const repeated = try encodeAlloc(allocator, &entries);
+    defer allocator.free(repeated);
+    try std.testing.expectEqualSlices(u8, encoded, repeated);
+    const parsed = try archive.parse(encoded);
+    try std.testing.expectEqual(@as(u8, 1), parsed.encryption_version);
+    try std.testing.expect(parsed.flags & 1 != 0);
+    for (entries, 0..) |source, index| {
+        const entry = try parsed.entryAt(index);
+        if (source.encryption) |encryption| {
+            try std.testing.expectEqual(archive.Encryption.garble, entry.encryption.?);
+            try std.testing.expectEqual(encryption.modifier, entry.password_modifier);
+            try std.testing.expectError(
+                error.EncryptedArjEntry,
+                parsed.extractAlloc(allocator, entry),
+            );
+        } else {
+            try std.testing.expect(entry.encryption == null);
+        }
+        const decoded = try parsed.extractAllocWithOptions(
+            allocator,
+            entry,
+            .{ .password = password },
+        );
+        defer allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, source.data, decoded);
+    }
+    try std.testing.expectError(
+        error.ChecksumMismatch,
+        parsed.extractAllocWithOptions(
+            allocator,
+            try parsed.entryAt(0),
+            .{ .password = "wrong" },
+        ),
+    );
+
+    const unsupported = try allocator.dupe(u8, encoded);
+    defer allocator.free(unsupported);
+    const main_size = std.mem.readInt(u16, unsupported[2..4], .little);
+    unsupported[4 + 28] = 2;
+    std.mem.writeInt(
+        u32,
+        unsupported[4 + main_size ..][0..4],
+        checksum.crc32Best(unsupported[4 .. 4 + main_size]),
+        .little,
+    );
+    const gost = try archive.parse(unsupported);
+    try std.testing.expectEqual(archive.Encryption.gost40, (try gost.entryAt(0)).encryption.?);
+    try std.testing.expectError(
+        error.UnsupportedArjEncryption,
+        gost.extractAllocWithOptions(
+            allocator,
+            try gost.entryAt(0),
+            .{ .password = password },
+        ),
+    );
+}
+
 test "ARJ append supports prefixes and rejects invalid inputs transactionally" {
     const allocator = std.testing.allocator;
     const entries = [_]EncodeEntry{.{ .name = "payload", .data = "prefixed ARJ" }};
@@ -249,6 +357,17 @@ test "ARJ append supports prefixes and rejects invalid inputs transactionally" {
     try std.testing.expectError(
         error.InvalidArjEntryName,
         encodeAppend(allocator, &output, &invalid),
+    );
+    try std.testing.expectEqualSlices(u8, before, output.items);
+
+    const invalid_encryption = [_]EncodeEntry{.{
+        .name = "secret",
+        .data = "bad",
+        .encryption = .{ .password = "", .modifier = 1 },
+    }};
+    try std.testing.expectError(
+        error.InvalidArjEncryption,
+        encodeAppend(allocator, &output, &invalid_encryption),
     );
     try std.testing.expectEqualSlices(u8, before, output.items);
 }

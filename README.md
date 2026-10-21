@@ -390,8 +390,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   for none/gzip/Bzip2/LZMA/XZ/Zstd payloads with 7-Zip differential validation;
 - dependency-free ARJ/SFX reading and deterministic writing with CRC-validated
   main/local/extended headers, stored and methods 1–4, no-data and directory
-  entries, bounded extraction, encrypted/multi-volume rejection, and external
-  ARJ plus 7-Zip interoperability;
+  entries, bounded extraction, Vail-backed legacy Garble encryption with
+  per-entry modifiers, explicit GOST/multi-volume rejection, and external ARJ,
+  unarc-rs, plus 7-Zip interoperability;
 - dependency-free ARC/PAK/SFX reading and deterministic ARC writing for stored,
   packed RLE90, Squeeze, old fixed-12-bit Crunch, dynamic Crunch, and Squash
   plus PAK Crushed and Distilled methods 1–11, including PAK trailers, CRC-16,

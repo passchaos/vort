@@ -4,12 +4,15 @@ const writer = @import("arj/writer.zig");
 
 pub const Error = archive.Error || writer.Error;
 pub const Method = archive.Method;
+pub const Encryption = archive.Encryption;
+pub const DecodeOptions = archive.DecodeOptions;
 pub const Name = archive.Name;
 pub const Entry = archive.Entry;
 pub const Archive = archive.Archive;
 pub const Iterator = archive.Iterator;
 pub const EncodeEntry = writer.EncodeEntry;
 pub const EntryKind = writer.EntryKind;
+pub const EncodeEncryptionOptions = writer.EncryptionOptions;
 pub const parse = archive.parse;
 pub const encodeAlloc = writer.encodeAlloc;
 pub const encodeAppend = writer.encodeAppend;
@@ -26,4 +29,5 @@ test {
     _ = archive;
     _ = method4;
     _ = writer;
+    _ = @import("arj/encryption_tests.zig");
 }

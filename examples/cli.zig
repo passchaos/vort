@@ -2904,10 +2904,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Extract a bounded RPM payload member
         \\  extract-rpm-payload <rpm> <out> [max_output]
         \\                              Decode the raw RPM CPIO payload
-        \\  create-arj-file <out> <entry> <in> [stored|method1|method2|method3|method4]
+        \\  create-arj-file <out> <entry> <in> [stored|method1|method2|method3|method4] [password modifier_hex]
         \\                              Create a deterministic ARJ archive
         \\  list-arj-file <path>        List ARJ entries and methods
-        \\  extract-arj-file <arj> <entry> <out> [max_output]
+        \\  extract-arj-file <arj> <entry> <out> [max_output] [password]
         \\                              Extract ARJ methods 0 through 4
         \\  create-arc-file <out> <entry> <in> [stored|packed|squeezed|crunched|squashed|crushed|distilled]
         \\                              Create a deterministic ARC/PAK archive

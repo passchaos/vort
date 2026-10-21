@@ -495,12 +495,15 @@ pub const encodeLh1Into = lha.encodeLh1Into;
 
 pub const ArjError = arj.Error;
 pub const ArjMethod = arj.Method;
+pub const ArjEncryption = arj.Encryption;
+pub const ArjDecodeOptions = arj.DecodeOptions;
 pub const ArjName = arj.Name;
 pub const ArjEntry = arj.Entry;
 pub const ArjArchive = arj.Archive;
 pub const ArjIterator = arj.Iterator;
 pub const ArjEncodeEntry = arj.EncodeEntry;
 pub const ArjEntryKind = arj.EntryKind;
+pub const ArjEncodeEncryptionOptions = arj.EncodeEncryptionOptions;
 pub const parseArjArchive = arj.parse;
 pub const encodeArjAlloc = arj.encodeAlloc;
 pub const encodeArjAppend = arj.encodeAppend;

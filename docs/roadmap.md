@@ -18062,8 +18062,8 @@ reuse, so production keeps the simpler independently owned plans.
 - Added dependency-free ARJ archive reading and deterministic writing. The
   parser bounds and CRC-32-validates main, local, and chained extended headers,
   supports SFX prefixes, exposes borrowed normalized names, verifies file data
-  CRCs, and rejects encryption and unsupported multi-volume extraction before
-  decoding. Stored method 0 and no-data entries are handled directly; methods
+  CRCs, and rejects unsupported multi-volume extraction before decoding.
+  Stored method 0 and no-data entries are handled directly; methods
   1–3 reuse the pure Zig LH6-compatible decoder, while method 4 has a dedicated
   fixed-code MSB LZ77 implementation. Functionality-first writers emit arbitrary
   literals for all five data methods with deterministic headers and timestamps;
@@ -22057,3 +22057,15 @@ reuse, so production keeps the simpler independently owned plans.
   verifies deterministic 40,000-byte-capped output, explicit multi-segment
   decode, and libewf 20260924 `ewfinfo`/`ewfverify`/`ewfexport`
   (`segmented_writer=1`, `segmented_writer_external=1`).
+
+- Added ARJ legacy Garble encryption in both directions without pulling the
+  weak cipher into the container layer. `../vail/archive_crypto` owns the
+  modifier-plus-cyclic-password XOR stream and chunk-stable state; Vort owns
+  main/local flags, encryption-version dispatch, per-entry modifiers,
+  compress-then-encrypt ordering, allocations, and plaintext CRC-32. Stored and
+  methods 1--4 round-trip alongside plain members, while GOST40/GOST256 remain
+  distinct unsupported variants. A fixed unarc-rs Garble fixture with password
+  `secret` pins reader compatibility and plaintext SHA-256. Debian ARJ 3.10 and
+  unarc-rs 0.8.0 independently accept Vort output
+  (`writer_encrypted=1`, `writer_encrypted_arj=1`,
+  `writer_encrypted_unarc=1`, `reader_encrypted=1`).

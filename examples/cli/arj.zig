@@ -12,12 +12,24 @@ pub fn createFile(
     const entry_name = args.next() orelse return error.MissingCorpusPath;
     const input_path = args.next() orelse return error.MissingCorpusPath;
     const method = try parseMethod(args.next());
+    const encryption: ?vort.ArjEncodeEncryptionOptions = if (args.next()) |password|
+        .{
+            .password = password,
+            .modifier = try std.fmt.parseInt(
+                u8,
+                args.next() orelse return error.MissingCorpusPath,
+                16,
+            ),
+        }
+    else
+        null;
     const input = try readFile(init, input_path);
     defer init.gpa.free(input);
     const entries = [_]vort.ArjEncodeEntry{.{
         .name = entry_name,
         .data = input,
         .method = method,
+        .encryption = encryption,
     }};
     const encoded = try vort.encodeArjAlloc(init.gpa, &entries);
     defer init.gpa.free(encoded);
@@ -50,13 +62,14 @@ pub fn listFile(
     while (try iterator.next()) |entry| : (index += 1) {
         const name = try entry.name.alloc(init.gpa);
         defer init.gpa.free(name);
-        try stdout.print("index={d} method={s} compressed={d} uncompressed={d} crc32={d} encrypted={} directory={} name={s}\n", .{
+        try stdout.print("index={d} method={s} compressed={d} uncompressed={d} crc32={d} encryption={s} modifier={d} directory={} name={s}\n", .{
             index,
             @tagName(entry.method),
             entry.compressed_size,
             entry.uncompressed_size,
             entry.crc32,
-            entry.isEncrypted(),
+            if (entry.encryption) |encryption| @tagName(encryption) else "none",
+            entry.password_modifier,
             entry.isDirectory(),
             name,
         });
@@ -75,13 +88,14 @@ pub fn extractFile(
         try std.fmt.parseInt(usize, text, 10)
     else
         max_file_size;
+    const password = args.next();
     const bytes = try readFile(init, input_path);
     defer init.gpa.free(bytes);
     const archive = try vort.parseArjArchive(bytes);
-    const decoded = try archive.extractByNameAllocLimited(
+    const decoded = try archive.extractByNameAllocWithOptions(
         init.gpa,
         entry_name,
-        max_output_len,
+        .{ .max_output_len = max_output_len, .password = password },
     );
     defer init.gpa.free(decoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });

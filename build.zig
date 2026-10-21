@@ -194,6 +194,14 @@ pub fn build(b: *std.Build) void {
     const run_rar_tests = b.addRunArtifact(rar_tests);
     const rar_test_step = b.step("test-rar", "Run focused RAR archive and codec tests");
     rar_test_step.dependOn(&run_rar_tests.step);
+    const arj_tests = b.addTest(.{
+        .name = "vort-arj-tests",
+        .root_module = tests_mod,
+        .filters = &.{"ARJ"},
+    });
+    const run_arj_tests = b.addRunArtifact(arj_tests);
+    const arj_test_step = b.step("test-arj", "Run focused ARJ archive and codec tests");
+    arj_test_step.dependOn(&run_arj_tests.step);
     const br_tests_mod = b.createModule(.{
         .root_source_file = b.path("src/br.zig"),
         .target = target,

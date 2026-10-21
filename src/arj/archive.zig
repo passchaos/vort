@@ -3,13 +3,26 @@ const checksum = @import("../checksum.zig");
 const core = @import("../core.zig");
 const lha = @import("../lha.zig");
 const method4 = @import("method4.zig");
+const arj_crypto = @import("vail_archive_crypto").arj;
 
-pub const Error = core.Error || lha.Error || method4.Error || error{
+pub const Error = core.Error || lha.Error || method4.Error || arj_crypto.Error || error{
     InvalidArjArchive,
     UnsupportedArjMethod,
     UnsupportedArjFeature,
     EncryptedArjEntry,
+    UnsupportedArjEncryption,
     ArjEntryNotFound,
+};
+
+pub const Encryption = enum {
+    garble,
+    gost40,
+    gost256,
+};
+
+pub const DecodeOptions = struct {
+    max_output_len: usize = std.math.maxInt(usize),
+    password: ?[]const u8 = null,
 };
 
 pub const Method = enum {
@@ -57,6 +70,8 @@ pub const Entry = struct {
     method_id: u8,
     file_type: u8,
     flags: u8,
+    password_modifier: u8,
+    encryption: ?Encryption,
     crc32: u32,
     compressed_size: usize,
     uncompressed_size: usize,
@@ -68,7 +83,7 @@ pub const Entry = struct {
     }
 
     pub fn isEncrypted(self: Entry) bool {
-        return self.flags & 1 != 0;
+        return self.encryption != null;
     }
 };
 
@@ -107,11 +122,36 @@ pub const Archive = struct {
     }
 
     pub fn extractInto(self: Archive, entry: Entry, output: []u8) Error!usize {
-        const parsed = try parseLocalEntry(self.bytes, entry.header_offset);
+        return self.extractIntoOptionalAllocator(null, entry, output, .{});
+    }
+
+    pub fn extractIntoWithOptions(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        entry: Entry,
+        output: []u8,
+        options: DecodeOptions,
+    ) Error!usize {
+        return self.extractIntoOptionalAllocator(allocator, entry, output, options);
+    }
+
+    fn extractIntoOptionalAllocator(
+        self: Archive,
+        allocator: ?std.mem.Allocator,
+        entry: Entry,
+        output: []u8,
+        options: DecodeOptions,
+    ) Error!usize {
+        const parsed = try parseLocalEntry(
+            self.bytes,
+            entry.header_offset,
+            self.encryption_version,
+        );
         const canonical = parsed.entry;
         if (!sameEntry(canonical, entry)) return error.InvalidArjArchive;
+        if (canonical.uncompressed_size > options.max_output_len)
+            return error.OutputLimitExceeded;
         if (output.len < canonical.uncompressed_size) return error.OutputTooSmall;
-        if (canonical.isEncrypted() or self.flags & 1 != 0) return error.EncryptedArjEntry;
         if (self.flags & 0x04 != 0) return error.UnsupportedArjFeature;
         if (canonical.flags & 0x0c != 0) return error.UnsupportedArjFeature;
         const target = output[0..canonical.uncompressed_size];
@@ -120,7 +160,21 @@ pub const Archive = struct {
             canonical.compressed_size,
             self.bytes.len,
         );
-        const compressed = self.bytes[canonical.data_offset..compressed_end];
+        const wire_data = self.bytes[canonical.data_offset..compressed_end];
+        const decrypted: ?[]u8 = if (canonical.encryption) |encryption| blk: {
+            if (encryption != .garble) return error.UnsupportedArjEncryption;
+            const password = options.password orelse return error.EncryptedArjEntry;
+            const scratch = allocator orelse return error.EncryptedArjEntry;
+            const bytes = try scratch.dupe(u8, wire_data);
+            errdefer scratch.free(bytes);
+            try arj_crypto.crypt(bytes, password, canonical.password_modifier);
+            break :blk bytes;
+        } else null;
+        defer if (decrypted) |bytes| {
+            std.crypto.secureZero(u8, bytes);
+            allocator.?.free(bytes);
+        };
+        const compressed = decrypted orelse wire_data;
         switch (canonical.method) {
             .stored => {
                 if (compressed.len != target.len) return error.SizeMismatch;
@@ -147,7 +201,7 @@ pub const Archive = struct {
         allocator: std.mem.Allocator,
         entry: Entry,
     ) ![]u8 {
-        return self.extractAllocLimited(allocator, entry, std.math.maxInt(usize));
+        return self.extractAllocWithOptions(allocator, entry, .{});
     }
 
     pub fn extractAllocLimited(
@@ -156,10 +210,29 @@ pub const Archive = struct {
         entry: Entry,
         max_output_len: usize,
     ) ![]u8 {
-        if (entry.uncompressed_size > max_output_len) return error.OutputLimitExceeded;
+        return self.extractAllocWithOptions(
+            allocator,
+            entry,
+            .{ .max_output_len = max_output_len },
+        );
+    }
+
+    pub fn extractAllocWithOptions(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        entry: Entry,
+        options: DecodeOptions,
+    ) ![]u8 {
+        if (entry.uncompressed_size > options.max_output_len)
+            return error.OutputLimitExceeded;
         const output = try allocator.alloc(u8, entry.uncompressed_size);
         errdefer allocator.free(output);
-        const written = try self.extractInto(entry, output);
+        const written = try self.extractIntoWithOptions(
+            allocator,
+            entry,
+            output,
+            options,
+        );
         if (written != output.len) return error.SizeMismatch;
         return output;
     }
@@ -173,6 +246,16 @@ pub const Archive = struct {
         const entry = (try self.find(name)) orelse return error.ArjEntryNotFound;
         return self.extractAllocLimited(allocator, entry, max_output_len);
     }
+
+    pub fn extractByNameAllocWithOptions(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        name: []const u8,
+        options: DecodeOptions,
+    ) ![]u8 {
+        const entry = (try self.find(name)) orelse return error.ArjEntryNotFound;
+        return self.extractAllocWithOptions(allocator, entry, options);
+    }
 };
 
 pub const Iterator = struct {
@@ -182,7 +265,11 @@ pub const Iterator = struct {
 
     pub fn next(self: *Iterator) Error!?Entry {
         if (self.remaining == 0) return null;
-        const parsed = try parseLocalEntry(self.archive.bytes, self.offset);
+        const parsed = try parseLocalEntry(
+            self.archive.bytes,
+            self.offset,
+            self.archive.encryption_version,
+        );
         self.offset = parsed.next_offset;
         self.remaining -= 1;
         return parsed.entry;
@@ -215,6 +302,7 @@ fn parseAt(bytes: []const u8, offset: usize) Error!Archive {
     const first_size = main.data[0];
     if (first_size < 30 or first_size > main.data.len) return error.InvalidArjArchive;
     const strings = try parseStrings(main.data, first_size);
+    const encryption_version = main.data[28];
 
     var cursor = main.next_offset;
     var entry_count: usize = 0;
@@ -224,7 +312,12 @@ fn parseAt(bytes: []const u8, offset: usize) Error!Archive {
             if (header.next_offset != bytes.len) return error.TrailingData;
             break;
         }
-        const parsed = try parseLocalEntryFromHeader(bytes, cursor, header);
+        const parsed = try parseLocalEntryFromHeader(
+            bytes,
+            cursor,
+            header,
+            encryption_version,
+        );
         cursor = parsed.next_offset;
         entry_count += 1;
     }
@@ -236,7 +329,7 @@ fn parseAt(bytes: []const u8, offset: usize) Error!Archive {
         .name = strings.name,
         .comment = strings.comment,
         .flags = main.data[4],
-        .encryption_version = main.data[28],
+        .encryption_version = encryption_version,
     };
 }
 
@@ -300,16 +393,21 @@ fn parseStrings(data: []const u8, start: usize) Error!Strings {
 
 const ParsedEntry = struct { entry: Entry, next_offset: usize };
 
-fn parseLocalEntry(bytes: []const u8, offset: usize) Error!ParsedEntry {
+fn parseLocalEntry(
+    bytes: []const u8,
+    offset: usize,
+    encryption_version: u8,
+) Error!ParsedEntry {
     const header = try parseHeader(bytes, offset);
     if (header.end_marker) return error.InvalidArjArchive;
-    return parseLocalEntryFromHeader(bytes, offset, header);
+    return parseLocalEntryFromHeader(bytes, offset, header, encryption_version);
 }
 
 fn parseLocalEntryFromHeader(
     bytes: []const u8,
     offset: usize,
     header: ParsedHeader,
+    encryption_version: u8,
 ) Error!ParsedEntry {
     if (header.data.len < 30) return error.InvalidArjArchive;
     const first_size = header.data[0];
@@ -320,13 +418,16 @@ fn parseLocalEntryFromHeader(
     const uncompressed_size: usize = readLe32(header.data, 16);
     const data_end = try checkedEnd(header.next_offset, compressed_size, bytes.len);
     const method_id = header.data[5];
+    const flags = header.data[4];
     return .{
         .entry = .{
             .name = .{ .bytes = strings.name },
             .method = methodFromId(method_id),
             .method_id = method_id,
             .file_type = header.data[6],
-            .flags = header.data[4],
+            .flags = flags,
+            .password_modifier = header.data[7],
+            .encryption = encryptionFromVersion(flags & 1 != 0, encryption_version),
             .crc32 = readLe32(header.data, 20),
             .compressed_size = compressed_size,
             .uncompressed_size = uncompressed_size,
@@ -334,6 +435,15 @@ fn parseLocalEntryFromHeader(
             .data_offset = header.next_offset,
         },
         .next_offset = data_end,
+    };
+}
+
+fn encryptionFromVersion(encrypted: bool, version: u8) ?Encryption {
+    if (!encrypted) return null;
+    return switch (version) {
+        0, 1 => .garble,
+        2 => .gost40,
+        else => .gost256,
     };
 }
 
@@ -358,6 +468,8 @@ fn sameEntry(a: Entry, b: Entry) bool {
         a.method_id == b.method_id and
         a.file_type == b.file_type and
         a.flags == b.flags and
+        a.password_modifier == b.password_modifier and
+        a.encryption == b.encryption and
         eqlNormalized(a.name, b.name);
 }
 
