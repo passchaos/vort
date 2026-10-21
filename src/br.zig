@@ -7051,7 +7051,7 @@ noinline fn processWideExternalLiteralLookupMetaBlock(
     // smaller executor is sensitive to code placement. The full 256-tree tier
     // amortizes a dedicated fixed-width lookup and receives its own instance.
     if (auxiliary_tail_lookups)
-        return processWideExternalLiteralLookupCompressedPayload(
+        return WideExternalLiteralLookupPayload.run(
             true,
             wideAuxiliaryUsesFixedNineBitPeek(capacity),
             &fast_reader,
@@ -7063,7 +7063,7 @@ noinline fn processWideExternalLiteralLookupMetaBlock(
             header,
             literal_lookups[0..header.literal_tree_count],
         );
-    return processWideExternalLiteralLookupCompressedPayload(false, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups[0..header.literal_tree_count]);
+    return WideExternalLiteralLookupPayload.run(false, false, &fast_reader, output, written, meta_block_end, last_distances, window_bits, header, literal_lookups[0..header.literal_tree_count]);
 }
 
 fn wideAuxiliaryUsesFixedNineBitPeek(comptime capacity: usize) bool {
@@ -7404,7 +7404,61 @@ noinline fn processExternalLiteralLookupCompressedPayload(
 /// Counterpart for the packed literal-tree tier. Root-table hits never expand
 /// the compact tree; a rare long-code miss falls back to the existing cached
 /// expansion path so the full canonical decoder remains the correctness oracle.
-noinline fn processWideExternalLiteralLookupCompressedPayload(
+const WideExternalLiteralLookupPayload = if (builtin.cpu.arch.isWasm()) struct {
+    noinline fn run(
+        comptime auxiliary_tail_lookups: bool,
+        comptime fixed_nine_bit_peek: bool,
+        reader: anytype,
+        output: []u8,
+        written: *usize,
+        meta_block_end: usize,
+        last_distances: *[4]usize,
+        window_bits: u5,
+        header: *MinimalCompressedHeader,
+        literal_lookups: []const ExternalLiteralLookup,
+    ) Error!void {
+        return processWideExternalLiteralLookupCompressedPayloadImpl(
+            auxiliary_tail_lookups,
+            fixed_nine_bit_peek,
+            reader,
+            output,
+            written,
+            meta_block_end,
+            last_distances,
+            window_bits,
+            header,
+            literal_lookups,
+        );
+    }
+} else struct {
+    noinline fn run(
+        comptime auxiliary_tail_lookups: bool,
+        comptime fixed_nine_bit_peek: bool,
+        reader: anytype,
+        output: []u8,
+        written: *usize,
+        meta_block_end: usize,
+        last_distances: *[4]usize,
+        window_bits: u5,
+        header: *MinimalCompressedHeader,
+        literal_lookups: []const ExternalLiteralLookup,
+    ) align(64) Error!void {
+        return processWideExternalLiteralLookupCompressedPayloadImpl(
+            auxiliary_tail_lookups,
+            fixed_nine_bit_peek,
+            reader,
+            output,
+            written,
+            meta_block_end,
+            last_distances,
+            window_bits,
+            header,
+            literal_lookups,
+        );
+    }
+};
+
+inline fn processWideExternalLiteralLookupCompressedPayloadImpl(
     comptime auxiliary_tail_lookups: bool,
     comptime fixed_nine_bit_peek: bool,
     reader: anytype,
@@ -7415,7 +7469,7 @@ noinline fn processWideExternalLiteralLookupCompressedPayload(
     window_bits: u5,
     header: *MinimalCompressedHeader,
     literal_lookups: []const ExternalLiteralLookup,
-) align(64) Error!void {
+) Error!void {
     var transformed_dictionary_word: [64]u8 = undefined;
     const utf8_context_only = allLiteralContextModesAreUtf8(header.literal_context_modes[0..header.literal_block.block_type_count]);
     // The parsed context map is already bounded by literal_tree_count, which

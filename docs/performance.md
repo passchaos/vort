@@ -34,6 +34,9 @@ records the structure-gated q1 fast path and real source/document comparisons.
 [Zstd wide-Huffman WASM portability](performance/zstd-wasm-portability.md)
 records the target-selected aligned wrapper, standalone wasm32 gate, identical
 native machine-code section, and fixed-CPU A/B evidence.
+[Brotli wide-literal WASM portability](performance/brotli-wasm-portability.md)
+records the matching target-selected wrapper, complete WOFF2 consumer closure,
+formal Brotli gate, and byte-identical native hot functions.
 
 ## Current local benchmark entrypoints
 
