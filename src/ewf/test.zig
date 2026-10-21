@@ -92,6 +92,114 @@ test "EWF writer and reader round trip raw zlib and automatic chunks" {
     }
 }
 
+test "EWF writer emits bounded deterministic multi-segment images" {
+    const input = try allocator.alloc(u8, 6 * 32768 + 137);
+    defer allocator.free(input);
+    var random = std.Random.DefaultPrng.init(0x4557_465f_5345_474d);
+    random.fill(input);
+    const max_segment_size = 72 * 1024;
+    inline for (.{ ewf.Compression.none, ewf.Compression.zlib, ewf.Compression.auto }) |compression| {
+        var encoded = try ewf.encodeSegmentsAlloc(
+            allocator,
+            input,
+            .{ .compression = compression, .sectors_per_chunk = 64 },
+            max_segment_size,
+        );
+        defer encoded.deinit();
+        try std.testing.expect(encoded.segments.len > 1);
+        for (encoded.segments, 1..) |segment, number| {
+            try std.testing.expect(segment.len <= max_segment_size);
+            try std.testing.expectEqual(
+                std.math.cast(u16, number).?,
+                (try ewf.parseFileHeader(segment)).segment_number,
+            );
+        }
+        var archive = try ewf.parseSegmentsAlloc(
+            allocator,
+            encoded.segments,
+            .{},
+        );
+        defer archive.deinit();
+        try std.testing.expectEqual(encoded.segments.len, archive.segment_count);
+        const decoded = try archive.decodeAllocLimited(
+            allocator,
+            std.mem.alignForward(usize, input.len, 512),
+        );
+        defer allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, input, decoded[0..input.len]);
+        for (decoded[input.len..]) |byte| try std.testing.expectEqual(@as(u8, 0), byte);
+
+        var second = try ewf.encodeSegmentsAlloc(
+            allocator,
+            input,
+            .{ .compression = compression, .sectors_per_chunk = 64 },
+            max_segment_size,
+        );
+        defer second.deinit();
+        try std.testing.expectEqual(encoded.segments.len, second.segments.len);
+        for (encoded.segments, second.segments) |first, repeated|
+            try std.testing.expectEqualSlices(u8, first, repeated);
+    }
+}
+
+test "EWF segmented writer preserves single-segment wire and enforces limits" {
+    const input = try makeInput(allocator, 2 * 32768 + 91);
+    defer allocator.free(input);
+    const one = try ewf.encodeAlloc(allocator, input, .{ .compression = .auto });
+    defer allocator.free(one);
+    var segmented = try ewf.encodeSegmentsAlloc(
+        allocator,
+        input,
+        .{ .compression = .auto },
+        std.math.maxInt(usize),
+    );
+    defer segmented.deinit();
+    try std.testing.expectEqual(@as(usize, 1), segmented.segments.len);
+    try std.testing.expectEqualSlices(u8, one, segmented.segments[0]);
+
+    try std.testing.expectError(
+        error.InvalidEwfSegmentSize,
+        ewf.encodeSegmentsAlloc(
+            allocator,
+            input,
+            .{ .compression = .none },
+            2048,
+        ),
+    );
+    try std.testing.expectError(
+        error.InvalidEwfSegmentSize,
+        ewf.encodeSegmentsAlloc(allocator, "", .{}, 2048),
+    );
+}
+
+test "EWF segmented writer releases every allocation failure" {
+    const Test = struct {
+        fn run(failing_allocator: std.mem.Allocator) !void {
+            const input = [_]u8{'E'} ** (3 * 32768);
+            var encoded = try ewf.encodeSegmentsAlloc(
+                failing_allocator,
+                &input,
+                .{ .compression = .none },
+                40 * 1024,
+            );
+            defer encoded.deinit();
+            var archive = try ewf.parseSegmentsAlloc(
+                failing_allocator,
+                encoded.segments,
+                .{},
+            );
+            defer archive.deinit();
+            const decoded = try archive.decodeAllocLimited(
+                failing_allocator,
+                input.len,
+            );
+            defer failing_allocator.free(decoded);
+            try std.testing.expectEqualSlices(u8, &input, decoded);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(allocator, Test.run, .{});
+}
+
 test "EWF verifies section table raw chunk and media MD5 checksums" {
     const input = [_]u8{'R'} ** 32768;
     const encoded = try ewf.encodeAlloc(allocator, &input, .{

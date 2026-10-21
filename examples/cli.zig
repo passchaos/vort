@@ -257,6 +257,8 @@ pub fn main(init: std.process.Init) !void {
         try ewf_cli.decodeRange(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-ewf")) {
         try ewf_cli.encode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-ewf-segments")) {
+        try ewf_cli.encodeSegments(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-chd")) {
         try chd_cli.inspect(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-chd")) {
@@ -2757,6 +2759,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  decode-ewf <first_segment> <out> [max_output] [additional_segments...]
         \\  decode-ewf-range <first_segment> <out> <offset> <length> [additional_segments...]
         \\  encode-ewf <in> <out> <none|zlib|auto> [sectors_per_chunk]
+        \\  encode-ewf-segments <in> <output_prefix> <none|zlib|auto> <max_segment_size> [sectors_per_chunk]
         \\  inspect-chd <image.chd> [parent.chd]
         \\  decode-chd <image.chd> <out> [max_output] [parent.chd]
         \\  decode-chd-range <image.chd> <out> <offset> <length> [parent.chd]

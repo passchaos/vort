@@ -1456,11 +1456,13 @@ pub const EwfArchive = ewf.Archive;
 pub const EwfOpenOptions = ewf.OpenOptions;
 pub const EwfCompression = ewf.Compression;
 pub const EwfEncodeOptions = ewf.EncodeOptions;
+pub const EwfEncodedSegments = ewf.EncodedSegments;
 pub const ewfSignature = ewf.signature;
 pub const parseEwfFileHeader = ewf.parseFileHeader;
 pub const parseEwfAlloc = ewf.parseOneAlloc;
 pub const parseEwfSegmentsAlloc = ewf.parseSegmentsAlloc;
 pub const encodeEwfAlloc = ewf.encodeAlloc;
+pub const encodeEwfSegmentsAlloc = ewf.encodeSegmentsAlloc;
 
 pub const ChdError = chd.Error;
 pub const ChdCodec = chd.Codec;

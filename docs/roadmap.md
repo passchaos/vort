@@ -18293,7 +18293,7 @@ reuse, so production keeps the simpler independently owned plans.
   bounded table groups, mirrored tables, data/hash/done sections, and sector
   tail padding. Pinned libewf single/multi-segment fixtures and bidirectional
   libewf 20260924 generation/export verify both directions. EWF2/Ex01, L01,
-  encryption, typed acquisition metadata, and writer-side segment splitting
+  encryption, typed acquisition metadata, and richer acquisition sections
   remain follow-up work. See `docs/formats/ewf.md`.
 
 - Added dependency-free CHD v5 reading and deterministic baseline writing.
@@ -22043,3 +22043,17 @@ reuse, so production keeps the simpler independently owned plans.
   `writer_comment_volumes=1`, verifies a full-size first file fragment despite
   an over-budget CMT, reconstructs the file, and optionally asks an external
   tool to test the first volume.
+
+- Added deterministic size-limited EWF1/E01 multi-segment writing. The public
+  `EncodedSegments` owner returns independently allocated, sequentially
+  numbered segments under a hard caller size ceiling. Segment 1 carries
+  `volume`; continuations carry repeated `data` geometry; every segment has
+  local sectors/table/table2 offsets; non-final segments terminate with `next`;
+  and only the final segment carries media MD5 plus `done`. Raw, forced-zlib,
+  and automatic chunk policies round-trip across segment boundaries, an
+  unbounded request remains byte-identical to the one-shot writer, invalid
+  undersized limits fail explicitly, and exhaustive allocation injection
+  covers ownership cleanup. The CLI writes `.E01`--`.E99`; the differential
+  verifies deterministic 40,000-byte-capped output, explicit multi-segment
+  decode, and libewf 20260924 `ewfinfo`/`ewfverify`/`ewfexport`
+  (`segmented_writer=1`, `segmented_writer_external=1`).

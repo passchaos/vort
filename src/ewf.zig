@@ -11,11 +11,13 @@ pub const Archive = archive.Archive;
 pub const OpenOptions = archive.OpenOptions;
 pub const Compression = writer.Compression;
 pub const EncodeOptions = writer.EncodeOptions;
+pub const EncodedSegments = writer.EncodedSegments;
 pub const signature = format.ewf1_signature;
 pub const parseFileHeader = format.parseFileHeader;
 pub const parseOneAlloc = archive.Archive.initOneAlloc;
 pub const parseSegmentsAlloc = archive.Archive.initAlloc;
 pub const encodeAlloc = writer.encodeAlloc;
+pub const encodeSegmentsAlloc = writer.encodeSegmentsAlloc;
 
 test {
     _ = format;

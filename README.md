@@ -159,7 +159,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   decoding, a pinned QEMU version-3 fixture, fuzzing, and bidirectional QEMU plus
   7-Zip interoperability;
 - dependency-free EWF1/E01 forensic-image reading and deterministic EnCase-6
-  style writing, with explicit multi-segment sets, checked section chains,
+  style single/size-limited multi-segment writing, with explicit segment sets,
+  checked section chains,
   volume geometry, sectors/table/table2 chunk maps, raw chunks with Adler-32,
   zlib chunks, media MD5 verification, bounded whole-image and random-range
   decoding, pinned libewf single/multi-segment fixtures, fuzzing, and
