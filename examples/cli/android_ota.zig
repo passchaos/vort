@@ -2,6 +2,8 @@ const std = @import("std");
 const vort = @import("vort");
 
 const max_file_size = 32 * 1024 * 1024 * 1024;
+const max_public_key_size = 1024 * 1024;
+const max_public_keys = 128;
 
 const FileSource = struct {
     file: std.Io.File,
@@ -334,6 +336,48 @@ pub fn extractSource(
     );
 }
 
+pub fn verifySignatures(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    var keys = try readPublicKeys(init, args);
+    defer keys.deinit(init.gpa);
+    const bytes = try readFile(init, input_path);
+    defer init.gpa.free(bytes);
+    var ota = try vort.parseAndroidOtaAlloc(init.gpa, bytes, .{});
+    defer ota.deinit();
+    const result = try ota.verifySignatures(keys.items, .{});
+    try writeSignatureResult(stdout, result, keys.items.len, false);
+}
+
+pub fn verifySourceSignatures(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    var keys = try readPublicKeys(init, args);
+    defer keys.deinit(init.gpa);
+    var file = try std.Io.Dir.cwd().openFile(init.io, input_path, .{});
+    defer file.close(init.io);
+    const stat = try file.stat(init.io);
+    var context = FileSource{ .file = file, .io = init.io };
+    var ota = try vort.parseAndroidOtaSourceAlloc(
+        init.gpa,
+        context.source(stat.size),
+        .{},
+    );
+    defer ota.deinit();
+    const result = try ota.verifySignatures(init.gpa, keys.items, .{});
+    try writeSignatureResult(stdout, result, keys.items.len, true);
+    try stdout.print("signature_source_reads={d} bytes={d}\n", .{
+        context.read_calls,
+        context.bytes_read,
+    });
+}
+
 pub fn encode(
     init: std.process.Init,
     args: *std.process.Args.Iterator,
@@ -534,6 +578,49 @@ fn parseCompression(text: []const u8) !vort.AndroidOtaCompression {
     inline for (std.enums.values(vort.AndroidOtaCompression)) |compression|
         if (std.mem.eql(u8, text, @tagName(compression))) return compression;
     return error.InvalidAndroidOta;
+}
+
+fn readPublicKeys(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+) !std.ArrayList(vort.AndroidOtaSignaturePublicKey) {
+    var keys: std.ArrayList(vort.AndroidOtaSignaturePublicKey) = .empty;
+    errdefer keys.deinit(init.gpa);
+    while (args.next()) |path| {
+        if (keys.items.len >= max_public_keys) return error.OutputLimitExceeded;
+        const pem = try std.Io.Dir.cwd().readFileAlloc(
+            init.io,
+            path,
+            init.gpa,
+            .limited(max_public_key_size),
+        );
+        defer init.gpa.free(pem);
+        try keys.append(
+            init.gpa,
+            try vort.AndroidOtaSignaturePublicKey.parsePem(pem),
+        );
+    }
+    if (keys.items.len == 0) return error.MissingCorpusPath;
+    return keys;
+}
+
+fn writeSignatureResult(
+    stdout: *std.Io.Writer,
+    result: vort.AndroidOtaSignatureVerificationResult,
+    key_count: usize,
+    source_backed: bool,
+) !void {
+    try stdout.print(
+        "android_ota_signatures=verified source_backed={} keys={d} metadata_signature={d} metadata_key={d} payload_signature={d} payload_key={d}\n",
+        .{
+            source_backed,
+            key_count,
+            result.metadata.?.signature_index,
+            result.metadata.?.key_index,
+            result.payload.?.signature_index,
+            result.payload.?.key_index,
+        },
+    );
 }
 
 fn readOptionalFile(

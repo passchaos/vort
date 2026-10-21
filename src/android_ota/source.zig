@@ -69,6 +69,21 @@ pub const Source = struct {
             return error.IntegerOverflow;
         if (end > self.len) return error.TruncatedFrame;
         var state = std.crypto.hash.sha2.Sha256.init(.{});
+        try self.updateSha256(offset, length, &state);
+        var actual: [32]u8 = undefined;
+        state.final(&actual);
+        if (!std.mem.eql(u8, &actual, expected)) return error.ChecksumMismatch;
+    }
+
+    pub fn updateSha256(
+        self: Source,
+        offset: u64,
+        length: u64,
+        state: *std.crypto.hash.sha2.Sha256,
+    ) Error!void {
+        const end = std.math.add(u64, offset, length) catch
+            return error.IntegerOverflow;
+        if (end > self.len) return error.TruncatedFrame;
         var scratch: [64 * 1024]u8 = undefined;
         var consumed: u64 = 0;
         while (consumed < length) {
@@ -85,9 +100,6 @@ pub const Source = struct {
             state.update(scratch[0..amount]);
             consumed += amount;
         }
-        var actual: [32]u8 = undefined;
-        state.final(&actual);
-        if (!std.mem.eql(u8, &actual, expected)) return error.ChecksumMismatch;
     }
 };
 

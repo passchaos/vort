@@ -20,6 +20,16 @@ payload. It validates:
 - old partition, per-operation source, and final partition SHA-256 values when
   the corresponding data is supplied.
 
+Vendor signatures use bounded proto2 `Signatures` messages with repeated data
+and optional fixed32 unpadded lengths. Metadata verification hashes exactly
+`header + manifest`; payload verification hashes that same metadata followed
+by data blobs while skipping both signature protobufs, matching AOSP
+update_engine. Multiple signatures and trusted keys are tried under explicit
+count/blob/signature/key limits. Vail owns strict SubjectPublicKeyInfo PEM/DER
+parsing plus RSA-2048/4096 PKCS#1-v1.5 SHA-256 and P-256 ECDSA verification.
+Unsigned payloads fail by default; either section becomes optional only through
+an explicit verification option.
+
 Full OTA extraction supports `REPLACE`, `REPLACE_BZ`, `REPLACE_XZ`, and `ZERO`.
 Delta payload `SOURCE_COPY`, legacy `SOURCE_BSDIFF`, `BROTLI_BSDIFF`, and
 `PUFFDIFF` operations are also supported with an explicit old partition image.
@@ -114,6 +124,9 @@ const lz4diff_patched = try vort.applyAndroidLz4diffAlloc(
     .{ .max_output_len = expected_physical_size },
 );
 defer allocator.free(lz4diff_patched);
+
+const trusted = try vort.AndroidOtaSignaturePublicKey.parsePem(public_key_pem);
+const verified = try payload.verifySignatures(&.{trusted}, .{});
 ```
 
 Large seekable payloads and old partition images can remain outside memory.
@@ -199,6 +212,8 @@ zig build run -- inspect-android-ota payload.bin
 zig build run -- inspect-android-ota-source payload.bin
 zig build run -- extract-android-ota payload.bin system system.img 8589934592
 zig build run -- extract-android-ota-source payload.bin system system.img 1048576 old-system.img
+zig build run -- verify-android-ota-signatures payload.bin vendor-public.pem
+zig build run -- verify-android-ota-source-signatures payload.bin vendor-public.pem
 zig build run -- extract-android-ota-range payload.bin system range.bin 1048576 65536
 zig build run -- encode-android-ota system.img payload.bin system auto 4096 1048576
 zig build run -- encode-android-ota-source system.img payload.bin system auto 4096 1048576 65536 65536
@@ -248,9 +263,15 @@ The source writer differential forces three-byte input reads and five-byte sink
 writes for raw, Bzip2, XZ, and automatic policies, requires exact equality with
 the corresponding one-shot payloads, and independently decodes all four with
 Rust `payload_dumper` (`source_writer=4`, `source_writer_oracle=4`).
+When OpenSSL is available, the differential independently generates temporary
+RSA-2048 and P-256 keys, signs both metadata and payload ranges, verifies all
+four raw signatures with OpenSSL, then requires both Vort slice/source APIs to
+select the correct key after a wrong-key candidate. Wrong-only keys, damaged
+signatures, and unsigned payloads fail (`signature_cases=9`,
+`signature_openssl=4`). Fixed Vail vectors additionally cover RSA-4096.
 
-Current explicit limitations are major-version-1 payloads, cryptographic
-verification of vendor metadata/payload signatures, and architecture-specific
+Current explicit limitations are major-version-1 payloads, certificate-bundle
+trust-store discovery/revocation policy, and architecture-specific
 Zucchini reference correction for PE, x86/x64 and AArch32 ELF, DEX, and ZTF
 elements. DISCARD is
 likewise rejected by default

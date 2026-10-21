@@ -991,6 +991,140 @@ test "Android OTA exposes signed metadata and payload sections" {
     try std.testing.expectEqualSlices(u8, &input, decoded);
 }
 
+test "Android OTA verifies AOSP RSA metadata and payload signatures" {
+    const public_key_pem =
+        \\-----BEGIN PUBLIC KEY-----
+        \\MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvtGHtqO21Uhy2wGz9flu
+        \\IpIUR8G7dZoCZhZukGkm4mlfgL71xPSArjx02/w/FhYxOusV6/XQeKgL3i8cni3H
+        \\CkCOurZLpi2L5Ver6qrxKFh6WBVZ0Dj7N6P/Mf5jZdhfvVyweLlsNK8Ypeb+Razf
+        \\rsXhd4cy3dBMxouGwH7R7QQXTFCoCc8kgJBTxILl3jfvY8OrNKgYiCETa7tQdFkP
+        \\0bfPwH9cAXuMjHXiZatim0tF+ivpkM2v/6LTxtD6Rq1wks/N6CHi8efrRaviFp7c
+        \\0mNmBNFaV54cHEUW2SlNIiRun7L01nAz/D8kuoHfx4E3Mtj0DbvngZJMX/X+rJQ5
+        \\cQIDAQAB
+        \\-----END PUBLIC KEY-----
+    ;
+    const metadata_signature_base64 =
+        "g+19dBqfCu0MFMVSEVkS7SXPMZZP+MJBSd00+4vTmU6f8opstsViMvY2SWREBe9q" ++
+        "mlNP6wkyQY1ngMshGOi4Et2ZGYDq/EOA2Ak/oDwQ/4dP0EIkrok39V4ri48hsWJu" ++
+        "2TCEU/ZYoHUO3/mSLrRhuMzCaMyD5iYnxPlR034HNp+GWbpZcQ8etGMUktWxFgQk" ++
+        "LmlfvbFcZS+AmOMaloA3gxCCG9zIwgb/fiLPZ97LWrrGAr4Ew+fH5fWvAFopzPOl" ++
+        "y9R4hEs8lhBSeKa9KMctM9YLMtYRIkjtt3QD8pIx77B3UoJXroe8rBx9U+EoX+QM" ++
+        "SqWWWvZOh+CdxX7jlB9ilw==";
+    const payload_signature_base64 =
+        "uOMmblIDxmmG3jw40ojP9BM868aP1DjKUn2jLt4xdx93BQ8wN/83uFb88EvjmER7" ++
+        "jWI6B+/Tqwkcr+7Cdg72PbxW3UXPSA35VODJr5cWgvhrviSqAtkacl0nKKUpH/Ie" ++
+        "+fYvzlrxiQ0y197OE9YxOm9d0/w6udxlmz08cJGOl3kCpJmpAUvnjQYROW22D9fQ" ++
+        "ylf5Iu3hCXDAOUrwmFZibPMOxYwNROw0wKDwcJZms3AqZnBV0YWe8YlNhRch9By" ++
+        "fZGSM1eAmuo7CUlXUez8b77mLDS087zAmD9W/9Dk5tVhPuv9I4aYOUXaMIue7JhX" ++
+        "q2qxjuf9enHmX/d9u3WbawQ==";
+    const input = [_]u8{0x41} ** 4096;
+    const unsigned = try noSourcePayloadAlloc(
+        allocator,
+        @intFromEnum(format.OperationType.replace),
+        &input,
+        &input,
+    );
+    defer allocator.free(unsigned);
+    const metadata_signature = try signatureProtoFromBase64Alloc(
+        allocator,
+        metadata_signature_base64,
+    );
+    defer allocator.free(metadata_signature);
+    const payload_signature = try signatureProtoFromBase64Alloc(
+        allocator,
+        payload_signature_base64,
+    );
+    defer allocator.free(payload_signature);
+    const payload = try addSignatureSectionsAlloc(
+        allocator,
+        unsigned,
+        metadata_signature,
+        payload_signature,
+    );
+    defer allocator.free(payload);
+    var final_digest: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(payload, &final_digest, .{});
+    const expected_final = [_]u8{
+        0x61, 0x3c, 0x69, 0x1e, 0x4d, 0xce, 0xa0, 0x27,
+        0x03, 0xf6, 0x2a, 0x22, 0x4b, 0x73, 0xaf, 0xd6,
+        0xca, 0x4f, 0x2d, 0xb7, 0x78, 0x32, 0xc2, 0xc4,
+        0xe0, 0xd1, 0xb8, 0xc7, 0x1c, 0xa3, 0x58, 0x1c,
+    };
+    try std.testing.expectEqualSlices(u8, &expected_final, &final_digest);
+    const key = try archive_mod.SignaturePublicKey.parsePem(public_key_pem);
+    const keys = [_]archive_mod.SignaturePublicKey{key};
+
+    var unsigned_archive = try archive_mod.Archive.initAlloc(allocator, unsigned, .{});
+    defer unsigned_archive.deinit();
+    try std.testing.expectError(
+        error.AndroidOtaSignatureMissing,
+        unsigned_archive.verifySignatures(&keys, .{}),
+    );
+    const optional = try unsigned_archive.verifySignatures(&keys, .{
+        .require_metadata = false,
+        .require_payload = false,
+    });
+    try std.testing.expect(optional.metadata == null and optional.payload == null);
+
+    var archive = try archive_mod.Archive.initAlloc(allocator, payload, .{});
+    defer archive.deinit();
+    const verified = try archive.verifySignatures(&keys, .{});
+    try std.testing.expectEqual(@as(usize, 0), verified.metadata.?.signature_index);
+    try std.testing.expectEqual(@as(usize, 0), verified.payload.?.key_index);
+
+    var context = TestSource{ .bytes = payload, .max_chunk = 3 };
+    var source_view = try source_archive.Archive.initAlloc(
+        allocator,
+        context.source(),
+        .{},
+    );
+    defer source_view.deinit();
+    const source_verified = try source_view.verifySignatures(
+        allocator,
+        &keys,
+        .{},
+    );
+    try std.testing.expectEqual(@as(usize, 0), source_verified.metadata.?.key_index);
+    try std.testing.expectEqual(@as(usize, 0), source_verified.payload.?.signature_index);
+    try std.testing.expect(context.read_calls > 1);
+
+    const corrupted_signature = try allocator.dupe(u8, payload);
+    defer allocator.free(corrupted_signature);
+    corrupted_signature[archive.header.metadata_size + metadata_signature.len - 1] ^= 1;
+    var corrupt_archive = try archive_mod.Archive.initAlloc(
+        allocator,
+        corrupted_signature,
+        .{},
+    );
+    defer corrupt_archive.deinit();
+    try std.testing.expectError(
+        error.AndroidOtaSignatureMismatch,
+        corrupt_archive.verifySignatures(&keys, .{}),
+    );
+
+    const AllocationTest = struct {
+        fn run(
+            failing_allocator: std.mem.Allocator,
+            bytes: []const u8,
+            public_keys: []const archive_mod.SignaturePublicKey,
+        ) !void {
+            var source_context = TestSource{ .bytes = bytes, .max_chunk = 11 };
+            var ota = try source_archive.Archive.initAlloc(
+                failing_allocator,
+                source_context.source(),
+                .{},
+            );
+            defer ota.deinit();
+            _ = try ota.verifySignatures(failing_allocator, public_keys, .{});
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        allocator,
+        AllocationTest.run,
+        .{ payload, keys[0..] },
+    );
+}
+
 fn sourceCopyPayloadAlloc(
     alloc: std.mem.Allocator,
     source_hash: *const [32]u8,
@@ -1288,4 +1422,22 @@ fn addSignatureSectionsAlloc(
     try output.appendSlice(alloc, blobs);
     try output.appendSlice(alloc, payload_signature);
     return output.toOwnedSlice(alloc);
+}
+
+fn signatureProtoFromBase64Alloc(
+    alloc: std.mem.Allocator,
+    encoded: []const u8,
+) ![]u8 {
+    const decoder = std.base64.standard.Decoder;
+    const size = try decoder.calcSizeForSlice(encoded);
+    const signature = try alloc.alloc(u8, size);
+    defer alloc.free(signature);
+    _ = try decoder.decode(signature, encoded);
+    var inner: std.ArrayList(u8) = .empty;
+    defer inner.deinit(alloc);
+    try protobuf.appendBytesField(alloc, &inner, 2, signature);
+    var outer: std.ArrayList(u8) = .empty;
+    errdefer outer.deinit(alloc);
+    try protobuf.appendMessageField(alloc, &outer, 1, inner.items);
+    return outer.toOwnedSlice(alloc);
 }

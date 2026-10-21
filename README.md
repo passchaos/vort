@@ -233,6 +233,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   streams, SHA-256 checks, bounded range reads, source-backed seekable payload
   and old-partition callbacks with operation-bounded memory, plus a two-pass
   seekable-source/short-write-sink writer byte-identical to one-shot output,
+  bounded AOSP metadata/payload signature verification through Vail-backed
+  RSA-2048/4096 PKCS#1 SHA-256 and P-256 ECDSA with multi-key selection,
   fuzzing, independent
   Python/liblz4 validation, and Rust
   `payload_dumper` interoperability;

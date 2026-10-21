@@ -18,6 +18,9 @@ pub const Error = core.Error || error{
     UnsupportedLz4diffCompression,
     InvalidZucchiniPatch,
     UnsupportedZucchiniPatch,
+    InvalidAndroidOtaSignature,
+    AndroidOtaSignatureMissing,
+    AndroidOtaSignatureMismatch,
 };
 
 pub const magic = "CrAU";

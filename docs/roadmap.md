@@ -22121,3 +22121,15 @@ reuse, so production keeps the simpler independently owned plans.
   with the one-shot writer under 3/5-byte file I/O schedules, and Rust
   `payload_dumper` independently extracts all four (`source_writer=4`,
   `source_writer_oracle=4`).
+
+- Added Android OTA vendor signature verification with exact AOSP coverage
+  ranges. The bounded Signatures parser handles repeated entries and fixed32
+  unpadded EC sizes, while slice/source archives hash metadata and payload data
+  without including either signature protobuf. `../vail/archive_crypto` owns
+  strict SPKI PEM/DER plus RSA-2048/4096 PKCS#1-v1.5 SHA-256 and P-256 ECDSA;
+  Vort owns multi-signature/multi-key policy and explicit required/optional
+  sections. Fixed AOSP/OpenSSL vectors cover all three key profiles. The
+  differential generates temporary RSA/P-256 signed payloads, independently
+  verifies four raw signatures with OpenSSL, and requires slice/source success
+  plus wrong-key, corruption and unsigned failures (`signature_cases=9`,
+  `signature_openssl=4`).

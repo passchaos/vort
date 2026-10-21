@@ -371,6 +371,10 @@ pub fn main(init: std.process.Init) !void {
         try android_ota_cli.extract(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-android-ota-source")) {
         try android_ota_cli.extractSource(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "verify-android-ota-signatures")) {
+        try android_ota_cli.verifySignatures(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "verify-android-ota-source-signatures")) {
+        try android_ota_cli.verifySourceSignatures(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-android-ota-range")) {
         try android_ota_cli.extractRange(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-android-ota")) {
@@ -2823,6 +2827,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  inspect-android-ota-source <payload.bin>
         \\  extract-android-ota <payload> <partition> <out> [max_output] [source|-]
         \\  extract-android-ota-source <payload> <partition> <out> <chunk_size> [source|-]
+        \\  verify-android-ota-signatures <payload> <public_key.pem> [additional_keys...]
+        \\  verify-android-ota-source-signatures <payload> <public_key.pem> [additional_keys...]
         \\  extract-android-ota-range <payload> <partition> <out> <offset> <length> [source|-]
         \\  encode-android-ota <in> <out> <partition> [auto|raw|bzip2|xz] [block_size] [operation_size]
         \\  encode-android-ota-source <in> <out> <partition> [mode] [block_size] [operation_size] [input_step] [output_step]

@@ -2,9 +2,10 @@ const std = @import("std");
 const decoder = @import("decoder.zig");
 const format = @import("format.zig");
 const manifest_mod = @import("manifest.zig");
+const signatures = @import("signatures.zig");
 
 pub const Error = format.Error || manifest_mod.Error || decoder.Error ||
-    std.mem.Allocator.Error;
+    signatures.Error || std.mem.Allocator.Error;
 
 pub const OpenOptions = struct {
     max_manifest_size: usize = 64 * 1024 * 1024,
@@ -21,6 +22,20 @@ pub const OpenOptions = struct {
 };
 
 pub const DecodeOptions = decoder.Options;
+pub const SignatureLimits = signatures.Limits;
+pub const SignaturePublicKey = signatures.PublicKey;
+pub const SignatureMatch = signatures.Match;
+
+pub const SignatureVerificationOptions = struct {
+    limits: SignatureLimits = .{},
+    require_metadata: bool = true,
+    require_payload: bool = true,
+};
+
+pub const SignatureVerificationResult = struct {
+    metadata: ?SignatureMatch,
+    payload: ?SignatureMatch,
+};
 
 pub const Archive = struct {
     allocator: std.mem.Allocator,
@@ -115,6 +130,55 @@ pub const Archive = struct {
     pub fn operationBlob(self: Archive, operation: format.Operation) []const u8 {
         const start = self.header.data_offset + @as(usize, @intCast(operation.data_offset));
         return self.bytes[start..][0..@intCast(operation.data_length)];
+    }
+
+    pub fn verifySignatures(
+        self: Archive,
+        keys: []const SignaturePublicKey,
+        options: SignatureVerificationOptions,
+    ) Error!SignatureVerificationResult {
+        const metadata = if (self.metadataSignature().len == 0) blk: {
+            if (options.require_metadata) return error.AndroidOtaSignatureMissing;
+            break :blk null;
+        } else blk: {
+            var digest: [32]u8 = undefined;
+            std.crypto.hash.sha2.Sha256.hash(
+                self.bytes[0..self.header.metadata_size],
+                &digest,
+                .{},
+            );
+            break :blk try signatures.verifyAny(
+                try signatures.parse(self.metadataSignature(), options.limits),
+                keys,
+                &digest,
+            );
+        };
+        const payload_bytes = self.payloadSignature();
+        const payload = if (payload_bytes == null) blk: {
+            if (options.require_payload) return error.AndroidOtaSignatureMissing;
+            break :blk null;
+        } else blk: {
+            const signature_offset = self.manifest.signatures_offset.?;
+            const signed_end_u64 = std.math.add(
+                u64,
+                self.header.data_offset,
+                signature_offset,
+            ) catch return error.IntegerOverflow;
+            const signed_end = std.math.cast(usize, signed_end_u64) orelse
+                return error.OutputLimitExceeded;
+            if (signed_end > self.bytes.len) return error.TruncatedFrame;
+            var hasher = std.crypto.hash.sha2.Sha256.init(.{});
+            hasher.update(self.bytes[0..self.header.metadata_size]);
+            hasher.update(self.bytes[self.header.data_offset..signed_end]);
+            var digest: [32]u8 = undefined;
+            hasher.final(&digest);
+            break :blk try signatures.verifyAny(
+                try signatures.parse(payload_bytes.?, options.limits),
+                keys,
+                &digest,
+            );
+        };
+        return .{ .metadata = metadata, .payload = payload };
     }
 
     pub fn findPartition(self: Archive, name: []const u8) ?usize {

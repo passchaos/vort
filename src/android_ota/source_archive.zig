@@ -9,6 +9,7 @@ const archive_mod = @import("archive.zig");
 const decoder = @import("decoder.zig");
 const format = @import("format.zig");
 const manifest_mod = @import("manifest.zig");
+const signatures = @import("signatures.zig");
 const source_mod = @import("source.zig");
 
 pub const Error = archive_mod.Error || decoder.Error || source_mod.Error ||
@@ -135,6 +136,55 @@ pub const Archive = struct {
             operation.data_length,
             max_size,
         );
+    }
+
+    pub fn verifySignatures(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        keys: []const archive_mod.SignaturePublicKey,
+        options: archive_mod.SignatureVerificationOptions,
+    ) Error!archive_mod.SignatureVerificationResult {
+        const metadata = if (self.metadataSignature().len == 0) blk: {
+            if (options.require_metadata) return error.AndroidOtaSignatureMissing;
+            break :blk null;
+        } else blk: {
+            var digest: [32]u8 = undefined;
+            std.crypto.hash.sha2.Sha256.hash(
+                self.metadata[0..self.header.metadata_size],
+                &digest,
+                .{},
+            );
+            break :blk try signatures.verifyAny(
+                try signatures.parse(self.metadataSignature(), options.limits),
+                keys,
+                &digest,
+            );
+        };
+        const payload = if (self.manifest.signatures_offset == null) blk: {
+            if (options.require_payload) return error.AndroidOtaSignatureMissing;
+            break :blk null;
+        } else blk: {
+            const signature_bytes = (try self.payloadSignatureAllocLimited(
+                allocator,
+                options.limits.max_blob_size,
+            )).?;
+            defer allocator.free(signature_bytes);
+            var hasher = std.crypto.hash.sha2.Sha256.init(.{});
+            try self.source.updateSha256(0, self.header.metadata_size, &hasher);
+            try self.source.updateSha256(
+                self.header.data_offset,
+                self.manifest.signatures_offset.?,
+                &hasher,
+            );
+            var digest: [32]u8 = undefined;
+            hasher.final(&digest);
+            break :blk try signatures.verifyAny(
+                try signatures.parse(signature_bytes, options.limits),
+                keys,
+                &digest,
+            );
+        };
+        return .{ .metadata = metadata, .payload = payload };
     }
 
     pub fn findPartition(self: Archive, name: []const u8) ?usize {

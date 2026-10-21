@@ -108,6 +108,125 @@ def bfield(number: int, value: bytes) -> bytes:
     return varint((number << 3) | 2) + varint(len(value)) + value
 
 
+def fixed32_field(number: int, value: int) -> bytes:
+    return varint((number << 3) | 5) + struct.pack("<I", value)
+
+
+def signature_proto(signature: bytes, padded_size: int) -> bytes:
+    if not signature or len(signature) > padded_size:
+        raise AssertionError("invalid signature size")
+    inner = bfield(2, signature + bytes(padded_size - len(signature)))
+    inner += fixed32_field(3, len(signature))
+    return bfield(1, inner)
+
+
+def sign_payload(
+    openssl: Path,
+    temp: Path,
+    unsigned: bytes,
+    name: str,
+    algorithm: str,
+) -> tuple[bytes, Path, bytes]:
+    private_key = temp / f"{name}.private.pem"
+    public_key = temp / f"{name}.public.pem"
+    if algorithm == "rsa":
+        run(
+            openssl,
+            "genpkey",
+            "-algorithm",
+            "RSA",
+            "-pkeyopt",
+            "rsa_keygen_bits:2048",
+            "-out",
+            private_key,
+        )
+        padded_size = 256
+    elif algorithm == "ec":
+        run(
+            openssl,
+            "genpkey",
+            "-algorithm",
+            "EC",
+            "-pkeyopt",
+            "ec_paramgen_curve:P-256",
+            "-out",
+            private_key,
+        )
+        padded_size = 72
+    else:
+        raise AssertionError(f"unsupported signing algorithm {algorithm}")
+    run(openssl, "pkey", "-in", private_key, "-pubout", "-out", public_key)
+    major, manifest_size, signature_size = struct.unpack_from(">QQI", unsigned, 4)
+    if major != 2 or signature_size != 0:
+        raise AssertionError("expected unsigned major-v2 payload")
+    old_manifest = unsigned[HEADER_SIZE : HEADER_SIZE + manifest_size]
+    blobs = unsigned[HEADER_SIZE + manifest_size :]
+    placeholder = signature_proto(bytes(padded_size), padded_size)
+    manifest = old_manifest + vfield(4, len(blobs)) + vfield(5, len(placeholder))
+    header = MAGIC + struct.pack(">QQI", 2, len(manifest), len(placeholder))
+    metadata = header + manifest
+    payload_signed_bytes = metadata + blobs
+    metadata_input = temp / f"{name}.metadata.bin"
+    payload_input = temp / f"{name}.payload-signed.bin"
+    metadata_signature_path = temp / f"{name}.metadata.sig"
+    payload_signature_path = temp / f"{name}.payload.sig"
+    metadata_input.write_bytes(metadata)
+    payload_input.write_bytes(payload_signed_bytes)
+    run(
+        openssl,
+        "dgst",
+        "-sha256",
+        "-sign",
+        private_key,
+        "-out",
+        metadata_signature_path,
+        metadata_input,
+    )
+    run(
+        openssl,
+        "dgst",
+        "-sha256",
+        "-sign",
+        private_key,
+        "-out",
+        payload_signature_path,
+        payload_input,
+    )
+    run(
+        openssl,
+        "dgst",
+        "-sha256",
+        "-verify",
+        public_key,
+        "-signature",
+        metadata_signature_path,
+        metadata_input,
+    )
+    run(
+        openssl,
+        "dgst",
+        "-sha256",
+        "-verify",
+        public_key,
+        "-signature",
+        payload_signature_path,
+        payload_input,
+    )
+    metadata_signature = signature_proto(
+        metadata_signature_path.read_bytes(),
+        padded_size,
+    )
+    raw_payload_signature = payload_signature_path.read_bytes()
+    payload_signature = signature_proto(raw_payload_signature, padded_size)
+    if len(metadata_signature) != len(placeholder) or len(payload_signature) != len(placeholder):
+        raise AssertionError("signature protobuf size changed after signing")
+    return (
+        metadata + metadata_signature + blobs + payload_signature,
+        public_key,
+        raw_payload_signature,
+    )
+
+
 def parse_varint(data: bytes, offset: int) -> tuple[int, int]:
     value = 0
     shift = 0
@@ -743,6 +862,7 @@ def main() -> None:
     parser.add_argument("--bspatch", type=Path)
     parser.add_argument("--puffin", type=Path)
     parser.add_argument("--puff-codec-oracle", type=Path)
+    parser.add_argument("--openssl", type=Path)
     args = parser.parse_args()
     oracle = args.payload_dumper or (
         Path(found) if (found := shutil.which("payload_dumper")) else None
@@ -754,6 +874,9 @@ def main() -> None:
         Path(found) if (found := shutil.which("puffin")) else None
     )
     puff_codec_oracle = args.puff_codec_oracle
+    openssl = args.openssl or (
+        Path(found) if (found := shutil.which("openssl")) else None
+    )
 
     source_bytes = writer_payload()
     writer_cases = 0
@@ -773,6 +896,8 @@ def main() -> None:
     source_aosp_cases = 0
     source_writer_cases = 0
     source_writer_oracle = 0
+    signature_cases = 0
+    signature_openssl_cases = 0
     with tempfile.TemporaryDirectory(prefix="vort-android-ota-") as temp_text:
         temp = Path(temp_text)
         source = temp / "system.img"
@@ -884,6 +1009,82 @@ def main() -> None:
                         f"payload_dumper source writer mismatch for {compression}"
                     )
                 source_writer_oracle += 1
+
+        if raw_payload is None:
+            raise AssertionError("missing raw payload")
+        if openssl is not None:
+            signed_payloads: list[tuple[str, Path, bytes, Path, bytes]] = []
+            for algorithm in ("rsa", "ec"):
+                signed, public_key, raw_payload_signature = sign_payload(
+                    openssl,
+                    temp,
+                    raw_payload,
+                    f"signed-{algorithm}",
+                    algorithm,
+                )
+                path = temp / f"signed-{algorithm}.bin"
+                path.write_bytes(signed)
+                signed_payloads.append(
+                    (algorithm, path, signed, public_key, raw_payload_signature)
+                )
+                signature_openssl_cases += 2
+            for index, (algorithm, path, signed, public_key, raw_payload_signature) in enumerate(
+                signed_payloads
+            ):
+                wrong_key = signed_payloads[1 - index][3]
+                for command in (
+                    "verify-android-ota-signatures",
+                    "verify-android-ota-source-signatures",
+                ):
+                    verified = run(
+                        args.cli,
+                        command,
+                        path,
+                        wrong_key,
+                        public_key,
+                    ).stdout
+                    if (
+                        b"android_ota_signatures=verified" not in verified
+                        or b"metadata_key=1" not in verified
+                        or b"payload_key=1" not in verified
+                    ):
+                        raise AssertionError(
+                            f"{algorithm} signature verification mismatch: {verified!r}"
+                        )
+                    signature_cases += 1
+                expect_failure(
+                    args.cli,
+                    "verify-android-ota-signatures",
+                    path,
+                    wrong_key,
+                    error_name="AndroidOtaSignatureMismatch",
+                )
+                signature_cases += 1
+                corrupt = bytearray(signed)
+                signature_at = signed.rfind(raw_payload_signature)
+                if signature_at < 0:
+                    raise AssertionError("payload signature bytes were not found")
+                corrupt[signature_at] ^= 1
+                corrupt_path = temp / f"signed-{algorithm}-corrupt.bin"
+                corrupt_path.write_bytes(corrupt)
+                expect_failure(
+                    args.cli,
+                    "verify-android-ota-signatures",
+                    corrupt_path,
+                    public_key,
+                    error_name="AndroidOtaSignatureMismatch",
+                )
+                signature_cases += 1
+            unsigned_path = temp / "unsigned-signature-check.bin"
+            unsigned_path.write_bytes(raw_payload)
+            expect_failure(
+                args.cli,
+                "verify-android-ota-signatures",
+                unsigned_path,
+                signed_payloads[0][3],
+                error_name="AndroidOtaSignatureMissing",
+            )
+            signature_cases += 1
 
         reference_data = mixed_payload_data()
         reference_payload = reference_mixed_payload(reference_data)
@@ -1448,7 +1649,9 @@ def main() -> None:
         f"aosp_delta={aosp_delta} source_reader={source_reader_cases} "
         f"source_inspect={source_inspect_cases} source_aosp={source_aosp_cases} "
         f"source_writer={source_writer_cases} "
-        f"source_writer_oracle={source_writer_oracle}"
+        f"source_writer_oracle={source_writer_oracle} "
+        f"openssl={openssl is not None} signature_cases={signature_cases} "
+        f"signature_openssl={signature_openssl_cases}"
     )
 
 
