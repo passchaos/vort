@@ -3,6 +3,7 @@ const legacy_solid = @import("rar/legacy_solid.zig");
 const rar15 = @import("rar/rar15.zig");
 const rar20 = @import("rar/rar20.zig");
 const rar29 = @import("rar/rar29.zig");
+const rar4_comment = @import("rar/rar4_comment.zig");
 const ppmd_h = @import("rar/ppmd_h.zig");
 const rar50 = @import("rar/rar50.zig");
 const volume_set = @import("rar/volume_set.zig");
@@ -85,6 +86,7 @@ test {
     _ = rar15;
     _ = rar20;
     _ = rar29;
+    _ = rar4_comment;
     _ = ppmd_h;
     _ = rar50;
     _ = volume_set;

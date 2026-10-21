@@ -253,6 +253,11 @@ def main() -> None:
     writer_comment_volumes = 0
     writer_comment_volumes_external = 0
     reference_comments = 0
+    writer_rar4_comments = 0
+    writer_rar4_comments_external = 0
+    writer_rar4_comment_volumes = 0
+    writer_rar4_comment_volumes_external = 0
+    reference_rar4_comments = 0
     reference_rar4_unicode = 0
     reference_stored = 0
     reference_compressed = 0
@@ -305,6 +310,133 @@ def main() -> None:
                 writer_external += 1
 
         if args.writer is not None:
+            rar4_comment_archive = temp / "vort-rar4-comment.rar"
+            run(args.writer, str(rar4_comment_archive), "rar4", "rar4-comment")
+            rar4_listing = run(
+                args.cli,
+                "list-rar-file",
+                str(rar4_comment_archive),
+            ).stdout
+            if (
+                "has_comment=true" not in rar4_listing
+                or "comment_bytes=24" not in rar4_listing
+                or "comment_encrypted=false" not in rar4_listing
+            ):
+                raise AssertionError(f"RAR4 comment listing mismatch: {rar4_listing}")
+            writer_rar4_comments += 1
+            if rar_tool is not None:
+                external_listing = run(
+                    rar_tool,
+                    "lt",
+                    "-p-",
+                    str(rar4_comment_archive),
+                ).stdout
+                if "Vort RAR4 comment 世界" not in external_listing:
+                    raise AssertionError("RAR omitted Vort RAR4 archive comment text")
+                writer_rar4_comments_external += 1
+            elif seven_zip is not None:
+                run(seven_zip, "t", str(rar4_comment_archive))
+                writer_rar4_comments_external += 1
+
+            rar4_encrypted_comment_archive = temp / "vort-rar4-comment-encrypted.rar"
+            rar4_comment_password = "rar4-comment-password"
+            run(
+                args.writer,
+                str(rar4_encrypted_comment_archive),
+                "rar4",
+                "rar4-comment-encrypted",
+            )
+            rar4_encrypted_listing = run(
+                args.cli,
+                "list-rar-file",
+                str(rar4_encrypted_comment_archive),
+                rar4_comment_password,
+            ).stdout
+            if (
+                "has_comment=true" not in rar4_encrypted_listing
+                or "comment_bytes=34" not in rar4_encrypted_listing
+                or "comment_encrypted=true" not in rar4_encrypted_listing
+                or "encrypted_headers=true" not in rar4_encrypted_listing
+            ):
+                raise AssertionError(
+                    f"RAR4 encrypted comment listing mismatch: {rar4_encrypted_listing}"
+                )
+            writer_rar4_comments += 1
+            if rar_tool is not None:
+                external_listing = run(
+                    rar_tool,
+                    "lt",
+                    f"-p{rar4_comment_password}",
+                    str(rar4_encrypted_comment_archive),
+                ).stdout
+                if "Encrypted Vort RAR4 comment 世界" not in external_listing:
+                    raise AssertionError("RAR omitted encrypted Vort RAR4 comment text")
+                writer_rar4_comments_external += 1
+            elif seven_zip is not None:
+                run(
+                    seven_zip,
+                    "t",
+                    f"-p{rar4_comment_password}",
+                    str(rar4_encrypted_comment_archive),
+                )
+                writer_rar4_comments_external += 1
+
+            rar4_comment_volume_prefix = temp / "vort-rar4-comment-volumes"
+            run(
+                args.writer,
+                str(rar4_comment_volume_prefix),
+                "rar4",
+                "rar4-comment-volumes",
+            )
+            rar4_comment_volumes = tuple(
+                sorted(temp.glob("vort-rar4-comment-volumes.part*.rar"))
+            )
+            if len(rar4_comment_volumes) < 2:
+                raise AssertionError("RAR4 comment volume probe did not split file data")
+            rar4_volume_comment = "Vort RAR4 comment outside payload budget\n" * 8
+            rar4_first_listing = run(
+                args.cli,
+                "list-rar-file",
+                str(rar4_comment_volumes[0]),
+            ).stdout
+            if (
+                f"comment_bytes={len(rar4_volume_comment.encode('utf-8'))}"
+                not in rar4_first_listing
+                or "compressed=64" not in rar4_first_listing
+            ):
+                raise AssertionError(
+                    f"RAR4 first-volume comment budget mismatch: {rar4_first_listing}"
+                )
+            for continuation in rar4_comment_volumes[1:]:
+                continuation_listing = run(
+                    args.cli,
+                    "list-rar-file",
+                    str(continuation),
+                ).stdout
+                if "has_comment=false" not in continuation_listing:
+                    raise AssertionError(
+                        f"RAR4 comment repeated in continuation volume: {continuation_listing}"
+                    )
+            rar4_comment_volume_output = temp / "vort-rar4-comment-volumes.out"
+            rar4_volume_payload = b"RAR4 comment volume payload\n" * 16
+            run(
+                args.cli,
+                "extract-rar-volumes",
+                "rar4-comment-volume.txt",
+                str(rar4_comment_volume_output),
+                str(len(rar4_volume_payload)),
+                *(str(volume) for volume in rar4_comment_volumes),
+            )
+            if rar4_comment_volume_output.read_bytes() != rar4_volume_payload:
+                raise AssertionError("RAR4 comment volume payload mismatch")
+            writer_rar4_comment_volumes = 1
+            if seven_zip is not None:
+                run(seven_zip, "t", str(rar4_comment_volumes[0]))
+                writer_rar4_comment_volumes_external = 1
+            elif rar_tool is not None:
+                run(rar_tool, "t", "-idq", "-p-", str(rar4_comment_volumes[0]))
+                writer_rar4_comment_volumes_external = 1
+
             comment_archive = temp / "vort-rar5-comment.rar"
             run(args.writer, str(comment_archive), "rar5", "rar5-comment")
             listing = run(args.cli, "list-rar-file", str(comment_archive)).stdout
@@ -492,6 +624,42 @@ def main() -> None:
                         f"Vort rejected RAR5 {suffix} reference comment: {listing}"
                     )
                 reference_comments += 1
+
+            for encrypted_headers in (False, True):
+                suffix = "secret" if encrypted_headers else "plain"
+                reference_comment_archive = temp / f"reference-rar4-comment-{suffix}.rar"
+                password_args = ("-hpcomment-password",) if encrypted_headers else ()
+                created = run(
+                    rar_tool,
+                    "a",
+                    "-idq",
+                    "-ma4",
+                    "-m0",
+                    "-ep",
+                    *password_args,
+                    f"-z{comment_file}",
+                    str(reference_comment_archive),
+                    str(comment_source),
+                    check=False,
+                )
+                if created.returncode != 0:
+                    continue
+                cli_password = ("comment-password",) if encrypted_headers else ()
+                listing = run(
+                    args.cli,
+                    "list-rar-file",
+                    str(reference_comment_archive),
+                    *cli_password,
+                ).stdout
+                if (
+                    "has_comment=true" not in listing
+                    or "comment_bytes=24" not in listing
+                    or f"comment_encrypted={str(encrypted_headers).lower()}" not in listing
+                ):
+                    raise AssertionError(
+                        f"Vort rejected RAR4 {suffix} reference comment: {listing}"
+                    )
+                reference_rar4_comments += 1
 
         for version, compression in (("rar4", "rar29"), ("rar5", "rar50")):
             compressed_first = temp / f"vort-{compression}-compressed-first.rar"
@@ -2008,6 +2176,11 @@ def main() -> None:
         f"writer_comment_volumes={writer_comment_volumes} "
         f"writer_comment_volumes_external={writer_comment_volumes_external} "
         f"reference_comments={reference_comments} "
+        f"writer_rar4_comments={writer_rar4_comments} "
+        f"writer_rar4_comments_external={writer_rar4_comments_external} "
+        f"writer_rar4_comment_volumes={writer_rar4_comment_volumes} "
+        f"writer_rar4_comment_volumes_external={writer_rar4_comment_volumes_external} "
+        f"reference_rar4_comments={reference_rar4_comments} "
         f"reference_rar4_unicode={reference_rar4_unicode} "
         f"reference_stored={reference_stored} reference_compressed={reference_compressed} "
         f"reference_compressed_decoded={reference_compressed_decoded} "

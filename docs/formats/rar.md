@@ -50,17 +50,20 @@ Unix/Windows symlink, junction, hard-link, or file-copy kind, directory-target
 flag, borrowed UTF-8 target, and a separate target-path safety classification.
 RAR5 encrypted entries additionally expose the
 version, flags, KDF count, salt, IV, and optional password-check record.
-`RarArchive.comment` exposes a borrowed, CRC-checked UTF-8 RAR5 archive
-comment, while `hasComment()` also reports an encrypted comment whose bytes
+`RarArchive.comment` exposes CRC-checked archive-comment text, while
+`hasComment()` also reports a compressed or encrypted comment whose bytes
 require the owned parser. `comment_encrypted` records the CMT payload's wire
-state independently from header encryption. The parser requires a unique CMT
-service block between the main header and the first file, stored method 0,
-exact plain sizes (or legal AES padding), and valid UTF-8 without NUL in the
-exposed text. It matches UnRAR by treating the first NUL in encrypted CMT data
-as the text terminator after authenticating the entire declared AES-block
-payload. RAR 4.x/5.0 file comments do not exist in the current format; WinRAR
-removed that legacy feature rather than assigning CMT blocks to individual
-files.
+state independently from header encryption. RAR5 requires a unique stored CMT
+service block between the main header and first file, exact plain sizes (or
+legal AES padding), and valid UTF-8 without NUL in exposed text. RAR4 accepts
+the real NEWSUB `CMT` shape used by RARLab, including Stored and RAR15/RAR20/
+RAR29 compressed payloads, CRC-32, legacy byte text, attribute-marked UTF-16LE,
+and Vail-backed RAR30 AES. Stored legacy byte comments can remain borrowed;
+compressed, Unicode, data-encrypted, or header-encrypted comments are decoded
+by the bounded owned parser. Both generations match UnRAR's NUL-termination
+rules after checking the entire declared plaintext. RAR 4.x/5.0 *file*
+comments do not exist in the current format; WinRAR removed that distinct
+feature rather than assigning archive CMT blocks to individual files.
 RAR 1.5-4.x encrypted entries expose their selected RAR15, RAR20, or RAR30
 cipher generation and, for RAR30 AES, the optional 8-byte salt.
 Borrowed RAR4 entries retain their ANSI fallback and encoded Unicode bytecode.
@@ -115,7 +118,9 @@ keeps its main header clear, prefixes later headers with an 8-byte salt, and
 resets AES-CBC to the salt-derived IV for each block. Repeated salts reuse the
 derived key. Entry count and
 copied-name and archive-comment bytes share the explicit metadata limit in
-addition to the independent entry, KDF, and output limits.
+addition to the independent entry, KDF, and output limits. RAR29-compressed
+RAR4 comments also inherit explicit PPMd-memory and VM-instruction limits from
+`RarParseOptions` before metadata is exposed.
 `Archive.extractSession` exposes explicit sequential decoding and returns owned
 entry data from `nextAlloc`. `extractByNameAllocLimited` and
 `extractByNameAllocWithOptions` automatically replays preceding compressed
@@ -217,16 +222,18 @@ file-data encryption with the same password. Header and file salts, IVs, and
 KDF counts remain independent. This composes with Stored, RAR50, directories,
 and solid RAR50 history without exposing names in the wire.
 
-`RarEncodeOptions.comment` writes the standard RAR5 `CMT` service header
-immediately after the main header. Comments are deterministic UTF-8, NUL-free,
-CRC-32 protected, stored without compression, and capped at the interoperable
-256 KiB writer limit. `comment_encryption` supplies an independent RAR5
-file-data salt/IV/KDF tuple for the CMT payload and uses Vail for PBKDF2,
-AES-256-CBC, password checks, and keyed CRCs. Header-encrypted archives require
-this payload encryption with the same password so the comment cannot leak.
-Multi-volume output writes the complete CMT only in the first volume. Matching
-RARLab's `-v` behavior, comment bytes do not consume the file-payload budget,
-so the first physical volume can exceed that budget by its CMT header and data.
+`RarEncodeOptions.comment` writes a generation-native CMT immediately after the
+main header. Comments are deterministic UTF-8, NUL-free, CRC-32 protected,
+stored without compression, and capped at the interoperable 256 KiB limit.
+RAR4 emits legacy bytes for ASCII and attribute-marked UTF-16LE otherwise;
+`rar4_comment_encryption` supplies the existing Vail-backed RAR30 password/salt
+tuple. RAR5 uses its service header, while `comment_encryption` supplies an
+independent salt/IV/KDF tuple for Vail PBKDF2/AES-256-CBC/password-check/keyed-
+CRC handling. Header-encrypted archives require matching comment-data
+encryption so text cannot leak. Multi-volume output writes the complete CMT
+only in the first volume. Matching RARLab's `-v` behavior, comment bytes do not
+consume the file-payload budget, so the first physical volume can exceed that
+budget by its CMT header and data.
 `encodeRarVolumesAlloc` splits logical RAR4/RAR5 members at an explicit maximum
 payload-per-volume budget and returns an owned `EncodedVolumes` collection. It
 writes numbered volume main headers, per-fragment split flags and CRCs, and
@@ -253,8 +260,8 @@ validated UTF-8 names. Both writers reject NUL,
 absolute, empty-component, dot, and parent-component paths. RAR29 compression
 rejects unsupported filter/codec combinations instead of relabeling them.
 RAR50 dictionary sizes must be power-of-two
-multiples of 128 KiB. Pre-RAR29 RAR 1.3/1.5/2.0 encryption, recovery records,
-and legacy RAR4 archive comments remain future writer work.
+multiples of 128 KiB. Pre-RAR29 RAR 1.3/1.5/2.0 encryption and recovery records
+remain future writer work.
 
 ## CLI
 

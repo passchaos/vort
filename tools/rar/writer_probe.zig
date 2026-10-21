@@ -9,6 +9,66 @@ pub fn main(init: std.process.Init) !void {
     const version_text = args.next() orelse "rar5";
     const version: vort.RarVersion = if (std.mem.eql(u8, version_text, "rar4")) .rar4 else .rar5;
     const mode = args.next() orelse "stored";
+    if (std.mem.eql(u8, mode, "rar4-comment-volumes")) {
+        if (version != .rar4) return error.UnsupportedRarVersion;
+        const entries = [_]vort.RarEncodeEntry{.{
+            .name = "rar4-comment-volume.txt",
+            .data = "RAR4 comment volume payload\n" ** 16,
+        }};
+        var volumes = try vort.encodeRarVolumesAlloc(init.gpa, &entries, .{
+            .version = .rar4,
+            .comment = "Vort RAR4 comment outside payload budget\n" ** 8,
+        }, 64);
+        defer volumes.deinit();
+        for (volumes.volumes, 1..) |volume, number| {
+            const path = try std.fmt.allocPrint(init.gpa, "{s}.part{d}.rar", .{
+                output_path,
+                number,
+            });
+            defer init.gpa.free(path);
+            try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = volume });
+        }
+        return;
+    }
+    if (std.mem.eql(u8, mode, "rar4-comment-encrypted")) {
+        if (version != .rar4) return error.UnsupportedRarVersion;
+        const password = "rar4-comment-password";
+        const salt = [_]u8{0x51} ** 8;
+        const entries = [_]vort.RarEncodeEntry{.{
+            .name = "hidden-rar4-comment.txt",
+            .data = "encrypted RAR4 archive comment interoperability\n",
+            .rar4_encryption = .{ .password = password, .salt = salt },
+        }};
+        const bytes = try vort.encodeRarAlloc(init.gpa, &entries, .{
+            .version = .rar4,
+            .comment = "Encrypted Vort RAR4 comment 世界",
+            .rar4_comment_encryption = .{ .password = password, .salt = salt },
+            .rar4_header_encryption = .{ .password = password, .salt = salt },
+        });
+        defer init.gpa.free(bytes);
+        try std.Io.Dir.cwd().writeFile(
+            init.io,
+            .{ .sub_path = output_path, .data = bytes },
+        );
+        return;
+    }
+    if (std.mem.eql(u8, mode, "rar4-comment")) {
+        if (version != .rar4) return error.UnsupportedRarVersion;
+        const entries = [_]vort.RarEncodeEntry{.{
+            .name = "rar4-commented.txt",
+            .data = "RAR4 archive comment interoperability\n",
+        }};
+        const bytes = try vort.encodeRarAlloc(init.gpa, &entries, .{
+            .version = .rar4,
+            .comment = "Vort RAR4 comment 世界",
+        });
+        defer init.gpa.free(bytes);
+        try std.Io.Dir.cwd().writeFile(
+            init.io,
+            .{ .sub_path = output_path, .data = bytes },
+        );
+        return;
+    }
     if (std.mem.eql(u8, mode, "rar5-comment-volumes")) {
         if (version != .rar5) return error.UnsupportedRarVersion;
         const entries = [_]vort.RarEncodeEntry{.{

@@ -22082,3 +22082,17 @@ reuse, so production keeps the simpler independently owned plans.
   unarc-rs 0.8.0 independently accept encrypted Vort volume sets when available
   (`writer_volumes=1`, `writer_volumes_arj=1`,
   `writer_volumes_unarc=1`, `reader_multivolume=1`).
+
+- Added legacy RAR4 archive comments through the NEWSUB `CMT` format used by
+  modern RARLab compatibility output. The reader accepts Stored, RAR15,
+  RAR20/26 and RAR29 compressed comments, validates plaintext CRC-32, converts
+  attribute-marked UTF-16LE, and uses the bounded owned-header surface for
+  compressed or encrypted metadata. Deterministic writing selects legacy bytes
+  for ASCII and UTF-16LE otherwise, supports Vail-backed RAR30 AES data and
+  header encryption, and keeps one complete comment outside the first volume's
+  file-payload budget. Duplicate, late, corrupt, invalid-Unicode, metadata-limit
+  and exhaustive allocation paths have focused coverage. RARLab 6.21 accepts
+  Vort plain/encrypted/multi-volume output and supplies plain/encrypted method-3
+  fixtures in the reverse direction (`writer_rar4_comments=2`,
+  `writer_rar4_comments_external=2`, `writer_rar4_comment_volumes=1`,
+  `writer_rar4_comment_volumes_external=1`, `reference_rar4_comments=2`).
