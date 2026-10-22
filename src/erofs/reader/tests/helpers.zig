@@ -6,12 +6,14 @@ const writer = @import("../../writer.zig");
 pub const Input = struct {
     bytes: []const u8,
     max_request: usize = 0,
+    calls: usize = 0,
     fail_from_offset: ?u64 = null,
     pub fn source(self: *Input) source_module.Source {
         return .{ .context = self, .len = self.bytes.len, .read_at = readAt, .max_read_size = 31 };
     }
     fn readAt(raw: *anyopaque, offset: u64, output: []u8) error{SourceReadFailed}!usize {
         const self: *Input = @ptrCast(@alignCast(raw));
+        self.calls += 1;
         self.max_request = @max(self.max_request, output.len);
         if (self.fail_from_offset) |start| if (offset >= start) return error.SourceReadFailed;
         const start = std.math.cast(usize, offset) orelse return error.SourceReadFailed;

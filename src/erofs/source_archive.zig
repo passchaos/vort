@@ -8,14 +8,14 @@ const metadata = @import("reader/inode.zig");
 const superblock = @import("reader/superblock.zig");
 const devices_module = @import("reader/devices.zig");
 const context_module = @import("reader/context.zig");
-const extract = @import("reader/extract.zig");
+const stream = @import("reader/stream.zig");
 const directory = @import("reader/directory.zig");
 const types = @import("reader/types.zig");
 const xattr = @import("xattr.zig");
 const source_xattrs = @import("reader/xattrs.zig");
 const format = @import("format.zig");
 
-pub const Error = extract.Error || source_xattrs.Error || directory.Error || error{
+pub const Error = stream.Error || sink_module.Error || source_xattrs.Error || directory.Error || error{
     ErofsNotDirectory,
     ErofsEntryNotFound,
     ErofsNotRegularFile,
@@ -30,6 +30,7 @@ pub const Limits = struct {
 };
 pub const ReadLimits = archive_module.ReadLimits;
 pub const ReadResult = struct { decoded_size: u64, peak_working_bytes: usize };
+pub const ExtractProgress = stream.Progress;
 
 /// Owns only bounded metabox metadata and working-allocation accounting.
 /// Source contexts and device arrays remain borrowed and stable for its lifetime.
@@ -40,6 +41,7 @@ pub const SourceArchive = struct {
     limits: Limits,
     working: working_module.WorkingAllocator,
     metabox_bytes: ?[]u8 = null,
+    active_extractors: usize = 0,
 
     pub fn init(allocator: std.mem.Allocator, source: source_module.Source, limits: Limits) Error!SourceArchive {
         return initWithDevices(allocator, source, &.{}, limits);
@@ -61,6 +63,7 @@ pub const SourceArchive = struct {
     }
 
     pub fn deinit(self: *SourceArchive) void {
+        std.debug.assert(self.active_extractors == 0);
         if (self.metabox_bytes) |bytes| self.working.allocator().free(bytes);
         std.debug.assert(self.working.live == 0);
         self.* = undefined;
@@ -103,6 +106,32 @@ pub const SourceArchive = struct {
         return self.deviceReader().info(index);
     }
 
+    fn initRangeExtractorInternal(self: *SourceArchive, value: types.Inode, start: usize, size: usize, limits: ReadLimits) Error!Extractor {
+        if (size > limits.max_output_len) return error.OutputLimitExceeded;
+        const state = try stream.Reader.init(self.context(limits), value, start, size);
+        self.active_extractors = std.math.add(usize, self.active_extractors, 1) catch return error.IntegerOverflow;
+        return .{ .archive = self, .state = state };
+    }
+
+    /// The archive and borrowed Sources must stay at stable addresses until
+    /// the extractor is deinitialized, including after done or failure.
+    pub fn initRangeExtractor(self: *SourceArchive, value: types.Inode, start: usize, size: usize, limits: ReadLimits) Error!Extractor {
+        self.begin();
+        return self.initRangeExtractorInternal(value, start, size, limits) catch |err| self.failure(err);
+    }
+
+    pub fn initExtractor(self: *SourceArchive, value: types.Inode, limits: ReadLimits) Error!Extractor {
+        return self.initRangeExtractor(value, 0, value.file_size, limits);
+    }
+
+    pub fn initPathExtractor(self: *SourceArchive, path: []const u8, limits: ReadLimits, max_directory_size: usize) Error!Extractor {
+        self.begin();
+        const value = self.lookupInternal(path, limits.max_output_len, max_directory_size) catch |err| return self.failure(err);
+        const file_type = try value.fileType();
+        if (file_type != .regular and file_type != .symlink) return error.ErofsNotRegularFile;
+        return self.initRangeExtractorInternal(value, 0, value.file_size, limits) catch |err| self.failure(err);
+    }
+
     pub fn loadMetabox(self: *SourceArchive) Error!void {
         self.begin();
         return self.loadMetaboxInternal() catch |err| self.failure(err);
@@ -126,7 +155,14 @@ pub const SourceArchive = struct {
     fn readRangeInternal(self: *SourceArchive, value: types.Inode, start: usize, size: usize, sink: sink_module.Sink, limits: ReadLimits) Error!ReadResult {
         if (sink.max_write_size == 0) return error.SinkWriteFailed;
         if (size > limits.max_output_len) return error.OutputLimitExceeded;
-        try extract.emit(self.context(limits), value, start, size, sink, 0);
+        var reader_state = try stream.Reader.init(self.context(limits), value, start, size);
+        defer reader_state.deinit();
+        var buffer: [64 * 1024]u8 = undefined;
+        while (true) {
+            const progress = try reader_state.read(&buffer);
+            if (progress.output_written != 0) try sink.writeExact(progress.position - progress.output_written, buffer[0..progress.output_written]);
+            if (progress.status == .done) break;
+        }
         try sink.finish(size);
         return .{ .decoded_size = size, .peak_working_bytes = self.working.peak };
     }
@@ -230,6 +266,35 @@ pub const SourceArchive = struct {
         const prefix: input_module.Input = if (self.superblock.xattr_prefix_count == 0 or self.superblock.feature_compat & format.feature_compat_plain_xattr_prefixes != 0) .{ .source = self.source } else .{ .slice = self.metabox_bytes orelse return error.ErofsMissingMetabox };
         const shared: input_module.Input = if (self.superblock.feature_compat & format.feature_compat_shared_xattrs_in_metabox != 0) .{ .slice = self.metabox_bytes orelse return error.ErofsMissingMetabox } else .{ .source = self.source };
         return source_xattrs.readAllocLimited(self.working.allocator(), allocator, prefix, shared, ibody, self.superblock.block_size, self.superblock.xattr_block, self.superblock.xattr_prefix_start, self.superblock.xattr_prefix_count, ibody_start, value.xattr_size, max_count, max_total_bytes);
+    }
+};
+
+/// Resumable caller-owned extraction. Errors are sticky and leave the current
+/// output buffer unchanged. position() counts bytes delivered by earlier reads.
+pub const Extractor = struct {
+    archive: *SourceArchive,
+    state: stream.Reader,
+    failed: ?Error = null,
+
+    pub fn read(self: *Extractor, output: []u8) Error!ExtractProgress {
+        if (self.failed) |err| return err;
+        self.archive.begin();
+        return self.state.read(output) catch |err| {
+            const failure = self.archive.failure(err);
+            self.failed = failure;
+            return failure;
+        };
+    }
+
+    pub fn position(self: *const Extractor) usize {
+        return self.state.position;
+    }
+
+    pub fn deinit(self: *Extractor) void {
+        self.state.deinit();
+        std.debug.assert(self.archive.active_extractors != 0);
+        self.archive.active_extractors -= 1;
+        self.* = undefined;
     }
 };
 

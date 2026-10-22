@@ -181,4 +181,14 @@ test "EROFS Source archive routes packed fragments through modern extent records
     const decoded = try archive.extractByPathAllocLimited(allocator, "file", 4096, 4096);
     defer allocator.free(decoded);
     try std.testing.expectEqualStrings(expected, decoded);
+    var extractor = try archive.initPathExtractor("file", .{ .max_output_len = 4096 }, 4096);
+    defer extractor.deinit();
+    var partial: [expected.len]u8 = undefined;
+    var position: usize = 0;
+    while (true) {
+        const progress = try extractor.read(partial[position..@min(partial.len, position + 3)]);
+        position += progress.output_written;
+        if (progress.status == .done) break;
+    }
+    try std.testing.expectEqualStrings(expected, &partial);
 }

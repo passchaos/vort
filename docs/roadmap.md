@@ -22629,3 +22629,23 @@ reuse, so production keeps the simpler independently owned plans.
   Broad check, wasm compilation and the Source CLI help page pass.
   The final Debug repository suite passes 3438/3438 tests, including 3431 root
   tests and seven separate Brotli object/classifier cases.
+
+- Added caller-owned `ErofsExtractor` for complete files, paths and ranges.
+  Logical segment iterators preserve flat/chunk/full/compact/modern-extent
+  progress and packed child state; a decoded extent survives small output
+  reads and is released at completion, cancellation or failure. Source reads
+  into temporary raw storage before modifying caller output, so failing reads
+  leave that output unchanged. Errors remain sticky, progress is explicit,
+  empty output does not trigger data I/O, and final metadata validation must
+  finish before `done` or Sink length commit. Active extractors borrow a stable
+  archive and share its working budget. Sink/allocating convenience APIs and
+  the CLI now use the same resumable core; obsolete emission modules were
+  removed. The CLI adds a bounded output-chunk option while retaining atomic
+  replacement and existing failure behavior. Tests cover mixed 0/1/7/31/137-
+  byte schedules, physical/inline/chunk boundaries, cache reuse without extra
+  Source I/O, early release, persistent budget/error classes, late metadata
+  failure, compact/modern/metabox/packed reference corpus and exhaustive OOM.
+  Debug and ReleaseFast pass 128 EROFS plus 12 I/O cases. erofs-utils
+  1.9.4-g5fcb2f76 interoperability passes all 324 modes, six large/failure file
+  cases and 18 additional CLI extractions using a 17-byte output buffer
+  (`resumable_reader=18`).

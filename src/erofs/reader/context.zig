@@ -3,11 +3,10 @@ const metadata = @import("inode.zig");
 const devices_module = @import("devices.zig");
 const source_module = @import("../../io/source.zig");
 const input_module = @import("input.zig");
-const sink_module = @import("../../io/sink.zig");
 const codec = @import("../codec.zig");
 const format = @import("../format.zig");
 
-pub const Error = metadata.Error || devices_module.Error || codec.Error || sink_module.Error || std.mem.Allocator.Error;
+pub const Error = metadata.Error || devices_module.Error || codec.Error || std.mem.Allocator.Error;
 pub const Limits = struct {
     max_encoded_extent_size: usize = 8 * 1024 * 1024,
     max_decoded_extent_size: usize = 8 * 1024 * 1024,
@@ -19,30 +18,6 @@ pub const Context = struct {
     reader: metadata.Reader,
     devices: devices_module.Devices(source_module.Source),
     limits: Limits,
-
-    pub fn copy(_: Context, input: input_module.Input, start: u64, size: usize, sink: sink_module.Sink, destination: u64) Error!void {
-        _ = try input.endAt(start, size);
-        _ = std.math.add(u64, destination, size) catch return error.IntegerOverflow;
-        var buffer: [64 * 1024]u8 = undefined;
-        var position: usize = 0;
-        while (position < size) {
-            const count = @min(buffer.len, size - position);
-            try input.readAt(start + position, buffer[0..count]);
-            try sink.writeExact(destination + position, buffer[0..count]);
-            position += count;
-        }
-    }
-
-    pub fn zeros(_: Context, size: usize, sink: sink_module.Sink, destination: u64) Error!void {
-        _ = std.math.add(u64, destination, size) catch return error.IntegerOverflow;
-        const buffer = [_]u8{0} ** 4096;
-        var position: usize = 0;
-        while (position < size) {
-            const count = @min(buffer.len, size - position);
-            try sink.writeExact(destination + position, buffer[0..count]);
-            position += count;
-        }
-    }
 
     pub fn encoded(self: Context, input: input_module.Input, start: u64, size: usize) Error![]u8 {
         if (size > self.limits.max_encoded_extent_size) return error.OutputLimitExceeded;
