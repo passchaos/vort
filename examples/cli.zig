@@ -2764,7 +2764,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  inspect-qcow2 <path>
         \\  decode-qcow2 <in> <out> [max_output] [backing|-] [data_file|-]
         \\  decode-qcow2-range <in> <out> <offset> <length> [backing|-] [data_file|-]
-        \\  encode-qcow2 <in> <out> <none|zlib|zstd> [cluster_bits] [version]
+        \\  encode-qcow2 <in> <out> <none|zlib|zstd> [cluster_bits] [version] [backing backing_name]
         \\  inspect-vmdk <path>
         \\  decode-vmdk <in> <out> [max_output] [logical_backing|-]
         \\  decode-vmdk-range <in> <out> <offset> <length> [logical_backing|-]

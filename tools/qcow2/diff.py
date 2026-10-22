@@ -72,6 +72,7 @@ def main() -> None:
     external_decode = 0
     layouts = 0
     malformed = 0
+    backing_writer_cases = 0
 
     with tempfile.TemporaryDirectory(prefix="vort-qcow2-") as temp_text:
         temp = Path(temp_text)
@@ -238,6 +239,60 @@ def main() -> None:
             external_decode += 1
             layouts += 1
 
+        parent_bytes = bytearray(plain)
+        parent_bytes[2 * CLUSTER_SIZE : 3 * CLUSTER_SIZE] = (
+            b"QCOW2 parent-only cluster\n" * 4096
+        )[:CLUSTER_SIZE]
+        child_bytes = bytearray(parent_bytes)
+        for index in range(CLUSTER_SIZE, 2 * CLUSTER_SIZE):
+            child_bytes[index] ^= (index * 13 + 0x51) & 0xFF
+        child_bytes[2 * CLUSTER_SIZE : 3 * CLUSTER_SIZE] = bytes(CLUSTER_SIZE)
+        parent_source = temp / "parent.raw"
+        child_source = temp / "child.raw"
+        parent_source.write_bytes(parent_bytes)
+        child_source.write_bytes(child_bytes)
+        for name, compression, version in (
+            ("v2-backing", "none", 2),
+            ("v3-backing", "zlib", 3),
+        ):
+            image = temp / f"vort-{name}.qcow2"
+            decoded = temp / f"vort-{name}.raw"
+            run(
+                args.cli,
+                "encode-qcow2",
+                child_source,
+                image,
+                compression,
+                16,
+                version,
+                parent_source,
+                parent_source.name,
+            )
+            summary = run(args.cli, "inspect-qcow2", image).stdout
+            if b"backing=parent.raw" not in summary:
+                raise AssertionError(f"missing Vort backing metadata for {name}")
+            run(
+                args.cli,
+                "decode-qcow2",
+                image,
+                decoded,
+                len(child_bytes),
+                parent_source,
+            )
+            if decoded.read_bytes() != child_bytes:
+                raise AssertionError(f"Vort backing writer mismatch for {name}")
+            backing_writer_cases += 1
+            self_cases += 1
+            if qemu_img is not None:
+                qemu_output = temp / f"qemu-{name}.raw"
+                if qemu_convert_to_raw(qemu_img, image, qemu_output) != child_bytes:
+                    raise AssertionError(f"QEMU backing writer mismatch for {name}")
+                info = run(qemu_img, "info", "--output=json", image).stdout
+                if b'"backing-filename-format": "raw"' not in info:
+                    raise AssertionError(f"QEMU missed raw backing format for {name}")
+                external_encode += 1
+
+        if qemu_img is not None:
             backing = temp / "qemu-backing.qcow2"
             backing_output = temp / "qemu-backing.raw"
             run(
@@ -339,6 +394,7 @@ def main() -> None:
         f"self={self_cases} qemu_img={qemu_img is not None} "
         f"seven_zip={seven_zip is not None} external_encode={external_encode} "
         f"external_decode={external_decode} layouts={layouts} malformed={malformed}"
+        f" backing_writer_cases={backing_writer_cases}"
     )
 
 

@@ -18264,8 +18264,13 @@ reuse, so production keeps the simpler independently owned plans.
   images, external data files, bounded whole-image decode, and random ranges.
   The writer emits sector-aligned v2/v3 images with none/zlib/Zstd selection,
   sparse zeros, compression fallback, complete refcount/L1/L2 metadata, and
-  explicit capacity failure. QEMU 9.2 validates both directions including
-  Zstd, extended subclusters, backing, and external-data layouts; 7-Zip also
+  explicit capacity failure. It now also emits deterministic raw-backing
+  overlays with the standard backing-format extension, inherited clusters,
+  v3 explicit-zero overrides, v2 allocated-zero overrides, and partial-sector
+  inheritance. Exhaustive OOM coverage also fixed the pre-existing
+  record-list-growth leak. QEMU 9.2 validates both directions including Vort
+  v2/v3 overlays, Zstd, extended subclusters, backing, and external-data
+  layouts; 7-Zip also
   extracts Vort v2/v3 none/zlib images. The generic raw-byte fuzz target now
   includes valid and malformed QCOW2 paths. Snapshot traversal, encryption,
   writer-side extended/external layouts, multi-payload compressed-cluster

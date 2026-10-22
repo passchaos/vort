@@ -42,8 +42,10 @@ zig build -Doptimize=ReleaseFast ci-smoke
 ```
 
 The QCOW2 differential always exercises the Vort v2/v3 writer and reader for
-uncompressed, raw-DEFLATE, and Zstandard clusters. When `qemu-img` is available,
-it checks both directions and adds sparse/zero clusters, extended L2
+uncompressed, raw-DEFLATE, and Zstandard clusters plus v2/v3 raw-backing
+overlays. Overlay fixtures distinguish inherited, modified, and explicit-zero
+clusters and require the `raw` backing-format extension. When `qemu-img` is
+available, it checks both directions and adds sparse/zero clusters, extended L2
 subclusters, raw backing files, and external data files. When `7zz` or `7z` is
 available, it independently extracts Vort's v2/v3 uncompressed and
 raw-DEFLATE images. Explicit tool paths can be supplied with
