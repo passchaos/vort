@@ -22179,3 +22179,21 @@ reuse, so production keeps the simpler independently owned plans.
   `fsck.erofs --xattrs` restore four Vort writer layouts
   (`xattr_reader=6`, `xattr_writer=4`). Shared-value deduplication in the writer
   and incompatible long-prefix tables remain follow-up space/features work.
+
+- Added EROFS plain long-xattr-prefix tables in both directions. The superblock
+  parser now accepts only the `XATTR_PREFIXES + PLAIN_XATTR_PFX` combination
+  supported by the existing non-fragment/non-metabox reader, validates the
+  7-bit count and 4-byte-unit table pointer, and rejects packed/metabox prefix
+  storage explicitly. The allocation-free table parser checks every little-
+  endian length, base index, infix, NUL, reconstructed 255-byte bound, 4-byte
+  alignment, and entry reference before the bounded xattr result allocates.
+  Writer options accept up to 128 unique borrowed prefixes, preserve their
+  first-match order, emit the standard base-index-plus-infix table after codec
+  configurations, and leave default output unchanged when empty. Stored, LZ4,
+  Deflate, and Zstandard round trips cover standard and generic base indexes,
+  flat-inline/compressed placement, invalid tables/options, exact limits, and
+  exhaustive reader/writer OOM. A fixed erofs-utils 1.9.4 fixture pins the
+  feature bits and wire. The differential retains six ordinary reference
+  layouts, adds one long-prefix image combining shared and inline xattrs, and
+  makes all four Vort writer modes use a prefix table that `fsck.erofs` restores
+  (`xattr_reader=7`, `xattr_writer=4`, `long_prefix_reader=1`).

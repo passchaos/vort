@@ -77,7 +77,13 @@ pub const Archive = struct {
     superblock: format.Superblock,
 
     pub fn init(bytes: []const u8) Error!Archive {
-        return .{ .bytes = bytes, .superblock = try format.parseSuperblock(bytes) };
+        const superblock = try format.parseSuperblock(bytes);
+        try xattr.validatePrefixTable(
+            bytes,
+            superblock.xattr_prefix_start,
+            superblock.xattr_prefix_count,
+        );
+        return .{ .bytes = bytes, .superblock = superblock };
     }
 
     pub fn rootInode(self: Archive) Error!Inode {
@@ -214,6 +220,8 @@ pub const Archive = struct {
             self.bytes,
             self.superblock.block_size,
             self.superblock.xattr_block,
+            self.superblock.xattr_prefix_start,
+            self.superblock.xattr_prefix_count,
             ibody_start,
             inode_value.xattr_size,
             max_count,
@@ -757,7 +765,7 @@ test "EROFS xattr reader rejects malformed ibodies and shared references" {
 
     bytes[inline_start + 12 + 1] = 0x81;
     try std.testing.expectError(
-        error.UnsupportedErofsFeature,
+        error.InvalidErofs,
         archive.readXattrsAllocLimited(allocator, inline_inode, 8, 1024),
     );
     bytes[inline_start + 12 + 1] = 1;
@@ -809,4 +817,121 @@ test "EROFS xattr reader releases every allocation failure" {
         }
     };
     try std.testing.checkAllAllocationFailures(allocator, Test.run, .{bytes});
+}
+
+test "EROFS reads erofs-utils long xattr prefixes with bounded ownership" {
+    const allocator = std.testing.allocator;
+    const bytes = try fixtureAlloc(
+        allocator,
+        @embedFile("testdata/xattr-long-prefix.erofs.b64"),
+    );
+    defer allocator.free(bytes);
+    const archive = try Archive.init(bytes);
+    try std.testing.expectEqual(@as(u8, 1), archive.superblock.xattr_prefix_count);
+    try std.testing.expectEqual(@as(u32, 0x120), archive.superblock.xattr_prefix_start);
+    try std.testing.expect(
+        archive.superblock.feature_incompat & format.feature_incompat_xattr_prefixes != 0,
+    );
+
+    const inode_value = try archive.lookup(allocator, "file", 0, 4096);
+    var attributes = try archive.readXattrsAllocLimited(
+        allocator,
+        inode_value,
+        2,
+        128,
+    );
+    defer attributes.deinit();
+    try std.testing.expectEqual(@as(usize, 2), attributes.entries.len);
+    try std.testing.expectEqualStrings(
+        "first-value",
+        attributes.find("user.vort.long.first").?.value,
+    );
+    try std.testing.expectEqualStrings(
+        "second-value",
+        attributes.find("user.vort.long.second").?.value,
+    );
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        archive.readXattrsAllocLimited(allocator, inode_value, 1, 128),
+    );
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        archive.readXattrsAllocLimited(allocator, inode_value, 2, 63),
+    );
+}
+
+test "EROFS rejects malformed long xattr prefix tables and references" {
+    const allocator = std.testing.allocator;
+    const bytes = try fixtureAlloc(
+        allocator,
+        @embedFile("testdata/xattr-long-prefix.erofs.b64"),
+    );
+    defer allocator.free(bytes);
+
+    bytes[0x480] = 0;
+    bytes[0x481] = 0;
+    refreshFixtureChecksum(bytes);
+    try std.testing.expectError(error.InvalidErofs, Archive.init(bytes));
+    bytes[0x480] = 11;
+    bytes[0x481] = 0;
+
+    bytes[0x482] = 7;
+    refreshFixtureChecksum(bytes);
+    try std.testing.expectError(error.UnsupportedErofsFeature, Archive.init(bytes));
+    bytes[0x482] = 1;
+
+    const compat = format.readU32(bytes, format.super_offset + 8);
+    std.mem.writeInt(
+        u32,
+        bytes[format.super_offset + 8 ..][0..4],
+        compat & ~format.feature_compat_plain_xattr_prefixes,
+        .little,
+    );
+    refreshFixtureChecksum(bytes);
+    try std.testing.expectError(error.UnsupportedErofsFeature, Archive.init(bytes));
+    std.mem.writeInt(u32, bytes[format.super_offset + 8 ..][0..4], compat, .little);
+    refreshFixtureChecksum(bytes);
+
+    const archive = try Archive.init(bytes);
+    const inode_value = try archive.lookup(allocator, "file", 0, 4096);
+    const ibody_start = inode_value.location + inode_value.inode_size;
+    bytes[ibody_start + 12 + 1] = 0x81;
+    try std.testing.expectError(
+        error.InvalidErofs,
+        archive.readXattrsAllocLimited(allocator, inode_value, 8, 1024),
+    );
+}
+
+test "EROFS long xattr prefix reader releases every allocation failure" {
+    const allocator = std.testing.allocator;
+    const bytes = try fixtureAlloc(
+        allocator,
+        @embedFile("testdata/xattr-long-prefix.erofs.b64"),
+    );
+    defer allocator.free(bytes);
+    const Test = struct {
+        fn run(failing_allocator: std.mem.Allocator, image: []const u8) !void {
+            const archive = try Archive.init(image);
+            const inode_value = try archive.lookup(failing_allocator, "file", 0, 4096);
+            var attributes = try archive.readXattrsAllocLimited(
+                failing_allocator,
+                inode_value,
+                2,
+                128,
+            );
+            defer attributes.deinit();
+            try std.testing.expectEqualStrings(
+                "second-value",
+                attributes.find("user.vort.long.second").?.value,
+            );
+        }
+    };
+    try std.testing.checkAllAllocationFailures(allocator, Test.run, .{bytes});
+}
+
+fn refreshFixtureChecksum(bytes: []u8) void {
+    const base = format.super_offset;
+    const block_size: usize = @as(usize, 1) << @intCast(bytes[base + 12]);
+    const checksum = format.computeSuperblockChecksum(bytes[base..block_size]);
+    std.mem.writeInt(u32, bytes[base + 4 ..][0..4], checksum, .little);
 }

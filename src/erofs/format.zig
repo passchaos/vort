@@ -12,6 +12,8 @@ pub const super_offset: usize = 1024;
 pub const super_base_size: usize = 128;
 pub const inode_slot_size: usize = 32;
 pub const name_max: usize = 255;
+pub const feature_compat_plain_xattr_prefixes: u32 = 0x0000_0010;
+pub const feature_incompat_xattr_prefixes: u32 = 0x0000_0040;
 
 pub const Layout = enum(u3) {
     flat_plain = 0,
@@ -53,6 +55,8 @@ pub const Superblock = struct {
     block_count: u64,
     meta_block: u32,
     xattr_block: u32,
+    xattr_prefix_count: u8,
+    xattr_prefix_start: u32,
     available_compression_algorithms: u16,
     build_time: u32,
 
@@ -77,16 +81,27 @@ pub fn parseSuperblock(input: []const u8) Error!Superblock {
     if (super_size > block_size -| super_offset or super_offset + super_size > input.len)
         return error.InvalidErofs;
     const feature_incompat = readU32(bytes, 80);
+    const feature_compat = readU32(bytes, 8);
     // The foundational reader handles legacy LZ4 padding and compressor
-    // configuration records. Other incompatible features alter addressing.
-    if (feature_incompat & ~@as(u32, 0x0000_0003) != 0)
+    // configuration records and plain long-xattr-prefix tables. Other
+    // incompatible features alter addressing.
+    if (feature_incompat & ~@as(u32, 0x0000_0043) != 0)
         return error.UnsupportedErofsFeature;
     if (readU16(bytes, 86) != 0) return error.UnsupportedErofsFeature;
+    const xattr_prefix_count = bytes[91];
+    const xattr_prefix_start = readU32(bytes, 92);
+    if (feature_incompat & feature_incompat_xattr_prefixes != 0) {
+        if (feature_compat & feature_compat_plain_xattr_prefixes == 0)
+            return error.UnsupportedErofsFeature;
+        if (xattr_prefix_count == 0 or xattr_prefix_count > 0x80)
+            return error.InvalidErofs;
+    } else if (xattr_prefix_count != 0 or xattr_prefix_start != 0) {
+        return error.InvalidErofs;
+    }
     const blocks: u64 = readU32(bytes, 36);
     const image_size = std.math.mul(usize, @intCast(blocks), block_size) catch
         return error.IntegerOverflow;
     if (blocks == 0 or image_size > input.len) return error.TruncatedFrame;
-    const feature_compat = readU32(bytes, 8);
     const checksum = readU32(bytes, 4);
     if (feature_compat & 1 != 0) {
         const checksum_len = if (block_size > super_offset)
@@ -116,6 +131,8 @@ pub fn parseSuperblock(input: []const u8) Error!Superblock {
         .block_count = blocks,
         .meta_block = meta_block,
         .xattr_block = readU32(bytes, 44),
+        .xattr_prefix_count = xattr_prefix_count,
+        .xattr_prefix_start = xattr_prefix_start,
         .available_compression_algorithms = readU16(bytes, 84),
         .build_time = readU32(bytes, 108),
     };

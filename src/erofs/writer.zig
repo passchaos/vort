@@ -20,6 +20,7 @@ pub const Options = struct {
     fixed_nsec: u32 = 0,
     build_time: u32 = 0,
     root_xattrs: []const Xattr = &.{},
+    xattr_prefixes: []const []const u8 = &.{},
 };
 
 const block_size: usize = 4096;
@@ -38,7 +39,12 @@ pub fn encodeAlloc(
     var filesystem = try tree.build(allocator, entries, options.root_xattrs);
     defer filesystem.deinit();
     try allocateDirectoryBuffers(&filesystem);
-    const metadata_end = try planMetadata(allocator, &filesystem, options.compression);
+    const metadata_end = try planMetadata(
+        allocator,
+        &filesystem,
+        options.compression,
+        options.xattr_prefixes,
+    );
     try fillDirectories(allocator, &filesystem);
 
     const first_data_block = try alignForward(metadata_end, block_size) / block_size;
@@ -58,6 +64,7 @@ pub fn encodeAlloc(
         image,
         &filesystem,
         options.compression,
+        options.xattr_prefixes,
         if (block_encoder) |*encoder| encoder else null,
     );
     try writeSuperblock(image, filesystem.nodes, block_count, options);
@@ -99,16 +106,19 @@ fn planMetadata(
     allocator: std.mem.Allocator,
     filesystem: *tree.Tree,
     compression: Compression,
+    xattr_prefixes: []const []const u8,
 ) Error!usize {
-    var cursor = try checkedAdd(
+    const configuration_end = try checkedAdd(
         configuration_start,
         if (writer_codec.configuration(compression)) |bytes| bytes.len else 0,
     );
+    const prefix_start = try alignForward(configuration_end, 4);
+    var cursor = try checkedAdd(prefix_start, try xattr.prefixTableSize(xattr_prefixes));
     for (filesystem.nodes) |*node| {
         if (node.content().len > std.math.maxInt(u32)) return error.InvalidErofs;
         const location = try alignForward(cursor, format.inode_slot_size);
         const inode_end = try checkedAdd(location, format.inode_slot_size);
-        node.xattr_size = try xattr.encodedSize(node.xattrs);
+        node.xattr_size = try xattr.encodedSize(node.xattrs, xattr_prefixes);
         const xattr_end = try checkedAdd(inode_end, node.xattr_size);
         node.location = location;
         node.nid = location / format.inode_slot_size;
@@ -241,6 +251,7 @@ fn writeNodes(
     image: []u8,
     filesystem: *tree.Tree,
     compression: Compression,
+    xattr_prefixes: []const []const u8,
     block_encoder: ?*writer_codec.Encoder,
 ) Error!void {
     for (filesystem.nodes, 0..) |*node, node_index| {
@@ -252,7 +263,14 @@ fn writeNodes(
         } else {
             try writeFlatData(image, node, layout);
         }
-        try writeInode(image, filesystem.nodes, node, node_index, compression);
+        try writeInode(
+            image,
+            filesystem.nodes,
+            node,
+            node_index,
+            compression,
+            xattr_prefixes,
+        );
     }
 }
 
@@ -312,6 +330,7 @@ fn writeInode(
     node: *const tree.Node,
     node_index: usize,
     compression: Compression,
+    xattr_prefixes: []const []const u8,
 ) Error!void {
     const location = node.location;
     if (try checkedAdd(location, format.inode_slot_size) > image.len)
@@ -340,7 +359,11 @@ fn writeInode(
     const xattr_start = try checkedAdd(location, format.inode_slot_size);
     const xattr_end = try checkedAdd(xattr_start, node.xattr_size);
     if (xattr_end > image.len) return error.InvalidErofs;
-    try xattr.writeIbody(image[xattr_start..xattr_end], node.xattrs);
+    try xattr.writeIbody(
+        image[xattr_start..xattr_end],
+        node.xattrs,
+        xattr_prefixes,
+    );
 
     if (layout == .compressed_full) {
         const header_start = try alignForward(xattr_end, 8);
@@ -371,9 +394,28 @@ fn writeSuperblock(
         block_count > std.math.maxInt(u32) or nodes[0].nid > std.math.maxInt(u16))
         return error.InvalidErofs;
     const base = format.super_offset;
+    const prefix_count = options.xattr_prefixes.len;
+    const configuration_end = try checkedAdd(
+        configuration_start,
+        if (writer_codec.configuration(options.compression)) |bytes| bytes.len else 0,
+    );
+    const prefix_start = try alignForward(configuration_end, 4);
+    const prefix_end = try checkedAdd(
+        prefix_start,
+        try xattr.prefixTableSize(options.xattr_prefixes),
+    );
+    if (prefix_end > image.len or prefix_start / 4 > std.math.maxInt(u32))
+        return error.InvalidErofs;
     writeU32(image, base, format.magic);
     writeU32(image, base + 4, 0);
-    writeU32(image, base + 8, 0x0000_0003);
+    writeU32(
+        image,
+        base + 8,
+        0x0000_0003 | (if (prefix_count == 0)
+            @as(u32, 0)
+        else
+            format.feature_compat_plain_xattr_prefixes),
+    );
     image[base + 12] = block_bits;
     image[base + 13] = 0;
     writeU16(image, base + 14, @intCast(nodes[0].nid));
@@ -384,13 +426,28 @@ fn writeSuperblock(
     writeU32(image, base + 40, 0);
     writeU32(image, base + 44, 0);
     @memcpy(image[base + 64 ..][0..options.volume_name.len], options.volume_name);
-    writeU32(image, base + 80, writer_codec.featureIncompat(options.compression));
+    writeU32(
+        image,
+        base + 80,
+        writer_codec.featureIncompat(options.compression) |
+            (if (prefix_count == 0)
+                @as(u32, 0)
+            else
+                format.feature_incompat_xattr_prefixes),
+    );
     writeU16(image, base + 84, writer_codec.compressionField(options.compression));
+    image[base + 91] = @intCast(prefix_count);
+    if (prefix_count != 0)
+        writeU32(image, base + 92, @intCast(prefix_start / 4));
     if (writer_codec.configuration(options.compression)) |configuration| {
         const end = try checkedAdd(configuration_start, configuration.len);
         if (end > image.len) return error.InvalidErofs;
         @memcpy(image[configuration_start..end], configuration);
     }
+    try xattr.writePrefixTable(
+        image[prefix_start..prefix_end],
+        options.xattr_prefixes,
+    );
     writeU32(image, base + 108, options.build_time);
     writeU32(image, base + 4, format.computeSuperblockChecksum(image[base..block_size]));
 }
@@ -778,6 +835,89 @@ test "EROFS writer rejects invalid duplicate and oversized xattrs" {
             .xattrs = &.{.{ .name = "user.large", .value = &oversized }},
         }}, .{}),
     );
+
+    const duplicate_prefixes = [_][]const u8{ "user.vort.", "user.vort." };
+    try std.testing.expectError(
+        error.InvalidErofs,
+        encodeAlloc(allocator, &.{}, .{ .xattr_prefixes = &duplicate_prefixes }),
+    );
+    const nul_prefixes = [_][]const u8{"user.vort\x00bad"};
+    try std.testing.expectError(
+        error.InvalidErofs,
+        encodeAlloc(allocator, &.{}, .{ .xattr_prefixes = &nul_prefixes }),
+    );
+    var oversized_prefix: [format.name_max + 1]u8 = @splat('a');
+    try std.testing.expectError(
+        error.InvalidErofs,
+        encodeAlloc(allocator, &.{}, .{ .xattr_prefixes = &.{&oversized_prefix} }),
+    );
+    const too_many_prefixes: [0x81][]const u8 = @splat("user.vort.");
+    try std.testing.expectError(
+        error.InvalidErofs,
+        encodeAlloc(allocator, &.{}, .{ .xattr_prefixes = &too_many_prefixes }),
+    );
+}
+
+test "EROFS writer emits plain long xattr prefix tables for every codec" {
+    const archive = @import("archive.zig");
+    const allocator = std.testing.allocator;
+    const prefixes = [_][]const u8{
+        "user.vort.long.",
+        "security.vort.",
+        "system.vort.",
+    };
+    const attributes = [_]Xattr{
+        .{ .name = "user.vort.long.alpha", .value = "alpha-value" },
+        .{ .name = "security.vort.label", .value = "security-value" },
+        .{ .name = "system.vort.hidden", .value = "generic-value" },
+        .{ .name = "user.short", .value = "short-value" },
+    };
+    const entries = [_]Entry{.{
+        .path = "file",
+        .data = "long-prefix payload",
+        .xattrs = &attributes,
+    }};
+
+    inline for (.{ Compression.stored, .lz4, .deflate, .zstandard }) |compression| {
+        const encoded = try encodeAlloc(allocator, &entries, .{
+            .compression = compression,
+            .xattr_prefixes = &prefixes,
+        });
+        defer allocator.free(encoded);
+        const parsed = try archive.Archive.init(encoded);
+        try std.testing.expectEqual(@as(u8, prefixes.len), parsed.superblock.xattr_prefix_count);
+        try std.testing.expect(
+            parsed.superblock.feature_compat & format.feature_compat_plain_xattr_prefixes != 0,
+        );
+        try std.testing.expect(
+            parsed.superblock.feature_incompat & format.feature_incompat_xattr_prefixes != 0,
+        );
+
+        const inode_value = try parsed.lookup(allocator, "file", 64, block_size);
+        const ibody_start = inode_value.location + inode_value.inode_size;
+        try std.testing.expectEqual(@as(u8, 0x80), encoded[ibody_start + 13]);
+        var decoded = try parsed.readXattrsAllocLimited(allocator, inode_value, 4, 512);
+        defer decoded.deinit();
+        try std.testing.expectEqualStrings(
+            "alpha-value",
+            decoded.find("user.vort.long.alpha").?.value,
+        );
+        try std.testing.expectEqualStrings(
+            "security-value",
+            decoded.find("security.vort.label").?.value,
+        );
+        try std.testing.expectEqualStrings(
+            "generic-value",
+            decoded.find("system.vort.hidden").?.value,
+        );
+        try std.testing.expectEqualStrings(
+            "short-value",
+            decoded.find("user.short").?.value,
+        );
+        const payload = try parsed.readFlatAllocLimited(allocator, inode_value, 64);
+        defer allocator.free(payload);
+        try std.testing.expectEqualStrings("long-prefix payload", payload);
+    }
 }
 
 test "EROFS xattr writer releases every allocation failure" {
@@ -788,7 +928,10 @@ test "EROFS xattr writer releases every allocation failure" {
                 .path = "file",
                 .data = "payload",
                 .xattrs = &.{.{ .name = "user.test", .value = "value" }},
-            }}, .{ .root_xattrs = &.{.{ .name = "user.root", .value = "root" }} });
+            }}, .{
+                .root_xattrs = &.{.{ .name = "user.root", .value = "root" }},
+                .xattr_prefixes = &.{"user."},
+            });
             defer failing_allocator.free(encoded);
             const parsed = try @import("archive.zig").Archive.init(encoded);
             const inode_value = try parsed.lookup(failing_allocator, "file", 32, block_size);

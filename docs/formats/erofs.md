@@ -8,9 +8,10 @@ incompatible feature bits, compact and extended inode layouts, directory entry
 ordering, names, NIDs, and exact allocation limits. Flat plain and flat inline
 files, directories, regular files, and symbolic links are supported. Bounded
 xattr decoding covers inline entries, shared IDs relative to `xattr_block`,
-empty values, and standard full-name/user/POSIX-ACL/trusted/lustre/security
-name indexes. Reconstructed names and values are copied into one owned buffer;
-count and aggregate-byte limits are checked before allocation.
+empty values, standard full-name/user/POSIX-ACL/trusted/lustre/security name
+indexes, and incompatible-feature long indexes backed by bounded plain prefix
+tables. Reconstructed names and values are copied into one owned buffer; count
+and aggregate-byte limits are checked before allocation.
 
 Compressed files support both legacy full indexes and modern compact indexes,
 including four-byte and sixteen-entry/two-byte packs, HEAD/NONHEAD lookback,
@@ -30,7 +31,9 @@ used whenever compression would not reduce the payload. Deflate and Zstandard
 images include their required superblock compression-configuration records.
 Each entry and the root directory can carry deterministic inline xattrs; inode
 planning accounts for their ibodies before flat-inline tails and aligned
-compression headers. Identical entries and options produce identical images.
+compression headers. `xattr_prefixes` optionally writes a plain prefix table
+and uses its caller-ordered first match without changing the default wire.
+Identical entries and options produce identical images.
 
 Writer entries use safe relative paths. Missing parent directories are created
 automatically, while absolute paths, empty components, `.`/`..`, NUL bytes,
@@ -48,7 +51,11 @@ const image = try vort.encodeErofsAlloc(allocator, &.{
     .{ .path = "etc/config", .data = "enabled=true\n", .xattrs = &config_xattrs },
     .{ .path = "var/empty", .kind = .directory },
     .{ .path = "config-link", .kind = .symlink, .target = "etc/config" },
-}, .{ .compression = .zstandard, .root_xattrs = &root_xattrs });
+}, .{
+    .compression = .zstandard,
+    .root_xattrs = &root_xattrs,
+    .xattr_prefixes = &.{"user."},
+});
 defer allocator.free(image);
 
 const archive = try vort.parseErofs(image);
@@ -59,10 +66,11 @@ const owner = attributes.find("user.owner").?.value;
 ```
 
 Chunk-based files, external devices, 48-bit addressing, packed fragments,
-metaboxes, and compressed tail packing remain future work. The reader rejects
-the incompatible long-xattr-prefix table until that table is implemented. The
-writer emits valid inline xattrs but does not yet deduplicate repeated values
-into the optional shared-xattr region.
+metaboxes, and compressed tail packing remain future work. Prefix tables stored
+inside packed-fragment or metabox inodes remain unsupported along with those
+layouts; ordinary `PLAIN_XATTR_PFX` tables are supported in both directions.
+The writer does not yet deduplicate repeated values into the optional
+shared-xattr region.
 
 ```sh
 zig build run -- list-erofs-file system.erofs
@@ -80,5 +88,7 @@ The same gate generates Vort stored, LZ4, raw Deflate, and Zstandard images
 twice to prove determinism, self-decodes their nested tree, and has `fsck.erofs`
 extract their regular files, incompressible `PLAIN` fallbacks, symlink, and empty
 directory. Real `user.*` attributes include repeated values that erofs-utils
-promotes to shared entries; Vort reads those images, while `fsck.erofs --xattrs`
-restores Vort-authored root, file, and directory attributes.
+promotes to shared entries; an additional reference image combines shared
+values with a long prefix table. Vort reads those images, while
+`fsck.erofs --xattrs` restores long-prefix Vort-authored root, file, and
+directory attributes.

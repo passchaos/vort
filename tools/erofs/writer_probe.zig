@@ -36,6 +36,7 @@ pub fn main(init: std.process.Init) !void {
         .compression = compression,
         .volume_name = "vort-writer",
         .root_xattrs = &root_xattrs,
+        .xattr_prefixes = &.{"user.vort."},
     });
     defer init.gpa.free(encoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });

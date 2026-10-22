@@ -70,12 +70,21 @@ def write_tree(root: Path) -> tuple[dict[str, bytes], dict[str, dict[bytes, byte
     return payloads, xattrs
 
 
-def make_image(mkfs: Path, source: Path, image: Path, compressor: str | None, legacy: bool) -> None:
+def make_image(
+    mkfs: Path,
+    source: Path,
+    image: Path,
+    compressor: str | None,
+    legacy: bool,
+    xattr_prefix: str | None = None,
+) -> None:
     command: list[object] = [mkfs, "-T0", "--all-root"]
     if compressor is not None:
         command.append(f"-z{compressor}")
     if legacy:
         command.extend(("-E", "legacy-compress"))
+    if xattr_prefix is not None:
+        command.append(f"--xattr-prefix={xattr_prefix}")
     command.extend((image, source))
     run(*command)
 
@@ -144,6 +153,7 @@ def main() -> None:
     external_writer = 0
     xattr_reader_cases = 0
     xattr_writer_cases = 0
+    long_prefix_reader_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -221,30 +231,31 @@ def main() -> None:
             help_text = run(mkfs, "--help", check=False).stderr + run(
                 mkfs, "--help", check=False
             ).stdout
-            cases: list[tuple[str, str | None, bool]] = [
-                ("plain", None, False),
-                ("lz4-compact", "lz4", False),
-                ("lz4-full", "lz4", True),
+            cases: list[tuple[str, str | None, bool, str | None]] = [
+                ("plain", None, False, None),
+                ("plain-long-prefix", None, False, "user.vort."),
+                ("lz4-compact", "lz4", False, None),
+                ("lz4-full", "lz4", True, None),
             ]
             if b"deflate" in help_text:
                 cases.extend(
                     (
-                        ("deflate-compact", "deflate", False),
-                        ("deflate-full", "deflate", True),
+                        ("deflate-compact", "deflate", False, None),
+                        ("deflate-full", "deflate", True, None),
                     )
                 )
             if b"lzma" in help_text:
                 cases.extend(
                     (
-                        ("lzma-compact", "lzma", False),
-                        ("lzma-full", "lzma", True),
+                        ("lzma-compact", "lzma", False, None),
+                        ("lzma-full", "lzma", True, None),
                     )
                 )
             if b"zstd" in help_text:
-                cases.append(("zstd-compact", "zstd", False))
-            for label, compressor, legacy in cases:
+                cases.append(("zstd-compact", "zstd", False, None))
+            for label, compressor, legacy, xattr_prefix in cases:
                 image = temp / f"{label}.erofs"
-                make_image(mkfs, source, image, compressor, legacy)
+                make_image(mkfs, source, image, compressor, legacy, xattr_prefix)
                 extracted = temp / f"{label}-fsck"
                 run(fsck, f"--extract={extracted}", "--no-preserve", "--xattrs", image)
                 if (extracted / "large.bin").read_bytes() != payloads["large.bin"]:
@@ -253,6 +264,8 @@ def main() -> None:
                 verify_vort_xattrs(args.cli, image, source_xattrs, label)
                 verify_extracted_xattrs(extracted, source_xattrs, label)
                 xattr_reader_cases += 1
+                if xattr_prefix is not None:
+                    long_prefix_reader_cases += 1
                 primary = image
                 if compressor is None:
                     plain_cases += 1
@@ -322,6 +335,7 @@ def main() -> None:
         f"modern={modern_cases} "
         f"writer={writer_cases} external_writer={external_writer} "
         f"xattr_reader={xattr_reader_cases} xattr_writer={xattr_writer_cases} "
+        f"long_prefix_reader={long_prefix_reader_cases} "
         f"malformed={malformed}"
     )
 

@@ -44,13 +44,15 @@ zig build -Doptimize=ReleaseFast ci-smoke
 The EROFS differential generates plain, compact/full LZ4, compact/full raw
 Deflate, and compact Zstandard images with current `mkfs.erofs`. Repeated
 `user.*` values exceed the default inline tolerance and therefore exercise real
-shared-xattr IDs as well as unique inline entries. Vort must list every name and
+shared-xattr IDs as well as unique inline entries. An additional plain image
+uses `--xattr-prefix=user.vort.` so shared and inline entries both reconstruct
+through the incompatible long-prefix table. Vort must list every name and
 byte-exact value. In the other direction, deterministic stored/LZ4/Deflate/Zstd
-Vort images carry root, regular-file, inline-tail, and directory attributes;
-`fsck.erofs --xattrs` must validate, extract, and restore them through the host
-xattr API. Supply explicit tools with
+Vort images carry root, regular-file, inline-tail, and directory attributes
+through a caller-selected plain prefix table; `fsck.erofs --xattrs` must
+validate, extract, and restore them through the host xattr API. Supply explicit tools with
 `-- --mkfs /path/to/mkfs.erofs --fsck /path/to/fsck.erofs`; the summary reports
-`xattr_reader` and `xattr_writer` separately.
+`xattr_reader`, `xattr_writer`, and `long_prefix_reader` separately.
 
 The QCOW2 differential always exercises the Vort v2/v3 writer and reader for
 uncompressed, raw-DEFLATE, and Zstandard clusters plus v2/v3 raw-backing

@@ -37,19 +37,36 @@ const EncodedName = struct {
 
 const WireAttribute = struct {
     prefix: []const u8,
+    infix: []const u8,
     suffix: []const u8,
     value: []const u8,
     padded_size: usize,
 
     fn nameLen(self: WireAttribute) Error!usize {
-        return checkedAdd(self.prefix.len, self.suffix.len);
+        return checkedAdd(
+            try checkedAdd(self.prefix.len, self.infix.len),
+            self.suffix.len,
+        );
     }
+};
+
+const LongPrefix = struct {
+    base: []const u8,
+    infix: []const u8,
+    next: usize,
+};
+
+const EncodedPrefix = struct {
+    base_index: u8,
+    infix: []const u8,
 };
 
 const Scanner = struct {
     image: []const u8,
     block_size: usize,
     xattr_block: u32,
+    xattr_prefix_start: u32,
+    xattr_prefix_count: u8,
     ibody: []const u8,
     shared_count: usize,
     shared_index: usize = 0,
@@ -59,6 +76,8 @@ const Scanner = struct {
         image: []const u8,
         block_size: usize,
         xattr_block: u32,
+        xattr_prefix_start: u32,
+        xattr_prefix_count: u8,
         ibody_start: usize,
         ibody_size: usize,
     ) Error!Scanner {
@@ -66,6 +85,8 @@ const Scanner = struct {
             .image = image,
             .block_size = block_size,
             .xattr_block = xattr_block,
+            .xattr_prefix_start = xattr_prefix_start,
+            .xattr_prefix_count = xattr_prefix_count,
             .ibody = &.{},
             .shared_count = 0,
             .inline_position = 0,
@@ -86,6 +107,8 @@ const Scanner = struct {
             .image = image,
             .block_size = block_size,
             .xattr_block = xattr_block,
+            .xattr_prefix_start = xattr_prefix_start,
+            .xattr_prefix_count = xattr_prefix_count,
             .ibody = ibody,
             .shared_count = shared_count,
             .inline_position = inline_position,
@@ -99,7 +122,14 @@ const Scanner = struct {
             self.shared_index += 1;
             const shared_base = try checkedMul(self.xattr_block, self.block_size);
             const shared_offset = try checkedAdd(shared_base, try checkedMul(id, 4));
-            return try parseEntry(self.image, shared_offset, self.image.len);
+            return try parseEntry(
+                self.image,
+                shared_offset,
+                self.image.len,
+                self.image,
+                self.xattr_prefix_start,
+                self.xattr_prefix_count,
+            );
         }
         if (self.inline_position == self.ibody.len) return null;
         const remaining = self.ibody[self.inline_position..];
@@ -107,7 +137,14 @@ const Scanner = struct {
             self.inline_position = self.ibody.len;
             return null;
         }
-        const entry = try parseEntry(self.ibody, self.inline_position, self.ibody.len);
+        const entry = try parseEntry(
+            self.ibody,
+            self.inline_position,
+            self.ibody.len,
+            self.image,
+            self.xattr_prefix_start,
+            self.xattr_prefix_count,
+        );
         self.inline_position = try checkedAdd(self.inline_position, entry.padded_size);
         return entry;
     }
@@ -118,15 +155,20 @@ pub fn readAllocLimited(
     image: []const u8,
     block_size: usize,
     xattr_block: u32,
+    xattr_prefix_start: u32,
+    xattr_prefix_count: u8,
     ibody_start: usize,
     ibody_size: usize,
     max_count: usize,
     max_total_bytes: usize,
 ) Error!Attributes {
+    try validatePrefixTable(image, xattr_prefix_start, xattr_prefix_count);
     var scanner = try Scanner.init(
         image,
         block_size,
         xattr_block,
+        xattr_prefix_start,
+        xattr_prefix_count,
         ibody_start,
         ibody_size,
     );
@@ -149,6 +191,8 @@ pub fn readAllocLimited(
         image,
         block_size,
         xattr_block,
+        xattr_prefix_start,
+        xattr_prefix_count,
         ibody_start,
         ibody_size,
     );
@@ -162,7 +206,10 @@ pub fn readAllocLimited(
         const value_end = try checkedAdd(name_end, wire.value.len);
         if (value_end > storage.len) return error.InvalidErofs;
         @memcpy(storage[name_start..][0..wire.prefix.len], wire.prefix);
-        @memcpy(storage[name_start + wire.prefix.len .. name_end], wire.suffix);
+        const infix_start = name_start + wire.prefix.len;
+        const suffix_start = infix_start + wire.infix.len;
+        @memcpy(storage[infix_start..suffix_start], wire.infix);
+        @memcpy(storage[suffix_start..name_end], wire.suffix);
         @memcpy(storage[name_end..value_end], wire.value);
         entries[entry_index] = .{
             .name = storage[name_start..name_end],
@@ -179,11 +226,15 @@ pub fn readAllocLimited(
     return .{ .allocator = allocator, .storage = storage, .entries = entries };
 }
 
-pub fn encodedSize(attributes: []const Attribute) Error!usize {
+pub fn encodedSize(
+    attributes: []const Attribute,
+    long_prefixes: []const []const u8,
+) Error!usize {
+    _ = try prefixTableSize(long_prefixes);
     if (attributes.len == 0) return 0;
     var size: usize = ibody_header_size;
     for (attributes, 0..) |attribute, index| {
-        const encoded = try encodeName(attribute.name);
+        const encoded = try encodeName(attribute.name, long_prefixes);
         if (attribute.value.len > std.math.maxInt(u16)) return error.InvalidErofs;
         for (attributes[0..index]) |previous|
             if (std.mem.eql(u8, previous.name, attribute.name))
@@ -208,14 +259,18 @@ pub fn ibodyIcount(size: usize) Error!u16 {
     return @intCast(count);
 }
 
-pub fn writeIbody(output: []u8, attributes: []const Attribute) Error!void {
-    const expected_size = try encodedSize(attributes);
+pub fn writeIbody(
+    output: []u8,
+    attributes: []const Attribute,
+    long_prefixes: []const []const u8,
+) Error!void {
+    const expected_size = try encodedSize(attributes, long_prefixes);
     if (output.len != expected_size) return error.InvalidErofs;
     if (output.len == 0) return;
     @memset(output, 0);
     var position: usize = ibody_header_size;
     for (attributes) |attribute| {
-        const encoded = try encodeName(attribute.name);
+        const encoded = try encodeName(attribute.name, long_prefixes);
         output[position] = @intCast(encoded.suffix.len);
         output[position + 1] = encoded.index;
         std.mem.writeInt(u16, output[position + 2 ..][0..2], @intCast(attribute.value.len), .little);
@@ -234,17 +289,86 @@ pub fn writeIbody(output: []u8, attributes: []const Attribute) Error!void {
     if (position != output.len) return error.InvalidErofs;
 }
 
-fn parseEntry(input: []const u8, start: usize, limit: usize) Error!WireAttribute {
+pub fn validatePrefixTable(
+    image: []const u8,
+    prefix_start_units: u32,
+    prefix_count: u8,
+) Error!void {
+    if (prefix_count == 0) {
+        if (prefix_start_units != 0) return error.InvalidErofs;
+        return;
+    }
+    if (prefix_count > 0x80) return error.InvalidErofs;
+    var position = try checkedMul(prefix_start_units, 4);
+    for (0..prefix_count) |_| {
+        const prefix = try parseLongPrefix(image, position);
+        position = prefix.next;
+    }
+}
+
+pub fn prefixTableSize(long_prefixes: []const []const u8) Error!usize {
+    if (long_prefixes.len > 0x80) return error.InvalidErofs;
+    var size: usize = 0;
+    for (long_prefixes, 0..) |prefix, index| {
+        const encoded = try encodePrefix(prefix);
+        for (long_prefixes[0..index]) |previous|
+            if (std.mem.eql(u8, previous, prefix)) return error.InvalidErofs;
+        size = try checkedAdd(
+            size,
+            try align4(try checkedAdd(3, encoded.infix.len)),
+        );
+    }
+    return size;
+}
+
+pub fn writePrefixTable(
+    output: []u8,
+    long_prefixes: []const []const u8,
+) Error!void {
+    if (output.len != try prefixTableSize(long_prefixes))
+        return error.InvalidErofs;
+    @memset(output, 0);
+    var position: usize = 0;
+    for (long_prefixes) |prefix| {
+        const encoded = try encodePrefix(prefix);
+        const payload_len = try checkedAdd(1, encoded.infix.len);
+        std.mem.writeInt(u16, output[position..][0..2], @intCast(payload_len), .little);
+        output[position + 2] = encoded.base_index;
+        @memcpy(output[position + 3 ..][0..encoded.infix.len], encoded.infix);
+        position = try align4(try checkedAdd(position, try checkedAdd(2, payload_len)));
+    }
+    if (position != output.len) return error.InvalidErofs;
+}
+
+fn parseEntry(
+    input: []const u8,
+    start: usize,
+    limit: usize,
+    prefix_image: []const u8,
+    prefix_start_units: u32,
+    prefix_count: u8,
+) Error!WireAttribute {
     if (limit > input.len or start > limit or limit - start < entry_header_size)
         return error.InvalidErofs;
     const name_len: usize = input[start];
     const name_index = input[start + 1];
-    if (name_index & 0x80 != 0) return error.UnsupportedErofsFeature;
-    const prefix = try prefixForIndex(name_index);
-    if (((name_index == 2 or name_index == 3) and name_len != 0) or
-        ((name_index == 1 or name_index == 4 or name_index == 5 or name_index == 6) and
-            name_len == 0))
-        return error.InvalidErofs;
+    const is_long = name_index & 0x80 != 0;
+    const prefix: []const u8, const infix: []const u8 = if (is_long) blk: {
+        const long_prefix = try longPrefixAt(
+            prefix_image,
+            prefix_start_units,
+            prefix_count,
+            name_index & 0x7f,
+        );
+        break :blk .{ long_prefix.base, long_prefix.infix };
+    } else blk: {
+        const short_prefix = try prefixForIndex(name_index);
+        if (((name_index == 2 or name_index == 3) and name_len != 0) or
+            ((name_index == 1 or name_index == 4 or name_index == 5 or name_index == 6) and
+                name_len == 0))
+            return error.InvalidErofs;
+        break :blk .{ short_prefix, &.{} };
+    };
     const value_len: usize = format.readU16(input, start + 2);
     const payload_len = try checkedAdd(name_len, value_len);
     const raw_size = try checkedAdd(entry_header_size, payload_len);
@@ -253,22 +377,35 @@ fn parseEntry(input: []const u8, start: usize, limit: usize) Error!WireAttribute
     const name_start = start + entry_header_size;
     const name_end = name_start + name_len;
     const value_end = name_end + value_len;
-    const full_name_len = try checkedAdd(prefix.len, name_len);
+    const full_name_len = try checkedAdd(
+        try checkedAdd(prefix.len, infix.len),
+        name_len,
+    );
     if (full_name_len == 0 or full_name_len > format.name_max or
         std.mem.indexOfScalar(u8, input[name_start..name_end], 0) != null)
         return error.InvalidErofs;
     return .{
         .prefix = prefix,
+        .infix = infix,
         .suffix = input[name_start..name_end],
         .value = input[name_end..value_end],
         .padded_size = padded_size,
     };
 }
 
-fn encodeName(name: []const u8) Error!EncodedName {
+fn encodeName(
+    name: []const u8,
+    long_prefixes: []const []const u8,
+) Error!EncodedName {
     if (name.len == 0 or name.len > format.name_max or
         std.mem.indexOfScalar(u8, name, 0) != null)
         return error.InvalidErofs;
+    for (long_prefixes, 0..) |prefix, index| {
+        if (std.mem.startsWith(u8, name, prefix)) return .{
+            .index = 0x80 | @as(u8, @intCast(index)),
+            .suffix = name[prefix.len..],
+        };
+    }
     if (std.mem.eql(u8, name, "system.posix_acl_access"))
         return .{ .index = 2, .suffix = &.{} };
     if (std.mem.eql(u8, name, "system.posix_acl_default"))
@@ -285,6 +422,65 @@ fn encodeName(name: []const u8) Error!EncodedName {
         }
     }
     return .{ .index = 0, .suffix = name };
+}
+
+fn encodePrefix(prefix: []const u8) Error!EncodedPrefix {
+    if (prefix.len == 0 or prefix.len > format.name_max or
+        std.mem.indexOfScalar(u8, prefix, 0) != null)
+        return error.InvalidErofs;
+    inline for (.{
+        .{ @as(u8, 1), "user." },
+        .{ @as(u8, 2), "system.posix_acl_access" },
+        .{ @as(u8, 3), "system.posix_acl_default" },
+        .{ @as(u8, 4), "trusted." },
+        .{ @as(u8, 5), "lustre." },
+        .{ @as(u8, 6), "security." },
+    }) |item| {
+        if (std.mem.startsWith(u8, prefix, item[1])) return .{
+            .base_index = item[0],
+            .infix = prefix[item[1].len..],
+        };
+    }
+    return .{ .base_index = 0, .infix = prefix };
+}
+
+fn longPrefixAt(
+    image: []const u8,
+    prefix_start_units: u32,
+    prefix_count: u8,
+    target: u8,
+) Error!LongPrefix {
+    if (target >= prefix_count) return error.InvalidErofs;
+    var position = try checkedMul(prefix_start_units, 4);
+    for (0..prefix_count) |index| {
+        const prefix = try parseLongPrefix(image, position);
+        if (index == target) return prefix;
+        position = prefix.next;
+    }
+    return error.InvalidErofs;
+}
+
+fn parseLongPrefix(image: []const u8, position: usize) Error!LongPrefix {
+    if (image.len -| position < 2) return error.TruncatedFrame;
+    const payload_len: usize = format.readU16(image, position);
+    if (payload_len < 1 or payload_len > format.name_max + 1)
+        return error.InvalidErofs;
+    const payload_start = try checkedAdd(position, 2);
+    const payload_end = try checkedEnd(payload_start, payload_len, image.len);
+    const base_index = image[payload_start];
+    const base = try prefixForIndex(base_index);
+    const infix = image[payload_start + 1 .. payload_end];
+    const full_len = try checkedAdd(base.len, infix.len);
+    if (full_len == 0 or full_len > format.name_max or
+        std.mem.indexOfScalar(u8, infix, 0) != null)
+        return error.InvalidErofs;
+    const next = try align4(payload_end);
+    if (next > image.len) return error.TruncatedFrame;
+    return .{
+        .base = base,
+        .infix = infix,
+        .next = next,
+    };
 }
 
 fn prefixForIndex(index: u8) Error![]const u8 {
