@@ -7,6 +7,12 @@ pub const Error = core.Error || xattr.Error || std.mem.Allocator.Error || error{
 pub const EntryKind = enum { file, directory, symlink };
 pub const Xattr = xattr.Attribute;
 
+pub const HiddenRole = enum {
+    none,
+    packed_file,
+    metabox,
+};
+
 pub const Entry = struct {
     path: []const u8,
     kind: EntryKind = .file,
@@ -28,6 +34,8 @@ pub const Node = struct {
     xattr_size: usize = 0,
     explicit: bool = false,
     hidden: bool = false,
+    hidden_role: HiddenRole = .none,
+    in_metabox: bool = false,
     parent: usize = 0,
     nid: u64 = 0,
     location: usize = 0,

@@ -269,8 +269,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   deduplicated local chunk maps and owning external chunk/device-table output,
   inline root/entry xattrs and caller-selected plain prefix tables, multi-block
   directories, compression-configuration records, and per-cluster
-  compressed-or-plain full-index selection with bidirectional erofs-utils
-  interoperability;
+  compressed-or-plain full-index selection, plus standard MZi stored/LZ4/raw-
+  Deflate/Zstandard metabox writing with a hidden low-NID metadata inode and
+  high-bit visible NIDs, all with bidirectional erofs-utils interoperability;
 - dependency-free WIM/ESD/SWM parsing with strict 208-byte headers, compression
   and part geometry, resource headers, lookup tables, SHA-1 verification, raw
   UTF-16 XML access, bounded resource extraction, validated image-metadata

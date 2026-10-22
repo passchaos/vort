@@ -43,11 +43,12 @@ pub fn prepare(
         .mode = 0o644,
         .explicit = true,
         .hidden = true,
+        .hidden_role = .packed_file,
         .parent = 0,
     };
 }
 
 pub fn packedNode(nodes: []const tree.Node) ?tree.Node {
-    for (nodes) |node| if (node.hidden) return node;
+    for (nodes) |node| if (node.hidden_role == .packed_file) return node;
     return null;
 }

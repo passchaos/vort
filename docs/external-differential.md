@@ -69,12 +69,19 @@ modes must also pass fsck and byte-exact extraction. Two LZ4 metabox references
 separately place inode metadata and inode+directory
 metadata in the hidden stream; Vort must list/extract all files and reconstruct
 source shared/long xattrs, while fsck independently validates and extracts file
-bytes. Supply explicit tools with
+bytes. Four Vort MZi writers use stored, LZ4, raw Deflate, and Zstandard hidden
+metadata inodes, must remain deterministic, and are self-decoded byte-exactly;
+fsck validates every image and independently extracts physical/compressed file
+extents. The stored-MZi check excludes flat-inline regular-file tails because
+erofs-utils 1.9.4's extractor zero-fills that layout even for its own MZi
+images, although its `dump --cat` path and Vort both read it correctly. Supply
+explicit tools with
 `-- --mkfs /path/to/mkfs.erofs --fsck /path/to/fsck.erofs`; the summary reports
 `xattr_reader`, `xattr_writer`, `long_prefix_reader`, `fragment_reader`,
 `fragment_writer`, `ztailpacking_reader`, `ztailpacking_writer`, `chunk_reader`,
 `external_chunk_reader`, `chunk_writer`, `external_chunk_writer`,
-`address48_reader`, `address48_writer`, and `metabox_reader` separately.
+`address48_reader`, `address48_writer`, `metabox_reader`, and `metabox_writer`
+separately.
 
 The QCOW2 differential always exercises the Vort v2/v3 writer and reader for
 uncompressed, raw-DEFLATE, and Zstandard clusters plus v2/v3 raw-backing

@@ -87,6 +87,17 @@ and external-chunk output even while current in-memory image sizes keep actual
 high halves zero; this provides interoperable forward-compatible wire without
 claiming to allocate multi-terabyte buffers.
 
+`metabox = true` emits the standard MZi layout. Visible inode slots, inline
+directories and tails, xattr ibodies, and compression indexes are planned in a
+separate block-padded metadata stream; directory entries and the superblock use
+bit-63 NIDs. One low-NID hidden inode in the primary metadata owns that stream,
+using stored blocks or the selected LZ4/raw-Deflate/Zstandard full-index codec.
+The extended 144-byte superblock carries `metabox_nid` and enables 48-bit
+addressing for the high-bit root NID. Physical file and large-directory blocks
+remain in the primary image. Metabox output currently rejects chunk mode,
+packed fragments, and compressed-inline pclusters explicitly instead of
+combining unimplemented layouts.
+
 Writer entries use safe relative paths. Missing parent directories are created
 automatically, while absolute paths, empty components, `.`/`..`, NUL bytes,
 duplicate entries, and non-directory parents are rejected. Entry data and
@@ -134,6 +145,13 @@ var loaded_metabox = try external.loadMetaboxAllocLimited(
 );
 defer loaded_metabox.deinit();
 
+const mzi_image = try vort.encodeErofsAlloc(
+    allocator,
+    entries,
+    .{ .compression = .zstandard, .metabox = true },
+);
+defer allocator.free(mzi_image);
+
 var encoded_chunks = try vort.encodeErofsExternalChunksAlloc(
     allocator,
     entries,
@@ -145,11 +163,11 @@ defer encoded_chunks.deinit(allocator);
 Prefix tables stored inside packed fragment inodes remain unsupported; plain and
 metabox prefix tables are supported. Compressed 48-bit `PARTIAL_REF` and
 fragment-extent combinations remain explicitly unsupported. The writer does
-not yet generate metaboxes or deduplicate repeated values into the optional
-shared-xattr region. Chunk output requires stored mode; fragment and
-compressed-inline output require a non-stored compression mode because visible
-files use the compressed inode layout even when a prefix or inline cluster
-falls back to `PLAIN`.
+not yet generate MZ=id directory-data placement or deduplicate repeated values
+into the optional shared-xattr region. Chunk output requires stored mode;
+fragment and compressed-inline output require a non-stored compression mode
+because visible files use the compressed inode layout even when a prefix or
+inline cluster falls back to `PLAIN`.
 
 ```sh
 zig build run -- list-erofs-file system.erofs
@@ -181,3 +199,10 @@ an external blob/device table; Vort extracts each byte-exactly and diagnoses a
 missing blob explicitly. Vort-authored local and external chunk layouts are
 also extracted by `fsck.erofs`, with the external metadata/blob pair kept as
 separate outputs.
+Four additional deterministic MZi writers cover stored, LZ4, raw Deflate, and
+Zstandard hidden metadata streams. Vort loads and byte-exactly extracts every
+mode, while `fsck.erofs` validates all images and independently extracts their
+physical/compressed extents. erofs-utils 1.9.4 itself writes zero-filled output
+for flat-inline regular files whose inode lives in a metabox (its `dump --cat`
+path reads the same bytes correctly), so the stored-MZi oracle check excludes
+only those affected inline tails.

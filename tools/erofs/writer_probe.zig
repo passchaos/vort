@@ -10,11 +10,17 @@ pub fn main(init: std.process.Init) !void {
     const address48_suffix = "-48bit";
     const fragment_suffix = "-fragments";
     const inline_suffix = "-ztailpacking";
-    const force_48bit = std.mem.endsWith(u8, mode_name, address48_suffix);
-    const layout_mode = if (force_48bit)
-        mode_name[0 .. mode_name.len - address48_suffix.len]
+    const metabox_suffix = "-metabox";
+    const metabox = std.mem.endsWith(u8, mode_name, metabox_suffix);
+    const without_metabox = if (metabox)
+        mode_name[0 .. mode_name.len - metabox_suffix.len]
     else
         mode_name;
+    const force_48bit = std.mem.endsWith(u8, without_metabox, address48_suffix);
+    const layout_mode = if (force_48bit)
+        without_metabox[0 .. without_metabox.len - address48_suffix.len]
+    else
+        without_metabox;
     const chunk_local = std.mem.eql(u8, layout_mode, "chunk-local");
     const chunk_external = std.mem.eql(u8, layout_mode, "chunk-external");
     const fragments = std.mem.endsWith(u8, layout_mode, fragment_suffix);
@@ -65,6 +71,7 @@ pub fn main(init: std.process.Init) !void {
             .none,
         .chunk_size = if (chunk_local or chunk_external) 4096 else null,
         .force_48bit = force_48bit,
+        .metabox = metabox,
     };
     if (chunk_external) {
         const device_path = args.next() orelse return error.MissingOutputPath;

@@ -22301,4 +22301,23 @@ reuse, so production keeps the simpler independently owned plans.
   premature high-NID access. Fixed erofs-utils fixtures cover 80 nested files
   and shared/long xattrs; malformed super/payload, exact limits, and exhaustive
   OOM are covered. The required differential validates MZi and MZ=id images
-  (`metabox_reader=2`). Metabox writing remains follow-up work.
+  (`metabox_reader=2`).
+
+- Added deterministic standard EROFS MZi writing. A dedicated hidden low-NID
+  inode owns the block-padded second metadata address space, while visible
+  inodes and directory entries use bit-63 NIDs and the 144-byte superblock
+  carries both the high root NID and `metabox_nid`. Planning and emission route
+  inode slots, inline directory/file/symlink data, xattr ibodies, and compressed
+  indexes to the metabox without moving physical payload blocks out of the
+  primary image. The hidden stream supports stored, LZ4, raw Deflate, and
+  Zstandard layouts through the existing block planners; plain long-prefix
+  tables remain in primary metadata. Chunk, packed-fragment, and compressed-
+  inline combinations are rejected explicitly until their mixed-wire rules are
+  implemented. Four-codec nested-directory/xattr/limit/OOM tests and repeated
+  outputs cover ownership and determinism. The required erofs-utils
+  differential validates four writer modes (`metabox_writer=4`, `writer=22`,
+  `external_writer=22`); fsck independently extracts physical/compressed
+  extents. Its known 1.9.4 zero-fill bug for metabox flat-inline regular-file
+  extraction is reproduced against erofs-utils' own MZi output and excluded
+  only from that narrow stored-tail oracle check. MZ=id directory-data
+  placement and shared-xattr writer deduplication remain follow-up work.
