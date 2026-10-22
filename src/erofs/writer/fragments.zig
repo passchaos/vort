@@ -1,5 +1,5 @@
 const std = @import("std");
-const tree = @import("writer_tree.zig");
+const tree = @import("tree.zig");
 
 pub const Error = tree.Error;
 const full_index_metadata_size: usize = 16;

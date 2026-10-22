@@ -1,7 +1,7 @@
 const std = @import("std");
-const archive_mod = @import("archive.zig");
-const format = @import("format.zig");
-const writer = @import("writer.zig");
+const archive_mod = @import("../../archive.zig");
+const format = @import("../../format.zig");
+const writer = @import("../../writer.zig");
 
 const Archive = archive_mod.Archive;
 const Compression = writer.Compression;
@@ -103,7 +103,7 @@ test "EROFS fragment writer validates mode and releases allocation failures" {
                 .{ .compression = .lz4, .tail_packing = .fragments },
             );
             defer failing_allocator.free(encoded);
-            const parsed = try @import("archive.zig").Archive.init(encoded);
+            const parsed = try @import("../../archive.zig").Archive.init(encoded);
             const decoded = try parsed.extractByPathAllocLimited(
                 failing_allocator,
                 "large",

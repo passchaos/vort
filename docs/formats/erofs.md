@@ -295,3 +295,9 @@ writer modes pass fsck and exact extraction (`grouped_writer=32`,
 `external_writer=68`, `directory_writer=12`, `extended_inode_writer=13`).
 Focused tests additionally cover 1 MiB decoded extents, metadata larger than
 two physical blocks, actual image-size reduction on repetitive data, and OOM.
+
+The public writer facade remains `src/erofs/writer.zig`. Internal tree,
+codec, cluster, chunk, fragment, inode, xattr, and metabox components live in
+`src/erofs/writer/`; options and wire serialization have dedicated modules,
+and writer regressions live in `writer/tests/`. The reader's full/compact
+index parser remains a separate `compression_index.zig` module.

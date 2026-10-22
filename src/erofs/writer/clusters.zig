@@ -1,7 +1,7 @@
 const std = @import("std");
-const core = @import("../core.zig");
-const tree = @import("writer_tree.zig");
-const writer_codec = @import("writer_codec.zig");
+const core = @import("../../core.zig");
+const tree = @import("tree.zig");
+const writer_codec = @import("codec.zig");
 
 pub const Error = core.Error || writer_codec.Error || std.mem.Allocator.Error;
 pub const block_size: usize = 4096;

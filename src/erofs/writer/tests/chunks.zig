@@ -1,7 +1,7 @@
 const std = @import("std");
-const archive_mod = @import("archive.zig");
-const format = @import("format.zig");
-const writer = @import("writer.zig");
+const archive_mod = @import("../../archive.zig");
+const format = @import("../../format.zig");
+const writer = @import("../../writer.zig");
 
 const Archive = archive_mod.Archive;
 const Entry = writer.Entry;

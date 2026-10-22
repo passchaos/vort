@@ -1,7 +1,7 @@
 const std = @import("std");
-const archive = @import("archive.zig");
-const format = @import("format.zig");
-const writer = @import("writer.zig");
+const archive = @import("../../archive.zig");
+const format = @import("../../format.zig");
+const writer = @import("../../writer.zig");
 
 const block_size: usize = 4096;
 

@@ -1,6 +1,6 @@
 const std = @import("std");
-const tree = @import("writer_tree.zig");
-const xattr = @import("xattr.zig");
+const tree = @import("tree.zig");
+const xattr = @import("../xattr.zig");
 
 pub const Error = tree.Error || xattr.Error;
 

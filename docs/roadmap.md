@@ -22472,3 +22472,12 @@ reuse, so production keeps the simpler independently owned plans.
   Input-adaptive group boundaries and integration of MicroLZMA capacity prefix
   selection into those boundaries remain future work; this functional slice
   does not claim industry-leading ratio or throughput.
+
+
+- Organized EROFS writer components under `writer/` and regressions under
+  `writer/tests/`. The library-facing facade retains its public exports and
+  reduces from roughly 1,400 lines to 589; options and wire serialization
+  occupy dedicated 35- and 443-line modules. Core orchestration no longer
+  contains hundreds of lines of serialization and embedded tests. The
+  relocated imports retain module ownership and test coverage: 81/81 EROFS
+  and 65/65 MicroLZMA tests pass, with wasm32-wasi compilation also passing.

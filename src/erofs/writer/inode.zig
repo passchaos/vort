@@ -1,7 +1,7 @@
 const std = @import("std");
-const format = @import("format.zig");
-const tree = @import("writer_tree.zig");
-const xattr = @import("xattr.zig");
+const format = @import("../format.zig");
+const tree = @import("tree.zig");
+const xattr = @import("../xattr.zig");
 
 pub const Error = format.Error || tree.Error || xattr.Error;
 pub const Version = enum { compact, extended, automatic };

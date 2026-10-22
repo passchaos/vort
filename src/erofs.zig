@@ -45,15 +45,16 @@ test {
     _ = extent;
     _ = @import("erofs/chunk_tests.zig");
     _ = @import("erofs/metabox_tests.zig");
-    _ = @import("erofs/writer_metabox_tests.zig");
-    _ = @import("erofs/writer_xattr_tests.zig");
-    _ = @import("erofs/writer_directory_tests.zig");
-    _ = @import("erofs/writer_cluster_tests.zig");
-    _ = @import("erofs/writer_inode_tests.zig");
+    _ = @import("erofs/writer/tests/metabox.zig");
+    _ = @import("erofs/writer/tests/xattrs.zig");
+    _ = @import("erofs/writer/tests/directories.zig");
+    _ = @import("erofs/writer/tests/clusters.zig");
+    _ = @import("erofs/writer/tests/inodes.zig");
     _ = codec;
     _ = writer;
-    _ = @import("erofs/writer_fragment_tests.zig");
-    _ = @import("erofs/writer_chunk_tests.zig");
-    _ = @import("erofs/writer_tail_tests.zig");
+    _ = @import("erofs/writer/tests/basic.zig");
+    _ = @import("erofs/writer/tests/fragments.zig");
+    _ = @import("erofs/writer/tests/chunks.zig");
+    _ = @import("erofs/writer/tests/tails.zig");
     _ = xattr;
 }

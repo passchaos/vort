@@ -1,6 +1,6 @@
 const std = @import("std");
-const core = @import("../core.zig");
-const xattr = @import("xattr.zig");
+const core = @import("../../core.zig");
+const xattr = @import("../xattr.zig");
 
 pub const Error = core.Error || xattr.Error || std.mem.Allocator.Error || error{InvalidErofs};
 

@@ -1,10 +1,10 @@
 const std = @import("std");
-const core = @import("../core.zig");
-const deflate = @import("../deflate.zig");
-const lz4 = @import("../lz4.zig");
-const lzma = @import("../lzma.zig");
-const zstd = @import("../zstd.zig");
-const format = @import("format.zig");
+const core = @import("../../core.zig");
+const deflate = @import("../../deflate.zig");
+const lz4 = @import("../../lz4.zig");
+const lzma = @import("../../lzma.zig");
+const zstd = @import("../../zstd.zig");
+const format = @import("../format.zig");
 
 pub const Error = core.Error || deflate.Error || lz4.Error || lzma.Error || zstd.Error ||
     std.mem.Allocator.Error || error{InvalidErofs};
@@ -172,7 +172,7 @@ pub const Encoder = struct {
 };
 
 test "EROFS writer codecs round trip compressed extents" {
-    const codec = @import("codec.zig");
+    const codec = @import("../codec.zig");
     const allocator = std.testing.allocator;
     const input = "EROFS writer codec payload 0123456789\n" ** 100;
     inline for (.{ Compression.lz4, .lzma, .deflate, .zstandard }) |compression| {
