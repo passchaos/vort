@@ -615,3 +615,7 @@ padding, node completion and metadata rewrites. Debug and ReleaseFast pass
 136 EROFS plus 12 independent I/O tests, including internal allocating-reference
 comparisons, a 4 MiB Source within 64 KiB working heap, selection reuse without
 extra Source reads, sticky failure, startup budgets, cancellation and OOM.
+Thirteen actual CLI creation cases also use 17-byte output buffers, covering
+stored/default/grouped/bounded codecs and existing atomic replacement checks.
+Final Debug repository validation passes 3455/3455 tests. Broad check, wasm,
+CLI help and all 148 post-rebase focused cases also pass.

@@ -22676,3 +22676,9 @@ reuse, so production keeps the simpler independently owned plans.
   `metabox_writer=84`, `directory_writer=80`, `extended_inode_writer=84`,
   `bounded_writer=160`), alongside six Source file checks and 18 tiny-buffer
   extraction cases.
+  Thirteen actual file creation cases use a 17-byte output buffer and preserve
+  budget-failure/same-path behavior through the public encoder.
+  Broad check and the CLI help page pass; post-rebase ReleaseFast verification
+  passes all 148 focused cases.
+  The final Debug repository suite passes 3455/3455 tests (3448 root tests
+  plus seven separate Brotli object/classifier cases).
