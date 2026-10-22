@@ -108,7 +108,7 @@ test "EROFS external chunk reader rejects malformed device tables" {
     const image = try fixtureAlloc(allocator, @embedFile("testdata/chunk-external.erofs.b64"));
     defer allocator.free(image);
     const slot_start: usize = @as(usize, format.readU16(image, format.super_offset + 88)) * 128;
-    std.mem.writeInt(u32, image[slot_start + 64 ..][0..4], 0, .little);
+    std.mem.writeInt(u32, image[slot_start + 68 ..][0..4], 0, .little);
     refreshFixtureChecksum(image);
     try std.testing.expectError(error.InvalidErofs, Archive.init(image));
 }

@@ -22,9 +22,11 @@ pub const Xattrs = xattr.Attributes;
 pub const Layout = format.Layout;
 pub const Superblock = format.Superblock;
 pub const WriterCompression = writer.Compression;
+pub const EncodedExternalChunks = writer.EncodedExternalChunks;
 pub const WriterOptions = writer.Options;
 pub const WriterTailPacking = writer.TailPacking;
 pub const encodeAlloc = writer.encodeAlloc;
+pub const encodeExternalChunksAlloc = writer.encodeExternalChunksAlloc;
 pub const parse = archive.Archive.init;
 pub const parseWithDevices = archive.Archive.initWithDevices;
 pub const parseSuperblock = format.parseSuperblock;
@@ -39,6 +41,7 @@ test {
     _ = codec;
     _ = writer;
     _ = @import("erofs/writer_fragment_tests.zig");
+    _ = @import("erofs/writer_chunk_tests.zig");
     _ = @import("erofs/writer_tail_tests.zig");
     _ = xattr;
 }

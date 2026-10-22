@@ -9,9 +9,13 @@ pub fn main(init: std.process.Init) !void {
     const mode_name = args.next() orelse "lz4";
     const fragment_suffix = "-fragments";
     const inline_suffix = "-ztailpacking";
+    const chunk_local = std.mem.eql(u8, mode_name, "chunk-local");
+    const chunk_external = std.mem.eql(u8, mode_name, "chunk-external");
     const fragments = std.mem.endsWith(u8, mode_name, fragment_suffix);
     const compressed_inline = std.mem.endsWith(u8, mode_name, inline_suffix);
-    const compression_name = if (fragments)
+    const compression_name = if (chunk_local or chunk_external)
+        "stored"
+    else if (fragments)
         mode_name[0 .. mode_name.len - fragment_suffix.len]
     else if (compressed_inline)
         mode_name[0 .. mode_name.len - inline_suffix.len]
@@ -42,7 +46,7 @@ pub fn main(init: std.process.Init) !void {
         .{ .path = "link", .kind = .symlink, .target = "etc/config" },
         .{ .path = "empty", .kind = .directory, .xattrs = &directory_xattrs },
     };
-    const encoded = try vort.encodeErofsAlloc(init.gpa, &entries, .{
+    const options = vort.ErofsWriterOptions{
         .compression = compression,
         .volume_name = "vort-writer",
         .root_xattrs = &root_xattrs,
@@ -53,9 +57,25 @@ pub fn main(init: std.process.Init) !void {
             .compressed_inline
         else
             .none,
-    });
-    defer init.gpa.free(encoded);
-    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+        .chunk_size = if (chunk_local or chunk_external) 4096 else null,
+    };
+    if (chunk_external) {
+        const device_path = args.next() orelse return error.MissingOutputPath;
+        var encoded = try vort.encodeErofsExternalChunksAlloc(init.gpa, &entries, options);
+        defer encoded.deinit(init.gpa);
+        try std.Io.Dir.cwd().writeFile(init.io, .{
+            .sub_path = output_path,
+            .data = encoded.image,
+        });
+        try std.Io.Dir.cwd().writeFile(init.io, .{
+            .sub_path = device_path,
+            .data = encoded.device,
+        });
+    } else {
+        const encoded = try vort.encodeErofsAlloc(init.gpa, &entries, options);
+        defer init.gpa.free(encoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+    }
 }
 
 fn parseCompression(name: []const u8) ?vort.ErofsWriterCompression {

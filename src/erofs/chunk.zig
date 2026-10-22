@@ -30,8 +30,7 @@ pub fn validateDevices(
     var previous_end: u64 = superblock.block_count;
     for (0..superblock.extra_devices) |index| {
         const info = try deviceInfo(image, superblock, index);
-        if (info.blocks == 0 or info.unified_start < previous_end)
-            return error.InvalidErofs;
+        if (info.unified_start < previous_end) return error.InvalidErofs;
         previous_end = std.math.add(u64, info.unified_start, info.blocks) catch
             return error.IntegerOverflow;
         if (devices.len != 0) {

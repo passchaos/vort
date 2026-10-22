@@ -22260,3 +22260,17 @@ reuse, so production keeps the simpler independently owned plans.
   local map, forced local index, and blob-device images
   (`chunk_reader=3`, `external_chunk_reader=1`, `xattr_reader=14`). Chunk and
   external-device writing plus 48-bit addresses remain follow-up work.
+
+- Added deterministic EROFS local and external chunk writers. A shared planner
+  accepts caller-selected power-of-two chunks, pads partial tails, detects
+  all-zero holes, and deduplicates identical padded chunks across every regular
+  file. Local output writes 4-byte block maps after ordinary metadata and one
+  copy of each unique chunk in the primary image. The owning external API
+  returns separate metadata/device buffers, writes 8-byte device indexes plus a
+  standard 128-byte slot, and handles an all-hole filesystem with a valid
+  zero-length device. Chunk mode is intentionally stored-only and mutually
+  exclusive with fragment/inline compression modes. Tests cover index reuse,
+  holes, xattrs, partial chunks, deterministic local/external output, invalid
+  options, ownership cleanup, and exhaustive OOM. erofs-utils independently
+  extracts both modes (`chunk_writer=2`, `external_chunk_writer=1`, `writer=12`,
+  `external_writer=12`, `xattr_writer=12`).

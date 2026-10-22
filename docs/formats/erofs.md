@@ -59,6 +59,13 @@ the raw tail, and writes `INLINE_PCLUSTER` only when header, full indexes, and
 payload fit in one metadata block. A non-fitting tail automatically retains its
 ordinary physical block.
 
+`chunk_size` selects deterministic local chunk-based output in stored mode.
+Chunks are padded to their declared power-of-two size, deduplicated across all
+regular files, and all-zero chunks become holes. `encodeErofsExternalChunksAlloc`
+uses the same plan but returns an owning `{ image, device }` pair with 8-byte
+device indexes and a standard 128-byte device-table slot; even an all-hole plan
+returns a valid zero-length device paired with its metadata image.
+
 Writer entries use safe relative paths. Missing parent directories are created
 automatically, while absolute paths, empty components, `.`/`..`, NUL bytes,
 duplicate entries, and non-directory parents are rejected. Entry data and
@@ -98,15 +105,22 @@ const payload = try archive.extractByPathAllocWithLimits(
 defer allocator.free(payload);
 
 const external = try vort.parseErofsWithDevices(metadata_image, &.{blob_bytes});
+
+var encoded_chunks = try vort.encodeErofsExternalChunksAlloc(
+    allocator,
+    entries,
+    .{ .chunk_size = 4096 },
+);
+defer encoded_chunks.deinit(allocator);
 ```
 
 48-bit addressing and metaboxes remain future work. Prefix tables stored inside
 packed or metabox inodes remain unsupported; ordinary `PLAIN_XATTR_PFX` tables
-are supported in both directions. The writer does not yet emit chunk-based or
-external-device layouts, nor deduplicate repeated values into the optional
-shared-xattr region. Both fragment and compressed-inline writing require a
-non-stored compression mode because visible files use the compressed inode
-layout even when a prefix or inline cluster falls back to `PLAIN`.
+are supported in both directions. The writer does not yet deduplicate repeated
+values into the optional shared-xattr region. Chunk output requires stored mode;
+fragment and compressed-inline output require a non-stored compression mode
+because visible files use the compressed inode layout even when a prefix or
+inline cluster falls back to `PLAIN`.
 
 ```sh
 zig build run -- list-erofs-file system.erofs
@@ -135,4 +149,6 @@ extracted by `fsck.erofs`; three more writer modes cover compressed inline
 tails and raw/fallback decisions.
 Three more reference images cover local block maps, forced local indexes, and
 an external blob/device table; Vort extracts each byte-exactly and diagnoses a
-missing blob explicitly.
+missing blob explicitly. Vort-authored local and external chunk layouts are
+also extracted by `fsck.erofs`, with the external metadata/blob pair kept as
+separate outputs.

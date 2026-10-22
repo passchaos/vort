@@ -42,11 +42,19 @@ pub const Node = struct {
     fragment_size: usize = 0,
     compressed_block_count: usize = 0,
     compressed_indexes: ?[]CompressionIndex = null,
+    chunk_format: u16 = 0,
+    chunk_indexes: ?[]ChunkIndex = null,
 
     pub const CompressionIndex = struct {
         kind: u2,
         logical_offset: u16 = 0,
         physical_block: u32,
+    };
+
+    pub const ChunkIndex = struct {
+        unique_index: ?u32,
+        start_block: u32 = std.math.maxInt(u32),
+        device_id: u16 = 0,
     };
 
     pub fn name(self: Node) []const u8 {
@@ -74,6 +82,7 @@ pub const Tree = struct {
             if (node.owned_data) |bytes| self.allocator.free(bytes);
             if (node.compressed_inline_data) |bytes| self.allocator.free(bytes);
             if (node.compressed_indexes) |indexes| self.allocator.free(indexes);
+            if (node.chunk_indexes) |indexes| self.allocator.free(indexes);
             self.allocator.free(node.path);
         }
         self.allocator.free(self.nodes);

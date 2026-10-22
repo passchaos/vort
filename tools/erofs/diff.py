@@ -176,6 +176,8 @@ def main() -> None:
     ztailpacking_writer_cases = 0
     chunk_reader_cases = 0
     external_chunk_reader_cases = 0
+    chunk_writer_cases = 0
+    external_chunk_writer_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -227,20 +229,40 @@ def main() -> None:
             "lz4-ztailpacking",
             "deflate-ztailpacking",
             "zstd-ztailpacking",
+            "chunk-local",
+            "chunk-external",
         ):
             image = temp / f"writer-{mode}.erofs"
             repeated = temp / f"writer-{mode}-repeat.erofs"
-            run(args.writer, image, mode)
-            run(args.writer, repeated, mode)
+            device = temp / f"writer-{mode}.blob"
+            repeated_device = temp / f"writer-{mode}-repeat.blob"
+            if mode == "chunk-external":
+                run(args.writer, image, mode, device)
+                run(args.writer, repeated, mode, repeated_device)
+            else:
+                run(args.writer, image, mode)
+                run(args.writer, repeated, mode)
             if image.read_bytes() != repeated.read_bytes():
                 raise AssertionError(f"non-deterministic EROFS writer output for {mode}")
+            if mode == "chunk-external" and device.read_bytes() != repeated_device.read_bytes():
+                raise AssertionError(f"non-deterministic EROFS external chunks for {mode}")
             listing = run(args.cli, "list-erofs-file", image).stdout
             for required in (b"etc/config", b"large.bin", b"random.bin", b"small", b"link", b"empty"):
                 if required not in listing:
                     raise AssertionError(f"EROFS writer listing missing {required!r} for {mode}")
             for name, expected in expected_writer.items():
                 output = temp / f"writer-{mode}-{name.replace('/', '-')}.out"
-                run(args.cli, "extract-erofs-file", image, name, output, len(expected))
+                command: list[object] = [
+                    args.cli,
+                    "extract-erofs-file",
+                    image,
+                    name,
+                    output,
+                    len(expected),
+                ]
+                if mode == "chunk-external":
+                    command.append(device)
+                run(*command)
                 if output.read_bytes() != expected:
                     raise AssertionError(f"Vort writer self decode mismatch for {mode}/{name}")
             verify_vort_xattrs(args.cli, image, expected_writer_xattrs, f"writer-{mode}")
@@ -250,10 +272,23 @@ def main() -> None:
                 fragment_writer_cases += 1
             if mode.endswith("-ztailpacking"):
                 ztailpacking_writer_cases += 1
+            if mode in ("chunk-local", "chunk-external"):
+                chunk_writer_cases += 1
+            if mode == "chunk-external":
+                external_chunk_writer_cases += 1
             writer_cases += 1
             if fsck is not None:
                 extracted = temp / f"writer-{mode}-fsck"
-                run(fsck, f"--extract={extracted}", "--no-preserve", "--xattrs", image)
+                fsck_command: list[object] = [
+                    fsck,
+                    f"--extract={extracted}",
+                    "--no-preserve",
+                    "--xattrs",
+                ]
+                if mode == "chunk-external":
+                    fsck_command.append(f"--device={device}")
+                fsck_command.append(image)
+                run(*fsck_command)
                 for name in ("etc/config", "large.bin", "random.bin", "small"):
                     if (extracted / name).read_bytes() != expected_writer[name]:
                         raise AssertionError(f"fsck.erofs writer mismatch for {mode}/{name}")
@@ -458,6 +493,8 @@ def main() -> None:
         f"ztailpacking_writer={ztailpacking_writer_cases} "
         f"chunk_reader={chunk_reader_cases} "
         f"external_chunk_reader={external_chunk_reader_cases} "
+        f"chunk_writer={chunk_writer_cases} "
+        f"external_chunk_writer={external_chunk_writer_cases} "
         f"malformed={malformed}"
     )
 

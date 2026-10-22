@@ -3,11 +3,12 @@ const core = @import("../core.zig");
 const format = @import("format.zig");
 const tree = @import("writer_tree.zig");
 const writer_codec = @import("writer_codec.zig");
+const writer_chunks = @import("writer_chunks.zig");
 const writer_fragments = @import("writer_fragments.zig");
 const xattr = @import("xattr.zig");
 
-pub const Error = core.Error || writer_codec.Error || writer_fragments.Error || tree.Error ||
-    xattr.Error || error{InvalidErofs};
+pub const Error = core.Error || writer_codec.Error || writer_chunks.Error ||
+    writer_fragments.Error || tree.Error || xattr.Error || error{InvalidErofs};
 
 pub const Entry = tree.Entry;
 pub const EntryKind = tree.EntryKind;
@@ -25,6 +26,18 @@ pub const Options = struct {
     root_xattrs: []const Xattr = &.{},
     xattr_prefixes: []const []const u8 = &.{},
     tail_packing: TailPacking = .none,
+    chunk_size: ?usize = null,
+};
+
+pub const EncodedExternalChunks = struct {
+    image: []u8,
+    device: []u8,
+
+    pub fn deinit(self: *EncodedExternalChunks, allocator: std.mem.Allocator) void {
+        allocator.free(self.image);
+        allocator.free(self.device);
+        self.* = undefined;
+    }
 };
 
 const block_size: usize = 4096;
@@ -37,15 +50,59 @@ pub fn encodeAlloc(
     entries: []const Entry,
     options: Options,
 ) Error![]u8 {
+    const encoded = try encodeInternal(allocator, entries, options, false);
+    if (encoded.device) |device| {
+        allocator.free(encoded.image);
+        allocator.free(device);
+        return error.InvalidErofs;
+    }
+    return encoded.image;
+}
+
+pub fn encodeExternalChunksAlloc(
+    allocator: std.mem.Allocator,
+    entries: []const Entry,
+    options: Options,
+) Error!EncodedExternalChunks {
+    if (options.chunk_size == null) return error.InvalidErofs;
+    const encoded = try encodeInternal(allocator, entries, options, true);
+    errdefer allocator.free(encoded.image);
+    const device = encoded.device orelse return error.InvalidErofs;
+    return .{
+        .image = encoded.image,
+        .device = device,
+    };
+}
+
+const InternalEncoded = struct {
+    image: []u8,
+    device: ?[]u8,
+};
+
+fn encodeInternal(
+    allocator: std.mem.Allocator,
+    entries: []const Entry,
+    options: Options,
+    external_chunks: bool,
+) Error!InternalEncoded {
     if (options.volume_name.len > 16 or options.fixed_nsec >= 1_000_000_000)
         return error.InvalidErofs;
     if (options.tail_packing != .none and options.compression == .stored)
         return error.InvalidErofs;
+    if (options.chunk_size != null and
+        (options.compression != .stored or options.tail_packing != .none))
+        return error.InvalidErofs;
+    if (external_chunks and options.chunk_size == null) return error.InvalidErofs;
 
     var filesystem = try tree.build(allocator, entries, options.root_xattrs);
     defer filesystem.deinit();
     if (options.tail_packing == .fragments)
         try writer_fragments.prepare(allocator, &filesystem, block_size);
+    var chunk_plan: ?writer_chunks.Plan = if (options.chunk_size) |chunk_size|
+        try writer_chunks.prepare(allocator, &filesystem, chunk_size, external_chunks)
+    else
+        null;
+    defer if (chunk_plan) |*plan| plan.deinit();
     var block_encoder: ?writer_codec.Encoder = if (options.compression != .stored)
         try writer_codec.Encoder.init(allocator, options.compression)
     else
@@ -59,11 +116,13 @@ pub fn encodeAlloc(
         options.xattr_prefixes,
         options.tail_packing,
         if (block_encoder) |*encoder| encoder else null,
+        chunk_plan != null and external_chunks and chunk_plan.?.active(),
     );
     try fillDirectories(allocator, &filesystem);
 
     const first_data_block = try alignForward(metadata_end, block_size) / block_size;
-    const block_count = try assignDataBlocks(&filesystem, first_data_block);
+    var block_count = try assignDataBlocks(&filesystem, first_data_block);
+    if (chunk_plan) |*plan| block_count = try plan.assign(filesystem.nodes, block_count);
     const image_len = try checkedMul(block_count, block_size);
     const image = try allocator.alloc(u8, image_len);
     errdefer allocator.free(image);
@@ -76,8 +135,19 @@ pub fn encodeAlloc(
         options.xattr_prefixes,
         if (block_encoder) |*encoder| encoder else null,
     );
-    try writeSuperblock(image, filesystem.nodes, block_count, options);
-    return image;
+    if (chunk_plan) |plan| try plan.writeLocal(image);
+    try writeSuperblock(
+        image,
+        filesystem.nodes,
+        block_count,
+        options,
+        if (chunk_plan) |plan| plan else null,
+    );
+    const device = if (external_chunks)
+        if (chunk_plan) |*plan| plan.takeData() else try allocator.alloc(u8, 0)
+    else
+        null;
+    return .{ .image = image, .device = device };
 }
 
 fn allocateDirectoryBuffers(filesystem: *tree.Tree) Error!void {
@@ -119,13 +189,18 @@ fn planMetadata(
     xattr_prefixes: []const []const u8,
     tail_packing: TailPacking,
     block_encoder: ?*writer_codec.Encoder,
+    external_chunks: bool,
 ) Error!usize {
     const configuration_end = try checkedAdd(
         configuration_start,
         if (writer_codec.configuration(compression)) |bytes| bytes.len else 0,
     );
     const prefix_start = try alignForward(configuration_end, 4);
-    var cursor = try checkedAdd(prefix_start, try xattr.prefixTableSize(xattr_prefixes));
+    const prefix_end = try checkedAdd(prefix_start, try xattr.prefixTableSize(xattr_prefixes));
+    var cursor = if (external_chunks)
+        try checkedAdd(try alignForward(prefix_end, 128), 128)
+    else
+        prefix_end;
     for (filesystem.nodes) |*node| {
         if (node.content().len > std.math.maxInt(u32)) return error.InvalidErofs;
         const location = try alignForward(cursor, format.inode_slot_size);
@@ -135,6 +210,17 @@ fn planMetadata(
         node.location = location;
         node.nid = location / format.inode_slot_size;
         node.start_block = no_block;
+
+        if (node.chunk_indexes) |indexes| {
+            node.layout = @intFromEnum(format.Layout.chunk_based);
+            const index_size: usize = if (node.chunk_format & 0x20 != 0) 8 else 4;
+            const index_start = try alignForward(xattr_end, index_size);
+            cursor = try checkedAdd(
+                index_start,
+                try checkedMul(indexes.len, index_size),
+            );
+            continue;
+        }
 
         if (compression != .stored and node.kind == .file and node.data.len != 0) {
             node.layout = @intFromEnum(format.Layout.compressed_full);
@@ -296,6 +382,7 @@ fn assignDataBlocks(filesystem: *tree.Tree, first_data_block: usize) Error!usize
             .compressed_full => try blockCount(physical_content_len),
             .flat_inline => content_len / block_size,
             .flat_plain => try blockCount(content_len),
+            .chunk_based => 0,
             else => return error.InvalidErofs,
         };
         node.compressed_block_count = if (node.compressed_indexes != null) blocks else 0;
@@ -330,6 +417,8 @@ fn writeNodes(
         if (layout == .compressed_full) {
             const encoder = block_encoder orelse return error.InvalidErofs;
             try writeCompressedData(image, node, encoder);
+        } else if (layout == .chunk_based) {
+            // Chunk payloads are emitted by writer_chunks.Plan.
         } else {
             try writeFlatData(image, node, layout);
         }
@@ -423,6 +512,8 @@ fn writeInode(
     writeU32(image, location + 12, node.modification_time);
     const data_value: u32 = if (layout == .compressed_full)
         @intCast(node.compressed_block_count)
+    else if (layout == .chunk_based)
+        0
     else
         node.start_block;
     writeU32(image, location + 16, data_value);
@@ -440,6 +531,28 @@ fn writeInode(
         node.xattrs,
         xattr_prefixes,
     );
+
+    if (layout == .chunk_based) {
+        const indexes = node.chunk_indexes orelse return error.InvalidErofs;
+        writeU16(image, location + 16, node.chunk_format);
+        writeU16(image, location + 18, 0);
+        const index_size: usize = if (node.chunk_format & 0x20 != 0) 8 else 4;
+        const index_start = try alignForward(xattr_end, index_size);
+        const index_end = try checkedAdd(index_start, try checkedMul(indexes.len, index_size));
+        if (index_end > image.len) return error.InvalidErofs;
+        for (indexes, 0..) |index, chunk_index| {
+            const offset = index_start + chunk_index * index_size;
+            if (index_size == 4) {
+                if (index.device_id != 0) return error.InvalidErofs;
+                writeU32(image, offset, index.start_block);
+            } else {
+                writeU16(image, offset, 0);
+                writeU16(image, offset + 2, index.device_id);
+                writeU32(image, offset + 4, index.start_block);
+            }
+        }
+        return;
+    }
 
     if (layout == .compressed_full) {
         const header_start = try alignForward(xattr_end, 8);
@@ -498,6 +611,7 @@ fn writeSuperblock(
     nodes: []const tree.Node,
     block_count: usize,
     options: Options,
+    chunk_plan: ?writer_chunks.Plan,
 ) Error!void {
     if (image.len < block_size or nodes.len == 0 or nodes.len > std.math.maxInt(u64) or
         block_count > std.math.maxInt(u32) or nodes[0].nid > std.math.maxInt(u16))
@@ -513,6 +627,18 @@ fn writeSuperblock(
         prefix_start,
         try xattr.prefixTableSize(options.xattr_prefixes),
     );
+    var has_chunks = false;
+    for (nodes) |node| if (node.chunk_indexes != null) {
+        has_chunks = true;
+    };
+    const has_external_chunks = if (chunk_plan) |plan|
+        plan.external and plan.active()
+    else
+        false;
+    const device_table_start = if (has_external_chunks)
+        try alignForward(prefix_end, 128)
+    else
+        0;
     var packed_nid: u64 = 0;
     var has_compressed_inline = false;
     for (nodes) |node| if (node.hidden) {
@@ -548,6 +674,14 @@ fn writeSuperblock(
         image,
         base + 80,
         writer_codec.featureIncompat(options.compression) |
+            (if (has_chunks)
+                format.feature_incompat_chunked_file
+            else
+                @as(u32, 0)) |
+            (if (has_external_chunks)
+                format.feature_incompat_device_table
+            else
+                @as(u32, 0)) |
             (if (has_fragments)
                 format.feature_incompat_fragments
             else
@@ -562,6 +696,12 @@ fn writeSuperblock(
                 format.feature_incompat_xattr_prefixes),
     );
     writeU16(image, base + 84, writer_codec.compressionField(options.compression));
+    if (has_external_chunks) {
+        if (device_table_start / 128 > std.math.maxInt(u16))
+            return error.InvalidErofs;
+        writeU16(image, base + 86, 1);
+        writeU16(image, base + 88, @intCast(device_table_start / 128));
+    }
     image[base + 91] = @intCast(prefix_count);
     if (prefix_count != 0)
         writeU32(image, base + 92, @intCast(prefix_start / 4));
@@ -575,6 +715,16 @@ fn writeSuperblock(
         image[prefix_start..prefix_end],
         options.xattr_prefixes,
     );
+    if (has_external_chunks) {
+        const plan = chunk_plan.?;
+        const table_end = try checkedAdd(device_table_start, 128);
+        if (table_end > image.len or plan.data.len % block_size != 0)
+            return error.InvalidErofs;
+        const device_blocks = plan.data.len / block_size;
+        if (device_blocks > std.math.maxInt(u32)) return error.InvalidErofs;
+        writeU32(image, device_table_start + 64, @intCast(device_blocks));
+        writeU32(image, device_table_start + 68, @intCast(block_count));
+    }
     writeU32(image, base + 108, options.build_time);
     writeU32(image, base + 4, format.computeSuperblockChecksum(image[base..block_size]));
 }

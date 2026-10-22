@@ -60,11 +60,14 @@ all files and attributes through the host API. Three more writers enable
 compressed inline tails for the same codecs and require the same byte-exact
 extraction. Local chunk block-map, forced local chunk-index, and external
 blob-device images additionally verify merged chunks, device tables, borrowed
-device extraction, and the missing-device error. Supply explicit tools with
+device extraction, and the missing-device error. Vort also writes deterministic
+local maps and owning external metadata/blob pairs; both must preserve xattrs,
+deduplicate repeated chunks, encode holes, and extract byte-exactly through
+`fsck.erofs`. Supply explicit tools with
 `-- --mkfs /path/to/mkfs.erofs --fsck /path/to/fsck.erofs`; the summary reports
 `xattr_reader`, `xattr_writer`, `long_prefix_reader`, `fragment_reader`,
 `fragment_writer`, `ztailpacking_reader`, `ztailpacking_writer`, `chunk_reader`,
-and `external_chunk_reader` separately.
+`external_chunk_reader`, `chunk_writer`, and `external_chunk_writer` separately.
 
 The QCOW2 differential always exercises the Vort v2/v3 writer and reader for
 uncompressed, raw-DEFLATE, and Zstandard clusters plus v2/v3 raw-backing
