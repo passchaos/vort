@@ -12,16 +12,22 @@ pub fn main(init: std.process.Init) !void {
     const inline_suffix = "-ztailpacking";
     const metabox_suffix = "-metabox";
     const directory_suffix = "-dirs";
+    const extended_suffix = "-extended";
     const metabox = std.mem.endsWith(u8, mode_name, metabox_suffix);
     const without_metabox = if (metabox)
         mode_name[0 .. mode_name.len - metabox_suffix.len]
     else
         mode_name;
-    const force_48bit = std.mem.endsWith(u8, without_metabox, address48_suffix);
-    const layout_mode = if (force_48bit)
-        without_metabox[0 .. without_metabox.len - address48_suffix.len]
+    const extended = std.mem.endsWith(u8, without_metabox, extended_suffix);
+    const without_extended = if (extended)
+        without_metabox[0 .. without_metabox.len - extended_suffix.len]
     else
         without_metabox;
+    const force_48bit = std.mem.endsWith(u8, without_extended, address48_suffix);
+    const layout_mode = if (force_48bit)
+        without_extended[0 .. without_extended.len - address48_suffix.len]
+    else
+        without_extended;
     const chunk_local = std.mem.eql(u8, layout_mode, "chunk-local");
     const chunk_external = std.mem.eql(u8, layout_mode, "chunk-external");
     const fragments = std.mem.endsWith(u8, layout_mode, fragment_suffix);
@@ -82,6 +88,7 @@ pub fn main(init: std.process.Init) !void {
         .metabox = metabox,
         .shared_xattrs = true,
         .compress_directories = compress_directories,
+        .inode_version = if (extended) .extended else .compact,
     };
     if (chunk_external) {
         const device_path = args.next() orelse return error.MissingOutputPath;

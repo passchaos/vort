@@ -191,6 +191,8 @@ def main() -> None:
     shared_xattr_writer_cases = 0
     directory_reader_cases = 0
     directory_writer_cases = 0
+    extended_inode_reader_cases = 0
+    extended_inode_writer_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -269,6 +271,10 @@ def main() -> None:
             "lz4-dirs",
             "deflate-dirs",
             "zstd-dirs",
+            "stored-extended",
+            "lz4-extended",
+            "deflate-extended",
+            "zstd-extended",
         ):
             image = temp / f"writer-{mode}.erofs"
             repeated = temp / f"writer-{mode}-repeat.erofs"
@@ -321,6 +327,8 @@ def main() -> None:
                 metabox_writer_cases += 1
             if mode.endswith("-dirs"):
                 directory_writer_cases += 1
+            if mode.endswith("-extended"):
+                extended_inode_writer_cases += 1
             shared_xattr_writer_cases += 1
             writer_cases += 1
             if fsck is not None:
@@ -366,12 +374,14 @@ def main() -> None:
                 ("plain", None, False, None, ()),
                 ("plain-48bit", None, False, None, ("48bit",)),
                 ("plain-long-prefix", None, False, "user.vort.", ()),
+                ("plain-extended", None, False, None, ("force-inode-extended",)),
                 ("lz4-compact", "lz4", False, None, ()),
                 ("lz4-full", "lz4", True, None, ()),
                 ("lz4-48bit", "lz4", False, None, ("48bit",)),
                 ("lz4-fragments", "lz4", False, None, ("fragments",)),
                 ("lz4-all-fragments", "lz4", False, None, ("all-fragments",)),
                 ("lz4-ztailpacking", "lz4", False, None, ("ztailpacking",)),
+                ("lz4-extended", "lz4", False, None, ("force-inode-extended",)),
             ]
             if b"deflate" in help_text:
                 cases.extend(
@@ -381,6 +391,7 @@ def main() -> None:
                         ("deflate-48bit", "deflate", False, None, ("48bit",)),
                         ("deflate-fragments", "deflate", False, None, ("fragments",)),
                         ("deflate-ztailpacking", "deflate", False, None, ("ztailpacking",)),
+                        ("deflate-extended", "deflate", False, None, ("force-inode-extended",)),
                     )
                 )
             if b"lzma" in help_text:
@@ -397,6 +408,7 @@ def main() -> None:
                         ("zstd-48bit", "zstd", False, None, ("48bit",)),
                         ("zstd-fragments", "zstd", False, None, ("fragments",)),
                         ("zstd-ztailpacking", "zstd", False, None, ("ztailpacking",)),
+                        ("zstd-extended", "zstd", False, None, ("force-inode-extended",)),
                     )
                 )
             for label, compressor, legacy, xattr_prefix, features in cases:
@@ -426,6 +438,8 @@ def main() -> None:
                     ztailpacking_reader_cases += 1
                 if "48bit" in features:
                     address48_reader_cases += 1
+                if "force-inode-extended" in features:
+                    extended_inode_reader_cases += 1
                 if not features and xattr_prefix is None:
                     primary = image
                 if compressor is None:
@@ -617,6 +631,8 @@ def main() -> None:
         f"shared_xattr_writer={shared_xattr_writer_cases} "
         f"directory_reader={directory_reader_cases} "
         f"directory_writer={directory_writer_cases} "
+        f"extended_inode_reader={extended_inode_reader_cases} "
+        f"extended_inode_writer={extended_inode_writer_cases} "
         f"malformed={malformed}"
     )
 

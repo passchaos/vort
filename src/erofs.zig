@@ -24,6 +24,7 @@ pub const Xattrs = xattr.Attributes;
 pub const Layout = format.Layout;
 pub const Superblock = format.Superblock;
 pub const WriterCompression = writer.Compression;
+pub const WriterInodeVersion = writer.InodeVersion;
 pub const EncodedExternalChunks = writer.EncodedExternalChunks;
 pub const WriterOptions = writer.Options;
 pub const WriterTailPacking = writer.TailPacking;
@@ -46,6 +47,7 @@ test {
     _ = @import("erofs/writer_metabox_tests.zig");
     _ = @import("erofs/writer_xattr_tests.zig");
     _ = @import("erofs/writer_directory_tests.zig");
+    _ = @import("erofs/writer_inode_tests.zig");
     _ = codec;
     _ = writer;
     _ = @import("erofs/writer_fragment_tests.zig");

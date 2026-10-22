@@ -7,6 +7,7 @@ const writer_chunks = @import("writer_chunks.zig");
 const writer_fragments = @import("writer_fragments.zig");
 const writer_metabox = @import("writer_metabox.zig");
 const writer_xattrs = @import("writer_xattrs.zig");
+const writer_inode = @import("writer_inode.zig");
 const xattr = @import("xattr.zig");
 
 pub const Error = core.Error || writer_codec.Error || writer_chunks.Error ||
@@ -19,6 +20,7 @@ pub const Xattr = tree.Xattr;
 
 pub const Compression = writer_codec.Compression;
 pub const TailPacking = enum { none, fragments, compressed_inline };
+pub const InodeVersion = writer_inode.Version;
 
 pub const Options = struct {
     compression: Compression = .stored,
@@ -27,6 +29,12 @@ pub const Options = struct {
     fixed_nsec: u32 = 0,
     build_time: u32 = 0,
     root_xattrs: []const Xattr = &.{},
+    root_mode: u16 = 0o755,
+    root_uid: u32 = 0,
+    root_gid: u32 = 0,
+    /// Seconds relative to epoch.
+    root_modification_time: u64 = 0,
+    root_modification_nsec: ?u32 = null,
     xattr_prefixes: []const []const u8 = &.{},
     tail_packing: TailPacking = .none,
     chunk_size: ?usize = null,
@@ -37,6 +45,7 @@ pub const Options = struct {
     shared_xattrs: bool = false,
     /// Store nontrivial directory streams as whole fragments in the packed inode.
     compress_directories: bool = false,
+    inode_version: InodeVersion = .compact,
 };
 
 pub const EncodedExternalChunks = struct {
@@ -111,6 +120,11 @@ fn encodeInternal(
 
     var filesystem = try tree.build(allocator, entries, options.root_xattrs);
     defer filesystem.deinit();
+    filesystem.nodes[0].mode = options.root_mode;
+    filesystem.nodes[0].uid = options.root_uid;
+    filesystem.nodes[0].gid = options.root_gid;
+    filesystem.nodes[0].modification_time = options.root_modification_time;
+    filesystem.nodes[0].modification_nsec = options.root_modification_nsec;
     if (options.metabox)
         try writer_metabox.prepare(allocator, &filesystem);
     try allocateDirectoryBuffers(&filesystem);
@@ -144,6 +158,9 @@ fn encodeInternal(
         chunk_plan != null and external_chunks and chunk_plan.?.active(),
         options.metabox,
         if (shared_xattr_plan) |*plan| plan else null,
+        options.inode_version,
+        options.epoch,
+        options.fixed_nsec,
     );
     try fillDirectories(allocator, &filesystem);
     try writer_fragments.syncDirectories(&filesystem);
@@ -163,6 +180,8 @@ fn encodeInternal(
         options.xattr_prefixes,
         if (block_encoder) |*encoder| encoder else null,
         if (shared_xattr_plan) |*plan| plan else null,
+        options.epoch,
+        options.fixed_nsec,
     );
     if (chunk_plan) |plan| try plan.writeLocal(image);
     try writeSuperblock(
@@ -222,7 +241,11 @@ fn planMetadata(
     external_chunks: bool,
     metabox: bool,
     shared_xattr_plan: ?*writer_xattrs.Plan,
+    inode_version: InodeVersion,
+    epoch: u64,
+    fixed_nsec: u32,
 ) Error!usize {
+    try writer_inode.planVersions(filesystem, inode_version, epoch, fixed_nsec);
     const configuration_start = configurationStart(metabox);
     const configuration_end = try checkedAdd(
         configuration_start,
@@ -257,6 +280,10 @@ fn planMetadata(
             filesystem.nodes,
             metabox_len,
         );
+        // The hidden metabox file gains its final length only after visible
+        // metadata has been planned. Re-evaluate automatic inode selection
+        // before placing that hidden inode in the primary metadata space.
+        try writer_inode.planVersions(filesystem, inode_version, epoch, fixed_nsec);
         for (filesystem.nodes, 0..) |*node, node_index| {
             if (node.in_metabox) continue;
             try planNodeMetadata(
@@ -309,9 +336,8 @@ fn planNodeMetadata(
     block_encoder: ?*writer_codec.Encoder,
     shared_xattr_plan: ?*const writer_xattrs.Plan,
 ) Error!void {
-    if (node.content().len > std.math.maxInt(u32)) return error.InvalidErofs;
     const location = try alignForward(cursor.*, format.inode_slot_size);
-    const inode_end = try checkedAdd(location, format.inode_slot_size);
+    const inode_end = try checkedAdd(location, node.inode_size);
     node.xattr_size = if (shared_xattr_plan) |plan|
         try plan.encodedIbodySize(node_index, node.xattrs, xattr_prefixes)
     else
@@ -529,6 +555,8 @@ fn writeNodes(
     xattr_prefixes: []const []const u8,
     block_encoder: ?*writer_codec.Encoder,
     shared_xattr_plan: ?*const writer_xattrs.Plan,
+    epoch: u64,
+    fixed_nsec: u32,
 ) Error!void {
     const metabox_data = writer_metabox.data(filesystem.nodes);
     for (filesystem.nodes, 0..) |*node, node_index| {
@@ -548,12 +576,13 @@ fn writeNodes(
         }
         try writeInode(
             metadata,
-            filesystem.nodes,
             node,
             node_index,
             compression,
             xattr_prefixes,
             shared_xattr_plan,
+            epoch,
+            fixed_nsec,
         );
     }
 }
@@ -578,7 +607,7 @@ fn writeFlatData(
     }
     if (layout == .flat_inline and data_len < content.len) {
         const inline_start = try checkedAdd(
-            try checkedAdd(node.location, format.inode_slot_size),
+            try checkedAdd(node.location, node.inode_size),
             node.xattr_size,
         );
         const inline_end = try checkedAdd(inline_start, content.len - data_len);
@@ -623,40 +652,19 @@ fn writeCompressedData(
 
 fn writeInode(
     metadata: []u8,
-    nodes: []const tree.Node,
     node: *const tree.Node,
     node_index: usize,
     compression: Compression,
     xattr_prefixes: []const []const u8,
     shared_xattr_plan: ?*const writer_xattrs.Plan,
+    epoch: u64,
+    fixed_nsec: u32,
 ) Error!void {
+    try writer_inode.writeHeader(metadata, node, node_index, epoch, fixed_nsec);
     const location = node.location;
-    if (try checkedAdd(location, format.inode_slot_size) > metadata.len)
-        return error.InvalidErofs;
     const layout = std.enums.fromInt(format.Layout, node.layout) orelse
         return error.InvalidErofs;
-    const inode_format: u16 = (@as(u16, @intFromEnum(layout)) << 1) |
-        (if (node.kind == .directory) @as(u16, 1 << 4) else 0);
-    writeU16(metadata, location, inode_format);
-    writeU16(metadata, location + 2, try xattr.ibodyIcount(node.xattr_size));
-    writeU16(metadata, location + 4, mode(node.*));
-    writeU16(metadata, location + 6, try linkCount(nodes, node_index));
-    writeU32(metadata, location + 8, @intCast(node.content().len));
-    writeU32(metadata, location + 12, node.modification_time);
-    const data_value: u32 = if (layout == .compressed_full)
-        @intCast(node.compressed_block_count)
-    else if (layout == .chunk_based)
-        0
-    else
-        node.start_block;
-    writeU32(metadata, location + 16, data_value);
-    if (node_index + 1 > std.math.maxInt(u32)) return error.InvalidErofs;
-    writeU32(metadata, location + 20, @intCast(node_index + 1));
-    writeU16(metadata, location + 24, 0);
-    writeU16(metadata, location + 26, 0);
-    writeU32(metadata, location + 28, 0);
-
-    const xattr_start = try checkedAdd(location, format.inode_slot_size);
+    const xattr_start = try checkedAdd(location, node.inode_size);
     const xattr_end = try checkedAdd(xattr_start, node.xattr_size);
     if (xattr_end > metadata.len) return error.InvalidErofs;
     if (shared_xattr_plan) |plan|
@@ -911,26 +919,6 @@ fn writeSuperblock(
     }
     writeU32(image, base + 108, options.build_time);
     writeU32(image, base + 4, format.computeSuperblockChecksum(image[base..block_size]));
-}
-
-fn linkCount(nodes: []const tree.Node, node_index: usize) Error!u16 {
-    if (nodes[node_index].kind != .directory) return 1;
-    var count: usize = 2;
-    for (nodes, 0..) |node, index| {
-        if (index != node_index and node.parent == node_index and node.kind == .directory)
-            count = try checkedAdd(count, 1);
-    }
-    if (count > std.math.maxInt(u16)) return error.InvalidErofs;
-    return @intCast(count);
-}
-
-fn mode(node: tree.Node) u16 {
-    const file_mode: u16 = switch (node.kind) {
-        .file => 0x8000,
-        .directory => 0x4000,
-        .symlink => 0xa000,
-    };
-    return file_mode | (node.mode & 0x0fff);
 }
 
 fn fileType(kind: EntryKind) format.FileType {

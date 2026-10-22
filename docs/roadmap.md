@@ -22362,3 +22362,24 @@ reuse, so production keeps the simpler independently owned plans.
   (`directory_reader=3`, `directory_writer=3`, `writer=25`,
   `shared_xattr_writer=25`, `xattr_writer=21`). The corrected focused EROFS
   gate now runs 65/65 tests.
+
+- Added EROFS extended-inode writing with explicit compact, extended, and
+  automatic policies. Entries now carry u32 UID/GID, u64 seconds relative to
+  the superblock epoch, and optional per-inode nanoseconds; matching root
+  options cover mode, IDs, relative time, and nanoseconds. Compact mode keeps
+  the existing 32-byte byte-exact default and rejects any lossy size, ID, time,
+  nanosecond, or nlink; extended mode writes the standard 64-byte layout with
+  u64 size/absolute mtime, u32 UID/GID/nlink/nsec, and zero reserved bytes;
+  automatic upgrades only affected nodes. NIDs remain 32-byte-slot based, so
+  mixed compact/extended trees, xattrs, compressed data, packed directories,
+  and metabox metadata share the ordinary planners. Tests cover all four writer
+  codecs, high IDs, independent nanoseconds, time deltas above u32, automatic
+  mixed trees, compact rejection, default byte identity, extended metabox
+  directory metadata, local/external chunk indexes, reserved bytes, and
+  exhaustive OOM. Four forced-extended
+  erofs-utils references and four Vort writer modes pass fsck and byte-exact
+  extraction (`extended_inode_reader=4`, `extended_inode_writer=4`,
+  `writer=29`, `shared_xattr_writer=29`, `xattr_writer=25`). The focused EROFS
+  gate now runs 73/73 tests, including u64 timestamp overflow, invalid root
+  nanoseconds, and extended-inode fragment/inline tails. Inode policy and wire
+  fields live in a dedicated module.

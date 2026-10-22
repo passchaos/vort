@@ -52,7 +52,7 @@ metadata. Packed-inode extraction scans indexes without retaining a whole head
 table and materializes only intersecting extents; `ErofsReadLimits` separately
 bounds caller output and hidden packed-extent scratch (8 MiB by default).
 
-The writer emits 4 KiB filesystems with compact inodes, CRC-32C-protected
+The writer emits 4 KiB filesystems with compact or extended inodes, CRC-32C-protected
 superblocks, dot-omitted sorted directories, nested and empty directories,
 symbolic links, flat plain/inline stored data, and legacy full compression
 indexes. LZ4, raw Deflate, and Zstandard modes encode every non-empty
@@ -69,9 +69,9 @@ keeps only candidates whose shared entry plus 4-byte references reduce total
 wire size, and emits the selected entries in a deterministic primary-image
 shared region after primary inode metadata. Each inode retains at most the
 standard 255 shared IDs and falls back to inline entries for the remainder. IDs
-are relative to
-`xattr_block`, including when a large long-prefix table moves the region beyond
-block zero; metabox inode ibodies also reference this primary region. Leaving
+are relative to `xattr_block`, including when a large long-prefix table moves
+the region beyond block zero; metabox inode ibodies also reference this primary
+region. Leaving
 the option disabled preserves the prior wire.
 `tail_packing = .fragments` deterministically packs the last logical block of
 each non-empty regular file: small files use the whole-fragment header, larger
@@ -123,6 +123,19 @@ Writer entries use safe relative paths. Missing parent directories are created
 automatically, while absolute paths, empty components, `.`/`..`, NUL bytes,
 duplicate entries, and non-directory parents are rejected. Entry data and
 symlink targets remain caller-owned for the duration of `encodeErofsAlloc`.
+Entries additionally accept 32-bit UID/GID, a modification-time delta relative
+to `WriterOptions.epoch`, and an optional per-inode nanosecond value.
+`root_mode`, `root_uid`, `root_gid`, `root_modification_time`, and
+`root_modification_nsec` provide the corresponding root metadata without a
+synthetic entry.
+`inode_version = .compact` preserves the original 32-byte default and rejects
+fields it cannot represent without truncation. `.extended` emits standard
+64-byte inodes for every visible and hidden node, with u64 size/absolute mtime,
+u32 UID/GID/nlink/nanoseconds, and sixteen zeroed reserved bytes. `.automatic`
+keeps compact inodes when size, IDs, time delta, common nanoseconds, and link
+count fit, upgrading only individual lossy cases. Extended inodes retain
+32-byte NID slot addressing and work with stored/compressed/chunk, packed
+directory, shared-xattr, and metabox layouts.
 
 ```zig
 const config_xattrs = [_]vort.ErofsXattr{
@@ -142,6 +155,7 @@ const image = try vort.encodeErofsAlloc(allocator, &.{
     .root_xattrs = &root_xattrs,
     .xattr_prefixes = &.{"user."},
     .shared_xattrs = true,
+    .inode_version = .automatic,
     .tail_packing = .fragments,
 });
 defer allocator.free(image);
@@ -229,11 +243,13 @@ physical/compressed extents. erofs-utils 1.9.4 itself writes zero-filled output
 for flat-inline regular files whose inode lives in a metabox (its `dump --cat`
 path reads the same bytes correctly), so the stored-MZi oracle check excludes
 only those affected inline tails.
-All 25 Vort writer modes enable cost-aware shared-xattr planning for one
+All 29 Vort writer modes enable cost-aware shared-xattr planning for one
 repeated long-prefix attribute across root, file, and directory ibodies. Vort
-reconstructs each value, and the 21 non-metabox modes additionally require
+reconstructs each value, and the 25 non-metabox modes additionally require
 `fsck.erofs --xattrs` restoration; the summary reports
-`shared_xattr_writer=25`. Three reference and three Vort-authored LZ4/Deflate/
+`shared_xattr_writer=29`. Three reference and three Vort-authored LZ4/Deflate/
 Zstandard directory-compression images require byte-exact listing/extraction
 through whole-directory fragments (`directory_reader=3`,
-`directory_writer=3`).
+`directory_writer=3`). Four forced-extended reference images and four
+Vort-authored stored/LZ4/Deflate/Zstandard images exercise 64-byte inode
+parsing/writing (`extended_inode_reader=4`, `extended_inode_writer=4`).

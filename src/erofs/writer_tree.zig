@@ -19,7 +19,11 @@ pub const Entry = struct {
     data: []const u8 = &.{},
     target: []const u8 = &.{},
     mode: u16 = 0,
-    modification_time: u32 = 0,
+    uid: u32 = 0,
+    gid: u32 = 0,
+    /// Seconds relative to WriterOptions.epoch.
+    modification_time: u64 = 0,
+    modification_nsec: ?u32 = null,
     xattrs: []const Xattr = &.{},
 };
 
@@ -29,7 +33,10 @@ pub const Node = struct {
     data: []const u8 = &.{},
     target: []const u8 = &.{},
     mode: u16,
-    modification_time: u32 = 0,
+    uid: u32 = 0,
+    gid: u32 = 0,
+    modification_time: u64 = 0,
+    modification_nsec: ?u32 = null,
     xattrs: []const Xattr = &.{},
     xattr_size: usize = 0,
     explicit: bool = false,
@@ -39,6 +46,8 @@ pub const Node = struct {
     parent: usize = 0,
     nid: u64 = 0,
     location: usize = 0,
+    inode_size: usize = 32,
+    link_count: u32 = 1,
     layout: u3 = 0,
     start_block: u32 = std.math.maxInt(u32),
     directory_data: ?[]u8 = null,
@@ -161,7 +170,10 @@ fn applyEntry(node: *Node, entry: Entry) void {
         .directory => 0o755,
         .symlink => 0o777,
     };
+    node.uid = entry.uid;
+    node.gid = entry.gid;
     node.modification_time = entry.modification_time;
+    node.modification_nsec = entry.modification_nsec;
     node.xattrs = entry.xattrs;
     node.explicit = true;
 }
