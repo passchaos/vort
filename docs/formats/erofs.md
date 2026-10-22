@@ -556,3 +556,5 @@ The Source archive increment's Debug repository suite passes 3438/3438 tests.
 Resumable extraction passes the 140-case focused gate and wasm compilation;
 the external matrix also passes 18 CLI extractions with 17-byte buffers
 (`resumable_reader=18`), alongside the 324 ordinary modes and six file cases.
+Final Debug repository validation passes 3447/3447 tests; broad check, wasm,
+CLI help and post-rebase focused verification also pass.

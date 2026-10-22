@@ -22649,3 +22649,6 @@ reuse, so production keeps the simpler independently owned plans.
   1.9.4-g5fcb2f76 interoperability passes all 324 modes, six large/failure file
   cases and 18 additional CLI extractions using a 17-byte output buffer
   (`resumable_reader=18`).
+  The final Debug repository suite passes 3447/3447 tests (3440 root tests and
+  seven separate Brotli object/classifier cases). Broad check, wasm, CLI help
+  and all 140 post-rebase focused cases pass.
