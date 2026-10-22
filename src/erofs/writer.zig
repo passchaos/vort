@@ -1047,7 +1047,7 @@ test "EROFS writer codecs use compressed and plain full indexes" {
         .{ .path = "random.bin", .data = &random },
         .{ .path = "tiny.txt", .data = "tiny" },
     };
-    inline for (.{ Compression.lz4, .deflate, .zstandard }) |compression| {
+    inline for (.{ Compression.lz4, .lzma, .deflate, .zstandard }) |compression| {
         const encoded = try encodeAlloc(allocator, &entries, .{
             .compression = compression,
             .volume_name = "codec-test",
@@ -1191,7 +1191,7 @@ test "EROFS writer round trips root file directory and symlink xattrs" {
         .{ .path = "link", .kind = .symlink, .target = "small", .xattrs = &.{.{ .name = "user.link", .value = "l" }} },
     };
 
-    inline for (.{ Compression.stored, .lz4, .deflate, .zstandard }) |compression| {
+    inline for (.{ Compression.stored, .lz4, .lzma, .deflate, .zstandard }) |compression| {
         const encoded = try encodeAlloc(allocator, &entries, .{
             .compression = compression,
             .root_xattrs = &root_xattrs,
@@ -1327,7 +1327,7 @@ test "EROFS writer emits plain long xattr prefix tables for every codec" {
         .xattrs = &attributes,
     }};
 
-    inline for (.{ Compression.stored, .lz4, .deflate, .zstandard }) |compression| {
+    inline for (.{ Compression.stored, .lz4, .lzma, .deflate, .zstandard }) |compression| {
         const encoded = try encodeAlloc(allocator, &entries, .{
             .compression = compression,
             .xattr_prefixes = &prefixes,

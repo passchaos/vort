@@ -1,0 +1,64 @@
+const std = @import("std");
+const core = @import("../core.zig");
+const encoder = @import("encoder.zig");
+
+pub const Error = core.Error || encoder.Error || std.mem.Allocator.Error;
+
+pub const Options = struct {
+    properties: encoder.Properties = .{},
+    dictionary_size: u32 = 32 * 1024,
+    mode: encoder.Mode = .greedy,
+};
+
+/// Encode a complete MicroLZMA stream. Its decoded size and dictionary size
+/// belong to the enclosing format and must be supplied to the decoder.
+pub fn encodeAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: Options,
+) Error![]u8 {
+    const property = try encoder.propertyByte(options.properties);
+    if (options.dictionary_size < 4096 or
+        options.dictionary_size > encoder.max_dictionary_size)
+        return error.InvalidLzmaOptions;
+    var encoded: std.ArrayList(u8) = .empty;
+    errdefer encoded.deinit(allocator);
+    _ = try encoder.encodeChunkAppend(allocator, &encoded, input, .{
+        .properties = options.properties,
+        .dictionary_size = options.dictionary_size,
+        .mode = options.mode,
+        .end_marker = false,
+    });
+    // MicroLZMA replaces the ordinary raw LZMA range prefix (zero) with
+    // the complemented properties byte. It has no header or end marker.
+    std.debug.assert(encoded.items.len >= 5 and encoded.items[0] == 0);
+    encoded.items[0] = ~property;
+    return encoded.toOwnedSlice(allocator);
+}
+
+/// Append one complete stream, preserving the existing bytes on error.
+pub fn encodeAppend(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    input: []const u8,
+    options: Options,
+) Error!usize {
+    const encoded = try encodeAlloc(allocator, input, options);
+    defer allocator.free(encoded);
+    try output.appendSlice(allocator, encoded);
+    return encoded.len;
+}
+
+/// Write one complete stream, preserving the destination on error.
+pub fn encodeInto(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    output: []u8,
+    options: Options,
+) Error!usize {
+    const encoded = try encodeAlloc(allocator, input, options);
+    defer allocator.free(encoded);
+    if (encoded.len > output.len) return error.OutputTooSmall;
+    @memcpy(output[0..encoded.len], encoded);
+    return encoded.len;
+}

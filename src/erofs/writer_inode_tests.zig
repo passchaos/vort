@@ -46,6 +46,7 @@ test "EROFS writer emits extended inodes for every codec" {
     inline for (.{
         writer.Compression.stored,
         .lz4,
+        .lzma,
         .deflate,
         .zstandard,
     }) |compression| {

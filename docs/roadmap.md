@@ -22383,3 +22383,32 @@ reuse, so production keeps the simpler independently owned plans.
   gate now runs 73/73 tests, including u64 timestamp overflow, invalid root
   nanoseconds, and extended-inode fragment/inline tails. Inode policy and wire
   fields live in a dedicated module.
+
+
+- Added dependency-free complete-stream MicroLZMA encoding with allocator,
+  append, and caller-buffer APIs. A dedicated writer emits complemented
+  lc/lp/pb properties in place of the zero range prefix, omits the end marker,
+  accepts 4 KiB...64 MiB dictionaries and literal-only/greedy/lazy modes, and
+  preserves destination bytes on error. The CLI encode/decode adapter is a
+  separate module. XZ Utils 5.8.4 (3b1efb0) consumes all bytes and reproduces
+  exact output for seven payload classes in all three modes
+  (`external=7`, `writer=22`, `external_writer=21`, `malformed=4`). This matrix
+  exposed the core's rejection of one-shot lazy dictionaries above u16;
+  wide one-shot planning now uses the existing lazy lookahead/price decisions,
+  while the default greedy plan retains its original path. Regression tests
+  cover wide matches beyond 80 KiB, insufficient decoder dictionaries, invalid
+  options, transactional destination buffers, and exhaustive narrow/wide OOM.
+- EROFS writing now supports all four standard compression algorithms,
+  including MicroLZMA algorithm ID 1 and its standard 16-byte dictionary/format
+  configuration record. The new codec shares existing compressed/plain
+  cluster selection, fragment and inline tails, shared xattrs, compressed
+  directories, extended inodes, 48-bit features, and metabox planning.
+  erofs-utils 1.9.4-g5fcb2f76 validates and extracts all seven new layouts
+  byte-exactly (`writer=36`, `external_writer=36`, `lzma_writer=7`,
+  `shared_xattr_writer=36`, `xattr_writer=31`, `directory_writer=4`,
+  `extended_inode_writer=5`). This is a functionality milestone; no performance
+  leadership is claimed. Destination-size-limited partial-input MicroLZMA
+  encoding, larger EROFS physical clusters, and streaming writer surfaces
+  remain next functional priorities.
+  Focused ReleaseFast validation passes 61/61 MicroLZMA and 73/73 EROFS
+  tests. CLI help exposes the MicroLZMA writer and the EROFS `lzma` mode.

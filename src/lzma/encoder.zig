@@ -586,8 +586,14 @@ noinline fn encodeLazyPlan(
             plan.stats,
         );
     }
-    if (options.dictionary_size > std.math.maxInt(u16))
-        return error.InvalidLzmaOptions;
+    if (options.dictionary_size > std.math.maxInt(u16)) {
+        var plan = try wide_match.planAlloc(allocator, input, dictionary, .{
+            .window_len = options.dictionary_size,
+            .lazy = true,
+        });
+        defer plan.deinit(allocator);
+        return encodeGreedyPlan(model, range, input, dictionary, plan.tokens, stream_start, stats, plan.stats);
+    }
     var plan = try lz77.lazyGreedyPlanAllocWithDictionary(allocator, input, dictionary, .{
         .window_len = options.dictionary_size,
         .max_chain = 64,

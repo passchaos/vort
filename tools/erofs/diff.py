@@ -193,6 +193,7 @@ def main() -> None:
     directory_writer_cases = 0
     extended_inode_reader_cases = 0
     extended_inode_writer_cases = 0
+    lzma_writer_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -275,6 +276,13 @@ def main() -> None:
             "lz4-extended",
             "deflate-extended",
             "zstd-extended",
+            "lzma",
+            "lzma-fragments",
+            "lzma-ztailpacking",
+            "lzma-48bit",
+            "lzma-metabox",
+            "lzma-dirs",
+            "lzma-extended",
         ):
             image = temp / f"writer-{mode}.erofs"
             repeated = temp / f"writer-{mode}-repeat.erofs"
@@ -330,6 +338,8 @@ def main() -> None:
             if mode.endswith("-extended"):
                 extended_inode_writer_cases += 1
             shared_xattr_writer_cases += 1
+            if mode.startswith("lzma"):
+                lzma_writer_cases += 1
             writer_cases += 1
             if fsck is not None:
                 extracted = temp / f"writer-{mode}-fsck"
@@ -633,6 +643,7 @@ def main() -> None:
         f"directory_writer={directory_writer_cases} "
         f"extended_inode_reader={extended_inode_reader_cases} "
         f"extended_inode_writer={extended_inode_writer_cases} "
+        f"lzma_writer={lzma_writer_cases} "
         f"malformed={malformed}"
     )
 

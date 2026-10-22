@@ -1522,7 +1522,7 @@ pub fn build(b: *std.Build) void {
     const microlzma_diff = b.addSystemCommand(&.{ "python3", "tools/microlzma/diff.py", "--cli" });
     microlzma_diff.addArtifactArg(cli_exe);
     if (b.args) |args| microlzma_diff.addArgs(args);
-    const microlzma_diff_step = b.step("run-microlzma-diff", "Validate MicroLZMA decoding against optional XZ Utils");
+    const microlzma_diff_step = b.step("run-microlzma-diff", "Validate MicroLZMA encoding and decoding against optional XZ Utils");
     microlzma_diff_step.dependOn(&microlzma_diff.step);
 
     const wof_diff = b.addSystemCommand(&.{ "python3", "tools/wof/diff.py", "--cli" });

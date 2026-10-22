@@ -26,7 +26,7 @@ test "EROFS writer stores directories as whole fragments for every codec" {
         try entries.append(allocator, .{ .path = path });
     }
 
-    inline for (.{ writer.Compression.lz4, .deflate, .zstandard }) |compression| {
+    inline for (.{ writer.Compression.lz4, .lzma, .deflate, .zstandard }) |compression| {
         const encoded = try writer.encodeAlloc(allocator, entries.items, .{
             .compression = compression,
             .compress_directories = true,

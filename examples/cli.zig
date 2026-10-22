@@ -16,6 +16,7 @@ const lz4_legacy_cli = @import("cli/lz4_legacy.zig");
 const lznt1_cli = @import("cli/lznt1.zig");
 const xpress_cli = @import("cli/xpress.zig");
 const lzms_cli = @import("cli/lzms.zig");
+const microlzma_cli = @import("cli/microlzma.zig");
 const wof_cli = @import("cli/wof.zig");
 const lzfse_cli = @import("cli/lzfse.zig");
 const decmpfs_cli = @import("cli/decmpfs.zig");
@@ -696,32 +697,10 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(decoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
         try stdout.print("lzma_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
+    } else if (std.mem.eql(u8, command, "encode-microlzma-file")) {
+        try microlzma_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-microlzma-file")) {
-        const input_path = args.next() orelse return error.MissingCorpusPath;
-        const output_path = args.next() orelse return error.MissingCorpusPath;
-        const expected_size_text = args.next() orelse return error.MissingCorpusPath;
-        const expected_size = try std.fmt.parseInt(usize, expected_size_text, 10);
-        const dictionary_size = if (args.next()) |text|
-            try std.fmt.parseInt(u32, text, 10)
-        else
-            8 * 1024 * 1024;
-        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(8 * 1024 * 1024));
-        defer init.gpa.free(compressed);
-        const decoded = try vort.decodeMicroLzmaAllocLimited(
-            init.gpa,
-            compressed,
-            expected_size,
-            dictionary_size,
-            12 * 1024 * 1024,
-        );
-        defer init.gpa.free(decoded);
-        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
-        try stdout.print("microlzma_compressed_bytes={d} decoded_bytes={d} dictionary={d} path={s}\n", .{
-            compressed.len,
-            decoded.len,
-            dictionary_size,
-            output_path,
-        });
+        try microlzma_cli.decode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "size-lzma-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -2847,7 +2826,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  create-squashfs-file <out> <entry> <in> [stored|gzip|lzma|lzo|xz|lz4|zstd] [block_size]
         \\  extract-squashfs-file <image> <entry> <out> [max_output]
         \\  list-erofs-file <path>
-        \\  create-erofs-file <out> <entry> <in> [stored|lz4|deflate|zstd]
+        \\  create-erofs-file <out> <entry> <in> [stored|lz4|lzma|deflate|zstd]
         \\  extract-erofs-file <image> <entry> <out> [max_output] [device...]
         \\  list-erofs-xattrs <image> <entry>
         \\  list-wim-file <path>
@@ -2987,6 +2966,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Encode deterministic LZMA-Alone data
         \\  decode-lzma-file <in> <out> [max_output] [max_dictionary]
         \\                              Decode an LZMA-Alone stream with explicit limits
+        \\  encode-microlzma-file <in> <out> [dictionary] [lc] [lp] [pb] [greedy|lazy|literal-only]
+        \\                              Encode a complete raw MicroLZMA stream
         \\  decode-microlzma-file <in> <out> <decoded_size> [dictionary]
         \\                              Decode an exact-size raw MicroLZMA stream
         \\  size-lzma-file <path> [max_output]

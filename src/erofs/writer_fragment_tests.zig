@@ -24,7 +24,7 @@ test "EROFS writer emits deterministic whole and partial packed fragments" {
         },
     };
 
-    inline for (.{ Compression.lz4, .deflate, .zstandard }) |compression| {
+    inline for (.{ Compression.lz4, .lzma, .deflate, .zstandard }) |compression| {
         const encoded = try encodeAlloc(allocator, &entries, .{
             .compression = compression,
             .tail_packing = .fragments,

@@ -262,17 +262,17 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   4/8/16/32-byte compressed extent records, and owning bounded metabox metadata
   caches with high-bit NIDs, LZ4/MicroLZMA/raw-Deflate/Zstandard extraction
   with explicit bounds, and
-  deterministic compact-inode stored/LZ4/raw-Deflate/Zstandard writing for
+  deterministic stored/LZ4/MicroLZMA/raw-Deflate/Zstandard writing for
   regular files, nested and empty directories, symlinks, inline tails,
   deterministic whole/last-block packed fragments, hidden packed inodes,
   raw-or-compressed inline pclusters with physical-block fallback, standard
-  whole-fragment LZ4/raw-Deflate/Zstandard directory compression,
+  whole-fragment LZ4/MicroLZMA/raw-Deflate/Zstandard directory compression,
   deduplicated local chunk maps and owning external chunk/device-table output,
   inline root/entry xattrs, cost-aware shared-xattr regions, and caller-selected
   plain prefix tables, multi-block directories, compression-configuration
   records, compact/extended/automatic inode writing with 32-bit IDs and
   nanosecond timestamps, and per-cluster
-  compressed-or-plain full-index selection, plus standard MZi stored/LZ4/raw-
+  compressed-or-plain full-index selection, plus standard MZi stored/LZ4/MicroLZMA/raw-
   Deflate/Zstandard metabox writing with a hidden low-NID metadata inode and
   high-bit visible NIDs, all with bidirectional erofs-utils interoperability;
 - dependency-free WIM/ESD/SWM parsing with strict 208-byte headers, compression
@@ -374,8 +374,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   probability/dictionary state for embedding formats such as 7z;
 - dependency-free LZMA-Alone encoding and decoding with known-size or
   end-marker streams, caller-selected output/dictionary limits, caller-owned
-  output, exact-size MicroLZMA decoding with inverted properties and strict
-  compressed-size/range termination, and ZIP method-14 writing/extraction
+  output, MicroLZMA complete-stream encoding and exact-size decoding with inverted
+  properties, strict compressed-size/range termination, and dictionaries
+  through 64 MiB, and ZIP method-14 writing/extraction
   through the same LZMA core, plus symbol-progressive LZMA-Alone decoding with
   bounded compressed staging, rolling dictionary history, single-symbol output
   staging, arbitrary input/output splits, zero-output backpressure, exact-size

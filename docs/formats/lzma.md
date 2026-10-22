@@ -82,7 +82,22 @@ so callers must provide the exact decoded size and dictionary limit out of
 band. Vort verifies the final range state and requires every compressed byte to
 be consumed; it does not treat LZMA-Alone bytes as MicroLZMA.
 
+`encodeMicroLzmaAlloc`, `encodeMicroLzmaAppend`, and `encodeMicroLzmaInto`
+encode a complete stream using `MicroLzmaEncodeOptions`. The default is a
+32 KiB dictionary with lc/lp/pb = 3/0/2 and greedy matching. Dictionaries from
+4 KiB through 64 MiB and literal-only, greedy, or lazy modes are supported;
+lc/lp/pb must satisfy lc + lp <= 4 and pb <= 4. The append and caller-buffer
+APIs preserve destination bytes on error. Encoding currently builds a complete
+temporary stream and does not yet implement XZ Utils' destination-size-limited
+partial-input MicroLZMA encoder contract.
+
 ```zig
+const encoded_micro = try vort.encodeMicroLzmaAlloc(allocator, input, .{
+    .dictionary_size = 128 * 1024,
+    .mode = .lazy,
+});
+defer allocator.free(encoded_micro);
+
 const decoded = try vort.decodeMicroLzmaAllocLimited(
     allocator,
     compressed,
@@ -105,12 +120,20 @@ CLI validation surfaces:
 zig build run -- encode-lzma-file input.bin output.lzma end-marker
 zig build run -- decode-lzma-file input.lzma output.bin 268435456 67108864
 zig build run -- size-lzma-file input.lzma 268435456
+zig build run -- encode-microlzma-file input.bin output.microlzma 32768
 zig build run -- decode-microlzma-file input.microlzma output.bin 1048576 32768
 zig build test-microlzma
 zig build run-microlzma-diff
 zig build run-lzma-diff
 zig build run-zip-diff
 ```
+
+The MicroLZMA differential driver compares Vort and XZ Utils in both
+directions across empty/tiny/repetitive/mixed/source data, independent
+properties, and a repeated suffix beyond 80 KiB. Every encoder mode is decoded
+with XZ Utils, with exact output and compressed-input accounting. Focused
+tests also cover transactional output, invalid options, dictionary bounds,
+and exhaustive allocation failures for narrow greedy and wide lazy paths.
 
 LZMA-Alone does not carry an integrity checksum. Known-size streams are checked
 against their declared output size, while unknown-size streams require the

@@ -58,6 +58,8 @@ def main() -> None:
     )
     pinned = 0
     external = 0
+    writer_cases = 0
+    external_writer_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-microlzma-") as temp_text:
         temp = Path(temp_text)
@@ -75,6 +77,19 @@ def main() -> None:
         if output.read_bytes() != plain_fixture:
             raise AssertionError("pinned MicroLZMA fixture mismatch")
         pinned += 1
+
+        source_fixture = temp / "fixture.bin"
+        native_fixture = temp / "fixture-native.microlzma"
+        repeated_fixture = temp / "fixture-native-repeat.microlzma"
+        source_fixture.write_bytes(plain_fixture)
+        run(args.cli, "encode-microlzma-file", source_fixture, native_fixture)
+        run(args.cli, "encode-microlzma-file", source_fixture, repeated_fixture)
+        if native_fixture.read_bytes() != repeated_fixture.read_bytes():
+            raise AssertionError("non-deterministic MicroLZMA output")
+        run(args.cli, "decode-microlzma-file", native_fixture, output, len(plain_fixture), 32768)
+        if output.read_bytes() != plain_fixture:
+            raise AssertionError("Vort MicroLZMA writer fixture mismatch")
+        writer_cases += 1
 
         probe = args.xz_probe
         if probe is None and args.xz_source is not None:
@@ -97,6 +112,7 @@ def main() -> None:
                 raise AssertionError("XZ Utils pinned fixture mismatch")
 
             rng = random.Random(0x4D49_4352_4F)
+            wide_prefix = rng.randbytes(80 * 1024)
             cases = (
                 ("empty", b"", 4096, 3, 0, 2),
                 ("tiny", b"MicroLZMA tiny payload\n", 4096, 3, 0, 2),
@@ -104,6 +120,7 @@ def main() -> None:
                 ("delta", bytes((row + col) & 0xFF for row in range(256) for col in range(64)), 65536, 0, 4, 0),
                 ("mixed", b"prefix\n" * 1000 + rng.randbytes(4096) + b"tail\n" * 1000, 131072, 4, 0, 4),
                 ("source", Path("src/lzma/decoder.zig").read_bytes(), 1024 * 1024, 3, 0, 2),
+                ("wide-repeat", wide_prefix + wide_prefix[:8192], 128 * 1024, 3, 0, 2),
             )
             for name, plain, dictionary, lc, lp, pb in cases:
                 source = temp / f"{name}.bin"
@@ -126,6 +143,18 @@ def main() -> None:
                 if decoded.read_bytes() != plain:
                     raise AssertionError(f"Vort MicroLZMA mismatch for {name}")
                 external += 1
+                for mode in ("greedy", "lazy", "literal-only"):
+                    native = temp / f"{name}-{mode}-native.microlzma"
+                    run(args.cli, "encode-microlzma-file", source, native,
+                        dictionary, lc, lp, pb, mode)
+                    run(args.cli, "decode-microlzma-file", native, decoded, len(plain), dictionary)
+                    if decoded.read_bytes() != plain:
+                        raise AssertionError(f"Vort MicroLZMA round trip mismatch for {name}/{mode}")
+                    writer_cases += 1
+                    run(probe, "decode", native, oracle, len(plain), dictionary)
+                    if oracle.read_bytes() != plain:
+                        raise AssertionError(f"XZ Utils rejected Vort MicroLZMA for {name}/{mode}")
+                    external_writer_cases += 1
 
         truncated = temp / "truncated.microlzma"
         truncated.write_bytes(encoded_fixture[:-1])
@@ -178,7 +207,8 @@ def main() -> None:
 
     print(
         f"pinned={pinned} xz={probe is not None} "
-        f"external={external} malformed={malformed}"
+        f"external={external} writer={writer_cases} "
+        f"external_writer={external_writer_cases} malformed={malformed}"
     )
 
 

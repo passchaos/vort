@@ -30,6 +30,7 @@ test "EROFS writer emits interoperable MZi metadata for every codec" {
     inline for (.{
         writer.Compression.stored,
         .lz4,
+        .lzma,
         .deflate,
         .zstandard,
     }) |compression| {

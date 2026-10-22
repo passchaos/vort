@@ -55,11 +55,11 @@ bounds caller output and hidden packed-extent scratch (8 MiB by default).
 The writer emits 4 KiB filesystems with compact or extended inodes, CRC-32C-protected
 superblocks, dot-omitted sorted directories, nested and empty directories,
 symbolic links, flat plain/inline stored data, and legacy full compression
-indexes. LZ4, raw Deflate, and Zstandard modes encode every non-empty
+indexes. LZ4, MicroLZMA, raw Deflate, and Zstandard modes encode every non-empty
 regular-file logical cluster into an independently addressable physical cluster.
 Compressed payloads are right-aligned with `lz4_0padding`; a `PLAIN` index is
-used whenever compression would not reduce the payload. Deflate and Zstandard
-images include their required superblock compression-configuration records.
+used whenever compression would not reduce the payload. MicroLZMA, Deflate,
+and Zstandard images include their required superblock compression-configuration records.
 Each entry and the root directory can carry deterministic inline xattrs; inode
 planning accounts for their ibodies before flat-inline tails and aligned
 compression headers. `xattr_prefixes` optionally writes a plain prefix table
@@ -76,8 +76,8 @@ the option disabled preserves the prior wire.
 `tail_packing = .fragments` deterministically packs the last logical block of
 each non-empty regular file: small files use the whole-fragment header, larger
 files retain ordinary compressed/plain prefix clusters, and one hidden packed
-inode is encoded through the selected LZ4/Deflate/Zstandard planner. The hidden
-inode contributes to the inode count but never to directory entries. Identical
+inode is encoded through the selected LZ4/MicroLZMA/Deflate/Zstandard planner.
+The hidden inode contributes to the inode count but never to directory entries. Identical
 entries and options produce identical images. Alternatively,
 `tail_packing = .compressed_inline` encodes the last logical block during
 metadata planning, selects compressed bytes only when smaller, otherwise keeps
@@ -86,8 +86,8 @@ payload fit in one metadata block. A non-fitting tail automatically retains its
 ordinary physical block.
 
 `compress_directories = true` implements the standard `--zD` layout for LZ4,
-raw Deflate, and Zstandard images. Directory streams smaller than the 16-byte
-full-index header threshold retain the ordinary flat-inline wire. Every larger
+MicroLZMA, raw Deflate, and Zstandard images. Directory streams smaller than
+the 16-byte full-index header threshold retain the ordinary flat-inline wire. Every larger
 directory is appended in path order to the hidden packed inode and its visible
 inode carries the standard whole-fragment high-bit header with no local
 clusters. Directory buffers are sized before metadata planning but copied into
@@ -111,7 +111,8 @@ claiming to allocate multi-terabyte buffers.
 directories and tails, xattr ibodies, and compression indexes are planned in a
 separate block-padded metadata stream; directory entries and the superblock use
 bit-63 NIDs. One low-NID hidden inode in the primary metadata owns that stream,
-using stored blocks or the selected LZ4/raw-Deflate/Zstandard full-index codec.
+using stored blocks or the selected LZ4/MicroLZMA/raw-Deflate/Zstandard
+full-index codec.
 The extended 144-byte superblock carries `metabox_nid` and enables 48-bit
 addressing for the high-bit root NID. Physical file and large-directory blocks
 remain in the primary image unless directory compression is selected. Metabox
@@ -236,20 +237,29 @@ an external blob/device table; Vort extracts each byte-exactly and diagnoses a
 missing blob explicitly. Vort-authored local and external chunk layouts are
 also extracted by `fsck.erofs`, with the external metadata/blob pair kept as
 separate outputs.
-Four additional deterministic MZi writers cover stored, LZ4, raw Deflate, and
+Five deterministic MZi writers cover stored, LZ4, MicroLZMA, raw Deflate, and
 Zstandard hidden metadata streams. Vort loads and byte-exactly extracts every
 mode, while `fsck.erofs` validates all images and independently extracts their
 physical/compressed extents. erofs-utils 1.9.4 itself writes zero-filled output
 for flat-inline regular files whose inode lives in a metabox (its `dump --cat`
 path reads the same bytes correctly), so the stored-MZi oracle check excludes
 only those affected inline tails.
-All 29 Vort writer modes enable cost-aware shared-xattr planning for one
+All 36 Vort writer modes enable cost-aware shared-xattr planning for one
 repeated long-prefix attribute across root, file, and directory ibodies. Vort
-reconstructs each value, and the 25 non-metabox modes additionally require
+reconstructs each value, and the 31 non-metabox modes additionally require
 `fsck.erofs --xattrs` restoration; the summary reports
-`shared_xattr_writer=29`. Three reference and three Vort-authored LZ4/Deflate/
+`shared_xattr_writer=36`. Three reference and four Vort-authored LZ4/MicroLZMA/Deflate/
 Zstandard directory-compression images require byte-exact listing/extraction
 through whole-directory fragments (`directory_reader=3`,
-`directory_writer=3`). Four forced-extended reference images and four
-Vort-authored stored/LZ4/Deflate/Zstandard images exercise 64-byte inode
-parsing/writing (`extended_inode_reader=4`, `extended_inode_writer=4`).
+`directory_writer=4`). Four forced-extended reference images and five
+Vort-authored stored/LZ4/MicroLZMA/Deflate/Zstandard images exercise 64-byte inode
+parsing/writing (`extended_inode_reader=4`, `extended_inode_writer=5`).
+
+MicroLZMA writing uses algorithm ID 1, the standard 14-byte configuration
+payload (16 bytes including length), a 32 KiB dictionary, complemented
+properties, and no end marker. Its clusters share ordinary compressed/plain
+selection, zero-padding, tail fragments, compressed inline tails, 48-bit
+feature output, extended inodes, directory fragments, and metabox planning.
+Seven writer modes pass erofs-utils 1.9.4-g5fcb2f76 checks and byte-exact
+extraction (`lzma_writer=7`). Destination-size-limited partial-input encoding
+and larger physical clusters remain future work.

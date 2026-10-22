@@ -23,7 +23,7 @@ test "EROFS writer emits compressed raw and fallback inline tails" {
         .{ .path = "mixed", .data = &mixed },
     };
 
-    inline for (.{ Compression.lz4, .deflate, .zstandard }) |compression| {
+    inline for (.{ Compression.lz4, .lzma, .deflate, .zstandard }) |compression| {
         const encoded = try encodeAlloc(allocator, &entries, .{
             .compression = compression,
             .tail_packing = .compressed_inline,

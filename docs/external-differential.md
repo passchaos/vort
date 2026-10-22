@@ -51,12 +51,12 @@ byte-exact value. LZ4 ordinary/all-fragment, Deflate-fragment, and
 Zstandard-fragment cases require byte-exact extraction through whole and
 partial references, compressed/plain/interlaced packed inodes, and bounded
 range reads. Separate LZ4/Deflate/Zstandard cases exercise compressed inline
-tail packing. In the other direction, deterministic stored/LZ4/Deflate/Zstd
+tail packing. In the other direction, deterministic stored/LZ4/MicroLZMA/Deflate/Zstd
 Vort images carry root, regular-file, inline-tail, and directory attributes
-through a caller-selected plain prefix table. Three additional Vort writers
+through a caller-selected plain prefix table. Four additional Vort writers
 combine those codecs with whole and last-block fragments; their packed inode
 must remain hidden while `fsck.erofs --xattrs` validates, extracts, and restores
-all files and attributes through the host API. Three more writers enable
+all files and attributes through the host API. Four more writers enable
 compressed inline tails for the same codecs and require the same byte-exact
 extraction. Local chunk block-map, forced local chunk-index, and external
 blob-device images additionally verify merged chunks, device tables, borrowed
@@ -65,24 +65,24 @@ local maps and owning external metadata/blob pairs; both must preserve xattrs,
 deduplicate repeated chunks, encode holes, and extract byte-exactly through
 `fsck.erofs`. Six forced-48bit reference images cover stored, LZ4, Deflate,
 Zstandard, local chunk, and external chunk layouts; six matching Vort writer
-modes must also pass fsck and byte-exact extraction. Two LZ4 metabox references
+modes plus MicroLZMA must also pass fsck and byte-exact extraction. Two LZ4 metabox references
 separately place inode metadata and inode+directory
 metadata in the hidden stream; Vort must list/extract all files and reconstruct
 source shared/long xattrs, while fsck independently validates and extracts file
-bytes. Four Vort MZi writers use stored, LZ4, raw Deflate, and Zstandard hidden
+bytes. Five Vort MZi writers use stored, LZ4, MicroLZMA, raw Deflate, and Zstandard hidden
 metadata inodes, must remain deterministic, and are self-decoded byte-exactly;
 fsck validates every image and independently extracts physical/compressed file
 extents. The stored-MZi check excludes flat-inline regular-file tails because
 erofs-utils 1.9.4's extractor zero-fills that layout even for its own MZi
-images, although its `dump --cat` path and Vort both read it correctly. All 29
+images, although its `dump --cat` path and Vort both read it correctly. All 36
 Vort writer modes also move one repeated long-prefix name/value pair to the
 primary shared-xattr region while retaining distinct inline attributes.
-Vort must reconstruct both sources in every mode; the 25 non-metabox cases
+Vort must reconstruct both sources in every mode; the 31 non-metabox cases
 additionally require host-restored xattrs from `fsck.erofs --xattrs`. Three
-erofs-utils `--zD` references and three Vort directory writers cover
-LZ4, raw Deflate, and Zstandard whole-directory fragments, including the shared
+erofs-utils `--zD` references and four Vort directory writers cover
+LZ4, MicroLZMA, raw Deflate, and Zstandard whole-directory fragments, including the shared
 packed-inode path used by ordinary file fragments. Four forced-extended
-erofs-utils references and four Vort stored/LZ4/Deflate/Zstandard writers cover
+erofs-utils references and five Vort stored/LZ4/MicroLZMA/Deflate/Zstandard writers cover
 64-byte inode layout and fsck validation. Supply explicit tools with
 `-- --mkfs /path/to/mkfs.erofs --fsck /path/to/fsck.erofs`; the summary reports
 `xattr_reader`, `xattr_writer`, `long_prefix_reader`, `fragment_reader`,
@@ -90,7 +90,7 @@ erofs-utils references and four Vort stored/LZ4/Deflate/Zstandard writers cover
 `external_chunk_reader`, `chunk_writer`, `external_chunk_writer`,
 `address48_reader`, `address48_writer`, `metabox_reader`, `metabox_writer`, and
 `shared_xattr_writer`, `directory_reader`, `directory_writer`,
-`extended_inode_reader`, and `extended_inode_writer` separately.
+`extended_inode_reader`, `extended_inode_writer`, and `lzma_writer` separately.
 
 The QCOW2 differential always exercises the Vort v2/v3 writer and reader for
 uncompressed, raw-DEFLATE, and Zstandard clusters plus v2/v3 raw-backing
@@ -424,3 +424,20 @@ best-preset plans so parser experiments can target the exact extra-bit buckets
 that differ. The dynamic-plan CSV additionally records length-symbol and
 distance-symbol histograms for exact RFC-code distribution analysis, and the
 Markdown summary calls out the largest best-minus-default symbol-count deltas.
+
+The MicroLZMA driver also encodes with Vort's literal-only, greedy, and lazy
+modes and requires XZ Utils to consume every compressed byte and reproduce the
+exact original payload. Seven cases cover empty, tiny, repeated, delta,
+mixed, source, and a repeated suffix more than 80 KiB away, with independent
+lc/lp/pb and dictionary settings. XZ Utils 5.8.4 (source commit 3b1efb0) passes
+all 21 Vort-writer comparisons; a deterministic fixture brings native writer
+coverage to 22 cases (`external=7`, `writer=22`, `external_writer=21`).
+Run `zig build run-microlzma-diff -- --xz-source /path/to/xz
+--xz-build /path/to/build` to build the probe against that checkout.
+
+The EROFS writer matrix additionally covers seven MicroLZMA modes: ordinary
+clusters, fragments, compressed inline tails, 48-bit features, metabox,
+compressed directories, and extended inodes. They carry the standard 32 KiB
+MicroLZMA configuration and pass erofs-utils 1.9.4-g5fcb2f76 fsck and exact
+extraction, bringing the matrix to 36 writer modes (`lzma_writer=7`,
+`external_writer=36`).

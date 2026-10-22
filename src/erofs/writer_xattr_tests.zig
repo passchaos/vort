@@ -26,6 +26,7 @@ test "EROFS writer deduplicates profitable shared xattrs for every codec" {
     inline for (.{
         writer.Compression.stored,
         .lz4,
+        .lzma,
         .deflate,
         .zstandard,
     }) |compression| {
@@ -105,6 +106,7 @@ test "EROFS metabox inodes reference primary shared xattr region" {
     inline for (.{
         writer.Compression.stored,
         .lz4,
+        .lzma,
         .deflate,
         .zstandard,
     }) |compression| {

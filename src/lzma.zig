@@ -6,11 +6,13 @@ const incremental_encoder = @import("lzma/incremental_encoder.zig");
 const incremental_encoder_tests = @import("lzma/incremental_encoder_tests.zig");
 const incremental_tests = @import("lzma/incremental_tests.zig");
 const writer = @import("lzma/writer.zig");
+const micro_writer = @import("lzma/micro_writer.zig");
 
-pub const Error = decoder.Error || writer.Error || incremental_decoder.Decoder.Error || incremental_encoder.Encoder.Error;
+pub const Error = decoder.Error || writer.Error || micro_writer.Error || incremental_decoder.Decoder.Error || incremental_encoder.Encoder.Error;
 pub const Header = decoder.Header;
 pub const DecodeOptions = decoder.DecodeOptions;
 pub const MicroDecodeOptions = decoder.MicroDecodeOptions;
+pub const MicroEncodeOptions = micro_writer.Options;
 pub const EncodeOptions = writer.EncodeOptions;
 pub const Properties = writer.Properties;
 pub const EncodeMode = writer.Mode;
@@ -28,6 +30,9 @@ pub const decodeMicroInto = decoder.decodeMicroInto;
 pub const decodeMicroAllocExactSize = decoder.decodeMicroAllocExactSize;
 pub const decodeMicroAllocLimited = decoder.decodeMicroAllocLimited;
 pub const decodeMicroAllocWithOptions = decoder.decodeMicroAllocWithOptions;
+pub const encodeMicroAlloc = micro_writer.encodeAlloc;
+pub const encodeMicroAppend = micro_writer.encodeAppend;
+pub const encodeMicroInto = micro_writer.encodeInto;
 pub const decodeZipPayloadInto = decoder.decodeZipPayloadInto;
 pub const decodeZipPayloadAllocLimited = decoder.decodeZipPayloadAllocLimited;
 pub const decodeChdPayloadAllocExactSize = decoder.decodeChdPayloadAllocExactSize;
@@ -45,6 +50,7 @@ test {
     _ = incremental_encoder_tests;
     _ = incremental_tests;
     _ = writer;
+    _ = @import("lzma/micro_writer_tests.zig");
 }
 
 test "LZMA decoder safely wraps output larger than its dictionary" {

@@ -33,6 +33,7 @@ pub const Options = struct {
     window_len: usize,
     max_chain: usize = 64,
     nice_len: usize = 64,
+    lazy: bool = false,
 };
 
 pub const StreamPlan = struct {
@@ -222,6 +223,18 @@ pub fn planAlloc(
             previous,
         );
         if (accept(best)) {
+            if (options.lazy) {
+                insert(dictionary, input, current, head, previous);
+                if (input_position + 1 < input.len) {
+                    const next = findBest(dictionary, input, current + 1, options, head, previous);
+                    if (accept(next) and preferLazy(best, next)) {
+                        tokens.appendAssumeCapacity(.{ .literal = input[input_position] });
+                        stats.literals += 1;
+                        input_position += 1;
+                        continue;
+                    }
+                }
+            }
             tokens.appendAssumeCapacity(.{ .match = .{
                 .length = @intCast(best.length),
                 .distance = @intCast(best.distance),
@@ -229,6 +242,7 @@ pub fn planAlloc(
             stats.matches += 1;
             stats.matched_bytes += best.length;
             const end = input_position + best.length;
+            if (options.lazy) input_position += 1;
             while (input_position < end) : (input_position += 1)
                 insert(dictionary, input, dictionary.len + input_position, head, previous);
             continue;

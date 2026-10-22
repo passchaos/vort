@@ -37,6 +37,7 @@ pub fn create(
 fn parseCompression(name: []const u8) ?vort.ErofsWriterCompression {
     if (std.mem.eql(u8, name, "stored")) return .stored;
     if (std.mem.eql(u8, name, "lz4")) return .lz4;
+    if (std.mem.eql(u8, name, "lzma")) return .lzma;
     if (std.mem.eql(u8, name, "deflate")) return .deflate;
     if (std.mem.eql(u8, name, "zstd")) return .zstandard;
     return null;
