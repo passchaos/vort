@@ -63,11 +63,14 @@ blob-device images additionally verify merged chunks, device tables, borrowed
 device extraction, and the missing-device error. Vort also writes deterministic
 local maps and owning external metadata/blob pairs; both must preserve xattrs,
 deduplicate repeated chunks, encode holes, and extract byte-exactly through
-`fsck.erofs`. Supply explicit tools with
+`fsck.erofs`. Six forced-48bit reference images cover stored, LZ4, Deflate,
+Zstandard, local chunk, and external chunk layouts; six matching Vort writer
+modes must also pass fsck and byte-exact extraction. Supply explicit tools with
 `-- --mkfs /path/to/mkfs.erofs --fsck /path/to/fsck.erofs`; the summary reports
 `xattr_reader`, `xattr_writer`, `long_prefix_reader`, `fragment_reader`,
 `fragment_writer`, `ztailpacking_reader`, `ztailpacking_writer`, `chunk_reader`,
 `external_chunk_reader`, `chunk_writer`, and `external_chunk_writer` separately.
+The summary also reports `address48_reader` and `address48_writer`.
 
 The QCOW2 differential always exercises the Vort v2/v3 writer and reader for
 uncompressed, raw-DEFLATE, and Zstandard clusters plus v2/v3 raw-backing

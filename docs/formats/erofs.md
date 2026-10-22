@@ -22,6 +22,13 @@ read boundary are validated. Metadata-only parsing and listing work without
 devices, while extraction reports `ErofsMissingDevice` until the required blob
 is supplied.
 
+The 48-bit incompatible feature extends superblock block counts/root NIDs, flat
+inode starts, chunk indexes, and device slots. Compressed full inodes additionally
+support 4/8/16/32-byte extent records: compact records derive logical starts
+from cluster bits and optionally carry one 64-bit physical base, while larger
+records carry explicit 64-bit physical and logical starts. Raw and all four
+EROFS compression formats share the same bounded decode path.
+
 Compressed files support both legacy full indexes and modern compact indexes,
 including four-byte and sixteen-entry/two-byte packs, HEAD/NONHEAD lookback,
 EOF sentinels, and big pclusters. LZ4, raw Deflate, and Zstandard extents are
@@ -65,6 +72,10 @@ regular files, and all-zero chunks become holes. `encodeErofsExternalChunksAlloc
 uses the same plan but returns an owning `{ image, device }` pair with 8-byte
 device indexes and a standard 128-byte device-table slot; even an all-hole plan
 returns a valid zero-length device paired with its metadata image.
+`force_48bit` emits the standard feature on stored, compressed, local-chunk,
+and external-chunk output even while current in-memory image sizes keep actual
+high halves zero; this provides interoperable forward-compatible wire without
+claiming to allocate multi-terabyte buffers.
 
 Writer entries use safe relative paths. Missing parent directories are created
 automatically, while absolute paths, empty components, `.`/`..`, NUL bytes,
@@ -114,13 +125,14 @@ var encoded_chunks = try vort.encodeErofsExternalChunksAlloc(
 defer encoded_chunks.deinit(allocator);
 ```
 
-48-bit addressing and metaboxes remain future work. Prefix tables stored inside
-packed or metabox inodes remain unsupported; ordinary `PLAIN_XATTR_PFX` tables
-are supported in both directions. The writer does not yet deduplicate repeated
-values into the optional shared-xattr region. Chunk output requires stored mode;
-fragment and compressed-inline output require a non-stored compression mode
-because visible files use the compressed inode layout even when a prefix or
-inline cluster falls back to `PLAIN`.
+Metaboxes remain future work. Prefix tables stored inside packed or metabox
+inodes remain unsupported; ordinary `PLAIN_XATTR_PFX` tables are supported in
+both directions. Compressed 48-bit `PARTIAL_REF` and fragment-extent combinations
+remain explicitly unsupported. The writer does not yet deduplicate repeated
+values into the optional shared-xattr region. Chunk output requires stored
+mode; fragment and compressed-inline output require a non-stored compression
+mode because visible files use the compressed inode layout even when a prefix
+or inline cluster falls back to `PLAIN`.
 
 ```sh
 zig build run -- list-erofs-file system.erofs

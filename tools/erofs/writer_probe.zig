@@ -7,20 +7,26 @@ pub fn main(init: std.process.Init) !void {
     _ = args.next();
     const output_path = args.next() orelse return error.MissingOutputPath;
     const mode_name = args.next() orelse "lz4";
+    const address48_suffix = "-48bit";
     const fragment_suffix = "-fragments";
     const inline_suffix = "-ztailpacking";
-    const chunk_local = std.mem.eql(u8, mode_name, "chunk-local");
-    const chunk_external = std.mem.eql(u8, mode_name, "chunk-external");
-    const fragments = std.mem.endsWith(u8, mode_name, fragment_suffix);
-    const compressed_inline = std.mem.endsWith(u8, mode_name, inline_suffix);
+    const force_48bit = std.mem.endsWith(u8, mode_name, address48_suffix);
+    const layout_mode = if (force_48bit)
+        mode_name[0 .. mode_name.len - address48_suffix.len]
+    else
+        mode_name;
+    const chunk_local = std.mem.eql(u8, layout_mode, "chunk-local");
+    const chunk_external = std.mem.eql(u8, layout_mode, "chunk-external");
+    const fragments = std.mem.endsWith(u8, layout_mode, fragment_suffix);
+    const compressed_inline = std.mem.endsWith(u8, layout_mode, inline_suffix);
     const compression_name = if (chunk_local or chunk_external)
         "stored"
     else if (fragments)
-        mode_name[0 .. mode_name.len - fragment_suffix.len]
+        layout_mode[0 .. layout_mode.len - fragment_suffix.len]
     else if (compressed_inline)
-        mode_name[0 .. mode_name.len - inline_suffix.len]
+        layout_mode[0 .. layout_mode.len - inline_suffix.len]
     else
-        mode_name;
+        layout_mode;
     const compression = parseCompression(compression_name) orelse return error.InvalidBlockPlan;
 
     var random: [8193]u8 = undefined;
@@ -58,6 +64,7 @@ pub fn main(init: std.process.Init) !void {
         else
             .none,
         .chunk_size = if (chunk_local or chunk_external) 4096 else null,
+        .force_48bit = force_48bit,
     };
     if (chunk_external) {
         const device_path = args.next() orelse return error.MissingOutputPath;

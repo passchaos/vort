@@ -178,6 +178,8 @@ def main() -> None:
     external_chunk_reader_cases = 0
     chunk_writer_cases = 0
     external_chunk_writer_cases = 0
+    address48_reader_cases = 0
+    address48_writer_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -231,12 +233,19 @@ def main() -> None:
             "zstd-ztailpacking",
             "chunk-local",
             "chunk-external",
+            "stored-48bit",
+            "lz4-48bit",
+            "deflate-48bit",
+            "zstd-48bit",
+            "chunk-local-48bit",
+            "chunk-external-48bit",
         ):
             image = temp / f"writer-{mode}.erofs"
             repeated = temp / f"writer-{mode}-repeat.erofs"
             device = temp / f"writer-{mode}.blob"
             repeated_device = temp / f"writer-{mode}-repeat.blob"
-            if mode == "chunk-external":
+            is_external_chunk = mode.startswith("chunk-external")
+            if is_external_chunk:
                 run(args.writer, image, mode, device)
                 run(args.writer, repeated, mode, repeated_device)
             else:
@@ -244,7 +253,7 @@ def main() -> None:
                 run(args.writer, repeated, mode)
             if image.read_bytes() != repeated.read_bytes():
                 raise AssertionError(f"non-deterministic EROFS writer output for {mode}")
-            if mode == "chunk-external" and device.read_bytes() != repeated_device.read_bytes():
+            if is_external_chunk and device.read_bytes() != repeated_device.read_bytes():
                 raise AssertionError(f"non-deterministic EROFS external chunks for {mode}")
             listing = run(args.cli, "list-erofs-file", image).stdout
             for required in (b"etc/config", b"large.bin", b"random.bin", b"small", b"link", b"empty"):
@@ -260,7 +269,7 @@ def main() -> None:
                     output,
                     len(expected),
                 ]
-                if mode == "chunk-external":
+                if is_external_chunk:
                     command.append(device)
                 run(*command)
                 if output.read_bytes() != expected:
@@ -272,10 +281,12 @@ def main() -> None:
                 fragment_writer_cases += 1
             if mode.endswith("-ztailpacking"):
                 ztailpacking_writer_cases += 1
-            if mode in ("chunk-local", "chunk-external"):
+            if mode.startswith("chunk-local") or is_external_chunk:
                 chunk_writer_cases += 1
-            if mode == "chunk-external":
+            if is_external_chunk:
                 external_chunk_writer_cases += 1
+            if mode.endswith("-48bit"):
+                address48_writer_cases += 1
             writer_cases += 1
             if fsck is not None:
                 extracted = temp / f"writer-{mode}-fsck"
@@ -285,7 +296,7 @@ def main() -> None:
                     "--no-preserve",
                     "--xattrs",
                 ]
-                if mode == "chunk-external":
+                if is_external_chunk:
                     fsck_command.append(f"--device={device}")
                 fsck_command.append(image)
                 run(*fsck_command)
@@ -307,9 +318,11 @@ def main() -> None:
             ).stdout
             cases: list[tuple[str, str | None, bool, str | None, tuple[str, ...]]] = [
                 ("plain", None, False, None, ()),
+                ("plain-48bit", None, False, None, ("48bit",)),
                 ("plain-long-prefix", None, False, "user.vort.", ()),
                 ("lz4-compact", "lz4", False, None, ()),
                 ("lz4-full", "lz4", True, None, ()),
+                ("lz4-48bit", "lz4", False, None, ("48bit",)),
                 ("lz4-fragments", "lz4", False, None, ("fragments",)),
                 ("lz4-all-fragments", "lz4", False, None, ("all-fragments",)),
                 ("lz4-ztailpacking", "lz4", False, None, ("ztailpacking",)),
@@ -319,6 +332,7 @@ def main() -> None:
                     (
                         ("deflate-compact", "deflate", False, None, ()),
                         ("deflate-full", "deflate", True, None, ()),
+                        ("deflate-48bit", "deflate", False, None, ("48bit",)),
                         ("deflate-fragments", "deflate", False, None, ("fragments",)),
                         ("deflate-ztailpacking", "deflate", False, None, ("ztailpacking",)),
                     )
@@ -334,6 +348,7 @@ def main() -> None:
                 cases.extend(
                     (
                         ("zstd-compact", "zstd", False, None, ()),
+                        ("zstd-48bit", "zstd", False, None, ("48bit",)),
                         ("zstd-fragments", "zstd", False, None, ("fragments",)),
                         ("zstd-ztailpacking", "zstd", False, None, ("ztailpacking",)),
                     )
@@ -363,6 +378,8 @@ def main() -> None:
                     fragment_reader_cases += 1
                 if "ztailpacking" in features:
                     ztailpacking_reader_cases += 1
+                if "48bit" in features:
+                    address48_reader_cases += 1
                 if not features and xattr_prefix is None:
                     primary = image
                 if compressor is None:
@@ -377,7 +394,9 @@ def main() -> None:
             chunk_cases = (
                 ("chunk-local-map", (), None),
                 ("chunk-local-index", ("force-chunk-indexes",), None),
+                ("chunk-local-48bit", ("48bit", "force-chunk-indexes"), None),
                 ("chunk-external", (), temp / "chunk-external.blob"),
+                ("chunk-external-48bit", ("48bit",), temp / "chunk-external-48bit.blob"),
             )
             for label, features, blobdev in chunk_cases:
                 image = temp / f"{label}.erofs"
@@ -426,6 +445,8 @@ def main() -> None:
                         error_name="ErofsMissingDevice",
                     )
                     external_chunk_reader_cases += 1
+                if "48bit" in features:
+                    address48_reader_cases += 1
 
         expect_failure(
             args.cli,
@@ -495,6 +516,8 @@ def main() -> None:
         f"external_chunk_reader={external_chunk_reader_cases} "
         f"chunk_writer={chunk_writer_cases} "
         f"external_chunk_writer={external_chunk_writer_cases} "
+        f"address48_reader={address48_reader_cases} "
+        f"address48_writer={address48_writer_cases} "
         f"malformed={malformed}"
     )
 

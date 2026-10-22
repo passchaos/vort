@@ -18,6 +18,7 @@ pub const feature_incompat_device_table: u32 = 0x0000_0008;
 pub const feature_incompat_ztailpacking: u32 = 0x0000_0010;
 pub const feature_incompat_fragments: u32 = 0x0000_0020;
 pub const feature_incompat_xattr_prefixes: u32 = 0x0000_0040;
+pub const feature_incompat_48bit: u32 = 0x0000_0080;
 
 pub const Layout = enum(u3) {
     flat_plain = 0,
@@ -92,7 +93,7 @@ pub fn parseSuperblock(input: []const u8) Error!Superblock {
     // The foundational reader handles legacy LZ4 padding and compressor
     // configuration records and plain long-xattr-prefix tables. Other
     // incompatible features alter addressing.
-    if (feature_incompat & ~@as(u32, 0x0000_007f) != 0)
+    if (feature_incompat & ~@as(u32, 0x0000_00ff) != 0)
         return error.UnsupportedErofsFeature;
     const extra_devices = readU16(bytes, 86);
     const device_slot_offset = readU16(bytes, 88);
@@ -115,7 +116,11 @@ pub fn parseSuperblock(input: []const u8) Error!Superblock {
     } else if (xattr_prefix_count != 0 or xattr_prefix_start != 0) {
         return error.InvalidErofs;
     }
-    const blocks: u64 = readU32(bytes, 36);
+    const root_nid_8 = readU64(bytes, 112);
+    const uses_high_addresses = feature_incompat & feature_incompat_48bit != 0 and
+        root_nid_8 != 0;
+    const blocks: u64 = @as(u64, readU32(bytes, 36)) |
+        (if (uses_high_addresses) @as(u64, readU16(bytes, 14)) << 32 else 0);
     const image_size = std.math.mul(usize, @intCast(blocks), block_size) catch
         return error.IntegerOverflow;
     if (blocks == 0 or image_size > input.len) return error.TruncatedFrame;
@@ -129,7 +134,7 @@ pub fn parseSuperblock(input: []const u8) Error!Superblock {
         if (computeSuperblockChecksum(input[super_offset..][0..checksum_len]) != checksum)
             return error.ChecksumMismatch;
     }
-    const root_nid: u64 = readU16(bytes, 14);
+    const root_nid: u64 = if (uses_high_addresses) root_nid_8 else readU16(bytes, 14);
     const inode_count = readU64(bytes, 16);
     const meta_block = readU32(bytes, 40);
     if (inode_count == 0 or meta_block >= blocks)

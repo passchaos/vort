@@ -22274,3 +22274,18 @@ reuse, so production keeps the simpler independently owned plans.
   options, ownership cleanup, and exhaustive OOM. erofs-utils independently
   extracts both modes (`chunk_writer=2`, `external_chunk_writer=1`, `writer=12`,
   `external_writer=12`, `xattr_writer=12`).
+
+- Added EROFS 48-bit addressing and encoded compressed extents. Superblocks now
+  honor the 16-bit block-count high half and optional 64-bit root NID; flat
+  inode starts, chunk indexes, and device slots combine checked high halves.
+  Compressed full inodes parse 4/8/16/32-byte extent records, including fixed
+  or explicit logical starts, cumulative or explicit 64-bit physical offsets,
+  raw records, and LZ4/MicroLZMA/Deflate/Zstandard format tags. Partial-ref and
+  fragment-extent combinations remain explicit unsupported cases rather than
+  being misdecoded. `force_48bit` emits interoperable low-address 48-bit wire
+  across stored, all three writer codecs, local chunks, and owning external
+  chunks. A fixed erofs-utils Zstandard fixture pins compact extent records;
+  mutations cover rootnid_8, blocks_hi, and nonzero physical high bits, with
+  exhaustive OOM. The differential independently reads and writes stored,
+  LZ4, Deflate, Zstandard, local-chunk, and external-chunk forced layouts
+  (`address48_reader=6`, `address48_writer=6`).

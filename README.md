@@ -258,8 +258,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   pclusters, whole/partial packed fragments, interlaced packed inodes, and
   compressed inline tail packing with caller-bounded packed-extent scratch,
   plus local/external chunk-based files with borrowed device tables, holes,
-  4-byte maps and 8-byte indexes, LZ4/MicroLZMA/raw-Deflate/Zstandard
-  extraction with explicit bounds, and
+  4-byte maps and 8-byte indexes, 48-bit superblock/flat/chunk/device addresses,
+  and 4/8/16/32-byte compressed extent records, LZ4/MicroLZMA/raw-Deflate/
+  Zstandard extraction with explicit bounds, and
   deterministic compact-inode stored/LZ4/raw-Deflate/Zstandard writing for
   regular files, nested and empty directories, symlinks, inline tails,
   deterministic whole/last-block packed fragments, hidden packed inodes,

@@ -15,6 +15,7 @@ pub const DeviceInfo = struct {
 
 pub const InodeView = struct {
     file_size: usize,
+    chunk_format: u16,
     chunk_bits: u8,
     index_start: usize,
     index_size: u8,
@@ -62,13 +63,18 @@ pub fn deviceInfo(
     ) catch return error.IntegerOverflow;
     const slot_end = try checkedEnd(slot_start, 128, image.len);
     const slot = image[slot_start..slot_end];
-    if (format.readU16(slot, 72) != 0 or format.readU16(slot, 74) != 0)
-        return error.UnsupportedErofsFeature;
+    const blocks_hi = format.readU16(slot, 72);
+    const unified_hi = format.readU16(slot, 74);
+    const use_48bit = superblock.feature_incompat & format.feature_incompat_48bit != 0;
+    if (!use_48bit and (blocks_hi != 0 or unified_hi != 0))
+        return error.InvalidErofs;
     var tag: [64]u8 = undefined;
     @memcpy(&tag, slot[0..64]);
     return .{
-        .blocks = format.readU32(slot, 64),
-        .unified_start = format.readU32(slot, 68),
+        .blocks = @as(u64, format.readU32(slot, 64)) |
+            (if (use_48bit) @as(u64, blocks_hi) << 32 else 0),
+        .unified_start = @as(u64, format.readU32(slot, 68)) |
+            (if (use_48bit) @as(u64, unified_hi) << 32 else 0),
         .tag = tag,
     };
 }
@@ -100,16 +106,25 @@ pub fn readAllocLimited(
         var device_id: u16 = 0;
         var start_block: u64 = undefined;
         if (inode.index_size == 8) {
-            if (format.readU16(image, entry_start) != 0)
-                return error.UnsupportedErofsFeature;
+            const start_hi = format.readU16(image, entry_start);
+            const index_48bit = inode.chunk_format & 0x0040 != 0;
+            if (index_48bit and
+                superblock.feature_incompat & format.feature_incompat_48bit == 0)
+                return error.InvalidErofs;
+            if (!index_48bit and start_hi != 0) return error.InvalidErofs;
             device_id = format.readU16(image, entry_start + 2) & device_mask;
-            start_block = format.readU32(image, entry_start + 4);
+            start_block = @as(u64, format.readU32(image, entry_start + 4)) |
+                (if (index_48bit) @as(u64, start_hi) << 32 else 0);
         } else if (inode.index_size == 4) {
             start_block = format.readU32(image, entry_start);
         } else {
             return error.InvalidErofs;
         }
-        if (start_block == std.math.maxInt(u32)) continue;
+        const address_mask: u64 = if (inode.chunk_format & 0x0040 != 0)
+            (@as(u64, 1) << 48) - 1
+        else
+            std.math.maxInt(u32);
+        if (start_block == address_mask) continue;
         const logical_start = std.math.mul(usize, chunk_index, chunk_size) catch
             return error.IntegerOverflow;
         const logical_end = @min(output.len, std.math.add(

@@ -27,6 +27,7 @@ pub const Options = struct {
     xattr_prefixes: []const []const u8 = &.{},
     tail_packing: TailPacking = .none,
     chunk_size: ?usize = null,
+    force_48bit: bool = false,
 };
 
 pub const EncodedExternalChunks = struct {
@@ -674,6 +675,10 @@ fn writeSuperblock(
         image,
         base + 80,
         writer_codec.featureIncompat(options.compression) |
+            (if (options.force_48bit)
+                format.feature_incompat_48bit
+            else
+                @as(u32, 0)) |
             (if (has_chunks)
                 format.feature_incompat_chunked_file
             else

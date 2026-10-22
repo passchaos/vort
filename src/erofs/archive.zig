@@ -3,9 +3,10 @@ const core = @import("../core.zig");
 const format = @import("format.zig");
 const codec = @import("codec.zig");
 const chunk = @import("chunk.zig");
+const extent_reader = @import("extent.zig");
 const xattr = @import("xattr.zig");
 
-pub const Error = core.Error || format.Error || codec.Error || chunk.Error || xattr.Error ||
+pub const Error = core.Error || format.Error || codec.Error || chunk.Error || extent_reader.Error || xattr.Error ||
     std.mem.Allocator.Error || error{
     InvalidErofs,
     ErofsEntryNotFound,
@@ -53,6 +54,9 @@ pub const Inode = struct {
     chunk_bits: u8 = 0,
     chunk_index_start: usize = 0,
     chunk_index_size: u8 = 0,
+    compressed_extent_start: usize = 0,
+    compressed_extent_count: usize = 0,
+    compressed_extent_record_size: u8 = 0,
 
     pub fn fileType(self: Inode) Error!format.FileType {
         return switch (self.mode & 0xf000) {
@@ -209,6 +213,10 @@ pub const Archive = struct {
         };
         const file_type = try result.fileType();
         var with_compression = result;
+        if (self.superblock.feature_incompat & format.feature_incompat_48bit != 0 and
+            (layout == .flat_plain or layout == .flat_inline) and
+            (version == 1 or (file_type != .directory and inode_format & (1 << 4) != 0)))
+            with_compression.data_block |= @as(u64, format.readU16(inode_bytes, 6)) << 32;
         if (layout == .chunk_based) {
             if (file_type != .regular or
                 self.superblock.feature_incompat & format.feature_incompat_chunked_file == 0)
@@ -217,7 +225,9 @@ pub const Archive = struct {
             if (format.readU16(inode_bytes, 18) != 0) return error.InvalidErofs;
             if (chunk_format & ~@as(u16, 0x007f) != 0)
                 return error.UnsupportedErofsFeature;
-            if (chunk_format & 0x0040 != 0) return error.UnsupportedErofsFeature;
+            if (chunk_format & 0x0040 != 0 and
+                self.superblock.feature_incompat & format.feature_incompat_48bit == 0)
+                return error.InvalidErofs;
             const chunk_bits = std.math.add(
                 u8,
                 self.superblock.block_bits,
@@ -271,6 +281,51 @@ pub const Archive = struct {
             if (cluster_byte & 0xf0 != 0 or advise & ~@as(u16, 0x003f) != 0)
                 return error.UnsupportedErofsFeature;
             if (advise & 0x28 == 0x28) return error.InvalidErofs;
+            if (layout == .compressed_full and
+                self.superblock.feature_incompat & format.feature_incompat_48bit != 0 and
+                advise & 1 != 0)
+            {
+                if (advise & 0x28 != 0) return error.UnsupportedErofsFeature;
+                const record_size: u8 = @as(u8, 4) << @intCast((advise >> 1) & 3);
+                const record_start = std.mem.alignForward(
+                    usize,
+                    header_start + 8,
+                    record_size,
+                );
+                const extent_count = if (record_size <= 8) blk: {
+                    const extent_cluster_bits = self.superblock.block_bits +
+                        (cluster_byte & 0x0f);
+                    const extent_cluster_size: usize = @as(usize, 1) <<
+                        @intCast(extent_cluster_bits);
+                    with_compression.compressed_cluster_bits = extent_cluster_bits;
+                    break :blk if (file_size == 0) 0 else (std.math.add(usize, file_size, extent_cluster_size - 1) catch
+                        return error.IntegerOverflow) / extent_cluster_size;
+                } else std.math.cast(
+                    usize,
+                    @as(u64, format.readU32(self.bytes, header_start)) |
+                        (@as(u64, format.readU16(self.bytes, header_start + 6)) << 32),
+                ) orelse return error.IntegerOverflow;
+                const records_size = std.math.mul(
+                    usize,
+                    extent_count,
+                    record_size,
+                ) catch return error.IntegerOverflow;
+                _ = try checkedEnd(
+                    record_start,
+                    std.math.add(
+                        usize,
+                        records_size,
+                        if (record_size == 4) @as(usize, 8) else 0,
+                    ) catch return error.IntegerOverflow,
+                    self.bytes.len,
+                );
+                with_compression.compressed_advise = advise;
+                with_compression.compressed_header_start = header_start;
+                with_compression.compressed_extent_start = record_start;
+                with_compression.compressed_extent_count = extent_count;
+                with_compression.compressed_extent_record_size = record_size;
+                return with_compression;
+            }
             const algorithm1 = std.enums.fromInt(
                 format.Compression,
                 self.bytes[header_start + 6] & 0x0f,
@@ -484,7 +539,12 @@ pub const Archive = struct {
                 return error.IntegerOverflow,
         );
         if (full_bytes != 0) {
-            if (inode_value.data_block == std.math.maxInt(u32)) {
+            const null_block: u64 = if (self.superblock.feature_incompat &
+                format.feature_incompat_48bit != 0)
+                (@as(u64, 1) << 48) - 1
+            else
+                std.math.maxInt(u32);
+            if (inode_value.data_block == null_block) {
                 @memset(output[0..full_bytes], 0);
             } else {
                 const data_start = std.math.mul(
@@ -526,6 +586,7 @@ pub const Archive = struct {
             self.superblock,
             .{
                 .file_size = inode_value.file_size,
+                .chunk_format = inode_value.chunk_format,
                 .chunk_bits = inode_value.chunk_bits,
                 .index_start = inode_value.chunk_index_start,
                 .index_size = inode_value.chunk_index_size,
@@ -544,6 +605,20 @@ pub const Archive = struct {
             inode_value.layout != .compressed_compact)
             return error.UnsupportedErofsLayout;
         if (inode_value.file_size > limits.max_output_len) return error.OutputLimitExceeded;
+        if (inode_value.compressed_extent_record_size != 0) return extent_reader.readAllocLimited(
+            allocator,
+            self.bytes,
+            self.superblock,
+            .{
+                .file_size = inode_value.file_size,
+                .advise = inode_value.compressed_advise,
+                .cluster_bits = inode_value.compressed_cluster_bits,
+                .record_start = inode_value.compressed_extent_start,
+                .record_size = inode_value.compressed_extent_record_size,
+                .record_count = inode_value.compressed_extent_count,
+            },
+            limits.max_output_len,
+        );
         const output = try allocator.alloc(u8, inode_value.file_size);
         errdefer allocator.free(output);
         @memset(output, 0);
