@@ -21,6 +21,7 @@ pub const Layout = format.Layout;
 pub const Superblock = format.Superblock;
 pub const WriterCompression = writer.Compression;
 pub const WriterOptions = writer.Options;
+pub const WriterTailPacking = writer.TailPacking;
 pub const encodeAlloc = writer.encodeAlloc;
 pub const parse = archive.Archive.init;
 pub const parseSuperblock = format.parseSuperblock;
@@ -32,5 +33,6 @@ test {
     _ = @import("erofs/archive_tests.zig");
     _ = codec;
     _ = writer;
+    _ = @import("erofs/writer_fragment_tests.zig");
     _ = xattr;
 }

@@ -27,16 +27,22 @@ pub const Node = struct {
     xattrs: []const Xattr = &.{},
     xattr_size: usize = 0,
     explicit: bool = false,
+    hidden: bool = false,
     parent: usize = 0,
     nid: u64 = 0,
     location: usize = 0,
     layout: u3 = 0,
     start_block: u32 = std.math.maxInt(u32),
     directory_data: ?[]u8 = null,
+    owned_data: ?[]u8 = null,
+    fragment_offset: ?u64 = null,
+    fragment_size: usize = 0,
+    compressed_block_count: usize = 0,
     compressed_indexes: ?[]CompressionIndex = null,
 
     pub const CompressionIndex = struct {
         kind: u2,
+        logical_offset: u16 = 0,
         physical_block: u32,
     };
 
@@ -62,6 +68,7 @@ pub const Tree = struct {
     pub fn deinit(self: *Tree) void {
         for (self.nodes) |node| {
             if (node.directory_data) |bytes| self.allocator.free(bytes);
+            if (node.owned_data) |bytes| self.allocator.free(bytes);
             if (node.compressed_indexes) |indexes| self.allocator.free(indexes);
             self.allocator.free(node.path);
         }

@@ -38,7 +38,12 @@ Each entry and the root directory can carry deterministic inline xattrs; inode
 planning accounts for their ibodies before flat-inline tails and aligned
 compression headers. `xattr_prefixes` optionally writes a plain prefix table
 and uses its caller-ordered first match without changing the default wire.
-Identical entries and options produce identical images.
+`tail_packing = .fragments` deterministically packs the last logical block of
+each non-empty regular file: small files use the whole-fragment header, larger
+files retain ordinary compressed/plain prefix clusters, and one hidden packed
+inode is encoded through the selected LZ4/Deflate/Zstandard planner. The hidden
+inode contributes to the inode count but never to directory entries. Identical
+entries and options produce identical images.
 
 Writer entries use safe relative paths. Missing parent directories are created
 automatically, while absolute paths, empty components, `.`/`..`, NUL bytes,
@@ -60,6 +65,7 @@ const image = try vort.encodeErofsAlloc(allocator, &.{
     .compression = .zstandard,
     .root_xattrs = &root_xattrs,
     .xattr_prefixes = &.{"user."},
+    .tail_packing = .fragments,
 });
 defer allocator.free(image);
 
@@ -81,8 +87,10 @@ defer allocator.free(payload);
 Chunk-based files, external devices, 48-bit addressing, and metaboxes remain
 future work. Prefix tables stored inside packed or metabox inodes remain
 unsupported; ordinary `PLAIN_XATTR_PFX` tables are supported in both
-directions. The writer does not yet generate fragments or compressed inline
-tails, nor deduplicate repeated values into the optional shared-xattr region.
+directions. The writer does not yet generate compressed inline tails or
+deduplicate repeated values into the optional shared-xattr region. Fragment
+writing requires a non-stored compression mode because visible files use the
+compressed inode layout even when a prefix cluster falls back to `PLAIN`.
 
 ```sh
 zig build run -- list-erofs-file system.erofs
@@ -105,4 +113,6 @@ values with a long prefix table. Vort reads those images, while
 `fsck.erofs --xattrs` restores long-prefix Vort-authored root, file, and
 directory attributes. Additional LZ4/Deflate/Zstandard fragment images cover
 whole and partial references plus flat/compressed/interlaced packed inodes;
-LZ4/Deflate/Zstandard images cover compressed inline tail packing.
+LZ4/Deflate/Zstandard images cover compressed inline tail packing. Seven Vort
+writer modes include all three fragment writers and are independently
+extracted by `fsck.erofs`.

@@ -6,7 +6,13 @@ pub fn main(init: std.process.Init) !void {
     defer args.deinit();
     _ = args.next();
     const output_path = args.next() orelse return error.MissingOutputPath;
-    const compression_name = args.next() orelse "lz4";
+    const mode_name = args.next() orelse "lz4";
+    const fragment_suffix = "-fragments";
+    const fragments = std.mem.endsWith(u8, mode_name, fragment_suffix);
+    const compression_name = if (fragments)
+        mode_name[0 .. mode_name.len - fragment_suffix.len]
+    else
+        mode_name;
     const compression = parseCompression(compression_name) orelse return error.InvalidBlockPlan;
 
     var random: [8193]u8 = undefined;
@@ -37,6 +43,7 @@ pub fn main(init: std.process.Init) !void {
         .volume_name = "vort-writer",
         .root_xattrs = &root_xattrs,
         .xattr_prefixes = &.{"user.vort."},
+        .tail_packing = if (fragments) .fragments else .none,
     });
     defer init.gpa.free(encoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });

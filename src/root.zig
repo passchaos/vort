@@ -1719,6 +1719,7 @@ pub const ErofsXattr = erofs.Xattr;
 pub const ErofsXattrs = erofs.Xattrs;
 pub const ErofsWriterCompression = erofs.WriterCompression;
 pub const ErofsWriterOptions = erofs.WriterOptions;
+pub const ErofsWriterTailPacking = erofs.WriterTailPacking;
 pub const encodeErofsAlloc = erofs.encodeAlloc;
 pub const parseErofs = erofs.parse;
 pub const parseErofsSuperblock = erofs.parseSuperblock;

@@ -51,14 +51,15 @@ byte-exact value. LZ4 ordinary/all-fragment, Deflate-fragment, and
 Zstandard-fragment cases require byte-exact extraction through whole and
 partial references, compressed/plain/interlaced packed inodes, and bounded
 range reads. Separate LZ4/Deflate/Zstandard cases exercise compressed inline
-tail packing. In
-the other direction, deterministic stored/LZ4/Deflate/Zstd Vort images carry
-root, regular-file, inline-tail, and directory attributes through a
-caller-selected plain prefix table; `fsck.erofs --xattrs` must validate,
-extract, and restore them through the host xattr API. Supply explicit tools with
+tail packing. In the other direction, deterministic stored/LZ4/Deflate/Zstd
+Vort images carry root, regular-file, inline-tail, and directory attributes
+through a caller-selected plain prefix table. Three additional Vort writers
+combine those codecs with whole and last-block fragments; their packed inode
+must remain hidden while `fsck.erofs --xattrs` validates, extracts, and restores
+all files and attributes through the host API. Supply explicit tools with
 `-- --mkfs /path/to/mkfs.erofs --fsck /path/to/fsck.erofs`; the summary reports
-`xattr_reader`, `xattr_writer`, `long_prefix_reader`, `fragment_reader`, and
-`ztailpacking_reader` separately.
+`xattr_reader`, `xattr_writer`, `long_prefix_reader`, `fragment_reader`,
+`fragment_writer`, and `ztailpacking_reader` separately.
 
 The QCOW2 differential always exercises the Vort v2/v3 writer and reader for
 uncompressed, raw-DEFLATE, and Zstandard clusters plus v2/v3 raw-backing

@@ -22215,3 +22215,18 @@ reuse, so production keeps the simpler independently owned plans.
   Deflate and Zstandard fragments, and LZ4/Deflate/Zstandard ztailpacking
   (`fragment_reader=4`, `ztailpacking_reader=3`, `xattr_reader=14`). Fragment
   and compressed-inline-tail writing remain follow-up work.
+
+- Added deterministic EROFS packed-fragment writing for LZ4, raw Deflate, and
+  Zstandard. Each non-empty regular file contributes at most its last 4 KiB
+  logical block to a caller-invisible packed inode; small files use the standard
+  whole-fragment high-bit header, while larger files retain independently
+  compressed or `PLAIN` prefix clusters and append one `FRAGMENT_PCLUSTER`
+  full-index head with checked packed offsets. The packed inode shares
+  the ordinary block planner, counts as an inode, and is explicitly excluded
+  from directory sizing and entries. Stored mode rejects the option instead of
+  fabricating an algorithm header, while default options preserve prior feature
+  bits and wire. Deterministic three-codec round trips cover exact-block,
+  multi-block, tiny whole-fragment, xattr, hidden-directory, invalid-mode, and
+  exhaustive OOM behavior. The required erofs-utils differential validates and
+  extracts all three new modes (`fragment_writer=3`, `writer=7`,
+  `external_writer=7`, `xattr_writer=7`).

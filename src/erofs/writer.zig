@@ -3,15 +3,18 @@ const core = @import("../core.zig");
 const format = @import("format.zig");
 const tree = @import("writer_tree.zig");
 const writer_codec = @import("writer_codec.zig");
+const writer_fragments = @import("writer_fragments.zig");
 const xattr = @import("xattr.zig");
 
-pub const Error = core.Error || writer_codec.Error || tree.Error || xattr.Error || error{InvalidErofs};
+pub const Error = core.Error || writer_codec.Error || writer_fragments.Error || tree.Error ||
+    xattr.Error || error{InvalidErofs};
 
 pub const Entry = tree.Entry;
 pub const EntryKind = tree.EntryKind;
 pub const Xattr = tree.Xattr;
 
 pub const Compression = writer_codec.Compression;
+pub const TailPacking = enum { none, fragments };
 
 pub const Options = struct {
     compression: Compression = .stored,
@@ -21,6 +24,7 @@ pub const Options = struct {
     build_time: u32 = 0,
     root_xattrs: []const Xattr = &.{},
     xattr_prefixes: []const []const u8 = &.{},
+    tail_packing: TailPacking = .none,
 };
 
 const block_size: usize = 4096;
@@ -35,9 +39,13 @@ pub fn encodeAlloc(
 ) Error![]u8 {
     if (options.volume_name.len > 16 or options.fixed_nsec >= 1_000_000_000)
         return error.InvalidErofs;
+    if (options.tail_packing == .fragments and options.compression == .stored)
+        return error.InvalidErofs;
 
     var filesystem = try tree.build(allocator, entries, options.root_xattrs);
     defer filesystem.deinit();
+    if (options.tail_packing == .fragments)
+        try writer_fragments.prepare(allocator, &filesystem, block_size);
     try allocateDirectoryBuffers(&filesystem);
     const metadata_end = try planMetadata(
         allocator,
@@ -85,7 +93,8 @@ fn directorySize(nodes: []const tree.Node, directory_index: usize) Error!usize {
     var used: usize = 0;
     try accountDirectoryEntry(&total, &used, 2);
     for (nodes, 0..) |node, node_index| {
-        if (node_index == directory_index or node.parent != directory_index) continue;
+        if (node.hidden or node_index == directory_index or node.parent != directory_index)
+            continue;
         try accountDirectoryEntry(&total, &used, node.name().len);
     }
     return total;
@@ -126,9 +135,29 @@ fn planMetadata(
 
         if (compression != .stored and node.kind == .file and node.data.len != 0) {
             node.layout = @intFromEnum(format.Layout.compressed_full);
-            const cluster_count = try blockCount(node.data.len);
+            const whole_fragment = node.fragment_size != 0 and
+                node.fragment_size == node.data.len;
+            const cluster_count = if (whole_fragment) 0 else try blockCount(node.data.len);
             node.compressed_indexes = try allocator.alloc(tree.Node.CompressionIndex, cluster_count);
-            @memset(node.compressed_indexes.?, .{ .kind = 0, .physical_block = 0 });
+            @memset(node.compressed_indexes.?, .{
+                .kind = 0,
+                .logical_offset = 0,
+                .physical_block = 0,
+            });
+            if (node.fragment_size != 0 and !whole_fragment) {
+                const fragment_offset = node.fragment_offset orelse return error.InvalidErofs;
+                const fragment_start = node.data.len - node.fragment_size;
+                if (node.fragment_size > block_size or fragment_start % block_size != 0)
+                    return error.InvalidErofs;
+                const fragment_index = fragment_start / block_size;
+                if (fragment_index >= node.compressed_indexes.?.len)
+                    return error.InvalidErofs;
+                node.compressed_indexes.?[fragment_index] = .{
+                    .kind = 1,
+                    .logical_offset = 0,
+                    .physical_block = @intCast(fragment_offset >> 32),
+                };
+            }
             const header_start = try alignForward(xattr_end, 8);
             cursor = try checkedAdd(header_start, try checkedAdd(16, try checkedMul(cluster_count, 8)));
             continue;
@@ -169,7 +198,8 @@ fn fillDirectories(allocator: std.mem.Allocator, filesystem: *tree.Tree) Error!v
             .file_type = .directory,
         });
         for (filesystem.nodes, 0..) |node, node_index| {
-            if (node_index == directory_index or node.parent != directory_index) continue;
+            if (node.hidden or node_index == directory_index or node.parent != directory_index)
+                continue;
             try references.append(allocator, .{
                 .nid = node.nid,
                 .name = node.name(),
@@ -222,19 +252,22 @@ fn assignDataBlocks(filesystem: *tree.Tree, first_data_block: usize) Error!usize
     var next_block = first_data_block;
     for (filesystem.nodes) |*node| {
         const content_len = node.content().len;
+        if (node.fragment_size > content_len) return error.InvalidErofs;
+        const physical_content_len = content_len - node.fragment_size;
         const blocks = switch (std.enums.fromInt(format.Layout, node.layout) orelse
             return error.InvalidErofs) {
-            .compressed_full => try blockCount(content_len),
+            .compressed_full => try blockCount(physical_content_len),
             .flat_inline => content_len / block_size,
             .flat_plain => try blockCount(content_len),
             else => return error.InvalidErofs,
         };
+        node.compressed_block_count = if (node.compressed_indexes != null) blocks else 0;
         if (blocks == 0) continue;
         if (next_block > std.math.maxInt(u32)) return error.InvalidErofs;
         node.start_block = @intCast(next_block);
         if (node.compressed_indexes) |indexes| {
-            if (indexes.len != blocks) return error.InvalidErofs;
-            for (indexes, 0..) |*index, cluster_index| {
+            if (indexes.len < blocks) return error.InvalidErofs;
+            for (indexes[0..blocks], 0..) |*index, cluster_index| {
                 const physical = try checkedAdd(next_block, cluster_index);
                 if (physical > std.math.maxInt(u32)) return error.InvalidErofs;
                 index.physical_block = @intCast(physical);
@@ -305,9 +338,14 @@ fn writeCompressedData(
     encoder: *writer_codec.Encoder,
 ) Error!void {
     const indexes = node.compressed_indexes orelse return error.InvalidErofs;
-    for (indexes, 0..) |*index, cluster_index| {
+    if (node.compressed_block_count > indexes.len) return error.InvalidErofs;
+    const physical_content_len = node.data.len - node.fragment_size;
+    for (indexes[0..node.compressed_block_count], 0..) |*index, cluster_index| {
         const logical_start = try checkedMul(cluster_index, block_size);
-        const logical_end = @min(node.data.len, try checkedAdd(logical_start, block_size));
+        const logical_end = @min(
+            physical_content_len,
+            try checkedAdd(logical_start, block_size),
+        );
         const chunk = node.data[logical_start..logical_end];
         const physical_start = try checkedMul(index.physical_block, block_size);
         const physical_end = try checkedAdd(physical_start, block_size);
@@ -346,7 +384,7 @@ fn writeInode(
     writeU32(image, location + 8, @intCast(node.content().len));
     writeU32(image, location + 12, node.modification_time);
     const data_value: u32 = if (layout == .compressed_full)
-        @intCast(node.compressed_indexes.?.len)
+        @intCast(node.compressed_block_count)
     else
         node.start_block;
     writeU32(image, location + 16, data_value);
@@ -370,7 +408,20 @@ fn writeInode(
         const index_start = try checkedAdd(header_start, 16);
         if (try checkedAdd(index_start, try checkedMul(node.compressed_indexes.?.len, 8)) > image.len)
             return error.InvalidErofs;
-        writeU16(image, header_start + 4, 0);
+        if (node.fragment_size == node.data.len and node.fragment_size != 0) {
+            const fragment_offset = node.fragment_offset orelse return error.InvalidErofs;
+            if (fragment_offset >> 63 != 0 or node.compressed_indexes.?.len != 0)
+                return error.InvalidErofs;
+            writeU64(image, header_start, fragment_offset | (@as(u64, 1) << 63));
+            return;
+        }
+        const fragment_offset = node.fragment_offset;
+        writeU32(
+            image,
+            header_start,
+            if (fragment_offset) |offset| @truncate(offset) else 0,
+        );
+        writeU16(image, header_start + 4, if (fragment_offset != null) 0x20 else 0);
         image[header_start + 6] = @intFromEnum(
             writer_codec.algorithm(compression) orelse return error.InvalidErofs,
         );
@@ -378,7 +429,7 @@ fn writeInode(
         for (node.compressed_indexes.?, 0..) |index, cluster_index| {
             const offset = index_start + cluster_index * 8;
             writeU16(image, offset, index.kind);
-            writeU16(image, offset + 2, 0);
+            writeU16(image, offset + 2, index.logical_offset);
             writeU32(image, offset + 4, index.physical_block);
         }
     }
@@ -404,6 +455,12 @@ fn writeSuperblock(
         prefix_start,
         try xattr.prefixTableSize(options.xattr_prefixes),
     );
+    var packed_nid: u64 = 0;
+    for (nodes) |node| if (node.hidden) {
+        if (packed_nid != 0) return error.InvalidErofs;
+        packed_nid = node.nid;
+    };
+    const has_fragments = packed_nid != 0;
     if (prefix_end > image.len or prefix_start / 4 > std.math.maxInt(u32))
         return error.InvalidErofs;
     writeU32(image, base, format.magic);
@@ -430,6 +487,10 @@ fn writeSuperblock(
         image,
         base + 80,
         writer_codec.featureIncompat(options.compression) |
+            (if (has_fragments)
+                format.feature_incompat_fragments
+            else
+                @as(u32, 0)) |
             (if (prefix_count == 0)
                 @as(u32, 0)
             else
@@ -439,6 +500,7 @@ fn writeSuperblock(
     image[base + 91] = @intCast(prefix_count);
     if (prefix_count != 0)
         writeU32(image, base + 92, @intCast(prefix_start / 4));
+    writeU64(image, base + 96, packed_nid);
     if (writer_codec.configuration(options.compression)) |configuration| {
         const end = try checkedAdd(configuration_start, configuration.len);
         if (end > image.len) return error.InvalidErofs;

@@ -158,6 +158,7 @@ def main() -> None:
     xattr_writer_cases = 0
     long_prefix_reader_cases = 0
     fragment_reader_cases = 0
+    fragment_writer_cases = 0
     ztailpacking_reader_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
@@ -199,7 +200,15 @@ def main() -> None:
             "small": {b"user.vort.small": b"small-xattr"},
             "empty": {b"user.vort.directory": b"directory-xattr"},
         }
-        for mode in ("stored", "lz4", "deflate", "zstd"):
+        for mode in (
+            "stored",
+            "lz4",
+            "deflate",
+            "zstd",
+            "lz4-fragments",
+            "deflate-fragments",
+            "zstd-fragments",
+        ):
             image = temp / f"writer-{mode}.erofs"
             repeated = temp / f"writer-{mode}-repeat.erofs"
             run(args.writer, image, mode)
@@ -216,6 +225,10 @@ def main() -> None:
                 if output.read_bytes() != expected:
                     raise AssertionError(f"Vort writer self decode mismatch for {mode}/{name}")
             verify_vort_xattrs(args.cli, image, expected_writer_xattrs, f"writer-{mode}")
+            if b"$vort-packed" in listing:
+                raise AssertionError(f"hidden EROFS packed inode was listed for {mode}")
+            if mode.endswith("-fragments"):
+                fragment_writer_cases += 1
             writer_cases += 1
             if fsck is not None:
                 extracted = temp / f"writer-{mode}-fsck"
@@ -366,6 +379,7 @@ def main() -> None:
         f"xattr_reader={xattr_reader_cases} xattr_writer={xattr_writer_cases} "
         f"long_prefix_reader={long_prefix_reader_cases} "
         f"fragment_reader={fragment_reader_cases} "
+        f"fragment_writer={fragment_writer_cases} "
         f"ztailpacking_reader={ztailpacking_reader_cases} "
         f"malformed={malformed}"
     )
