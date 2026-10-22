@@ -31,7 +31,8 @@ rejection; the LZ4DIFF seed reaches a complete BSDIFF application and LZ4HC
 level-5 target reconstruction, while the Zucchini seed reaches CRC-checked
 NoOp literal application, a second seed reaches AArch64 ELF target-pool and
 branch-reference correction, and a third reaches PE32+ base-relocation,
-absolute-pointer, and rel32 correction.
+absolute-pointer, and rel32 correction. A fourth valid seed reaches AArch32 ELF
+relocation, absolute-pointer, and ARM A24 branch correction.
 
 The `tools/fuzz_corpus.zig` command is intentionally hex-sample based so corpus
 reducers can feed minimized byte strings without inventing a file format.

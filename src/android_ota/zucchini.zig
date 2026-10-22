@@ -1,6 +1,7 @@
 const std = @import("std");
 const checksum = @import("../checksum.zig");
 const format = @import("format.zig");
+const aarch32 = @import("zucchini/aarch32.zig");
 const aarch64 = @import("zucchini/aarch64.zig");
 const intel = @import("zucchini/intel.zig");
 const pe = @import("zucchini/pe.zig");
@@ -147,6 +148,19 @@ pub const Patch = struct {
                 .elf_x64 => try applyExecutableReferences(
                     intel.X64,
                     intel.Options{
+                        .max_sections = options.max_elf_sections,
+                        .max_references = options.max_references,
+                    },
+                    allocator,
+                    old_element,
+                    new_element,
+                    element,
+                    self.target_pools[element.pool_start..][0..element.pool_count],
+                    options,
+                ),
+                .elf_aarch32 => try applyExecutableReferences(
+                    aarch32,
+                    aarch32.Options{
                         .max_sections = options.max_elf_sections,
                         .max_references = options.max_references,
                     },
@@ -1234,6 +1248,71 @@ test "Android OTA Zucchini PE releases every allocation failure" {
     );
 }
 
+test "Android OTA Zucchini corrects AArch32 ELF references" {
+    const allocator = std.testing.allocator;
+    const source = aarch32.testElf(0x108);
+    const expected = aarch32.testElf(0x10c);
+    const encoded = try testAarch32PatchAlloc(
+        allocator,
+        &source,
+        &expected,
+    );
+    defer allocator.free(encoded);
+    const output = try applyAlloc(
+        allocator,
+        &source,
+        encoded,
+        expected.len,
+        .{},
+    );
+    defer allocator.free(output);
+    try std.testing.expectEqualSlices(u8, &expected, output);
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        applyAlloc(
+            allocator,
+            &source,
+            encoded,
+            expected.len,
+            .{ .max_references = 0 },
+        ),
+    );
+}
+
+test "Android OTA Zucchini AArch32 releases every allocation failure" {
+    const source = aarch32.testElf(0x108);
+    const expected = aarch32.testElf(0x10c);
+    const encoded = try testAarch32PatchAlloc(
+        std.testing.allocator,
+        &source,
+        &expected,
+    );
+    defer std.testing.allocator.free(encoded);
+    const Test = struct {
+        fn run(
+            allocator: std.mem.Allocator,
+            source_bytes: []const u8,
+            patch_bytes: []const u8,
+            expected_bytes: []const u8,
+        ) !void {
+            const output = try applyAlloc(
+                allocator,
+                source_bytes,
+                patch_bytes,
+                expected_bytes.len,
+                .{},
+            );
+            defer allocator.free(output);
+            try std.testing.expectEqualSlices(u8, expected_bytes, output);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{ &source, encoded, &expected },
+    );
+}
+
 pub const test_aosp_reader_fixture = [_]u8{
     0x5a, 0x75, 0x63, 0x63, 0x01, 0x00, 0x00, 0x00,
     0x10, 0x32, 0x54, 0x76, 0x00, 0x11, 0x22, 0x33,
@@ -1549,6 +1628,40 @@ pub fn testPePatchAlloc(
     try appendU32(allocator, &output, 1);
     try output.append(allocator, 2);
     try appendBuffer(allocator, &output, &.{ 0x8c, 0x04 });
+    return output.toOwnedSlice(allocator);
+}
+
+pub fn testAarch32PatchAlloc(
+    allocator: std.mem.Allocator,
+    source: []const u8,
+    expected: []const u8,
+) ![]u8 {
+    var output: std.ArrayList(u8) = .empty;
+    errdefer output.deinit(allocator);
+    try output.appendSlice(allocator, magic);
+    try appendU16(allocator, &output, major_version);
+    try appendU16(allocator, &output, 0);
+    try appendU32(allocator, &output, @intCast(source.len));
+    try appendU32(allocator, &output, checksum.crc32(source));
+    try appendU32(allocator, &output, @intCast(expected.len));
+    try appendU32(allocator, &output, checksum.crc32(expected));
+    try appendU32(allocator, &output, 1);
+    try appendU32(allocator, &output, 0);
+    try appendU32(allocator, &output, @intCast(source.len));
+    try appendU32(allocator, &output, 0);
+    try appendU32(allocator, &output, @intCast(expected.len));
+    try output.appendSlice(allocator, "EA32");
+    try appendU16(allocator, &output, 1);
+    try appendBuffer(allocator, &output, &.{0});
+    try appendBuffer(allocator, &output, &.{0});
+    try appendBuffer(allocator, &output, &.{ 0xa0, 0x07 });
+    try appendBuffer(allocator, &output, "");
+    try appendBuffer(allocator, &output, "");
+    try appendBuffer(allocator, &output, "");
+    try appendBuffer(allocator, &output, &.{ 0, 0, 2 });
+    try appendU32(allocator, &output, 1);
+    try output.append(allocator, 2);
+    try appendBuffer(allocator, &output, &.{ 0x8c, 0x02 });
     return output.toOwnedSlice(allocator);
 }
 

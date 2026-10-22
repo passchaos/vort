@@ -228,8 +228,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   extraction, PUFFDIFF with byte- and bit-aligned Deflate extents,
   LZ4DIFF_BSDIFF/LZ4DIFF_PUFFDIFF with liblz4-compatible fixed-output LZ4 and
   LZ4HC reconstruction plus postfix correction, bounded Zucchini v1 NoOp/raw,
-  AArch64 ELF, x86/x86-64 ELF, and PE32/PE32+ elements behind the Android
-  Brotli envelope,
+  AArch32/AArch64 ELF, x86/x86-64 ELF, and PE32/PE32+ elements behind the
+  Android Brotli envelope,
   BSDIFF40/BSDF2/PUF1 patch
   streams, SHA-256 checks, bounded range reads, source-backed seekable payload
   and old-partition callbacks with operation-bounded memory, plus a two-pass

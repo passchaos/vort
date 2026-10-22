@@ -199,8 +199,11 @@ patches that jointly exercise relative relocations, absolute pointers, and
 Intel rel32 correction. Independent PE32 and PE32+ generators exercise the
 same three reference pools through `Px86` and `Px64` base-relocation tables,
 image-base-adjusted pointers, and executable sections. All six Zucchini
-fixtures must match through complete, source-backed, and bounded-range OTA
-extraction.
+fixtures plus an `EA32` ELF generator must match through complete,
+source-backed, and bounded-range OTA extraction. The AArch32 fixture covers
+`R_ARM_RELATIVE`, absolute pointers, ARM-mode detection, and A24 branch
+correction; AOSP-derived fixed vectors separately pin all five ARM/Thumb-2
+branch encodings.
 
 `run-br-real-corpus-diff` reads the repository-owned
 `tools/br/real_corpus_manifest.json` and requires source, documentation,

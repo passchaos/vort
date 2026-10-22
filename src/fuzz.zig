@@ -6,6 +6,7 @@ const bitstream = @import("bitstream.zig");
 const huffman = @import("huffman.zig");
 const android_ota_puffin = @import("android_ota/puffin.zig");
 const android_ota_zucchini = @import("android_ota/zucchini.zig");
+const android_ota_zucchini_aarch32 = @import("android_ota/zucchini/aarch32.zig");
 const android_ota_zucchini_pe = @import("android_ota/zucchini/pe.zig");
 const lz77 = @import("lz77.zig");
 
@@ -40,6 +41,28 @@ pub fn androidOtaZucchiniPeFuzzSampleAlloc(
         &source,
         &expected,
         true,
+    );
+    defer allocator.free(patch);
+    var output: std.ArrayList(u8) = .empty;
+    errdefer output.deinit(allocator);
+    var prefix: [4]u8 = undefined;
+    std.mem.writeInt(u16, prefix[0..2], expected.len, .little);
+    std.mem.writeInt(u16, prefix[2..4], source.len, .little);
+    try output.appendSlice(allocator, &prefix);
+    try output.appendSlice(allocator, &source);
+    try output.appendSlice(allocator, patch);
+    return output.toOwnedSlice(allocator);
+}
+
+pub fn androidOtaZucchiniAarch32FuzzSampleAlloc(
+    allocator: std.mem.Allocator,
+) ![]u8 {
+    const source = android_ota_zucchini_aarch32.testElf(0x108);
+    const expected = android_ota_zucchini_aarch32.testElf(0x10c);
+    const patch = try android_ota_zucchini.testAarch32PatchAlloc(
+        allocator,
+        &source,
+        &expected,
     );
     defer allocator.free(patch);
     var output: std.ArrayList(u8) = .empty;

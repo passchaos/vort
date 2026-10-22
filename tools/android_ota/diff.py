@@ -684,6 +684,100 @@ def zucchini_aarch64_payload() -> tuple[bytes, bytes, bytes]:
     return payload, source, target
 
 
+def test_aarch32_elf(target_offset: int) -> bytes:
+    image = bytearray(BLOCK_SIZE)
+    image[:4] = b"\x7fELF"
+    image[4:7] = b"\1\1\1"
+    struct.pack_into("<HHI", image, 16, 2, 40, 1)
+    section_offset = BLOCK_SIZE - 4 * 40
+    struct.pack_into("<I", image, 32, section_offset)
+    struct.pack_into("<HHHHH", image, 40, 52, 32, 0, 40, 4)
+
+    def section(
+        index: int,
+        kind: int,
+        flags: int,
+        address: int,
+        offset: int,
+        size: int,
+        entry_size: int,
+    ) -> None:
+        base = section_offset + index * 40
+        struct.pack_into(
+            "<IIIIIIIIII",
+            image,
+            base,
+            0,
+            kind,
+            flags,
+            address,
+            offset,
+            size,
+            0,
+            0,
+            1,
+            entry_size,
+        )
+
+    section(1, 1, 6, 0x10000, 0x100, 0x20, 0)
+    section(2, 1, 3, 0x20000, 0x140, 0x08, 0)
+    section(3, 9, 2, 0x30000, 0x160, 0x08, 8)
+    for offset in range(0x100, 0x120, 4):
+        struct.pack_into("<I", image, offset, 0xE1A00000)
+    displacement = target_offset - 0x108
+    struct.pack_into("<I", image, 0x100, 0xEA000000 | ((displacement >> 2) & 0xFFFFFF))
+    struct.pack_into("<I", image, 0x140, 0x10008)
+    struct.pack_into("<II", image, 0x160, 0x20000, 23)
+    return bytes(image)
+
+
+def zucchini_aarch32_payload() -> tuple[bytes, bytes, bytes]:
+    if python_brotli is None:
+        raise AssertionError("python brotli module is unavailable")
+    source = test_aarch32_elf(0x108)
+    target = test_aarch32_elf(0x10C)
+    patch = bytearray(b"Zucc")
+    patch += struct.pack(
+        "<HHIIII",
+        1,
+        0,
+        len(source),
+        zlib.crc32(source) & 0xFFFFFFFF,
+        len(target),
+        zlib.crc32(target) & 0xFFFFFFFF,
+    )
+    patch += struct.pack("<I", 1)
+    patch += struct.pack(
+        "<IIII4sH",
+        0,
+        len(source),
+        0,
+        len(target),
+        b"EA32",
+        1,
+    )
+    patch += struct.pack("<I", 1) + b"\0"
+    patch += struct.pack("<I", 1) + b"\0"
+    encoded_length = varint(len(source))
+    patch += struct.pack("<I", len(encoded_length)) + encoded_length
+    patch += struct.pack("<I", 0) * 3
+    patch += struct.pack("<I", 3) + b"\0\0\2"
+    patch += struct.pack("<I", 1) + b"\2" + struct.pack("<I", 2) + b"\x8c\2"
+    compressed_patch = python_brotli.compress(bytes(patch), quality=9)
+    operation_message = bytearray(vfield(1, ZUCCHINI))
+    operation_message += vfield(2, 0) + vfield(3, len(compressed_patch))
+    operation_message += bfield(4, extent(0, 1)) + bfield(6, extent(0, 1))
+    operation_message += bfield(8, hashlib.sha256(compressed_patch).digest())
+    operation_message += bfield(9, hashlib.sha256(source).digest())
+    partition = bytearray(bfield(1, b"zucchini-aarch32"))
+    partition += bfield(6, partition_info(source))
+    partition += bfield(7, partition_info(target))
+    partition += bfield(8, bytes(operation_message))
+    manifest = vfield(3, BLOCK_SIZE) + vfield(12, 5) + bfield(13, bytes(partition))
+    payload = MAGIC + struct.pack(">QQI", 2, len(manifest), 0) + manifest + compressed_patch
+    return payload, source, target
+
+
 def test_intel_elf(is_64: bool, target_offset: int) -> bytes:
     image = bytearray(BLOCK_SIZE)
     image[:4] = b"\x7fELF"
@@ -1633,6 +1727,7 @@ def main() -> None:
             for name, partition_name, fixture in (
                 ("noop", "zucchini", zucchini_payload),
                 ("aarch64", "zucchini-aarch64", zucchini_aarch64_payload),
+                ("aarch32", "zucchini-aarch32", zucchini_aarch32_payload),
                 ("x86", "zucchini-x86", lambda: zucchini_intel_payload(False)),
                 ("x64", "zucchini-x64", lambda: zucchini_intel_payload(True)),
                 ("pe-x86", "zucchini-pe-x86", lambda: zucchini_pe_payload(False)),
