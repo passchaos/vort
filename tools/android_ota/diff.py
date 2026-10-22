@@ -1104,6 +1104,64 @@ def zucchini_dex_payload() -> tuple[bytes, bytes, bytes]:
     return payload, source, target
 
 
+def zucchini_ztf_payload() -> tuple[bytes, bytes, bytes]:
+    if python_brotli is None:
+        raise AssertionError("python brotli module is unavailable")
+    source_ztf = b"ZTxt\nTargetABC\nRef <2,1>\ntxTZ\n"
+    target_ztf = b"ZTxt\nTargetABC\nRef <2,2>\ntxTZ\n"
+    source = source_ztf + bytes(BLOCK_SIZE - len(source_ztf))
+    target = target_ztf + bytes(BLOCK_SIZE - len(target_ztf))
+    patch = bytearray(b"Zucc")
+    patch += struct.pack(
+        "<HHIIII",
+        1,
+        0,
+        len(source),
+        zlib.crc32(source) & 0xFFFFFFFF,
+        len(target),
+        zlib.crc32(target) & 0xFFFFFFFF,
+    )
+    patch += struct.pack("<I", 2)
+    patch += struct.pack(
+        "<IIII4sH",
+        0,
+        len(source_ztf),
+        0,
+        len(target_ztf),
+        b"ZTF ",
+        1,
+    )
+    for stream in (b"\0", b"\0", varint(len(source_ztf)), b"", b"", b"", b"\2"):
+        patch += struct.pack("<I", len(stream)) + stream
+    patch += struct.pack("<I", 1) + b"\0" + struct.pack("<I", 1) + b"\6"
+    padding = BLOCK_SIZE - len(source_ztf)
+    patch += struct.pack(
+        "<IIII4sH",
+        len(source_ztf),
+        padding,
+        len(target_ztf),
+        padding,
+        b"NoOp",
+        1,
+    )
+    for stream in (b"\0", b"\0", varint(padding), b"", b"", b"", b""):
+        patch += struct.pack("<I", len(stream)) + stream
+    patch += struct.pack("<I", 0)
+    compressed_patch = python_brotli.compress(bytes(patch), quality=9)
+    operation_message = bytearray(vfield(1, ZUCCHINI))
+    operation_message += vfield(2, 0) + vfield(3, len(compressed_patch))
+    operation_message += bfield(4, extent(0, 1)) + bfield(6, extent(0, 1))
+    operation_message += bfield(8, hashlib.sha256(compressed_patch).digest())
+    operation_message += bfield(9, hashlib.sha256(source).digest())
+    partition = bytearray(bfield(1, b"zucchini-ztf"))
+    partition += bfield(6, partition_info(source))
+    partition += bfield(7, partition_info(target))
+    partition += bfield(8, bytes(operation_message))
+    manifest = vfield(3, BLOCK_SIZE) + vfield(12, 5) + bfield(13, bytes(partition))
+    payload = MAGIC + struct.pack(">QQI", 2, len(manifest), 0) + manifest + compressed_patch
+    return payload, source, target
+
+
 def source_bsdiff_payload(source: bytes) -> tuple[bytes, bytes, bytes]:
     if len(source) != 2 * BLOCK_SIZE:
         raise AssertionError("SOURCE_BSDIFF fixture must be two blocks")
@@ -1841,6 +1899,7 @@ def main() -> None:
                 ("pe-x86", "zucchini-pe-x86", lambda: zucchini_pe_payload(False)),
                 ("pe-x64", "zucchini-pe-x64", lambda: zucchini_pe_payload(True)),
                 ("dex", "zucchini-dex", zucchini_dex_payload),
+                ("ztf", "zucchini-ztf", zucchini_ztf_payload),
             ):
                 zucchini_data, zucchini_source, zucchini_expected = fixture()
                 zucchini_payload_path = temp / f"zucchini-{name}.bin"

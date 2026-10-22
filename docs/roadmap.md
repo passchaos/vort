@@ -18480,8 +18480,11 @@ reuse, so production keeps the simpler independently owned plans.
   indices, and relative code targets. A 42/42 group fixture, valid SHA-1 /
   Adler-32 differential, raw-integrity deltas, block-tail NoOp, malformed and
   quota cases, exhaustive OOM, and a valid fuzz seed cover the implementation.
-  ZTF reference correction remains the final explicit executable follow-up.
-  See `docs/formats/android-ota.md`.
+  ZTF support closes the remaining executable type with all 24 delimiter /
+  absolute-or-relative / digit-width groups, bounded line-column translation,
+  negative-zero and newline protections, byte-pinned AOSP old/new fixtures,
+  an independent OTA differential, malformed/quota/OOM coverage, and a valid
+  fuzz seed. See `docs/formats/android-ota.md`.
 
 - Promoted the previously internal LZ4DIFF high-compression engine into public
   pure-Zig LZ4HC block and independent-frame APIs. Raw blocks reproduce
@@ -22124,10 +22127,10 @@ reuse, so production keeps the simpler independently owned plans.
   accounting in the CLI. Unit tests cover 3/5/7/17-byte reads, raw/Bzip2/XZ/
   ZERO, SOURCE_COPY, operation limits, corrupt old-image hashes and exhaustive
   OOM. The independent differential adds four writer, Python mixed,
-  SOURCE_COPY, SOURCE_BSDIFF, PUFFDIFF, six LZ4DIFF and eight Zucchini file-source
-  extractions (`source_reader=22`, `source_inspect=4`), while Rust
+  SOURCE_COPY, SOURCE_BSDIFF, PUFFDIFF, six LZ4DIFF and nine Zucchini file-source
+  extractions (`source_reader=23`, `source_inspect=4`), while Rust
   `payload_dumper` independently retains all four writer checks. The optional
-  AOSP official full/delta corpus raises source coverage to 26 with four real
+  AOSP official full/delta corpus raises source coverage to 27 with four real
   kernel/root cases, including genuine BROTLI_BSDIFF (`source_aosp=4`).
 
 - Added a two-pass Android OTA writer over stable seekable partition sources

@@ -206,7 +206,9 @@ correction; AOSP-derived fixed vectors separately pin all five ARM/Thumb-2
 branch encodings. A valid DEX 039 generator carries correct SHA-1 and Adler-32,
 splits block-tail padding into a NoOp element, applies raw integrity deltas, and
 retargets a Dalvik `const-string` through the DEX string-ID pool. All eight
-fixtures exercise complete, source-backed, and bounded-range extraction.
+fixtures plus an independently generated ZTF reference patch exercise complete,
+source-backed, and bounded-range extraction. Byte-pinned AOSP `old.ztf` and
+`new.ztf` fixtures separately validate the full textual parser and writers.
 
 `run-br-real-corpus-diff` reads the repository-owned
 `tools/br/real_corpus_manifest.json` and requires source, documentation,

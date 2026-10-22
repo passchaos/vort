@@ -77,8 +77,14 @@ layouts, and payload boundaries. All 42 AOSP reference types and 17 target
 pools are covered: string/type/proto/field/method/call-site/method-handle
 indices, variable-item offsets, annotations, encoded arrays, and 8-/16-/32-bit
 relative code targets. DEX SHA-1 and Adler-32 changes remain ordinary Zucchini
-raw deltas, matching upstream wire semantics. ZTF elements are parsed but
-explicitly return `UnsupportedZucchiniPatch`.
+raw deltas, matching upstream wire semantics.
+
+Zucchini Text Format (`ZTF `) elements support all 24 AOSP reference groups:
+four delimiter pools, absolute and relative line/column addressing, and one-
+through three-digit fields. Parsing pins the first `txTZ\n` footer, bounds lines
+and columns below 1000, rejects negative zero and out-of-range targets, and
+protects newlines during writes. Repository fixtures are byte-identical to
+AOSP's `old.ztf` and `new.ztf` corpus files.
 
 The bsdiff patch
 reader accepts traditional `BSDIFF40` with three Bzip2 streams and Android's
@@ -274,15 +280,16 @@ fixtures cover the corresponding PE base-relocation and image-base semantics.
 An `EA32` fixture additionally retargets an ARM A24 branch. A DEX 039 fixture
 with valid SHA-1/Adler-32 retargets a Dalvik string index while raw deltas update
 the integrity fields and a NoOp element preserves block padding. It wraps all
-eight in Brotli and verifies whole-partition and bounded-range OTA extraction.
+eight binary fixtures plus an independent ZTF reference patch in Brotli and
+verifies whole-partition and bounded-range OTA extraction.
 The required source-backed matrix uses real positional file callbacks for all
 four writer modes, the independent Python mixed payload, SOURCE_COPY,
-SOURCE_BSDIFF, PUFFDIFF, six LZ4/LZ4HC diff variants, and eight Zucchini variants.
+SOURCE_BSDIFF, PUFFDIFF, six LZ4/LZ4HC diff variants, and nine Zucchini variants.
 It writes outputs in 257-byte chunks, checks final bytes and SHA-256, reports
-physical read counts, and currently requires `source_reader=22` plus
+physical read counts, and currently requires `source_reader=23` plus
 `source_inspect=4`. Supplying the local AOSP update-engine corpus additionally
 requires both full and both delta kernel/root partitions through this path,
-raising the result to `source_reader=26`, `source_aosp=4`.
+raising the result to `source_reader=27`, `source_aosp=4`.
 The source writer differential forces three-byte input reads and five-byte sink
 writes for raw, Bzip2, XZ, and automatic policies, requires exact equality with
 the corresponding one-shot payloads, and independently decodes all four with
@@ -294,12 +301,10 @@ select the correct key after a wrong-key candidate. Wrong-only keys, damaged
 signatures, and unsigned payloads fail (`signature_cases=9`,
 `signature_openssl=4`). Fixed Vail vectors additionally cover RSA-4096.
 
-Current explicit limitations are major-version-1 payloads, certificate-bundle
-trust-store discovery/revocation policy, and architecture-specific
-Zucchini reference correction for ZTF elements. DISCARD is
+Current explicit limitations are major-version-1 payloads and certificate-bundle
+trust-store discovery/revocation policy. DISCARD is
 likewise rejected by default
 because Android defines its read-back contents as undefined; callers may opt
 into deterministic zero interpretation through `DecodeOptions.discard_as_zero`.
-Non-seekable network input, a single-pass writer for callers unable to replay
-input, and the remaining architecture-specific Zucchini reference models
-remain future work.
+Non-seekable network input and a single-pass writer for callers unable to replay
+input remain future work.

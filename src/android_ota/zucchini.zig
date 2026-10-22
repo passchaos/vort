@@ -6,6 +6,7 @@ const aarch64 = @import("zucchini/aarch64.zig");
 const dex = @import("zucchini/dex.zig");
 const intel = @import("zucchini/intel.zig");
 const pe = @import("zucchini/pe.zig");
+const ztf = @import("zucchini/ztf.zig");
 
 pub const Error = format.Error || std.mem.Allocator.Error;
 
@@ -69,6 +70,7 @@ pub const ParseOptions = struct {
     max_pe_reloc_blocks: usize = 1 << 20,
     max_dex_map_items: usize = 21,
     max_dex_items: usize = 1 << 24,
+    max_ztf_lines: usize = 1000,
     max_references: usize = 1 << 24,
     max_targets: usize = 1 << 24,
 };
@@ -207,6 +209,19 @@ pub const Patch = struct {
                     dex.Options{
                         .max_map_items = options.max_dex_map_items,
                         .max_items = options.max_dex_items,
+                        .max_references = options.max_references,
+                    },
+                    allocator,
+                    old_element,
+                    new_element,
+                    element,
+                    self.target_pools[element.pool_start..][0..element.pool_count],
+                    options,
+                ),
+                .ztf => try applyExecutableReferences(
+                    ztf,
+                    ztf.Options{
+                        .max_lines = options.max_ztf_lines,
                         .max_references = options.max_references,
                     },
                     allocator,
@@ -1401,6 +1416,77 @@ test "Android OTA Zucchini DEX releases every allocation failure" {
     );
 }
 
+test "Android OTA Zucchini corrects ZTF text references" {
+    const allocator = std.testing.allocator;
+    const source = "ZTxt\nTargetABC\nRef <2,1>\ntxTZ\n";
+    const expected = "ZTxt\nTargetABC\nRef <2,2>\ntxTZ\n";
+    const encoded = try testZtfPatchAlloc(allocator, source, expected);
+    defer allocator.free(encoded);
+    const output = try applyAlloc(
+        allocator,
+        source,
+        encoded,
+        expected.len,
+        .{},
+    );
+    defer allocator.free(output);
+    try std.testing.expectEqualSlices(u8, expected, output);
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        applyAlloc(
+            allocator,
+            source,
+            encoded,
+            expected.len,
+            .{ .max_ztf_lines = 1 },
+        ),
+    );
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        applyAlloc(
+            allocator,
+            source,
+            encoded,
+            expected.len,
+            .{ .max_references = 0 },
+        ),
+    );
+}
+
+test "Android OTA Zucchini ZTF releases every allocation failure" {
+    const source = "ZTxt\nTargetABC\nRef <2,1>\ntxTZ\n";
+    const expected = "ZTxt\nTargetABC\nRef <2,2>\ntxTZ\n";
+    const encoded = try testZtfPatchAlloc(
+        std.testing.allocator,
+        source,
+        expected,
+    );
+    defer std.testing.allocator.free(encoded);
+    const Test = struct {
+        fn run(
+            allocator: std.mem.Allocator,
+            source_bytes: []const u8,
+            patch_bytes: []const u8,
+            expected_bytes: []const u8,
+        ) !void {
+            const output = try applyAlloc(
+                allocator,
+                source_bytes,
+                patch_bytes,
+                expected_bytes.len,
+                .{},
+            );
+            defer allocator.free(output);
+            try std.testing.expectEqualSlices(u8, expected_bytes, output);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{ source, encoded, expected },
+    );
+}
+
 pub const test_aosp_reader_fixture = [_]u8{
     0x5a, 0x75, 0x63, 0x63, 0x01, 0x00, 0x00, 0x00,
     0x10, 0x32, 0x54, 0x76, 0x00, 0x11, 0x22, 0x33,
@@ -1796,6 +1882,40 @@ pub fn testDexPatchAlloc(
     try appendU32(allocator, &output, 1);
     try output.append(allocator, 0);
     try appendBuffer(allocator, &output, &.{ 0xb4, 0x01 });
+    return output.toOwnedSlice(allocator);
+}
+
+pub fn testZtfPatchAlloc(
+    allocator: std.mem.Allocator,
+    source: []const u8,
+    expected: []const u8,
+) ![]u8 {
+    var output: std.ArrayList(u8) = .empty;
+    errdefer output.deinit(allocator);
+    try output.appendSlice(allocator, magic);
+    try appendU16(allocator, &output, major_version);
+    try appendU16(allocator, &output, 0);
+    try appendU32(allocator, &output, @intCast(source.len));
+    try appendU32(allocator, &output, checksum.crc32(source));
+    try appendU32(allocator, &output, @intCast(expected.len));
+    try appendU32(allocator, &output, checksum.crc32(expected));
+    try appendU32(allocator, &output, 1);
+    try appendU32(allocator, &output, 0);
+    try appendU32(allocator, &output, @intCast(source.len));
+    try appendU32(allocator, &output, 0);
+    try appendU32(allocator, &output, @intCast(expected.len));
+    try output.appendSlice(allocator, "ZTF ");
+    try appendU16(allocator, &output, 1);
+    try appendBuffer(allocator, &output, &.{0});
+    try appendBuffer(allocator, &output, &.{0});
+    try appendBuffer(allocator, &output, &.{0x1e});
+    try appendBuffer(allocator, &output, "");
+    try appendBuffer(allocator, &output, "");
+    try appendBuffer(allocator, &output, "");
+    try appendBuffer(allocator, &output, &.{2});
+    try appendU32(allocator, &output, 1);
+    try output.append(allocator, 0);
+    try appendBuffer(allocator, &output, &.{6});
     return output.toOwnedSlice(allocator);
 }
 

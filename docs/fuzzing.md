@@ -34,7 +34,8 @@ branch-reference correction, and a third reaches PE32+ base-relocation,
 absolute-pointer, and rel32 correction. A fourth valid seed reaches AArch32 ELF
 relocation, absolute-pointer, and ARM A24 branch correction. A fifth reaches
 DEX fixed tables, Dalvik code references, raw integrity deltas, and target-pool
-correction.
+correction. A sixth exercises ZTF line/column translation and textual reference
+rewriting.
 
 The `tools/fuzz_corpus.zig` command is intentionally hex-sample based so corpus
 reducers can feed minimized byte strings without inventing a file format.

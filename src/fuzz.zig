@@ -99,6 +99,28 @@ pub fn androidOtaZucchiniDexFuzzSampleAlloc(
     return output.toOwnedSlice(allocator);
 }
 
+pub fn androidOtaZucchiniZtfFuzzSampleAlloc(
+    allocator: std.mem.Allocator,
+) ![]u8 {
+    const source = "ZTxt\nTargetABC\nRef <2,1>\ntxTZ\n";
+    const expected = "ZTxt\nTargetABC\nRef <2,2>\ntxTZ\n";
+    const patch = try android_ota_zucchini.testZtfPatchAlloc(
+        allocator,
+        source,
+        expected,
+    );
+    defer allocator.free(patch);
+    var output: std.ArrayList(u8) = .empty;
+    errdefer output.deinit(allocator);
+    var prefix: [4]u8 = undefined;
+    std.mem.writeInt(u16, prefix[0..2], expected.len, .little);
+    std.mem.writeInt(u16, prefix[2..4], source.len, .little);
+    try output.appendSlice(allocator, &prefix);
+    try output.appendSlice(allocator, source);
+    try output.appendSlice(allocator, patch);
+    return output.toOwnedSlice(allocator);
+}
+
 pub const CorpusStats = struct {
     cases: usize = 0,
     valid_frames: usize = 0,
