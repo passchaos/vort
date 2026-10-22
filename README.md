@@ -150,8 +150,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - dependency-free QCOW2 v2/v3 image reading and deterministic writing with
   L1/L2 mapping, sparse and zero clusters, raw-DEFLATE and Zstandard compressed
   clusters, extended-L2 subclusters, caller-supplied raw backing/external data
-  files, deterministic v2/v3 raw-backing overlays, bounded whole-image and
-  random-range decoding, fuzzing, and
+  files, deterministic v2/v3 raw-backing overlays and v3 raw external-data
+  output, bounded whole-image and random-range decoding, fuzzing, and
   bidirectional QEMU plus 7-Zip interoperability;
 - dependency-free hosted-sparse VMDK reading and deterministic monolithicSparse
   plus streamOptimized writing, with grain directory/table lookup, unallocated

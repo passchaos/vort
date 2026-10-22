@@ -55,6 +55,7 @@ pub const Header = struct {
     backing_file_offset: u64,
     backing_file_size: usize,
     backing_file_name: []const u8,
+    data_file_name: []const u8,
 
     pub fn hasBackingFile(self: Header) bool {
         return self.backing_file_offset != 0;
@@ -165,6 +166,15 @@ pub fn parseHeader(input: []const u8) Error!Header {
     if (backing_file_size != 0 and
         autoclear_features & autoclear_data_file_raw != 0)
         return error.InvalidQcow2;
+    const extension_limit = if (backing_file_size == 0)
+        cluster_size
+    else
+        backing_start;
+    const data_file_name = try parseDataFileExtension(
+        input,
+        header_length,
+        extension_limit,
+    );
     return .{
         .version = version,
         .header_length = header_length,
@@ -186,7 +196,37 @@ pub fn parseHeader(input: []const u8) Error!Header {
         .backing_file_offset = backing_file_offset,
         .backing_file_size = backing_file_size,
         .backing_file_name = backing_file_name,
+        .data_file_name = data_file_name,
     };
+}
+
+fn parseDataFileExtension(
+    input: []const u8,
+    start: usize,
+    limit: usize,
+) Error![]const u8 {
+    var data_file_name: []const u8 = "";
+    var cursor = start;
+    while (cursor + 8 <= limit) {
+        const magic_value = readU32Be(input, cursor);
+        const length: usize = readU32Be(input, cursor + 4);
+        if (magic_value == 0) {
+            if (length != 0) return error.InvalidQcow2;
+            break;
+        }
+        const payload = cursor + 8;
+        if (length > limit - payload) return error.InvalidQcow2;
+        const end = payload + length;
+        const next = std.mem.alignForward(usize, end, 8);
+        if (next > limit) return error.InvalidQcow2;
+        if (magic_value == 0x4441_5441) {
+            if (length == 0 or data_file_name.len != 0)
+                return error.InvalidQcow2;
+            data_file_name = input[payload..end];
+        }
+        cursor = next;
+    }
+    return data_file_name;
 }
 
 pub fn readU32Be(bytes: []const u8, offset: usize) u32 {

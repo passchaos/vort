@@ -1439,10 +1439,13 @@ pub const Qcow2Archive = qcow2.Archive;
 pub const Qcow2OpenOptions = qcow2.OpenOptions;
 pub const Qcow2Compression = qcow2.Compression;
 pub const Qcow2EncodeOptions = qcow2.EncodeOptions;
+pub const Qcow2ExternalDataEncodeOptions = qcow2.ExternalDataEncodeOptions;
+pub const Qcow2EncodedExternalData = qcow2.EncodedExternalData;
 pub const qcow2Magic = qcow2.magic;
 pub const parseQcow2Header = qcow2.parseHeader;
 pub const parseQcow2 = qcow2.parse;
 pub const encodeQcow2Alloc = qcow2.encodeAlloc;
+pub const encodeQcow2ExternalDataAlloc = qcow2.encodeExternalDataAlloc;
 
 pub const VmdkError = vmdk.Error;
 pub const VmdkHeader = vmdk.Header;

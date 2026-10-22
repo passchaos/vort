@@ -56,6 +56,14 @@ flag; v2 allocates a normal zero cluster because an unallocated entry would
 inherit the parent. Parent bytes beyond their supplied length read as zero, and
 partial final sectors retain the ordinary zero-padding rule.
 
+`encodeQcow2ExternalDataAlloc` returns an owning two-output result containing a
+v3 metadata image and a raw external data file. The metadata sets the standard
+external-data incompatible feature and raw-data autoclear bit, writes the
+`DATA` filename extension, keeps cluster zero at host offset zero, and maps
+every guest cluster to the same byte offset in the data file. The external file
+is sector-padded but need not be cluster-padded. Both allocations have one
+explicit `deinit` owner.
+
 ```zig
 const encoded = try vort.encodeQcow2Alloc(allocator, raw_disk, .{
     .version = 3,
@@ -65,6 +73,12 @@ const encoded = try vort.encodeQcow2Alloc(allocator, raw_disk, .{
     .backing_file_name = if (optional_raw_parent != null) "parent.raw" else null,
 });
 defer allocator.free(encoded);
+
+var external = try vort.encodeQcow2ExternalDataAlloc(allocator, raw_disk, .{
+    .cluster_bits = 16,
+    .data_file_name = "disk.data.raw",
+});
+defer external.deinit(allocator);
 ```
 
 CLI validation surface:
@@ -75,6 +89,7 @@ zig build run -- decode-qcow2 disk.qcow2 disk.raw 1073741824
 zig build run -- decode-qcow2-range disk.qcow2 range.raw 1048576 65536
 zig build run -- encode-qcow2 disk.raw disk.qcow2 zstd 16 3
 zig build run -- encode-qcow2 child.raw child.qcow2 zlib 16 3 parent.raw parent.raw
+zig build run -- encode-qcow2-external disk.raw disk.qcow2 disk.data.raw disk.data.raw 16
 zig build test-qcow2
 zig build run-qcow2-diff
 ```
@@ -83,11 +98,13 @@ zig build run-qcow2-diff
 output limit; use `-` when only the later external-data argument is needed.
 `encode-qcow2` accepts an optional logical raw backing path and the exact
 backing name to store after version.
+`encode-qcow2-external` writes metadata and raw data paths separately and stores
+the exact caller-provided data-file name.
 
 Encrypted images are rejected. The reader does not resolve backing paths,
 validate refcount ownership, or expose internal snapshots; it reads the active
-L1/L2 mapping only. The baseline writer does not yet emit external data files,
-extended L2 tables, snapshots, encryption, dirty bitmaps,
+L1/L2 mapping only. The baseline writer does not yet emit extended L2 tables,
+snapshots, encryption, dirty bitmaps,
 or compact multiple compressed payloads into one host cluster. Its single
 16-bit refcount block bounds the number of host clusters and returns
 `error.OutputLimitExceeded` rather than silently generating an incomplete
@@ -96,6 +113,7 @@ claimed support.
 
 The differential gate validates Vort output with QEMU 9.2 `qemu-img` and 7-Zip,
 including v2/v3 raw-backing overlays with inherited, modified, and explicit-zero
-clusters. It also decodes QEMU-generated v2/v3 zlib/Zstandard, extended-L2,
-backing, and external-data images byte-exactly. The generic raw-byte fuzz target
-exercises bounded header parsing, mapping, and range decoding.
+clusters and v3 raw external-data output with cluster-zero mapping. It also
+decodes QEMU-generated v2/v3 zlib/Zstandard, extended-L2, backing, and
+external-data images byte-exactly. The generic raw-byte fuzz target exercises
+bounded header parsing, mapping, and range decoding.

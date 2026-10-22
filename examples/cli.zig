@@ -241,6 +241,8 @@ pub fn main(init: std.process.Init) !void {
         try qcow2_cli.decodeRange(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-qcow2")) {
         try qcow2_cli.encode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-qcow2-external")) {
+        try qcow2_cli.encodeExternal(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "inspect-vmdk")) {
         try vmdk_cli.inspect(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-vmdk")) {
@@ -2765,6 +2767,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  decode-qcow2 <in> <out> [max_output] [backing|-] [data_file|-]
         \\  decode-qcow2-range <in> <out> <offset> <length> [backing|-] [data_file|-]
         \\  encode-qcow2 <in> <out> <none|zlib|zstd> [cluster_bits] [version] [backing backing_name]
+        \\  encode-qcow2-external <in> <image_out> <data_out> <data_name> [cluster_bits]
         \\  inspect-vmdk <path>
         \\  decode-vmdk <in> <out> [max_output] [logical_backing|-]
         \\  decode-vmdk-range <in> <out> <offset> <length> [logical_backing|-]

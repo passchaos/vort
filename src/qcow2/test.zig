@@ -302,6 +302,134 @@ test "QCOW2 external raw data file maps guest cluster zero" {
     try std.testing.expectEqualSlices(u8, input, decoded);
 }
 
+test "QCOW2 external-data writer emits raw guest mappings" {
+    const input = try makeInput(allocator, 2 * 4096 + 137);
+    defer allocator.free(input);
+    var encoded = try qcow2.encodeExternalDataAlloc(allocator, input, .{
+        .cluster_bits = 12,
+        .data_file_name = "payload.raw",
+    });
+    defer encoded.deinit(allocator);
+    const virtual_size = std.mem.alignForward(usize, input.len, 512);
+    try std.testing.expectEqual(virtual_size, encoded.data_file.len);
+    try std.testing.expectEqualSlices(u8, input, encoded.data_file[0..input.len]);
+    for (encoded.data_file[input.len..]) |byte|
+        try std.testing.expectEqual(@as(u8, 0), byte);
+    const header = try qcow2.parseHeader(encoded.image);
+    try std.testing.expect(header.hasRawExternalDataFile());
+    try std.testing.expectEqualStrings("payload.raw", header.data_file_name);
+    try std.testing.expectEqual(@as(u32, 0x4441_5441), std.mem.readInt(
+        u32,
+        encoded.image[112..116],
+        .big,
+    ));
+    const l2_offset = 4 * 4096;
+    inline for (0..3) |cluster_index| {
+        const expected = (@as(u64, 1) << 63) | cluster_index * 4096;
+        try std.testing.expectEqual(expected, std.mem.readInt(
+            u64,
+            encoded.image[l2_offset + cluster_index * 8 ..][0..8],
+            .big,
+        ));
+    }
+    const missing = try qcow2.parse(encoded.image, .{});
+    try std.testing.expectError(
+        error.MissingQcow2DataFile,
+        missing.decodeAllocLimited(allocator, virtual_size),
+    );
+    const archive = try qcow2.parse(encoded.image, .{
+        .external_data_file = encoded.data_file,
+    });
+    const decoded = try archive.decodeAllocLimited(allocator, virtual_size);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, encoded.data_file, decoded);
+    const range = try archive.readRangeAllocLimited(
+        allocator,
+        4096 - 31,
+        4096 + 89,
+        4096 + 89,
+    );
+    defer allocator.free(range);
+    try std.testing.expectEqualSlices(
+        u8,
+        encoded.data_file[4096 - 31 ..][0 .. 4096 + 89],
+        range,
+    );
+}
+
+test "QCOW2 external-data writer handles empty images and validates names" {
+    var empty = try qcow2.encodeExternalDataAlloc(allocator, "", .{
+        .cluster_bits = 12,
+        .data_file_name = "empty.raw",
+    });
+    defer empty.deinit(allocator);
+    try std.testing.expectEqual(@as(usize, 0), empty.data_file.len);
+    const archive = try qcow2.parse(empty.image, .{
+        .external_data_file = empty.data_file,
+    });
+    try std.testing.expectEqual(@as(u64, 0), archive.header.virtual_size);
+    try std.testing.expectEqualStrings("empty.raw", archive.header.data_file_name);
+
+    try std.testing.expectError(
+        error.InvalidQcow2,
+        qcow2.encodeExternalDataAlloc(allocator, "data", .{
+            .data_file_name = "",
+        }),
+    );
+    try std.testing.expectError(
+        error.InvalidQcow2,
+        qcow2.encodeExternalDataAlloc(allocator, "data", .{
+            .data_file_name = "bad\x00name",
+        }),
+    );
+    const long_name = [_]u8{'x'} ** 385;
+    try std.testing.expectError(
+        error.InvalidQcow2,
+        qcow2.encodeExternalDataAlloc(allocator, "data", .{
+            .cluster_bits = 9,
+            .data_file_name = &long_name,
+        }),
+    );
+}
+
+test "QCOW2 external-data writer rejects malformed extension bounds" {
+    var encoded = try qcow2.encodeExternalDataAlloc(allocator, "data", .{
+        .cluster_bits = 12,
+        .data_file_name = "payload.raw",
+    });
+    defer encoded.deinit(allocator);
+    std.mem.writeInt(u32, encoded.image[116..120], 0xffff_ffff, .big);
+    try std.testing.expectError(
+        error.InvalidQcow2,
+        qcow2.parseHeader(encoded.image),
+    );
+}
+
+test "QCOW2 external-data writer releases every allocation failure" {
+    const input = try makeInput(allocator, 2 * 4096 + 137);
+    defer allocator.free(input);
+    const Test = struct {
+        fn run(failing_allocator: std.mem.Allocator, source: []const u8) !void {
+            var encoded = try qcow2.encodeExternalDataAlloc(
+                failing_allocator,
+                source,
+                .{ .cluster_bits = 12, .data_file_name = "payload.raw" },
+            );
+            defer encoded.deinit(failing_allocator);
+            const archive = try qcow2.parse(encoded.image, .{
+                .external_data_file = encoded.data_file,
+            });
+            const decoded = try archive.decodeAllocLimited(
+                failing_allocator,
+                encoded.data_file.len,
+            );
+            defer failing_allocator.free(decoded);
+            try std.testing.expectEqualSlices(u8, encoded.data_file, decoded);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(allocator, Test.run, .{input});
+}
+
 test "QCOW2 writer supports L1 tables spanning multiple clusters" {
     const cluster_size = 512;
     const guest_clusters = 65 * (cluster_size / 8);

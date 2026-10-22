@@ -73,6 +73,7 @@ def main() -> None:
     layouts = 0
     malformed = 0
     backing_writer_cases = 0
+    external_data_writer_cases = 0
 
     with tempfile.TemporaryDirectory(prefix="vort-qcow2-") as temp_text:
         temp = Path(temp_text)
@@ -292,6 +293,50 @@ def main() -> None:
                     raise AssertionError(f"QEMU missed raw backing format for {name}")
                 external_encode += 1
 
+        external_image = temp / "vort-external.qcow2"
+        external_data = temp / "vort-external.raw"
+        external_decoded = temp / "vort-external-decoded.raw"
+        external_data_name = str(external_data)
+        run(
+            args.cli,
+            "encode-qcow2-external",
+            source,
+            external_image,
+            external_data,
+            external_data_name,
+            16,
+        )
+        external_summary = run(args.cli, "inspect-qcow2", external_image).stdout
+        if f"data_file={external_data_name}".encode() not in external_summary:
+            raise AssertionError("missing Vort external-data metadata")
+        run(
+            args.cli,
+            "decode-qcow2",
+            external_image,
+            external_decoded,
+            len(plain),
+            "-",
+            external_data,
+        )
+        if external_decoded.read_bytes() != plain:
+            raise AssertionError("Vort external-data writer mismatch")
+        if external_data.read_bytes() != plain:
+            raise AssertionError("Vort raw external data file mismatch")
+        external_data_writer_cases += 1
+        self_cases += 1
+        if qemu_img is not None:
+            qemu_external_output = temp / "qemu-vort-external.raw"
+            if qemu_convert_to_raw(
+                qemu_img,
+                external_image,
+                qemu_external_output,
+            ) != plain:
+                raise AssertionError("QEMU external-data writer mismatch")
+            info = run(qemu_img, "info", "--output=json", external_image).stdout
+            if b'"data-file-raw": true' not in info:
+                raise AssertionError("QEMU missed raw external-data feature")
+            external_encode += 1
+
         if qemu_img is not None:
             backing = temp / "qemu-backing.qcow2"
             backing_output = temp / "qemu-backing.raw"
@@ -395,6 +440,7 @@ def main() -> None:
         f"seven_zip={seven_zip is not None} external_encode={external_encode} "
         f"external_decode={external_decode} layouts={layouts} malformed={malformed}"
         f" backing_writer_cases={backing_writer_cases}"
+        f" external_data_writer_cases={external_data_writer_cases}"
     )
 
 

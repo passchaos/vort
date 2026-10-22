@@ -18267,13 +18267,15 @@ reuse, so production keeps the simpler independently owned plans.
   explicit capacity failure. It now also emits deterministic raw-backing
   overlays with the standard backing-format extension, inherited clusters,
   v3 explicit-zero overrides, v2 allocated-zero overrides, and partial-sector
-  inheritance. Exhaustive OOM coverage also fixed the pre-existing
+  inheritance. A separate owning two-output API now emits v3 raw external-data
+  images with the `DATA` name extension, exact guest/host cluster mapping and a
+  sector-padded data file. Exhaustive OOM coverage also fixed the pre-existing
   record-list-growth leak. QEMU 9.2 validates both directions including Vort
   v2/v3 overlays, Zstd, extended subclusters, backing, and external-data
   layouts; 7-Zip also
   extracts Vort v2/v3 none/zlib images. The generic raw-byte fuzz target now
   includes valid and malformed QCOW2 paths. Snapshot traversal, encryption,
-  writer-side extended/external layouts, multi-payload compressed-cluster
+  writer-side extended-L2 layouts, multi-payload compressed-cluster
   packing, and broader refcount scaling remain follow-up work. See
   `docs/formats/qcow2.md`.
 
