@@ -2,9 +2,11 @@ const std = @import("std");
 const core = @import("../core.zig");
 const format = @import("format.zig");
 const codec = @import("codec.zig");
+const chunk = @import("chunk.zig");
 const xattr = @import("xattr.zig");
 
-pub const Error = core.Error || format.Error || codec.Error || xattr.Error || std.mem.Allocator.Error || error{
+pub const Error = core.Error || format.Error || codec.Error || chunk.Error || xattr.Error ||
+    std.mem.Allocator.Error || error{
     InvalidErofs,
     ErofsEntryNotFound,
     ErofsNotDirectory,
@@ -19,6 +21,8 @@ pub const ReadLimits = struct {
     max_output_len: usize,
     max_packed_extent_len: usize = default_packed_extent_limit,
 };
+
+pub const DeviceInfo = chunk.DeviceInfo;
 
 pub const Inode = struct {
     nid: u64,
@@ -45,6 +49,10 @@ pub const Inode = struct {
     compressed_inline_kind: u2 = 0,
     fragment_offset: ?u64 = null,
     fragment_logical_start: usize = 0,
+    chunk_format: u16 = 0,
+    chunk_bits: u8 = 0,
+    chunk_index_start: usize = 0,
+    chunk_index_size: u8 = 0,
 
     pub fn fileType(self: Inode) Error!format.FileType {
         return switch (self.mode & 0xf000) {
@@ -86,16 +94,34 @@ pub const Directory = struct {
 
 pub const Archive = struct {
     bytes: []const u8,
+    devices: []const []const u8 = &.{},
     superblock: format.Superblock,
 
     pub fn init(bytes: []const u8) Error!Archive {
+        return initWithDevices(bytes, &.{});
+    }
+
+    pub fn initWithDevices(
+        bytes: []const u8,
+        devices: []const []const u8,
+    ) Error!Archive {
         const superblock = try format.parseSuperblock(bytes);
         try xattr.validatePrefixTable(
             bytes,
             superblock.xattr_prefix_start,
             superblock.xattr_prefix_count,
         );
-        return .{ .bytes = bytes, .superblock = superblock };
+        const result = Archive{
+            .bytes = bytes,
+            .devices = devices,
+            .superblock = superblock,
+        };
+        try chunk.validateDevices(bytes, devices, superblock);
+        return result;
+    }
+
+    pub fn deviceInfo(self: Archive, index: usize) Error!DeviceInfo {
+        return chunk.deviceInfo(self.bytes, self.superblock, index);
     }
 
     pub fn rootInode(self: Archive) Error!Inode {
@@ -181,8 +207,44 @@ pub const Archive = struct {
             .modification_nsec = modification_nsec,
             .data_block = data_block,
         };
-        _ = try result.fileType();
+        const file_type = try result.fileType();
         var with_compression = result;
+        if (layout == .chunk_based) {
+            if (file_type != .regular or
+                self.superblock.feature_incompat & format.feature_incompat_chunked_file == 0)
+                return error.InvalidErofs;
+            const chunk_format = format.readU16(inode_bytes, 16);
+            if (format.readU16(inode_bytes, 18) != 0) return error.InvalidErofs;
+            if (chunk_format & ~@as(u16, 0x007f) != 0)
+                return error.UnsupportedErofsFeature;
+            if (chunk_format & 0x0040 != 0) return error.UnsupportedErofsFeature;
+            const chunk_bits = std.math.add(
+                u8,
+                self.superblock.block_bits,
+                @as(u8, @intCast(chunk_format & 0x001f)),
+            ) catch return error.IntegerOverflow;
+            if (chunk_bits >= @bitSizeOf(usize)) return error.UnsupportedErofsFeature;
+            const chunk_size: usize = @as(usize, 1) << @intCast(chunk_bits);
+            const chunk_count = if (file_size == 0) 0 else (std.math.add(usize, file_size, chunk_size - 1) catch
+                return error.IntegerOverflow) / chunk_size;
+            const index_size: u8 = if (chunk_format & 0x0020 != 0) 8 else 4;
+            const index_start = std.mem.alignForward(
+                usize,
+                location + inode_size + xattr_size,
+                index_size,
+            );
+            _ = try checkedEnd(
+                index_start,
+                std.math.mul(usize, chunk_count, index_size) catch
+                    return error.IntegerOverflow,
+                self.bytes.len,
+            );
+            with_compression.chunk_format = chunk_format;
+            with_compression.chunk_bits = chunk_bits;
+            with_compression.chunk_index_start = index_start;
+            with_compression.chunk_index_size = index_size;
+            return with_compression;
+        }
         if (layout == .compressed_full or layout == .compressed_compact) {
             const header_start = std.mem.alignForward(
                 usize,
@@ -401,6 +463,8 @@ pub const Archive = struct {
         limits: ReadLimits,
     ) Error![]u8 {
         if (inode_value.file_size > limits.max_output_len) return error.OutputLimitExceeded;
+        if (inode_value.layout == .chunk_based)
+            return self.readChunkedAllocLimited(allocator, inode_value, limits.max_output_len);
         if (inode_value.layout != .flat_plain and inode_value.layout != .flat_inline)
             return self.readCompressedAllocLimited(
                 allocator,
@@ -446,6 +510,28 @@ pub const Archive = struct {
             @memcpy(output[full_bytes..], self.bytes[inline_start..inline_end]);
         }
         return output;
+    }
+
+    fn readChunkedAllocLimited(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        inode_value: Inode,
+        max_output_len: usize,
+    ) Error![]u8 {
+        if (inode_value.layout != .chunk_based) return error.UnsupportedErofsLayout;
+        return chunk.readAllocLimited(
+            allocator,
+            self.bytes,
+            self.devices,
+            self.superblock,
+            .{
+                .file_size = inode_value.file_size,
+                .chunk_bits = inode_value.chunk_bits,
+                .index_start = inode_value.chunk_index_start,
+                .index_size = inode_value.chunk_index_size,
+            },
+            max_output_len,
+        );
     }
 
     fn readCompressedAllocLimited(

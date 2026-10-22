@@ -111,7 +111,19 @@ pub fn extract(
         max_file_size;
     const input = try readFile(init, input_path);
     defer init.gpa.free(input);
-    const archive = try vort.parseErofs(input);
+    var devices: std.ArrayList([]const u8) = .empty;
+    defer {
+        for (devices.items) |device| init.gpa.free(device);
+        devices.deinit(init.gpa);
+    }
+    while (args.next()) |device_path| {
+        const device = try readFile(init, device_path);
+        devices.append(init.gpa, device) catch |err| {
+            init.gpa.free(device);
+            return err;
+        };
+    }
+    const archive = try vort.parseErofsWithDevices(input, devices.items);
     const decoded = try archive.extractByPathAllocLimited(
         init.gpa,
         entry_path,

@@ -22244,3 +22244,19 @@ reuse, so production keeps the simpler independently owned plans.
   identical empty/default wire. erofs-utils validates and extracts all three
   new modes (`ztailpacking_writer=3`, `writer=10`, `external_writer=10`,
   `xattr_writer=10`).
+
+- Added bounded EROFS chunk-based reading with borrowed external devices. The
+  superblock parser accepts `CHUNKED_FILE` and `DEVICE_TABLE`, validates every
+  128-byte slot, primary/external block count, ordered unified address range,
+  zero high halves while 48-bit mode remains unsupported, and optional supplied
+  device lengths. Compact/extended chunk inodes validate chunkformat, relative
+  block bits, index alignment/count, reserved fields, and 4-byte block maps or
+  8-byte device indexes. Extraction handles merged chunks, partial tails,
+  all-ones holes, explicit device IDs, unified-address remapping, absent blobs,
+  and every arithmetic/read bound without copying or concatenating devices.
+  `ErofsDeviceInfo`, `parseErofsWithDevices`, CLI device arguments, output
+  limits, malformed tables/indexes, and exhaustive OOM have focused coverage.
+  Fixed erofs-utils fixtures pin local and external wire. The differential adds
+  local map, forced local index, and blob-device images
+  (`chunk_reader=3`, `external_chunk_reader=1`, `xattr_reader=14`). Chunk and
+  external-device writing plus 48-bit addresses remain follow-up work.

@@ -13,6 +13,8 @@ pub const super_base_size: usize = 128;
 pub const inode_slot_size: usize = 32;
 pub const name_max: usize = 255;
 pub const feature_compat_plain_xattr_prefixes: u32 = 0x0000_0010;
+pub const feature_incompat_chunked_file: u32 = 0x0000_0004;
+pub const feature_incompat_device_table: u32 = 0x0000_0008;
 pub const feature_incompat_ztailpacking: u32 = 0x0000_0010;
 pub const feature_incompat_fragments: u32 = 0x0000_0020;
 pub const feature_incompat_xattr_prefixes: u32 = 0x0000_0040;
@@ -60,6 +62,8 @@ pub const Superblock = struct {
     xattr_prefix_count: u8,
     xattr_prefix_start: u32,
     packed_nid: u64,
+    extra_devices: u16,
+    device_slot_offset: u16,
     available_compression_algorithms: u16,
     build_time: u32,
 
@@ -88,9 +92,15 @@ pub fn parseSuperblock(input: []const u8) Error!Superblock {
     // The foundational reader handles legacy LZ4 padding and compressor
     // configuration records and plain long-xattr-prefix tables. Other
     // incompatible features alter addressing.
-    if (feature_incompat & ~@as(u32, 0x0000_0073) != 0)
+    if (feature_incompat & ~@as(u32, 0x0000_007f) != 0)
         return error.UnsupportedErofsFeature;
-    if (readU16(bytes, 86) != 0) return error.UnsupportedErofsFeature;
+    const extra_devices = readU16(bytes, 86);
+    const device_slot_offset = readU16(bytes, 88);
+    if (extra_devices != 0 and feature_incompat & feature_incompat_device_table == 0)
+        return error.InvalidErofs;
+    if (extra_devices == 0 and
+        (feature_incompat & feature_incompat_device_table != 0 or device_slot_offset != 0))
+        return error.InvalidErofs;
     const xattr_prefix_count = bytes[91];
     const xattr_prefix_start = readU32(bytes, 92);
     const packed_nid = readU64(bytes, 96);
@@ -141,6 +151,8 @@ pub fn parseSuperblock(input: []const u8) Error!Superblock {
         .xattr_prefix_count = xattr_prefix_count,
         .xattr_prefix_start = xattr_prefix_start,
         .packed_nid = packed_nid,
+        .extra_devices = extra_devices,
+        .device_slot_offset = device_slot_offset,
         .available_compression_algorithms = readU16(bytes, 84),
         .build_time = readU32(bytes, 108),
     };

@@ -1708,6 +1708,7 @@ pub const encodeSquashfsAppend = squashfs.encodeAppend;
 pub const ErofsArchive = erofs.Archive;
 pub const ErofsDirectory = erofs.Directory;
 pub const ErofsDirectoryEntry = erofs.DirectoryEntry;
+pub const ErofsDeviceInfo = erofs.DeviceInfo;
 pub const ErofsEntry = erofs.Entry;
 pub const ErofsEntryKind = erofs.EntryKind;
 pub const ErofsFileType = erofs.FileType;
@@ -1722,6 +1723,7 @@ pub const ErofsWriterOptions = erofs.WriterOptions;
 pub const ErofsWriterTailPacking = erofs.WriterTailPacking;
 pub const encodeErofsAlloc = erofs.encodeAlloc;
 pub const parseErofs = erofs.parse;
+pub const parseErofsWithDevices = erofs.parseWithDevices;
 pub const parseErofsSuperblock = erofs.parseSuperblock;
 pub const erofsDefaultPackedExtentLimit = erofs.defaultPackedExtentLimit;
 

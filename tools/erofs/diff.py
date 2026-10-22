@@ -78,6 +78,8 @@ def make_image(
     legacy: bool,
     xattr_prefix: str | None = None,
     features: tuple[str, ...] = (),
+    chunksize: int | None = None,
+    blobdev: Path | None = None,
 ) -> None:
     command: list[object] = [mkfs, "-T0", "--all-root"]
     if compressor is not None:
@@ -88,18 +90,29 @@ def make_image(
         command.append(f"--xattr-prefix={xattr_prefix}")
     for feature in features:
         command.extend(("-E", feature))
+    if chunksize is not None:
+        command.append(f"--chunksize={chunksize}")
+    if blobdev is not None:
+        command.append(f"--blobdev={blobdev}")
     command.extend((image, source))
     run(*command)
 
 
-def verify_vort(cli: Path, image: Path, payloads: dict[str, bytes], label: str, temp: Path) -> None:
+def verify_vort(
+    cli: Path,
+    image: Path,
+    payloads: dict[str, bytes],
+    label: str,
+    temp: Path,
+    devices: tuple[Path, ...] = (),
+) -> None:
     listing = run(cli, "list-erofs-file", image).stdout
     for required in (b"large.bin", b"mixed.bin", b"nested/data.txt", b"small.txt", b"link"):
         if required not in listing:
             raise AssertionError(f"EROFS listing missing {required!r} for {label}")
     for name, expected in payloads.items():
         output = temp / f"{label}-{name.replace('/', '-')}.out"
-        run(cli, "extract-erofs-file", image, name, output, len(expected))
+        run(cli, "extract-erofs-file", image, name, output, len(expected), *devices)
         if output.read_bytes() != expected:
             raise AssertionError(f"EROFS extraction mismatch for {label}/{name}")
 
@@ -161,6 +174,8 @@ def main() -> None:
     fragment_writer_cases = 0
     ztailpacking_reader_cases = 0
     ztailpacking_writer_cases = 0
+    chunk_reader_cases = 0
+    external_chunk_reader_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -324,6 +339,59 @@ def main() -> None:
                 else:
                     modern_cases += 1
 
+            chunk_cases = (
+                ("chunk-local-map", (), None),
+                ("chunk-local-index", ("force-chunk-indexes",), None),
+                ("chunk-external", (), temp / "chunk-external.blob"),
+            )
+            for label, features, blobdev in chunk_cases:
+                image = temp / f"{label}.erofs"
+                if blobdev is not None:
+                    blobdev.touch()
+                make_image(
+                    mkfs,
+                    source,
+                    image,
+                    None,
+                    False,
+                    features=features,
+                    chunksize=4096,
+                    blobdev=blobdev,
+                )
+                extracted = temp / f"{label}-fsck"
+                fsck_args: list[object] = [
+                    fsck,
+                    f"--extract={extracted}",
+                    "--no-preserve",
+                    "--xattrs",
+                ]
+                if blobdev is not None:
+                    fsck_args.append(f"--device={blobdev}")
+                fsck_args.append(image)
+                run(*fsck_args)
+                verify_vort(
+                    args.cli,
+                    image,
+                    payloads,
+                    label,
+                    temp,
+                    (blobdev,) if blobdev is not None else (),
+                )
+                verify_vort_xattrs(args.cli, image, source_xattrs, label)
+                verify_extracted_xattrs(extracted, source_xattrs, label)
+                chunk_reader_cases += 1
+                if blobdev is not None:
+                    expect_failure(
+                        args.cli,
+                        "extract-erofs-file",
+                        image,
+                        "large.bin",
+                        temp / "chunk-missing-device.out",
+                        len(payloads["large.bin"]),
+                        error_name="ErofsMissingDevice",
+                    )
+                    external_chunk_reader_cases += 1
+
         expect_failure(
             args.cli,
             "extract-erofs-file",
@@ -388,6 +456,8 @@ def main() -> None:
         f"fragment_writer={fragment_writer_cases} "
         f"ztailpacking_reader={ztailpacking_reader_cases} "
         f"ztailpacking_writer={ztailpacking_writer_cases} "
+        f"chunk_reader={chunk_reader_cases} "
+        f"external_chunk_reader={external_chunk_reader_cases} "
         f"malformed={malformed}"
     )
 

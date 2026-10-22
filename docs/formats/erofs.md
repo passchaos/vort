@@ -13,6 +13,15 @@ indexes, and incompatible-feature long indexes backed by bounded plain prefix
 tables. Reconstructed names and values are copied into one owned buffer; count
 and aggregate-byte limits are checked before allocation.
 
+Chunk-based regular files support per-inode chunk sizes, 4-byte local block
+maps, 8-byte device indexes, merged chunks, partial final chunks, and all-ones
+holes. `parseErofsWithDevices` borrows the primary image plus an ordered slice
+of external device byte slices; no blob is copied or concatenated. Device-table
+slots, unified address ranges, declared block counts, explicit IDs, and every
+read boundary are validated. Metadata-only parsing and listing work without
+devices, while extraction reports `ErofsMissingDevice` until the required blob
+is supplied.
+
 Compressed files support both legacy full indexes and modern compact indexes,
 including four-byte and sixteen-entry/two-byte packs, HEAD/NONHEAD lookback,
 EOF sentinels, and big pclusters. LZ4, raw Deflate, and Zstandard extents are
@@ -87,20 +96,22 @@ const payload = try archive.extractByPathAllocWithLimits(
     1024 * 1024,
 );
 defer allocator.free(payload);
+
+const external = try vort.parseErofsWithDevices(metadata_image, &.{blob_bytes});
 ```
 
-Chunk-based files, external devices, 48-bit addressing, and metaboxes remain
-future work. Prefix tables stored inside packed or metabox inodes remain
-unsupported; ordinary `PLAIN_XATTR_PFX` tables are supported in both
-directions. The writer does not yet deduplicate repeated values into the
-optional shared-xattr region. Both fragment and compressed-inline writing
-require a non-stored compression mode because visible files use the compressed
-inode layout even when a prefix or inline cluster falls back to `PLAIN`.
+48-bit addressing and metaboxes remain future work. Prefix tables stored inside
+packed or metabox inodes remain unsupported; ordinary `PLAIN_XATTR_PFX` tables
+are supported in both directions. The writer does not yet emit chunk-based or
+external-device layouts, nor deduplicate repeated values into the optional
+shared-xattr region. Both fragment and compressed-inline writing require a
+non-stored compression mode because visible files use the compressed inode
+layout even when a prefix or inline cluster falls back to `PLAIN`.
 
 ```sh
 zig build run -- list-erofs-file system.erofs
 zig build run -- create-erofs-file output.erofs path/in/image input.bin zstd
-zig build run -- extract-erofs-file system.erofs etc/config output.conf 67108864
+zig build run -- extract-erofs-file system.erofs etc/config output.conf 67108864 [device...]
 zig build run -- list-erofs-xattrs system.erofs etc/config
 zig build run-erofs-diff
 ```
@@ -122,3 +133,6 @@ LZ4/Deflate/Zstandard images cover compressed inline tail packing. Seven Vort
 writer modes include all three fragment writers and are independently
 extracted by `fsck.erofs`; three more writer modes cover compressed inline
 tails and raw/fallback decisions.
+Three more reference images cover local block maps, forced local indexes, and
+an external blob/device table; Vort extracts each byte-exactly and diagnoses a
+missing blob explicitly.
