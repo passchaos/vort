@@ -3,12 +3,12 @@ const core = @import("../../core.zig");
 const tree = @import("tree.zig");
 const writer_codec = @import("codec.zig");
 
-pub const Error = core.Error || writer_codec.Error || std.mem.Allocator.Error;
+pub const Error = core.Error || writer_codec.Error || tree.ContentError || std.mem.Allocator.Error;
 pub const block_size: usize = 4096;
 pub const max_extent_size: usize = 1024 * 1024;
 
 pub fn prefixLength(node: *const tree.Node) Error!usize {
-    const length = node.content().len;
+    const length = node.contentSize();
     if ((node.fragment_size != 0 and node.compressed_inline_tail_size != 0) or
         node.fragment_size > length or
         node.compressed_inline_tail_size > length - node.fragment_size)
@@ -31,14 +31,22 @@ pub fn prepareNode(
         !std.math.isPowerOfTwo(extent_size) or node.compressed_data != null)
         return error.InvalidErofs;
     const length = try prefixLength(node);
-    const input = node.content()[0..length];
+    const scratch = if (node.source != null and length != 0)
+        try allocator.alloc(u8, @min(extent_size, length))
+    else
+        null;
+    defer if (scratch) |bytes| allocator.free(bytes);
     var output: std.ArrayList(u8) = .empty;
     errdefer output.deinit(allocator);
     node.compressed_advise = 2;
     var position: usize = 0;
-    while (position < input.len) {
-        const window_end = position + @min(extent_size, input.len - position);
-        const window = input[position..window_end];
+    while (position < length) {
+        const window_end = position + @min(extent_size, length - position);
+        const window = if (scratch) |bytes| blk: {
+            const part = bytes[0 .. window_end - position];
+            try node.readContent(position, part);
+            break :blk part;
+        } else node.content()[position..window_end];
         const selected = if (max_pcluster_size) |capacity|
             try encoder.encodePrefixScratch(window, capacity, block_size)
         else
@@ -50,10 +58,10 @@ pub fn prepareNode(
         const end = if (use_compressed)
             position + selected.consumed
         else if (max_pcluster_size != null)
-            position + @min(block_size, input.len - position)
+            position + @min(block_size, length - position)
         else
             window_end;
-        const chunk = input[position..end];
+        const chunk = window[0 .. end - position];
         const logical_count = try blocksFor(chunk.len);
         const first_index = position / block_size;
         if (first_index > indexes.len or logical_count > indexes.len - first_index)
@@ -96,7 +104,7 @@ pub fn prepareNode(
                     return error.IntegerOverflow;
                 try output.resize(allocator, output_end);
                 @memset(output.items[previous_len..], 0);
-                @memcpy(output.items[previous_len..][0 .. raw_end - raw_position], input[raw_position..raw_end]);
+                @memcpy(output.items[previous_len..][0 .. raw_end - raw_position], window[raw_position - position .. raw_end - position]);
                 raw_position = raw_end;
             }
         }

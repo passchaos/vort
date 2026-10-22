@@ -7,17 +7,20 @@ pub fn main(init: std.process.Init) !void {
     _ = args.next();
     const output_path = args.next() orelse return error.MissingOutputPath;
     const mode_name = args.next() orelse "lz4";
+    const source_suffix = "-source";
+    const source_mode = std.mem.endsWith(u8, mode_name, source_suffix);
+    const layout_name = if (source_mode) mode_name[0 .. mode_name.len - source_suffix.len] else mode_name;
     const address48_suffix = "-48bit";
     const fragment_suffix = "-fragments";
     const inline_suffix = "-ztailpacking";
     const metabox_suffix = "-metabox";
     const directory_suffix = "-dirs";
     const extended_suffix = "-extended";
-    const metabox = std.mem.endsWith(u8, mode_name, metabox_suffix);
+    const metabox = std.mem.endsWith(u8, layout_name, metabox_suffix);
     const without_metabox = if (metabox)
-        mode_name[0 .. mode_name.len - metabox_suffix.len]
+        layout_name[0 .. layout_name.len - metabox_suffix.len]
     else
-        mode_name;
+        layout_name;
     const extended = std.mem.endsWith(u8, without_metabox, extended_suffix);
     const without_extended = if (extended)
         without_metabox[0 .. without_metabox.len - extended_suffix.len]
@@ -83,7 +86,7 @@ pub fn main(init: std.process.Init) !void {
         .{ .name = "user.vort.root", .value = "root-xattr" },
         .{ .name = "user.vort.shared", .value = "shared-xattr" },
     };
-    const entries = [_]vort.ErofsEntry{
+    var entries = [_]vort.ErofsEntry{
         .{ .path = "etc/config", .data = "writer probe configuration\n", .xattrs = &config_xattrs },
         .{ .path = "large.bin", .data = large },
         .{ .path = "random.bin", .data = &random },
@@ -92,6 +95,16 @@ pub fn main(init: std.process.Init) !void {
         .{ .path = "link", .kind = .symlink, .target = "etc/config" },
         .{ .path = "empty", .kind = .directory, .xattrs = &directory_xattrs },
     };
+    var sources: [entries.len]vort.SliceByteSource = undefined;
+    if (source_mode) {
+        for (&entries, 0..) |*entry, index| {
+            if (entry.kind != .file) continue;
+            sources[index] = .{ .bytes = entry.data };
+            entry.source = sources[index].source();
+            entry.source.?.max_read_size = 4096;
+            entry.data = &.{};
+        }
+    }
     const options = vort.ErofsWriterOptions{
         .compression = compression,
         .compression_extent_size = if (grouped) 64 * 1024 else 4096,

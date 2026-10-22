@@ -158,6 +158,37 @@ Writer entries use safe relative paths. Missing parent directories are created
 automatically, while absolute paths, empty components, `.`/`..`, NUL bytes,
 duplicate entries, and non-directory parents are rejected. Entry data and
 symlink targets remain caller-owned for the duration of `encodeErofsAlloc`.
+Regular-file entries may supply `source: ?ByteSource` instead of `data`.
+The source borrows a callback/context and stable u64 length; a source entry
+must have empty `data`, be a regular file, and use a nonzero maximum read
+size. Metadata and inode version planning use declared length, while physical
+blocks, decoded compression groups, chunk deduplication, and tail packing read
+only the required windows. Short callback reads are completed, zero before
+declared EOF reports `TruncatedFrame`, and callback failures/invalid counts
+report `SourceReadFailed`. A source length that cannot fit host accounting
+reports `IntegerOverflow` before reading.
+
+`ByteSource`, `SliceByteSource`, and `FileByteSource` are reusable public input
+adapters. Individual requests default to at most 64 KiB and are configurable
+through `max_read_size`; the file adapter borrows both the file and `std.Io`,
+uses positional reads, and leaves closing to the caller. Source bytes and
+length must remain stable throughout encoding. Source input avoids loading
+all regular files into memory, but `encodeErofsAlloc` still retains encoded
+payload plans and allocates the complete output image. Metadata and output
+memory therefore remain proportional to the archive; a bounded output-sink
+writer is a separate next API. Compressed source scratch is at most the decoded
+extent size; chunk input scratch is bounded by the selected chunk size.
+
+```zig
+const file = try std.Io.Dir.cwd().openFile(io, "payload.bin", .{});
+defer file.close(io);
+var input = try vort.FileByteSource.init(io, file);
+const image = try vort.encodeErofsAlloc(allocator, &.{.{
+    .path = "data/payload", .source = input.source(),
+}}, .{ .compression = .zstandard, .compression_extent_size = 64 * 1024 });
+defer allocator.free(image);
+```
+
 Entries additionally accept 32-bit UID/GID, a modification-time delta relative
 to `WriterOptions.epoch`, and an optional per-inode nanosecond value.
 `root_mode`, `root_uid`, `root_gid`, `root_modification_time`, and
@@ -325,3 +356,12 @@ matrix to 108 writers (`bounded_writer=40`, `external_writer=108`,
 `extended_inode_writer=21`). Unit tests read physical counts directly, cover
 non-power-of-two limits, require exact round trips and deterministic output,
 and exercise no-fit fallback, EOF/tail metadata, and exhaustive OOM.
+
+The source matrix mirrors every one of the 108 memory-backed writer modes,
+requiring byte-identical images and external devices as well as fsck/extraction
+compatibility (`writer=216`, `source_writer=108`, `external_writer=216`).
+Thirteen additional CLI cases use actual positional file adapters across
+stored, default compressed, grouped, and physically bounded output
+(`file_source_writer=13`). Unit tests additionally cover short reads, callback
+errors, premature EOF, empty-source non-reading, declarations overflowing host
+accounting, and allocation failures in grouped/metabox/chunk source paths.

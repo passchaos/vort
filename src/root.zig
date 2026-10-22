@@ -1,6 +1,13 @@
 //! Vort: next-generation compression experiments and compatibility-oriented primitives.
 
 const std = @import("std");
+const byte_source = @import("io/source.zig");
+const file_source = @import("io/file_source.zig");
+
+pub const ByteSource = byte_source.Source;
+pub const ByteSourceError = byte_source.Error;
+pub const SliceByteSource = byte_source.SliceSource;
+pub const FileByteSource = file_source.FileSource;
 
 pub const checksum = @import("checksum.zig");
 pub const core = @import("core.zig");
@@ -1733,6 +1740,7 @@ pub const ErofsWriterCompression = erofs.WriterCompression;
 pub const ErofsWriterInodeVersion = erofs.WriterInodeVersion;
 pub const ErofsEncodedExternalChunks = erofs.EncodedExternalChunks;
 pub const ErofsWriterOptions = erofs.WriterOptions;
+pub const ErofsSource = erofs.Source;
 pub const ErofsWriterTailPacking = erofs.WriterTailPacking;
 pub const encodeErofsAlloc = erofs.encodeAlloc;
 pub const encodeErofsExternalChunksAlloc = erofs.encodeExternalChunksAlloc;

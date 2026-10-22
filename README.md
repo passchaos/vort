@@ -276,7 +276,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   groups with actual-sized big pclusters, optional physical byte caps, aligned
   prefix planning, and stored fallback, plus standard MZi stored/LZ4/MicroLZMA/raw-
   Deflate/Zstandard metabox writing with a hidden low-NID metadata inode and
-  high-bit visible NIDs, all with bidirectional erofs-utils interoperability;
+  high-bit visible NIDs, regular-file callback/file sources with bounded
+  positional reads, and byte-identical source/memory output, all with
+  bidirectional erofs-utils interoperability;
 - dependency-free WIM/ESD/SWM parsing with strict 208-byte headers, compression
   and part geometry, resource headers, lookup tables, SHA-1 verification, raw
   UTF-16 XML access, bounded resource extraction, validated image-metadata

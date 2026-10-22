@@ -21,6 +21,7 @@ pub const LoadedMetaboxArchive = archive.LoadedMetaboxArchive;
 pub const ReadLimits = archive.ReadLimits;
 pub const Xattr = xattr.Attribute;
 pub const Xattrs = xattr.Attributes;
+pub const Source = writer.Source;
 pub const Layout = format.Layout;
 pub const Superblock = format.Superblock;
 pub const WriterCompression = writer.Compression;
@@ -50,6 +51,7 @@ test {
     _ = @import("erofs/writer/tests/directories.zig");
     _ = @import("erofs/writer/tests/clusters.zig");
     _ = @import("erofs/writer/tests/physical_limit.zig");
+    _ = @import("erofs/writer/tests/source.zig");
     _ = @import("erofs/writer/tests/inodes.zig");
     _ = codec;
     _ = writer;

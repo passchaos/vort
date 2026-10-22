@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 from final_big_diff import verify_final_big_pclusters
+from file_source_diff import verify_file_sources
 
 
 def run(*args: object, check: bool = True) -> subprocess.CompletedProcess[bytes]:
@@ -201,6 +202,8 @@ def main() -> None:
     final_big_pcluster_reader_cases = 0
     grouped_writer_cases = 0
     bounded_writer_cases = 0
+    source_writer_cases = 0
+    file_source_writer_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -264,7 +267,8 @@ def main() -> None:
             for codec in ("lz4", "lzma", "deflate", "zstd")
             for suffix in ("", "-fragments", "-ztailpacking", "-48bit", "-metabox", "-dirs", "-extended", "-dirs-extended-metabox", "8", "12")
         )
-        for mode in (
+        file_source_writer_cases += verify_file_sources(args.cli, fsck, temp, expected_writer["mixed.bin"], run)
+        writer_modes = (
             "stored",
             "lz4",
             "deflate",
@@ -301,7 +305,10 @@ def main() -> None:
             "lzma-metabox",
             "lzma-dirs",
             "lzma-extended",
-        ) + grouped_modes + bounded_modes:
+        ) + grouped_modes + bounded_modes
+        for mode in writer_modes + tuple(f"{name}-source" for name in writer_modes):
+            source_mode = mode.endswith("-source")
+            layout_mode = mode.removesuffix("-source")
             image = temp / f"writer-{mode}.erofs"
             repeated = temp / f"writer-{mode}-repeat.erofs"
             device = temp / f"writer-{mode}.blob"
@@ -315,8 +322,12 @@ def main() -> None:
                 run(args.writer, repeated, mode)
             if image.read_bytes() != repeated.read_bytes():
                 raise AssertionError(f"non-deterministic EROFS writer output for {mode}")
+            if source_mode and image.read_bytes() != (temp / f"writer-{layout_mode}.erofs").read_bytes():
+                raise AssertionError(f"EROFS source/memory wire mismatch for {mode}")
             if is_external_chunk and device.read_bytes() != repeated_device.read_bytes():
                 raise AssertionError(f"non-deterministic EROFS external chunks for {mode}")
+            if source_mode and is_external_chunk and device.read_bytes() != (temp / f"writer-{layout_mode}.blob").read_bytes():
+                raise AssertionError(f"EROFS source/memory device mismatch for {mode}")
             listing = run(args.cli, "list-erofs-file", image).stdout
             for required in (b"etc/config", b"large.bin", b"random.bin", b"mixed.bin", b"small", b"link", b"empty"):
                 if required not in listing:
@@ -339,17 +350,17 @@ def main() -> None:
             verify_vort_xattrs(args.cli, image, expected_writer_xattrs, f"writer-{mode}")
             if b"$vort-packed" in listing:
                 raise AssertionError(f"hidden EROFS packed inode was listed for {mode}")
-            if mode.endswith("-fragments"):
+            if layout_mode.endswith("-fragments"):
                 fragment_writer_cases += 1
-            if mode.endswith("-ztailpacking"):
+            if layout_mode.endswith("-ztailpacking"):
                 ztailpacking_writer_cases += 1
             if mode.startswith("chunk-local") or is_external_chunk:
                 chunk_writer_cases += 1
             if is_external_chunk:
                 external_chunk_writer_cases += 1
-            if mode.endswith("-48bit"):
+            if layout_mode.endswith("-48bit"):
                 address48_writer_cases += 1
-            if mode.endswith("-metabox"):
+            if layout_mode.endswith("-metabox"):
                 metabox_writer_cases += 1
             if "-dirs" in mode:
                 directory_writer_cases += 1
@@ -362,6 +373,8 @@ def main() -> None:
                 grouped_writer_cases += 1
             if "-bounded" in mode:
                 bounded_writer_cases += 1
+            if source_mode:
+                source_writer_cases += 1
             writer_cases += 1
             if fsck is not None:
                 extracted = temp / f"writer-{mode}-fsck"
@@ -382,7 +395,7 @@ def main() -> None:
                 # rely on the self-decode checks above for these inline tails.
                 checked_names = (
                     ("large.bin", "mixed.bin")
-                    if mode == "stored-metabox"
+                    if layout_mode == "stored-metabox"
                     else ("etc/config", "large.bin", "random.bin", "mixed.bin", "small")
                 )
                 for name in checked_names:
@@ -392,7 +405,7 @@ def main() -> None:
                     raise AssertionError(f"fsck.erofs symlink mismatch for {mode}")
                 if not (extracted / "empty").is_dir():
                     raise AssertionError(f"fsck.erofs empty directory missing for {mode}")
-                if not mode.endswith("-metabox"):
+                if not layout_mode.endswith("-metabox"):
                     verify_extracted_xattrs(extracted, expected_writer_xattrs, f"writer-{mode}")
                     xattr_writer_cases += 1
                 external_writer += 1
@@ -673,6 +686,8 @@ def main() -> None:
         f"final_big_pcluster_reader={final_big_pcluster_reader_cases} "
         f"grouped_writer={grouped_writer_cases} "
         f"bounded_writer={bounded_writer_cases} "
+        f"source_writer={source_writer_cases} "
+        f"file_source_writer={file_source_writer_cases} "
         f"malformed={malformed}"
     )
 

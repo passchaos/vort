@@ -23,28 +23,31 @@ pub fn prepare(
     const visible_count = filesystem.nodes.len;
     for (filesystem.nodes[0..visible_count]) |*node| {
         if (node.hidden) continue;
-        const content = node.content();
-        const fragment = switch (node.kind) {
+        const content_size = node.contentSize();
+        const fragment_start = switch (node.kind) {
             .file => blk: {
-                if (!options.file_tails or content.len == 0) continue;
-                const tail_start = if (content.len <= block_size)
+                if (!options.file_tails or content_size == 0) continue;
+                const tail_start = if (content_size <= block_size)
                     0
                 else
-                    (content.len - 1) & ~(block_size - 1);
-                break :blk content[tail_start..];
+                    (content_size - 1) & ~(block_size - 1);
+                break :blk tail_start;
             },
             .directory => blk: {
-                if (!options.directories or content.len < full_index_metadata_size) continue;
-                break :blk content;
+                if (!options.directories or content_size < full_index_metadata_size) continue;
+                break :blk @as(usize, 0);
             },
             .symlink => continue,
         };
-        const next_len = std.math.add(usize, packed_data.items.len, fragment.len) catch
+        const fragment_size = content_size - fragment_start;
+        const previous_len = packed_data.items.len;
+        const next_len = std.math.add(usize, previous_len, fragment_size) catch
             return error.IntegerOverflow;
         if (next_len > std.math.maxInt(u32)) return error.InvalidErofs;
-        node.fragment_offset = @intCast(packed_data.items.len);
-        node.fragment_size = fragment.len;
-        try packed_data.appendSlice(allocator, fragment);
+        try packed_data.resize(allocator, next_len);
+        try node.readContent(fragment_start, packed_data.items[previous_len..next_len]);
+        node.fragment_offset = @intCast(previous_len);
+        node.fragment_size = fragment_size;
     }
     if (packed_data.items.len == 0) return;
     if (packed_data.items.len > std.math.maxInt(u32)) return error.InvalidErofs;

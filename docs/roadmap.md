@@ -22523,3 +22523,26 @@ reuse, so production keeps the simpler independently owned plans.
   MicroLZMA). The f95c02a1 snapshot's full repository suite also completed:
   3387/3387 tests passed; its result is recorded separately from these new
   capacity changes.
+
+
+- Added reusable borrowed random-access `ByteSource`, `SliceByteSource`, and
+  `FileByteSource` adapters, with stable u64 lengths and bounded per-callback
+  requests (64 KiB default). Exact reads complete short callbacks and preserve
+  error distinctions for premature EOF, failed callbacks, invalid returned
+  counts, and arithmetic overflow. File adapters borrow handles/Io, use
+  positional reads, and never close caller files. EROFS regular-file entries
+  accept sources instead of data slices; source/data ambiguity, non-file
+  sources, invalid read-size limits, and host-size overflow are rejected.
+  Inode/metadata planning uses content size separately from bytes. Stored and
+  legacy compressed blocks, grouped/physically bounded compression, inline and
+  packed tails, local/external chunks with deduplication/holes, directories,
+  xattrs, extended/48-bit metadata, and metabox all share bounded source reads.
+  The CLI creation path now uses an actual file adapter. Output remains the
+  one-shot image API with retained payload plans; this is source-backed input,
+  not yet a bounded output-sink writer. Tests cover source/memory byte identity,
+  short-read/request bounds, empty non-reading, declared EOF errors, callback
+  failures, oversized lengths, and exhaustive grouped/metabox/chunk OOM.
+  90 EROFS and 55 byte-source focused tests pass, along with wasm compilation.
+  The external matrix passes all 216 modes, including 108 source counterparts,
+  and 13 actual file-adapter CLI cases (`source_writer=108`,
+  `file_source_writer=13`, `external_writer=216`, `xattr_writer=174`).

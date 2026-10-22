@@ -1,8 +1,11 @@
 const std = @import("std");
 const core = @import("../../core.zig");
 const xattr = @import("../xattr.zig");
+const byte_source = @import("../../io/source.zig");
 
-pub const Error = core.Error || xattr.Error || std.mem.Allocator.Error || error{InvalidErofs};
+pub const Error = core.Error || xattr.Error || byte_source.Error || std.mem.Allocator.Error || error{InvalidErofs};
+pub const Source = byte_source.Source;
+pub const ContentError = byte_source.Error;
 
 pub const EntryKind = enum { file, directory, symlink };
 pub const Xattr = xattr.Attribute;
@@ -17,6 +20,8 @@ pub const Entry = struct {
     path: []const u8,
     kind: EntryKind = .file,
     data: []const u8 = &.{},
+    /// Regular-file bytes may instead be borrowed from a stable data source.
+    source: ?Source = null,
     target: []const u8 = &.{},
     mode: u16 = 0,
     uid: u32 = 0,
@@ -31,6 +36,7 @@ pub const Node = struct {
     path: []u8,
     kind: EntryKind,
     data: []const u8 = &.{},
+    source: ?Source = null,
     target: []const u8 = &.{},
     mode: u16,
     uid: u32 = 0,
@@ -89,6 +95,19 @@ pub const Node = struct {
             .symlink => self.target,
         };
     }
+
+    pub fn contentSize(self: Node) usize {
+        if (self.source) |input| return @intCast(input.len);
+        return self.content().len;
+    }
+
+    pub fn readContent(self: Node, offset: usize, output: []u8) ContentError!void {
+        if (self.source) |input| return input.readExact(@intCast(offset), output);
+        const bytes = self.content();
+        if (offset > bytes.len or output.len > bytes.len - offset)
+            return error.TruncatedFrame;
+        @memcpy(output, bytes[offset..][0..output.len]);
+    }
 };
 
 pub const Tree = struct {
@@ -132,6 +151,11 @@ pub fn build(
         return err;
     };
     for (entries) |entry| {
+        if (entry.source) |input| {
+            if (entry.kind != .file or entry.data.len != 0 or input.max_read_size == 0)
+                return error.InvalidErofs;
+            _ = std.math.cast(usize, input.len) orelse return error.IntegerOverflow;
+        }
         try validatePath(entry.path);
         try ensureParents(allocator, &nodes, entry.path);
         if (findNode(nodes.items, entry.path)) |index| {
@@ -167,6 +191,7 @@ pub fn build(
 fn applyEntry(node: *Node, entry: Entry) void {
     node.kind = entry.kind;
     node.data = entry.data;
+    node.source = entry.source;
     node.target = entry.target;
     node.mode = if (entry.mode != 0) entry.mode else switch (entry.kind) {
         .file => 0o644,

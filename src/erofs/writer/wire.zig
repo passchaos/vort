@@ -80,34 +80,34 @@ fn writeFlatData(
     node: *const tree.Node,
     layout: format.Layout,
 ) Error!void {
-    const content = node.content();
+    const content_size = node.contentSize();
     const data_len = if (layout == .flat_inline)
-        content.len / block_size * block_size
+        content_size / block_size * block_size
     else
-        content.len;
+        content_size;
     if (data_len != 0) {
         if (node.start_block == no_block) return error.InvalidErofs;
         const data_start = try checkedMul(node.start_block, block_size);
         const data_end = try checkedAdd(data_start, data_len);
         if (data_end > image.len) return error.InvalidErofs;
-        @memcpy(image[data_start..data_end], content[0..data_len]);
+        try node.readContent(0, image[data_start..data_end]);
     }
     try writeFlatInlineData(metadata, node, layout);
 }
 
 fn writeFlatInlineData(metadata: []u8, node: *const tree.Node, layout: format.Layout) Error!void {
-    const content = node.content();
-    const data_len = content.len / block_size * block_size;
-    if (layout == .flat_inline and data_len < content.len) {
+    const content_size = node.contentSize();
+    const data_len = content_size / block_size * block_size;
+    if (layout == .flat_inline and data_len < content_size) {
         const inline_start = try checkedAdd(
             try checkedAdd(node.location, node.inode_size),
             node.xattr_size,
         );
-        const inline_end = try checkedAdd(inline_start, content.len - data_len);
+        const inline_end = try checkedAdd(inline_start, content_size - data_len);
         if (inline_end > metadata.len or
             inline_start / block_size != (inline_end - 1) / block_size)
             return error.InvalidErofs;
-        @memcpy(metadata[inline_start..inline_end], content[data_len..]);
+        try node.readContent(data_len, metadata[inline_start..inline_end]);
     }
 }
 
@@ -120,16 +120,16 @@ fn writeCompressedData(
         return writer_clusters.writePrepared(image, node);
     const indexes = node.compressed_indexes orelse return error.InvalidErofs;
     if (node.compressed_block_count > indexes.len) return error.InvalidErofs;
-    const content = node.content();
-    const physical_content_len = content.len - node.fragment_size -
-        node.compressed_inline_tail_size;
+    const physical_content_len = try writer_clusters.prefixLength(node);
+    var chunk_storage: [block_size]u8 = undefined;
     for (indexes[0..node.compressed_block_count], 0..) |*index, cluster_index| {
         const logical_start = try checkedMul(cluster_index, block_size);
         const logical_end = @min(
             physical_content_len,
             try checkedAdd(logical_start, block_size),
         );
-        const chunk = content[logical_start..logical_end];
+        const chunk = chunk_storage[0 .. logical_end - logical_start];
+        try node.readContent(logical_start, chunk);
         const physical_start = try checkedMul(index.physical_block, block_size);
         const physical_end = try checkedAdd(physical_start, block_size);
         if (physical_end > image.len) return error.InvalidErofs;
@@ -203,7 +203,7 @@ fn writeInode(
         const index_start = try checkedAdd(header_start, 16);
         if (try checkedAdd(index_start, try checkedMul(node.compressed_indexes.?.len, 8)) > metadata.len)
             return error.InvalidErofs;
-        if (node.fragment_size == node.content().len and node.fragment_size != 0) {
+        if (node.fragment_size == node.contentSize() and node.fragment_size != 0) {
             const fragment_offset = node.fragment_offset orelse return error.InvalidErofs;
             if (fragment_offset >> 63 != 0 or node.compressed_indexes.?.len != 0)
                 return error.InvalidErofs;

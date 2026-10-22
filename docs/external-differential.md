@@ -489,3 +489,13 @@ and combined directory/extended/metabox layouts; ordinary modes also exercise
 xattrs, and independent fsck extraction cover all 108 modes
 (`bounded_writer=40`, `external_writer=108`, `xattr_writer=87`). This gate
 retains the eight final-big-pcluster references and earlier unbounded modes.
+
+The EROFS source matrix duplicates all 108 memory writer modes with borrowed
+slice sources and 4 KiB callback request bounds. Each source image/device must
+match the corresponding memory image/device byte-for-byte, remain deterministic,
+extract exactly through Vort, and pass fsck. Thirteen CLI cases independently
+use actual regular files through positional FileByteSource adapters. Current
+coverage reports `writer=216`, `source_writer=108`, `file_source_writer=13`,
+`external_writer=216`, and `xattr_writer=174`. Stored-MZi exclusions remain
+limited to host extractor behavior on affected inline tails. Generic byte-source
+and file-adapter tests run with `zig build test-byte-source`.

@@ -18,7 +18,7 @@ pub fn planVersions(
         _ = std.math.add(u64, epoch, node.modification_time) catch
             return error.InvalidErofs;
         node.link_count = try linkCount(filesystem.nodes, node_index);
-        const compact_ok = node.content().len <= std.math.maxInt(u32) and
+        const compact_ok = node.contentSize() <= std.math.maxInt(u32) and
             node.uid <= std.math.maxInt(u16) and
             node.gid <= std.math.maxInt(u16) and
             node.modification_time <= std.math.maxInt(u32) and
@@ -68,7 +68,7 @@ pub fn writeHeader(
     if (node_index + 1 > std.math.maxInt(u32)) return error.InvalidErofs;
     if (extended) {
         writeU16(metadata, location + 6, 0);
-        writeU64(metadata, location + 8, @intCast(node.content().len));
+        writeU64(metadata, location + 8, @intCast(node.contentSize()));
         writeU32(metadata, location + 16, data_value);
         writeU32(metadata, location + 20, @intCast(node_index + 1));
         writeU32(metadata, location + 24, node.uid);
@@ -84,12 +84,12 @@ pub fn writeHeader(
         @memset(metadata[location + 48 .. location + 64], 0);
     } else {
         if (node.link_count > std.math.maxInt(u16) or
-            node.content().len > std.math.maxInt(u32) or
+            node.contentSize() > std.math.maxInt(u32) or
             node.modification_time > std.math.maxInt(u32) or
             node.uid > std.math.maxInt(u16) or node.gid > std.math.maxInt(u16))
             return error.InvalidErofs;
         writeU16(metadata, location + 6, @intCast(node.link_count));
-        writeU32(metadata, location + 8, @intCast(node.content().len));
+        writeU32(metadata, location + 8, @intCast(node.contentSize()));
         writeU32(metadata, location + 12, @intCast(node.modification_time));
         writeU32(metadata, location + 16, data_value);
         writeU32(metadata, location + 20, @intCast(node_index + 1));

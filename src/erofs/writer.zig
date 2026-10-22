@@ -20,6 +20,7 @@ pub const Error = core.Error || writer_codec.Error || writer_chunks.Error ||
 pub const Entry = tree.Entry;
 pub const EntryKind = tree.EntryKind;
 pub const Xattr = tree.Xattr;
+pub const Source = tree.Source;
 
 pub const Compression = writer_options.Compression;
 pub const TailPacking = writer_options.TailPacking;
@@ -363,15 +364,15 @@ fn planNodeMetadata(
         return;
     }
 
-    const content = node.content();
-    const compress_content = (node.kind == .file and content.len != 0) or
+    const content_size = node.contentSize();
+    const compress_content = (node.kind == .file and content_size != 0) or
         (node.kind == .directory and node.fragment_size != 0 and
-            node.fragment_size == content.len);
+            node.fragment_size == content_size);
     if (compression != .stored and compress_content) {
         node.layout = @intFromEnum(format.Layout.compressed_full);
         const whole_fragment = node.fragment_size != 0 and
-            node.fragment_size == content.len;
-        const cluster_count = if (whole_fragment) 0 else try blockCount(content.len);
+            node.fragment_size == content_size;
+        const cluster_count = if (whole_fragment) 0 else try blockCount(content_size);
         node.compressed_indexes = try allocator.alloc(tree.Node.CompressionIndex, cluster_count);
         @memset(node.compressed_indexes.?, .{
             .kind = 0,
@@ -380,7 +381,7 @@ fn planNodeMetadata(
         });
         if (node.fragment_size != 0 and !whole_fragment) {
             const fragment_offset = node.fragment_offset orelse return error.InvalidErofs;
-            const fragment_start = content.len - node.fragment_size;
+            const fragment_start = content_size - node.fragment_size;
             if (node.fragment_size > block_size or fragment_start % block_size != 0)
                 return error.InvalidErofs;
             const fragment_index = fragment_start / block_size;
@@ -399,8 +400,10 @@ fn planNodeMetadata(
         );
         if (tail_packing == .compressed_inline and node.kind == .file and !node.hidden) {
             const encoder = block_encoder orelse return error.InvalidErofs;
-            const tail_start = (content.len - 1) & ~(block_size - 1);
-            const tail = content[tail_start..];
+            const tail_start = (content_size - 1) & ~(block_size - 1);
+            var tail_storage: [block_size]u8 = undefined;
+            const tail = tail_storage[0 .. content_size - tail_start];
+            try node.readContent(tail_start, tail);
             const encoded = try encoder.encodeScratch(tail);
             const use_compressed = encoded.len < tail.len;
             const candidate = if (use_compressed) encoded else tail;
@@ -427,7 +430,7 @@ fn planNodeMetadata(
         return;
     }
 
-    const tail_len = node.content().len % block_size;
+    const tail_len = node.contentSize() % block_size;
     const inline_end = try checkedAdd(xattr_end, tail_len);
     if (tail_len != 0 and
         xattr_end / block_size == (inline_end - 1) / block_size)
@@ -519,7 +522,7 @@ fn assignDataBlocks(filesystem: *tree.Tree, first_data_block: usize, skip_metabo
 }
 
 fn assignNodeDataBlocks(node: *tree.Node, next_block: *usize) Error!void {
-    const content_len = node.content().len;
+    const content_len = node.contentSize();
     const physical_content_len = try writer_clusters.prefixLength(node);
     const blocks = switch (std.enums.fromInt(format.Layout, node.layout) orelse
         return error.InvalidErofs) {

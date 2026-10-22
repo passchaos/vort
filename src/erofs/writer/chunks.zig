@@ -82,11 +82,19 @@ pub fn prepare(
     var unique_data: std.ArrayList(u8) = .empty;
     defer unique_data.deinit(allocator);
     var has_chunks = false;
+    var scratch_size: usize = 0;
+    for (filesystem.nodes) |node| {
+        if (node.source != null and node.kind == .file and !node.hidden)
+            scratch_size = @max(scratch_size, @min(chunk_size, node.contentSize()));
+    }
+    const scratch = if (scratch_size != 0) try allocator.alloc(u8, scratch_size) else null;
+    defer if (scratch) |bytes| allocator.free(bytes);
 
     for (filesystem.nodes) |*node| {
-        if (node.kind != .file or node.hidden or node.data.len == 0) continue;
+        const content_size = node.contentSize();
+        if (node.kind != .file or node.hidden or content_size == 0) continue;
         has_chunks = true;
-        const count = (std.math.add(usize, node.data.len, chunk_size - 1) catch
+        const count = (std.math.add(usize, content_size, chunk_size - 1) catch
             return error.IntegerOverflow) / chunk_size;
         node.chunk_indexes = try allocator.alloc(tree.Node.ChunkIndex, count);
         node.chunk_format = @as(u16, chunk_bits - 12) |
@@ -94,9 +102,13 @@ pub fn prepare(
         for (node.chunk_indexes.?, 0..) |*index, chunk_index| {
             const start = std.math.mul(usize, chunk_index, chunk_size) catch
                 return error.IntegerOverflow;
-            const end = @min(node.data.len, std.math.add(usize, start, chunk_size) catch
+            const end = @min(content_size, std.math.add(usize, start, chunk_size) catch
                 return error.IntegerOverflow);
-            const bytes = node.data[start..end];
+            const bytes = if (node.source != null) blk: {
+                const part = scratch.?[0 .. end - start];
+                try node.readContent(start, part);
+                break :blk part;
+            } else node.data[start..end];
             if (allZero(bytes)) {
                 index.* = .{ .unique_index = null };
                 continue;

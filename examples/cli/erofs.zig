@@ -22,11 +22,14 @@ pub fn create(
         .lz4;
     const extent_size = if (args.next()) |text| try std.fmt.parseInt(usize, text, 10) else 4096;
     const max_pcluster_size = if (args.next()) |text| try std.fmt.parseInt(usize, text, 10) else null;
-    const input = try readFile(init, input_path);
-    defer init.gpa.free(input);
+    const input_file = try std.Io.Dir.cwd().openFile(init.io, input_path, .{});
+    defer input_file.close(init.io);
+    var input_adapter = try vort.FileByteSource.init(init.io, input_file);
+    const input = input_adapter.source();
+    if (input.len > max_file_size) return error.OutputLimitExceeded;
     const encoded = try vort.encodeErofsAlloc(init.gpa, &.{.{
         .path = entry_name,
-        .data = input,
+        .source = input,
     }}, .{ .compression = compression, .compression_extent_size = extent_size, .max_pcluster_size = max_pcluster_size });
     defer init.gpa.free(encoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
