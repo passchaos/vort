@@ -22600,3 +22600,26 @@ reuse, so production keeps the simpler independently owned plans.
   u64 Source offsets; a virtual 64 TiB device test reads eight bytes at a
   32 TiB offset without loading the blob. This is the parsing foundation for
   the Source archive and direct extraction APIs.
+
+- Added owning `ErofsSourceArchive` over stable borrowed primary/device
+  Sources, with bounded metabox caching and explicit live requested working
+  memory limits. Inodes, lookup, directory/xattr output, full and partial
+  extraction share the metadata reader. Flat/chunk bytes and holes emit
+  directly; full/compact/modern compression decodes one overlapping extent
+  and releases its buffers. Encoded, decoded, packed and metabox limits remain
+  independent. Returned caller buffers, stack and backing allocator overhead
+  are outside the working budget; lifetime peak reporting is not an RSS limit.
+  Metabox can load eagerly or explicitly, and allocation failures distinguish
+  denied work budgets from backing/output allocator OOM across repeated calls.
+  Convenience output APIs use the Sink core. Source/write/final-length errors
+  leave the archive reusable and do not commit incomplete output length.
+  Tests include every codec/layout, compact/final-big reference images,
+  external/local chunks, padding/holes, ranges crossing boundaries, shared
+  xattrs, metabox/directory compression, and exhaustive allocation failures.
+  Four-MiB stored extraction fits a 64 KiB working heap budget; compressed
+  extraction fits 2 MiB while emitting 4 MiB directly. The CLI uses file Sources
+  for all reading and atomic file Sinks for extraction, with no complete image
+  or external-device load. All 324 interoperability modes and 13 writer file
+  cases pass through the new reader; six further real file checks cover sparse
+  image/device inputs above 512 MiB, 64 KiB budgets, same-path extraction and
+  budget/late-corruption preservation with temporary-file cleanup.
