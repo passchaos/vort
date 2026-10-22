@@ -33,7 +33,7 @@ pub fn main(init: std.process.Init) !void {
     const fragments = std.mem.endsWith(u8, layout_mode, fragment_suffix);
     const compressed_inline = std.mem.endsWith(u8, layout_mode, inline_suffix);
     const compress_directories = std.mem.endsWith(u8, layout_mode, directory_suffix);
-    const compression_name = if (chunk_local or chunk_external)
+    const compression_with_extent = if (chunk_local or chunk_external)
         "stored"
     else if (fragments)
         layout_mode[0 .. layout_mode.len - fragment_suffix.len]
@@ -43,10 +43,19 @@ pub fn main(init: std.process.Init) !void {
         layout_mode[0 .. layout_mode.len - directory_suffix.len]
     else
         layout_mode;
+    const grouped_suffix = "-clusters";
+    const grouped = std.mem.endsWith(u8, compression_with_extent, grouped_suffix);
+    const compression_name = if (grouped)
+        compression_with_extent[0 .. compression_with_extent.len - grouped_suffix.len]
+    else
+        compression_with_extent;
     const compression = parseCompression(compression_name) orelse return error.InvalidBlockPlan;
 
     var random: [8193]u8 = undefined;
     fillPseudoRandom(&random);
+    var mixed: [16384]u8 = undefined;
+    @memcpy(mixed[0..8192], random[0..8192]);
+    @memcpy(mixed[8192..], random[0..8192]);
     const large = "EROFS writer probe multi-block payload 0123456789\n" ** 4096;
     const config_xattrs = [_]vort.ErofsXattr{
         .{ .name = "user.vort.config", .value = "config-xattr" },
@@ -68,12 +77,14 @@ pub fn main(init: std.process.Init) !void {
         .{ .path = "etc/config", .data = "writer probe configuration\n", .xattrs = &config_xattrs },
         .{ .path = "large.bin", .data = large },
         .{ .path = "random.bin", .data = &random },
+        .{ .path = "mixed.bin", .data = &mixed },
         .{ .path = "small", .data = "inline payload", .xattrs = &small_xattrs },
         .{ .path = "link", .kind = .symlink, .target = "etc/config" },
         .{ .path = "empty", .kind = .directory, .xattrs = &directory_xattrs },
     };
     const options = vort.ErofsWriterOptions{
         .compression = compression,
+        .compression_extent_size = if (grouped) 64 * 1024 else 4096,
         .volume_name = "vort-writer",
         .root_xattrs = &root_xattrs,
         .xattr_prefixes = &.{"user.vort."},

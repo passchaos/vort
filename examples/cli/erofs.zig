@@ -20,17 +20,18 @@ pub fn create(
         parseCompression(name) orelse return error.InvalidBlockPlan
     else
         .lz4;
+    const extent_size = if (args.next()) |text| try std.fmt.parseInt(usize, text, 10) else 4096;
     const input = try readFile(init, input_path);
     defer init.gpa.free(input);
     const encoded = try vort.encodeErofsAlloc(init.gpa, &.{.{
         .path = entry_name,
         .data = input,
-    }}, .{ .compression = compression });
+    }}, .{ .compression = compression, .compression_extent_size = extent_size });
     defer init.gpa.free(encoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
     try stdout.print(
-        "entry={s} input_bytes={d} erofs_bytes={d} compression={s} path={s}\n",
-        .{ entry_name, input.len, encoded.len, @tagName(compression), output_path },
+        "entry={s} input_bytes={d} erofs_bytes={d} compression={s} extent_size={d} path={s}\n",
+        .{ entry_name, input.len, encoded.len, @tagName(compression), extent_size, output_path },
     );
 }
 

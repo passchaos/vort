@@ -22446,3 +22446,29 @@ reuse, so production keeps the simpler independently owned plans.
   tests pass 76/76, including malformed counts, output limits, and exhaustive
   allocation failures. The earlier complete-stream/extended-inode snapshot
   at 5b1bb9e0 also finished its full repository suite: 3375/3375 passed.
+
+
+- Added EROFS multi-logical-cluster writing through
+  `compression_extent_size` (power-of-two decoded groups, 4 KiB...1 MiB).
+  Larger groups retain ordinary full indexes with HEAD/NONHEAD lookback and
+  lookahead, explicit CBLKCNT, actual rounded physical allocation, and PLAIN
+  per-logical-block fallback. LZ4 advertises its standard 16-byte configuration
+  and bounded maximum physical clusters; Zstandard frames cap their window
+  at the advertised 32 KiB. Larger Deflate groups perform complete-input
+  matching when the normal prefix-only storage classifier would discard
+  repeated suffixes. The 4 KiB default retains its previous path and wire.
+  A separate payload planner owns cached bytes and determines real physical
+  counts before addresses are assigned. Grouped metabox output assigns all
+  ordinary/packed payloads first, fills visible metadata with final addresses,
+  then compresses and places the metabox last, avoiding reserved-space or
+  address/encoding cycles. The CLI accepts optional decoded extent size.
+  Tests cover all codecs, actual image reduction, multi-block final pclusters,
+  stored fallback, tiny/empty/symlink data, 1 MiB extent bounds, fragment/inline
+  tails, 48-bit and extended inodes, shared/large xattrs, compressed directories
+  plus metabox, and exhaustive allocation failures. Focused EROFS tests pass
+  81/81; erofs-utils 1.9.4-g5fcb2f76 validates and extracts all 68 modes,
+  including 32 grouped variants (`grouped_writer=32`, `xattr_writer=55`,
+  `directory_writer=12`, `extended_inode_writer=13`, `metabox_writer=13`).
+  Input-adaptive group boundaries and integration of MicroLZMA capacity prefix
+  selection into those boundaries remain future work; this functional slice
+  does not claim industry-leading ratio or throughput.

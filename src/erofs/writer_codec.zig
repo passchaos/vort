@@ -81,11 +81,42 @@ pub fn compressionField(compression: Compression) u16 {
     };
 }
 
+pub fn configurationSizeForExtent(compression: Compression, extent_size: usize) usize {
+    if (compression == .lz4 and extent_size > 4096) return 16;
+    return if (configuration(compression)) |bytes| bytes.len else 0;
+}
+
+pub fn writeConfigurationForExtent(output: []u8, compression: Compression, extent_size: usize) Error!void {
+    if (output.len != configurationSizeForExtent(compression, extent_size))
+        return error.InvalidErofs;
+    if (compression == .lz4 and extent_size > 4096) {
+        const blocks = extent_size / 4096;
+        if (blocks > std.math.maxInt(u16)) return error.InvalidErofs;
+        @memset(output, 0);
+        std.mem.writeInt(u16, output[0..2], 14, .little);
+        std.mem.writeInt(u16, output[2..4], std.math.maxInt(u16), .little);
+        std.mem.writeInt(u16, output[4..6], @intCast(blocks), .little);
+    } else if (configuration(compression)) |bytes| {
+        @memcpy(output, bytes);
+    }
+}
+
+pub fn featureIncompatForExtent(compression: Compression, extent_size: usize) u32 {
+    return featureIncompat(compression) |
+        (if (compression == .lz4 and extent_size > 4096) @as(u32, 2) else 0);
+}
+
+pub fn compressionFieldForExtent(compression: Compression, extent_size: usize) u16 {
+    if (compression == .lz4 and extent_size > 4096) return 1;
+    return compressionField(compression);
+}
+
 pub const Encoder = struct {
     allocator: std.mem.Allocator,
     compression: Compression,
     lz4_encoder: ?lz4.BlockEncoder = null,
     owned_scratch: ?[]u8 = null,
+    zstandard_window_log: ?u6 = null,
 
     pub fn init(allocator: std.mem.Allocator, compression: Compression) Error!Encoder {
         if (compression == .stored) return error.InvalidErofs;
@@ -119,11 +150,11 @@ pub const Encoder = struct {
                 break :blk encoded;
             },
             .deflate => blk: {
-                const encoded = try deflate.encodeRawBestAlloc(
-                    self.allocator,
-                    input,
-                    deflate.optionsForLevel(.default),
-                );
+                const options = deflate.optionsForLevel(.default);
+                const encoded = if (input.len > 4096 and deflate.usesStoredFastPath(input, options))
+                    try deflate.encodeRawDynamicWithOptionsAlloc(self.allocator, input, options)
+                else
+                    try deflate.encodeRawBestAlloc(self.allocator, input, options);
                 self.owned_scratch = encoded;
                 break :blk encoded;
             },
@@ -131,7 +162,7 @@ pub const Encoder = struct {
                 const encoded = try zstd.encodeFrameWithOptionsAlloc(
                     self.allocator,
                     input,
-                    .{ .content_checksum = false },
+                    .{ .content_checksum = false, .window_log = self.zstandard_window_log },
                 );
                 self.owned_scratch = encoded;
                 break :blk encoded;

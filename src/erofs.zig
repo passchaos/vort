@@ -48,6 +48,7 @@ test {
     _ = @import("erofs/writer_metabox_tests.zig");
     _ = @import("erofs/writer_xattr_tests.zig");
     _ = @import("erofs/writer_directory_tests.zig");
+    _ = @import("erofs/writer_cluster_tests.zig");
     _ = @import("erofs/writer_inode_tests.zig");
     _ = codec;
     _ = writer;

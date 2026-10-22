@@ -58,6 +58,8 @@ pub const Node = struct {
     fragment_offset: ?u64 = null,
     fragment_size: usize = 0,
     compressed_block_count: usize = 0,
+    compressed_advise: u16 = 0,
+    compressed_data: ?[]u8 = null,
     compressed_indexes: ?[]CompressionIndex = null,
     chunk_format: u16 = 0,
     chunk_indexes: ?[]ChunkIndex = null,
@@ -99,6 +101,7 @@ pub const Tree = struct {
             if (node.owned_data) |bytes| self.allocator.free(bytes);
             if (node.compressed_inline_data) |bytes| self.allocator.free(bytes);
             if (node.compressed_indexes) |indexes| self.allocator.free(indexes);
+            if (node.compressed_data) |bytes| self.allocator.free(bytes);
             if (node.chunk_indexes) |indexes| self.allocator.free(indexes);
             self.allocator.free(node.path);
         }

@@ -199,6 +199,7 @@ def main() -> None:
     extended_inode_writer_cases = 0
     lzma_writer_cases = 0
     final_big_pcluster_reader_cases = 0
+    grouped_writer_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -230,6 +231,7 @@ def main() -> None:
             "etc/config": b"writer probe configuration\n",
             "large.bin": writer_large,
             "random.bin": bytes(writer_random),
+            "mixed.bin": bytes(writer_random[:8192]) * 2,
             "small": b"inline payload",
             "link": b"etc/config",
         }
@@ -251,6 +253,11 @@ def main() -> None:
                 b"user.vort.shared": b"shared-xattr",
             },
         }
+        grouped_modes = tuple(
+            f"{codec}-clusters{suffix}"
+            for codec in ("lz4", "lzma", "deflate", "zstd")
+            for suffix in ("", "-fragments", "-ztailpacking", "-48bit", "-metabox", "-dirs", "-extended", "-dirs-extended-metabox")
+        )
         for mode in (
             "stored",
             "lz4",
@@ -288,7 +295,7 @@ def main() -> None:
             "lzma-metabox",
             "lzma-dirs",
             "lzma-extended",
-        ):
+        ) + grouped_modes:
             image = temp / f"writer-{mode}.erofs"
             repeated = temp / f"writer-{mode}-repeat.erofs"
             device = temp / f"writer-{mode}.blob"
@@ -305,7 +312,7 @@ def main() -> None:
             if is_external_chunk and device.read_bytes() != repeated_device.read_bytes():
                 raise AssertionError(f"non-deterministic EROFS external chunks for {mode}")
             listing = run(args.cli, "list-erofs-file", image).stdout
-            for required in (b"etc/config", b"large.bin", b"random.bin", b"small", b"link", b"empty"):
+            for required in (b"etc/config", b"large.bin", b"random.bin", b"mixed.bin", b"small", b"link", b"empty"):
                 if required not in listing:
                     raise AssertionError(f"EROFS writer listing missing {required!r} for {mode}")
             for name, expected in expected_writer.items():
@@ -338,13 +345,15 @@ def main() -> None:
                 address48_writer_cases += 1
             if mode.endswith("-metabox"):
                 metabox_writer_cases += 1
-            if mode.endswith("-dirs"):
+            if "-dirs" in mode:
                 directory_writer_cases += 1
-            if mode.endswith("-extended"):
+            if "-extended" in mode:
                 extended_inode_writer_cases += 1
             shared_xattr_writer_cases += 1
             if mode.startswith("lzma"):
                 lzma_writer_cases += 1
+            if "-clusters" in mode:
+                grouped_writer_cases += 1
             writer_cases += 1
             if fsck is not None:
                 extracted = temp / f"writer-{mode}-fsck"
@@ -364,9 +373,9 @@ def main() -> None:
                 # so keep fsck coverage on physical extents and directories and
                 # rely on the self-decode checks above for these inline tails.
                 checked_names = (
-                    ("large.bin",)
+                    ("large.bin", "mixed.bin")
                     if mode == "stored-metabox"
-                    else ("etc/config", "large.bin", "random.bin", "small")
+                    else ("etc/config", "large.bin", "random.bin", "mixed.bin", "small")
                 )
                 for name in checked_names:
                     if (extracted / name).read_bytes() != expected_writer[name]:
@@ -654,6 +663,7 @@ def main() -> None:
         f"extended_inode_writer={extended_inode_writer_cases} "
         f"lzma_writer={lzma_writer_cases} "
         f"final_big_pcluster_reader={final_big_pcluster_reader_cases} "
+        f"grouped_writer={grouped_writer_cases} "
         f"malformed={malformed}"
     )
 

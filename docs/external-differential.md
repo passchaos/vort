@@ -74,10 +74,10 @@ metadata inodes, must remain deterministic, and are self-decoded byte-exactly;
 fsck validates every image and independently extracts physical/compressed file
 extents. The stored-MZi check excludes flat-inline regular-file tails because
 erofs-utils 1.9.4's extractor zero-fills that layout even for its own MZi
-images, although its `dump --cat` path and Vort both read it correctly. All 36
+images, although its `dump --cat` path and Vort both read it correctly. All 68
 Vort writer modes also move one repeated long-prefix name/value pair to the
 primary shared-xattr region while retaining distinct inline attributes.
-Vort must reconstruct both sources in every mode; the 31 non-metabox cases
+Vort must reconstruct both sources in every mode; the 55 non-metabox cases
 additionally require host-restored xattrs from `fsck.erofs --xattrs`. Three
 erofs-utils `--zD` references and four Vort directory writers cover
 LZ4, MicroLZMA, raw Deflate, and Zstandard whole-directory fragments, including the shared
@@ -462,3 +462,14 @@ list and extract the exact 16 KiB payload (`final_big_pcluster_reader=8`).
 This exercises explicit CBLKCNT handling at EOF, independently of the distance
 to a following HEAD. Existing fragment and inline-tail references remain in
 the same matrix to pin their legitimate zero-physical-block markers.
+
+Thirty-two additional Vort modes use 64 KiB decoded groups in all four
+EROFS codecs, including ordinary data, fragments, inline tails, 48-bit
+features, metabox, directories, extended inodes, and directory + extended +
+metabox combinations. Every mode includes a 16 KiB mixed file (8 KiB random
+prefix repeated twice) that requires a multi-block physical pcluster when
+compression is selected. Vort's deterministic output, extraction, and xattrs
+are checked for all 68 writer modes; fsck independently extracts every mode
+(`grouped_writer=32`, `external_writer=68`, `xattr_writer=55`,
+`directory_writer=12`, `extended_inode_writer=13`). The stored-MZi host
+extractor exception continues to apply only to affected inline tails.

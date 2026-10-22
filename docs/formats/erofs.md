@@ -64,6 +64,20 @@ regular-file logical cluster into an independently addressable physical cluster.
 Compressed payloads are right-aligned with `lz4_0padding`; a `PLAIN` index is
 used whenever compression would not reduce the payload. MicroLZMA, Deflate,
 and Zstandard images include their required superblock compression-configuration records.
+`compression_extent_size` selects power-of-two decoded groups from 4 KiB
+through 1 MiB. The 4 KiB default preserves the earlier wire. Larger groups
+use one compressed HEAD, standard NONHEAD lookback/lookahead distances, and
+an explicit CBLKCNT marker when the group spans multiple logical clusters.
+Compressed payloads occupy their actual rounded physical size; groups that
+cannot reduce bytes fall back to one PLAIN block per logical cluster. LZ4
+adds its standard configuration record and algorithm bitmap; Zstandard uses
+a 32 KiB window matching the advertised configuration. Large Deflate groups
+perform complete-input matching before storage selection, including when a
+random prefix would otherwise trigger the ordinary sampled storage shortcut.
+Payload plans are allocator-owned and retained until the image is emitted,
+so this one-shot writer uses memory proportional to the planned image.
+Stored/chunk modes require the default extent size.
+
 Each entry and the root directory can carry deterministic inline xattrs; inode
 planning accounts for their ibodies before flat-inline tails and aligned
 compression headers. `xattr_prefixes` optionally writes a plain prefix table
@@ -116,7 +130,9 @@ directories and tails, xattr ibodies, and compression indexes are planned in a
 separate block-padded metadata stream; directory entries and the superblock use
 bit-63 NIDs. One low-NID hidden inode in the primary metadata owns that stream,
 using stored blocks or the selected LZ4/MicroLZMA/raw-Deflate/Zstandard
-full-index codec.
+full-index codec. With larger groups, all non-metabox physical addresses are
+assigned first, visible metabox metadata is populated, and the metadata inode
+is compressed last; its actual physical size never changes earlier addresses.
 The extended 144-byte superblock carries `metabox_nid` and enables 48-bit
 addressing for the high-bit root NID. Physical file and large-directory blocks
 remain in the primary image unless directory compression is selected. Metabox
@@ -157,6 +173,7 @@ const image = try vort.encodeErofsAlloc(allocator, &.{
     .{ .path = "config-link", .kind = .symlink, .target = "etc/config" },
 }, .{
     .compression = .zstandard,
+    .compression_extent_size = 64 * 1024,
     .root_xattrs = &root_xattrs,
     .xattr_prefixes = &.{"user."},
     .shared_xattrs = true,
@@ -248,11 +265,11 @@ physical/compressed extents. erofs-utils 1.9.4 itself writes zero-filled output
 for flat-inline regular files whose inode lives in a metabox (its `dump --cat`
 path reads the same bytes correctly), so the stored-MZi oracle check excludes
 only those affected inline tails.
-All 36 Vort writer modes enable cost-aware shared-xattr planning for one
+All 68 Vort writer modes enable cost-aware shared-xattr planning for one
 repeated long-prefix attribute across root, file, and directory ibodies. Vort
-reconstructs each value, and the 31 non-metabox modes additionally require
+reconstructs each value, and the 55 non-metabox modes additionally require
 `fsck.erofs --xattrs` restoration; the summary reports
-`shared_xattr_writer=36`. Three reference and four Vort-authored LZ4/MicroLZMA/Deflate/
+`shared_xattr_writer=68`. Three reference and four Vort-authored LZ4/MicroLZMA/Deflate/
 Zstandard directory-compression images require byte-exact listing/extraction
 through whole-directory fragments (`directory_reader=3`,
 `directory_writer=4`). Four forced-extended reference images and five
@@ -268,3 +285,13 @@ Seven writer modes pass erofs-utils 1.9.4-g5fcb2f76 checks and byte-exact
 extraction (`lzma_writer=7`). The shared MicroLZMA codec also exposes capacity-
 limited prefix encoding with consumed/written accounting. Integrating that
 surface into larger EROFS physical clusters remains future writer work.
+
+Thirty-two additional writer modes cover 64 KiB groups across all four
+compression algorithms, ordinary/fragments/inline/48-bit/metabox/directory/
+extended layouts, and combined directory + extended + metabox output.
+A random 8 KiB prefix repeated twice additionally exercises multi-block
+physical clusters in both ordinary files and the extraction matrix. All 68
+writer modes pass fsck and exact extraction (`grouped_writer=32`,
+`external_writer=68`, `directory_writer=12`, `extended_inode_writer=13`).
+Focused tests additionally cover 1 MiB decoded extents, metadata larger than
+two physical blocks, actual image-size reduction on repetitive data, and OOM.
