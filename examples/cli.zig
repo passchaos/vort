@@ -2831,7 +2831,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  extract-squashfs-file <image> <entry> <out> [max_output]
         \\  list-erofs-file <path>
         \\  create-erofs-file <out> <entry> <in> [stored|lz4|lzma|deflate|zstd] [extent_size] [max_pcluster_size] [working_memory_limit]
-        \\  extract-erofs-file <image> <entry> <out> [max_output] [device...]
+        \\  extract-erofs-file <image> <entry> <out> [max_output] [device...] [--working-memory-limit=bytes]
         \\  list-erofs-xattrs <image> <entry>
         \\  list-wim-file <path>
         \\  extract-wim-resource <image> <sha1> <out> [max_output]

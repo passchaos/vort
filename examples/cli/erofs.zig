@@ -27,14 +27,13 @@ pub fn create(
     defer input_file.close(init.io);
     var input_adapter = try vort.FileByteSource.init(init.io, input_file);
     const input = input_adapter.source();
-    if (input.len > max_file_size) return error.OutputLimitExceeded;
     var output_file = try std.Io.Dir.cwd().createFileAtomic(init.io, output_path, .{ .replace = true });
     defer output_file.deinit(init.io);
     var output_adapter = vort.FileByteSink.init(init.io, output_file.file);
     const result = try vort.encodeErofsToSink(init.gpa, &.{.{
         .path = entry_name,
         .source = input,
-    }}, .{ .compression = compression, .compression_extent_size = extent_size, .max_pcluster_size = max_pcluster_size }, output_adapter.sink(), .{ .max_working_memory = working_limit });
+    }}, .{ .compression = compression, .compression_extent_size = extent_size, .max_pcluster_size = max_pcluster_size, .inode_version = .automatic }, output_adapter.sink(), .{ .max_working_memory = working_limit });
     try output_file.replace(init.io);
     try stdout.print(
         "entry={s} input_bytes={d} erofs_bytes={d} compression={s} extent_size={d} max_pcluster_size={?d} peak_working_bytes={d} path={s}\n",
@@ -57,19 +56,11 @@ pub fn list(
     stdout: *std.Io.Writer,
 ) !void {
     const input_path = args.next() orelse return error.MissingCorpusPath;
-    const input = try readFile(init, input_path);
-    defer init.gpa.free(input);
-    const base_archive = try vort.parseErofs(input);
-    var loaded = if (base_archive.superblock.metabox_nid != 0)
-        try base_archive.loadMetaboxAllocLimited(
-            init.gpa,
-            max_metabox_size,
-            vort.erofsDefaultPackedExtentLimit,
-        )
-    else
-        null;
-    defer if (loaded) |*owner| owner.deinit();
-    const archive = if (loaded) |owner| owner.archive else base_archive;
+    const input_file = try std.Io.Dir.cwd().openFile(init.io, input_path, .{});
+    defer input_file.close(init.io);
+    var input_adapter = try vort.FileByteSource.init(init.io, input_file);
+    var archive = try vort.ErofsSourceArchive.init(init.gpa, input_adapter.source(), .{ .max_metabox_size = max_metabox_size });
+    defer archive.deinit();
     try stdout.print(
         "erofs_inodes={d} blocks={d} block_size={d} root_nid={d} compression_mask={d}\n",
         .{
@@ -81,12 +72,12 @@ pub fn list(
         },
     );
     const root = try archive.rootInode();
-    try listDirectory(init, archive, root, "", 0, stdout);
+    try listDirectory(init, &archive, root, "", 0, stdout);
 }
 
 fn listDirectory(
     init: std.process.Init,
-    archive: vort.ErofsArchive,
+    archive: *vort.ErofsSourceArchive,
     inode: vort.ErofsInode,
     prefix: []const u8,
     depth: usize,
@@ -129,42 +120,48 @@ pub fn extract(
         try std.fmt.parseInt(usize, text, 10)
     else
         max_file_size;
-    const input = try readFile(init, input_path);
-    defer init.gpa.free(input);
-    var devices: std.ArrayList([]const u8) = .empty;
+    const input_file = try std.Io.Dir.cwd().openFile(init.io, input_path, .{});
+    defer input_file.close(init.io);
+    var input_adapter = try vort.FileByteSource.init(init.io, input_file);
+    var adapters: std.ArrayList(vort.FileByteSource) = .empty;
     defer {
-        for (devices.items) |device| init.gpa.free(device);
-        devices.deinit(init.gpa);
+        for (adapters.items) |adapter| adapter.file.close(init.io);
+        adapters.deinit(init.gpa);
     }
-    while (args.next()) |device_path| {
-        const device = try readFile(init, device_path);
-        devices.append(init.gpa, device) catch |err| {
-            init.gpa.free(device);
+    var working_limit: usize = 64 * 1024 * 1024;
+    const working_option = "--working-memory-limit=";
+    while (args.next()) |argument| {
+        if (std.mem.startsWith(u8, argument, working_option)) {
+            working_limit = try std.fmt.parseInt(usize, argument[working_option.len..], 10);
+            continue;
+        }
+        const file = try std.Io.Dir.cwd().openFile(init.io, argument, .{});
+        const adapter = vort.FileByteSource.init(init.io, file) catch |err| {
+            file.close(init.io);
+            return err;
+        };
+        adapters.append(init.gpa, adapter) catch |err| {
+            file.close(init.io);
             return err;
         };
     }
-    const base_archive = try vort.parseErofsWithDevices(input, devices.items);
-    var loaded = if (base_archive.superblock.metabox_nid != 0)
-        try base_archive.loadMetaboxAllocLimited(
-            init.gpa,
-            max_metabox_size,
-            vort.erofsDefaultPackedExtentLimit,
-        )
-    else
-        null;
-    defer if (loaded) |*owner| owner.deinit();
-    const archive = if (loaded) |owner| owner.archive else base_archive;
-    const decoded = try archive.extractByPathAllocLimited(
-        init.gpa,
+    const devices = try init.gpa.alloc(vort.ByteSource, adapters.items.len);
+    defer init.gpa.free(devices);
+    for (adapters.items, 0..) |*adapter, index| devices[index] = adapter.source();
+    var archive = try vort.ErofsSourceArchive.initWithDevices(init.gpa, input_adapter.source(), devices, .{
+        .max_working_memory = working_limit,
+        .max_metabox_size = max_metabox_size,
+    });
+    defer archive.deinit();
+    var output_file = try std.Io.Dir.cwd().createFileAtomic(init.io, output_path, .{ .replace = true });
+    defer output_file.deinit(init.io);
+    var output_adapter = vort.FileByteSink.init(init.io, output_file.file);
+    const result = try archive.extractByPathToSink(entry_path, output_adapter.sink(), .{ .max_output_len = limit }, max_directory_size);
+    try output_file.replace(init.io);
+    try stdout.print("entry={s} decoded_bytes={d} peak_working_bytes={d} path={s}\n", .{
         entry_path,
-        limit,
-        max_directory_size,
-    );
-    defer init.gpa.free(decoded);
-    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
-    try stdout.print("entry={s} decoded_bytes={d} path={s}\n", .{
-        entry_path,
-        decoded.len,
+        result.decoded_size,
+        result.peak_working_bytes,
         output_path,
     });
 }
@@ -176,21 +173,12 @@ pub fn listXattrs(
 ) !void {
     const input_path = args.next() orelse return error.MissingCorpusPath;
     const entry_path = args.next() orelse return error.MissingCorpusPath;
-    const input = try readFile(init, input_path);
-    defer init.gpa.free(input);
-    const base_archive = try vort.parseErofs(input);
-    var loaded = if (base_archive.superblock.metabox_nid != 0)
-        try base_archive.loadMetaboxAllocLimited(
-            init.gpa,
-            max_metabox_size,
-            vort.erofsDefaultPackedExtentLimit,
-        )
-    else
-        null;
-    defer if (loaded) |*owner| owner.deinit();
-    const archive = if (loaded) |owner| owner.archive else base_archive;
+    const input_file = try std.Io.Dir.cwd().openFile(init.io, input_path, .{});
+    defer input_file.close(init.io);
+    var input_adapter = try vort.FileByteSource.init(init.io, input_file);
+    var archive = try vort.ErofsSourceArchive.init(init.gpa, input_adapter.source(), .{ .max_metabox_size = max_metabox_size });
+    defer archive.deinit();
     const inode = try archive.lookup(
-        init.gpa,
         entry_path,
         std.math.maxInt(usize),
         max_directory_size,
@@ -205,8 +193,4 @@ pub fn listXattrs(
     try stdout.print("xattrs={d} entry={s}\n", .{ attributes.entries.len, entry_path });
     for (attributes.entries) |attribute|
         try stdout.print("xattr\t{s}\t{x}\n", .{ attribute.name, attribute.value });
-}
-
-fn readFile(init: std.process.Init, path: []const u8) ![]u8 {
-    return std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(max_file_size));
 }

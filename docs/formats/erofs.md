@@ -3,6 +3,73 @@
 Vort provides a pure Zig EROFS reader and deterministic writer for the
 filesystem format used by Android, embedded Linux, and container images.
 
+`ErofsSourceArchive.init(allocator, source, limits)` opens a borrowed stable
+`ByteSource`; `initWithDevices` additionally borrows an ordered Source array.
+It reads only the superblock/checksum block initially, parses metadata on
+demand, and owns bounded metabox metadata when present. `deinit()` releases
+that metadata and leaves source handles and contexts with the caller. All
+source bytes, lengths and contexts, including the device array, must remain
+stable and valid throughout the archive's lifetime. Reads are bounded to the
+image length declared by the superblock. Image/device lengths and physical
+read offsets use u64; file sizes and metadata positions use checked host
+`usize` accounting.
+
+Source archives support inode/device access, lookup, directory and xattr
+reading, `readToSink`, `readRangeToSink`, and `extractByPathToSink`. Flat and
+chunk data copy directly through a 64 KiB stack buffer, including zero-filled
+holes and explicit/unified external addresses. Full/compact and modern extent
+indexes decode one overlapping extent at a time, then release its encoded and
+decoded working buffers. Inline/interlaced/whole and partial packed tails,
+compressed directories, 48-bit/extended inodes and metabox use the same input
+and decoding paths. Allocating convenience methods call the Sink core.
+
+`ErofsSourceLimits` defaults to 64 MiB of live requested working heap, a
+64 MiB metabox cap, and separate 8 MiB encoded/decoded extent caps. Metabox is
+loaded by default; `load_metabox = false` allows header inspection before an
+explicit `loadMetabox()` call. A retained metabox and decoder scratch together
+must fit the working budget, even when the independent metabox size cap fits.
+`ErofsReadLimits.max_output_len` bounds the requested extraction/range, and
+`max_packed_extent_len` additionally bounds decoded packed extents.
+
+The working budget includes retained metabox bytes, encoded/decoded extents,
+xattr scanning scratch and temporary lookup directories. It excludes stack,
+backing allocator bookkeeping/remap transients and caller-owned Source/Sink
+storage or returned file/directory/xattr buffers. `ErofsSourceReadResult`
+returns `decoded_size` and the archive lifetime's monotonic
+`peak_working_bytes`; `peakWorkingBytes()` exposes the same counter. Budget
+denial reports `WorkingMemoryLimitExceeded`, while backing/output allocator
+failure remains `OutOfMemory`. This accounting is not an RSS limit.
+
+Source/Sink callback errors preserve their public error classes. Extraction
+sets final Sink length only after successful data emission; failures can leave
+partial caller output. File, directory and xattr convenience results own their
+buffers independently of the Source archive.
+
+```zig
+const image_file = try std.Io.Dir.cwd().openFile(io, "image.erofs", .{});
+defer image_file.close(io);
+var input = try vort.FileByteSource.init(io, image_file);
+var archive = try vort.ErofsSourceArchive.init(allocator, input.source(), .{
+    .max_working_memory = 8 * 1024 * 1024,
+});
+defer archive.deinit();
+const output_file = try std.Io.Dir.cwd().createFile(io, "payload.bin", .{});
+defer output_file.close(io);
+var output = vort.FileByteSink.init(io, output_file);
+const result = try archive.extractByPathToSink("data/payload", output.sink(), .{
+    .max_output_len = 512 * 1024 * 1024,
+}, 64 * 1024 * 1024);
+_ = result;
+```
+
+CLI list, xattr and extraction commands use actual file Sources, including
+external devices. Input images and devices have no whole-file 512 MiB loading
+cap; extraction retains its explicit output cap. Extraction uses an atomic
+file Sink, preserves existing output on budget or late decoding failure, and
+supports same-path input/output. Its final optional
+`--working-memory-limit=bytes` follows the output limit/device arguments.
+Creation uses automatic inode version selection for larger input files.
+
 The reader validates the superblock, CRC-32C checksum, block geometry,
 incompatible feature bits, compact and extended inode layouts, directory entry
 ordering, names, NIDs, and exact allocation limits. Flat plain and flat inline
@@ -430,3 +497,8 @@ counterparts, with 261 xattr, 63 metabox, 60 directory, 63 extended-inode and
 120 physically bounded writer cases.
 The external matrix uses the Debug CLI. The final standard Debug repository
 suite (`zig build test`) also passes, alongside check and wasm compilation.
+
+The Source reader runs this complete matrix through file Sources and direct
+file Sinks. Six additional CLI checks cover images and devices larger than
+512 MiB under a 64 KiB working limit, listing, budget-failure preservation,
+same-path extraction and corrupt-final-pcluster cleanup (`source_reader=6`).

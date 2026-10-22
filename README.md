@@ -279,7 +279,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   high-bit visible NIDs, regular-file callback/file sources with bounded
   positional reads, random-access file/buffer output sinks with explicit
   working allocation limits and chunk deduplication using source locations,
-  byte-identical source/sink/memory output, all with
+  byte-identical source/sink/memory output, owning Source archives with bounded
+  metadata/extent working memory and direct file/range Sink extraction,
+  all with
   bidirectional erofs-utils interoperability;
 - dependency-free WIM/ESD/SWM parsing with strict 208-byte headers, compression
   and part geometry, resource headers, lookup tables, SHA-1 verification, raw

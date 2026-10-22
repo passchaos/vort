@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 from final_big_diff import verify_final_big_pclusters
 from file_source_diff import verify_file_sources
+from source_reader_diff import verify_source_readers
 
 
 def run(*args: object, check: bool = True) -> subprocess.CompletedProcess[bytes]:
@@ -205,6 +206,7 @@ def main() -> None:
     source_writer_cases = 0
     sink_writer_cases = 0
     file_source_writer_cases = 0
+    source_reader_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -662,6 +664,8 @@ def main() -> None:
         )
         malformed += 1
 
+        source_reader_cases += verify_source_readers(args.cli, temp, run)
+
     print(
         f"fixture_cases={fixture_cases} tools={mkfs is not None} "
         f"plain={plain_cases} lz4={lz4_cases} lzma={lzma_cases} "
@@ -693,6 +697,7 @@ def main() -> None:
         f"source_writer={source_writer_cases} "
         f"sink_writer={sink_writer_cases} "
         f"file_source_writer={file_source_writer_cases} "
+        f"source_reader={source_reader_cases} "
         f"malformed={malformed}"
     )
 
