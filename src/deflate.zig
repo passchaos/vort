@@ -24,6 +24,7 @@ const incremental_fixed_literal_decoder = @import("deflate/incremental/decoder/f
 const incremental_zlib_decoder = @import("deflate/incremental/decoder/zlib.zig");
 const incremental_gzip_decoder = @import("deflate/incremental/decoder/gzip.zig");
 const incremental_tests = @import("deflate/incremental/tests.zig");
+const decode_work_control = @import("deflate/decode_work_control.zig");
 
 const incompressible_classifier_text_section = switch (builtin.object_format) {
     .elf => ".vort_deflate_incompressible",
@@ -659,6 +660,9 @@ pub const ZlibDecodeOptions = struct {
     ignore_adler: bool = false,
     allow_trailing_data: bool = false,
 };
+
+pub const DecodeCancellation = decode_work_control.Cancellation;
+pub const DecodeWorkControl = decode_work_control.Control;
 
 pub const GzipDecodeOptions = struct {
     ignore_crc32: bool = false,
@@ -4158,6 +4162,142 @@ fn decodeRawAutoAppendPartialWithDictionaryFromReader(
             else => return error.InvalidDeflateBlockType,
         }
         if (header.final) return .{ .input_read = reader.byteOffset() - raw_base_offset, .output_written = out.items.len - start_len };
+    }
+}
+
+const decode_work_poll_interval = decode_work_control.poll_interval;
+const DecodeWorkTracker = decode_work_control.Tracker;
+
+fn decodeRawAutoAppendPartialWithDictionaryAndWorkControl(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    dictionary: []const u8,
+    out: *std.ArrayList(u8),
+    tracker: *DecodeWorkTracker,
+) !DecodeResult {
+    if (input.len == 0) return error.TruncatedFrame;
+    try rejectReservedFirstBlockBeforeAlloc(input);
+    try reserveInflateAppendOutputHint(allocator, out, input.len, tracker.control.max_output_len);
+
+    var reader = bitstream.BufferedBitReader.init(input);
+    const start_len = out.items.len;
+    while (true) {
+        const header = try readBlockHeader(&reader);
+        try tracker.observeInput(reader.byteOffset());
+        switch (header.block_type) {
+            0 => try decodeStoredBlockFromReaderWithWorkControl(allocator, &reader, out, tracker),
+            1 => try decodeFixedBlockFromReaderWithWorkControl(allocator, &reader, out, dictionary, start_len, tracker),
+            2 => {
+                const parsed = try huffman.parseDynamicLengthsAfterHeader(header.final, &reader);
+                try tracker.observeInput(reader.byteOffset());
+                const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
+                const dist_decoder = try makeDynamicDistanceDecoderFromLengths(parsed.distance_lengths[0..parsed.header.hdist]);
+                const lit_lookup_bits = dynamicLiteralLookupBits(parsed);
+                if (lit_lookup_bits == 9) {
+                    const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
+                    try decodeCompressedBlockFromReaderWithWorkControl(allocator, &reader, out, dictionary, start_len, tracker, &lit_decoder, &dist_decoder);
+                } else {
+                    const lit_decoder = huffman.FastDecoder(286, 11).init(lit_table);
+                    try decodeCompressedBlockFromReaderWithWorkControl(allocator, &reader, out, dictionary, start_len, tracker, &lit_decoder, &dist_decoder);
+                }
+            },
+            else => return error.InvalidDeflateBlockType,
+        }
+        if (header.final) {
+            try tracker.observeInput(reader.byteOffset());
+            return .{
+                .input_read = reader.byteOffset(),
+                .output_written = out.items.len - start_len,
+            };
+        }
+    }
+}
+
+fn decodeStoredBlockFromReaderWithWorkControl(
+    allocator: std.mem.Allocator,
+    reader: anytype,
+    out: *std.ArrayList(u8),
+    tracker: *DecodeWorkTracker,
+) !void {
+    reader.alignToByte();
+    const len = try reader.readAlignedInt(u16, .little);
+    const nlen = try reader.readAlignedInt(u16, .little);
+    if (nlen != ~len) return error.StoredLengthMismatch;
+    try tracker.observeInput(reader.byteOffset());
+
+    var remaining: usize = len;
+    while (remaining != 0) {
+        const chunk_len = @min(remaining, decode_work_poll_interval);
+        try ensureOutputLimit(out.items.len, chunk_len, tracker.control.max_output_len);
+        try tracker.charge(chunk_len);
+        const dest = try out.addManyAsSlice(allocator, chunk_len);
+        try reader.readAlignedBytes(dest);
+        try tracker.observeInput(reader.byteOffset());
+        remaining -= chunk_len;
+    }
+}
+
+fn decodeFixedBlockFromReaderWithWorkControl(
+    allocator: std.mem.Allocator,
+    reader: anytype,
+    out: *std.ArrayList(u8),
+    dictionary: []const u8,
+    history_start: usize,
+    tracker: *DecodeWorkTracker,
+) !void {
+    while (true) {
+        const symbol = try huffman.decodeFixedLiteralValueFast(reader);
+        try tracker.observeInput(reader.byteOffset());
+        if (symbol < 256) {
+            try ensureOutputLimit(out.items.len, 1, tracker.control.max_output_len);
+            try tracker.charge(1);
+            try out.append(allocator, @intCast(symbol));
+        } else if (symbol == 256) {
+            return;
+        } else if (symbol <= 285) {
+            const length = try decodeLength(symbol, reader);
+            const distance_symbol = try huffman.decodeFixedDistanceValueFast(reader);
+            const distance = try decodeDistance(distance_symbol, reader);
+            try tracker.observeInput(reader.byteOffset());
+            try ensureOutputLimit(out.items.len, length, tracker.control.max_output_len);
+            try tracker.charge(length);
+            try appendMatchWithDictionaryFromBase(allocator, out, dictionary, history_start, length, distance, tracker.control.max_output_len);
+        } else {
+            return error.InvalidHuffmanCode;
+        }
+    }
+}
+
+fn decodeCompressedBlockFromReaderWithWorkControl(
+    allocator: std.mem.Allocator,
+    reader: anytype,
+    out: *std.ArrayList(u8),
+    dictionary: []const u8,
+    history_start: usize,
+    tracker: *DecodeWorkTracker,
+    lit_table: anytype,
+    dist_table: anytype,
+) !void {
+    while (true) {
+        const symbol = try lit_table.decodeValue(reader);
+        try tracker.observeInput(reader.byteOffset());
+        if (symbol < 256) {
+            try ensureOutputLimit(out.items.len, 1, tracker.control.max_output_len);
+            try tracker.charge(1);
+            try out.append(allocator, @intCast(symbol));
+        } else if (symbol == 256) {
+            return;
+        } else if (symbol <= 285) {
+            const length = try decodeLength(symbol, reader);
+            const distance_symbol = try dist_table.decodeValue(reader);
+            const distance = try decodeDistance(distance_symbol, reader);
+            try tracker.observeInput(reader.byteOffset());
+            try ensureOutputLimit(out.items.len, length, tracker.control.max_output_len);
+            try tracker.charge(length);
+            try appendMatchWithDictionaryFromBase(allocator, out, dictionary, history_start, length, distance, tracker.control.max_output_len);
+        } else {
+            return error.InvalidHuffmanCode;
+        }
     }
 }
 
@@ -15174,6 +15314,69 @@ pub fn decodeZlibAllocWithDictionaryAndOptionsLimited(allocator: std.mem.Allocat
     return decodeZlibAllocWithOptionalDictionaryAndOptionsLimited(allocator, input, dictionary, options, max_output_len);
 }
 
+/// Decode one complete zlib stream with explicit input, output, work, and
+/// cooperative-cancellation controls. The callback/context are borrowed only
+/// for this call. Use `decodeZlibAllocLimited` when only an output limit is
+/// required and the cancellable accounting path is unnecessary.
+pub fn decodeZlibAllocWithWorkControl(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    control: DecodeWorkControl,
+) ![]u8 {
+    return decodeZlibAllocWithOptionsAndWorkControl(allocator, input, .{}, control);
+}
+
+/// Option-bearing counterpart to `decodeZlibAllocWithWorkControl`.
+pub fn decodeZlibAllocWithOptionsAndWorkControl(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: ZlibDecodeOptions,
+    control: DecodeWorkControl,
+) ![]u8 {
+    if (input.len > control.max_input_len) return error.InputLimitExceeded;
+
+    var tracker = DecodeWorkTracker{ .control = control };
+    try tracker.poll();
+
+    const header = try parseZlibHeader(input, null);
+    try tracker.charge(header.data_offset);
+    const raw_input = input[header.data_offset..];
+
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    const raw = try decodeRawAutoAppendPartialWithDictionaryAndWorkControl(
+        allocator,
+        raw_input,
+        "",
+        &out,
+        &tracker,
+    );
+    const footer_offset = header.data_offset + raw.input_read;
+
+    // Preserve the normal decoder's structural-error precedence. In
+    // particular, missing/trailing wrapper bytes are diagnosed before checksum
+    // scanning or another cooperative-cancellation poll can mask them.
+    if (footer_offset > input.len or input.len - footer_offset < 4) return error.TruncatedFrame;
+    if (!options.allow_trailing_data and footer_offset + 4 != input.len) return error.TrailingData;
+    try tracker.charge(4);
+
+    if (!options.ignore_adler) {
+        var adler = checksum.Adler32.init();
+        var offset: usize = 0;
+        while (offset < out.items.len) {
+            const chunk_len = @min(decode_work_poll_interval, out.items.len - offset);
+            try tracker.charge(chunk_len);
+            adler.update(out.items[offset..][0..chunk_len]);
+            offset += chunk_len;
+        }
+        const expected = std.mem.readInt(u32, input[footer_offset..][0..4], .big);
+        if (adler.digest() != expected) return error.ChecksumMismatch;
+    }
+
+    try tracker.poll();
+    return out.toOwnedSlice(allocator);
+}
+
 pub fn decodeZlibAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) !usize {
     return decodeZlibAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, input, null, .{}, null);
 }
@@ -21853,6 +22056,189 @@ test "one-shot deflate wrappers enforce output limits" {
     }, "hello ", 17);
     defer std.testing.allocator.free(dict_ok);
     try std.testing.expectEqualSlices(u8, "hello hello hello", dict_ok);
+}
+
+test "zlib work-control decode matches reference vectors and strict errors" {
+    const cases = [_]struct { compressed: []const u8, plain: []const u8 }{
+        .{ .compressed = &.{ 0x78, 0x01, 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00, 0x06, 0x2c, 0x02, 0x15 }, .plain = "hello" },
+        .{ .compressed = &.{ 0x78, 0x01, 0x4b, 0x4c, 0x4a, 0x4e, 0x84, 0x21, 0x00, 0x1d, 0xe0, 0x04, 0x99 }, .plain = "abcabcabcabc" },
+        .{ .compressed = &.{
+            0x78, 0x01, 0x3d, 0xc6, 0x39, 0x11, 0x00, 0x00,
+            0x0c, 0x02, 0x30, 0x2b, 0xb5, 0x52, 0x1e, 0xff,
+            0x96, 0x38, 0x16, 0x96, 0x5c, 0x1e, 0x94, 0xcb,
+            0x6d, 0x01, 0x30, 0x33, 0x04, 0xd3,
+        }, .plain = "ABCDEABCD ABCDEABCD" },
+    };
+    for (cases) |case| {
+        const decoded = try decodeZlibAllocWithWorkControl(std.testing.allocator, case.compressed, .{});
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, case.plain, decoded);
+
+        const reference = try decodeZlibAlloc(std.testing.allocator, case.compressed);
+        defer std.testing.allocator.free(reference);
+        try std.testing.expectEqualSlices(u8, reference, decoded);
+    }
+
+    const stored = try encodeZlibStoredAlloc(std.testing.allocator, "stored compatibility");
+    defer std.testing.allocator.free(stored);
+    const stored_decoded = try decodeZlibAllocWithWorkControl(std.testing.allocator, stored, .{});
+    defer std.testing.allocator.free(stored_decoded);
+    try std.testing.expectEqualSlices(u8, "stored compatibility", stored_decoded);
+
+    try std.testing.expectError(
+        error.TruncatedFrame,
+        decodeZlibAllocWithWorkControl(std.testing.allocator, stored[0 .. stored.len - 1], .{}),
+    );
+
+    const trailing = try std.testing.allocator.alloc(u8, stored.len + 1);
+    defer std.testing.allocator.free(trailing);
+    @memcpy(trailing[0..stored.len], stored);
+    trailing[stored.len] = 0xaa;
+    try std.testing.expectError(
+        error.TrailingData,
+        decodeZlibAllocWithWorkControl(std.testing.allocator, trailing, .{}),
+    );
+    const relaxed = try decodeZlibAllocWithOptionsAndWorkControl(
+        std.testing.allocator,
+        trailing,
+        .{ .allow_trailing_data = true },
+        .{},
+    );
+    defer std.testing.allocator.free(relaxed);
+    try std.testing.expectEqualSlices(u8, "stored compatibility", relaxed);
+
+    const corrupt = try std.testing.allocator.dupe(u8, stored);
+    defer std.testing.allocator.free(corrupt);
+    corrupt[corrupt.len - 1] ^= 1;
+    try std.testing.expectError(
+        error.ChecksumMismatch,
+        decodeZlibAllocWithWorkControl(std.testing.allocator, corrupt, .{}),
+    );
+}
+
+test "zlib work-control decode cancels immediately and inside long inflate" {
+    const CancellationState = struct {
+        calls: usize = 0,
+        cancel_after: usize,
+
+        fn isCancelled(context: ?*anyopaque) bool {
+            const self: *@This() = @ptrCast(@alignCast(context.?));
+            self.calls += 1;
+            return self.calls >= self.cancel_after;
+        }
+
+        fn hook(self: *@This()) DecodeCancellation {
+            return .{ .context = self, .is_cancelled = isCancelled };
+        }
+    };
+
+    const small = try encodeZlibFixedAlloc(std.testing.allocator, "cancel me");
+    defer std.testing.allocator.free(small);
+    var immediate = CancellationState{ .cancel_after = 1 };
+    var no_alloc = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(
+        error.Cancelled,
+        decodeZlibAllocWithWorkControl(no_alloc.allocator(), small, .{
+            .cancellation = immediate.hook(),
+        }),
+    );
+    try std.testing.expectEqual(@as(usize, 1), immediate.calls);
+    try std.testing.expectEqual(@as(usize, 0), no_alloc.allocations);
+
+    const plain = try std.testing.allocator.alloc(u8, 128 * 1024);
+    defer std.testing.allocator.free(plain);
+    for (plain, 0..) |*byte, i| byte.* = @intCast('a' + (i % 7));
+    const long = try encodeZlibFixedAlloc(std.testing.allocator, plain);
+    defer std.testing.allocator.free(long);
+
+    var delayed = CancellationState{ .cancel_after = 3 };
+    try std.testing.expectError(
+        error.Cancelled,
+        decodeZlibAllocWithWorkControl(std.testing.allocator, long, .{
+            .cancellation = delayed.hook(),
+        }),
+    );
+    try std.testing.expectEqual(@as(usize, 3), delayed.calls);
+}
+
+test "zlib work-control limits have deterministic precedence and exact boundaries" {
+    const CancellationState = struct {
+        calls: usize = 0,
+
+        fn cancelOnSecond(context: ?*anyopaque) bool {
+            const self: *@This() = @ptrCast(@alignCast(context.?));
+            self.calls += 1;
+            return self.calls >= 2;
+        }
+
+        fn hook(self: *@This()) DecodeCancellation {
+            return .{ .context = self, .is_cancelled = cancelOnSecond };
+        }
+    };
+
+    const plain = "work-control limit precedence";
+    const frame = try encodeZlibFixedAlloc(std.testing.allocator, plain);
+    defer std.testing.allocator.free(frame);
+
+    var input_cancel = CancellationState{};
+    try std.testing.expectError(
+        error.InputLimitExceeded,
+        decodeZlibAllocWithWorkControl(std.testing.allocator, frame, .{
+            .max_input_len = frame.len - 1,
+            .cancellation = input_cancel.hook(),
+        }),
+    );
+    try std.testing.expectEqual(@as(usize, 0), input_cancel.calls);
+
+    var output_cancel = CancellationState{};
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        decodeZlibAllocWithWorkControl(std.testing.allocator, frame, .{
+            .max_output_len = plain.len - 1,
+            .cancellation = output_cancel.hook(),
+        }),
+    );
+    try std.testing.expectEqual(@as(usize, 1), output_cancel.calls);
+
+    var work_cancel = CancellationState{};
+    try std.testing.expectError(
+        error.WorkLimitExceeded,
+        decodeZlibAllocWithWorkControl(std.testing.allocator, frame, .{
+            .max_work_units = 0,
+            .cancellation = work_cancel.hook(),
+        }),
+    );
+    try std.testing.expectEqual(@as(usize, 1), work_cancel.calls);
+
+    const exact_work = frame.len + 2 * plain.len;
+    try std.testing.expectError(
+        error.WorkLimitExceeded,
+        decodeZlibAllocWithWorkControl(std.testing.allocator, frame, .{
+            .max_work_units = exact_work - 1,
+        }),
+    );
+    const decoded = try decodeZlibAllocWithWorkControl(std.testing.allocator, frame, .{
+        .max_input_len = frame.len,
+        .max_output_len = plain.len,
+        .max_work_units = exact_work,
+    });
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, plain, decoded);
+}
+
+test "zlib work-control decode cleans partial output on allocation failure" {
+    const plain = try std.testing.allocator.alloc(u8, 32 * 1024);
+    defer std.testing.allocator.free(plain);
+    for (plain, 0..) |*byte, i| byte.* = @truncate((i *% 131) ^ (i >> 3));
+    const frame = try encodeZlibDynamicLiteralAlloc(std.testing.allocator, plain);
+    defer std.testing.allocator.free(frame);
+
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 1 });
+    try std.testing.expectError(
+        error.OutOfMemory,
+        decodeZlibAllocWithWorkControl(failing.allocator(), frame, .{}),
+    );
+    try std.testing.expectEqual(@as(usize, 1), failing.allocations);
 }
 
 test "gzip header rejects reserved flags and bad method" {

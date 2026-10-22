@@ -16538,3 +16538,18 @@ reuse, so production keeps the simpler independently owned plans.
   coverage, and x86-64 Linux ReleaseFast compile-only validation. This closes
   another bounded Huffman table-amortization gap; compressed real files still
   trail libzstd by roughly 12--19%, so broader leadership remains open.
+
+- Added `decodeZlibAllocWithWorkControl` and its option-bearing counterpart for
+  callers that need cooperative cancellation around a one-shot allocating zlib
+  decode. `DecodeWorkControl` independently caps the complete input slice,
+  decoded output, and work charged for consumed wrapper/DEFLATE bytes, emitted
+  bytes, and Adler verification bytes. Its callback and opaque context are
+  borrowed only for the call, receive an immediate poll plus bounded polls at
+  roughly 4 Ki work intervals inside stored/fixed/dynamic inflate and checksum
+  validation, and report `Cancelled` distinctly from input/output/work limit
+  failures. The existing high-throughput one-shot APIs keep their established
+  fast paths and behavior; the controlled path adds accounting only for callers
+  that opt in. Focused tests cover immediate/delayed cancellation, exact work
+  boundaries and limit precedence, allocation-failure cleanup, fixed/dynamic/
+  stored reference parity, and malformed/trailing/checksum compatibility. No
+  throughput claim is made without a dedicated benchmark.
