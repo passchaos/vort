@@ -3,6 +3,8 @@ const vort = @import("vort");
 
 const max_file_size = 512 * 1024 * 1024;
 const max_directory_size = 64 * 1024 * 1024;
+const max_xattr_count = 4096;
+const max_xattr_bytes = 16 * 1024 * 1024;
 const max_depth = 256;
 
 pub fn create(
@@ -123,6 +125,34 @@ pub fn extract(
         decoded.len,
         output_path,
     });
+}
+
+pub fn listXattrs(
+    init: std.process.Init,
+    args: *std.process.Args.Iterator,
+    stdout: *std.Io.Writer,
+) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const entry_path = args.next() orelse return error.MissingCorpusPath;
+    const input = try readFile(init, input_path);
+    defer init.gpa.free(input);
+    const archive = try vort.parseErofs(input);
+    const inode = try archive.lookup(
+        init.gpa,
+        entry_path,
+        std.math.maxInt(usize),
+        max_directory_size,
+    );
+    var attributes = try archive.readXattrsAllocLimited(
+        init.gpa,
+        inode,
+        max_xattr_count,
+        max_xattr_bytes,
+    );
+    defer attributes.deinit();
+    try stdout.print("xattrs={d} entry={s}\n", .{ attributes.entries.len, entry_path });
+    for (attributes.entries) |attribute|
+        try stdout.print("xattr\t{s}\t{x}\n", .{ attribute.name, attribute.value });
 }
 
 fn readFile(init: std.process.Init, path: []const u8) ![]u8 {

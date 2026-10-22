@@ -407,6 +407,8 @@ pub fn main(init: std.process.Init) !void {
         try erofs_cli.create(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-erofs-file")) {
         try erofs_cli.extract(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "list-erofs-xattrs")) {
+        try erofs_cli.listXattrs(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "list-wim-file")) {
         try wim_cli.list(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "extract-wim-resource")) {
@@ -2847,6 +2849,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  list-erofs-file <path>
         \\  create-erofs-file <out> <entry> <in> [stored|lz4|deflate|zstd]
         \\  extract-erofs-file <image> <entry> <out> [max_output]
+        \\  list-erofs-xattrs <image> <entry>
         \\  list-wim-file <path>
         \\  extract-wim-resource <image> <sha1> <out> [max_output]
         \\  extract-wim-xml <image> <out> [max_output]

@@ -2,13 +2,17 @@ const std = @import("std");
 const core = @import("../core.zig");
 const format = @import("format.zig");
 const codec = @import("codec.zig");
+const xattr = @import("xattr.zig");
 
-pub const Error = core.Error || format.Error || codec.Error || std.mem.Allocator.Error || error{
+pub const Error = core.Error || format.Error || codec.Error || xattr.Error || std.mem.Allocator.Error || error{
     InvalidErofs,
     ErofsEntryNotFound,
     ErofsNotDirectory,
     ErofsNotRegularFile,
 };
+
+pub const Xattr = xattr.Attribute;
+pub const Xattrs = xattr.Attributes;
 
 pub const Inode = struct {
     nid: u64,
@@ -191,6 +195,30 @@ pub const Archive = struct {
                 (if (layout == .compressed_full) @as(usize, 16) else 8);
         }
         return with_compression;
+    }
+
+    pub fn readXattrsAllocLimited(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        inode_value: Inode,
+        max_count: usize,
+        max_total_bytes: usize,
+    ) Error!Xattrs {
+        const ibody_start = std.math.add(
+            usize,
+            inode_value.location,
+            inode_value.inode_size,
+        ) catch return error.IntegerOverflow;
+        return xattr.readAllocLimited(
+            allocator,
+            self.bytes,
+            self.superblock.block_size,
+            self.superblock.xattr_block,
+            ibody_start,
+            inode_value.xattr_size,
+            max_count,
+            max_total_bytes,
+        );
     }
 
     pub fn readFlatAllocLimited(
@@ -647,4 +675,138 @@ test "EROFS validates superblock checksum and output limits" {
             1024 * 1024,
         ),
     );
+}
+
+test "EROFS reads inline and shared xattrs from erofs-utils" {
+    const allocator = std.testing.allocator;
+    const bytes = try fixtureAlloc(
+        allocator,
+        @embedFile("testdata/xattr-inline-shared.erofs.b64"),
+    );
+    defer allocator.free(bytes);
+    const archive = try Archive.init(bytes);
+
+    const inline_inode = try archive.lookup(allocator, "inline", 0, 4096);
+    try std.testing.expectEqual(@as(usize, 36), inline_inode.xattr_size);
+    var inline_xattrs = try archive.readXattrsAllocLimited(
+        allocator,
+        inline_inode,
+        1,
+        64,
+    );
+    defer inline_xattrs.deinit();
+    try std.testing.expectEqual(@as(usize, 1), inline_xattrs.entries.len);
+    try std.testing.expectEqualStrings(
+        "inline-value",
+        inline_xattrs.find("user.unique").?.value,
+    );
+
+    inline for (.{ "shared-a", "shared-b", "shared-c" }) |path| {
+        const inode_value = try archive.lookup(allocator, path, 0, 4096);
+        try std.testing.expectEqual(@as(usize, 16), inode_value.xattr_size);
+        var shared_xattrs = try archive.readXattrsAllocLimited(
+            allocator,
+            inode_value,
+            1,
+            64,
+        );
+        defer shared_xattrs.deinit();
+        try std.testing.expectEqualStrings(
+            "shared-value",
+            shared_xattrs.find("user.repeat").?.value,
+        );
+    }
+
+    const empty_inode = try archive.lookup(allocator, "sub/leaf", 0, 4096);
+    var empty_xattrs = try archive.readXattrsAllocLimited(
+        allocator,
+        empty_inode,
+        1,
+        16,
+    );
+    defer empty_xattrs.deinit();
+    try std.testing.expectEqual(@as(usize, 0), empty_xattrs.find("user.empty").?.value.len);
+
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        archive.readXattrsAllocLimited(allocator, inline_inode, 0, 64),
+    );
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        archive.readXattrsAllocLimited(allocator, inline_inode, 1, 22),
+    );
+}
+
+test "EROFS xattr reader rejects malformed ibodies and shared references" {
+    const allocator = std.testing.allocator;
+    const bytes = try fixtureAlloc(
+        allocator,
+        @embedFile("testdata/xattr-inline-shared.erofs.b64"),
+    );
+    defer allocator.free(bytes);
+    const archive = try Archive.init(bytes);
+    const inline_inode = try archive.lookup(allocator, "inline", 0, 4096);
+    const inline_start = inline_inode.location + inline_inode.inode_size;
+
+    bytes[inline_start + 5] = 1;
+    try std.testing.expectError(
+        error.InvalidErofs,
+        archive.readXattrsAllocLimited(allocator, inline_inode, 8, 1024),
+    );
+    bytes[inline_start + 5] = 0;
+
+    bytes[inline_start + 12 + 1] = 0x81;
+    try std.testing.expectError(
+        error.UnsupportedErofsFeature,
+        archive.readXattrsAllocLimited(allocator, inline_inode, 8, 1024),
+    );
+    bytes[inline_start + 12 + 1] = 1;
+
+    bytes[inline_start + 12 + 1] = 2;
+    try std.testing.expectError(
+        error.InvalidErofs,
+        archive.readXattrsAllocLimited(allocator, inline_inode, 8, 1024),
+    );
+    bytes[inline_start + 12 + 1] = 1;
+
+    const shared_inode = try archive.lookup(allocator, "shared-a", 0, 4096);
+    const shared_start = shared_inode.location + shared_inode.inode_size;
+    bytes[shared_start + 4] = 2;
+    try std.testing.expectError(
+        error.InvalidErofs,
+        archive.readXattrsAllocLimited(allocator, shared_inode, 8, 1024),
+    );
+    bytes[shared_start + 4] = 1;
+    std.mem.writeInt(u32, bytes[shared_start + 12 ..][0..4], std.math.maxInt(u32), .little);
+    try std.testing.expectError(
+        error.InvalidErofs,
+        archive.readXattrsAllocLimited(allocator, shared_inode, 8, 1024),
+    );
+}
+
+test "EROFS xattr reader releases every allocation failure" {
+    const allocator = std.testing.allocator;
+    const bytes = try fixtureAlloc(
+        allocator,
+        @embedFile("testdata/xattr-inline-shared.erofs.b64"),
+    );
+    defer allocator.free(bytes);
+    const Test = struct {
+        fn run(failing_allocator: std.mem.Allocator, image: []const u8) !void {
+            const archive = try Archive.init(image);
+            const inode_value = try archive.lookup(failing_allocator, "inline", 0, 4096);
+            var attributes = try archive.readXattrsAllocLimited(
+                failing_allocator,
+                inode_value,
+                8,
+                1024,
+            );
+            defer attributes.deinit();
+            try std.testing.expectEqualStrings(
+                "inline-value",
+                attributes.find("user.unique").?.value,
+            );
+        }
+    };
+    try std.testing.checkAllAllocationFailures(allocator, Test.run, .{bytes});
 }

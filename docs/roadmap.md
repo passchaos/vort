@@ -22161,3 +22161,21 @@ reuse, so production keeps the simpler independently owned plans.
   verifies four raw signatures with OpenSSL, and requires slice/source success
   plus wrong-key, corruption and unsigned failures (`signature_cases=9`,
   `signature_openssl=4`).
+
+- Added bounded EROFS extended attributes in both directions. The reader
+  validates ibody headers, shared-count tables, 4-byte entry alignment,
+  reconstructed 255-byte names, u16 values, reserved bytes, duplicate names,
+  inline entries, empty values, standard name indexes, and shared IDs relative
+  to `xattr_block`; it rejects unsupported long-prefix indexes and applies
+  count plus aggregate name/value limits before allocating one owned result.
+  The deterministic writer accepts borrowed xattrs on the root, regular files,
+  directories, and symlinks, emits compact inline ibodies, and correctly moves
+  flat-inline tails and aligned compression headers after them in stored, LZ4,
+  raw-Deflate, and Zstandard images. Invalid names, duplicate keys, oversized
+  values, malformed references, and exhaustive reader/writer allocation
+  failures have focused coverage. A fixed erofs-utils fixture pins inline,
+  shared, and empty-value wire semantics. The required erofs-utils 1.9.4
+  differential reads six reference layouts with real shared attributes and has
+  `fsck.erofs --xattrs` restore four Vort writer layouts
+  (`xattr_reader=6`, `xattr_writer=4`). Shared-value deduplication in the writer
+  and incompatible long-prefix tables remain follow-up space/features work.

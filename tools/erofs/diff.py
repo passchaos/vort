@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import base64
+import os
 import shutil
 import struct
 import subprocess
@@ -27,7 +28,7 @@ def expect_failure(*args: object, error_name: str | None = None) -> None:
         )
 
 
-def write_tree(root: Path) -> dict[str, bytes]:
+def write_tree(root: Path) -> tuple[dict[str, bytes], dict[str, dict[bytes, bytes]]]:
     (root / "nested").mkdir(parents=True)
     state = 0x1234_5678
     random_data = bytearray()
@@ -52,7 +53,21 @@ def write_tree(root: Path) -> dict[str, bytes]:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(payload)
     (root / "link").symlink_to("nested/data.txt")
-    return payloads
+    xattrs = {
+        "/": {b"user.vort.root": b"oracle-root"},
+        "small.txt": {
+            b"user.vort.unique": b"oracle-inline",
+            b"user.vort.repeat": b"oracle-shared",
+        },
+        "nested/data.txt": {b"user.vort.repeat": b"oracle-shared"},
+        "large.bin": {b"user.vort.repeat": b"oracle-shared"},
+        "nested": {b"user.vort.directory": b"oracle-directory"},
+    }
+    for name, attributes in xattrs.items():
+        path = root if name == "/" else root / name
+        for key, value in attributes.items():
+            os.setxattr(path, key, value)
+    return payloads, xattrs
 
 
 def make_image(mkfs: Path, source: Path, image: Path, compressor: str | None, legacy: bool) -> None:
@@ -77,6 +92,37 @@ def verify_vort(cli: Path, image: Path, payloads: dict[str, bytes], label: str, 
             raise AssertionError(f"EROFS extraction mismatch for {label}/{name}")
 
 
+def verify_vort_xattrs(
+    cli: Path,
+    image: Path,
+    expected: dict[str, dict[bytes, bytes]],
+    label: str,
+) -> None:
+    for path, attributes in expected.items():
+        output = run(cli, "list-erofs-xattrs", image, path).stdout
+        for name, value in attributes.items():
+            required = b"xattr\t" + name + b"\t" + value.hex().encode() + b"\n"
+            if required not in output:
+                raise AssertionError(
+                    f"EROFS xattr missing for {label}/{path}: {required!r} in {output!r}"
+                )
+
+
+def verify_extracted_xattrs(
+    root: Path,
+    expected: dict[str, dict[bytes, bytes]],
+    label: str,
+) -> None:
+    for name, attributes in expected.items():
+        path = root if name == "/" else root / name
+        for key, value in attributes.items():
+            actual = os.getxattr(path, key)
+            if actual != value:
+                raise AssertionError(
+                    f"EROFS extracted xattr mismatch for {label}/{name}/{key!r}"
+                )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
@@ -96,6 +142,8 @@ def main() -> None:
     modern_cases = 0
     writer_cases = 0
     external_writer = 0
+    xattr_reader_cases = 0
+    xattr_writer_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -111,7 +159,7 @@ def main() -> None:
         fixture_cases += 1
 
         source = temp / "tree"
-        payloads = write_tree(source)
+        payloads, source_xattrs = write_tree(source)
         primary = fixture
 
         writer_large = b"EROFS writer probe multi-block payload 0123456789\n" * 4096
@@ -130,6 +178,12 @@ def main() -> None:
             "small": b"inline payload",
             "link": b"etc/config",
         }
+        expected_writer_xattrs = {
+            "/": {b"user.vort.root": b"root-xattr"},
+            "etc/config": {b"user.vort.config": b"config-xattr"},
+            "small": {b"user.vort.small": b"small-xattr"},
+            "empty": {b"user.vort.directory": b"directory-xattr"},
+        }
         for mode in ("stored", "lz4", "deflate", "zstd"):
             image = temp / f"writer-{mode}.erofs"
             repeated = temp / f"writer-{mode}-repeat.erofs"
@@ -146,10 +200,11 @@ def main() -> None:
                 run(args.cli, "extract-erofs-file", image, name, output, len(expected))
                 if output.read_bytes() != expected:
                     raise AssertionError(f"Vort writer self decode mismatch for {mode}/{name}")
+            verify_vort_xattrs(args.cli, image, expected_writer_xattrs, f"writer-{mode}")
             writer_cases += 1
             if fsck is not None:
                 extracted = temp / f"writer-{mode}-fsck"
-                run(fsck, f"--extract={extracted}", "--no-preserve", image)
+                run(fsck, f"--extract={extracted}", "--no-preserve", "--xattrs", image)
                 for name in ("etc/config", "large.bin", "random.bin", "small"):
                     if (extracted / name).read_bytes() != expected_writer[name]:
                         raise AssertionError(f"fsck.erofs writer mismatch for {mode}/{name}")
@@ -157,6 +212,8 @@ def main() -> None:
                     raise AssertionError(f"fsck.erofs symlink mismatch for {mode}")
                 if not (extracted / "empty").is_dir():
                     raise AssertionError(f"fsck.erofs empty directory missing for {mode}")
+                verify_extracted_xattrs(extracted, expected_writer_xattrs, f"writer-{mode}")
+                xattr_writer_cases += 1
                 external_writer += 1
 
         if mkfs is not None:
@@ -189,10 +246,13 @@ def main() -> None:
                 image = temp / f"{label}.erofs"
                 make_image(mkfs, source, image, compressor, legacy)
                 extracted = temp / f"{label}-fsck"
-                run(fsck, f"--extract={extracted}", "--no-preserve", image)
+                run(fsck, f"--extract={extracted}", "--no-preserve", "--xattrs", image)
                 if (extracted / "large.bin").read_bytes() != payloads["large.bin"]:
                     raise AssertionError(f"fsck.erofs extraction mismatch for {label}")
                 verify_vort(args.cli, image, payloads, label, temp)
+                verify_vort_xattrs(args.cli, image, source_xattrs, label)
+                verify_extracted_xattrs(extracted, source_xattrs, label)
+                xattr_reader_cases += 1
                 primary = image
                 if compressor is None:
                     plain_cases += 1
@@ -260,7 +320,9 @@ def main() -> None:
         f"fixture_cases={fixture_cases} tools={mkfs is not None} "
         f"plain={plain_cases} lz4={lz4_cases} lzma={lzma_cases} "
         f"modern={modern_cases} "
-        f"writer={writer_cases} external_writer={external_writer} malformed={malformed}"
+        f"writer={writer_cases} external_writer={external_writer} "
+        f"xattr_reader={xattr_reader_cases} xattr_writer={xattr_writer_cases} "
+        f"malformed={malformed}"
     )
 
 

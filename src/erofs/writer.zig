@@ -3,11 +3,13 @@ const core = @import("../core.zig");
 const format = @import("format.zig");
 const tree = @import("writer_tree.zig");
 const writer_codec = @import("writer_codec.zig");
+const xattr = @import("xattr.zig");
 
-pub const Error = core.Error || writer_codec.Error || tree.Error || error{InvalidErofs};
+pub const Error = core.Error || writer_codec.Error || tree.Error || xattr.Error || error{InvalidErofs};
 
 pub const Entry = tree.Entry;
 pub const EntryKind = tree.EntryKind;
+pub const Xattr = tree.Xattr;
 
 pub const Compression = writer_codec.Compression;
 
@@ -17,6 +19,7 @@ pub const Options = struct {
     epoch: u64 = 0,
     fixed_nsec: u32 = 0,
     build_time: u32 = 0,
+    root_xattrs: []const Xattr = &.{},
 };
 
 const block_size: usize = 4096;
@@ -32,7 +35,7 @@ pub fn encodeAlloc(
     if (options.volume_name.len > 16 or options.fixed_nsec >= 1_000_000_000)
         return error.InvalidErofs;
 
-    var filesystem = try tree.build(allocator, entries);
+    var filesystem = try tree.build(allocator, entries, options.root_xattrs);
     defer filesystem.deinit();
     try allocateDirectoryBuffers(&filesystem);
     const metadata_end = try planMetadata(allocator, &filesystem, options.compression);
@@ -105,6 +108,8 @@ fn planMetadata(
         if (node.content().len > std.math.maxInt(u32)) return error.InvalidErofs;
         const location = try alignForward(cursor, format.inode_slot_size);
         const inode_end = try checkedAdd(location, format.inode_slot_size);
+        node.xattr_size = try xattr.encodedSize(node.xattrs);
+        const xattr_end = try checkedAdd(inode_end, node.xattr_size);
         node.location = location;
         node.nid = location / format.inode_slot_size;
         node.start_block = no_block;
@@ -114,20 +119,21 @@ fn planMetadata(
             const cluster_count = try blockCount(node.data.len);
             node.compressed_indexes = try allocator.alloc(tree.Node.CompressionIndex, cluster_count);
             @memset(node.compressed_indexes.?, .{ .kind = 0, .physical_block = 0 });
-            cursor = try checkedAdd(inode_end, try checkedAdd(16, try checkedMul(cluster_count, 8)));
+            const header_start = try alignForward(xattr_end, 8);
+            cursor = try checkedAdd(header_start, try checkedAdd(16, try checkedMul(cluster_count, 8)));
             continue;
         }
 
         const tail_len = node.content().len % block_size;
-        const inline_end = try checkedAdd(inode_end, tail_len);
+        const inline_end = try checkedAdd(xattr_end, tail_len);
         if (tail_len != 0 and
-            inode_end / block_size == (inline_end - 1) / block_size)
+            xattr_end / block_size == (inline_end - 1) / block_size)
         {
             node.layout = @intFromEnum(format.Layout.flat_inline);
             cursor = inline_end;
         } else {
             node.layout = @intFromEnum(format.Layout.flat_plain);
-            cursor = inode_end;
+            cursor = xattr_end;
         }
     }
     const root_nid = filesystem.nodes[0].nid;
@@ -264,7 +270,10 @@ fn writeFlatData(image: []u8, node: *const tree.Node, layout: format.Layout) Err
         @memcpy(image[data_start..data_end], content[0..data_len]);
     }
     if (layout == .flat_inline and data_len < content.len) {
-        const inline_start = try checkedAdd(node.location, format.inode_slot_size);
+        const inline_start = try checkedAdd(
+            try checkedAdd(node.location, format.inode_slot_size),
+            node.xattr_size,
+        );
         const inline_end = try checkedAdd(inline_start, content.len - data_len);
         if (inline_end > image.len or inline_start / block_size != (inline_end - 1) / block_size)
             return error.InvalidErofs;
@@ -312,7 +321,7 @@ fn writeInode(
     const inode_format: u16 = (@as(u16, @intFromEnum(layout)) << 1) |
         (if (node.kind == .directory) @as(u16, 1 << 4) else 0);
     writeU16(image, location, inode_format);
-    writeU16(image, location + 2, 0);
+    writeU16(image, location + 2, try xattr.ibodyIcount(node.xattr_size));
     writeU16(image, location + 4, mode(node.*));
     writeU16(image, location + 6, try linkCount(nodes, node_index));
     writeU32(image, location + 8, @intCast(node.content().len));
@@ -328,8 +337,13 @@ fn writeInode(
     writeU16(image, location + 26, 0);
     writeU32(image, location + 28, 0);
 
+    const xattr_start = try checkedAdd(location, format.inode_slot_size);
+    const xattr_end = try checkedAdd(xattr_start, node.xattr_size);
+    if (xattr_end > image.len) return error.InvalidErofs;
+    try xattr.writeIbody(image[xattr_start..xattr_end], node.xattrs);
+
     if (layout == .compressed_full) {
-        const header_start = try alignForward(location + format.inode_slot_size, 8);
+        const header_start = try alignForward(xattr_end, 8);
         const index_start = try checkedAdd(header_start, 16);
         if (try checkedAdd(index_start, try checkedMul(node.compressed_indexes.?.len, 8)) > image.len)
             return error.InvalidErofs;
@@ -649,4 +663,144 @@ test "EROFS writer packs multi-block directories" {
     );
     defer allocator.free(last);
     try std.testing.expectEqual(@as(usize, 0), last.len);
+}
+
+test "EROFS writer round trips root file directory and symlink xattrs" {
+    const archive = @import("archive.zig");
+    const allocator = std.testing.allocator;
+    const file_xattrs = [_]Xattr{
+        .{ .name = "user.author", .value = "vort" },
+        .{ .name = "user.empty", .value = &.{} },
+        .{ .name = "security.selinux", .value = "u:object_r:system_file:s0" },
+        .{ .name = "trusted.vort", .value = "trusted" },
+        .{ .name = "lustre.vort", .value = "lustre" },
+        .{ .name = "system.posix_acl_access", .value = &.{ 1, 2 } },
+        .{ .name = "system.posix_acl_default", .value = &.{ 3, 4 } },
+        .{ .name = "system.vort", .value = &.{ 0, 1, 2, 3 } },
+    };
+    const root_xattrs = [_]Xattr{.{ .name = "user.root", .value = "root-value" }};
+    const entries = [_]Entry{
+        .{ .path = "small", .data = "inline payload", .xattrs = &file_xattrs },
+        .{ .path = "dir", .kind = .directory, .xattrs = &.{.{ .name = "user.dir", .value = "d" }} },
+        .{ .path = "link", .kind = .symlink, .target = "small", .xattrs = &.{.{ .name = "user.link", .value = "l" }} },
+    };
+
+    inline for (.{ Compression.stored, .lz4, .deflate, .zstandard }) |compression| {
+        const encoded = try encodeAlloc(allocator, &entries, .{
+            .compression = compression,
+            .root_xattrs = &root_xattrs,
+        });
+        defer allocator.free(encoded);
+        const parsed = try archive.Archive.init(encoded);
+
+        const root_inode = try parsed.rootInode();
+        var root_attributes = try parsed.readXattrsAllocLimited(allocator, root_inode, 4, 128);
+        defer root_attributes.deinit();
+        try std.testing.expectEqualStrings(
+            "root-value",
+            root_attributes.find("user.root").?.value,
+        );
+
+        const small_inode = try parsed.lookup(allocator, "small", 32, block_size);
+        var small_attributes = try parsed.readXattrsAllocLimited(allocator, small_inode, 8, 512);
+        defer small_attributes.deinit();
+        try std.testing.expectEqual(@as(usize, 8), small_attributes.entries.len);
+        try std.testing.expectEqualStrings("vort", small_attributes.find("user.author").?.value);
+        try std.testing.expectEqual(@as(usize, 0), small_attributes.find("user.empty").?.value.len);
+        try std.testing.expectEqualStrings(
+            "u:object_r:system_file:s0",
+            small_attributes.find("security.selinux").?.value,
+        );
+        try std.testing.expectEqualStrings("trusted", small_attributes.find("trusted.vort").?.value);
+        try std.testing.expectEqualStrings("lustre", small_attributes.find("lustre.vort").?.value);
+        try std.testing.expectEqualSlices(
+            u8,
+            &.{ 1, 2 },
+            small_attributes.find("system.posix_acl_access").?.value,
+        );
+        try std.testing.expectEqualSlices(
+            u8,
+            &.{ 3, 4 },
+            small_attributes.find("system.posix_acl_default").?.value,
+        );
+        try std.testing.expectEqualSlices(
+            u8,
+            &.{ 0, 1, 2, 3 },
+            small_attributes.find("system.vort").?.value,
+        );
+        const decoded = try parsed.readFlatAllocLimited(allocator, small_inode, 32);
+        defer allocator.free(decoded);
+        try std.testing.expectEqualStrings("inline payload", decoded);
+
+        const directory_inode = try parsed.lookup(allocator, "dir", 0, block_size);
+        var directory_attributes = try parsed.readXattrsAllocLimited(allocator, directory_inode, 1, 32);
+        defer directory_attributes.deinit();
+        try std.testing.expectEqualStrings("d", directory_attributes.find("user.dir").?.value);
+
+        const link_inode = try parsed.lookup(allocator, "link", 32, block_size);
+        var link_attributes = try parsed.readXattrsAllocLimited(allocator, link_inode, 1, 32);
+        defer link_attributes.deinit();
+        try std.testing.expectEqualStrings("l", link_attributes.find("user.link").?.value);
+    }
+}
+
+test "EROFS writer rejects invalid duplicate and oversized xattrs" {
+    const allocator = std.testing.allocator;
+    try std.testing.expectError(
+        error.InvalidErofs,
+        encodeAlloc(allocator, &.{.{
+            .path = "empty-name",
+            .xattrs = &.{.{ .name = "", .value = "x" }},
+        }}, .{}),
+    );
+    try std.testing.expectError(
+        error.InvalidErofs,
+        encodeAlloc(allocator, &.{.{
+            .path = "duplicate",
+            .xattrs = &.{
+                .{ .name = "user.same", .value = "a" },
+                .{ .name = "user.same", .value = "b" },
+            },
+        }}, .{}),
+    );
+    try std.testing.expectError(
+        error.InvalidErofs,
+        encodeAlloc(allocator, &.{.{
+            .path = "empty-suffix",
+            .xattrs = &.{.{ .name = "user.", .value = "x" }},
+        }}, .{}),
+    );
+    var oversized: [std.math.maxInt(u16) + 1]u8 = @splat(0);
+    try std.testing.expectError(
+        error.InvalidErofs,
+        encodeAlloc(allocator, &.{.{
+            .path = "oversized",
+            .xattrs = &.{.{ .name = "user.large", .value = &oversized }},
+        }}, .{}),
+    );
+}
+
+test "EROFS xattr writer releases every allocation failure" {
+    const allocator = std.testing.allocator;
+    const Test = struct {
+        fn run(failing_allocator: std.mem.Allocator) !void {
+            const encoded = try encodeAlloc(failing_allocator, &.{.{
+                .path = "file",
+                .data = "payload",
+                .xattrs = &.{.{ .name = "user.test", .value = "value" }},
+            }}, .{ .root_xattrs = &.{.{ .name = "user.root", .value = "root" }} });
+            defer failing_allocator.free(encoded);
+            const parsed = try @import("archive.zig").Archive.init(encoded);
+            const inode_value = try parsed.lookup(failing_allocator, "file", 32, block_size);
+            var attributes = try parsed.readXattrsAllocLimited(
+                failing_allocator,
+                inode_value,
+                4,
+                64,
+            );
+            defer attributes.deinit();
+            try std.testing.expectEqualStrings("value", attributes.find("user.test").?.value);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(allocator, Test.run, .{});
 }

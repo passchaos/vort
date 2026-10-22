@@ -253,12 +253,14 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   fragments, with squashfs-tools interoperability;
 - dependency-free EROFS reading with CRC-32C superblock verification,
   compact/extended inodes, flat plain/inline data, sorted directories,
-  symlinks, legacy full and modern compact compression indexes, big pclusters,
+  symlinks, bounded inline/shared xattrs with standard name indexes, legacy
+  full and modern compact compression indexes, big pclusters,
   and LZ4/MicroLZMA/raw-Deflate/Zstandard extraction with explicit bounds, plus
   deterministic compact-inode stored/LZ4/raw-Deflate/Zstandard writing for
   regular files, nested and empty directories, symlinks, inline tails,
-  multi-block directories, compression-configuration records, and per-cluster
-  compressed-or-plain full-index selection with erofs-utils interoperability;
+  inline root/entry xattrs, multi-block directories, compression-configuration
+  records, and per-cluster compressed-or-plain full-index selection with
+  bidirectional erofs-utils interoperability;
 - dependency-free WIM/ESD/SWM parsing with strict 208-byte headers, compression
   and part geometry, resource headers, lookup tables, SHA-1 verification, raw
   UTF-16 XML access, bounded resource extraction, validated image-metadata

@@ -1,9 +1,11 @@
 const std = @import("std");
 const core = @import("../core.zig");
+const xattr = @import("xattr.zig");
 
-pub const Error = core.Error || std.mem.Allocator.Error || error{InvalidErofs};
+pub const Error = core.Error || xattr.Error || std.mem.Allocator.Error || error{InvalidErofs};
 
 pub const EntryKind = enum { file, directory, symlink };
+pub const Xattr = xattr.Attribute;
 
 pub const Entry = struct {
     path: []const u8,
@@ -12,6 +14,7 @@ pub const Entry = struct {
     target: []const u8 = &.{},
     mode: u16 = 0,
     modification_time: u32 = 0,
+    xattrs: []const Xattr = &.{},
 };
 
 pub const Node = struct {
@@ -21,6 +24,8 @@ pub const Node = struct {
     target: []const u8 = &.{},
     mode: u16,
     modification_time: u32 = 0,
+    xattrs: []const Xattr = &.{},
+    xattr_size: usize = 0,
     explicit: bool = false,
     parent: usize = 0,
     nid: u64 = 0,
@@ -65,7 +70,11 @@ pub const Tree = struct {
     }
 };
 
-pub fn build(allocator: std.mem.Allocator, entries: []const Entry) Error!Tree {
+pub fn build(
+    allocator: std.mem.Allocator,
+    entries: []const Entry,
+    root_xattrs: []const Xattr,
+) Error!Tree {
     var nodes: std.ArrayList(Node) = .empty;
     errdefer {
         for (nodes.items) |node| allocator.free(node.path);
@@ -77,6 +86,7 @@ pub fn build(allocator: std.mem.Allocator, entries: []const Entry) Error!Tree {
         .kind = .directory,
         .mode = 0o755,
         .explicit = true,
+        .xattrs = root_xattrs,
     }) catch |err| {
         allocator.free(root_path);
         return err;
@@ -124,6 +134,7 @@ fn applyEntry(node: *Node, entry: Entry) void {
         .symlink => 0o777,
     };
     node.modification_time = entry.modification_time;
+    node.xattrs = entry.xattrs;
     node.explicit = true;
 }
 
