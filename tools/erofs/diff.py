@@ -207,6 +207,7 @@ def main() -> None:
     sink_writer_cases = 0
     file_source_writer_cases = 0
     source_reader_cases = 0
+    resumable_reader_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -352,6 +353,22 @@ def main() -> None:
                 if output.read_bytes() != expected:
                     raise AssertionError(f"Vort writer self decode mismatch for {mode}/{name}")
             verify_vort_xattrs(args.cli, image, expected_writer_xattrs, f"writer-{mode}")
+            if mode in (
+                "stored", "lz4", "lzma", "deflate", "zstd",
+                "lz4-fragments", "lzma-fragments", "deflate-ztailpacking", "zstd-ztailpacking",
+                "lz4-metabox", "lzma-metabox", "zstd-dirs",
+                "lz4-bounded", "lzma-bounded", "deflate-bounded", "zstd-bounded",
+                "chunk-local", "chunk-external",
+            ):
+                output = temp / f"resumable-{mode}.out"
+                command = [args.cli, "extract-erofs-file", image, "large.bin", output, len(expected_writer["large.bin"])]
+                if is_external_chunk:
+                    command.append(device)
+                command.append("--output-chunk-size=17")
+                run(*command)
+                if output.read_bytes() != expected_writer["large.bin"]:
+                    raise AssertionError(f"resumable file extraction mismatch for {mode}")
+                resumable_reader_cases += 1
             if b"$vort-packed" in listing:
                 raise AssertionError(f"hidden EROFS packed inode was listed for {mode}")
             if layout_mode.endswith("-fragments"):
@@ -698,6 +715,7 @@ def main() -> None:
         f"sink_writer={sink_writer_cases} "
         f"file_source_writer={file_source_writer_cases} "
         f"source_reader={source_reader_cases} "
+        f"resumable_reader={resumable_reader_cases} "
         f"malformed={malformed}"
     )
 

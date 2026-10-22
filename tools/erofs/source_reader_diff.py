@@ -58,6 +58,9 @@ def verify_source_readers(cli, temp, run):
         raise AssertionError("Source reader did not reject a corrupt final pcluster")
     if output.read_bytes() != b"keep output" or set(temp.iterdir()) != before:
         raise AssertionError("Source reader late decode failure replaced output or leaked a temporary file")
+    failed = run(cli, "extract-erofs-file", damaged, "payload", output, len(damaged_payload), "--output-chunk-size=0", check=False)
+    if failed.returncode == 0 or b"OutputTooSmall" not in failed.stderr:
+        raise AssertionError("Source reader did not reject an empty output chunk")
 
     # Expand a real external device without materializing its unused padding.
     primary = temp / "writer-chunk-external.erofs"

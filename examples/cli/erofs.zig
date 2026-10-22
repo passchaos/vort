@@ -129,10 +129,18 @@ pub fn extract(
         adapters.deinit(init.gpa);
     }
     var working_limit: usize = 64 * 1024 * 1024;
+    var output_chunk_size: usize = 64 * 1024;
     const working_option = "--working-memory-limit=";
+    const chunk_option = "--output-chunk-size=";
     while (args.next()) |argument| {
         if (std.mem.startsWith(u8, argument, working_option)) {
             working_limit = try std.fmt.parseInt(usize, argument[working_option.len..], 10);
+            continue;
+        }
+        if (std.mem.startsWith(u8, argument, chunk_option)) {
+            output_chunk_size = try std.fmt.parseInt(usize, argument[chunk_option.len..], 10);
+            if (output_chunk_size == 0) return error.OutputTooSmall;
+            if (output_chunk_size > 1024 * 1024) return error.OutputLimitExceeded;
             continue;
         }
         const file = try std.Io.Dir.cwd().openFile(init.io, argument, .{});
@@ -156,12 +164,22 @@ pub fn extract(
     var output_file = try std.Io.Dir.cwd().createFileAtomic(init.io, output_path, .{ .replace = true });
     defer output_file.deinit(init.io);
     var output_adapter = vort.FileByteSink.init(init.io, output_file.file);
-    const result = try archive.extractByPathToSink(entry_path, output_adapter.sink(), .{ .max_output_len = limit }, max_directory_size);
+    var extractor = try archive.initPathExtractor(entry_path, .{ .max_output_len = limit }, max_directory_size);
+    defer extractor.deinit();
+    const buffer = try init.gpa.alloc(u8, output_chunk_size);
+    defer init.gpa.free(buffer);
+    const sink = output_adapter.sink();
+    while (true) {
+        const progress = try extractor.read(buffer);
+        if (progress.output_written != 0) try sink.writeExact(progress.position - progress.output_written, buffer[0..progress.output_written]);
+        if (progress.status == .done) break;
+    }
+    try sink.finish(extractor.position());
     try output_file.replace(init.io);
     try stdout.print("entry={s} decoded_bytes={d} peak_working_bytes={d} path={s}\n", .{
         entry_path,
-        result.decoded_size,
-        result.peak_working_bytes,
+        extractor.position(),
+        archive.peakWorkingBytes(),
         output_path,
     });
 }

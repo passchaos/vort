@@ -281,6 +281,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   working allocation limits and chunk deduplication using source locations,
   byte-identical source/sink/memory output, owning Source archives with bounded
   metadata/extent working memory and direct file/range Sink extraction,
+  resumable caller-owned extraction with bounded decoded-extent caching,
   all with
   bidirectional erofs-utils interoperability;
 - dependency-free WIM/ESD/SWM parsing with strict 208-byte headers, compression

@@ -45,6 +45,47 @@ sets final Sink length only after successful data emission; failures can leave
 partial caller output. File, directory and xattr convenience results own their
 buffers independently of the Source archive.
 
+`initExtractor(inode, limits)`, `initRangeExtractor(inode, start, size, limits)`
+and `initPathExtractor(path, limits, max_directory_size)` create a caller-owned
+`ErofsExtractor`. `read(output)` returns `ErofsExtractProgress` with
+`output_written`, range-relative `position`, and `need_output`/`done` status.
+Successful reads initialize only the returned output prefix. Before all range
+bytes have been delivered, an empty output slice returns zero progress and
+does not read Sources or allocate decode buffers.
+
+The extractor retains one current logical segment and at most one decoded
+extent, reusing it across arbitrarily small output slices. That cache counts
+against the archive's working budget and is released at the segment boundary,
+on failure or on extractor deinitialization. Source/Sink convenience methods
+and allocating methods use the same resumable reader. Flat/chunk, legacy full,
+compact, modern extent, inline/interlaced and packed child ranges all keep
+explicit iterator state rather than restarting metadata scans on each read.
+
+Read errors leave the current caller output unchanged and remain sticky;
+`position()` still counts bytes returned by earlier successful reads. After
+the last data bytes, a further read completes remaining metadata validation
+before reporting `done`. That read may fail even though the requested range
+has already been delivered. Sink adapters commit final length only after
+`done`. Completed reads return zero bytes on subsequent calls.
+
+Always call extractor `deinit()`, including after `done` or error. The archive,
+Source contexts and device array must remain valid at stable addresses until
+all extractors have been released. Multiple extractors share the archive's
+working budget; the archive cannot be deinitialized while one is active.
+
+```zig
+var extractor = try archive.initPathExtractor("data/payload", .{
+    .max_output_len = 512 * 1024 * 1024,
+}, 64 * 1024 * 1024);
+defer extractor.deinit();
+var buffer: [4096]u8 = undefined;
+while (true) {
+    const progress = try extractor.read(&buffer);
+    try consume(buffer[0..progress.output_written]);
+    if (progress.status == .done) break;
+}
+```
+
 ```zig
 const image_file = try std.Io.Dir.cwd().openFile(io, "image.erofs", .{});
 defer image_file.close(io);
@@ -69,6 +110,9 @@ file Sink, preserves existing output on budget or late decoding failure, and
 supports same-path input/output. Its final optional
 `--working-memory-limit=bytes` follows the output limit/device arguments.
 Creation uses automatic inode version selection for larger input files.
+CLI extraction uses the public extractor and accepts
+`--output-chunk-size=bytes` (1 byte...1 MiB, 64 KiB default) to select its
+caller-owned output buffer. This buffer is outside the archive working budget.
 
 The reader validates the superblock, CRC-32C checksum, block geometry,
 incompatible feature bits, compact and extended inode layouts, directory entry
@@ -489,7 +533,7 @@ plus local/external chunk padding, deduplication and holes. Four-MiB stored
 and all-unique chunk sources complete within 64 KiB of requested working heap;
 LZ4 legacy/grouped sources complete within 1 MiB including encoder tables.
 Source/write/final-length/device failures, empty devices and exhaustive OOM
-are covered. Debug and ReleaseFast each pass 119 EROFS plus 12 independent I/O
+are covered. Debug and ReleaseFast each pass 128 EROFS plus 12 independent I/O
 tests (4 Source, 8 Sink/allocator), with explicit imports ensuring that file
 adapters and allocator tests are actually analyzed by Zig.
 erofs-utils 1.9.4-g5fcb2f76 passes all 324 writer modes, including 108 Sink
@@ -508,5 +552,7 @@ loading, encoded/decoded caps, Source/Sink errors and exhaustive OOM. Four-MiB
 stored input/output uses less than 64 KiB requested working heap; legacy and
 grouped compressed extraction uses at most 2 MiB while emitting 4 MiB. Packed
 files with modern extent records also extract through the Source path.
-The final Debug repository suite passes 3438/3438 tests; broad check, wasm
-compilation, the 131-case focused gate and all external file cases also pass.
+The Source archive increment's Debug repository suite passes 3438/3438 tests.
+Resumable extraction passes the 140-case focused gate and wasm compilation;
+the external matrix also passes 18 CLI extractions with 17-byte buffers
+(`resumable_reader=18`), alongside the 324 ordinary modes and six file cases.
