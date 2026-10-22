@@ -22652,3 +22652,27 @@ reuse, so production keeps the simpler independently owned plans.
   The final Debug repository suite passes 3447/3447 tests (3440 root tests and
   seven separate Brotli object/classifier cases). Broad check, wasm, CLI help
   and all 140 post-rebase focused cases pass.
+
+- Extracted EROFS directory planning, metadata/address layout, checked math
+  and plan ownership into cohesive modules. Added a cluster cursor that keeps
+  one selected logical prefix, codec/input buffers and zero-padding progress;
+  reference comparisons cover every codec and 4/8/12 KiB physical budgets.
+  Added in-place caller-owned `ErofsEncoder` with positional image/device
+  output, node/chunk/metadata phases, stable planner allocator pointers and
+  explicit final size/peak results. Small/empty output buffers preserve state,
+  failed reads leave output unchanged, and cancellation frees all work storage.
+  Sink and allocating convenience APIs now use this core; the original
+  allocating path is retained internally for byte comparisons. Tests cover
+  metadata/tail/metabox layouts, local/external chunks with padding/holes/
+  deduplication, short Source requests, monotonic prefix progress, cached
+  selection reuse, startup budgets, sticky Source failure, cancellation and
+  exhaustive OOM. Four-MiB Source output completes below 64 KiB requested work
+  heap. The CLI and writer probe use the public encoder with configurable or
+  mixed tiny output slices, and the compatibility matrix adds 108 encoder
+  counterparts to its memory/Source/Sink paths.
+  Debug and ReleaseFast each pass 136 EROFS plus 12 I/O cases, with wasm
+  compilation passing. erofs-utils 1.9.4-g5fcb2f76 validates all 432 modes
+  (`encoder_writer=108`, `external_writer=432`, `xattr_writer=348`,
+  `metabox_writer=84`, `directory_writer=80`, `extended_inode_writer=84`,
+  `bounded_writer=160`), alongside six Source file checks and 18 tiny-buffer
+  extraction cases.
