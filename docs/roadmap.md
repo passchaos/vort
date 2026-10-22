@@ -22567,11 +22567,22 @@ reuse, so production keeps the simpler independently owned plans.
   replacement, reporting working peaks and preserving existing output on
   failure. Source stability remains required, cross-device completion is not
   atomic, and the descriptor deduplication search remains a portable quadratic
-  reference. The legacy allocating writer remains as the independent byte
-  oracle; migrating convenience APIs onto the Sink core and fully resumable
+  reference. The legacy allocating writer remains a separate byte-comparison
+  path; migrating convenience APIs onto the Sink core and fully resumable
   caller-owned state remain future work.
   Debug/ReleaseFast each pass 99 EROFS and 12 independent I/O tests. These
   cover byte identity across codecs/layouts, 4 MiB stored and all-unique chunk
   sources within a 64 KiB requested-heap budget, LZ4 legacy/grouped output
   within 1 MiB including its existing tables, source/write/final-length/device
   failures, zero devices, and exhaustive allocation failures.
+  erofs-utils 1.9.4-g5fcb2f76 validates and extracts all 324 memory/Source/Sink
+  modes (`source_writer=108`, `sink_writer=108`, `external_writer=324`,
+  `xattr_writer=261`, `metabox_writer=63`, `directory_writer=60`,
+  `extended_inode_writer=63`, `bounded_writer=120`). Thirteen actual file
+  Source/Sink cases pass, including budget-failure preservation/temporary-file
+  cleanup and same-path input/output; check, wasm compilation and CLI help
+  also pass.
+  The external matrix runs with the Debug CLI, and the final standard Debug
+  full repository suite (`zig build test`) passes. ReleaseFast validation is
+  focused on the 111 EROFS/I/O cases; this remains a functionality milestone
+  without a performance-leadership claim.

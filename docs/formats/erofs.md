@@ -404,12 +404,15 @@ matrix to 108 writers (`bounded_writer=40`, `external_writer=108`,
 non-power-of-two limits, require exact round trips and deterministic output,
 and exercise no-fit fallback, EOF/tail metadata, and exhaustive OOM.
 
-The source matrix mirrors every one of the 108 memory-backed writer modes,
-requiring byte-identical images and external devices as well as fsck/extraction
-compatibility (`writer=216`, `source_writer=108`, `external_writer=216`).
-Thirteen additional CLI cases use actual positional file adapters across
+The Source and Sink matrices each mirror every one of the 108 memory-backed
+writer modes, requiring byte-identical images and external devices as well as
+fsck/extraction compatibility (`writer=324`, `source_writer=108`,
+`sink_writer=108`, `external_writer=324`). Thirteen additional CLI cases use
+actual positional file Source/Sink adapters across
 stored, default compressed, grouped, and physically bounded output
-(`file_source_writer=13`). Unit tests additionally cover short reads, callback
+(`file_source_writer=13`); budget rejection preserves existing output and
+removes temporary files, and same-path input/output retains input until
+encoding succeeds. Unit tests additionally cover short reads, callback
 errors, premature EOF, empty-source non-reading, declarations overflowing host
 accounting, and allocation failures in grouped/metabox/chunk source paths.
 
@@ -422,3 +425,8 @@ Source/write/final-length/device failures, empty devices and exhaustive OOM
 are covered. Debug and ReleaseFast each pass 99 EROFS plus 12 independent I/O
 tests (4 Source, 8 Sink/allocator), with explicit imports ensuring that file
 adapters and allocator tests are actually analyzed by Zig.
+erofs-utils 1.9.4-g5fcb2f76 passes all 324 writer modes, including 108 Sink
+counterparts, with 261 xattr, 63 metabox, 60 directory, 63 extended-inode and
+120 physically bounded writer cases.
+The external matrix uses the Debug CLI. The final standard Debug repository
+suite (`zig build test`) also passes, alongside check and wasm compilation.

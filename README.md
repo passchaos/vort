@@ -278,7 +278,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   Deflate/Zstandard metabox writing with a hidden low-NID metadata inode and
   high-bit visible NIDs, regular-file callback/file sources with bounded
   positional reads, random-access file/buffer output sinks with explicit
-  working allocation limits and source-descriptor chunk deduplication,
+  working allocation limits and chunk deduplication using source locations,
   byte-identical source/sink/memory output, all with
   bidirectional erofs-utils interoperability;
 - dependency-free WIM/ESD/SWM parsing with strict 208-byte headers, compression
