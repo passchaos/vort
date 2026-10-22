@@ -22546,3 +22546,32 @@ reuse, so production keeps the simpler independently owned plans.
   The external matrix passes all 216 modes, including 108 source counterparts,
   and 13 actual file-adapter CLI cases (`source_writer=108`,
   `file_source_writer=13`, `external_writer=216`, `xattr_writer=174`).
+
+
+- Added reusable borrowed random-access `ByteSink`/`FileByteSink`, owning
+  `BufferByteSink`, and a working allocator that limits live requested bytes.
+  Short writes, callback bounds, zero/excessive results, positional file
+  ownership/truncation, resize/remap accounting and backing-OOM versus budget
+  rejection are explicitly tested. Independent I/O test entrypoints ensure
+  lazy module analysis cannot omit file/allocator tests; the full-suite root
+  also explicitly imports all I/O modules.
+- Added `encodeErofsToSink` and `encodeErofsExternalChunksToSinks`, emitting
+  physical data directly and retaining only metadata, indexes, directory/tail
+  plans and codec scratch. Shared cluster emission preserves legacy/grouped/
+  bounded wire output, including metabox address ordering. Chunk mode retains
+  source descriptors and rereads padded candidates/unique payloads through
+  fixed 4 KiB buffers instead of caching all unique chunks. The explicit
+  default 64 MiB working limit excludes stack, caller/Sink storage and backing
+  allocator overhead; it is not an RSS limit, and metadata/index costs still
+  scale with entries/blocks. The CLI uses file Source/Sink adapters and atomic
+  replacement, reporting working peaks and preserving existing output on
+  failure. Source stability remains required, cross-device completion is not
+  atomic, and the descriptor deduplication search remains a portable quadratic
+  reference. The legacy allocating writer remains as the independent byte
+  oracle; migrating convenience APIs onto the Sink core and fully resumable
+  caller-owned state remain future work.
+  Debug/ReleaseFast each pass 99 EROFS and 12 independent I/O tests. These
+  cover byte identity across codecs/layouts, 4 MiB stored and all-unique chunk
+  sources within a 64 KiB requested-heap budget, LZ4 legacy/grouped output
+  within 1 MiB including its existing tables, source/write/final-length/device
+  failures, zero devices, and exhaustive allocation failures.

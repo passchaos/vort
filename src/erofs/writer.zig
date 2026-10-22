@@ -12,10 +12,14 @@ const writer_clusters = @import("writer/clusters.zig");
 const xattr = @import("xattr.zig");
 const writer_options = @import("writer/options.zig");
 const writer_wire = @import("writer/wire.zig");
+const writer_stream = @import("writer/stream.zig");
+const chunk_stream = @import("writer/chunk_stream.zig");
+const byte_sink = @import("../io/sink.zig");
+const working_allocator = @import("../io/working_allocator.zig");
 
 pub const Error = core.Error || writer_codec.Error || writer_chunks.Error ||
     writer_fragments.Error || writer_metabox.Error || writer_xattrs.Error ||
-    tree.Error || xattr.Error || writer_wire.Error || error{InvalidErofs};
+    tree.Error || xattr.Error || writer_wire.Error || writer_stream.Error || error{ InvalidErofs, WorkingMemoryLimitExceeded };
 
 pub const Entry = tree.Entry;
 pub const EntryKind = tree.EntryKind;
@@ -26,6 +30,11 @@ pub const Compression = writer_options.Compression;
 pub const TailPacking = writer_options.TailPacking;
 pub const InodeVersion = writer_options.InodeVersion;
 pub const Options = writer_options.Options;
+pub const Sink = byte_sink.Sink;
+/// Live requested bytes in library allocations, excluding stack, caller-owned
+/// entry/source/sink storage and backing-allocator bookkeeping.
+pub const SinkLimits = struct { max_working_memory: usize = 64 * 1024 * 1024 };
+pub const SinkResult = struct { image_size: u64, device_size: u64 = 0, peak_working_bytes: usize };
 
 pub const EncodedExternalChunks = struct {
     image: []u8,
@@ -47,7 +56,7 @@ pub fn encodeAlloc(
     entries: []const Entry,
     options: Options,
 ) Error![]u8 {
-    const encoded = try encodeInternal(allocator, entries, options, false);
+    const encoded = try encodeInternal(allocator, entries, options, false, null, null);
     if (encoded.device) |device| {
         allocator.free(encoded.image);
         allocator.free(device);
@@ -62,7 +71,7 @@ pub fn encodeExternalChunksAlloc(
     options: Options,
 ) Error!EncodedExternalChunks {
     if (options.chunk_size == null) return error.InvalidErofs;
-    const encoded = try encodeInternal(allocator, entries, options, true);
+    const encoded = try encodeInternal(allocator, entries, options, true, null, null);
     errdefer allocator.free(encoded.image);
     const device = encoded.device orelse return error.InvalidErofs;
     return .{
@@ -74,13 +83,43 @@ pub fn encodeExternalChunksAlloc(
 const InternalEncoded = struct {
     image: []u8,
     device: ?[]u8,
+    image_size: u64 = 0,
+    device_size: u64 = 0,
 };
+
+/// Emits physical data directly and retains only metadata/plans/codec scratch.
+/// Sources must remain stable for repeated reads. Errors may leave partial
+/// output; final length is set only after all image writes succeed.
+pub fn encodeToSink(allocator: std.mem.Allocator, entries: []const Entry, options: Options, sink: Sink, limits: SinkLimits) Error!SinkResult {
+    return encodeSinks(allocator, entries, options, sink, null, limits);
+}
+
+/// Uses distinct primary/device destinations. Completion is not atomic across
+/// the two sinks; device length is committed before the primary image length.
+pub fn encodeExternalChunksToSinks(allocator: std.mem.Allocator, entries: []const Entry, options: Options, sink: Sink, device: Sink, limits: SinkLimits) Error!SinkResult {
+    if (options.chunk_size == null) return error.InvalidErofs;
+    return encodeSinks(allocator, entries, options, sink, device, limits);
+}
+
+fn encodeSinks(allocator: std.mem.Allocator, entries: []const Entry, options: Options, sink: Sink, device: ?Sink, limits: SinkLimits) Error!SinkResult {
+    if (sink.max_write_size == 0) return error.SinkWriteFailed;
+    if (device) |output| if (output.max_write_size == 0) return error.SinkWriteFailed;
+    var budget = working_allocator.WorkingAllocator.init(allocator, limits.max_working_memory);
+    const encoded = encodeInternal(budget.allocator(), entries, options, device != null, sink, device) catch |err| {
+        if (err == error.OutOfMemory and budget.last_failure_was_limit) return error.WorkingMemoryLimitExceeded;
+        return err;
+    };
+    std.debug.assert(budget.live == 0);
+    return .{ .image_size = encoded.image_size, .device_size = encoded.device_size, .peak_working_bytes = budget.peak };
+}
 
 fn encodeInternal(
     allocator: std.mem.Allocator,
     entries: []const Entry,
     options: Options,
     external_chunks: bool,
+    output_sink: ?Sink,
+    device_sink: ?Sink,
 ) Error!InternalEncoded {
     if (options.volume_name.len > 16 or options.fixed_nsec >= 1_000_000_000)
         return error.InvalidErofs;
@@ -124,7 +163,10 @@ fn encodeInternal(
             .directories = options.compress_directories,
         });
     var chunk_plan: ?writer_chunks.Plan = if (options.chunk_size) |chunk_size|
-        try writer_chunks.prepare(allocator, &filesystem, chunk_size, external_chunks)
+        if (output_sink != null)
+            try chunk_stream.prepare(allocator, &filesystem, chunk_size, external_chunks)
+        else
+            try writer_chunks.prepare(allocator, &filesystem, chunk_size, external_chunks)
     else
         null;
     defer if (chunk_plan) |*plan| plan.deinit();
@@ -150,6 +192,17 @@ fn encodeInternal(
     );
     try fillDirectories(allocator, &filesystem);
     try writer_fragments.syncDirectories(&filesystem);
+
+    if (output_sink) |sink| {
+        var fixed_blocks: ?usize = null;
+        if (!grouped) {
+            var count = try assignDataBlocks(&filesystem, try alignForward(metadata_end, block_size) / block_size, false);
+            if (chunk_plan) |*plan| count = try plan.assign(filesystem.nodes, count);
+            fixed_blocks = count;
+        }
+        const result = try writer_stream.emit(allocator, &filesystem, options, if (block_encoder) |*encoder| encoder else null, if (chunk_plan) |*plan| plan else null, if (shared_xattr_plan) |*plan| plan else null, metadata_end, fixed_blocks, sink, device_sink);
+        return .{ .image = &.{}, .device = null, .image_size = result.image_size, .device_size = result.device_size };
+    }
 
     if (grouped) {
         for (filesystem.nodes) |*node| {

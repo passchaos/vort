@@ -8,8 +8,10 @@ pub fn main(init: std.process.Init) !void {
     const output_path = args.next() orelse return error.MissingOutputPath;
     const mode_name = args.next() orelse "lz4";
     const source_suffix = "-source";
-    const source_mode = std.mem.endsWith(u8, mode_name, source_suffix);
-    const layout_name = if (source_mode) mode_name[0 .. mode_name.len - source_suffix.len] else mode_name;
+    const sink_suffix = "-sink";
+    const sink_mode = std.mem.endsWith(u8, mode_name, sink_suffix);
+    const source_mode = sink_mode or std.mem.endsWith(u8, mode_name, source_suffix);
+    const layout_name = if (sink_mode) mode_name[0 .. mode_name.len - sink_suffix.len] else if (source_mode) mode_name[0 .. mode_name.len - source_suffix.len] else mode_name;
     const address48_suffix = "-48bit";
     const fragment_suffix = "-fragments";
     const inline_suffix = "-ztailpacking";
@@ -128,7 +130,20 @@ pub fn main(init: std.process.Init) !void {
         .compress_directories = compress_directories,
         .inode_version = if (extended) .extended else .compact,
     };
-    if (chunk_external) {
+    if (sink_mode) {
+        const output_file = try std.Io.Dir.cwd().createFile(init.io, output_path, .{});
+        defer output_file.close(init.io);
+        var output_adapter = vort.FileByteSink.init(init.io, output_file);
+        if (chunk_external) {
+            const device_path = args.next() orelse return error.MissingOutputPath;
+            const device_file = try std.Io.Dir.cwd().createFile(init.io, device_path, .{});
+            defer device_file.close(init.io);
+            var device_adapter = vort.FileByteSink.init(init.io, device_file);
+            _ = try vort.encodeErofsExternalChunksToSinks(init.gpa, &entries, options, output_adapter.sink(), device_adapter.sink(), .{});
+        } else {
+            _ = try vort.encodeErofsToSink(init.gpa, &entries, options, output_adapter.sink(), .{});
+        }
+    } else if (chunk_external) {
         const device_path = args.next() orelse return error.MissingOutputPath;
         var encoded = try vort.encodeErofsExternalChunksAlloc(init.gpa, &entries, options);
         defer encoded.deinit(init.gpa);

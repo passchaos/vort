@@ -157,7 +157,7 @@ layouts.
 Writer entries use safe relative paths. Missing parent directories are created
 automatically, while absolute paths, empty components, `.`/`..`, NUL bytes,
 duplicate entries, and non-directory parents are rejected. Entry data and
-symlink targets remain caller-owned for the duration of `encodeErofsAlloc`.
+symlink targets remain caller-owned for the duration of encoding.
 Regular-file entries may supply `source: ?ByteSource` instead of `data`.
 The source borrows a callback/context and stable u64 length; a source entry
 must have empty `data`, be a regular file, and use a nonzero maximum read
@@ -174,10 +174,9 @@ through `max_read_size`; the file adapter borrows both the file and `std.Io`,
 uses positional reads, and leaves closing to the caller. Source bytes and
 length must remain stable throughout encoding. Source input avoids loading
 all regular files into memory, but `encodeErofsAlloc` still retains encoded
-payload plans and allocates the complete output image. Metadata and output
-memory therefore remain proportional to the archive; a bounded output-sink
-writer is a separate next API. Compressed source scratch is at most the decoded
-extent size; chunk input scratch is bounded by the selected chunk size.
+payload plans and allocates the complete output image. Compressed source
+scratch is at most the decoded extent size; chunk input scratch is bounded by
+the selected chunk size.
 
 ```zig
 const file = try std.Io.Dir.cwd().openFile(io, "payload.bin", .{});
@@ -188,6 +187,54 @@ const image = try vort.encodeErofsAlloc(allocator, &.{.{
 }}, .{ .compression = .zstandard, .compression_extent_size = 64 * 1024 });
 defer allocator.free(image);
 ```
+
+`encodeErofsToSink(allocator, entries, options, sink, limits)` emits physical
+data directly to a borrowed random-access `ByteSink`, then writes finalized
+metadata and sets the image length. It retains metadata, directory/packed-tail
+plans, indexes and codec scratch, without allocating the complete image or
+caching all encoded extents. `encodeErofsExternalChunksToSinks` accepts
+separate image and device sinks. Chunk deduplication keeps stable source
+locations, rereads candidates with two 4 KiB comparison buffers, and rereads
+unique chunks during emission. This preserves padded deduplication and holes
+without retaining unique payloads; its reference search may be quadratic in
+the number of unique chunks.
+
+`ErofsSinkLimits.max_working_memory` defaults to 64 MiB and bounds live
+requested bytes in library allocations. A denied budget reports
+`WorkingMemoryLimitExceeded`; backing allocator failures remain `OutOfMemory`.
+`ErofsSinkResult` returns u64 `image_size`/`device_size` and
+`peak_working_bytes`. The budget includes metadata, plans, indexes and codec
+allocations; those still grow with entry/block counts. It excludes caller
+entry/source storage, the sink's own allocations, stack scratch and backing
+allocator bookkeeping or remap transients, so it is not an RSS limit.
+
+`ByteSink` completes short writes and caps individual callbacks through
+`max_write_size` (64 KiB default). Zero/excessive counts, failed writes and
+failed final-length changes report `SinkWriteFailed`; address arithmetic
+overflow reports `IntegerOverflow`. `FileByteSink` borrows a writable seekable
+file/Io, uses positional writes and leaves closing to the caller.
+`BufferByteSink` owns a growing buffer, fills gaps with zeros and transfers
+ownership through `take()`; that output buffer is outside the working budget.
+Caller sinks may contain partial output on failure. Final lengths are set
+after successful data/metadata writes; external device length is set before
+primary image length, with no atomic transaction across both sinks.
+
+```zig
+const output_file = try std.Io.Dir.cwd().createFile(io, "image.erofs", .{});
+defer output_file.close(io);
+var output = vort.FileByteSink.init(io, output_file);
+const result = try vort.encodeErofsToSink(allocator, &.{.{
+    .path = "data/payload", .source = input.source(),
+}}, .{ .compression = .lz4 }, output.sink(), .{
+    .max_working_memory = 8 * 1024 * 1024,
+});
+_ = result;
+```
+
+`create-erofs-file` uses file Source/Sink adapters and atomically replaces its
+destination only after encoding succeeds, allowing input and output to name
+the same file. Its final optional `working_memory_limit` argument follows
+`max_pcluster_size`; successful output reports `peak_working_bytes`.
 
 Entries additionally accept 32-bit UID/GID, a modification-time delta relative
 to `WriterOptions.epoch`, and an optional per-inode nanosecond value.
@@ -365,3 +412,13 @@ stored, default compressed, grouped, and physically bounded output
 (`file_source_writer=13`). Unit tests additionally cover short reads, callback
 errors, premature EOF, empty-source non-reading, declarations overflowing host
 accounting, and allocation failures in grouped/metabox/chunk source paths.
+
+Sink tests require byte identity across all codecs, grouped/physical limits,
+inline/fragment tails, xattrs, directories, extended/48-bit inodes and metabox,
+plus local/external chunk padding, deduplication and holes. Four-MiB stored
+and all-unique chunk sources complete within 64 KiB of requested working heap;
+LZ4 legacy/grouped sources complete within 1 MiB including encoder tables.
+Source/write/final-length/device failures, empty devices and exhaustive OOM
+are covered. Debug and ReleaseFast each pass 99 EROFS plus 12 independent I/O
+tests (4 Source, 8 Sink/allocator), with explicit imports ensuring that file
+adapters and allocator tests are actually analyzed by Zig.

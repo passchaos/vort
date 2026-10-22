@@ -277,7 +277,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   prefix planning, and stored fallback, plus standard MZi stored/LZ4/MicroLZMA/raw-
   Deflate/Zstandard metabox writing with a hidden low-NID metadata inode and
   high-bit visible NIDs, regular-file callback/file sources with bounded
-  positional reads, and byte-identical source/memory output, all with
+  positional reads, random-access file/buffer output sinks with explicit
+  working allocation limits and source-descriptor chunk deduplication,
+  byte-identical source/sink/memory output, all with
   bidirectional erofs-utils interoperability;
 - dependency-free WIM/ESD/SWM parsing with strict 208-byte headers, compression
   and part geometry, resource headers, lookup tables, SHA-1 verification, raw

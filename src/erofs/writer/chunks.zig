@@ -11,9 +11,19 @@ pub const Plan = struct {
     has_chunks: bool,
     local_start_block: usize = 0,
     data_taken: bool = false,
+    unique_sources: ?[]UniqueSource = null,
+
+    pub const UniqueSource = struct { node: usize, offset: usize, len: usize };
+
+    pub fn dataSize(self: Plan) Error!usize {
+        if (self.unique_sources) |sources|
+            return std.math.mul(usize, sources.len, self.chunk_size) catch return error.IntegerOverflow;
+        return self.data.len;
+    }
 
     pub fn deinit(self: *Plan) void {
         if (!self.data_taken) self.allocator.free(self.data);
+        if (self.unique_sources) |sources| self.allocator.free(sources);
         self.* = undefined;
     }
 
@@ -47,7 +57,7 @@ pub const Plan = struct {
             }
         }
         if (self.external) return first_block;
-        const data_blocks = self.data.len / 4096;
+        const data_blocks = (try self.dataSize()) / 4096;
         return std.math.add(usize, first_block, data_blocks) catch
             return error.IntegerOverflow;
     }

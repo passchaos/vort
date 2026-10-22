@@ -35,6 +35,17 @@ pub fn populateMetaboxMetadata(filesystem: *tree.Tree, options: Options, shared_
     }
 }
 
+pub fn writeNodeMetadata(primary: []u8, filesystem: *tree.Tree, index: usize, options: Options, shared_xattr_plan: ?*const writer_xattrs.Plan) Error!void {
+    const node = &filesystem.nodes[index];
+    const metadata = if (node.in_metabox)
+        writer_metabox.data(filesystem.nodes) orelse return error.InvalidErofs
+    else
+        primary;
+    const layout = std.enums.fromInt(format.Layout, node.layout) orelse return error.InvalidErofs;
+    try writeFlatInlineData(metadata, node, layout);
+    try writeInode(metadata, node, index, options.compression, options.xattr_prefixes, shared_xattr_plan, options.epoch, options.fixed_nsec);
+}
+
 pub fn writeNodes(
     image: []u8,
     filesystem: *tree.Tree,
@@ -410,9 +421,10 @@ pub fn writeSuperblock(
     if (has_external_chunks) {
         const plan = chunk_plan.?;
         const table_end = try checkedAdd(device_table_start, 128);
-        if (table_end > image.len or plan.data.len % block_size != 0)
+        const device_size = try plan.dataSize();
+        if (table_end > image.len or device_size % block_size != 0)
             return error.InvalidErofs;
-        const device_blocks = plan.data.len / block_size;
+        const device_blocks = device_size / block_size;
         if (device_blocks > std.math.maxInt(u32)) return error.InvalidErofs;
         writeU32(image, device_table_start + 64, @intCast(device_blocks));
         writeU32(image, device_table_start + 68, @intCast(block_count));
