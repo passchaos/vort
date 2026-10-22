@@ -81,6 +81,7 @@ def make_image(
     chunksize: int | None = None,
     blobdev: Path | None = None,
     metabox: str | None = None,
+    compress_directories: bool = False,
 ) -> None:
     command: list[object] = [mkfs, "-T0", "--all-root"]
     if compressor is not None:
@@ -97,6 +98,8 @@ def make_image(
         command.append(f"--blobdev={blobdev}")
     if metabox is not None:
         command.extend(("-m4096", f"--MZ={metabox}"))
+    if compress_directories:
+        command.append("--zD")
     command.extend((image, source))
     run(*command)
 
@@ -186,6 +189,8 @@ def main() -> None:
     metabox_reader_cases = 0
     metabox_writer_cases = 0
     shared_xattr_writer_cases = 0
+    directory_reader_cases = 0
+    directory_writer_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -261,6 +266,9 @@ def main() -> None:
             "lz4-metabox",
             "deflate-metabox",
             "zstd-metabox",
+            "lz4-dirs",
+            "deflate-dirs",
+            "zstd-dirs",
         ):
             image = temp / f"writer-{mode}.erofs"
             repeated = temp / f"writer-{mode}-repeat.erofs"
@@ -311,6 +319,8 @@ def main() -> None:
                 address48_writer_cases += 1
             if mode.endswith("-metabox"):
                 metabox_writer_cases += 1
+            if mode.endswith("-dirs"):
+                directory_writer_cases += 1
             shared_xattr_writer_cases += 1
             writer_cases += 1
             if fsck is not None:
@@ -426,6 +436,30 @@ def main() -> None:
                     lzma_cases += 1
                 else:
                     modern_cases += 1
+
+            directory_codecs = ["lz4"]
+            if b"deflate" in help_text:
+                directory_codecs.append("deflate")
+            if b"zstd" in help_text:
+                directory_codecs.append("zstd")
+            for compressor in directory_codecs:
+                label = f"{compressor}-directories"
+                image = temp / f"{label}.erofs"
+                make_image(
+                    mkfs,
+                    source,
+                    image,
+                    compressor,
+                    False,
+                    compress_directories=True,
+                )
+                extracted = temp / f"{label}-fsck"
+                run(fsck, f"--extract={extracted}", "--no-preserve", "--xattrs", image)
+                verify_vort(args.cli, image, payloads, label, temp)
+                verify_vort_xattrs(args.cli, image, source_xattrs, label)
+                verify_extracted_xattrs(extracted, source_xattrs, label)
+                directory_reader_cases += 1
+                xattr_reader_cases += 1
 
             chunk_cases = (
                 ("chunk-local-map", (), None),
@@ -581,6 +615,8 @@ def main() -> None:
         f"metabox_reader={metabox_reader_cases} "
         f"metabox_writer={metabox_writer_cases} "
         f"shared_xattr_writer={shared_xattr_writer_cases} "
+        f"directory_reader={directory_reader_cases} "
+        f"directory_writer={directory_writer_cases} "
         f"malformed={malformed}"
     )
 

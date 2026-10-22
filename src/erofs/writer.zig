@@ -35,6 +35,8 @@ pub const Options = struct {
     metabox: bool = false,
     /// Deduplicate repeated name/value pairs into the shared-xattr region.
     shared_xattrs: bool = false,
+    /// Store nontrivial directory streams as whole fragments in the packed inode.
+    compress_directories: bool = false,
 };
 
 pub const EncodedExternalChunks = struct {
@@ -96,8 +98,11 @@ fn encodeInternal(
         return error.InvalidErofs;
     if (options.tail_packing != .none and options.compression == .stored)
         return error.InvalidErofs;
+    if (options.compress_directories and options.compression == .stored)
+        return error.InvalidErofs;
     if (options.chunk_size != null and
-        (options.compression != .stored or options.tail_packing != .none))
+        (options.compression != .stored or options.tail_packing != .none or
+            options.compress_directories))
         return error.InvalidErofs;
     if (options.metabox and
         (options.tail_packing != .none or options.chunk_size != null or external_chunks))
@@ -108,8 +113,12 @@ fn encodeInternal(
     defer filesystem.deinit();
     if (options.metabox)
         try writer_metabox.prepare(allocator, &filesystem);
-    if (options.tail_packing == .fragments)
-        try writer_fragments.prepare(allocator, &filesystem, block_size);
+    try allocateDirectoryBuffers(&filesystem);
+    if (options.tail_packing == .fragments or options.compress_directories)
+        try writer_fragments.prepare(allocator, &filesystem, block_size, .{
+            .file_tails = options.tail_packing == .fragments,
+            .directories = options.compress_directories,
+        });
     var chunk_plan: ?writer_chunks.Plan = if (options.chunk_size) |chunk_size|
         try writer_chunks.prepare(allocator, &filesystem, chunk_size, external_chunks)
     else
@@ -125,7 +134,6 @@ fn encodeInternal(
     else
         null;
     defer if (block_encoder) |*encoder| encoder.deinit();
-    try allocateDirectoryBuffers(&filesystem);
     const metadata_end = try planMetadata(
         allocator,
         &filesystem,
@@ -138,6 +146,7 @@ fn encodeInternal(
         if (shared_xattr_plan) |*plan| plan else null,
     );
     try fillDirectories(allocator, &filesystem);
+    try writer_fragments.syncDirectories(&filesystem);
 
     const first_data_block = try alignForward(metadata_end, block_size) / block_size;
     var block_count = try assignDataBlocks(&filesystem, first_data_block);
@@ -327,11 +336,15 @@ fn planNodeMetadata(
         return;
     }
 
-    if (compression != .stored and node.kind == .file and node.data.len != 0) {
+    const content = node.content();
+    const compress_content = (node.kind == .file and content.len != 0) or
+        (node.kind == .directory and node.fragment_size != 0 and
+            node.fragment_size == content.len);
+    if (compression != .stored and compress_content) {
         node.layout = @intFromEnum(format.Layout.compressed_full);
         const whole_fragment = node.fragment_size != 0 and
-            node.fragment_size == node.data.len;
-        const cluster_count = if (whole_fragment) 0 else try blockCount(node.data.len);
+            node.fragment_size == content.len;
+        const cluster_count = if (whole_fragment) 0 else try blockCount(content.len);
         node.compressed_indexes = try allocator.alloc(tree.Node.CompressionIndex, cluster_count);
         @memset(node.compressed_indexes.?, .{
             .kind = 0,
@@ -340,7 +353,7 @@ fn planNodeMetadata(
         });
         if (node.fragment_size != 0 and !whole_fragment) {
             const fragment_offset = node.fragment_offset orelse return error.InvalidErofs;
-            const fragment_start = node.data.len - node.fragment_size;
+            const fragment_start = content.len - node.fragment_size;
             if (node.fragment_size > block_size or fragment_start % block_size != 0)
                 return error.InvalidErofs;
             const fragment_index = fragment_start / block_size;
@@ -357,10 +370,10 @@ fn planNodeMetadata(
             header_start,
             try checkedAdd(16, try checkedMul(cluster_count, 8)),
         );
-        if (tail_packing == .compressed_inline and !node.hidden) {
+        if (tail_packing == .compressed_inline and node.kind == .file and !node.hidden) {
             const encoder = block_encoder orelse return error.InvalidErofs;
-            const tail_start = (node.data.len - 1) & ~(block_size - 1);
-            const tail = node.data[tail_start..];
+            const tail_start = (content.len - 1) & ~(block_size - 1);
+            const tail = content[tail_start..];
             const encoded = try encoder.encodeScratch(tail);
             const use_compressed = encoded.len < tail.len;
             const candidate = if (use_compressed) encoded else tail;
@@ -583,7 +596,8 @@ fn writeCompressedData(
 ) Error!void {
     const indexes = node.compressed_indexes orelse return error.InvalidErofs;
     if (node.compressed_block_count > indexes.len) return error.InvalidErofs;
-    const physical_content_len = node.data.len - node.fragment_size -
+    const content = node.content();
+    const physical_content_len = content.len - node.fragment_size -
         node.compressed_inline_tail_size;
     for (indexes[0..node.compressed_block_count], 0..) |*index, cluster_index| {
         const logical_start = try checkedMul(cluster_index, block_size);
@@ -591,7 +605,7 @@ fn writeCompressedData(
             physical_content_len,
             try checkedAdd(logical_start, block_size),
         );
-        const chunk = node.data[logical_start..logical_end];
+        const chunk = content[logical_start..logical_end];
         const physical_start = try checkedMul(index.physical_block, block_size);
         const physical_end = try checkedAdd(physical_start, block_size);
         if (physical_end > image.len) return error.InvalidErofs;
@@ -686,7 +700,7 @@ fn writeInode(
         const index_start = try checkedAdd(header_start, 16);
         if (try checkedAdd(index_start, try checkedMul(node.compressed_indexes.?.len, 8)) > metadata.len)
             return error.InvalidErofs;
-        if (node.fragment_size == node.data.len and node.fragment_size != 0) {
+        if (node.fragment_size == node.content().len and node.fragment_size != 0) {
             const fragment_offset = node.fragment_offset orelse return error.InvalidErofs;
             if (fragment_offset >> 63 != 0 or node.compressed_indexes.?.len != 0)
                 return error.InvalidErofs;

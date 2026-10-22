@@ -22345,3 +22345,20 @@ reuse, so production keeps the simpler independently owned plans.
   module, so the separate address48, chunk, metabox, and writer test modules are
   no longer filtered out through an unreferenced anonymous import block. The
   corrected focused gate runs 60/60 tests.
+
+- Added standard EROFS directory-compression writing. `compress_directories`
+  matches erofs-utils `--zD`: directories below the 16-byte full-index metadata
+  threshold remain flat, while every larger final dirent stream becomes a
+  whole-file fragment in the hidden packed inode. Directory storage is
+  allocated before NID planning and synchronized only after dirents contain
+  their final ordinary/high-bit NIDs, avoiding a second tree or approximate
+  placeholders. The shared packed planner can combine compressed directories
+  with regular last-block/whole-file fragments; metabox directory inodes also
+  resolve the primary packed stream. LZ4, raw Deflate, and Zstandard tests cover
+  400-entry multi-block directories, small fallback, xattrs, shared file
+  fragments, metabox metadata, stored-mode rejection, default byte identity,
+  and exhaustive OOM. Three fresh erofs-utils `--zD` images validate the reader
+  and fsck independently extracts all three Vort writer modes
+  (`directory_reader=3`, `directory_writer=3`, `writer=25`,
+  `shared_xattr_writer=25`, `xattr_writer=21`). The corrected focused EROFS
+  gate now runs 65/65 tests.

@@ -45,6 +45,7 @@ test {
     _ = @import("erofs/metabox_tests.zig");
     _ = @import("erofs/writer_metabox_tests.zig");
     _ = @import("erofs/writer_xattr_tests.zig");
+    _ = @import("erofs/writer_directory_tests.zig");
     _ = codec;
     _ = writer;
     _ = @import("erofs/writer_fragment_tests.zig");

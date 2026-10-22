@@ -11,6 +11,7 @@ pub fn main(init: std.process.Init) !void {
     const fragment_suffix = "-fragments";
     const inline_suffix = "-ztailpacking";
     const metabox_suffix = "-metabox";
+    const directory_suffix = "-dirs";
     const metabox = std.mem.endsWith(u8, mode_name, metabox_suffix);
     const without_metabox = if (metabox)
         mode_name[0 .. mode_name.len - metabox_suffix.len]
@@ -25,12 +26,15 @@ pub fn main(init: std.process.Init) !void {
     const chunk_external = std.mem.eql(u8, layout_mode, "chunk-external");
     const fragments = std.mem.endsWith(u8, layout_mode, fragment_suffix);
     const compressed_inline = std.mem.endsWith(u8, layout_mode, inline_suffix);
+    const compress_directories = std.mem.endsWith(u8, layout_mode, directory_suffix);
     const compression_name = if (chunk_local or chunk_external)
         "stored"
     else if (fragments)
         layout_mode[0 .. layout_mode.len - fragment_suffix.len]
     else if (compressed_inline)
         layout_mode[0 .. layout_mode.len - inline_suffix.len]
+    else if (compress_directories)
+        layout_mode[0 .. layout_mode.len - directory_suffix.len]
     else
         layout_mode;
     const compression = parseCompression(compression_name) orelse return error.InvalidBlockPlan;
@@ -77,6 +81,7 @@ pub fn main(init: std.process.Init) !void {
         .force_48bit = force_48bit,
         .metabox = metabox,
         .shared_xattrs = true,
+        .compress_directories = compress_directories,
     };
     if (chunk_external) {
         const device_path = args.next() orelse return error.MissingOutputPath;

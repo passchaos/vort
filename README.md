@@ -265,7 +265,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   deterministic compact-inode stored/LZ4/raw-Deflate/Zstandard writing for
   regular files, nested and empty directories, symlinks, inline tails,
   deterministic whole/last-block packed fragments, hidden packed inodes,
-  raw-or-compressed inline pclusters with physical-block fallback,
+  raw-or-compressed inline pclusters with physical-block fallback, standard
+  whole-fragment LZ4/raw-Deflate/Zstandard directory compression,
   deduplicated local chunk maps and owning external chunk/device-table output,
   inline root/entry xattrs, cost-aware shared-xattr regions, and caller-selected
   plain prefix tables, multi-block directories, compression-configuration

@@ -85,6 +85,17 @@ the raw tail, and writes `INLINE_PCLUSTER` only when header, full indexes, and
 payload fit in one metadata block. A non-fitting tail automatically retains its
 ordinary physical block.
 
+`compress_directories = true` implements the standard `--zD` layout for LZ4,
+raw Deflate, and Zstandard images. Directory streams smaller than the 16-byte
+full-index header threshold retain the ordinary flat-inline wire. Every larger
+directory is appended in path order to the hidden packed inode and its visible
+inode carries the standard whole-fragment high-bit header with no local
+clusters. Directory buffers are sized before metadata planning but copied into
+the packed stream only after final high-bit/ordinary NIDs have populated the
+dirents. The option can share one packed inode with regular-file fragments and
+also works when visible inode metadata lives in a metabox; stored mode is
+rejected explicitly.
+
 `chunk_size` selects deterministic local chunk-based output in stored mode.
 Chunks are padded to their declared power-of-two size, deduplicated across all
 regular files, and all-zero chunks become holes. `encodeErofsExternalChunksAlloc`
@@ -103,9 +114,10 @@ bit-63 NIDs. One low-NID hidden inode in the primary metadata owns that stream,
 using stored blocks or the selected LZ4/raw-Deflate/Zstandard full-index codec.
 The extended 144-byte superblock carries `metabox_nid` and enables 48-bit
 addressing for the high-bit root NID. Physical file and large-directory blocks
-remain in the primary image. Metabox output currently rejects chunk mode,
-packed fragments, and compressed-inline pclusters explicitly instead of
-combining unimplemented layouts.
+remain in the primary image unless directory compression is selected. Metabox
+output currently rejects chunk mode, regular-file tail fragments, and
+compressed-inline pclusters explicitly instead of combining unimplemented
+layouts.
 
 Writer entries use safe relative paths. Missing parent directories are created
 automatically, while absolute paths, empty components, `.`/`..`, NUL bytes,
@@ -217,8 +229,11 @@ physical/compressed extents. erofs-utils 1.9.4 itself writes zero-filled output
 for flat-inline regular files whose inode lives in a metabox (its `dump --cat`
 path reads the same bytes correctly), so the stored-MZi oracle check excludes
 only those affected inline tails.
-All 22 Vort writer modes enable cost-aware shared-xattr planning for one
+All 25 Vort writer modes enable cost-aware shared-xattr planning for one
 repeated long-prefix attribute across root, file, and directory ibodies. Vort
-reconstructs each value, and the 18 non-metabox modes additionally require
+reconstructs each value, and the 21 non-metabox modes additionally require
 `fsck.erofs --xattrs` restoration; the summary reports
-`shared_xattr_writer=22`.
+`shared_xattr_writer=25`. Three reference and three Vort-authored LZ4/Deflate/
+Zstandard directory-compression images require byte-exact listing/extraction
+through whole-directory fragments (`directory_reader=3`,
+`directory_writer=3`).
