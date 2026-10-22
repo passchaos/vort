@@ -40,6 +40,7 @@ test {
     _ = archive;
     _ = @import("erofs/address48_tests.zig");
     _ = @import("erofs/archive_tests.zig");
+    _ = @import("erofs/big_pcluster_tests.zig");
     _ = chunk;
     _ = extent;
     _ = @import("erofs/chunk_tests.zig");

@@ -22430,3 +22430,19 @@ reuse, so production keeps the simpler independently owned plans.
   The CLI exposes `encode-microlzma-prefix-file`; focused MicroLZMA/EROFS
   tests pass 65/65 and 73/73, and wasm32-wasi compilation passes. Larger EROFS
   physical-cluster planning is the next integration target.
+
+
+- Fixed EROFS physical-size accounting for the last big pcluster and clusters
+  preceding fragment tails. The reader now uses the first NONHEAD CBLKCNT
+  marker for full and compact indexes instead of assuming one block at EOF.
+  Index parsing lives in a dedicated module; zero/missing primary-image
+  counts, counts exceeding the 1 MiB physical limit, and out-of-image reads
+  have explicit errors, while standard fragment/inline-tail zero markers
+  remain valid. Two pinned erofs-utils 1.9.4-g5fcb2f76 fixtures previously
+  failed with TruncatedFrame and now extract byte-exactly. Eight references
+  cover all four compression algorithms with full/compact indexes; the
+  complete existing writer/fragment/inline/metabox matrix still passes
+  (`writer=36`, `external_writer=36`, `final_big_pcluster_reader=8`). Focused
+  tests pass 76/76, including malformed counts, output limits, and exhaustive
+  allocation failures. The earlier complete-stream/extended-inode snapshot
+  at 5b1bb9e0 also finished its full repository suite: 3375/3375 passed.

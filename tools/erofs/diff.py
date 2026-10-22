@@ -7,6 +7,7 @@ import struct
 import subprocess
 import tempfile
 from pathlib import Path
+from final_big_diff import verify_final_big_pclusters
 
 
 def run(*args: object, check: bool = True) -> subprocess.CompletedProcess[bytes]:
@@ -82,10 +83,13 @@ def make_image(
     blobdev: Path | None = None,
     metabox: str | None = None,
     compress_directories: bool = False,
+    pcluster_size: int | None = None,
 ) -> None:
     command: list[object] = [mkfs, "-T0", "--all-root"]
     if compressor is not None:
         command.append(f"-z{compressor}")
+    if pcluster_size is not None:
+        command.append(f"-C{pcluster_size}")
     if legacy:
         command.extend(("-E", "legacy-compress"))
     if xattr_prefix is not None:
@@ -194,6 +198,7 @@ def main() -> None:
     extended_inode_reader_cases = 0
     extended_inode_writer_cases = 0
     lzma_writer_cases = 0
+    final_big_pcluster_reader_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -485,6 +490,10 @@ def main() -> None:
                 directory_reader_cases += 1
                 xattr_reader_cases += 1
 
+            final_big_pcluster_reader_cases += verify_final_big_pclusters(
+                args.cli, mkfs, fsck, temp, help_text, make_image, run
+            )
+
             chunk_cases = (
                 ("chunk-local-map", (), None),
                 ("chunk-local-index", ("force-chunk-indexes",), None),
@@ -644,6 +653,7 @@ def main() -> None:
         f"extended_inode_reader={extended_inode_reader_cases} "
         f"extended_inode_writer={extended_inode_writer_cases} "
         f"lzma_writer={lzma_writer_cases} "
+        f"final_big_pcluster_reader={final_big_pcluster_reader_cases} "
         f"malformed={malformed}"
     )
 

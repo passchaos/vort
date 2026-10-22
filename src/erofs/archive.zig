@@ -5,6 +5,7 @@ const codec = @import("codec.zig");
 const chunk = @import("chunk.zig");
 const extent_reader = @import("extent.zig");
 const xattr = @import("xattr.zig");
+const compression_index = @import("compression_index.zig");
 
 pub const Error = core.Error || format.Error || codec.Error || chunk.Error || extent_reader.Error || xattr.Error ||
     std.mem.Allocator.Error || error{
@@ -789,6 +790,7 @@ pub const Archive = struct {
         logical_start: usize,
         physical_block: u32,
         kind: u2,
+        compressed_blocks: ?u32,
     };
 
     fn readCompressedRangeInto(
@@ -835,6 +837,7 @@ pub const Archive = struct {
                 .logical_start = logical,
                 .physical_block = index.physical_block,
                 .kind = kind,
+                .compressed_blocks = try self.compressedBlockCount(inode_value, cluster_index, cluster_count, logical, kind),
             };
             if (previous) |prior| {
                 if (head.logical_start <= prior.logical_start) return error.InvalidErofs;
@@ -888,7 +891,9 @@ pub const Archive = struct {
             head.physical_block,
             self.superblock.block_size,
         ) catch return error.IntegerOverflow;
-        const physical_blocks: usize = if (next) |value|
+        const physical_blocks: usize = if (head.compressed_blocks) |blocks|
+            blocks
+        else if (next) |value|
             if (inode_value.fragment_offset != null and
                 value.logical_start == inode_value.fragment_logical_start)
                 1
@@ -1036,114 +1041,41 @@ pub const Archive = struct {
         }
     }
 
-    const CompressionIndex = struct {
-        kind: u2,
-        logical_offset: usize,
-        physical_block: u32,
-    };
+    const CompressionIndex = compression_index.Index;
 
-    fn readFullIndex(
-        self: Archive,
-        inode_value: Inode,
-        cluster_index: usize,
-    ) Error!CompressionIndex {
-        const metadata = try self.metadataBytes(inode_value);
-        const index_offset = std.math.add(
-            usize,
-            inode_value.compressed_index_start,
-            cluster_index * 8,
-        ) catch return error.IntegerOverflow;
-        if (metadata.len -| index_offset < 8) return error.TruncatedFrame;
+    fn compressedBlockCount(self: Archive, inode_value: Inode, cluster_index: usize, cluster_count: usize, logical_start: usize, kind: u2) Error!?u32 {
+        if ((inode_value.fragment_offset != null and logical_start >= inode_value.fragment_logical_start) or
+            (inode_value.compressed_inline_size != 0 and logical_start >= inode_value.compressed_inline_logical_start))
+            return null;
+        const flag: u16 = if (kind == 1) 2 else 4;
+        if (inode_value.compressed_advise & flag == 0) return null;
+        const next_index = cluster_index + 1;
+        if (next_index >= cluster_count) return 1;
+        const next = if (inode_value.layout == .compressed_full)
+            try self.readFullIndex(inode_value, next_index)
+        else
+            try self.readCompactIndex(inode_value, next_index, cluster_count);
+        if (next.kind != 2) return 1;
+        const blocks = next.compressed_blocks orelse return error.InvalidErofs;
+        if (blocks == 0) return error.InvalidErofs;
+        return blocks;
+    }
+
+    fn indexView(self: Archive, inode_value: Inode) compression_index.View {
         return .{
-            .kind = @truncate(format.readU16(metadata, index_offset) & 3),
-            .logical_offset = format.readU16(metadata, index_offset + 2),
-            .physical_block = format.readU32(metadata, index_offset + 4),
+            .index_start = inode_value.compressed_index_start,
+            .cluster_bits = inode_value.compressed_cluster_bits,
+            .advise = inode_value.compressed_advise,
+            .block_size = self.superblock.block_size,
         };
     }
 
-    fn readCompactIndex(
-        self: Archive,
-        inode_value: Inode,
-        cluster_index: usize,
-        cluster_count: usize,
-    ) Error!CompressionIndex {
-        const metadata = try self.metadataBytes(inode_value);
-        const entry_base = inode_value.compressed_index_start;
-        const initial_4byte = ((32 - entry_base % 32) / 4) & 7;
-        const compact_2byte = if (inode_value.compressed_advise & 1 != 0 and
-            initial_4byte < cluster_count)
-            (cluster_count - initial_4byte) / 16 * 16
-        else
-            0;
-        var relative_index = cluster_index;
-        var position = entry_base;
-        var shift: u3 = 2;
-        if (relative_index >= initial_4byte) {
-            position += initial_4byte * 4;
-            relative_index -= initial_4byte;
-            if (relative_index < compact_2byte) {
-                shift = 1;
-            } else {
-                position += compact_2byte * 2;
-                relative_index -= compact_2byte;
-            }
-        }
-        position += relative_index << shift;
-        const entry_size: usize = @as(usize, 1) << shift;
-        const value_count: usize = if (entry_size == 4) 2 else 16;
-        const pack_size = value_count * entry_size;
-        const pack_start = position & ~(pack_size - 1);
-        if (metadata.len -| pack_start < pack_size) return error.TruncatedFrame;
-        const item_index = (position & (pack_size - 1)) >> shift;
-        const logical_bits = @max(inode_value.compressed_cluster_bits, 12);
-        if (logical_bits > 14) return error.UnsupportedErofsFeature;
-        const encoded_bits: usize = (pack_size - 4) * 8 / value_count;
-        const value = readPackedBits(
-            metadata[pack_start..][0 .. pack_size - 4],
-            encoded_bits * item_index,
-            encoded_bits,
-        );
-        const logical_mask = (@as(u32, 1) << @intCast(logical_bits)) - 1;
-        const kind: u2 = @truncate((value >> @intCast(logical_bits)) & 3);
-        var physical = format.readU32(metadata, pack_start + pack_size - 4);
-        if (kind != 2) {
-            var scan_index: isize = @intCast(item_index);
-            var physical_delta: u32 = if (inode_value.compressed_advise & 2 != 0) 0 else 1;
-            while (scan_index > 0) {
-                scan_index -= 1;
-                const previous = readPackedBits(
-                    metadata[pack_start..][0 .. pack_size - 4],
-                    encoded_bits * @as(usize, @intCast(scan_index)),
-                    encoded_bits,
-                );
-                const previous_kind = (previous >> @intCast(logical_bits)) & 3;
-                const previous_value = previous & logical_mask;
-                if (inode_value.compressed_advise & 2 != 0) {
-                    if (previous_kind == 2) {
-                        if (previous_value & 0x800 != 0) {
-                            scan_index -= 1;
-                            physical_delta += previous_value & ~@as(u32, 0x800);
-                            continue;
-                        }
-                        if (previous_value <= 1) return error.InvalidErofs;
-                        scan_index -= @intCast(previous_value - 2);
-                        continue;
-                    }
-                    physical_delta += 1;
-                } else {
-                    if (previous_kind == 2)
-                        scan_index -= @intCast(previous_value);
-                    if (scan_index >= 0) physical_delta += 1;
-                }
-            }
-            physical = std.math.add(u32, physical, physical_delta) catch
-                return error.IntegerOverflow;
-        }
-        return .{
-            .kind = kind,
-            .logical_offset = value & logical_mask,
-            .physical_block = physical,
-        };
+    fn readFullIndex(self: Archive, inode_value: Inode, cluster_index: usize) Error!CompressionIndex {
+        return compression_index.readFull(try self.metadataBytes(inode_value), self.indexView(inode_value), cluster_index);
+    }
+
+    fn readCompactIndex(self: Archive, inode_value: Inode, cluster_index: usize, cluster_count: usize) Error!CompressionIndex {
+        return compression_index.readCompact(try self.metadataBytes(inode_value), self.indexView(inode_value), cluster_index, cluster_count);
     }
 
     pub fn readDirectoryAlloc(
@@ -1277,16 +1209,6 @@ fn validName(name: []const u8) bool {
         return false;
     return std.mem.indexOfScalar(u8, name, '/') == null and
         std.mem.indexOfScalar(u8, name, 0) == null;
-}
-
-fn readPackedBits(input: []const u8, bit_offset: usize, bit_count: usize) u32 {
-    var value: u32 = 0;
-    for (0..bit_count) |index| {
-        const bit = bit_offset + index;
-        value |= @as(u32, (input[bit / 8] >> @intCast(bit & 7)) & 1) <<
-            @intCast(index);
-    }
-    return value;
 }
 
 fn checkedEnd(start: usize, length: usize, limit: usize) Error!usize {

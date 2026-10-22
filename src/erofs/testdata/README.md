@@ -4,3 +4,20 @@
 compression from a 250,000-byte repeated payload. It exercises compact indexes,
 including the 16-entry two-byte packs, a multi-logical-cluster physical extent,
 flat-inline directory data, and the superblock CRC-32C checksum.
+
+
+`lz4-full-final-big.erofs.b64` and `lz4-compact-final-big.erofs.b64` were
+created with erofs-utils 1.9.4-g5fcb2f76 from `tail.bin`: 8,192 xorshift32 bytes
+(seed `0x8f123456`, shifts 13/17/5), repeated twice. Commands used `-T0
+--all-root -zlz4 -C65536`, with `-E legacy-compress` for the full-index image.
+Both images validate and extract byte-exactly with `fsck.erofs`. The only
+compressed extent occupies three physical blocks and ends at EOF, exercising
+explicit CBLKCNT decoding where no next HEAD exists.
+
+Decoded image SHA-256:
+
+- full: `554e31ba369a25d26b57483ee7743fa627d5376c3ff911b5caa0318b528c1d09`;
+- compact: `2543f97edabaf6f6d1e8b531c3d6ca5b052a506e07fb596010869bf4e59a7a94`.
+
+The expected 16,384-byte payload SHA-256 is
+`c7c5ca5fb73b03b1fd1837e595e8a9721a6b2ec44ed468eeed53851b4fe96d9c`.

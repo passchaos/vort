@@ -41,7 +41,11 @@ can still be inspected without loading, but high-bit inode access reports
 
 Compressed files support both legacy full indexes and modern compact indexes,
 including four-byte and sixteen-entry/two-byte packs, HEAD/NONHEAD lookback,
-EOF sentinels, and big pclusters. LZ4, raw Deflate, and Zstandard extents are
+EOF sentinels, and big pclusters. Explicit CBLKCNT sizes from the first
+NONHEAD record govern physical reads, including the final EOF pcluster and
+clusters preceding fragment tails. Missing, excessive, out-of-image, and zero
+counts for primary-image extents are rejected; fragment/inline tails retain
+their standard zero-physical-block markers. LZ4, raw Deflate, and Zstandard extents are
 decoded, as are exact-size MicroLZMA extents with inverted property bytes,
 8 MiB EROFS dictionary bounds, exact compressed-input consumption, and range
 termination validation. MicroLZMA is handled as its own wire format rather than

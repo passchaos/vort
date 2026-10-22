@@ -1,0 +1,141 @@
+const std = @import("std");
+const core = @import("../core.zig");
+const format = @import("format.zig");
+
+pub const Error = core.Error || format.Error;
+pub const Index = struct {
+    kind: u2,
+    logical_offset: usize,
+    physical_block: u32,
+    compressed_blocks: ?u32 = null,
+};
+
+pub const View = struct {
+    index_start: usize,
+    cluster_bits: u8,
+    advise: u16,
+    block_size: usize,
+};
+
+pub fn readFull(metadata: []const u8, view: View, cluster_index: usize) Error!Index {
+    const index_offset = std.math.add(
+        usize,
+        view.index_start,
+        std.math.mul(usize, cluster_index, 8) catch return error.IntegerOverflow,
+    ) catch return error.IntegerOverflow;
+    if (metadata.len -| index_offset < 8) return error.TruncatedFrame;
+    const kind: u2 = @truncate(format.readU16(metadata, index_offset) & 3);
+    return .{
+        .kind = kind,
+        .logical_offset = format.readU16(metadata, index_offset + 2),
+        .physical_block = format.readU32(metadata, index_offset + 4),
+        .compressed_blocks = if (kind == 2)
+            try blockCount(format.readU16(metadata, index_offset + 4), view)
+        else
+            null,
+    };
+}
+
+pub fn readCompact(metadata: []const u8, view: View, cluster_index: usize, cluster_count: usize) Error!Index {
+    const entry_base = view.index_start;
+    const initial_4byte = ((32 - entry_base % 32) / 4) & 7;
+    const compact_2byte = if (view.advise & 1 != 0 and
+        initial_4byte < cluster_count)
+        (cluster_count - initial_4byte) / 16 * 16
+    else
+        0;
+    var relative_index = cluster_index;
+    var position = entry_base;
+    var shift: u3 = 2;
+    if (relative_index >= initial_4byte) {
+        position += initial_4byte * 4;
+        relative_index -= initial_4byte;
+        if (relative_index < compact_2byte) {
+            shift = 1;
+        } else {
+            position += compact_2byte * 2;
+            relative_index -= compact_2byte;
+        }
+    }
+    position += relative_index << shift;
+    const entry_size: usize = @as(usize, 1) << shift;
+    const value_count: usize = if (entry_size == 4) 2 else 16;
+    const pack_size = value_count * entry_size;
+    const pack_start = position & ~(pack_size - 1);
+    if (metadata.len -| pack_start < pack_size) return error.TruncatedFrame;
+    const item_index = (position & (pack_size - 1)) >> shift;
+    const logical_bits = @max(view.cluster_bits, 12);
+    if (logical_bits > 14) return error.UnsupportedErofsFeature;
+    const encoded_bits: usize = (pack_size - 4) * 8 / value_count;
+    const value = readPackedBits(
+        metadata[pack_start..][0 .. pack_size - 4],
+        encoded_bits * item_index,
+        encoded_bits,
+    );
+    const logical_mask = (@as(u32, 1) << @intCast(logical_bits)) - 1;
+    const kind: u2 = @truncate((value >> @intCast(logical_bits)) & 3);
+    var physical = format.readU32(metadata, pack_start + pack_size - 4);
+    if (kind != 2) {
+        var scan_index: isize = @intCast(item_index);
+        var physical_delta: u32 = if (view.advise & 2 != 0) 0 else 1;
+        while (scan_index > 0) {
+            scan_index -= 1;
+            const previous = readPackedBits(
+                metadata[pack_start..][0 .. pack_size - 4],
+                encoded_bits * @as(usize, @intCast(scan_index)),
+                encoded_bits,
+            );
+            const previous_kind = (previous >> @intCast(logical_bits)) & 3;
+            const previous_value = previous & logical_mask;
+            if (view.advise & 2 != 0) {
+                if (previous_kind == 2) {
+                    if (previous_value & 0x800 != 0) {
+                        scan_index -= 1;
+                        physical_delta += previous_value & ~@as(u32, 0x800);
+                        continue;
+                    }
+                    if (previous_value <= 1) return error.InvalidErofs;
+                    scan_index -= @intCast(previous_value - 2);
+                    continue;
+                }
+                physical_delta += 1;
+            } else {
+                if (previous_kind == 2)
+                    scan_index -= @intCast(previous_value);
+                if (scan_index >= 0) physical_delta += 1;
+            }
+        }
+        physical = std.math.add(u32, physical, physical_delta) catch
+            return error.IntegerOverflow;
+    }
+    return .{
+        .kind = kind,
+        .logical_offset = value & logical_mask,
+        .physical_block = physical,
+        .compressed_blocks = if (kind == 2)
+            try blockCount(@intCast(value & logical_mask), view)
+        else
+            null,
+    };
+}
+
+fn blockCount(delta: u16, view: View) Error!?u32 {
+    if (delta & 0x800 == 0) return null;
+    if (view.advise & 6 == 0 or view.block_size == 0) return error.InvalidErofs;
+    const blocks = delta & ~@as(u16, 0x800);
+    // Fragment/inline tails legitimately use zero physical blocks. The
+    // extraction path rejects zero for extents stored in the primary image.
+    if (blocks > (1024 * 1024) / view.block_size)
+        return error.InvalidErofs;
+    return blocks;
+}
+
+fn readPackedBits(input: []const u8, bit_offset: usize, bit_count: usize) u32 {
+    var value: u32 = 0;
+    for (0..bit_count) |index| {
+        const bit = bit_offset + index;
+        value |= @as(u32, (input[bit / 8] >> @intCast(bit & 7)) & 1) <<
+            @intCast(index);
+    }
+    return value;
+}

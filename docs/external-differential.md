@@ -453,3 +453,12 @@ The driver reports `limited_writer=186`, `limited_reference=62`, and
 `malformed=5`, preserving separate complete-stream counters. These checks
 establish interoperable prefix behavior rather than identical parser choices
 or encoded bytes between implementations.
+
+Eight additional EROFS references end with a physical cluster spanning more
+than one 4 KiB block. A deterministic 8 KiB xorshift32 prefix repeated twice
+is built with a 64 KiB physical-cluster limit in LZ4, MicroLZMA, raw Deflate,
+and Zstandard, under both full and compact index modes. fsck and Vort must
+list and extract the exact 16 KiB payload (`final_big_pcluster_reader=8`).
+This exercises explicit CBLKCNT handling at EOF, independently of the distance
+to a following HEAD. Existing fragment and inline-tail references remain in
+the same matrix to pin their legitimate zero-physical-block markers.
