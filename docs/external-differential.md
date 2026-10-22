@@ -441,3 +441,15 @@ compressed directories, and extended inodes. They carry the standard 32 KiB
 MicroLZMA configuration and pass erofs-utils 1.9.4-g5fcb2f76 fsck and exact
 extraction, bringing the matrix to 36 writer modes (`lzma_writer=7`,
 `external_writer=36`).
+
+The MicroLZMA capacity differential uses a fresh XZ Utils probe with an
+`encode-limit` mode. Capacities from the six-byte minimum through complete
+input cover all seven payload classes and Vort's three parser modes. XZ Utils
+independently consumes and decodes 186 Vort prefixes; Vort likewise decodes
+62 XZ Utils prefixes. Both directions require exact source-prefix bytes,
+compressed-input consumption, destination bounds, and declared progress;
+Vort additionally requires nondecreasing consumed prefixes across capacities.
+The driver reports `limited_writer=186`, `limited_reference=62`, and
+`malformed=5`, preserving separate complete-stream counters. These checks
+establish interoperable prefix behavior rather than identical parser choices
+or encoded bytes between implementations.

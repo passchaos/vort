@@ -1,8 +1,12 @@
 const std = @import("std");
 const core = @import("../core.zig");
 const encoder = @import("encoder.zig");
+const limited = @import("micro_limited_writer.zig");
 
 pub const Error = core.Error || encoder.Error || std.mem.Allocator.Error;
+pub const DestSizeResult = limited.Result;
+pub const EncodedPrefix = limited.EncodedPrefix;
+pub const min_destination_size = limited.min_destination_size;
 
 pub const Options = struct {
     properties: encoder.Properties = .{},
@@ -17,10 +21,7 @@ pub fn encodeAlloc(
     input: []const u8,
     options: Options,
 ) Error![]u8 {
-    const property = try encoder.propertyByte(options.properties);
-    if (options.dictionary_size < 4096 or
-        options.dictionary_size > encoder.max_dictionary_size)
-        return error.InvalidLzmaOptions;
+    const property = try validateOptions(options);
     var encoded: std.ArrayList(u8) = .empty;
     errdefer encoded.deinit(allocator);
     _ = try encoder.encodeChunkAppend(allocator, &encoded, input, .{
@@ -47,6 +48,46 @@ pub fn encodeAppend(
     defer allocator.free(encoded);
     try output.appendSlice(allocator, encoded);
     return encoded.len;
+}
+
+/// Encode a terminated input prefix that fits in `capacity` bytes. The
+/// minimum capacity is six bytes, including for empty input.
+pub fn encodeDestSizeAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    capacity: usize,
+    options: Options,
+) Error!EncodedPrefix {
+    _ = try validateOptions(options);
+    return limited.encodeAlloc(allocator, input, capacity, .{
+        .properties = options.properties,
+        .dictionary_size = options.dictionary_size,
+        .mode = options.mode,
+        .end_marker = false,
+    });
+}
+
+/// Write a terminated input prefix, preserving destination bytes on error.
+/// `output[0..result.written]` represents `input[0..result.consumed]`.
+pub fn encodeDestSizeInto(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    output: []u8,
+    options: Options,
+) Error!DestSizeResult {
+    var encoded = try encodeDestSizeAlloc(allocator, input, output.len, options);
+    defer encoded.deinit(allocator);
+    if (encoded.bytes.len > output.len) return error.OutputTooSmall;
+    @memcpy(output[0..encoded.bytes.len], encoded.bytes);
+    return .{ .written = encoded.bytes.len, .consumed = encoded.consumed };
+}
+
+fn validateOptions(options: Options) Error!u8 {
+    const property = try encoder.propertyByte(options.properties);
+    if (options.dictionary_size < 4096 or
+        options.dictionary_size > encoder.max_dictionary_size)
+        return error.InvalidLzmaOptions;
+    return property;
 }
 
 /// Write one complete stream, preserving the destination on error.

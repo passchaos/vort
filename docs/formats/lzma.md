@@ -87,9 +87,21 @@ encode a complete stream using `MicroLzmaEncodeOptions`. The default is a
 32 KiB dictionary with lc/lp/pb = 3/0/2 and greedy matching. Dictionaries from
 4 KiB through 64 MiB and literal-only, greedy, or lazy modes are supported;
 lc/lp/pb must satisfy lc + lp <= 4 and pb <= 4. The append and caller-buffer
-APIs preserve destination bytes on error. Encoding currently builds a complete
-temporary stream and does not yet implement XZ Utils' destination-size-limited
-partial-input MicroLZMA encoder contract.
+APIs preserve destination bytes on error.
+
+`encodeMicroLzmaDestSizeAlloc` and `encodeMicroLzmaDestSizeInto` encode a
+terminated input prefix within a caller-selected capacity. The allocating
+result owns `bytes` and reports `consumed`; the caller-buffer result reports
+`written` and `consumed`. Both require at least six destination bytes, even
+for empty input, and guarantee progress for non-empty input. A symbol is
+accepted only when its range state plus final flush fits; the first rejected
+symbol is discarded. Increasing capacity cannot reduce the consumed prefix
+for the same input/options. Sufficient capacity preserves the complete-stream
+wire. Parser choices and consumed lengths need not match XZ Utils' presets.
+These are independent one-shot streams, with size and dictionary metadata
+still provided by the enclosing format. Greedy/lazy modes currently plan the
+complete input before applying the range budget; scratch memory therefore
+depends on input size rather than destination capacity alone.
 
 ```zig
 const encoded_micro = try vort.encodeMicroLzmaAlloc(allocator, input, .{
@@ -97,6 +109,10 @@ const encoded_micro = try vort.encodeMicroLzmaAlloc(allocator, input, .{
     .mode = .lazy,
 });
 defer allocator.free(encoded_micro);
+
+var prefix = try vort.encodeMicroLzmaDestSizeAlloc(allocator, input, 4096, .{});
+defer prefix.deinit(allocator);
+// prefix.bytes represents exactly input[0..prefix.consumed].
 
 const decoded = try vort.decodeMicroLzmaAllocLimited(
     allocator,
@@ -121,6 +137,7 @@ zig build run -- encode-lzma-file input.bin output.lzma end-marker
 zig build run -- decode-lzma-file input.lzma output.bin 268435456 67108864
 zig build run -- size-lzma-file input.lzma 268435456
 zig build run -- encode-microlzma-file input.bin output.microlzma 32768
+zig build run -- encode-microlzma-prefix-file input.bin prefix.microlzma 4096 32768
 zig build run -- decode-microlzma-file input.microlzma output.bin 1048576 32768
 zig build test-microlzma
 zig build run-microlzma-diff
@@ -134,6 +151,11 @@ properties, and a repeated suffix beyond 80 KiB. Every encoder mode is decoded
 with XZ Utils, with exact output and compressed-input accounting. Focused
 tests also cover transactional output, invalid options, dictionary bounds,
 and exhaustive allocation failures for narrow greedy and wide lazy paths.
+The capacity matrix additionally validates 186 Vort prefixes with XZ Utils
+and 62 XZ Utils prefixes with Vort, including six-byte destinations, partial
+input, complete input, all modes/properties, and exact consumed/written
+accounting. Unit tests sweep every capacity from 6 through 96 and verify
+monotonic progress, untouched destination tails, and every allocation failure.
 
 LZMA-Alone does not carry an integrity checksum. Known-size streams are checked
 against their declared output size, while unknown-size streams require the

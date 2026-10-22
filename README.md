@@ -376,7 +376,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   end-marker streams, caller-selected output/dictionary limits, caller-owned
   output, MicroLZMA complete-stream encoding and exact-size decoding with inverted
   properties, strict compressed-size/range termination, and dictionaries
-  through 64 MiB, and ZIP method-14 writing/extraction
+  through 64 MiB, destination-capacity-limited MicroLZMA prefix encoding with
+  explicit consumed/written progress, and ZIP method-14 writing/extraction
   through the same LZMA core, plus symbol-progressive LZMA-Alone decoding with
   bounded compressed staging, rolling dictionary history, single-symbol output
   staging, arbitrary input/output splits, zero-output backpressure, exact-size

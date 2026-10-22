@@ -4,25 +4,30 @@ const vort = @import("vort");
 pub fn encode(init: std.process.Init, args: *std.process.Args.Iterator, stdout: *std.Io.Writer) !void {
     const input_path = args.next() orelse return error.MissingCorpusPath;
     const output_path = args.next() orelse return error.MissingCorpusPath;
-    const dictionary_size = try parseNumber(u32, args, 32 * 1024);
-    const lc = try parseNumber(u4, args, 3);
-    const lp = try parseNumber(u3, args, 0);
-    const pb = try parseNumber(u3, args, 2);
-    const mode: vort.LzmaEncodeMode = if (args.next()) |name|
-        if (std.mem.eql(u8, name, "greedy")) .greedy else if (std.mem.eql(u8, name, "lazy")) .lazy else if (std.mem.eql(u8, name, "literal-only")) .literal_only else return error.InvalidLzmaOptions
-    else
-        .greedy;
+    const options = try parseOptions(args);
     const input = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
     defer init.gpa.free(input);
-    const encoded = try vort.encodeMicroLzmaAlloc(init.gpa, input, .{
-        .dictionary_size = dictionary_size,
-        .properties = .{ .lc = lc, .lp = lp, .pb = pb },
-        .mode = mode,
-    });
+    const encoded = try vort.encodeMicroLzmaAlloc(init.gpa, input, options);
     defer init.gpa.free(encoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
     try stdout.print("input_bytes={d} microlzma_bytes={d} dictionary={d} path={s}\n", .{
-        input.len, encoded.len, dictionary_size, output_path,
+        input.len, encoded.len, options.dictionary_size, output_path,
+    });
+}
+
+pub fn encodeLimited(init: std.process.Init, args: *std.process.Args.Iterator, stdout: *std.Io.Writer) !void {
+    const input_path = args.next() orelse return error.MissingCorpusPath;
+    const output_path = args.next() orelse return error.MissingCorpusPath;
+    const capacity_text = args.next() orelse return error.MissingCorpusPath;
+    const capacity = try std.fmt.parseInt(usize, capacity_text, 10);
+    const options = try parseOptions(args);
+    const input = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
+    defer init.gpa.free(input);
+    var encoded = try vort.encodeMicroLzmaDestSizeAlloc(init.gpa, input, capacity, options);
+    defer encoded.deinit(init.gpa);
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded.bytes });
+    try stdout.print("input_bytes={d} consumed={d} microlzma_bytes={d} capacity={d} dictionary={d} path={s}\n", .{
+        input.len, encoded.consumed, encoded.bytes.len, capacity, options.dictionary_size, output_path,
     });
 }
 
@@ -44,4 +49,16 @@ pub fn decode(init: std.process.Init, args: *std.process.Args.Iterator, stdout: 
 
 fn parseNumber(comptime T: type, args: *std.process.Args.Iterator, default: T) !T {
     return if (args.next()) |value| try std.fmt.parseInt(T, value, 10) else default;
+}
+
+fn parseOptions(args: *std.process.Args.Iterator) !vort.MicroLzmaEncodeOptions {
+    const dictionary_size = try parseNumber(u32, args, 32 * 1024);
+    const lc = try parseNumber(u4, args, 3);
+    const lp = try parseNumber(u3, args, 0);
+    const pb = try parseNumber(u3, args, 2);
+    const mode: vort.LzmaEncodeMode = if (args.next()) |name|
+        if (std.mem.eql(u8, name, "greedy")) .greedy else if (std.mem.eql(u8, name, "lazy")) .lazy else if (std.mem.eql(u8, name, "literal-only")) .literal_only else return error.InvalidLzmaOptions
+    else
+        .greedy;
+    return .{ .dictionary_size = dictionary_size, .properties = .{ .lc = lc, .lp = lp, .pb = pb }, .mode = mode };
 }

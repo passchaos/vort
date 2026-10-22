@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from limited_diff import verify_limits
 
 
 def run(*args: object, check: bool = True) -> subprocess.CompletedProcess[bytes]:
@@ -60,6 +61,8 @@ def main() -> None:
     external = 0
     writer_cases = 0
     external_writer_cases = 0
+    limited_writer_cases = 0
+    limited_reference_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-microlzma-") as temp_text:
         temp = Path(temp_text)
@@ -155,6 +158,11 @@ def main() -> None:
                     if oracle.read_bytes() != plain:
                         raise AssertionError(f"XZ Utils rejected Vort MicroLZMA for {name}/{mode}")
                     external_writer_cases += 1
+                native_limits, reference_limits = verify_limits(
+                    args.cli, probe, source, temp, plain, dictionary, lc, lp, pb, run
+                )
+                limited_writer_cases += native_limits
+                limited_reference_cases += reference_limits
 
         truncated = temp / "truncated.microlzma"
         truncated.write_bytes(encoded_fixture[:-1])
@@ -166,6 +174,11 @@ def main() -> None:
             len(plain_fixture),
             32 * 1024,
             error_name="TruncatedFrame",
+        )
+        malformed += 1
+        expect_failure(
+            args.cli, "encode-microlzma-prefix-file", source_fixture,
+            temp / "short-destination.microlzma", 5, error_name="OutputTooSmall"
         )
         malformed += 1
         bad_properties = temp / "bad-properties.microlzma"
@@ -208,7 +221,9 @@ def main() -> None:
     print(
         f"pinned={pinned} xz={probe is not None} "
         f"external={external} writer={writer_cases} "
-        f"external_writer={external_writer_cases} malformed={malformed}"
+        f"external_writer={external_writer_cases} "
+        f"limited_writer={limited_writer_cases} limited_reference={limited_reference_cases} "
+        f"malformed={malformed}"
     )
 
 

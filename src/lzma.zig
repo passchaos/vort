@@ -13,6 +13,8 @@ pub const Header = decoder.Header;
 pub const DecodeOptions = decoder.DecodeOptions;
 pub const MicroDecodeOptions = decoder.MicroDecodeOptions;
 pub const MicroEncodeOptions = micro_writer.Options;
+pub const MicroDestSizeResult = micro_writer.DestSizeResult;
+pub const MicroEncodedPrefix = micro_writer.EncodedPrefix;
 pub const EncodeOptions = writer.EncodeOptions;
 pub const Properties = writer.Properties;
 pub const EncodeMode = writer.Mode;
@@ -33,6 +35,8 @@ pub const decodeMicroAllocWithOptions = decoder.decodeMicroAllocWithOptions;
 pub const encodeMicroAlloc = micro_writer.encodeAlloc;
 pub const encodeMicroAppend = micro_writer.encodeAppend;
 pub const encodeMicroInto = micro_writer.encodeInto;
+pub const encodeMicroDestSizeAlloc = micro_writer.encodeDestSizeAlloc;
+pub const encodeMicroDestSizeInto = micro_writer.encodeDestSizeInto;
 pub const decodeZipPayloadInto = decoder.decodeZipPayloadInto;
 pub const decodeZipPayloadAllocLimited = decoder.decodeZipPayloadAllocLimited;
 pub const decodeChdPayloadAllocExactSize = decoder.decodeChdPayloadAllocExactSize;
@@ -51,6 +55,7 @@ test {
     _ = incremental_tests;
     _ = writer;
     _ = @import("lzma/micro_writer_tests.zig");
+    _ = @import("lzma/micro_limited_tests.zig");
 }
 
 test "LZMA decoder safely wraps output larger than its dictionary" {

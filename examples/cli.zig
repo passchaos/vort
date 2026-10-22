@@ -699,6 +699,8 @@ pub fn main(init: std.process.Init) !void {
         try stdout.print("lzma_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
     } else if (std.mem.eql(u8, command, "encode-microlzma-file")) {
         try microlzma_cli.encode(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-microlzma-prefix-file")) {
+        try microlzma_cli.encodeLimited(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-microlzma-file")) {
         try microlzma_cli.decode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "size-lzma-file")) {
@@ -2968,6 +2970,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode an LZMA-Alone stream with explicit limits
         \\  encode-microlzma-file <in> <out> [dictionary] [lc] [lp] [pb] [greedy|lazy|literal-only]
         \\                              Encode a complete raw MicroLZMA stream
+        \\  encode-microlzma-prefix-file <in> <out> <capacity> [dictionary] [lc] [lp] [pb] [greedy|lazy|literal-only]
+        \\                              Encode a terminated source prefix within capacity
         \\  decode-microlzma-file <in> <out> <decoded_size> [dictionary]
         \\                              Decode an exact-size raw MicroLZMA stream
         \\  size-lzma-file <path> [max_output]

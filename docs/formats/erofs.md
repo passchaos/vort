@@ -261,5 +261,6 @@ properties, and no end marker. Its clusters share ordinary compressed/plain
 selection, zero-padding, tail fragments, compressed inline tails, 48-bit
 feature output, extended inodes, directory fragments, and metabox planning.
 Seven writer modes pass erofs-utils 1.9.4-g5fcb2f76 checks and byte-exact
-extraction (`lzma_writer=7`). Destination-size-limited partial-input encoding
-and larger physical clusters remain future work.
+extraction (`lzma_writer=7`). The shared MicroLZMA codec also exposes capacity-
+limited prefix encoding with consumed/written accounting. Integrating that
+surface into larger EROFS physical clusters remains future writer work.

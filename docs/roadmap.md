@@ -22412,3 +22412,21 @@ reuse, so production keeps the simpler independently owned plans.
   remain next functional priorities.
   Focused ReleaseFast validation passes 61/61 MicroLZMA and 73/73 EROFS
   tests. CLI help exposes the MicroLZMA writer and the EROFS `lzma` mode.
+
+
+- Added MicroLZMA destination-capacity-limited encoding with allocating and
+  caller-buffer APIs and explicit written/consumed progress. A dedicated
+  module uses the normal parser/model, checks exact range-flush size after
+  each complete symbol, and restores only the accepted range/byte state when
+  the last symbol exceeds capacity. Six bytes are required even for empty
+  input, and non-empty input always advances. Greedy/lazy matching currently
+  plans the full input; reducing its scratch to the output budget remains
+  later memory work. Tests sweep capacities 6...96 over empty/tiny/random/
+  repetitive data and multiple modes/properties, require nondecreasing
+  prefixes, unchanged destination tails, complete-wire identity when capacity
+  suffices, and exhaustive narrow/wide allocation failures. XZ Utils 5.8.4
+  independently decodes 186 Vort prefixes, and Vort decodes 62 XZ Utils
+  prefixes (`limited_writer=186`, `limited_reference=62`, `malformed=5`).
+  The CLI exposes `encode-microlzma-prefix-file`; focused MicroLZMA/EROFS
+  tests pass 65/65 and 73/73, and wasm32-wasi compilation passes. Larger EROFS
+  physical-cluster planning is the next integration target.

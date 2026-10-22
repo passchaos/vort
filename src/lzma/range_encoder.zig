@@ -76,6 +76,14 @@ pub const Encoder = struct {
         for (0..5) |_| try self.shiftLow();
     }
 
+    /// Exact size after the five-byte range flush. Every cached byte is
+    /// emitted; the fifth shift leaves exactly one new byte cached.
+    pub fn finishedSize(self: *const Encoder) error{IntegerOverflow}!usize {
+        const with_cache = std.math.add(usize, self.output.items.len, self.cache_size) catch
+            return error.IntegerOverflow;
+        return std.math.add(usize, with_cache, 4) catch error.IntegerOverflow;
+    }
+
     fn shiftLow(self: *Encoder) !void {
         const low_tail: u32 = @truncate(self.low);
         const carry: u8 = @intCast(self.low >> 32);
