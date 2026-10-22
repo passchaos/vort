@@ -9,6 +9,7 @@ def verify_file_sources(cli, fsck, temp, payload, run):
         command = [cli, "create-erofs-file", image, "dir/payload", source, codec, extent]
         if capacity is not None:
             command.append(capacity)
+        command.append("--output-chunk-size=17")
         report = run(*command).stdout
         if b"peak_working_bytes=" not in report:
             raise AssertionError("file writer did not report Sink working-memory accounting")

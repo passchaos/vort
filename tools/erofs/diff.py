@@ -205,6 +205,7 @@ def main() -> None:
     bounded_writer_cases = 0
     source_writer_cases = 0
     sink_writer_cases = 0
+    encoder_writer_cases = 0
     file_source_writer_cases = 0
     source_reader_cases = 0
     resumable_reader_cases = 0
@@ -310,10 +311,11 @@ def main() -> None:
             "lzma-dirs",
             "lzma-extended",
         ) + grouped_modes + bounded_modes
-        for mode in writer_modes + tuple(f"{name}-source" for name in writer_modes) + tuple(f"{name}-sink" for name in writer_modes):
+        for mode in writer_modes + tuple(f"{name}-source" for name in writer_modes) + tuple(f"{name}-sink" for name in writer_modes) + tuple(f"{name}-encoder" for name in writer_modes):
             source_mode = mode.endswith("-source")
             sink_mode = mode.endswith("-sink")
-            layout_mode = mode.removesuffix("-source").removesuffix("-sink")
+            encoder_mode = mode.endswith("-encoder")
+            layout_mode = mode.removesuffix("-source").removesuffix("-sink").removesuffix("-encoder")
             image = temp / f"writer-{mode}.erofs"
             repeated = temp / f"writer-{mode}-repeat.erofs"
             device = temp / f"writer-{mode}.blob"
@@ -327,11 +329,11 @@ def main() -> None:
                 run(args.writer, repeated, mode)
             if image.read_bytes() != repeated.read_bytes():
                 raise AssertionError(f"non-deterministic EROFS writer output for {mode}")
-            if (source_mode or sink_mode) and image.read_bytes() != (temp / f"writer-{layout_mode}.erofs").read_bytes():
+            if (source_mode or sink_mode or encoder_mode) and image.read_bytes() != (temp / f"writer-{layout_mode}.erofs").read_bytes():
                 raise AssertionError(f"EROFS source/sink/memory wire mismatch for {mode}")
             if is_external_chunk and device.read_bytes() != repeated_device.read_bytes():
                 raise AssertionError(f"non-deterministic EROFS external chunks for {mode}")
-            if (source_mode or sink_mode) and is_external_chunk and device.read_bytes() != (temp / f"writer-{layout_mode}.blob").read_bytes():
+            if (source_mode or sink_mode or encoder_mode) and is_external_chunk and device.read_bytes() != (temp / f"writer-{layout_mode}.blob").read_bytes():
                 raise AssertionError(f"EROFS source/sink/memory device mismatch for {mode}")
             listing = run(args.cli, "list-erofs-file", image).stdout
             for required in (b"etc/config", b"large.bin", b"random.bin", b"mixed.bin", b"small", b"link", b"empty"):
@@ -398,6 +400,8 @@ def main() -> None:
                 source_writer_cases += 1
             if sink_mode:
                 sink_writer_cases += 1
+            if encoder_mode:
+                encoder_writer_cases += 1
             writer_cases += 1
             if fsck is not None:
                 extracted = temp / f"writer-{mode}-fsck"
@@ -713,6 +717,7 @@ def main() -> None:
         f"bounded_writer={bounded_writer_cases} "
         f"source_writer={source_writer_cases} "
         f"sink_writer={sink_writer_cases} "
+        f"encoder_writer={encoder_writer_cases} "
         f"file_source_writer={file_source_writer_cases} "
         f"source_reader={source_reader_cases} "
         f"resumable_reader={resumable_reader_cases} "

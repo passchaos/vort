@@ -284,10 +284,10 @@ adapters. Individual requests default to at most 64 KiB and are configurable
 through `max_read_size`; the file adapter borrows both the file and `std.Io`,
 uses positional reads, and leaves closing to the caller. Source bytes and
 length must remain stable throughout encoding. Source input avoids loading
-all regular files into memory, but `encodeErofsAlloc` still retains encoded
-payload plans and allocates the complete output image. Compressed source
-scratch is at most the decoded extent size; chunk input scratch is bounded by
-the selected chunk size.
+all regular files into memory. `encodeErofsAlloc` allocates the complete
+caller-owned output image while its working core retains only metadata plans
+and the current input/codec window. Compressed Source scratch is at most the
+decoded extent size; chunk emission uses a fixed 4 KiB temporary buffer.
 
 ```zig
 const file = try std.Io.Dir.cwd().openFile(io, "payload.bin", .{});
@@ -346,6 +346,54 @@ _ = result;
 destination only after encoding succeeds, allowing input and output to name
 the same file. Its final optional `working_memory_limit` argument follows
 `max_pcluster_size`; successful output reports `peak_working_bytes`.
+
+`ErofsEncoder` is a caller-owned resumable writer. Initialize it in stable
+storage with `init(allocator, entries, options, limits)` or
+`initExternalChunks(...)`, and retain that address until `deinit()`. Entry
+data, Source contexts, options and their borrowed arrays remain valid and
+stable for the same lifetime. Planning may read tails/chunks and encode inline
+tails before the first output call; the writer owns only tree/metadata plans,
+source descriptors and the current input/codec window.
+
+`read(output)` returns `ErofsEncodeProgress`: `output_written`, absolute
+`offset`, `target` (`image`/`device`) and `need_output`/`done` status. Apply
+nonempty output to the indicated random-access destination. Physical data is
+emitted before finalized metadata; image offsets therefore return to zero
+near completion. A selected cluster and its padding survive arbitrarily small
+output slices without rereading/reencoding that selection. Empty output
+produces no progress or additional Source reads. Failed reads leave caller
+output unchanged and remain sticky.
+
+`result()` returns null until `done`, then provides image/device lengths and
+peak working bytes. The last successful read may carry bytes and `done`
+together, so write those bytes before committing final length. External
+device length precedes primary image length in convenience adapters; callers
+using raw pieces control their own transaction boundaries. Always deinitialize
+the writer, including on cancellation or error. Moving/copying a live encoder
+would invalidate its allocator/planner pointers.
+
+```zig
+var encoder: vort.ErofsEncoder = undefined;
+try encoder.init(allocator, entries, .{ .compression = .lz4 }, .{});
+defer encoder.deinit();
+var buffer: [4096]u8 = undefined;
+while (true) {
+    const progress = try encoder.read(&buffer);
+    if (progress.output_written != 0)
+        try image_sink.writeExact(progress.offset, buffer[0..progress.output_written]);
+    if (progress.status == .done) break;
+}
+try image_sink.finish(encoder.result().?.image_size);
+```
+
+Sink and allocating convenience writers use this same core. Allocating
+methods retain caller-owned image/device output buffers and impose no separate
+working limit; direct encoders and Sink methods use `ErofsSinkLimits`.
+The original allocating orchestration is retained only as an internal byte
+comparison reference. CLI creation uses the public encoder and accepts
+`--output-chunk-size=bytes` and `--working-memory-limit=bytes`; existing
+positional options remain supported. The chunk option ranges from 1 byte to
+1 MiB and controls a caller-owned output buffer outside the working budget.
 
 Entries additionally accept 32-bit UID/GID, a modification-time delta relative
 to `WriterOptions.epoch`, and an optional per-inode nanosecond value.
@@ -558,3 +606,12 @@ the external matrix also passes 18 CLI extractions with 17-byte buffers
 (`resumable_reader=18`), alongside the 324 ordinary modes and six file cases.
 Final Debug repository validation passes 3447/3447 tests; broad check, wasm,
 CLI help and post-rebase focused verification also pass.
+
+Resumable encoding adds another 108 Source-backed writer modes. The complete
+432-mode matrix requires identical primary/device bytes and validates output
+with erofs-utils 1.9.4-g5fcb2f76 (`encoder_writer=108`, `writer=432`,
+`external_writer=432`). Mixed 0/1/7/137/31-byte output slices exercise data,
+padding, node completion and metadata rewrites. Debug and ReleaseFast pass
+136 EROFS plus 12 independent I/O tests, including internal allocating-reference
+comparisons, a 4 MiB Source within 64 KiB working heap, selection reuse without
+extra Source reads, sticky failure, startup budgets, cancellation and OOM.

@@ -16,13 +16,34 @@ pub fn create(
     const output_path = args.next() orelse return error.MissingCorpusPath;
     const entry_name = args.next() orelse return error.MissingCorpusPath;
     const input_path = args.next() orelse return error.MissingCorpusPath;
-    const compression: vort.ErofsWriterCompression = if (args.next()) |name|
-        parseCompression(name) orelse return error.InvalidBlockPlan
-    else
-        .lz4;
-    const extent_size = if (args.next()) |text| try std.fmt.parseInt(usize, text, 10) else 4096;
-    const max_pcluster_size = if (args.next()) |text| try std.fmt.parseInt(usize, text, 10) else null;
-    const working_limit = if (args.next()) |text| try std.fmt.parseInt(usize, text, 10) else 64 * 1024 * 1024;
+    var compression: vort.ErofsWriterCompression = .lz4;
+    var extent_size: usize = 4096;
+    var max_pcluster_size: ?usize = null;
+    var working_limit: usize = 64 * 1024 * 1024;
+    var output_chunk_size: usize = 64 * 1024;
+    var positional: usize = 0;
+    while (args.next()) |argument| {
+        const chunk_option = "--output-chunk-size=";
+        const working_option = "--working-memory-limit=";
+        if (std.mem.startsWith(u8, argument, chunk_option)) {
+            output_chunk_size = try std.fmt.parseInt(usize, argument[chunk_option.len..], 10);
+            if (output_chunk_size == 0) return error.OutputTooSmall;
+            if (output_chunk_size > 1024 * 1024) return error.OutputLimitExceeded;
+            continue;
+        }
+        if (std.mem.startsWith(u8, argument, working_option)) {
+            working_limit = try std.fmt.parseInt(usize, argument[working_option.len..], 10);
+            continue;
+        }
+        switch (positional) {
+            0 => compression = parseCompression(argument) orelse return error.InvalidBlockPlan,
+            1 => extent_size = try std.fmt.parseInt(usize, argument, 10),
+            2 => max_pcluster_size = try std.fmt.parseInt(usize, argument, 10),
+            3 => working_limit = try std.fmt.parseInt(usize, argument, 10),
+            else => return error.InvalidBlockPlan,
+        }
+        positional += 1;
+    }
     const input_file = try std.Io.Dir.cwd().openFile(init.io, input_path, .{});
     defer input_file.close(init.io);
     var input_adapter = try vort.FileByteSource.init(init.io, input_file);
@@ -30,10 +51,25 @@ pub fn create(
     var output_file = try std.Io.Dir.cwd().createFileAtomic(init.io, output_path, .{ .replace = true });
     defer output_file.deinit(init.io);
     var output_adapter = vort.FileByteSink.init(init.io, output_file.file);
-    const result = try vort.encodeErofsToSink(init.gpa, &.{.{
+    var encoder: vort.ErofsEncoder = undefined;
+    try encoder.init(init.gpa, &.{.{
         .path = entry_name,
         .source = input,
-    }}, .{ .compression = compression, .compression_extent_size = extent_size, .max_pcluster_size = max_pcluster_size, .inode_version = .automatic }, output_adapter.sink(), .{ .max_working_memory = working_limit });
+    }}, .{ .compression = compression, .compression_extent_size = extent_size, .max_pcluster_size = max_pcluster_size, .inode_version = .automatic }, .{ .max_working_memory = working_limit });
+    defer encoder.deinit();
+    const buffer = try init.gpa.alloc(u8, output_chunk_size);
+    defer init.gpa.free(buffer);
+    const sink = output_adapter.sink();
+    while (true) {
+        const progress = try encoder.read(buffer);
+        if (progress.output_written != 0) {
+            if (progress.target != .image) return error.InvalidErofs;
+            try sink.writeExact(progress.offset, buffer[0..progress.output_written]);
+        }
+        if (progress.status == .done) break;
+    }
+    const result = encoder.result().?;
+    try sink.finish(result.image_size);
     try output_file.replace(init.io);
     try stdout.print(
         "entry={s} input_bytes={d} erofs_bytes={d} compression={s} extent_size={d} max_pcluster_size={?d} peak_working_bytes={d} path={s}\n",

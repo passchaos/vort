@@ -9,9 +9,11 @@ pub fn main(init: std.process.Init) !void {
     const mode_name = args.next() orelse "lz4";
     const source_suffix = "-source";
     const sink_suffix = "-sink";
+    const encoder_suffix = "-encoder";
+    const encoder_mode = std.mem.endsWith(u8, mode_name, encoder_suffix);
     const sink_mode = std.mem.endsWith(u8, mode_name, sink_suffix);
-    const source_mode = sink_mode or std.mem.endsWith(u8, mode_name, source_suffix);
-    const layout_name = if (sink_mode) mode_name[0 .. mode_name.len - sink_suffix.len] else if (source_mode) mode_name[0 .. mode_name.len - source_suffix.len] else mode_name;
+    const source_mode = encoder_mode or sink_mode or std.mem.endsWith(u8, mode_name, source_suffix);
+    const layout_name = if (encoder_mode) mode_name[0 .. mode_name.len - encoder_suffix.len] else if (sink_mode) mode_name[0 .. mode_name.len - sink_suffix.len] else if (source_mode) mode_name[0 .. mode_name.len - source_suffix.len] else mode_name;
     const address48_suffix = "-48bit";
     const fragment_suffix = "-fragments";
     const inline_suffix = "-ztailpacking";
@@ -130,7 +132,7 @@ pub fn main(init: std.process.Init) !void {
         .compress_directories = compress_directories,
         .inode_version = if (extended) .extended else .compact,
     };
-    if (sink_mode) {
+    if (sink_mode or encoder_mode) {
         const output_file = try std.Io.Dir.cwd().createFile(init.io, output_path, .{});
         defer output_file.close(init.io);
         var output_adapter = vort.FileByteSink.init(init.io, output_file);
@@ -139,9 +141,19 @@ pub fn main(init: std.process.Init) !void {
             const device_file = try std.Io.Dir.cwd().createFile(init.io, device_path, .{});
             defer device_file.close(init.io);
             var device_adapter = vort.FileByteSink.init(init.io, device_file);
-            _ = try vort.encodeErofsExternalChunksToSinks(init.gpa, &entries, options, output_adapter.sink(), device_adapter.sink(), .{});
+            if (encoder_mode) {
+                var encoder: vort.ErofsEncoder = undefined;
+                try encoder.initExternalChunks(init.gpa, &entries, options, .{});
+                defer encoder.deinit();
+                try pumpEncoder(&encoder, output_adapter.sink(), device_adapter.sink());
+            } else _ = try vort.encodeErofsExternalChunksToSinks(init.gpa, &entries, options, output_adapter.sink(), device_adapter.sink(), .{});
         } else {
-            _ = try vort.encodeErofsToSink(init.gpa, &entries, options, output_adapter.sink(), .{});
+            if (encoder_mode) {
+                var encoder: vort.ErofsEncoder = undefined;
+                try encoder.init(init.gpa, &entries, options, .{});
+                defer encoder.deinit();
+                try pumpEncoder(&encoder, output_adapter.sink(), null);
+            } else _ = try vort.encodeErofsToSink(init.gpa, &entries, options, output_adapter.sink(), .{});
         }
     } else if (chunk_external) {
         const device_path = args.next() orelse return error.MissingOutputPath;
@@ -179,4 +191,22 @@ fn fillPseudoRandom(output: []u8) void {
         state ^= state << 5;
         byte.* = @truncate(state);
     }
+}
+
+fn pumpEncoder(encoder: *vort.ErofsEncoder, image: vort.ByteSink, device: ?vort.ByteSink) !void {
+    var buffer: [137]u8 = undefined;
+    var step: usize = 0;
+    while (true) {
+        const size = ([_]usize{ 0, 1, 7, 137, 31 })[step % 5];
+        const progress = try encoder.read(buffer[0..size]);
+        if (progress.output_written != 0) {
+            const output = if (progress.target == .image) image else device orelse return error.InvalidErofs;
+            try output.writeExact(progress.offset, buffer[0..progress.output_written]);
+        }
+        if (progress.status == .done) break;
+        step += 1;
+    }
+    const result = encoder.result().?;
+    if (device) |output| try output.finish(result.device_size);
+    try image.finish(result.image_size);
 }
