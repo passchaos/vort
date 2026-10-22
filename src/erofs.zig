@@ -14,6 +14,7 @@ pub const Entry = writer.Entry;
 pub const EntryKind = writer.EntryKind;
 pub const FileType = format.FileType;
 pub const Inode = archive.Inode;
+pub const ReadLimits = archive.ReadLimits;
 pub const Xattr = xattr.Attribute;
 pub const Xattrs = xattr.Attributes;
 pub const Layout = format.Layout;
@@ -23,10 +24,12 @@ pub const WriterOptions = writer.Options;
 pub const encodeAlloc = writer.encodeAlloc;
 pub const parse = archive.Archive.init;
 pub const parseSuperblock = format.parseSuperblock;
+pub const defaultPackedExtentLimit = archive.default_packed_extent_limit;
 
 test {
     _ = format;
     _ = archive;
+    _ = @import("erofs/archive_tests.zig");
     _ = codec;
     _ = writer;
     _ = xattr;

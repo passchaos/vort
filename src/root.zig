@@ -1713,6 +1713,7 @@ pub const ErofsEntryKind = erofs.EntryKind;
 pub const ErofsFileType = erofs.FileType;
 pub const ErofsInode = erofs.Inode;
 pub const ErofsLayout = erofs.Layout;
+pub const ErofsReadLimits = erofs.ReadLimits;
 pub const ErofsSuperblock = erofs.Superblock;
 pub const ErofsXattr = erofs.Xattr;
 pub const ErofsXattrs = erofs.Xattrs;
@@ -1721,6 +1722,7 @@ pub const ErofsWriterOptions = erofs.WriterOptions;
 pub const encodeErofsAlloc = erofs.encodeAlloc;
 pub const parseErofs = erofs.parse;
 pub const parseErofsSuperblock = erofs.parseSuperblock;
+pub const erofsDefaultPackedExtentLimit = erofs.defaultPackedExtentLimit;
 
 pub const WimArchive = wim.Archive;
 pub const WimArchiveSet = wim.ArchiveSet;

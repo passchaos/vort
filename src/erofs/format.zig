@@ -13,6 +13,8 @@ pub const super_base_size: usize = 128;
 pub const inode_slot_size: usize = 32;
 pub const name_max: usize = 255;
 pub const feature_compat_plain_xattr_prefixes: u32 = 0x0000_0010;
+pub const feature_incompat_ztailpacking: u32 = 0x0000_0010;
+pub const feature_incompat_fragments: u32 = 0x0000_0020;
 pub const feature_incompat_xattr_prefixes: u32 = 0x0000_0040;
 
 pub const Layout = enum(u3) {
@@ -57,6 +59,7 @@ pub const Superblock = struct {
     xattr_block: u32,
     xattr_prefix_count: u8,
     xattr_prefix_start: u32,
+    packed_nid: u64,
     available_compression_algorithms: u16,
     build_time: u32,
 
@@ -85,11 +88,15 @@ pub fn parseSuperblock(input: []const u8) Error!Superblock {
     // The foundational reader handles legacy LZ4 padding and compressor
     // configuration records and plain long-xattr-prefix tables. Other
     // incompatible features alter addressing.
-    if (feature_incompat & ~@as(u32, 0x0000_0043) != 0)
+    if (feature_incompat & ~@as(u32, 0x0000_0073) != 0)
         return error.UnsupportedErofsFeature;
     if (readU16(bytes, 86) != 0) return error.UnsupportedErofsFeature;
     const xattr_prefix_count = bytes[91];
     const xattr_prefix_start = readU32(bytes, 92);
+    const packed_nid = readU64(bytes, 96);
+    if (packed_nid >> 63 != 0) return error.InvalidErofs;
+    if (feature_incompat & feature_incompat_fragments == 0 and packed_nid != 0)
+        return error.InvalidErofs;
     if (feature_incompat & feature_incompat_xattr_prefixes != 0) {
         if (feature_compat & feature_compat_plain_xattr_prefixes == 0)
             return error.UnsupportedErofsFeature;
@@ -133,6 +140,7 @@ pub fn parseSuperblock(input: []const u8) Error!Superblock {
         .xattr_block = readU32(bytes, 44),
         .xattr_prefix_count = xattr_prefix_count,
         .xattr_prefix_start = xattr_prefix_start,
+        .packed_nid = packed_nid,
         .available_compression_algorithms = readU16(bytes, 84),
         .build_time = readU32(bytes, 108),
     };

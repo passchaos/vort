@@ -19,7 +19,12 @@ EOF sentinels, and big pclusters. LZ4, raw Deflate, and Zstandard extents are
 decoded, as are exact-size MicroLZMA extents with inverted property bytes,
 8 MiB EROFS dictionary bounds, exact compressed-input consumption, and range
 termination validation. MicroLZMA is handled as its own wire format rather than
-being substituted with LZMA-Alone.
+being substituted with LZMA-Alone. Whole-file and partial-tail fragments are
+resolved through the hidden packed inode, whether it is flat, compressed, or
+interlaced. Compressed inline tail packing is decoded directly from inode
+metadata. Packed-inode extraction scans indexes without retaining a whole head
+table and materializes only intersecting extents; `ErofsReadLimits` separately
+bounds caller output and hidden packed-extent scratch (8 MiB by default).
 
 The writer emits 4 KiB filesystems with compact inodes, CRC-32C-protected
 superblocks, dot-omitted sorted directories, nested and empty directories,
@@ -63,14 +68,21 @@ const inode = try archive.lookup(allocator, "etc/config", 1024, 1024 * 1024);
 var attributes = try archive.readXattrsAllocLimited(allocator, inode, 32, 64 * 1024);
 defer attributes.deinit();
 const owner = attributes.find("user.owner").?.value;
+
+const payload = try archive.extractByPathAllocWithLimits(
+    allocator,
+    "etc/config",
+    .{ .max_output_len = 1024, .max_packed_extent_len = 2 * 1024 * 1024 },
+    1024 * 1024,
+);
+defer allocator.free(payload);
 ```
 
-Chunk-based files, external devices, 48-bit addressing, packed fragments,
-metaboxes, and compressed tail packing remain future work. Prefix tables stored
-inside packed-fragment or metabox inodes remain unsupported along with those
-layouts; ordinary `PLAIN_XATTR_PFX` tables are supported in both directions.
-The writer does not yet deduplicate repeated values into the optional
-shared-xattr region.
+Chunk-based files, external devices, 48-bit addressing, and metaboxes remain
+future work. Prefix tables stored inside packed or metabox inodes remain
+unsupported; ordinary `PLAIN_XATTR_PFX` tables are supported in both
+directions. The writer does not yet generate fragments or compressed inline
+tails, nor deduplicate repeated values into the optional shared-xattr region.
 
 ```sh
 zig build run -- list-erofs-file system.erofs
@@ -91,4 +103,6 @@ directory. Real `user.*` attributes include repeated values that erofs-utils
 promotes to shared entries; an additional reference image combines shared
 values with a long prefix table. Vort reads those images, while
 `fsck.erofs --xattrs` restores long-prefix Vort-authored root, file, and
-directory attributes.
+directory attributes. Additional LZ4/Deflate/Zstandard fragment images cover
+whole and partial references plus flat/compressed/interlaced packed inodes;
+LZ4/Deflate/Zstandard images cover compressed inline tail packing.

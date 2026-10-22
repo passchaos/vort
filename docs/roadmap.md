@@ -22197,3 +22197,21 @@ reuse, so production keeps the simpler independently owned plans.
   layouts, adds one long-prefix image combining shared and inline xattrs, and
   makes all four Vort writer modes use a prefix table that `fsck.erofs` restores
   (`xattr_reader=7`, `xattr_writer=4`, `long_prefix_reader=1`).
+
+- Added modern EROFS packed-fragment and compressed inline-tail reading.
+  Whole-file high-bit headers and partial `FRAGMENT_PCLUSTER` tails resolve
+  through the superblock packed NID with checked 32/64-bit offsets; packed
+  inodes may be flat, compressed, compact/full-indexed, or interlaced. The
+  compressed reader now scans heads in constant retained space and decodes only
+  extents intersecting the requested packed range instead of allocating the
+  entire hidden file. `ErofsReadLimits` separates output from packed-extent
+  scratch with an 8 MiB default, while the original limited APIs preserve their
+  signatures. `INLINE_PCLUSTER` metadata locates compact/full index ends,
+  enforces single-block encoded tails, and supports raw or all existing EROFS
+  codecs. Fixed erofs-utils 1.9.4 fixtures cover physical-prefix plus fragment
+  tail, whole fragments, compressed packed data, and LZ4 ztailpacking; malformed
+  feature/NID/offset/header and exact scratch-limit paths plus exhaustive OOM
+  are covered. The required differential adds LZ4 ordinary/all fragments,
+  Deflate and Zstandard fragments, and LZ4/Deflate/Zstandard ztailpacking
+  (`fragment_reader=4`, `ztailpacking_reader=3`, `xattr_reader=14`). Fragment
+  and compressed-inline-tail writing remain follow-up work.

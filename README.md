@@ -254,8 +254,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - dependency-free EROFS reading with CRC-32C superblock verification,
   compact/extended inodes, flat plain/inline data, sorted directories,
   symlinks, bounded inline/shared xattrs with standard and plain long-prefix
-  name indexes, legacy full and modern compact compression indexes, big pclusters,
-  and LZ4/MicroLZMA/raw-Deflate/Zstandard extraction with explicit bounds, plus
+  name indexes, legacy full and modern compact compression indexes, big
+  pclusters, whole/partial packed fragments, interlaced packed inodes, and
+  compressed inline tail packing with caller-bounded packed-extent scratch,
+  plus LZ4/MicroLZMA/raw-Deflate/Zstandard extraction with explicit bounds and
   deterministic compact-inode stored/LZ4/raw-Deflate/Zstandard writing for
   regular files, nested and empty directories, symlinks, inline tails,
   inline root/entry xattrs and caller-selected plain prefix tables, multi-block

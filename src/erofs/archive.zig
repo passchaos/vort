@@ -13,6 +13,12 @@ pub const Error = core.Error || format.Error || codec.Error || xattr.Error || st
 
 pub const Xattr = xattr.Attribute;
 pub const Xattrs = xattr.Attributes;
+pub const default_packed_extent_limit: usize = 8 * 1024 * 1024;
+
+pub const ReadLimits = struct {
+    max_output_len: usize,
+    max_packed_extent_len: usize = default_packed_extent_limit,
+};
 
 pub const Inode = struct {
     nid: u64,
@@ -33,6 +39,12 @@ pub const Inode = struct {
     compressed_advise: u16 = 0,
     compressed_header_start: usize = 0,
     compressed_index_start: usize = 0,
+    compressed_inline_start: usize = 0,
+    compressed_inline_size: usize = 0,
+    compressed_inline_logical_start: usize = 0,
+    compressed_inline_kind: u2 = 0,
+    fragment_offset: ?u64 = null,
+    fragment_logical_start: usize = 0,
 
     pub fn fileType(self: Inode) Error!format.FileType {
         return switch (self.mode & 0xf000) {
@@ -178,10 +190,25 @@ pub const Archive = struct {
                 8,
             );
             if (self.bytes.len -| header_start < 16) return error.TruncatedFrame;
-            const advise = format.readU16(self.bytes, header_start + 4);
             const cluster_byte = self.bytes[header_start + 7];
-            if (cluster_byte & 0xf0 != 0 or advise & ~@as(u16, 0x0007) != 0)
+            if (cluster_byte & 0x80 != 0) {
+                if (layout != .compressed_full or
+                    self.superblock.feature_incompat & format.feature_incompat_fragments == 0 or
+                    self.superblock.packed_nid == 0)
+                    return error.InvalidErofs;
+                const encoded_offset = format.readU64(self.bytes, header_start);
+                if (encoded_offset >> 63 == 0) return error.InvalidErofs;
+                with_compression.compressed_advise = 0x20;
+                with_compression.compressed_header_start = header_start;
+                with_compression.compressed_index_start = header_start + 16;
+                with_compression.fragment_offset = encoded_offset ^ (@as(u64, 1) << 63);
+                with_compression.fragment_logical_start = 0;
+                return with_compression;
+            }
+            const advise = format.readU16(self.bytes, header_start + 4);
+            if (cluster_byte & 0xf0 != 0 or advise & ~@as(u16, 0x003f) != 0)
                 return error.UnsupportedErofsFeature;
+            if (advise & 0x28 == 0x28) return error.InvalidErofs;
             const algorithm1 = std.enums.fromInt(
                 format.Compression,
                 self.bytes[header_start + 6] & 0x0f,
@@ -199,6 +226,52 @@ pub const Archive = struct {
             with_compression.compressed_header_start = header_start;
             with_compression.compressed_index_start = header_start +
                 (if (layout == .compressed_full) @as(usize, 16) else 8);
+            if (advise & 0x28 != 0) {
+                const tail = try self.findTailHead(with_compression);
+                if (advise & 0x20 != 0) {
+                    if (self.superblock.feature_incompat & format.feature_incompat_fragments == 0 or
+                        self.superblock.packed_nid == 0 or tail.logical_start == 0)
+                        return error.InvalidErofs;
+                    with_compression.fragment_offset = @as(
+                        u64,
+                        format.readU32(self.bytes, header_start),
+                    ) | (if (layout == .compressed_full)
+                        @as(u64, tail.index.physical_block) << 32
+                    else
+                        0);
+                    with_compression.fragment_logical_start = tail.logical_start;
+                } else {
+                    if (self.superblock.feature_incompat &
+                        format.feature_incompat_ztailpacking == 0)
+                        return error.InvalidErofs;
+                    const inline_size: usize = format.readU16(self.bytes, header_start + 2);
+                    if (inline_size == 0) return error.InvalidErofs;
+                    const cluster_size: usize = @as(usize, 1) << @intCast(
+                        with_compression.compressed_cluster_bits,
+                    );
+                    const cluster_count = (std.math.add(
+                        usize,
+                        file_size,
+                        cluster_size - 1,
+                    ) catch return error.IntegerOverflow) / cluster_size;
+                    const inline_start = try self.compressedIndexEnd(
+                        with_compression,
+                        cluster_count,
+                    );
+                    const inline_end = try checkedEnd(
+                        inline_start,
+                        inline_size,
+                        self.bytes.len,
+                    );
+                    if (inline_start / self.superblock.block_size !=
+                        (inline_end - 1) / self.superblock.block_size)
+                        return error.InvalidErofs;
+                    with_compression.compressed_inline_start = inline_start;
+                    with_compression.compressed_inline_size = inline_size;
+                    with_compression.compressed_inline_logical_start = tail.logical_start;
+                    with_compression.compressed_inline_kind = tail.index.kind;
+                }
+            }
         }
         return with_compression;
     }
@@ -229,18 +302,110 @@ pub const Archive = struct {
         );
     }
 
+    const TailHead = struct {
+        logical_start: usize,
+        index: CompressionIndex,
+    };
+
+    fn findTailHead(self: Archive, inode_value: Inode) Error!TailHead {
+        const cluster_size: usize = @as(usize, 1) << @intCast(
+            inode_value.compressed_cluster_bits,
+        );
+        if (cluster_size < self.superblock.block_size or cluster_size > 16 * 1024)
+            return error.UnsupportedErofsFeature;
+        const cluster_count = if (inode_value.file_size == 0) 0 else (std.math.add(usize, inode_value.file_size, cluster_size - 1) catch
+            return error.IntegerOverflow) / cluster_size;
+        var tail: ?TailHead = null;
+        for (0..cluster_count) |cluster_index| {
+            const index = if (inode_value.layout == .compressed_full)
+                try self.readFullIndex(inode_value, cluster_index)
+            else
+                try self.readCompactIndex(inode_value, cluster_index, cluster_count);
+            if (index.kind == 2) continue;
+            const logical_base = std.math.mul(usize, cluster_index, cluster_size) catch
+                return error.IntegerOverflow;
+            const logical_start = std.math.add(
+                usize,
+                logical_base,
+                index.logical_offset,
+            ) catch return error.IntegerOverflow;
+            if (logical_start >= inode_value.file_size) continue;
+            tail = .{
+                .logical_start = logical_start,
+                .index = index,
+            };
+        }
+        return tail orelse return error.InvalidErofs;
+    }
+
+    fn compressedIndexEnd(
+        _: Archive,
+        inode_value: Inode,
+        cluster_count: usize,
+    ) Error!usize {
+        if (cluster_count == 0) return inode_value.compressed_index_start;
+        if (inode_value.layout == .compressed_full) return std.math.add(
+            usize,
+            inode_value.compressed_index_start,
+            std.math.mul(usize, cluster_count, 8) catch return error.IntegerOverflow,
+        ) catch return error.IntegerOverflow;
+        if (inode_value.layout != .compressed_compact)
+            return error.UnsupportedErofsLayout;
+        const cluster_index = cluster_count - 1;
+        const entry_base = inode_value.compressed_index_start;
+        const initial_4byte = ((32 - entry_base % 32) / 4) & 7;
+        const compact_2byte = if (inode_value.compressed_advise & 1 != 0 and
+            initial_4byte < cluster_count)
+            (cluster_count - initial_4byte) / 16 * 16
+        else
+            0;
+        var relative_index = cluster_index;
+        var position = entry_base;
+        var shift: u3 = 2;
+        if (relative_index >= initial_4byte) {
+            position += initial_4byte * 4;
+            relative_index -= initial_4byte;
+            if (relative_index < compact_2byte) {
+                shift = 1;
+            } else {
+                position += compact_2byte * 2;
+                relative_index -= compact_2byte;
+            }
+        }
+        position += relative_index << shift;
+        const entry_size: usize = @as(usize, 1) << shift;
+        const value_count: usize = if (entry_size == 4) 2 else 16;
+        const pack_size = value_count * entry_size;
+        return std.math.add(
+            usize,
+            position & ~(pack_size - 1),
+            pack_size,
+        ) catch return error.IntegerOverflow;
+    }
+
     pub fn readFlatAllocLimited(
         self: Archive,
         allocator: std.mem.Allocator,
         inode_value: Inode,
         max_output_len: usize,
     ) Error![]u8 {
-        if (inode_value.file_size > max_output_len) return error.OutputLimitExceeded;
+        return self.readFlatAllocWithLimits(allocator, inode_value, .{
+            .max_output_len = max_output_len,
+        });
+    }
+
+    pub fn readFlatAllocWithLimits(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        inode_value: Inode,
+        limits: ReadLimits,
+    ) Error![]u8 {
+        if (inode_value.file_size > limits.max_output_len) return error.OutputLimitExceeded;
         if (inode_value.layout != .flat_plain and inode_value.layout != .flat_inline)
             return self.readCompressedAllocLimited(
                 allocator,
                 inode_value,
-                max_output_len,
+                limits,
             );
         const output = try allocator.alloc(u8, inode_value.file_size);
         errdefer allocator.free(output);
@@ -287,31 +452,126 @@ pub const Archive = struct {
         self: Archive,
         allocator: std.mem.Allocator,
         inode_value: Inode,
-        max_output_len: usize,
+        limits: ReadLimits,
     ) Error![]u8 {
         if (inode_value.layout != .compressed_full and
             inode_value.layout != .compressed_compact)
             return error.UnsupportedErofsLayout;
-        if (inode_value.file_size > max_output_len) return error.OutputLimitExceeded;
+        if (inode_value.file_size > limits.max_output_len) return error.OutputLimitExceeded;
+        const output = try allocator.alloc(u8, inode_value.file_size);
+        errdefer allocator.free(output);
+        @memset(output, 0);
+        if (inode_value.compressed_inline_size != 0) {
+            if (inode_value.fragment_offset != null) return error.InvalidErofs;
+            const inline_start = inode_value.compressed_inline_logical_start;
+            if (inline_start > output.len) return error.InvalidErofs;
+            if (inline_start != 0)
+                try self.readCompressedRangeInto(
+                    allocator,
+                    inode_value,
+                    0,
+                    output[0..inline_start],
+                    null,
+                );
+            try self.readCompressedInlineTailInto(
+                allocator,
+                inode_value,
+                output[inline_start..],
+            );
+        } else if (inode_value.fragment_offset) |fragment_offset| {
+            if (self.superblock.feature_incompat & format.feature_incompat_fragments == 0 or
+                self.superblock.packed_nid == 0 or inode_value.nid == self.superblock.packed_nid)
+                return error.InvalidErofs;
+            const fragment_start = inode_value.fragment_logical_start;
+            if (fragment_start > output.len) return error.InvalidErofs;
+            if (fragment_start != 0)
+                try self.readCompressedRangeInto(
+                    allocator,
+                    inode_value,
+                    0,
+                    output[0..fragment_start],
+                    null,
+                );
+            try self.readPackedRangeInto(
+                allocator,
+                fragment_offset,
+                output[fragment_start..],
+                limits.max_packed_extent_len,
+            );
+        } else {
+            try self.readCompressedRangeInto(
+                allocator,
+                inode_value,
+                0,
+                output,
+                null,
+            );
+        }
+        return output;
+    }
+
+    fn readCompressedInlineTailInto(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        inode_value: Inode,
+        output: []u8,
+    ) Error!void {
+        const inline_end = try checkedEnd(
+            inode_value.compressed_inline_start,
+            inode_value.compressed_inline_size,
+            self.bytes.len,
+        );
+        const encoded = self.bytes[inode_value.compressed_inline_start..inline_end];
+        const kind = inode_value.compressed_inline_kind;
+        if (kind == 0) {
+            if (encoded.len != output.len) return error.InvalidErofs;
+            @memcpy(output, encoded);
+            return;
+        }
+        if (kind != 1 and kind != 3) return error.InvalidErofs;
+        const algorithm = inode_value.compressed_algorithms[if (kind == 3) 1 else 0] orelse
+            return error.InvalidErofs;
+        const decoded = try codec.decodeExtentAlloc(
+            allocator,
+            algorithm,
+            encoded,
+            output.len,
+            self.superblock.feature_incompat & 1 != 0,
+        );
+        defer allocator.free(decoded);
+        @memcpy(output, decoded);
+    }
+
+    const CompressionHead = struct {
+        logical_start: usize,
+        physical_block: u32,
+        kind: u2,
+    };
+
+    fn readCompressedRangeInto(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        inode_value: Inode,
+        range_start: usize,
+        output: []u8,
+        max_extent_len: ?usize,
+    ) Error!void {
+        if (output.len == 0) return;
         _ = inode_value.compressed_algorithms[0] orelse return error.InvalidErofs;
+        const range_end = std.math.add(usize, range_start, output.len) catch
+            return error.IntegerOverflow;
+        if (range_end > inode_value.file_size) return error.InvalidErofs;
         const cluster_size: usize = @as(usize, 1) << @intCast(
             inode_value.compressed_cluster_bits,
         );
         if (cluster_size < self.superblock.block_size or cluster_size > 16 * 1024)
             return error.UnsupportedErofsFeature;
-        const cluster_count = (inode_value.file_size + self.superblock.block_size - 1) /
-            self.superblock.block_size;
-        const output = try allocator.alloc(u8, inode_value.file_size);
-        errdefer allocator.free(output);
-        @memset(output, 0);
-
-        const Head = struct {
-            logical_start: usize,
-            physical_block: u32,
-            kind: u2,
-        };
-        var heads: std.ArrayList(Head) = .empty;
-        defer heads.deinit(allocator);
+        const cluster_count = (std.math.add(
+            usize,
+            inode_value.file_size,
+            cluster_size - 1,
+        ) catch return error.IntegerOverflow) / cluster_size;
+        var previous: ?CompressionHead = null;
         for (0..cluster_count) |cluster_index| {
             const index = if (inode_value.layout == .compressed_full)
                 try self.readFullIndex(inode_value, cluster_index)
@@ -321,64 +581,215 @@ pub const Archive = struct {
             if (kind == 2) continue;
             const cluster_offset = index.logical_offset;
             if (cluster_offset >= cluster_size) return error.InvalidErofs;
+            const logical_base = std.math.mul(usize, cluster_index, cluster_size) catch
+                return error.IntegerOverflow;
             const logical = std.math.add(
                 usize,
-                cluster_index * cluster_size,
+                logical_base,
                 cluster_offset,
             ) catch return error.IntegerOverflow;
-            if (heads.items.len != 0 and logical <= heads.items[heads.items.len - 1].logical_start)
-                return error.InvalidErofs;
-            try heads.append(allocator, .{
+            const head = CompressionHead{
                 .logical_start = logical,
                 .physical_block = index.physical_block,
                 .kind = kind,
-            });
-        }
-        for (heads.items, 0..) |head, index| {
-            if (head.logical_start >= output.len) continue; // EOF sentinel.
-            const logical_end = if (index + 1 < heads.items.len)
-                @min(output.len, heads.items[index + 1].logical_start)
-            else
-                output.len;
-            if (logical_end <= head.logical_start) return error.InvalidErofs;
-            const decoded = output[head.logical_start..logical_end];
-            const physical_start = std.math.mul(
-                usize,
-                head.physical_block,
-                self.superblock.block_size,
-            ) catch return error.IntegerOverflow;
-            const physical_blocks: usize = if (index + 1 < heads.items.len and
-                heads.items[index + 1].physical_block > head.physical_block)
-                heads.items[index + 1].physical_block - head.physical_block
-            else
-                1;
-            const physical_size = std.math.mul(
-                usize,
-                physical_blocks,
-                self.superblock.block_size,
-            ) catch return error.IntegerOverflow;
-            const physical_end = try checkedEnd(physical_start, physical_size, self.bytes.len);
-            const physical = self.bytes[physical_start..physical_end];
-            if (head.kind == 0) {
-                if (decoded.len > physical.len) return error.InvalidErofs;
-                @memcpy(decoded, physical[0..decoded.len]);
-            } else if (head.kind == 1 or head.kind == 3) {
-                const algorithm = inode_value.compressed_algorithms[if (head.kind == 3) 1 else 0] orelse
-                    return error.InvalidErofs;
-                const extent = try codec.decodeExtentAlloc(
+            };
+            if (previous) |prior| {
+                if (head.logical_start <= prior.logical_start) return error.InvalidErofs;
+                try self.readCompressedExtentRangeInto(
                     allocator,
-                    algorithm,
-                    physical,
-                    decoded.len,
-                    self.superblock.feature_incompat & 1 != 0,
+                    inode_value,
+                    prior,
+                    head,
+                    range_start,
+                    output,
+                    max_extent_len,
                 );
-                defer allocator.free(extent);
-                @memcpy(decoded, extent);
-            } else {
-                return error.UnsupportedErofsFeature;
             }
+            previous = head;
         }
-        return output;
+        const final = previous orelse return error.InvalidErofs;
+        try self.readCompressedExtentRangeInto(
+            allocator,
+            inode_value,
+            final,
+            null,
+            range_start,
+            output,
+            max_extent_len,
+        );
+    }
+
+    fn readCompressedExtentRangeInto(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        inode_value: Inode,
+        head: CompressionHead,
+        next: ?CompressionHead,
+        range_start: usize,
+        output: []u8,
+        max_extent_len: ?usize,
+    ) Error!void {
+        if (head.logical_start >= inode_value.file_size) return;
+        const logical_end = @min(
+            inode_value.file_size,
+            if (next) |value| value.logical_start else inode_value.file_size,
+        );
+        if (logical_end <= head.logical_start) return error.InvalidErofs;
+        const range_end = range_start + output.len;
+        const overlap_start = @max(head.logical_start, range_start);
+        const overlap_end = @min(logical_end, range_end);
+        if (overlap_start >= overlap_end) return;
+
+        const physical_start = std.math.mul(
+            usize,
+            head.physical_block,
+            self.superblock.block_size,
+        ) catch return error.IntegerOverflow;
+        const physical_blocks: usize = if (next) |value|
+            if (inode_value.fragment_offset != null and
+                value.logical_start == inode_value.fragment_logical_start)
+                1
+            else if (value.physical_block > head.physical_block)
+                value.physical_block - head.physical_block
+            else
+                1
+        else
+            1;
+        const physical_size = std.math.mul(
+            usize,
+            physical_blocks,
+            self.superblock.block_size,
+        ) catch return error.IntegerOverflow;
+        const physical_end = try checkedEnd(physical_start, physical_size, self.bytes.len);
+        const physical = self.bytes[physical_start..physical_end];
+        const destination = output[overlap_start - range_start .. overlap_end - range_start];
+        const extent_offset = overlap_start - head.logical_start;
+        const extent_len = logical_end - head.logical_start;
+        if (head.kind == 0) {
+            if (inode_value.compressed_advise & 0x10 != 0) {
+                if (extent_len > self.superblock.block_size or
+                    physical.len < self.superblock.block_size)
+                    return error.InvalidErofs;
+                const rotation = head.logical_start % self.superblock.block_size;
+                for (destination, 0..) |*byte, index|
+                    byte.* = physical[
+                        (rotation + extent_offset + index) %
+                            self.superblock.block_size
+                    ];
+            } else {
+                const source_end = std.math.add(
+                    usize,
+                    extent_offset,
+                    destination.len,
+                ) catch return error.IntegerOverflow;
+                if (source_end > physical.len) return error.InvalidErofs;
+                @memcpy(destination, physical[extent_offset..source_end]);
+            }
+        } else if (head.kind == 1 or head.kind == 3) {
+            if (max_extent_len) |limit|
+                if (extent_len > limit) return error.OutputLimitExceeded;
+            const algorithm = inode_value.compressed_algorithms[if (head.kind == 3) 1 else 0] orelse
+                return error.InvalidErofs;
+            const extent = try codec.decodeExtentAlloc(
+                allocator,
+                algorithm,
+                physical,
+                extent_len,
+                self.superblock.feature_incompat & 1 != 0,
+            );
+            defer allocator.free(extent);
+            @memcpy(destination, extent[extent_offset..][0..destination.len]);
+        } else {
+            return error.UnsupportedErofsFeature;
+        }
+    }
+
+    fn readPackedRangeInto(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        fragment_offset: u64,
+        output: []u8,
+        max_extent_len: usize,
+    ) Error!void {
+        const offset = std.math.cast(usize, fragment_offset) orelse
+            return error.IntegerOverflow;
+        const end = std.math.add(usize, offset, output.len) catch
+            return error.IntegerOverflow;
+        const packed_inode = try self.inode(self.superblock.packed_nid);
+        if (try packed_inode.fileType() != .regular or
+            packed_inode.fragment_offset != null or end > packed_inode.file_size)
+            return error.InvalidErofs;
+        if (packed_inode.layout == .flat_plain or packed_inode.layout == .flat_inline) {
+            return self.readFlatRangeInto(packed_inode, offset, output);
+        }
+        if (packed_inode.layout != .compressed_full and packed_inode.layout != .compressed_compact)
+            return error.UnsupportedErofsLayout;
+        return self.readCompressedRangeInto(
+            allocator,
+            packed_inode,
+            offset,
+            output,
+            max_extent_len,
+        );
+    }
+
+    fn readFlatRangeInto(
+        self: Archive,
+        inode_value: Inode,
+        range_start: usize,
+        output: []u8,
+    ) Error!void {
+        const range_end = std.math.add(usize, range_start, output.len) catch
+            return error.IntegerOverflow;
+        if (range_end > inode_value.file_size) return error.InvalidErofs;
+        @memset(output, 0);
+        const full_bytes = if (inode_value.layout == .flat_inline)
+            inode_value.file_size / self.superblock.block_size * self.superblock.block_size
+        else
+            inode_value.file_size;
+        const data_end = @min(range_end, full_bytes);
+        if (range_start < data_end and inode_value.data_block != std.math.maxInt(u32)) {
+            const data_start = std.math.mul(
+                usize,
+                @as(usize, inode_value.data_block),
+                self.superblock.block_size,
+            ) catch return error.IntegerOverflow;
+            const source_start = std.math.add(usize, data_start, range_start) catch
+                return error.IntegerOverflow;
+            const source_end = try checkedEnd(
+                source_start,
+                data_end - range_start,
+                self.bytes.len,
+            );
+            @memcpy(output[0 .. data_end - range_start], self.bytes[source_start..source_end]);
+        }
+        if (range_end > full_bytes) {
+            if (inode_value.layout != .flat_inline) return error.InvalidErofs;
+            const tail_len = inode_value.file_size - full_bytes;
+            const inline_start = std.math.add(
+                usize,
+                inode_value.location,
+                inode_value.inode_size + inode_value.xattr_size,
+            ) catch return error.IntegerOverflow;
+            if (tail_len != 0 and inline_start / self.superblock.block_size !=
+                (inline_start + tail_len - 1) / self.superblock.block_size)
+                return error.InvalidErofs;
+            const tail_read_start = @max(range_start, full_bytes);
+            const source_start = std.math.add(
+                usize,
+                inline_start,
+                tail_read_start - full_bytes,
+            ) catch return error.IntegerOverflow;
+            const source_end = try checkedEnd(
+                source_start,
+                range_end - tail_read_start,
+                self.bytes.len,
+            );
+            @memcpy(
+                output[tail_read_start - range_start ..],
+                self.bytes[source_start..source_end],
+            );
+        }
     }
 
     const CompressionIndex = struct {
@@ -587,16 +998,31 @@ pub const Archive = struct {
         max_output_len: usize,
         max_directory_bytes: usize,
     ) Error![]u8 {
+        return self.extractByPathAllocWithLimits(
+            allocator,
+            path,
+            .{ .max_output_len = max_output_len },
+            max_directory_bytes,
+        );
+    }
+
+    pub fn extractByPathAllocWithLimits(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        path: []const u8,
+        limits: ReadLimits,
+        max_directory_bytes: usize,
+    ) Error![]u8 {
         const target = try self.lookup(
             allocator,
             path,
-            max_output_len,
+            limits.max_output_len,
             max_directory_bytes,
         );
         const file_type = try target.fileType();
         if (file_type != .regular and file_type != .symlink)
             return error.ErofsNotRegularFile;
-        return self.readFlatAllocLimited(allocator, target, max_output_len);
+        return self.readFlatAllocWithLimits(allocator, target, limits);
     }
 };
 
@@ -621,317 +1047,4 @@ fn checkedEnd(start: usize, length: usize, limit: usize) Error!usize {
     const end = std.math.add(usize, start, length) catch return error.IntegerOverflow;
     if (end > limit) return error.TruncatedFrame;
     return end;
-}
-
-fn fixtureAlloc(allocator: std.mem.Allocator, encoded_base64: []const u8) ![]u8 {
-    const decoder = std.base64.standard.decoderWithIgnore(" \r\n\t");
-    const bytes = try allocator.alloc(
-        u8,
-        decoder.calcSizeUpperBound(encoded_base64.len),
-    );
-    errdefer allocator.free(bytes);
-    const written = try decoder.decode(bytes, encoded_base64);
-    return allocator.realloc(bytes, written);
-}
-
-test "EROFS compact LZ4 two-byte indexes decode a large reference file" {
-    const allocator = std.testing.allocator;
-    const bytes = try fixtureAlloc(
-        allocator,
-        @embedFile("testdata/lz4-compact-big.erofs.b64"),
-    );
-    defer allocator.free(bytes);
-    const archive = try Archive.init(bytes);
-    try std.testing.expectEqual(@as(usize, 4096), archive.superblock.block_size);
-    var root = try archive.readDirectoryAlloc(
-        allocator,
-        try archive.rootInode(),
-        1024 * 1024,
-    );
-    defer root.deinit();
-    try std.testing.expectEqual(@as(usize, 1), root.entries.len);
-    const decoded = try archive.extractByPathAllocLimited(
-        allocator,
-        "big.bin",
-        250_000,
-        1024 * 1024,
-    );
-    defer allocator.free(decoded);
-    const pattern = "EROFS compact two-byte index payload 0123456789\n";
-    try std.testing.expectEqual(@as(usize, 250_000), decoded.len);
-    for (decoded, 0..) |byte, index|
-        try std.testing.expectEqual(pattern[index % pattern.len], byte);
-}
-
-test "EROFS validates superblock checksum and output limits" {
-    const allocator = std.testing.allocator;
-    const bytes = try fixtureAlloc(
-        allocator,
-        @embedFile("testdata/lz4-compact-big.erofs.b64"),
-    );
-    defer allocator.free(bytes);
-    bytes[1024 + 20] ^= 1;
-    try std.testing.expectError(error.ChecksumMismatch, Archive.init(bytes));
-    bytes[1024 + 20] ^= 1;
-    const archive = try Archive.init(bytes);
-    try std.testing.expectError(
-        error.OutputLimitExceeded,
-        archive.extractByPathAllocLimited(
-            allocator,
-            "big.bin",
-            249_999,
-            1024 * 1024,
-        ),
-    );
-}
-
-test "EROFS reads inline and shared xattrs from erofs-utils" {
-    const allocator = std.testing.allocator;
-    const bytes = try fixtureAlloc(
-        allocator,
-        @embedFile("testdata/xattr-inline-shared.erofs.b64"),
-    );
-    defer allocator.free(bytes);
-    const archive = try Archive.init(bytes);
-
-    const inline_inode = try archive.lookup(allocator, "inline", 0, 4096);
-    try std.testing.expectEqual(@as(usize, 36), inline_inode.xattr_size);
-    var inline_xattrs = try archive.readXattrsAllocLimited(
-        allocator,
-        inline_inode,
-        1,
-        64,
-    );
-    defer inline_xattrs.deinit();
-    try std.testing.expectEqual(@as(usize, 1), inline_xattrs.entries.len);
-    try std.testing.expectEqualStrings(
-        "inline-value",
-        inline_xattrs.find("user.unique").?.value,
-    );
-
-    inline for (.{ "shared-a", "shared-b", "shared-c" }) |path| {
-        const inode_value = try archive.lookup(allocator, path, 0, 4096);
-        try std.testing.expectEqual(@as(usize, 16), inode_value.xattr_size);
-        var shared_xattrs = try archive.readXattrsAllocLimited(
-            allocator,
-            inode_value,
-            1,
-            64,
-        );
-        defer shared_xattrs.deinit();
-        try std.testing.expectEqualStrings(
-            "shared-value",
-            shared_xattrs.find("user.repeat").?.value,
-        );
-    }
-
-    const empty_inode = try archive.lookup(allocator, "sub/leaf", 0, 4096);
-    var empty_xattrs = try archive.readXattrsAllocLimited(
-        allocator,
-        empty_inode,
-        1,
-        16,
-    );
-    defer empty_xattrs.deinit();
-    try std.testing.expectEqual(@as(usize, 0), empty_xattrs.find("user.empty").?.value.len);
-
-    try std.testing.expectError(
-        error.OutputLimitExceeded,
-        archive.readXattrsAllocLimited(allocator, inline_inode, 0, 64),
-    );
-    try std.testing.expectError(
-        error.OutputLimitExceeded,
-        archive.readXattrsAllocLimited(allocator, inline_inode, 1, 22),
-    );
-}
-
-test "EROFS xattr reader rejects malformed ibodies and shared references" {
-    const allocator = std.testing.allocator;
-    const bytes = try fixtureAlloc(
-        allocator,
-        @embedFile("testdata/xattr-inline-shared.erofs.b64"),
-    );
-    defer allocator.free(bytes);
-    const archive = try Archive.init(bytes);
-    const inline_inode = try archive.lookup(allocator, "inline", 0, 4096);
-    const inline_start = inline_inode.location + inline_inode.inode_size;
-
-    bytes[inline_start + 5] = 1;
-    try std.testing.expectError(
-        error.InvalidErofs,
-        archive.readXattrsAllocLimited(allocator, inline_inode, 8, 1024),
-    );
-    bytes[inline_start + 5] = 0;
-
-    bytes[inline_start + 12 + 1] = 0x81;
-    try std.testing.expectError(
-        error.InvalidErofs,
-        archive.readXattrsAllocLimited(allocator, inline_inode, 8, 1024),
-    );
-    bytes[inline_start + 12 + 1] = 1;
-
-    bytes[inline_start + 12 + 1] = 2;
-    try std.testing.expectError(
-        error.InvalidErofs,
-        archive.readXattrsAllocLimited(allocator, inline_inode, 8, 1024),
-    );
-    bytes[inline_start + 12 + 1] = 1;
-
-    const shared_inode = try archive.lookup(allocator, "shared-a", 0, 4096);
-    const shared_start = shared_inode.location + shared_inode.inode_size;
-    bytes[shared_start + 4] = 2;
-    try std.testing.expectError(
-        error.InvalidErofs,
-        archive.readXattrsAllocLimited(allocator, shared_inode, 8, 1024),
-    );
-    bytes[shared_start + 4] = 1;
-    std.mem.writeInt(u32, bytes[shared_start + 12 ..][0..4], std.math.maxInt(u32), .little);
-    try std.testing.expectError(
-        error.InvalidErofs,
-        archive.readXattrsAllocLimited(allocator, shared_inode, 8, 1024),
-    );
-}
-
-test "EROFS xattr reader releases every allocation failure" {
-    const allocator = std.testing.allocator;
-    const bytes = try fixtureAlloc(
-        allocator,
-        @embedFile("testdata/xattr-inline-shared.erofs.b64"),
-    );
-    defer allocator.free(bytes);
-    const Test = struct {
-        fn run(failing_allocator: std.mem.Allocator, image: []const u8) !void {
-            const archive = try Archive.init(image);
-            const inode_value = try archive.lookup(failing_allocator, "inline", 0, 4096);
-            var attributes = try archive.readXattrsAllocLimited(
-                failing_allocator,
-                inode_value,
-                8,
-                1024,
-            );
-            defer attributes.deinit();
-            try std.testing.expectEqualStrings(
-                "inline-value",
-                attributes.find("user.unique").?.value,
-            );
-        }
-    };
-    try std.testing.checkAllAllocationFailures(allocator, Test.run, .{bytes});
-}
-
-test "EROFS reads erofs-utils long xattr prefixes with bounded ownership" {
-    const allocator = std.testing.allocator;
-    const bytes = try fixtureAlloc(
-        allocator,
-        @embedFile("testdata/xattr-long-prefix.erofs.b64"),
-    );
-    defer allocator.free(bytes);
-    const archive = try Archive.init(bytes);
-    try std.testing.expectEqual(@as(u8, 1), archive.superblock.xattr_prefix_count);
-    try std.testing.expectEqual(@as(u32, 0x120), archive.superblock.xattr_prefix_start);
-    try std.testing.expect(
-        archive.superblock.feature_incompat & format.feature_incompat_xattr_prefixes != 0,
-    );
-
-    const inode_value = try archive.lookup(allocator, "file", 0, 4096);
-    var attributes = try archive.readXattrsAllocLimited(
-        allocator,
-        inode_value,
-        2,
-        128,
-    );
-    defer attributes.deinit();
-    try std.testing.expectEqual(@as(usize, 2), attributes.entries.len);
-    try std.testing.expectEqualStrings(
-        "first-value",
-        attributes.find("user.vort.long.first").?.value,
-    );
-    try std.testing.expectEqualStrings(
-        "second-value",
-        attributes.find("user.vort.long.second").?.value,
-    );
-    try std.testing.expectError(
-        error.OutputLimitExceeded,
-        archive.readXattrsAllocLimited(allocator, inode_value, 1, 128),
-    );
-    try std.testing.expectError(
-        error.OutputLimitExceeded,
-        archive.readXattrsAllocLimited(allocator, inode_value, 2, 63),
-    );
-}
-
-test "EROFS rejects malformed long xattr prefix tables and references" {
-    const allocator = std.testing.allocator;
-    const bytes = try fixtureAlloc(
-        allocator,
-        @embedFile("testdata/xattr-long-prefix.erofs.b64"),
-    );
-    defer allocator.free(bytes);
-
-    bytes[0x480] = 0;
-    bytes[0x481] = 0;
-    refreshFixtureChecksum(bytes);
-    try std.testing.expectError(error.InvalidErofs, Archive.init(bytes));
-    bytes[0x480] = 11;
-    bytes[0x481] = 0;
-
-    bytes[0x482] = 7;
-    refreshFixtureChecksum(bytes);
-    try std.testing.expectError(error.UnsupportedErofsFeature, Archive.init(bytes));
-    bytes[0x482] = 1;
-
-    const compat = format.readU32(bytes, format.super_offset + 8);
-    std.mem.writeInt(
-        u32,
-        bytes[format.super_offset + 8 ..][0..4],
-        compat & ~format.feature_compat_plain_xattr_prefixes,
-        .little,
-    );
-    refreshFixtureChecksum(bytes);
-    try std.testing.expectError(error.UnsupportedErofsFeature, Archive.init(bytes));
-    std.mem.writeInt(u32, bytes[format.super_offset + 8 ..][0..4], compat, .little);
-    refreshFixtureChecksum(bytes);
-
-    const archive = try Archive.init(bytes);
-    const inode_value = try archive.lookup(allocator, "file", 0, 4096);
-    const ibody_start = inode_value.location + inode_value.inode_size;
-    bytes[ibody_start + 12 + 1] = 0x81;
-    try std.testing.expectError(
-        error.InvalidErofs,
-        archive.readXattrsAllocLimited(allocator, inode_value, 8, 1024),
-    );
-}
-
-test "EROFS long xattr prefix reader releases every allocation failure" {
-    const allocator = std.testing.allocator;
-    const bytes = try fixtureAlloc(
-        allocator,
-        @embedFile("testdata/xattr-long-prefix.erofs.b64"),
-    );
-    defer allocator.free(bytes);
-    const Test = struct {
-        fn run(failing_allocator: std.mem.Allocator, image: []const u8) !void {
-            const archive = try Archive.init(image);
-            const inode_value = try archive.lookup(failing_allocator, "file", 0, 4096);
-            var attributes = try archive.readXattrsAllocLimited(
-                failing_allocator,
-                inode_value,
-                2,
-                128,
-            );
-            defer attributes.deinit();
-            try std.testing.expectEqualStrings(
-                "second-value",
-                attributes.find("user.vort.long.second").?.value,
-            );
-        }
-    };
-    try std.testing.checkAllAllocationFailures(allocator, Test.run, .{bytes});
-}
-
-fn refreshFixtureChecksum(bytes: []u8) void {
-    const base = format.super_offset;
-    const block_size: usize = @as(usize, 1) << @intCast(bytes[base + 12]);
-    const checksum = format.computeSuperblockChecksum(bytes[base..block_size]);
-    std.mem.writeInt(u32, bytes[base + 4 ..][0..4], checksum, .little);
 }
