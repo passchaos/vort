@@ -34,5 +34,6 @@ test {
     _ = codec;
     _ = writer;
     _ = @import("erofs/writer_fragment_tests.zig");
+    _ = @import("erofs/writer_tail_tests.zig");
     _ = xattr;
 }

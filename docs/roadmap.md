@@ -22230,3 +22230,17 @@ reuse, so production keeps the simpler independently owned plans.
   exhaustive OOM behavior. The required erofs-utils differential validates and
   extracts all three new modes (`fragment_writer=3`, `writer=7`,
   `external_writer=7`, `xattr_writer=7`).
+
+- Added deterministic EROFS compressed inline-tail writing for LZ4, raw
+  Deflate, and Zstandard. Metadata planning encodes the final logical block
+  before image allocation, retains compressed bytes only when smaller, and
+  otherwise emits a raw `PLAIN` inline pcluster. Header, full indexes, and
+  payload must remain within one metadata block; a 4 KiB or badly positioned
+  candidate falls back to the existing physical-block path without setting the
+  feature. Owned inline plans participate in Tree teardown and exhaustive OOM,
+  while block-encoder scratch is reused for subsequent physical clusters.
+  Three-codec tests cover compressed tails, incompressible raw tails, forced
+  physical fallback, deterministic output, invalid stored mode, and byte-
+  identical empty/default wire. erofs-utils validates and extracts all three
+  new modes (`ztailpacking_writer=3`, `writer=10`, `external_writer=10`,
+  `xattr_writer=10`).

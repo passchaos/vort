@@ -56,10 +56,12 @@ Vort images carry root, regular-file, inline-tail, and directory attributes
 through a caller-selected plain prefix table. Three additional Vort writers
 combine those codecs with whole and last-block fragments; their packed inode
 must remain hidden while `fsck.erofs --xattrs` validates, extracts, and restores
-all files and attributes through the host API. Supply explicit tools with
+all files and attributes through the host API. Three more writers enable
+compressed inline tails for the same codecs and require the same byte-exact
+extraction. Supply explicit tools with
 `-- --mkfs /path/to/mkfs.erofs --fsck /path/to/fsck.erofs`; the summary reports
 `xattr_reader`, `xattr_writer`, `long_prefix_reader`, `fragment_reader`,
-`fragment_writer`, and `ztailpacking_reader` separately.
+`fragment_writer`, `ztailpacking_reader`, and `ztailpacking_writer` separately.
 
 The QCOW2 differential always exercises the Vort v2/v3 writer and reader for
 uncompressed, raw-DEFLATE, and Zstandard clusters plus v2/v3 raw-backing

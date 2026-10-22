@@ -8,9 +8,13 @@ pub fn main(init: std.process.Init) !void {
     const output_path = args.next() orelse return error.MissingOutputPath;
     const mode_name = args.next() orelse "lz4";
     const fragment_suffix = "-fragments";
+    const inline_suffix = "-ztailpacking";
     const fragments = std.mem.endsWith(u8, mode_name, fragment_suffix);
+    const compressed_inline = std.mem.endsWith(u8, mode_name, inline_suffix);
     const compression_name = if (fragments)
         mode_name[0 .. mode_name.len - fragment_suffix.len]
+    else if (compressed_inline)
+        mode_name[0 .. mode_name.len - inline_suffix.len]
     else
         mode_name;
     const compression = parseCompression(compression_name) orelse return error.InvalidBlockPlan;
@@ -43,7 +47,12 @@ pub fn main(init: std.process.Init) !void {
         .volume_name = "vort-writer",
         .root_xattrs = &root_xattrs,
         .xattr_prefixes = &.{"user.vort."},
-        .tail_packing = if (fragments) .fragments else .none,
+        .tail_packing = if (fragments)
+            .fragments
+        else if (compressed_inline)
+            .compressed_inline
+        else
+            .none,
     });
     defer init.gpa.free(encoded);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });

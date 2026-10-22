@@ -160,6 +160,7 @@ def main() -> None:
     fragment_reader_cases = 0
     fragment_writer_cases = 0
     ztailpacking_reader_cases = 0
+    ztailpacking_writer_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -208,6 +209,9 @@ def main() -> None:
             "lz4-fragments",
             "deflate-fragments",
             "zstd-fragments",
+            "lz4-ztailpacking",
+            "deflate-ztailpacking",
+            "zstd-ztailpacking",
         ):
             image = temp / f"writer-{mode}.erofs"
             repeated = temp / f"writer-{mode}-repeat.erofs"
@@ -229,6 +233,8 @@ def main() -> None:
                 raise AssertionError(f"hidden EROFS packed inode was listed for {mode}")
             if mode.endswith("-fragments"):
                 fragment_writer_cases += 1
+            if mode.endswith("-ztailpacking"):
+                ztailpacking_writer_cases += 1
             writer_cases += 1
             if fsck is not None:
                 extracted = temp / f"writer-{mode}-fsck"
@@ -381,6 +387,7 @@ def main() -> None:
         f"fragment_reader={fragment_reader_cases} "
         f"fragment_writer={fragment_writer_cases} "
         f"ztailpacking_reader={ztailpacking_reader_cases} "
+        f"ztailpacking_writer={ztailpacking_writer_cases} "
         f"malformed={malformed}"
     )
 

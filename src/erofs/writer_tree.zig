@@ -35,6 +35,9 @@ pub const Node = struct {
     start_block: u32 = std.math.maxInt(u32),
     directory_data: ?[]u8 = null,
     owned_data: ?[]u8 = null,
+    compressed_inline_data: ?[]u8 = null,
+    compressed_inline_tail_size: usize = 0,
+    compressed_inline_kind: u2 = 0,
     fragment_offset: ?u64 = null,
     fragment_size: usize = 0,
     compressed_block_count: usize = 0,
@@ -69,6 +72,7 @@ pub const Tree = struct {
         for (self.nodes) |node| {
             if (node.directory_data) |bytes| self.allocator.free(bytes);
             if (node.owned_data) |bytes| self.allocator.free(bytes);
+            if (node.compressed_inline_data) |bytes| self.allocator.free(bytes);
             if (node.compressed_indexes) |indexes| self.allocator.free(indexes);
             self.allocator.free(node.path);
         }

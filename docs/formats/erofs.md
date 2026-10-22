@@ -43,7 +43,12 @@ each non-empty regular file: small files use the whole-fragment header, larger
 files retain ordinary compressed/plain prefix clusters, and one hidden packed
 inode is encoded through the selected LZ4/Deflate/Zstandard planner. The hidden
 inode contributes to the inode count but never to directory entries. Identical
-entries and options produce identical images.
+entries and options produce identical images. Alternatively,
+`tail_packing = .compressed_inline` encodes the last logical block during
+metadata planning, selects compressed bytes only when smaller, otherwise keeps
+the raw tail, and writes `INLINE_PCLUSTER` only when header, full indexes, and
+payload fit in one metadata block. A non-fitting tail automatically retains its
+ordinary physical block.
 
 Writer entries use safe relative paths. Missing parent directories are created
 automatically, while absolute paths, empty components, `.`/`..`, NUL bytes,
@@ -87,10 +92,10 @@ defer allocator.free(payload);
 Chunk-based files, external devices, 48-bit addressing, and metaboxes remain
 future work. Prefix tables stored inside packed or metabox inodes remain
 unsupported; ordinary `PLAIN_XATTR_PFX` tables are supported in both
-directions. The writer does not yet generate compressed inline tails or
-deduplicate repeated values into the optional shared-xattr region. Fragment
-writing requires a non-stored compression mode because visible files use the
-compressed inode layout even when a prefix cluster falls back to `PLAIN`.
+directions. The writer does not yet deduplicate repeated values into the
+optional shared-xattr region. Both fragment and compressed-inline writing
+require a non-stored compression mode because visible files use the compressed
+inode layout even when a prefix or inline cluster falls back to `PLAIN`.
 
 ```sh
 zig build run -- list-erofs-file system.erofs
@@ -115,4 +120,5 @@ directory attributes. Additional LZ4/Deflate/Zstandard fragment images cover
 whole and partial references plus flat/compressed/interlaced packed inodes;
 LZ4/Deflate/Zstandard images cover compressed inline tail packing. Seven Vort
 writer modes include all three fragment writers and are independently
-extracted by `fsck.erofs`.
+extracted by `fsck.erofs`; three more writer modes cover compressed inline
+tails and raw/fallback decisions.

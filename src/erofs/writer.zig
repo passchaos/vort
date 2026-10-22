@@ -14,7 +14,7 @@ pub const EntryKind = tree.EntryKind;
 pub const Xattr = tree.Xattr;
 
 pub const Compression = writer_codec.Compression;
-pub const TailPacking = enum { none, fragments };
+pub const TailPacking = enum { none, fragments, compressed_inline };
 
 pub const Options = struct {
     compression: Compression = .stored,
@@ -39,19 +39,26 @@ pub fn encodeAlloc(
 ) Error![]u8 {
     if (options.volume_name.len > 16 or options.fixed_nsec >= 1_000_000_000)
         return error.InvalidErofs;
-    if (options.tail_packing == .fragments and options.compression == .stored)
+    if (options.tail_packing != .none and options.compression == .stored)
         return error.InvalidErofs;
 
     var filesystem = try tree.build(allocator, entries, options.root_xattrs);
     defer filesystem.deinit();
     if (options.tail_packing == .fragments)
         try writer_fragments.prepare(allocator, &filesystem, block_size);
+    var block_encoder: ?writer_codec.Encoder = if (options.compression != .stored)
+        try writer_codec.Encoder.init(allocator, options.compression)
+    else
+        null;
+    defer if (block_encoder) |*encoder| encoder.deinit();
     try allocateDirectoryBuffers(&filesystem);
     const metadata_end = try planMetadata(
         allocator,
         &filesystem,
         options.compression,
         options.xattr_prefixes,
+        options.tail_packing,
+        if (block_encoder) |*encoder| encoder else null,
     );
     try fillDirectories(allocator, &filesystem);
 
@@ -61,12 +68,6 @@ pub fn encodeAlloc(
     const image = try allocator.alloc(u8, image_len);
     errdefer allocator.free(image);
     @memset(image, 0);
-
-    var block_encoder: ?writer_codec.Encoder = if (options.compression != .stored)
-        try writer_codec.Encoder.init(allocator, options.compression)
-    else
-        null;
-    defer if (block_encoder) |*encoder| encoder.deinit();
 
     try writeNodes(
         image,
@@ -116,6 +117,8 @@ fn planMetadata(
     filesystem: *tree.Tree,
     compression: Compression,
     xattr_prefixes: []const []const u8,
+    tail_packing: TailPacking,
+    block_encoder: ?*writer_codec.Encoder,
 ) Error!usize {
     const configuration_end = try checkedAdd(
         configuration_start,
@@ -159,7 +162,37 @@ fn planMetadata(
                 };
             }
             const header_start = try alignForward(xattr_end, 8);
-            cursor = try checkedAdd(header_start, try checkedAdd(16, try checkedMul(cluster_count, 8)));
+            const metadata_end = try checkedAdd(
+                header_start,
+                try checkedAdd(16, try checkedMul(cluster_count, 8)),
+            );
+            if (tail_packing == .compressed_inline and !node.hidden) {
+                const encoder = block_encoder orelse return error.InvalidErofs;
+                const tail_start = (node.data.len - 1) & ~(block_size - 1);
+                const tail = node.data[tail_start..];
+                const encoded = try encoder.encodeScratch(tail);
+                const use_compressed = encoded.len < tail.len;
+                const candidate = if (use_compressed) encoded else tail;
+                const inline_end = try checkedAdd(metadata_end, candidate.len);
+                if (candidate.len <= std.math.maxInt(u16) and
+                    metadata_end / block_size == (inline_end - 1) / block_size)
+                {
+                    node.compressed_inline_data = try allocator.dupe(u8, candidate);
+                    node.compressed_inline_tail_size = tail.len;
+                    node.compressed_inline_kind = if (use_compressed) 1 else 0;
+                    const tail_index = tail_start / block_size;
+                    if (tail_index >= node.compressed_indexes.?.len)
+                        return error.InvalidErofs;
+                    node.compressed_indexes.?[tail_index] = .{
+                        .kind = node.compressed_inline_kind,
+                        .logical_offset = 0,
+                        .physical_block = 0,
+                    };
+                    cursor = inline_end;
+                    continue;
+                }
+            }
+            cursor = metadata_end;
             continue;
         }
 
@@ -252,8 +285,12 @@ fn assignDataBlocks(filesystem: *tree.Tree, first_data_block: usize) Error!usize
     var next_block = first_data_block;
     for (filesystem.nodes) |*node| {
         const content_len = node.content().len;
-        if (node.fragment_size > content_len) return error.InvalidErofs;
-        const physical_content_len = content_len - node.fragment_size;
+        if ((node.fragment_size != 0 and node.compressed_inline_tail_size != 0) or
+            node.fragment_size > content_len or
+            node.compressed_inline_tail_size > content_len - node.fragment_size)
+            return error.InvalidErofs;
+        const physical_content_len = content_len - node.fragment_size -
+            node.compressed_inline_tail_size;
         const blocks = switch (std.enums.fromInt(format.Layout, node.layout) orelse
             return error.InvalidErofs) {
             .compressed_full => try blockCount(physical_content_len),
@@ -339,7 +376,8 @@ fn writeCompressedData(
 ) Error!void {
     const indexes = node.compressed_indexes orelse return error.InvalidErofs;
     if (node.compressed_block_count > indexes.len) return error.InvalidErofs;
-    const physical_content_len = node.data.len - node.fragment_size;
+    const physical_content_len = node.data.len - node.fragment_size -
+        node.compressed_inline_tail_size;
     for (indexes[0..node.compressed_block_count], 0..) |*index, cluster_index| {
         const logical_start = try checkedMul(cluster_index, block_size);
         const logical_end = @min(
@@ -416,12 +454,21 @@ fn writeInode(
             return;
         }
         const fragment_offset = node.fragment_offset;
-        writeU32(
-            image,
-            header_start,
-            if (fragment_offset) |offset| @truncate(offset) else 0,
-        );
-        writeU16(image, header_start + 4, if (fragment_offset != null) 0x20 else 0);
+        const inline_data = node.compressed_inline_data;
+        if (fragment_offset != null and inline_data != null) return error.InvalidErofs;
+        if (inline_data) |bytes| {
+            if (bytes.len == 0 or bytes.len > std.math.maxInt(u16))
+                return error.InvalidErofs;
+            writeU16(image, header_start + 2, @intCast(bytes.len));
+            writeU16(image, header_start + 4, 0x08);
+        } else {
+            writeU32(
+                image,
+                header_start,
+                if (fragment_offset) |offset| @truncate(offset) else 0,
+            );
+            writeU16(image, header_start + 4, if (fragment_offset != null) 0x20 else 0);
+        }
         image[header_start + 6] = @intFromEnum(
             writer_codec.algorithm(compression) orelse return error.InvalidErofs,
         );
@@ -431,6 +478,17 @@ fn writeInode(
             writeU16(image, offset, index.kind);
             writeU16(image, offset + 2, index.logical_offset);
             writeU32(image, offset + 4, index.physical_block);
+        }
+        if (inline_data) |bytes| {
+            const inline_start = try checkedAdd(
+                index_start,
+                try checkedMul(node.compressed_indexes.?.len, 8),
+            );
+            const inline_end = try checkedAdd(inline_start, bytes.len);
+            if (inline_end > image.len or
+                inline_start / block_size != (inline_end - 1) / block_size)
+                return error.InvalidErofs;
+            @memcpy(image[inline_start..inline_end], bytes);
         }
     }
 }
@@ -456,9 +514,12 @@ fn writeSuperblock(
         try xattr.prefixTableSize(options.xattr_prefixes),
     );
     var packed_nid: u64 = 0;
+    var has_compressed_inline = false;
     for (nodes) |node| if (node.hidden) {
         if (packed_nid != 0) return error.InvalidErofs;
         packed_nid = node.nid;
+    } else if (node.compressed_inline_data != null) {
+        has_compressed_inline = true;
     };
     const has_fragments = packed_nid != 0;
     if (prefix_end > image.len or prefix_start / 4 > std.math.maxInt(u32))
@@ -489,6 +550,10 @@ fn writeSuperblock(
         writer_codec.featureIncompat(options.compression) |
             (if (has_fragments)
                 format.feature_incompat_fragments
+            else
+                @as(u32, 0)) |
+            (if (has_compressed_inline)
+                format.feature_incompat_ztailpacking
             else
                 @as(u32, 0)) |
             (if (prefix_count == 0)

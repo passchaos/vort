@@ -261,6 +261,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   deterministic compact-inode stored/LZ4/raw-Deflate/Zstandard writing for
   regular files, nested and empty directories, symlinks, inline tails,
   deterministic whole/last-block packed fragments, hidden packed inodes,
+  raw-or-compressed inline pclusters with physical-block fallback,
   inline root/entry xattrs and caller-selected plain prefix tables, multi-block
   directories, compression-configuration records, and per-cluster
   compressed-or-plain full-index selection with bidirectional erofs-utils
