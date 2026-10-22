@@ -5,6 +5,7 @@ const lz4 = @import("../../lz4.zig");
 const lzma = @import("../../lzma.zig");
 const zstd = @import("../../zstd.zig");
 const format = @import("../format.zig");
+const prefix = @import("prefix.zig");
 
 pub const Error = core.Error || deflate.Error || lz4.Error || lzma.Error || zstd.Error ||
     std.mem.Allocator.Error || error{InvalidErofs};
@@ -81,17 +82,26 @@ pub fn compressionField(compression: Compression) u16 {
     };
 }
 
-pub fn configurationSizeForExtent(compression: Compression, extent_size: usize) usize {
-    if (compression == .lz4 and extent_size > 4096) return 16;
+pub const ExtentOptions = struct {
+    decoded_size: usize,
+    max_pcluster_size: ?usize = null,
+
+    fn prepared(self: ExtentOptions) bool {
+        return self.decoded_size > 4096 or self.max_pcluster_size != null;
+    }
+};
+
+pub fn configurationSizeForExtent(compression: Compression, extent: ExtentOptions) usize {
+    if (compression == .lz4 and extent.prepared()) return 16;
     return if (configuration(compression)) |bytes| bytes.len else 0;
 }
 
-pub fn writeConfigurationForExtent(output: []u8, compression: Compression, extent_size: usize) Error!void {
-    if (output.len != configurationSizeForExtent(compression, extent_size))
+pub fn writeConfigurationForExtent(output: []u8, compression: Compression, extent: ExtentOptions) Error!void {
+    if (output.len != configurationSizeForExtent(compression, extent))
         return error.InvalidErofs;
-    if (compression == .lz4 and extent_size > 4096) {
-        const blocks = extent_size / 4096;
-        if (blocks > std.math.maxInt(u16)) return error.InvalidErofs;
+    if (compression == .lz4 and extent.prepared()) {
+        const blocks = @min(extent.decoded_size, extent.max_pcluster_size orelse extent.decoded_size) / 4096;
+        if (blocks == 0 or blocks > std.math.maxInt(u16)) return error.InvalidErofs;
         @memset(output, 0);
         std.mem.writeInt(u16, output[0..2], 14, .little);
         std.mem.writeInt(u16, output[2..4], std.math.maxInt(u16), .little);
@@ -101,13 +111,13 @@ pub fn writeConfigurationForExtent(output: []u8, compression: Compression, exten
     }
 }
 
-pub fn featureIncompatForExtent(compression: Compression, extent_size: usize) u32 {
+pub fn featureIncompatForExtent(compression: Compression, extent: ExtentOptions) u32 {
     return featureIncompat(compression) |
-        (if (compression == .lz4 and extent_size > 4096) @as(u32, 2) else 0);
+        (if (compression == .lz4 and extent.prepared()) @as(u32, 2) else 0);
 }
 
-pub fn compressionFieldForExtent(compression: Compression, extent_size: usize) u16 {
-    if (compression == .lz4 and extent_size > 4096) return 1;
+pub fn compressionFieldForExtent(compression: Compression, extent: ExtentOptions) u16 {
+    if (compression == .lz4 and extent.prepared()) return 1;
     return compressionField(compression);
 }
 
@@ -167,6 +177,27 @@ pub const Encoder = struct {
                 self.owned_scratch = encoded;
                 break :blk encoded;
             },
+        };
+    }
+
+    pub fn encodePrefixScratch(self: *Encoder, input: []const u8, capacity: usize, alignment: usize) Error!prefix.Result {
+        return switch (self.compression) {
+            .stored => error.InvalidErofs,
+            .lz4 => blk: {
+                if (self.owned_scratch) |bytes| self.allocator.free(bytes);
+                self.owned_scratch = null;
+                const output = try self.allocator.alloc(u8, capacity);
+                self.owned_scratch = output;
+                break :blk try prefix.selectLz4(input, output, alignment);
+            },
+            .lzma => blk: {
+                if (self.owned_scratch) |bytes| self.allocator.free(bytes);
+                self.owned_scratch = null;
+                const encoded = try lzma.encodeMicroAlignedDestSizeAlloc(self.allocator, input, capacity, alignment, .{});
+                self.owned_scratch = encoded.bytes;
+                break :blk .{ .bytes = encoded.bytes, .consumed = encoded.consumed };
+            },
+            .deflate, .zstandard => try prefix.selectFrames(self, input, capacity, alignment),
         };
     }
 };

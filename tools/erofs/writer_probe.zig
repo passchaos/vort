@@ -44,8 +44,18 @@ pub fn main(init: std.process.Init) !void {
     else
         layout_mode;
     const grouped_suffix = "-clusters";
-    const grouped = std.mem.endsWith(u8, compression_with_extent, grouped_suffix);
-    const compression_name = if (grouped)
+    const bounded_suffix: ?[]const u8 = if (std.mem.endsWith(u8, compression_with_extent, "-bounded12"))
+        "-bounded12"
+    else if (std.mem.endsWith(u8, compression_with_extent, "-bounded8"))
+        "-bounded8"
+    else if (std.mem.endsWith(u8, compression_with_extent, "-bounded"))
+        "-bounded"
+    else
+        null;
+    const grouped = bounded_suffix != null or std.mem.endsWith(u8, compression_with_extent, grouped_suffix);
+    const compression_name = if (bounded_suffix) |suffix|
+        compression_with_extent[0 .. compression_with_extent.len - suffix.len]
+    else if (grouped)
         compression_with_extent[0 .. compression_with_extent.len - grouped_suffix.len]
     else
         compression_with_extent;
@@ -85,6 +95,10 @@ pub fn main(init: std.process.Init) !void {
     const options = vort.ErofsWriterOptions{
         .compression = compression,
         .compression_extent_size = if (grouped) 64 * 1024 else 4096,
+        .max_pcluster_size = if (bounded_suffix) |suffix|
+            if (std.mem.eql(u8, suffix, "-bounded12")) 12288 else if (std.mem.eql(u8, suffix, "-bounded8")) 8192 else 4096
+        else
+            null,
         .volume_name = "vort-writer",
         .root_xattrs = &root_xattrs,
         .xattr_prefixes = &.{"user.vort."},

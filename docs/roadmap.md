@@ -22496,3 +22496,30 @@ reuse, so production keeps the simpler independently owned plans.
   decodes all 315 aligned outputs (`aligned_writer=315`), while the existing
   186 unaligned Vort and 62 XZ Utils prefix cases still pass. This supplies
   the range-budget primitive for physically bounded EROFS cluster planning.
+
+
+- Added physically bounded EROFS cluster planning through
+  `max_pcluster_size` (4 KiB multiples, 4 KiB...1 MiB). Decoded-window and
+  physical limits are independent; intermediate prefixes remain logical-block
+  aligned, while complete EOF tails may be partial. LZ4 uses its fill-output
+  block encoder with aligned retry, and MicroLZMA uses the new aligned range
+  budget. Deflate/Zstandard use descending complete-frame candidate checks as
+  portable references, preserving correctness under nonmonotonic size; native
+  bounded encoders are still future work, and large decoded windows can make
+  reference search expensive. A no-fit prefix becomes one PLAIN logical block,
+  keeping deterministic progress without skipping later compressible data.
+  Metadata planning and LZ4 configuration advertise the effective physical
+  limit, and the metabox still encodes after all visible addresses are final.
+  Tests pass 86/86, covering every codec, direct physical-count bounds,
+  4/8/12 KiB caps, tiny/empty data, EOF and inline/fragment tails, directories,
+  48-bit/extended inodes, metabox, no-fit fallback, invalid settings, a
+  nonmonotonic reference encoder, and exhaustive per-codec OOM. erofs-utils
+  1.9.4-g5fcb2f76 validates and extracts all 108 writer modes, including 40 new
+  capped variants (`bounded_writer=40`, `xattr_writer=87`, `metabox_writer=21`,
+  `directory_writer=20`, `extended_inode_writer=21`). The CLI accepts a final
+  optional physical size argument. This is a functionality milestone; general
+  streaming/source-backed writer APIs and performance leadership remain open.
+  ReleaseFast verification passes 154/154 focused tests (86 EROFS, 68
+  MicroLZMA). The f95c02a1 snapshot's full repository suite also completed:
+  3387/3387 tests passed; its result is recorded separately from these new
+  capacity changes.

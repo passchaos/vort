@@ -200,6 +200,7 @@ def main() -> None:
     lzma_writer_cases = 0
     final_big_pcluster_reader_cases = 0
     grouped_writer_cases = 0
+    bounded_writer_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -258,6 +259,11 @@ def main() -> None:
             for codec in ("lz4", "lzma", "deflate", "zstd")
             for suffix in ("", "-fragments", "-ztailpacking", "-48bit", "-metabox", "-dirs", "-extended", "-dirs-extended-metabox")
         )
+        bounded_modes = tuple(
+            f"{codec}-bounded{suffix}"
+            for codec in ("lz4", "lzma", "deflate", "zstd")
+            for suffix in ("", "-fragments", "-ztailpacking", "-48bit", "-metabox", "-dirs", "-extended", "-dirs-extended-metabox", "8", "12")
+        )
         for mode in (
             "stored",
             "lz4",
@@ -295,7 +301,7 @@ def main() -> None:
             "lzma-metabox",
             "lzma-dirs",
             "lzma-extended",
-        ) + grouped_modes:
+        ) + grouped_modes + bounded_modes:
             image = temp / f"writer-{mode}.erofs"
             repeated = temp / f"writer-{mode}-repeat.erofs"
             device = temp / f"writer-{mode}.blob"
@@ -354,6 +360,8 @@ def main() -> None:
                 lzma_writer_cases += 1
             if "-clusters" in mode:
                 grouped_writer_cases += 1
+            if "-bounded" in mode:
+                bounded_writer_cases += 1
             writer_cases += 1
             if fsck is not None:
                 extracted = temp / f"writer-{mode}-fsck"
@@ -664,6 +672,7 @@ def main() -> None:
         f"lzma_writer={lzma_writer_cases} "
         f"final_big_pcluster_reader={final_big_pcluster_reader_cases} "
         f"grouped_writer={grouped_writer_cases} "
+        f"bounded_writer={bounded_writer_cases} "
         f"malformed={malformed}"
     )
 

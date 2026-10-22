@@ -273,7 +273,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   records, compact/extended/automatic inode writing with 32-bit IDs and
   nanosecond timestamps, and per-cluster
   compressed-or-plain full-index selection, optional 4 KiB...1 MiB decoded
-  groups with actual-sized big pclusters and stored fallback, plus standard MZi stored/LZ4/MicroLZMA/raw-
+  groups with actual-sized big pclusters, optional physical byte caps, aligned
+  prefix planning, and stored fallback, plus standard MZi stored/LZ4/MicroLZMA/raw-
   Deflate/Zstandard metabox writing with a hidden low-NID metadata inode and
   high-bit visible NIDs, all with bidirectional erofs-utils interoperability;
 - dependency-free WIM/ESD/SWM parsing with strict 208-byte headers, compression

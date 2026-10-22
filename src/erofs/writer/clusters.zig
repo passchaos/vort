@@ -24,6 +24,7 @@ pub fn prepareNode(
     node: *tree.Node,
     encoder: *writer_codec.Encoder,
     extent_size: usize,
+    max_pcluster_size: ?usize,
 ) Error!void {
     const indexes = node.compressed_indexes orelse return;
     if (extent_size < block_size or extent_size > max_extent_size or
@@ -36,14 +37,31 @@ pub fn prepareNode(
     node.compressed_advise = 2;
     var position: usize = 0;
     while (position < input.len) {
-        const end = position + @min(extent_size, input.len - position);
+        const window_end = position + @min(extent_size, input.len - position);
+        const window = input[position..window_end];
+        const selected = if (max_pcluster_size) |capacity|
+            try encoder.encodePrefixScratch(window, capacity, block_size)
+        else
+            @import("prefix.zig").Result{ .bytes = try encoder.encodeScratch(window), .consumed = window.len };
+        if (selected.consumed > window.len or
+            (selected.consumed != window.len and selected.consumed % block_size != 0))
+            return error.InvalidErofs;
+        const use_compressed = selected.consumed != 0 and selected.bytes.len != 0 and selected.bytes.len < selected.consumed;
+        const end = if (use_compressed)
+            position + selected.consumed
+        else if (max_pcluster_size != null)
+            position + @min(block_size, input.len - position)
+        else
+            window_end;
         const chunk = input[position..end];
         const logical_count = try blocksFor(chunk.len);
         const first_index = position / block_size;
         if (first_index > indexes.len or logical_count > indexes.len - first_index)
             return error.InvalidErofs;
-        const encoded = try encoder.encodeScratch(chunk);
-        if (encoded.len < chunk.len) {
+        const encoded = selected.bytes;
+        if (use_compressed) {
+            if (max_pcluster_size) |capacity|
+                if (encoded.len > capacity) return error.InvalidErofs;
             const physical_count = try blocksFor(encoded.len);
             if (physical_count == 0 or physical_count > 256)
                 return error.InvalidErofs;

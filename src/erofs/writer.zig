@@ -88,6 +88,12 @@ fn encodeInternal(
         !std.math.isPowerOfTwo(options.compression_extent_size) or
         (options.compression == .stored and options.compression_extent_size != block_size))
         return error.InvalidErofs;
+    if (options.max_pcluster_size) |capacity| {
+        if (capacity < block_size or capacity > writer_clusters.max_extent_size or
+            capacity % block_size != 0 or options.compression == .stored)
+            return error.InvalidErofs;
+    }
+    const grouped = options.compression_extent_size > block_size or options.max_pcluster_size != null;
     if (options.tail_packing != .none and options.compression == .stored)
         return error.InvalidErofs;
     if (options.compress_directories and options.compression == .stored)
@@ -131,7 +137,7 @@ fn encodeInternal(
     else
         null;
     defer if (block_encoder) |*encoder| encoder.deinit();
-    if (options.compression_extent_size > block_size and options.compression == .zstandard)
+    if (grouped and options.compression == .zstandard)
         block_encoder.?.zstandard_window_log = 15;
     const metadata_end = try planMetadata(
         allocator,
@@ -144,11 +150,10 @@ fn encodeInternal(
     try fillDirectories(allocator, &filesystem);
     try writer_fragments.syncDirectories(&filesystem);
 
-    const grouped = options.compression_extent_size > block_size;
     if (grouped) {
         for (filesystem.nodes) |*node| {
             if (node.hidden_role == .metabox) continue;
-            try writer_clusters.prepareNode(allocator, node, &block_encoder.?, options.compression_extent_size);
+            try writer_clusters.prepareNode(allocator, node, &block_encoder.?, options.compression_extent_size, options.max_pcluster_size);
         }
     }
 
@@ -158,7 +163,7 @@ fn encodeInternal(
         try writer_wire.populateMetaboxMetadata(&filesystem, options, if (shared_xattr_plan) |*plan| plan else null);
         for (filesystem.nodes) |*node| {
             if (node.hidden_role != .metabox) continue;
-            try writer_clusters.prepareNode(allocator, node, &block_encoder.?, options.compression_extent_size);
+            try writer_clusters.prepareNode(allocator, node, &block_encoder.?, options.compression_extent_size, options.max_pcluster_size);
             try assignNodeDataBlocks(node, &block_count);
         }
     }
@@ -245,7 +250,7 @@ fn planMetadata(
     const configuration_start = writer_wire.configurationStart(metabox);
     const configuration_end = try checkedAdd(
         configuration_start,
-        writer_codec.configurationSizeForExtent(compression, options.compression_extent_size),
+        writer_codec.configurationSizeForExtent(compression, .{ .decoded_size = options.compression_extent_size, .max_pcluster_size = options.max_pcluster_size }),
     );
     const prefix_start = try alignForward(configuration_end, 4);
     const prefix_end = try checkedAdd(prefix_start, try xattr.prefixTableSize(xattr_prefixes));

@@ -49,6 +49,7 @@ test {
     _ = @import("erofs/writer/tests/xattrs.zig");
     _ = @import("erofs/writer/tests/directories.zig");
     _ = @import("erofs/writer/tests/clusters.zig");
+    _ = @import("erofs/writer/tests/physical_limit.zig");
     _ = @import("erofs/writer/tests/inodes.zig");
     _ = codec;
     _ = writer;

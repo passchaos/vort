@@ -10,6 +10,8 @@ pub const Options = struct {
     compression: Compression = .stored,
     /// Maximum decoded bytes per compressed extent (4 KiB...1 MiB).
     compression_extent_size: usize = 4096,
+    /// Optional maximum physical bytes per pcluster, in 4 KiB multiples.
+    max_pcluster_size: ?usize = null,
     volume_name: []const u8 = "vort",
     epoch: u64 = 0,
     fixed_nsec: u32 = 0,

@@ -258,6 +258,10 @@ pub fn writeSuperblock(
     chunk_plan: ?writer_chunks.Plan,
     shared_xattr_plan: ?*const writer_xattrs.Plan,
 ) Error!void {
+    const extent = writer_codec.ExtentOptions{
+        .decoded_size = options.compression_extent_size,
+        .max_pcluster_size = options.max_pcluster_size,
+    };
     if (image.len < block_size or nodes.len == 0 or nodes.len > std.math.maxInt(u64) or
         block_count > std.math.maxInt(u32))
         return error.InvalidErofs;
@@ -266,7 +270,7 @@ pub fn writeSuperblock(
     const configuration_start = configurationStart(options.metabox);
     const configuration_end = try checkedAdd(
         configuration_start,
-        writer_codec.configurationSizeForExtent(options.compression, options.compression_extent_size),
+        writer_codec.configurationSizeForExtent(options.compression, extent),
     );
     const prefix_start = try alignForward(configuration_end, 4);
     const prefix_end = try checkedAdd(
@@ -350,7 +354,7 @@ pub fn writeSuperblock(
     writeU32(
         image,
         base + 80,
-        writer_codec.featureIncompatForExtent(options.compression, options.compression_extent_size) |
+        writer_codec.featureIncompatForExtent(options.compression, extent) |
             (if (options.force_48bit or has_metabox)
                 format.feature_incompat_48bit
             else
@@ -380,7 +384,7 @@ pub fn writeSuperblock(
             else
                 @as(u32, 0)),
     );
-    writeU16(image, base + 84, writer_codec.compressionFieldForExtent(options.compression, options.compression_extent_size));
+    writeU16(image, base + 84, writer_codec.compressionFieldForExtent(options.compression, extent));
     if (has_external_chunks) {
         if (device_table_start / 128 > std.math.maxInt(u16))
             return error.InvalidErofs;
@@ -391,11 +395,11 @@ pub fn writeSuperblock(
     if (prefix_count != 0)
         writeU32(image, base + 92, @intCast(prefix_start / 4));
     writeU64(image, base + 96, packed_nid);
-    const configuration_size = writer_codec.configurationSizeForExtent(options.compression, options.compression_extent_size);
+    const configuration_size = writer_codec.configurationSizeForExtent(options.compression, extent);
     if (configuration_size != 0) {
         const end = try checkedAdd(configuration_start, configuration_size);
         if (end > image.len) return error.InvalidErofs;
-        try writer_codec.writeConfigurationForExtent(image[configuration_start..end], options.compression, options.compression_extent_size);
+        try writer_codec.writeConfigurationForExtent(image[configuration_start..end], options.compression, extent);
     }
     try xattr.writePrefixTable(
         image[prefix_start..prefix_end],

@@ -74,10 +74,10 @@ metadata inodes, must remain deterministic, and are self-decoded byte-exactly;
 fsck validates every image and independently extracts physical/compressed file
 extents. The stored-MZi check excludes flat-inline regular-file tails because
 erofs-utils 1.9.4's extractor zero-fills that layout even for its own MZi
-images, although its `dump --cat` path and Vort both read it correctly. All 68
+images, although its `dump --cat` path and Vort both read it correctly. All 108
 Vort writer modes also move one repeated long-prefix name/value pair to the
 primary shared-xattr region while retaining distinct inline attributes.
-Vort must reconstruct both sources in every mode; the 55 non-metabox cases
+Vort must reconstruct both sources in every mode; the 87 non-metabox cases
 additionally require host-restored xattrs from `fsck.erofs --xattrs`. Three
 erofs-utils `--zD` references and four Vort directory writers cover
 LZ4, MicroLZMA, raw Deflate, and Zstandard whole-directory fragments, including the shared
@@ -481,3 +481,11 @@ partial consumed length must align; only complete input may end unaligned.
 Zero-consumption results must decode as valid empty streams, and increasing
 capacity must preserve monotonic progress (`aligned_writer=315`). Existing
 complete and unaligned capacity counters remain separate.
+
+The EROFS matrix adds 40 bounded writers. Every codec uses a 4 KiB physical
+limit with ordinary, fragments, inline, 48-bit, metabox, directories, extended,
+and combined directory/extended/metabox layouts; ordinary modes also exercise
+8 KiB and non-power-of-two 12 KiB limits. Self-decode, deterministic reruns,
+xattrs, and independent fsck extraction cover all 108 modes
+(`bounded_writer=40`, `external_writer=108`, `xattr_writer=87`). This gate
+retains the eight final-big-pcluster references and earlier unbounded modes.

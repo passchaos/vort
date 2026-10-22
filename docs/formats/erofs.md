@@ -78,6 +78,20 @@ Payload plans are allocator-owned and retained until the image is emitted,
 so this one-shot writer uses memory proportional to the planned image.
 Stored/chunk modes require the default extent size.
 
+`max_pcluster_size` optionally caps physical bytes per cluster. It accepts
+4 KiB multiples from 4 KiB through 1 MiB, independently of the maximum decoded
+extent size. With this option, intermediate input progress remains 4 KiB
+aligned, while a fully encoded final tail may be partial. LZ4 uses bounded
+block encoding and retries an aligned prefix; MicroLZMA uses aligned range
+checkpoints. Deflate and Zstandard currently use a portable reference path
+that checks complete aligned candidates in descending order, so it does not
+assume monotonic compressed size. This reference search can perform many
+encodings as decoded extent size increases; native capacity encoders remain
+later work. A prefix that does not compress within the cap becomes one PLAIN
+logical block, after which planning resumes at the next block. LZ4 advertises
+the effective bounded physical limit in its standard configuration record.
+Stored/chunk modes reject this option. Omitting it retains fixed groups.
+
 Each entry and the root directory can carry deterministic inline xattrs; inode
 planning accounts for their ibodies before flat-inline tails and aligned
 compression headers. `xattr_prefixes` optionally writes a plain prefix table
@@ -174,6 +188,7 @@ const image = try vort.encodeErofsAlloc(allocator, &.{
 }, .{
     .compression = .zstandard,
     .compression_extent_size = 64 * 1024,
+    .max_pcluster_size = 4096,
     .root_xattrs = &root_xattrs,
     .xattr_prefixes = &.{"user."},
     .shared_xattrs = true,
@@ -265,11 +280,11 @@ physical/compressed extents. erofs-utils 1.9.4 itself writes zero-filled output
 for flat-inline regular files whose inode lives in a metabox (its `dump --cat`
 path reads the same bytes correctly), so the stored-MZi oracle check excludes
 only those affected inline tails.
-All 68 Vort writer modes enable cost-aware shared-xattr planning for one
+All 108 Vort writer modes enable cost-aware shared-xattr planning for one
 repeated long-prefix attribute across root, file, and directory ibodies. Vort
-reconstructs each value, and the 55 non-metabox modes additionally require
+reconstructs each value, and the 87 non-metabox modes additionally require
 `fsck.erofs --xattrs` restoration; the summary reports
-`shared_xattr_writer=68`. Three reference and four Vort-authored LZ4/MicroLZMA/Deflate/
+`shared_xattr_writer=108`. Three reference and four Vort-authored LZ4/MicroLZMA/Deflate/
 Zstandard directory-compression images require byte-exact listing/extraction
 through whole-directory fragments (`directory_reader=3`,
 `directory_writer=4`). Four forced-extended reference images and five
@@ -301,3 +316,12 @@ codec, cluster, chunk, fragment, inode, xattr, and metabox components live in
 `src/erofs/writer/`; options and wire serialization have dedicated modules,
 and writer regressions live in `writer/tests/`. The reader's full/compact
 index parser remains a separate `compression_index.zig` module.
+
+Forty bounded writer modes cover 4 KiB physical limits in all codecs and
+existing layout combinations, plus 8/12 KiB limits in ordinary layouts.
+erofs-utils independently validates and extracts every output, bringing the
+matrix to 108 writers (`bounded_writer=40`, `external_writer=108`,
+`xattr_writer=87`, `metabox_writer=21`, `directory_writer=20`,
+`extended_inode_writer=21`). Unit tests read physical counts directly, cover
+non-power-of-two limits, require exact round trips and deterministic output,
+and exercise no-fit fallback, EOF/tail metadata, and exhaustive OOM.
