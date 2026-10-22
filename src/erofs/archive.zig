@@ -12,6 +12,7 @@ pub const Error = core.Error || format.Error || codec.Error || chunk.Error || ex
     ErofsEntryNotFound,
     ErofsNotDirectory,
     ErofsNotRegularFile,
+    ErofsMissingMetabox,
 };
 
 pub const Xattr = xattr.Attribute;
@@ -27,6 +28,7 @@ pub const DeviceInfo = chunk.DeviceInfo;
 
 pub const Inode = struct {
     nid: u64,
+    in_metabox: bool = false,
     location: usize,
     inode_size: usize,
     xattr_size: usize,
@@ -96,9 +98,21 @@ pub const Directory = struct {
     }
 };
 
+pub const LoadedMetaboxArchive = struct {
+    allocator: std.mem.Allocator,
+    bytes: []u8,
+    archive: Archive,
+
+    pub fn deinit(self: *LoadedMetaboxArchive) void {
+        self.allocator.free(self.bytes);
+        self.* = undefined;
+    }
+};
+
 pub const Archive = struct {
     bytes: []const u8,
     devices: []const []const u8 = &.{},
+    metabox_bytes: ?[]const u8 = null,
     superblock: format.Superblock,
 
     pub fn init(bytes: []const u8) Error!Archive {
@@ -110,11 +124,13 @@ pub const Archive = struct {
         devices: []const []const u8,
     ) Error!Archive {
         const superblock = try format.parseSuperblock(bytes);
-        try xattr.validatePrefixTable(
-            bytes,
-            superblock.xattr_prefix_start,
-            superblock.xattr_prefix_count,
-        );
+        if (superblock.feature_compat & format.feature_compat_plain_xattr_prefixes != 0 or
+            superblock.xattr_prefix_count == 0)
+            try xattr.validatePrefixTable(
+                bytes,
+                superblock.xattr_prefix_start,
+                superblock.xattr_prefix_count,
+            );
         const result = Archive{
             .bytes = bytes,
             .devices = devices,
@@ -124,8 +140,42 @@ pub const Archive = struct {
         return result;
     }
 
+    pub fn loadMetaboxAllocLimited(
+        self: Archive,
+        allocator: std.mem.Allocator,
+        max_metabox_len: usize,
+        max_packed_extent_len: usize,
+    ) Error!LoadedMetaboxArchive {
+        if (self.superblock.feature_incompat & format.feature_incompat_metabox == 0 or
+            self.superblock.metabox_nid == 0 or self.metabox_bytes != null)
+            return error.InvalidErofs;
+        const inode_value = try self.inode(self.superblock.metabox_nid);
+        if (try inode_value.fileType() != .regular) return error.InvalidErofs;
+        const bytes = try self.readFlatAllocWithLimits(allocator, inode_value, .{
+            .max_output_len = max_metabox_len,
+            .max_packed_extent_len = max_packed_extent_len,
+        });
+        var loaded = self;
+        loaded.metabox_bytes = bytes;
+        if (self.superblock.xattr_prefix_count != 0 and
+            self.superblock.feature_compat & format.feature_compat_plain_xattr_prefixes == 0)
+            try xattr.validatePrefixTable(
+                bytes,
+                self.superblock.xattr_prefix_start,
+                self.superblock.xattr_prefix_count,
+            );
+        return .{ .allocator = allocator, .bytes = bytes, .archive = loaded };
+    }
+
     pub fn deviceInfo(self: Archive, index: usize) Error!DeviceInfo {
         return chunk.deviceInfo(self.bytes, self.superblock, index);
+    }
+
+    fn metadataBytes(self: Archive, inode_value: Inode) Error![]const u8 {
+        return if (inode_value.in_metabox)
+            self.metabox_bytes orelse error.ErofsMissingMetabox
+        else
+            self.bytes;
     }
 
     pub fn rootInode(self: Archive) Error!Inode {
@@ -133,19 +183,29 @@ pub const Archive = struct {
     }
 
     pub fn inode(self: Archive, nid: u64) Error!Inode {
-        if (nid >> 63 != 0)
+        const in_metabox = nid >> 63 != 0;
+        if (in_metabox and
+            self.superblock.feature_incompat & format.feature_incompat_metabox == 0)
             return error.InvalidErofs;
-        const metadata_start = std.math.mul(
-            usize,
-            self.superblock.meta_block,
-            self.superblock.block_size,
-        ) catch return error.IntegerOverflow;
-        const slot_offset = std.math.mul(usize, @intCast(nid), format.inode_slot_size) catch
+        const metadata = if (in_metabox)
+            self.metabox_bytes orelse return error.ErofsMissingMetabox
+        else
+            self.bytes;
+        const metadata_start = if (in_metabox)
+            0
+        else
+            std.math.mul(
+                usize,
+                self.superblock.meta_block,
+                self.superblock.block_size,
+            ) catch return error.IntegerOverflow;
+        const slot_nid = nid & ((@as(u64, 1) << 63) - 1);
+        const slot_offset = std.math.mul(usize, @intCast(slot_nid), format.inode_slot_size) catch
             return error.IntegerOverflow;
         const location = std.math.add(usize, metadata_start, slot_offset) catch
             return error.IntegerOverflow;
-        if (self.bytes.len -| location < 32) return error.TruncatedFrame;
-        const compact = self.bytes[location..];
+        if (metadata.len -| location < 32) return error.TruncatedFrame;
+        const compact = metadata[location..];
         const inode_format = format.readU16(compact, 0);
         if (inode_format & ~@as(u16, 0x1f) != 0) return error.UnsupportedErofsFeature;
         const version = inode_format & 1;
@@ -153,8 +213,8 @@ pub const Archive = struct {
         const layout = std.enums.fromInt(format.Layout, layout_raw) orelse
             return error.UnsupportedErofsLayout;
         const inode_size: usize = if (version == 0) 32 else 64;
-        if (self.bytes.len - location < inode_size) return error.TruncatedFrame;
-        const inode_bytes = self.bytes[location..][0..inode_size];
+        if (metadata.len - location < inode_size) return error.TruncatedFrame;
+        const inode_bytes = metadata[location..][0..inode_size];
         const xattr_count = format.readU16(inode_bytes, 2);
         const xattr_size: usize = if (xattr_count == 0)
             0
@@ -198,6 +258,7 @@ pub const Archive = struct {
             format.readU32(inode_bytes, 44);
         const result = Inode{
             .nid = nid,
+            .in_metabox = in_metabox,
             .location = location,
             .inode_size = inode_size,
             .xattr_size = xattr_size,
@@ -247,7 +308,7 @@ pub const Archive = struct {
                 index_start,
                 std.math.mul(usize, chunk_count, index_size) catch
                     return error.IntegerOverflow,
-                self.bytes.len,
+                metadata.len,
             );
             with_compression.chunk_format = chunk_format;
             with_compression.chunk_bits = chunk_bits;
@@ -261,14 +322,14 @@ pub const Archive = struct {
                 location + inode_size + xattr_size,
                 8,
             );
-            if (self.bytes.len -| header_start < 16) return error.TruncatedFrame;
-            const cluster_byte = self.bytes[header_start + 7];
+            if (metadata.len -| header_start < 16) return error.TruncatedFrame;
+            const cluster_byte = metadata[header_start + 7];
             if (cluster_byte & 0x80 != 0) {
                 if (layout != .compressed_full or
                     self.superblock.feature_incompat & format.feature_incompat_fragments == 0 or
                     self.superblock.packed_nid == 0)
                     return error.InvalidErofs;
-                const encoded_offset = format.readU64(self.bytes, header_start);
+                const encoded_offset = format.readU64(metadata, header_start);
                 if (encoded_offset >> 63 == 0) return error.InvalidErofs;
                 with_compression.compressed_advise = 0x20;
                 with_compression.compressed_header_start = header_start;
@@ -277,7 +338,7 @@ pub const Archive = struct {
                 with_compression.fragment_logical_start = 0;
                 return with_compression;
             }
-            const advise = format.readU16(self.bytes, header_start + 4);
+            const advise = format.readU16(metadata, header_start + 4);
             if (cluster_byte & 0xf0 != 0 or advise & ~@as(u16, 0x003f) != 0)
                 return error.UnsupportedErofsFeature;
             if (advise & 0x28 == 0x28) return error.InvalidErofs;
@@ -302,8 +363,8 @@ pub const Archive = struct {
                         return error.IntegerOverflow) / extent_cluster_size;
                 } else std.math.cast(
                     usize,
-                    @as(u64, format.readU32(self.bytes, header_start)) |
-                        (@as(u64, format.readU16(self.bytes, header_start + 6)) << 32),
+                    @as(u64, format.readU32(metadata, header_start)) |
+                        (@as(u64, format.readU16(metadata, header_start + 6)) << 32),
                 ) orelse return error.IntegerOverflow;
                 const records_size = std.math.mul(
                     usize,
@@ -317,7 +378,7 @@ pub const Archive = struct {
                         records_size,
                         if (record_size == 4) @as(usize, 8) else 0,
                     ) catch return error.IntegerOverflow,
-                    self.bytes.len,
+                    metadata.len,
                 );
                 with_compression.compressed_advise = advise;
                 with_compression.compressed_header_start = header_start;
@@ -328,9 +389,9 @@ pub const Archive = struct {
             }
             const algorithm1 = std.enums.fromInt(
                 format.Compression,
-                self.bytes[header_start + 6] & 0x0f,
+                metadata[header_start + 6] & 0x0f,
             ) orelse return error.UnsupportedErofsCompression;
-            const algorithm2_raw = self.bytes[header_start + 6] >> 4;
+            const algorithm2_raw = metadata[header_start + 6] >> 4;
             const algorithm2 = if (algorithm2_raw == 0)
                 algorithm1
             else
@@ -351,7 +412,7 @@ pub const Archive = struct {
                         return error.InvalidErofs;
                     with_compression.fragment_offset = @as(
                         u64,
-                        format.readU32(self.bytes, header_start),
+                        format.readU32(metadata, header_start),
                     ) | (if (layout == .compressed_full)
                         @as(u64, tail.index.physical_block) << 32
                     else
@@ -361,7 +422,7 @@ pub const Archive = struct {
                     if (self.superblock.feature_incompat &
                         format.feature_incompat_ztailpacking == 0)
                         return error.InvalidErofs;
-                    const inline_size: usize = format.readU16(self.bytes, header_start + 2);
+                    const inline_size: usize = format.readU16(metadata, header_start + 2);
                     if (inline_size == 0) return error.InvalidErofs;
                     const cluster_size: usize = @as(usize, 1) << @intCast(
                         with_compression.compressed_cluster_bits,
@@ -378,7 +439,7 @@ pub const Archive = struct {
                     const inline_end = try checkedEnd(
                         inline_start,
                         inline_size,
-                        self.bytes.len,
+                        metadata.len,
                     );
                     if (inline_start / self.superblock.block_size !=
                         (inline_end - 1) / self.superblock.block_size)
@@ -405,9 +466,22 @@ pub const Archive = struct {
             inode_value.location,
             inode_value.inode_size,
         ) catch return error.IntegerOverflow;
+        const metadata = try self.metadataBytes(inode_value);
+        const prefix_metadata = if (self.superblock.xattr_prefix_count == 0 or
+            self.superblock.feature_compat & format.feature_compat_plain_xattr_prefixes != 0)
+            self.bytes
+        else
+            self.metabox_bytes orelse return error.ErofsMissingMetabox;
+        const shared_metadata = if (self.superblock.feature_compat &
+            format.feature_compat_shared_xattrs_in_metabox != 0)
+            self.metabox_bytes orelse return error.ErofsMissingMetabox
+        else
+            self.bytes;
         return xattr.readAllocLimited(
             allocator,
-            self.bytes,
+            prefix_metadata,
+            shared_metadata,
+            metadata,
             self.superblock.block_size,
             self.superblock.xattr_block,
             self.superblock.xattr_prefix_start,
@@ -557,6 +631,7 @@ pub const Archive = struct {
             }
         }
         if (inode_value.layout == .flat_inline and full_bytes < output.len) {
+            const metadata = try self.metadataBytes(inode_value);
             const inline_start = std.math.add(
                 usize,
                 inode_value.location,
@@ -566,8 +641,8 @@ pub const Archive = struct {
             if (inline_start / self.superblock.block_size !=
                 (inline_start + inline_len - 1) / self.superblock.block_size)
                 return error.InvalidErofs;
-            const inline_end = try checkedEnd(inline_start, inline_len, self.bytes.len);
-            @memcpy(output[full_bytes..], self.bytes[inline_start..inline_end]);
+            const inline_end = try checkedEnd(inline_start, inline_len, metadata.len);
+            @memcpy(output[full_bytes..], metadata[inline_start..inline_end]);
         }
         return output;
     }
@@ -579,9 +654,11 @@ pub const Archive = struct {
         max_output_len: usize,
     ) Error![]u8 {
         if (inode_value.layout != .chunk_based) return error.UnsupportedErofsLayout;
+        const metadata = try self.metadataBytes(inode_value);
         return chunk.readAllocLimited(
             allocator,
             self.bytes,
+            metadata,
             self.devices,
             self.superblock,
             .{
@@ -605,20 +682,24 @@ pub const Archive = struct {
             inode_value.layout != .compressed_compact)
             return error.UnsupportedErofsLayout;
         if (inode_value.file_size > limits.max_output_len) return error.OutputLimitExceeded;
-        if (inode_value.compressed_extent_record_size != 0) return extent_reader.readAllocLimited(
-            allocator,
-            self.bytes,
-            self.superblock,
-            .{
-                .file_size = inode_value.file_size,
-                .advise = inode_value.compressed_advise,
-                .cluster_bits = inode_value.compressed_cluster_bits,
-                .record_start = inode_value.compressed_extent_start,
-                .record_size = inode_value.compressed_extent_record_size,
-                .record_count = inode_value.compressed_extent_count,
-            },
-            limits.max_output_len,
-        );
+        if (inode_value.compressed_extent_record_size != 0) {
+            const metadata = try self.metadataBytes(inode_value);
+            return extent_reader.readAllocLimited(
+                allocator,
+                self.bytes,
+                metadata,
+                self.superblock,
+                .{
+                    .file_size = inode_value.file_size,
+                    .advise = inode_value.compressed_advise,
+                    .cluster_bits = inode_value.compressed_cluster_bits,
+                    .record_start = inode_value.compressed_extent_start,
+                    .record_size = inode_value.compressed_extent_record_size,
+                    .record_count = inode_value.compressed_extent_count,
+                },
+                limits.max_output_len,
+            );
+        }
         const output = try allocator.alloc(u8, inode_value.file_size);
         errdefer allocator.free(output);
         @memset(output, 0);
@@ -677,12 +758,13 @@ pub const Archive = struct {
         inode_value: Inode,
         output: []u8,
     ) Error!void {
+        const metadata = try self.metadataBytes(inode_value);
         const inline_end = try checkedEnd(
             inode_value.compressed_inline_start,
             inode_value.compressed_inline_size,
-            self.bytes.len,
+            metadata.len,
         );
-        const encoded = self.bytes[inode_value.compressed_inline_start..inline_end];
+        const encoded = metadata[inode_value.compressed_inline_start..inline_end];
         const kind = inode_value.compressed_inline_kind;
         if (kind == 0) {
             if (encoded.len != output.len) return error.InvalidErofs;
@@ -926,6 +1008,7 @@ pub const Archive = struct {
         }
         if (range_end > full_bytes) {
             if (inode_value.layout != .flat_inline) return error.InvalidErofs;
+            const metadata = try self.metadataBytes(inode_value);
             const tail_len = inode_value.file_size - full_bytes;
             const inline_start = std.math.add(
                 usize,
@@ -944,11 +1027,11 @@ pub const Archive = struct {
             const source_end = try checkedEnd(
                 source_start,
                 range_end - tail_read_start,
-                self.bytes.len,
+                metadata.len,
             );
             @memcpy(
                 output[tail_read_start - range_start ..],
-                self.bytes[source_start..source_end],
+                metadata[source_start..source_end],
             );
         }
     }
@@ -964,16 +1047,17 @@ pub const Archive = struct {
         inode_value: Inode,
         cluster_index: usize,
     ) Error!CompressionIndex {
+        const metadata = try self.metadataBytes(inode_value);
         const index_offset = std.math.add(
             usize,
             inode_value.compressed_index_start,
             cluster_index * 8,
         ) catch return error.IntegerOverflow;
-        if (self.bytes.len -| index_offset < 8) return error.TruncatedFrame;
+        if (metadata.len -| index_offset < 8) return error.TruncatedFrame;
         return .{
-            .kind = @truncate(format.readU16(self.bytes, index_offset) & 3),
-            .logical_offset = format.readU16(self.bytes, index_offset + 2),
-            .physical_block = format.readU32(self.bytes, index_offset + 4),
+            .kind = @truncate(format.readU16(metadata, index_offset) & 3),
+            .logical_offset = format.readU16(metadata, index_offset + 2),
+            .physical_block = format.readU32(metadata, index_offset + 4),
         };
     }
 
@@ -983,6 +1067,7 @@ pub const Archive = struct {
         cluster_index: usize,
         cluster_count: usize,
     ) Error!CompressionIndex {
+        const metadata = try self.metadataBytes(inode_value);
         const entry_base = inode_value.compressed_index_start;
         const initial_4byte = ((32 - entry_base % 32) / 4) & 7;
         const compact_2byte = if (inode_value.compressed_advise & 1 != 0 and
@@ -1008,26 +1093,26 @@ pub const Archive = struct {
         const value_count: usize = if (entry_size == 4) 2 else 16;
         const pack_size = value_count * entry_size;
         const pack_start = position & ~(pack_size - 1);
-        if (self.bytes.len -| pack_start < pack_size) return error.TruncatedFrame;
+        if (metadata.len -| pack_start < pack_size) return error.TruncatedFrame;
         const item_index = (position & (pack_size - 1)) >> shift;
         const logical_bits = @max(inode_value.compressed_cluster_bits, 12);
         if (logical_bits > 14) return error.UnsupportedErofsFeature;
         const encoded_bits: usize = (pack_size - 4) * 8 / value_count;
         const value = readPackedBits(
-            self.bytes[pack_start..][0 .. pack_size - 4],
+            metadata[pack_start..][0 .. pack_size - 4],
             encoded_bits * item_index,
             encoded_bits,
         );
         const logical_mask = (@as(u32, 1) << @intCast(logical_bits)) - 1;
         const kind: u2 = @truncate((value >> @intCast(logical_bits)) & 3);
-        var physical = format.readU32(self.bytes, pack_start + pack_size - 4);
+        var physical = format.readU32(metadata, pack_start + pack_size - 4);
         if (kind != 2) {
             var scan_index: isize = @intCast(item_index);
             var physical_delta: u32 = if (inode_value.compressed_advise & 2 != 0) 0 else 1;
             while (scan_index > 0) {
                 scan_index -= 1;
                 const previous = readPackedBits(
-                    self.bytes[pack_start..][0 .. pack_size - 4],
+                    metadata[pack_start..][0 .. pack_size - 4],
                     encoded_bits * @as(usize, @intCast(scan_index)),
                     encoded_bits,
                 );

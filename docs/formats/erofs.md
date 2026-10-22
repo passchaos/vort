@@ -29,6 +29,16 @@ from cluster bits and optionally carry one 64-bit physical base, while larger
 records carry explicit 64-bit physical and logical starts. Raw and all four
 EROFS compression formats share the same bounded decode path.
 
+Metabox images expose an ordinary hidden compressed inode whose decoded file is
+a second metadata address space. `loadMetaboxAllocLimited` first validates and
+decodes that inode under caller output/scratch limits, then returns an owning
+`ErofsLoadedMetaboxArchive`; its embedded borrowed Archive routes bit-63 NIDs,
+inline directories, xattr ibodies, non-plain long-prefix tables, shared xattrs,
+chunk indexes, and compressed indexes/extents to the decoded metadata while
+physical payloads continue to use the primary/external devices. Base metadata
+can still be inspected without loading, but high-bit inode access reports
+`ErofsMissingMetabox`.
+
 Compressed files support both legacy full indexes and modern compact indexes,
 including four-byte and sixteen-entry/two-byte packs, HEAD/NONHEAD lookback,
 EOF sentinels, and big pclusters. LZ4, raw Deflate, and Zstandard extents are
@@ -117,6 +127,13 @@ defer allocator.free(payload);
 
 const external = try vort.parseErofsWithDevices(metadata_image, &.{blob_bytes});
 
+var loaded_metabox = try external.loadMetaboxAllocLimited(
+    allocator,
+    64 * 1024 * 1024,
+    vort.erofsDefaultPackedExtentLimit,
+);
+defer loaded_metabox.deinit();
+
 var encoded_chunks = try vort.encodeErofsExternalChunksAlloc(
     allocator,
     entries,
@@ -125,14 +142,14 @@ var encoded_chunks = try vort.encodeErofsExternalChunksAlloc(
 defer encoded_chunks.deinit(allocator);
 ```
 
-Metaboxes remain future work. Prefix tables stored inside packed or metabox
-inodes remain unsupported; ordinary `PLAIN_XATTR_PFX` tables are supported in
-both directions. Compressed 48-bit `PARTIAL_REF` and fragment-extent combinations
-remain explicitly unsupported. The writer does not yet deduplicate repeated
-values into the optional shared-xattr region. Chunk output requires stored
-mode; fragment and compressed-inline output require a non-stored compression
-mode because visible files use the compressed inode layout even when a prefix
-or inline cluster falls back to `PLAIN`.
+Prefix tables stored inside packed fragment inodes remain unsupported; plain and
+metabox prefix tables are supported. Compressed 48-bit `PARTIAL_REF` and
+fragment-extent combinations remain explicitly unsupported. The writer does
+not yet generate metaboxes or deduplicate repeated values into the optional
+shared-xattr region. Chunk output requires stored mode; fragment and
+compressed-inline output require a non-stored compression mode because visible
+files use the compressed inode layout even when a prefix or inline cluster
+falls back to `PLAIN`.
 
 ```sh
 zig build run -- list-erofs-file system.erofs

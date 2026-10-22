@@ -1713,6 +1713,7 @@ pub const ErofsEntry = erofs.Entry;
 pub const ErofsEntryKind = erofs.EntryKind;
 pub const ErofsFileType = erofs.FileType;
 pub const ErofsInode = erofs.Inode;
+pub const ErofsLoadedMetaboxArchive = erofs.LoadedMetaboxArchive;
 pub const ErofsLayout = erofs.Layout;
 pub const ErofsReadLimits = erofs.ReadLimits;
 pub const ErofsSuperblock = erofs.Superblock;

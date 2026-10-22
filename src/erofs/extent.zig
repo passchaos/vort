@@ -25,6 +25,7 @@ const Record = struct {
 pub fn readAllocLimited(
     allocator: std.mem.Allocator,
     image: []const u8,
+    metadata: []const u8,
     superblock: format.Superblock,
     view: View,
     max_output_len: usize,
@@ -37,12 +38,12 @@ pub fn readAllocLimited(
 
     var cumulative_physical: u64 = 0;
     if (view.record_size == 4) {
-        if (image.len -| view.record_start < 8) return error.TruncatedFrame;
-        cumulative_physical = format.readU64(image, view.record_start);
+        if (metadata.len -| view.record_start < 8) return error.TruncatedFrame;
+        cumulative_physical = format.readU64(metadata, view.record_start);
     }
     var previous: ?Record = null;
     for (0..view.record_count) |index| {
-        const record = try readRecord(image, view, index, &cumulative_physical);
+        const record = try readRecord(metadata, view, index, &cumulative_physical);
         if (previous) |prior| {
             if (record.logical_start <= prior.logical_start) return error.InvalidErofs;
             try decodeRecord(
@@ -195,6 +196,7 @@ test "EROFS 48-bit extent records decode 8 16 and 32 byte layouts" {
         .xattr_prefix_count = 0,
         .xattr_prefix_start = 0,
         .packed_nid = 0,
+        .metabox_nid = 0,
         .extra_devices = 0,
         .device_slot_offset = 0,
         .available_compression_algorithms = 0,
@@ -207,6 +209,7 @@ test "EROFS 48-bit extent records decode 8 16 and 32 byte layouts" {
         writeRawRecord(&image, record_size, record_size, 512, 1536, 512);
         const decoded = try readAllocLimited(
             allocator,
+            &image,
             &image,
             superblock,
             .{

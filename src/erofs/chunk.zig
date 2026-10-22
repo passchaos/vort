@@ -82,6 +82,7 @@ pub fn deviceInfo(
 pub fn readAllocLimited(
     allocator: std.mem.Allocator,
     image: []const u8,
+    metadata: []const u8,
     devices: []const []const u8,
     superblock: format.Superblock,
     inode: InodeView,
@@ -106,17 +107,17 @@ pub fn readAllocLimited(
         var device_id: u16 = 0;
         var start_block: u64 = undefined;
         if (inode.index_size == 8) {
-            const start_hi = format.readU16(image, entry_start);
+            const start_hi = format.readU16(metadata, entry_start);
             const index_48bit = inode.chunk_format & 0x0040 != 0;
             if (index_48bit and
                 superblock.feature_incompat & format.feature_incompat_48bit == 0)
                 return error.InvalidErofs;
             if (!index_48bit and start_hi != 0) return error.InvalidErofs;
-            device_id = format.readU16(image, entry_start + 2) & device_mask;
-            start_block = @as(u64, format.readU32(image, entry_start + 4)) |
+            device_id = format.readU16(metadata, entry_start + 2) & device_mask;
+            start_block = @as(u64, format.readU32(metadata, entry_start + 4)) |
                 (if (index_48bit) @as(u64, start_hi) << 32 else 0);
         } else if (inode.index_size == 4) {
-            start_block = format.readU32(image, entry_start);
+            start_block = format.readU32(metadata, entry_start);
         } else {
             return error.InvalidErofs;
         }

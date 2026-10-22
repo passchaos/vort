@@ -22289,3 +22289,16 @@ reuse, so production keeps the simpler independently owned plans.
   exhaustive OOM. The differential independently reads and writes stored,
   LZ4, Deflate, Zstandard, local-chunk, and external-chunk forced layouts
   (`address48_reader=6`, `address48_writer=6`).
+
+- Added bounded EROFS metabox reading. The superblock parser validates the
+  extension slot and low metabox NID, while a new owning loader decodes the
+  hidden ordinary inode under independent metadata-output and packed-extent
+  limits. The embedded Archive then routes bit-63 inode slots, inline directory
+  payloads, chunk/compression indexes, extent records, xattr ibodies, shared
+  entries, and non-plain long-prefix tables through the decoded metadata space;
+  physical file data remains on primary or borrowed external devices. Base
+  inspection stays allocation-free and reports `ErofsMissingMetabox` for
+  premature high-NID access. Fixed erofs-utils fixtures cover 80 nested files
+  and shared/long xattrs; malformed super/payload, exact limits, and exhaustive
+  OOM are covered. The required differential validates MZi and MZ=id images
+  (`metabox_reader=2`). Metabox writing remains follow-up work.

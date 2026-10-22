@@ -13,12 +13,14 @@ pub const super_base_size: usize = 128;
 pub const inode_slot_size: usize = 32;
 pub const name_max: usize = 255;
 pub const feature_compat_plain_xattr_prefixes: u32 = 0x0000_0010;
+pub const feature_compat_shared_xattrs_in_metabox: u32 = 0x0000_0008;
 pub const feature_incompat_chunked_file: u32 = 0x0000_0004;
 pub const feature_incompat_device_table: u32 = 0x0000_0008;
 pub const feature_incompat_ztailpacking: u32 = 0x0000_0010;
 pub const feature_incompat_fragments: u32 = 0x0000_0020;
 pub const feature_incompat_xattr_prefixes: u32 = 0x0000_0040;
 pub const feature_incompat_48bit: u32 = 0x0000_0080;
+pub const feature_incompat_metabox: u32 = 0x0000_0100;
 
 pub const Layout = enum(u3) {
     flat_plain = 0,
@@ -63,6 +65,7 @@ pub const Superblock = struct {
     xattr_prefix_count: u8,
     xattr_prefix_start: u32,
     packed_nid: u64,
+    metabox_nid: u64,
     extra_devices: u16,
     device_slot_offset: u16,
     available_compression_algorithms: u16,
@@ -93,7 +96,7 @@ pub fn parseSuperblock(input: []const u8) Error!Superblock {
     // The foundational reader handles legacy LZ4 padding and compressor
     // configuration records and plain long-xattr-prefix tables. Other
     // incompatible features alter addressing.
-    if (feature_incompat & ~@as(u32, 0x0000_00ff) != 0)
+    if (feature_incompat & ~@as(u32, 0x0000_01ff) != 0)
         return error.UnsupportedErofsFeature;
     const extra_devices = readU16(bytes, 86);
     const device_slot_offset = readU16(bytes, 88);
@@ -108,8 +111,15 @@ pub fn parseSuperblock(input: []const u8) Error!Superblock {
     if (packed_nid >> 63 != 0) return error.InvalidErofs;
     if (feature_incompat & feature_incompat_fragments == 0 and packed_nid != 0)
         return error.InvalidErofs;
+    const metabox_nid = if (feature_incompat & feature_incompat_metabox != 0) blk: {
+        if (super_size < 136) return error.InvalidErofs;
+        const value = readU64(bytes, 128);
+        if (value == 0 or value >> 63 != 0) return error.InvalidErofs;
+        break :blk value;
+    } else 0;
     if (feature_incompat & feature_incompat_xattr_prefixes != 0) {
-        if (feature_compat & feature_compat_plain_xattr_prefixes == 0)
+        if (feature_compat & feature_compat_plain_xattr_prefixes == 0 and
+            feature_incompat & feature_incompat_metabox == 0)
             return error.UnsupportedErofsFeature;
         if (xattr_prefix_count == 0 or xattr_prefix_count > 0x80)
             return error.InvalidErofs;
@@ -156,6 +166,7 @@ pub fn parseSuperblock(input: []const u8) Error!Superblock {
         .xattr_prefix_count = xattr_prefix_count,
         .xattr_prefix_start = xattr_prefix_start,
         .packed_nid = packed_nid,
+        .metabox_nid = metabox_nid,
         .extra_devices = extra_devices,
         .device_slot_offset = device_slot_offset,
         .available_compression_algorithms = readU16(bytes, 84),

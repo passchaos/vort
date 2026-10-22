@@ -17,6 +17,7 @@ pub const Entry = writer.Entry;
 pub const EntryKind = writer.EntryKind;
 pub const FileType = format.FileType;
 pub const Inode = archive.Inode;
+pub const LoadedMetaboxArchive = archive.LoadedMetaboxArchive;
 pub const ReadLimits = archive.ReadLimits;
 pub const Xattr = xattr.Attribute;
 pub const Xattrs = xattr.Attributes;
@@ -41,6 +42,7 @@ test {
     _ = chunk;
     _ = extent;
     _ = @import("erofs/chunk_tests.zig");
+    _ = @import("erofs/metabox_tests.zig");
     _ = codec;
     _ = writer;
     _ = @import("erofs/writer_fragment_tests.zig");

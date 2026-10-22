@@ -5,6 +5,7 @@ const max_file_size = 512 * 1024 * 1024;
 const max_directory_size = 64 * 1024 * 1024;
 const max_xattr_count = 4096;
 const max_xattr_bytes = 16 * 1024 * 1024;
+const max_metabox_size = 64 * 1024 * 1024;
 const max_depth = 256;
 
 pub fn create(
@@ -49,7 +50,17 @@ pub fn list(
     const input_path = args.next() orelse return error.MissingCorpusPath;
     const input = try readFile(init, input_path);
     defer init.gpa.free(input);
-    const archive = try vort.parseErofs(input);
+    const base_archive = try vort.parseErofs(input);
+    var loaded = if (base_archive.superblock.metabox_nid != 0)
+        try base_archive.loadMetaboxAllocLimited(
+            init.gpa,
+            max_metabox_size,
+            vort.erofsDefaultPackedExtentLimit,
+        )
+    else
+        null;
+    defer if (loaded) |*owner| owner.deinit();
+    const archive = if (loaded) |owner| owner.archive else base_archive;
     try stdout.print(
         "erofs_inodes={d} blocks={d} block_size={d} root_nid={d} compression_mask={d}\n",
         .{
@@ -123,7 +134,17 @@ pub fn extract(
             return err;
         };
     }
-    const archive = try vort.parseErofsWithDevices(input, devices.items);
+    const base_archive = try vort.parseErofsWithDevices(input, devices.items);
+    var loaded = if (base_archive.superblock.metabox_nid != 0)
+        try base_archive.loadMetaboxAllocLimited(
+            init.gpa,
+            max_metabox_size,
+            vort.erofsDefaultPackedExtentLimit,
+        )
+    else
+        null;
+    defer if (loaded) |*owner| owner.deinit();
+    const archive = if (loaded) |owner| owner.archive else base_archive;
     const decoded = try archive.extractByPathAllocLimited(
         init.gpa,
         entry_path,
@@ -148,7 +169,17 @@ pub fn listXattrs(
     const entry_path = args.next() orelse return error.MissingCorpusPath;
     const input = try readFile(init, input_path);
     defer init.gpa.free(input);
-    const archive = try vort.parseErofs(input);
+    const base_archive = try vort.parseErofs(input);
+    var loaded = if (base_archive.superblock.metabox_nid != 0)
+        try base_archive.loadMetaboxAllocLimited(
+            init.gpa,
+            max_metabox_size,
+            vort.erofsDefaultPackedExtentLimit,
+        )
+    else
+        null;
+    defer if (loaded) |*owner| owner.deinit();
+    const archive = if (loaded) |owner| owner.archive else base_archive;
     const inode = try archive.lookup(
         init.gpa,
         entry_path,

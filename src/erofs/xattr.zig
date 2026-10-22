@@ -62,7 +62,8 @@ const EncodedPrefix = struct {
 };
 
 const Scanner = struct {
-    image: []const u8,
+    prefix_image: []const u8,
+    shared_image: []const u8,
     block_size: usize,
     xattr_block: u32,
     xattr_prefix_start: u32,
@@ -73,7 +74,9 @@ const Scanner = struct {
     inline_position: usize,
 
     fn init(
-        image: []const u8,
+        prefix_image: []const u8,
+        shared_image: []const u8,
+        ibody_image: []const u8,
         block_size: usize,
         xattr_block: u32,
         xattr_prefix_start: u32,
@@ -82,7 +85,8 @@ const Scanner = struct {
         ibody_size: usize,
     ) Error!Scanner {
         if (ibody_size == 0) return .{
-            .image = image,
+            .prefix_image = prefix_image,
+            .shared_image = shared_image,
             .block_size = block_size,
             .xattr_block = xattr_block,
             .xattr_prefix_start = xattr_prefix_start,
@@ -93,8 +97,8 @@ const Scanner = struct {
         };
         if (ibody_size < ibody_header_size or ibody_size & 3 != 0)
             return error.InvalidErofs;
-        const ibody_end = try checkedEnd(ibody_start, ibody_size, image.len);
-        const ibody = image[ibody_start..ibody_end];
+        const ibody_end = try checkedEnd(ibody_start, ibody_size, ibody_image.len);
+        const ibody = ibody_image[ibody_start..ibody_end];
         for (ibody[5..ibody_header_size]) |reserved|
             if (reserved != 0) return error.InvalidErofs;
         const shared_count: usize = ibody[4];
@@ -104,7 +108,8 @@ const Scanner = struct {
         );
         if (inline_position > ibody.len) return error.InvalidErofs;
         return .{
-            .image = image,
+            .prefix_image = prefix_image,
+            .shared_image = shared_image,
             .block_size = block_size,
             .xattr_block = xattr_block,
             .xattr_prefix_start = xattr_prefix_start,
@@ -123,10 +128,10 @@ const Scanner = struct {
             const shared_base = try checkedMul(self.xattr_block, self.block_size);
             const shared_offset = try checkedAdd(shared_base, try checkedMul(id, 4));
             return try parseEntry(
-                self.image,
+                self.shared_image,
                 shared_offset,
-                self.image.len,
-                self.image,
+                self.shared_image.len,
+                self.prefix_image,
                 self.xattr_prefix_start,
                 self.xattr_prefix_count,
             );
@@ -141,7 +146,7 @@ const Scanner = struct {
             self.ibody,
             self.inline_position,
             self.ibody.len,
-            self.image,
+            self.prefix_image,
             self.xattr_prefix_start,
             self.xattr_prefix_count,
         );
@@ -152,7 +157,9 @@ const Scanner = struct {
 
 pub fn readAllocLimited(
     allocator: std.mem.Allocator,
-    image: []const u8,
+    prefix_image: []const u8,
+    shared_image: []const u8,
+    ibody_image: []const u8,
     block_size: usize,
     xattr_block: u32,
     xattr_prefix_start: u32,
@@ -162,9 +169,11 @@ pub fn readAllocLimited(
     max_count: usize,
     max_total_bytes: usize,
 ) Error!Attributes {
-    try validatePrefixTable(image, xattr_prefix_start, xattr_prefix_count);
+    try validatePrefixTable(prefix_image, xattr_prefix_start, xattr_prefix_count);
     var scanner = try Scanner.init(
-        image,
+        prefix_image,
+        shared_image,
+        ibody_image,
         block_size,
         xattr_block,
         xattr_prefix_start,
@@ -188,7 +197,9 @@ pub fn readAllocLimited(
     errdefer allocator.free(storage);
 
     scanner = try Scanner.init(
-        image,
+        prefix_image,
+        shared_image,
+        ibody_image,
         block_size,
         xattr_block,
         xattr_prefix_start,

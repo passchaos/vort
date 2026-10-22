@@ -80,6 +80,7 @@ def make_image(
     features: tuple[str, ...] = (),
     chunksize: int | None = None,
     blobdev: Path | None = None,
+    metabox: str | None = None,
 ) -> None:
     command: list[object] = [mkfs, "-T0", "--all-root"]
     if compressor is not None:
@@ -94,6 +95,8 @@ def make_image(
         command.append(f"--chunksize={chunksize}")
     if blobdev is not None:
         command.append(f"--blobdev={blobdev}")
+    if metabox is not None:
+        command.extend(("-m4096", f"--MZ={metabox}"))
     command.extend((image, source))
     run(*command)
 
@@ -180,6 +183,7 @@ def main() -> None:
     external_chunk_writer_cases = 0
     address48_reader_cases = 0
     address48_writer_cases = 0
+    metabox_reader_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -448,6 +452,30 @@ def main() -> None:
                 if "48bit" in features:
                     address48_reader_cases += 1
 
+            for label, metabox in (("metabox-inodes", "i"), ("metabox-inodes-dirs", "id")):
+                image = temp / f"{label}.erofs"
+                make_image(
+                    mkfs,
+                    source,
+                    image,
+                    "lz4",
+                    False,
+                    metabox=metabox,
+                )
+                extracted = temp / f"{label}-fsck"
+                run(
+                    fsck,
+                    f"--extract={extracted}",
+                    "--no-preserve",
+                    "--xattrs",
+                    image,
+                )
+                verify_vort(args.cli, image, payloads, label, temp)
+                verify_vort_xattrs(args.cli, image, source_xattrs, label)
+                if (extracted / "large.bin").read_bytes() != payloads["large.bin"]:
+                    raise AssertionError(f"fsck.erofs metabox extraction mismatch for {label}")
+                metabox_reader_cases += 1
+
         expect_failure(
             args.cli,
             "extract-erofs-file",
@@ -518,6 +546,7 @@ def main() -> None:
         f"external_chunk_writer={external_chunk_writer_cases} "
         f"address48_reader={address48_reader_cases} "
         f"address48_writer={address48_writer_cases} "
+        f"metabox_reader={metabox_reader_cases} "
         f"malformed={malformed}"
     )
 
