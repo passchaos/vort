@@ -22623,3 +22623,9 @@ reuse, so production keeps the simpler independently owned plans.
   cases pass through the new reader; six further real file checks cover sparse
   image/device inputs above 512 MiB, 64 KiB budgets, same-path extraction and
   budget/late-corruption preservation with temporary-file cleanup.
+  Debug and ReleaseFast each pass 119 EROFS plus 12 independent I/O tests;
+  post-rebase verification passes all 131. Packed fragments whose owning
+  packed file uses modern extent records have a dedicated Source regression.
+  Broad check, wasm compilation and the Source CLI help page pass.
+  The final Debug repository suite passes 3438/3438 tests, including 3431 root
+  tests and seven separate Brotli object/classifier cases.

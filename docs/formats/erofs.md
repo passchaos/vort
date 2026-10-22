@@ -489,7 +489,7 @@ plus local/external chunk padding, deduplication and holes. Four-MiB stored
 and all-unique chunk sources complete within 64 KiB of requested working heap;
 LZ4 legacy/grouped sources complete within 1 MiB including encoder tables.
 Source/write/final-length/device failures, empty devices and exhaustive OOM
-are covered. Debug and ReleaseFast each pass 99 EROFS plus 12 independent I/O
+are covered. Debug and ReleaseFast each pass 119 EROFS plus 12 independent I/O
 tests (4 Source, 8 Sink/allocator), with explicit imports ensuring that file
 adapters and allocator tests are actually analyzed by Zig.
 erofs-utils 1.9.4-g5fcb2f76 passes all 324 writer modes, including 108 Sink
@@ -502,3 +502,11 @@ The Source reader runs this complete matrix through file Sources and direct
 file Sinks. Six additional CLI checks cover images and devices larger than
 512 MiB under a 64 KiB working limit, listing, budget-failure preservation,
 same-path extraction and corrupt-final-pcluster cleanup (`source_reader=6`).
+The Source reader regressions cover every codec/layout, boundary-crossing
+ranges, compact/final-big references, metabox and shared xattrs, deferred
+loading, encoded/decoded caps, Source/Sink errors and exhaustive OOM. Four-MiB
+stored input/output uses less than 64 KiB requested working heap; legacy and
+grouped compressed extraction uses at most 2 MiB while emitting 4 MiB. Packed
+files with modern extent records also extract through the Source path.
+The final Debug repository suite passes 3438/3438 tests; broad check, wasm
+compilation, the 131-case focused gate and all external file cases also pass.
