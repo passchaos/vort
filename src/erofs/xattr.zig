@@ -1,8 +1,9 @@
 const std = @import("std");
 const core = @import("../core.zig");
 const format = @import("format.zig");
+const input_module = @import("reader/input.zig");
 
-pub const Error = core.Error || format.Error || std.mem.Allocator.Error;
+pub const Error = core.Error || format.Error || input_module.Error || std.mem.Allocator.Error;
 
 pub const Attribute = struct {
     name: []const u8,
@@ -35,14 +36,14 @@ const EncodedName = struct {
     suffix: []const u8,
 };
 
-const WireAttribute = struct {
+pub const WireAttribute = struct {
     prefix: []const u8,
     infix: []const u8,
     suffix: []const u8,
     value: []const u8,
     padded_size: usize,
 
-    fn nameLen(self: WireAttribute) Error!usize {
+    pub fn nameLen(self: WireAttribute) Error!usize {
         return checkedAdd(
             try checkedAdd(self.prefix.len, self.infix.len),
             self.suffix.len,
@@ -50,7 +51,7 @@ const WireAttribute = struct {
     }
 };
 
-const LongPrefix = struct {
+pub const LongPrefix = struct {
     base: []const u8,
     infix: []const u8,
     next: usize,
@@ -315,14 +316,19 @@ pub fn validatePrefixTable(
     prefix_start_units: u32,
     prefix_count: u8,
 ) Error!void {
+    return validatePrefixTableInput(.{ .slice = image }, prefix_start_units, prefix_count);
+}
+
+pub fn validatePrefixTableInput(image: input_module.Input, prefix_start_units: u32, prefix_count: u8) Error!void {
     if (prefix_count == 0) {
         if (prefix_start_units != 0) return error.InvalidErofs;
         return;
     }
     if (prefix_count > 0x80) return error.InvalidErofs;
     var position = try checkedMul(prefix_start_units, 4);
+    var buffer: [260]u8 = undefined;
     for (0..prefix_count) |_| {
-        const prefix = try parseLongPrefix(image, position);
+        const prefix = try readLongPrefixInput(image, position, &buffer);
         position = prefix.next;
     }
 }
@@ -383,13 +389,21 @@ fn parseEntry(
         );
         break :blk .{ long_prefix.base, long_prefix.infix };
     } else blk: {
-        const short_prefix = try prefixForIndex(name_index);
-        if (((name_index == 2 or name_index == 3) and name_len != 0) or
-            ((name_index == 1 or name_index == 4 or name_index == 5 or name_index == 6) and
-                name_len == 0))
-            return error.InvalidErofs;
-        break :blk .{ short_prefix, &.{} };
+        break :blk .{ try shortPrefix(name_index, name_len), &.{} };
     };
+    return parseEntryWithPrefix(input, start, limit, prefix, infix);
+}
+
+pub fn shortPrefix(name_index: u8, name_len: usize) Error![]const u8 {
+    const prefix = try prefixForIndex(name_index);
+    if (((name_index == 2 or name_index == 3) and name_len != 0) or
+        ((name_index == 1 or name_index == 4 or name_index == 5 or name_index == 6) and name_len == 0)) return error.InvalidErofs;
+    return prefix;
+}
+
+pub fn parseEntryWithPrefix(input: []const u8, start: usize, limit: usize, prefix: []const u8, infix: []const u8) Error!WireAttribute {
+    if (limit > input.len or start > limit or limit - start < entry_header_size) return error.InvalidErofs;
+    const name_len: usize = input[start];
     const value_len: usize = format.readU16(input, start + 2);
     const payload_len = try checkedAdd(name_len, value_len);
     const raw_size = try checkedAdd(entry_header_size, payload_len);
@@ -479,6 +493,27 @@ fn longPrefixAt(
         position = prefix.next;
     }
     return error.InvalidErofs;
+}
+
+pub fn longPrefixAtInput(image: input_module.Input, prefix_start_units: u32, prefix_count: u8, target: u8, buffer: *[260]u8) Error!LongPrefix {
+    if (target >= prefix_count) return error.InvalidErofs;
+    var position = try checkedMul(prefix_start_units, 4);
+    for (0..prefix_count) |index| {
+        const prefix = try readLongPrefixInput(image, position, buffer);
+        if (index == target) return prefix;
+        position = prefix.next;
+    }
+    return error.InvalidErofs;
+}
+
+fn readLongPrefixInput(image: input_module.Input, position: usize, buffer: *[260]u8) Error!LongPrefix {
+    const payload_len: usize = try image.integer(u16, position);
+    if (payload_len < 1 or payload_len > format.name_max + 1) return error.InvalidErofs;
+    const size = try align4(try checkedAdd(2, payload_len));
+    try image.read(position, buffer[0..size]);
+    var prefix = try parseLongPrefix(buffer[0..size], 0);
+    prefix.next = try checkedAdd(position, prefix.next);
+    return prefix;
 }
 
 fn parseLongPrefix(image: []const u8, position: usize) Error!LongPrefix {

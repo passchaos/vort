@@ -42,6 +42,9 @@ pub const parseSuperblock = format.parseSuperblock;
 pub const defaultPackedExtentLimit = archive.default_packed_extent_limit;
 
 test {
+    _ = @import("erofs/reader/input.zig");
+    _ = @import("erofs/reader/superblock.zig");
+    _ = @import("erofs/reader/tests.zig");
     _ = format;
     _ = archive;
     _ = @import("erofs/address48_tests.zig");

@@ -1,8 +1,9 @@
 const std = @import("std");
 const core = @import("../core.zig");
 const format = @import("format.zig");
+const input_module = @import("reader/input.zig");
 
-pub const Error = core.Error || format.Error;
+pub const Error = core.Error || format.Error || input_module.Error;
 pub const Index = struct {
     kind: u2,
     logical_offset: usize,
@@ -18,25 +19,36 @@ pub const View = struct {
 };
 
 pub fn readFull(metadata: []const u8, view: View, cluster_index: usize) Error!Index {
+    return readFullInput(.{ .slice = metadata }, view, cluster_index);
+}
+
+pub fn readFullInput(metadata: input_module.Input, view: View, cluster_index: usize) Error!Index {
     const index_offset = std.math.add(
         usize,
         view.index_start,
         std.math.mul(usize, cluster_index, 8) catch return error.IntegerOverflow,
     ) catch return error.IntegerOverflow;
-    if (metadata.len -| index_offset < 8) return error.TruncatedFrame;
-    const kind: u2 = @truncate(format.readU16(metadata, index_offset) & 3);
+    var record: [8]u8 = undefined;
+    try metadata.read(index_offset, &record);
+    const kind: u2 = @truncate(format.readU16(&record, 0) & 3);
     return .{
         .kind = kind,
-        .logical_offset = format.readU16(metadata, index_offset + 2),
-        .physical_block = format.readU32(metadata, index_offset + 4),
+        .logical_offset = format.readU16(&record, 2),
+        .physical_block = format.readU32(&record, 4),
         .compressed_blocks = if (kind == 2)
-            try blockCount(format.readU16(metadata, index_offset + 4), view)
+            try blockCount(format.readU16(&record, 4), view)
         else
             null,
     };
 }
 
 pub fn readCompact(metadata: []const u8, view: View, cluster_index: usize, cluster_count: usize) Error!Index {
+    return readCompactInput(.{ .slice = metadata }, view, cluster_index, cluster_count);
+}
+
+const Pack = struct { start: usize, size: usize, item: usize };
+
+fn packFor(view: View, cluster_index: usize, cluster_count: usize) Error!Pack {
     const entry_base = view.index_start;
     const initial_4byte = ((32 - entry_base % 32) / 4) & 7;
     const compact_2byte = if (view.advise & 1 != 0 and
@@ -48,40 +60,58 @@ pub fn readCompact(metadata: []const u8, view: View, cluster_index: usize, clust
     var position = entry_base;
     var shift: u3 = 2;
     if (relative_index >= initial_4byte) {
-        position += initial_4byte * 4;
+        position = std.math.add(usize, position, initial_4byte * 4) catch return error.IntegerOverflow;
         relative_index -= initial_4byte;
         if (relative_index < compact_2byte) {
             shift = 1;
         } else {
-            position += compact_2byte * 2;
+            const size = std.math.mul(usize, compact_2byte, 2) catch return error.IntegerOverflow;
+            position = std.math.add(usize, position, size) catch return error.IntegerOverflow;
             relative_index -= compact_2byte;
         }
     }
-    position += relative_index << shift;
+    const relative = std.math.mul(usize, relative_index, @as(usize, 1) << shift) catch return error.IntegerOverflow;
+    position = std.math.add(usize, position, relative) catch return error.IntegerOverflow;
     const entry_size: usize = @as(usize, 1) << shift;
     const value_count: usize = if (entry_size == 4) 2 else 16;
     const pack_size = value_count * entry_size;
     const pack_start = position & ~(pack_size - 1);
-    if (metadata.len -| pack_start < pack_size) return error.TruncatedFrame;
     const item_index = (position & (pack_size - 1)) >> shift;
+    return .{ .start = pack_start, .size = pack_size, .item = item_index };
+}
+
+pub fn compactIndexEnd(view: View, cluster_count: usize) Error!usize {
+    if (cluster_count == 0) return view.index_start;
+    const pack = try packFor(view, cluster_count - 1, cluster_count);
+    return std.math.add(usize, pack.start, pack.size) catch return error.IntegerOverflow;
+}
+
+pub fn readCompactInput(metadata: input_module.Input, view: View, cluster_index: usize, cluster_count: usize) Error!Index {
+    const pack = try packFor(view, cluster_index, cluster_count);
+    var buffer: [32]u8 = undefined;
+    const data = buffer[0..pack.size];
+    try metadata.read(pack.start, data);
+    const pack_size = pack.size;
+    const item_index = pack.item;
+    const value_count: usize = if (pack_size == 8) 2 else 16;
     const logical_bits = @max(view.cluster_bits, 12);
     if (logical_bits > 14) return error.UnsupportedErofsFeature;
     const encoded_bits: usize = (pack_size - 4) * 8 / value_count;
     const value = readPackedBits(
-        metadata[pack_start..][0 .. pack_size - 4],
+        data[0 .. pack_size - 4],
         encoded_bits * item_index,
         encoded_bits,
     );
     const logical_mask = (@as(u32, 1) << @intCast(logical_bits)) - 1;
     const kind: u2 = @truncate((value >> @intCast(logical_bits)) & 3);
-    var physical = format.readU32(metadata, pack_start + pack_size - 4);
+    var physical = format.readU32(data, pack_size - 4);
     if (kind != 2) {
         var scan_index: isize = @intCast(item_index);
         var physical_delta: u32 = if (view.advise & 2 != 0) 0 else 1;
         while (scan_index > 0) {
             scan_index -= 1;
             const previous = readPackedBits(
-                metadata[pack_start..][0 .. pack_size - 4],
+                data[0 .. pack_size - 4],
                 encoded_bits * @as(usize, @intCast(scan_index)),
                 encoded_bits,
             );

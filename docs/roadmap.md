@@ -22586,3 +22586,17 @@ reuse, so production keeps the simpler independently owned plans.
   full repository suite (`zig build test`) passes. ReleaseFast validation is
   focused on the 111 EROFS/I/O cases; this remains a functionality milestone
   without a performance-leadership claim.
+
+
+- Separated EROFS inode/directory types and metadata parsing into cohesive
+  reader modules. Borrowed slice/Source address spaces share superblock,
+  inode, full/compact index, extent-record, prefix-table and device rules;
+  metadata reads use fixed-size headers/packs instead of an image mirror.
+  Superblock Source parsing reads at most one 64 KiB block, verifies CRC-32C
+  against the stable u64 image length, and preserves slice error precedence.
+  Explicit host-size checks replace integer-cast traps, index/alignment
+  arithmetic is checked, and directory names reject embedded NUL bytes.
+  Device resolution shares explicit/unified address handling and preserves
+  u64 Source offsets; a virtual 64 TiB device test reads eight bytes at a
+  32 TiB offset without loading the blob. This is the parsing foundation for
+  the Source archive and direct extraction APIs.

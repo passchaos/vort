@@ -2,8 +2,9 @@ const std = @import("std");
 const core = @import("../core.zig");
 const codec = @import("codec.zig");
 const format = @import("format.zig");
+const input_module = @import("reader/input.zig");
 
-pub const Error = core.Error || codec.Error || format.Error || std.mem.Allocator.Error ||
+pub const Error = core.Error || codec.Error || format.Error || input_module.Error || std.mem.Allocator.Error ||
     error{InvalidErofs};
 
 pub const View = struct {
@@ -15,7 +16,7 @@ pub const View = struct {
     record_count: usize,
 };
 
-const Record = struct {
+pub const Record = struct {
     logical_start: usize,
     physical_start: u64,
     encoded_len: usize,
@@ -77,14 +78,21 @@ fn readRecord(
     index: usize,
     cumulative_physical: *u64,
 ) Error!Record {
-    const records_base = view.record_start + (if (view.record_size == 4) @as(usize, 8) else 0);
+    return readRecordInput(.{ .slice = image }, view, index, cumulative_physical);
+}
+
+pub fn readRecordInput(input: input_module.Input, view: View, index: usize, cumulative_physical: *u64) Error!Record {
+    if (view.record_size != 4 and view.record_size != 8 and view.record_size != 16 and view.record_size != 32) return error.InvalidErofs;
+    if (view.cluster_bits >= @bitSizeOf(usize)) return error.UnsupportedErofsFeature;
+    const records_base = std.math.add(usize, view.record_start, if (view.record_size == 4) @as(usize, 8) else 0) catch return error.IntegerOverflow;
     const start = std.math.add(
         usize,
         records_base,
         std.math.mul(usize, index, view.record_size) catch return error.IntegerOverflow,
     ) catch return error.IntegerOverflow;
-    const end = try checkedEnd(start, view.record_size, image.len);
-    const bytes = image[start..end];
+    var buffer: [32]u8 = undefined;
+    const bytes = buffer[0..view.record_size];
+    try input.read(start, bytes);
     const encoded = format.readU32(bytes, 0);
     if (encoded & (@as(u32, 1) << 27) != 0) return error.UnsupportedErofsFeature;
     const encoded_len: usize = encoded & 0x001f_ffff;

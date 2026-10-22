@@ -72,12 +72,27 @@ pub const Superblock = struct {
     build_time: u32,
 
     pub fn imageSize(self: Superblock) Error!usize {
-        return std.math.mul(usize, @intCast(self.block_count), self.block_size) catch
+        const count = std.math.cast(usize, self.block_count) orelse return error.IntegerOverflow;
+        return std.math.mul(usize, count, self.block_size) catch
             return error.IntegerOverflow;
+    }
+
+    pub fn imageSize64(self: Superblock) Error!u64 {
+        return std.math.mul(u64, self.block_count, self.block_size) catch return error.IntegerOverflow;
     }
 };
 
 pub fn parseSuperblock(input: []const u8) Error!Superblock {
+    return parseSuperblockInternal(input, input.len, true);
+}
+
+/// Parses a resident superblock/checksum region against the declared stable
+/// input length, allowing Source users to retain only the header block.
+pub fn parseSuperblockWithLength(input: []const u8, input_len: u64) Error!Superblock {
+    return parseSuperblockInternal(input, input_len, false);
+}
+
+fn parseSuperblockInternal(input: []const u8, input_len: u64, host_size: bool) Error!Superblock {
     if (input.len < super_offset + super_base_size) return error.TruncatedFrame;
     const bytes = input[super_offset..];
     if (readU32(bytes, 0) != magic) return error.InvalidMagic;
@@ -131,9 +146,10 @@ pub fn parseSuperblock(input: []const u8) Error!Superblock {
         root_nid_8 != 0;
     const blocks: u64 = @as(u64, readU32(bytes, 36)) |
         (if (uses_high_addresses) @as(u64, readU16(bytes, 14)) << 32 else 0);
-    const image_size = std.math.mul(usize, @intCast(blocks), block_size) catch
+    const image_size = std.math.mul(u64, blocks, block_size) catch
         return error.IntegerOverflow;
-    if (blocks == 0 or image_size > input.len) return error.TruncatedFrame;
+    if (host_size) _ = std.math.cast(usize, image_size) orelse return error.IntegerOverflow;
+    if (blocks == 0 or image_size > input_len) return error.TruncatedFrame;
     const checksum = readU32(bytes, 4);
     if (feature_compat & 1 != 0) {
         const checksum_len = if (block_size > super_offset)
