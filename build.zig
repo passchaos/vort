@@ -560,14 +560,27 @@ pub fn build(b: *std.Build) void {
     const run_erofs_tests = b.addRunArtifact(erofs_tests);
     const erofs_test_step = b.step("test-erofs", "Run focused EROFS reader and writer tests");
     erofs_test_step.dependOn(&run_erofs_tests.step);
+    const io_tests_mod = b.createModule(.{
+        .root_source_file = b.path("src/io/tests.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
     const byte_source_tests = b.addTest(.{
         .name = "vort-byte-source-tests",
-        .root_module = tests_mod,
+        .root_module = io_tests_mod,
         .filters = &.{"byte source"},
     });
     const run_byte_source_tests = b.addRunArtifact(byte_source_tests);
     const byte_source_test_step = b.step("test-byte-source", "Run bounded byte-source and file adapter tests");
     byte_source_test_step.dependOn(&run_byte_source_tests.step);
+    const byte_sink_tests = b.addTest(.{
+        .name = "vort-byte-sink-tests",
+        .root_module = io_tests_mod,
+        .filters = &.{ "byte sink", "working allocator" },
+    });
+    const run_byte_sink_tests = b.addRunArtifact(byte_sink_tests);
+    const byte_sink_test_step = b.step("test-byte-sink", "Run output sink and working-memory accounting tests");
+    byte_sink_test_step.dependOn(&run_byte_sink_tests.step);
     const wim_tests = b.addTest(.{
         .name = "vort-wim-tests",
         .root_module = tests_mod,

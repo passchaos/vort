@@ -3,11 +3,19 @@
 const std = @import("std");
 const byte_source = @import("io/source.zig");
 const file_source = @import("io/file_source.zig");
+const byte_sink = @import("io/sink.zig");
+const file_sink = @import("io/file_sink.zig");
+const working_allocator = @import("io/working_allocator.zig");
 
 pub const ByteSource = byte_source.Source;
 pub const ByteSourceError = byte_source.Error;
 pub const SliceByteSource = byte_source.SliceSource;
 pub const FileByteSource = file_source.FileSource;
+pub const ByteSink = byte_sink.Sink;
+pub const ByteSinkError = byte_sink.Error;
+pub const BufferByteSink = byte_sink.BufferSink;
+pub const FileByteSink = file_sink.FileSink;
+pub const WorkingAllocator = working_allocator.WorkingAllocator;
 
 pub const checksum = @import("checksum.zig");
 pub const core = @import("core.zig");
@@ -3768,6 +3776,11 @@ pub const planBlocksWithLongDistanceAlloc = planner.planBlocksWithLongDistanceAl
 pub const planBlocksAligningLongDistanceAlloc = planner.planBlocksAligningLongDistanceAlloc;
 
 test {
+    _ = byte_source;
+    _ = file_source;
+    _ = byte_sink;
+    _ = file_sink;
+    _ = working_allocator;
     _ = checksum;
     _ = core;
     _ = store;
