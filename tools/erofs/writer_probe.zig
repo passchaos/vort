@@ -40,15 +40,19 @@ pub fn main(init: std.process.Init) !void {
     const large = "EROFS writer probe multi-block payload 0123456789\n" ** 4096;
     const config_xattrs = [_]vort.ErofsXattr{
         .{ .name = "user.vort.config", .value = "config-xattr" },
+        .{ .name = "user.vort.shared", .value = "shared-xattr" },
     };
     const small_xattrs = [_]vort.ErofsXattr{
         .{ .name = "user.vort.small", .value = "small-xattr" },
+        .{ .name = "user.vort.shared", .value = "shared-xattr" },
     };
     const directory_xattrs = [_]vort.ErofsXattr{
         .{ .name = "user.vort.directory", .value = "directory-xattr" },
+        .{ .name = "user.vort.shared", .value = "shared-xattr" },
     };
     const root_xattrs = [_]vort.ErofsXattr{
         .{ .name = "user.vort.root", .value = "root-xattr" },
+        .{ .name = "user.vort.shared", .value = "shared-xattr" },
     };
     const entries = [_]vort.ErofsEntry{
         .{ .path = "etc/config", .data = "writer probe configuration\n", .xattrs = &config_xattrs },
@@ -72,6 +76,7 @@ pub fn main(init: std.process.Init) !void {
         .chunk_size = if (chunk_local or chunk_external) 4096 else null,
         .force_48bit = force_48bit,
         .metabox = metabox,
+        .shared_xattrs = true,
     };
     if (chunk_external) {
         const device_path = args.next() orelse return error.MissingOutputPath;

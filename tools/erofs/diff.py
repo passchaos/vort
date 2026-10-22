@@ -185,6 +185,7 @@ def main() -> None:
     address48_writer_cases = 0
     metabox_reader_cases = 0
     metabox_writer_cases = 0
+    shared_xattr_writer_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -220,10 +221,22 @@ def main() -> None:
             "link": b"etc/config",
         }
         expected_writer_xattrs = {
-            "/": {b"user.vort.root": b"root-xattr"},
-            "etc/config": {b"user.vort.config": b"config-xattr"},
-            "small": {b"user.vort.small": b"small-xattr"},
-            "empty": {b"user.vort.directory": b"directory-xattr"},
+            "/": {
+                b"user.vort.root": b"root-xattr",
+                b"user.vort.shared": b"shared-xattr",
+            },
+            "etc/config": {
+                b"user.vort.config": b"config-xattr",
+                b"user.vort.shared": b"shared-xattr",
+            },
+            "small": {
+                b"user.vort.small": b"small-xattr",
+                b"user.vort.shared": b"shared-xattr",
+            },
+            "empty": {
+                b"user.vort.directory": b"directory-xattr",
+                b"user.vort.shared": b"shared-xattr",
+            },
         }
         for mode in (
             "stored",
@@ -298,6 +311,7 @@ def main() -> None:
                 address48_writer_cases += 1
             if mode.endswith("-metabox"):
                 metabox_writer_cases += 1
+            shared_xattr_writer_cases += 1
             writer_cases += 1
             if fsck is not None:
                 extracted = temp / f"writer-{mode}-fsck"
@@ -566,6 +580,7 @@ def main() -> None:
         f"address48_writer={address48_writer_cases} "
         f"metabox_reader={metabox_reader_cases} "
         f"metabox_writer={metabox_writer_cases} "
+        f"shared_xattr_writer={shared_xattr_writer_cases} "
         f"malformed={malformed}"
     )
 

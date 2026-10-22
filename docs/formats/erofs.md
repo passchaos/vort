@@ -64,6 +64,15 @@ Each entry and the root directory can carry deterministic inline xattrs; inode
 planning accounts for their ibodies before flat-inline tails and aligned
 compression headers. `xattr_prefixes` optionally writes a plain prefix table
 and uses its caller-ordered first match without changing the default wire.
+`shared_xattrs = true` counts exact repeated name/value pairs across the tree,
+keeps only candidates whose shared entry plus 4-byte references reduce total
+wire size, and emits the selected entries in a deterministic primary-image
+shared region after primary inode metadata. Each inode retains at most the
+standard 255 shared IDs and falls back to inline entries for the remainder. IDs
+are relative to
+`xattr_block`, including when a large long-prefix table moves the region beyond
+block zero; metabox inode ibodies also reference this primary region. Leaving
+the option disabled preserves the prior wire.
 `tail_packing = .fragments` deterministically packs the last logical block of
 each non-empty regular file: small files use the whole-fragment header, larger
 files retain ordinary compressed/plain prefix clusters, and one hidden packed
@@ -106,9 +115,11 @@ symlink targets remain caller-owned for the duration of `encodeErofsAlloc`.
 ```zig
 const config_xattrs = [_]vort.ErofsXattr{
     .{ .name = "user.owner", .value = "vort" },
+    .{ .name = "user.shared", .value = "common" },
 };
 const root_xattrs = [_]vort.ErofsXattr{
     .{ .name = "user.image", .value = "system" },
+    .{ .name = "user.shared", .value = "common" },
 };
 const image = try vort.encodeErofsAlloc(allocator, &.{
     .{ .path = "etc/config", .data = "enabled=true\n", .xattrs = &config_xattrs },
@@ -118,6 +129,7 @@ const image = try vort.encodeErofsAlloc(allocator, &.{
     .compression = .zstandard,
     .root_xattrs = &root_xattrs,
     .xattr_prefixes = &.{"user."},
+    .shared_xattrs = true,
     .tail_packing = .fragments,
 });
 defer allocator.free(image);
@@ -163,11 +175,10 @@ defer encoded_chunks.deinit(allocator);
 Prefix tables stored inside packed fragment inodes remain unsupported; plain and
 metabox prefix tables are supported. Compressed 48-bit `PARTIAL_REF` and
 fragment-extent combinations remain explicitly unsupported. The writer does
-not yet generate MZ=id directory-data placement or deduplicate repeated values
-into the optional shared-xattr region. Chunk output requires stored mode;
-fragment and compressed-inline output require a non-stored compression mode
-because visible files use the compressed inode layout even when a prefix or
-inline cluster falls back to `PLAIN`.
+not yet expose MZ=id directory-data placement. Chunk output requires stored
+mode; fragment and compressed-inline output require a non-stored compression
+mode because visible files use the compressed inode layout even when a prefix
+or inline cluster falls back to `PLAIN`.
 
 ```sh
 zig build run -- list-erofs-file system.erofs
@@ -206,3 +217,8 @@ physical/compressed extents. erofs-utils 1.9.4 itself writes zero-filled output
 for flat-inline regular files whose inode lives in a metabox (its `dump --cat`
 path reads the same bytes correctly), so the stored-MZi oracle check excludes
 only those affected inline tails.
+All 22 Vort writer modes enable cost-aware shared-xattr planning for one
+repeated long-prefix attribute across root, file, and directory ibodies. Vort
+reconstructs each value, and the 18 non-metabox modes additionally require
+`fsck.erofs --xattrs` restoration; the summary reports
+`shared_xattr_writer=22`.

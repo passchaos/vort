@@ -245,21 +245,25 @@ pub fn encodedSize(
     if (attributes.len == 0) return 0;
     var size: usize = ibody_header_size;
     for (attributes, 0..) |attribute, index| {
-        const encoded = try encodeName(attribute.name, long_prefixes);
-        if (attribute.value.len > std.math.maxInt(u16)) return error.InvalidErofs;
         for (attributes[0..index]) |previous|
             if (std.mem.eql(u8, previous.name, attribute.name))
                 return error.InvalidErofs;
-        size = try checkedAdd(
-            size,
-            try align4(try checkedAdd(
-                entry_header_size,
-                try checkedAdd(encoded.suffix.len, attribute.value.len),
-            )),
-        );
+        size = try checkedAdd(size, try encodedEntrySize(attribute, long_prefixes));
     }
     _ = try ibodyIcount(size);
     return size;
+}
+
+pub fn encodedEntrySize(
+    attribute: Attribute,
+    long_prefixes: []const []const u8,
+) Error!usize {
+    const encoded = try encodeName(attribute.name, long_prefixes);
+    if (attribute.value.len > std.math.maxInt(u16)) return error.InvalidErofs;
+    return align4(try checkedAdd(
+        entry_header_size,
+        try checkedAdd(encoded.suffix.len, attribute.value.len),
+    ));
 }
 
 pub fn ibodyIcount(size: usize) Error!u16 {
@@ -281,23 +285,29 @@ pub fn writeIbody(
     @memset(output, 0);
     var position: usize = ibody_header_size;
     for (attributes) |attribute| {
-        const encoded = try encodeName(attribute.name, long_prefixes);
-        output[position] = @intCast(encoded.suffix.len);
-        output[position + 1] = encoded.index;
-        std.mem.writeInt(u16, output[position + 2 ..][0..2], @intCast(attribute.value.len), .little);
-        const name_start = position + entry_header_size;
-        const value_start = name_start + encoded.suffix.len;
-        @memcpy(output[name_start..value_start], encoded.suffix);
-        @memcpy(output[value_start..][0..attribute.value.len], attribute.value);
-        position = try checkedAdd(
-            position,
-            try align4(try checkedAdd(
-                entry_header_size,
-                try checkedAdd(encoded.suffix.len, attribute.value.len),
-            )),
-        );
+        const entry_size = try encodedEntrySize(attribute, long_prefixes);
+        const entry_end = try checkedAdd(position, entry_size);
+        try writeEntry(output[position..entry_end], attribute, long_prefixes);
+        position = entry_end;
     }
     if (position != output.len) return error.InvalidErofs;
+}
+
+pub fn writeEntry(
+    output: []u8,
+    attribute: Attribute,
+    long_prefixes: []const []const u8,
+) Error!void {
+    if (output.len != try encodedEntrySize(attribute, long_prefixes))
+        return error.InvalidErofs;
+    const encoded = try encodeName(attribute.name, long_prefixes);
+    @memset(output, 0);
+    output[0] = @intCast(encoded.suffix.len);
+    output[1] = encoded.index;
+    std.mem.writeInt(u16, output[2..4], @intCast(attribute.value.len), .little);
+    const value_start = entry_header_size + encoded.suffix.len;
+    @memcpy(output[entry_header_size..value_start], encoded.suffix);
+    @memcpy(output[value_start..][0..attribute.value.len], attribute.value);
 }
 
 pub fn validatePrefixTable(

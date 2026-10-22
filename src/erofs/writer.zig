@@ -6,11 +6,12 @@ const writer_codec = @import("writer_codec.zig");
 const writer_chunks = @import("writer_chunks.zig");
 const writer_fragments = @import("writer_fragments.zig");
 const writer_metabox = @import("writer_metabox.zig");
+const writer_xattrs = @import("writer_xattrs.zig");
 const xattr = @import("xattr.zig");
 
 pub const Error = core.Error || writer_codec.Error || writer_chunks.Error ||
-    writer_fragments.Error || writer_metabox.Error || tree.Error || xattr.Error ||
-    error{InvalidErofs};
+    writer_fragments.Error || writer_metabox.Error || writer_xattrs.Error ||
+    tree.Error || xattr.Error || error{InvalidErofs};
 
 pub const Entry = tree.Entry;
 pub const EntryKind = tree.EntryKind;
@@ -32,6 +33,8 @@ pub const Options = struct {
     force_48bit: bool = false,
     /// Store visible inode metadata in a standard MZi metabox inode.
     metabox: bool = false,
+    /// Deduplicate repeated name/value pairs into the shared-xattr region.
+    shared_xattrs: bool = false,
 };
 
 pub const EncodedExternalChunks = struct {
@@ -112,6 +115,11 @@ fn encodeInternal(
     else
         null;
     defer if (chunk_plan) |*plan| plan.deinit();
+    var shared_xattr_plan: ?writer_xattrs.Plan = if (options.shared_xattrs)
+        try writer_xattrs.prepare(allocator, filesystem.nodes, options.xattr_prefixes)
+    else
+        null;
+    defer if (shared_xattr_plan) |*plan| plan.deinit();
     var block_encoder: ?writer_codec.Encoder = if (options.compression != .stored)
         try writer_codec.Encoder.init(allocator, options.compression)
     else
@@ -127,6 +135,7 @@ fn encodeInternal(
         if (block_encoder) |*encoder| encoder else null,
         chunk_plan != null and external_chunks and chunk_plan.?.active(),
         options.metabox,
+        if (shared_xattr_plan) |*plan| plan else null,
     );
     try fillDirectories(allocator, &filesystem);
 
@@ -144,6 +153,7 @@ fn encodeInternal(
         options.compression,
         options.xattr_prefixes,
         if (block_encoder) |*encoder| encoder else null,
+        if (shared_xattr_plan) |*plan| plan else null,
     );
     if (chunk_plan) |plan| try plan.writeLocal(image);
     try writeSuperblock(
@@ -152,6 +162,7 @@ fn encodeInternal(
         block_count,
         options,
         if (chunk_plan) |plan| plan else null,
+        if (shared_xattr_plan) |*plan| plan else null,
     );
     const device = if (external_chunks)
         if (chunk_plan) |*plan| plan.takeData() else try allocator.alloc(u8, 0)
@@ -201,6 +212,7 @@ fn planMetadata(
     block_encoder: ?*writer_codec.Encoder,
     external_chunks: bool,
     metabox: bool,
+    shared_xattr_plan: ?*writer_xattrs.Plan,
 ) Error!usize {
     const configuration_start = configurationStart(metabox);
     const configuration_end = try checkedAdd(
@@ -216,16 +228,18 @@ fn planMetadata(
 
     if (metabox) {
         var metabox_cursor: usize = 0;
-        for (filesystem.nodes) |*node| {
+        for (filesystem.nodes, 0..) |*node, node_index| {
             if (!node.in_metabox) continue;
             try planNodeMetadata(
                 allocator,
                 node,
+                node_index,
                 &metabox_cursor,
                 compression,
                 xattr_prefixes,
                 tail_packing,
                 block_encoder,
+                shared_xattr_plan,
             );
         }
         const metabox_len = try alignForward(metabox_cursor, block_size);
@@ -234,31 +248,38 @@ fn planMetadata(
             filesystem.nodes,
             metabox_len,
         );
-        for (filesystem.nodes) |*node| {
+        for (filesystem.nodes, 0..) |*node, node_index| {
             if (node.in_metabox) continue;
             try planNodeMetadata(
                 allocator,
                 node,
+                node_index,
                 &cursor,
                 compression,
                 xattr_prefixes,
                 tail_packing,
                 block_encoder,
+                shared_xattr_plan,
             );
         }
     } else {
-        for (filesystem.nodes) |*node| {
+        for (filesystem.nodes, 0..) |*node, node_index| {
             try planNodeMetadata(
                 allocator,
                 node,
+                node_index,
                 &cursor,
                 compression,
                 xattr_prefixes,
                 tail_packing,
                 block_encoder,
+                shared_xattr_plan,
             );
         }
     }
+
+    if (shared_xattr_plan) |plan|
+        cursor = try plan.place(cursor, block_size);
 
     const root_nid = filesystem.nodes[0].nid;
     if (filesystem.nodes[0].path.len != 0 or
@@ -271,16 +292,21 @@ fn planMetadata(
 fn planNodeMetadata(
     allocator: std.mem.Allocator,
     node: *tree.Node,
+    node_index: usize,
     cursor: *usize,
     compression: Compression,
     xattr_prefixes: []const []const u8,
     tail_packing: TailPacking,
     block_encoder: ?*writer_codec.Encoder,
+    shared_xattr_plan: ?*const writer_xattrs.Plan,
 ) Error!void {
     if (node.content().len > std.math.maxInt(u32)) return error.InvalidErofs;
     const location = try alignForward(cursor.*, format.inode_slot_size);
     const inode_end = try checkedAdd(location, format.inode_slot_size);
-    node.xattr_size = try xattr.encodedSize(node.xattrs, xattr_prefixes);
+    node.xattr_size = if (shared_xattr_plan) |plan|
+        try plan.encodedIbodySize(node_index, node.xattrs, xattr_prefixes)
+    else
+        try xattr.encodedSize(node.xattrs, xattr_prefixes);
     const xattr_end = try checkedAdd(inode_end, node.xattr_size);
     const slot_nid = location / format.inode_slot_size;
     const slot_nid_u64 = std.math.cast(u64, slot_nid) orelse return error.InvalidErofs;
@@ -489,6 +515,7 @@ fn writeNodes(
     compression: Compression,
     xattr_prefixes: []const []const u8,
     block_encoder: ?*writer_codec.Encoder,
+    shared_xattr_plan: ?*const writer_xattrs.Plan,
 ) Error!void {
     const metabox_data = writer_metabox.data(filesystem.nodes);
     for (filesystem.nodes, 0..) |*node, node_index| {
@@ -513,6 +540,7 @@ fn writeNodes(
             node_index,
             compression,
             xattr_prefixes,
+            shared_xattr_plan,
         );
     }
 }
@@ -586,6 +614,7 @@ fn writeInode(
     node_index: usize,
     compression: Compression,
     xattr_prefixes: []const []const u8,
+    shared_xattr_plan: ?*const writer_xattrs.Plan,
 ) Error!void {
     const location = node.location;
     if (try checkedAdd(location, format.inode_slot_size) > metadata.len)
@@ -616,11 +645,19 @@ fn writeInode(
     const xattr_start = try checkedAdd(location, format.inode_slot_size);
     const xattr_end = try checkedAdd(xattr_start, node.xattr_size);
     if (xattr_end > metadata.len) return error.InvalidErofs;
-    try xattr.writeIbody(
-        metadata[xattr_start..xattr_end],
-        node.xattrs,
-        xattr_prefixes,
-    );
+    if (shared_xattr_plan) |plan|
+        try plan.writeIbody(
+            metadata[xattr_start..xattr_end],
+            node_index,
+            node.xattrs,
+            xattr_prefixes,
+        )
+    else
+        try xattr.writeIbody(
+            metadata[xattr_start..xattr_end],
+            node.xattrs,
+            xattr_prefixes,
+        );
 
     if (layout == .chunk_based) {
         const indexes = node.chunk_indexes orelse return error.InvalidErofs;
@@ -702,6 +739,7 @@ fn writeSuperblock(
     block_count: usize,
     options: Options,
     chunk_plan: ?writer_chunks.Plan,
+    shared_xattr_plan: ?*const writer_xattrs.Plan,
 ) Error!void {
     if (image.len < block_size or nodes.len == 0 or nodes.len > std.math.maxInt(u64) or
         block_count > std.math.maxInt(u32))
@@ -783,7 +821,14 @@ fn writeSuperblock(
     writeU32(image, base + 32, options.fixed_nsec);
     writeU32(image, base + 36, @intCast(block_count));
     writeU32(image, base + 40, 0);
-    writeU32(image, base + 44, 0);
+    writeU32(
+        image,
+        base + 44,
+        if (shared_xattr_plan) |plan|
+            if (plan.hasShared()) plan.xattr_block else 0
+        else
+            0,
+    );
     @memcpy(image[base + 64 ..][0..options.volume_name.len], options.volume_name);
     writeU32(
         image,
@@ -838,6 +883,8 @@ fn writeSuperblock(
         image[prefix_start..prefix_end],
         options.xattr_prefixes,
     );
+    if (shared_xattr_plan) |plan|
+        try plan.writeRegion(image, options.xattr_prefixes);
     if (has_external_chunks) {
         const plan = chunk_plan.?;
         const table_end = try checkedAdd(device_table_start, 128);

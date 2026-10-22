@@ -3804,6 +3804,7 @@ test {
     _ = wux;
     _ = android_sparse;
     _ = android_ota;
+    _ = erofs;
     _ = wim;
 }
 

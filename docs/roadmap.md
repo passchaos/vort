@@ -22177,8 +22177,9 @@ reuse, so production keeps the simpler independently owned plans.
   shared, and empty-value wire semantics. The required erofs-utils 1.9.4
   differential reads six reference layouts with real shared attributes and has
   `fsck.erofs --xattrs` restore four Vort writer layouts
-  (`xattr_reader=6`, `xattr_writer=4`). Shared-value deduplication in the writer
-  and incompatible long-prefix tables remain follow-up space/features work.
+  (`xattr_reader=6`, `xattr_writer=4`). Shared-value deduplication and
+  incompatible long-prefix tables were follow-up space/features work and are
+  completed by later milestones below.
 
 - Added EROFS plain long-xattr-prefix tables in both directions. The superblock
   parser now accepts only the `XATTR_PREFIXES + PLAIN_XATTR_PFX` combination
@@ -22320,4 +22321,27 @@ reuse, so production keeps the simpler independently owned plans.
   extents. Its known 1.9.4 zero-fill bug for metabox flat-inline regular-file
   extraction is reproduced against erofs-utils' own MZi output and excluded
   only from that narrow stored-tail oracle check. MZ=id directory-data
-  placement and shared-xattr writer deduplication remain follow-up work.
+  placement remains follow-up work.
+
+- Added deterministic EROFS shared-xattr writing. `shared_xattrs` validates and
+  counts exact borrowed name/value pairs across the complete tree, ranks them
+  by actual wire savings, and shares only candidates whose one aligned entry
+  plus 4-byte per-inode IDs beat repeated inline entries. Each ibody obeys the
+  u8 255-reference limit and transparently leaves lower-ranked attributes
+  inline. The primary shared region is placed after primary inode metadata so
+  large deduplicated sets do not inflate root NIDs; IDs are relative to the
+  containing `xattr_block`,
+  including nonzero blocks, and high-NID metabox ibodies deliberately reference
+  the primary region without setting `SHARED_EA_IN_METABOX`. Entry encoding is
+  shared with the ordinary ibody writer so standard and long name indexes stay
+  identical. Four-codec ordinary/metabox tests cover mixed shared+inline
+  attributes, distinct values, unprofitable 4-byte ACL entries, nonzero xattr
+  blocks, the 255-ID boundary, invalid duplicates, default/no-op byte identity,
+  exact decode limits, and exhaustive OOM. Every one of the 22 Vort
+  erofs-utils writer modes now carries a repeated shared long-prefix attribute
+  (`shared_xattr_writer=22`); Vort reconstructs all of them and fsck restores
+  xattrs for all 18 non-metabox modes. The focused build step now roots at
+  `src/erofs.zig`, and the all-library test root explicitly references that
+  module, so the separate address48, chunk, metabox, and writer test modules are
+  no longer filtered out through an unreferenced anonymous import block. The
+  corrected focused gate runs 60/60 tests.

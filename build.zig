@@ -134,6 +134,15 @@ pub fn build(b: *std.Build) void {
     tests_mod.addObject(br_record_optimal_obj);
     tests_mod.addObject(zstd_huffman_x2_obj);
 
+    const erofs_tests_mod = b.createModule(.{
+        .root_source_file = b.path("src/erofs.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "vail_archive_crypto", .module = vail_crypto }},
+    });
+    erofs_tests_mod.addObject(br_record_optimal_obj);
+    erofs_tests_mod.addObject(zstd_huffman_x2_obj);
+
     const tests = b.addTest(.{
         .name = "vort-tests",
         .root_module = tests_mod,
@@ -545,7 +554,7 @@ pub fn build(b: *std.Build) void {
     squashfs_test_step.dependOn(&run_squashfs_tests.step);
     const erofs_tests = b.addTest(.{
         .name = "vort-erofs-tests",
-        .root_module = tests_mod,
+        .root_module = erofs_tests_mod,
         .filters = &.{"EROFS"},
     });
     const run_erofs_tests = b.addRunArtifact(erofs_tests);
