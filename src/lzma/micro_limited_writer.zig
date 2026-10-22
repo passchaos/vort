@@ -29,12 +29,24 @@ pub fn encodeAlloc(
     capacity: usize,
     options: encoder.EncodeOptions,
 ) Error!EncodedPrefix {
+    return encodeAlignedAlloc(allocator, input, capacity, 1, options);
+}
+
+pub fn encodeAlignedAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    capacity: usize,
+    alignment: usize,
+    options: encoder.EncodeOptions,
+) Error!EncodedPrefix {
+    if (alignment == 0) return error.InvalidLzmaOptions;
     if (capacity < min_destination_size) return error.OutputTooSmall;
     var output: std.ArrayList(u8) = .empty;
     errdefer output.deinit(allocator);
     var range = range_encoder.Encoder.init(allocator, &output);
     var model = try encoder.initModel(options);
     var consumed: usize = 0;
+    var checkpoint = Checkpoint{ .range = range };
     var stats = encoder.EncodeStats{
         .input_bytes = input.len,
         .output_bytes = 0,
@@ -47,7 +59,7 @@ pub fn encodeAlloc(
 
     if (options.mode == .literal_only) {
         for (input) |byte| {
-            if (!try appendToken(&range, &model, input, &consumed, capacity, &stats, wide_match.Token{ .literal = byte }))
+            if (!try appendAlignedToken(&range, &model, input, &consumed, capacity, alignment, &checkpoint, &stats, wide_match.Token{ .literal = byte }))
                 break;
         }
     } else if (options.dictionary_size > std.math.maxInt(u16)) {
@@ -56,7 +68,7 @@ pub fn encodeAlloc(
             .lazy = options.mode == .lazy,
         });
         defer plan.deinit(allocator);
-        try appendTokens(&range, &model, input, &consumed, capacity, &stats, plan.tokens);
+        try appendTokens(&range, &model, input, &consumed, capacity, alignment, &checkpoint, &stats, plan.tokens);
     } else if (options.mode == .lazy) {
         var plan = try lz77.lazyGreedyPlanAllocWithDictionary(allocator, input, &.{}, .{
             .window_len = options.dictionary_size,
@@ -68,7 +80,7 @@ pub fn encodeAlloc(
             .max_match = lz77.max_match_len,
         });
         defer plan.deinit(allocator);
-        try appendTokens(&range, &model, input, &consumed, capacity, &stats, plan.tokens);
+        try appendTokens(&range, &model, input, &consumed, capacity, alignment, &checkpoint, &stats, plan.tokens);
     } else {
         var plan = try lz77.hashGreedyPlanAllocWithDictionary(allocator, input, &.{}, .{
             .window_len = options.dictionary_size,
@@ -79,14 +91,23 @@ pub fn encodeAlloc(
             .max_match = lz77.max_match_len,
         });
         defer plan.deinit(allocator);
-        try appendTokens(&range, &model, input, &consumed, capacity, &stats, plan.tokens);
+        try appendTokens(&range, &model, input, &consumed, capacity, alignment, &checkpoint, &stats, plan.tokens);
     }
+    range = checkpoint.range;
+    output.items.len = checkpoint.output_len;
+    consumed = checkpoint.consumed;
     try range.finish();
-    if (output.items.len > capacity or (input.len != 0 and consumed == 0))
+    if (output.items.len > capacity or (alignment == 1 and input.len != 0 and consumed == 0))
         return error.InvalidBlockPlan;
     output.items[0] = ~try encoder.propertyByte(options.properties);
     return .{ .bytes = try output.toOwnedSlice(allocator), .consumed = consumed };
 }
+
+const Checkpoint = struct {
+    range: range_encoder.Encoder,
+    output_len: usize = 0,
+    consumed: usize = 0,
+};
 
 fn appendTokens(
     range: *range_encoder.Encoder,
@@ -94,12 +115,47 @@ fn appendTokens(
     input: []const u8,
     consumed: *usize,
     capacity: usize,
+    alignment: usize,
+    checkpoint: *Checkpoint,
     stats: *encoder.EncodeStats,
     tokens: anytype,
 ) Error!void {
     for (tokens) |token|
-        if (!try appendToken(range, model, input, consumed, capacity, stats, token))
+        if (!try appendAlignedToken(range, model, input, consumed, capacity, alignment, checkpoint, stats, token))
             break;
+}
+
+fn appendAlignedToken(
+    range: *range_encoder.Encoder,
+    model: *encoder.Model,
+    input: []const u8,
+    consumed: *usize,
+    capacity: usize,
+    alignment: usize,
+    checkpoint: *Checkpoint,
+    stats: *encoder.EncodeStats,
+    token: anytype,
+) Error!bool {
+    var remaining: usize = switch (token) {
+        .literal => 1,
+        .match => |match| match.length,
+    };
+    while (remaining != 0) {
+        const piece_len = if (alignment == 1) remaining else @min(remaining, alignment - consumed.* % alignment);
+        var piece = token;
+        if (piece_len == 1) {
+            if (consumed.* >= input.len) return error.InvalidMatch;
+            piece = .{ .literal = input[consumed.*] };
+        } else {
+            piece.match.length = @intCast(piece_len);
+        }
+        if (!try appendToken(range, model, input, consumed, capacity, stats, piece)) return false;
+        remaining -= piece_len;
+        if (consumed.* % alignment == 0 or consumed.* == input.len) {
+            checkpoint.* = .{ .range = range.*, .output_len = range.output.items.len, .consumed = consumed.* };
+        }
+    }
+    return true;
 }
 
 fn appendToken(

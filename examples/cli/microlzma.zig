@@ -16,18 +16,33 @@ pub fn encode(init: std.process.Init, args: *std.process.Args.Iterator, stdout: 
 }
 
 pub fn encodeLimited(init: std.process.Init, args: *std.process.Args.Iterator, stdout: *std.Io.Writer) !void {
+    return encodePrefix(init, args, stdout, false);
+}
+
+pub fn encodeAlignedLimited(init: std.process.Init, args: *std.process.Args.Iterator, stdout: *std.Io.Writer) !void {
+    return encodePrefix(init, args, stdout, true);
+}
+
+fn encodePrefix(init: std.process.Init, args: *std.process.Args.Iterator, stdout: *std.Io.Writer, aligned: bool) !void {
     const input_path = args.next() orelse return error.MissingCorpusPath;
     const output_path = args.next() orelse return error.MissingCorpusPath;
     const capacity_text = args.next() orelse return error.MissingCorpusPath;
     const capacity = try std.fmt.parseInt(usize, capacity_text, 10);
+    const alignment = if (aligned)
+        try std.fmt.parseInt(usize, args.next() orelse return error.MissingCorpusPath, 10)
+    else
+        1;
     const options = try parseOptions(args);
     const input = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
     defer init.gpa.free(input);
-    var encoded = try vort.encodeMicroLzmaDestSizeAlloc(init.gpa, input, capacity, options);
+    var encoded = if (aligned)
+        try vort.encodeMicroLzmaAlignedDestSizeAlloc(init.gpa, input, capacity, alignment, options)
+    else
+        try vort.encodeMicroLzmaDestSizeAlloc(init.gpa, input, capacity, options);
     defer encoded.deinit(init.gpa);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded.bytes });
-    try stdout.print("input_bytes={d} consumed={d} microlzma_bytes={d} capacity={d} dictionary={d} path={s}\n", .{
-        input.len, encoded.consumed, encoded.bytes.len, capacity, options.dictionary_size, output_path,
+    try stdout.print("input_bytes={d} consumed={d} microlzma_bytes={d} capacity={d} alignment={d} dictionary={d} path={s}\n", .{
+        input.len, encoded.consumed, encoded.bytes.len, capacity, alignment, options.dictionary_size, output_path,
     });
 }
 

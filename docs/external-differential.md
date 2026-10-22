@@ -473,3 +473,11 @@ are checked for all 68 writer modes; fsck independently extracts every mode
 (`grouped_writer=32`, `external_writer=68`, `xattr_writer=55`,
 `directory_writer=12`, `extended_inode_writer=13`). The stored-MZi host
 extractor exception continues to apply only to affected inline tails.
+
+MicroLZMA aligned-prefix verification adds 315 XZ Utils decode checks over
+seven payload classes, three parser modes, and 16/512/4096-byte alignment.
+Capacities include six bytes, partial prefixes, and complete streams. Every
+partial consumed length must align; only complete input may end unaligned.
+Zero-consumption results must decode as valid empty streams, and increasing
+capacity must preserve monotonic progress (`aligned_writer=315`). Existing
+complete and unaligned capacity counters remain separate.

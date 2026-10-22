@@ -48,3 +48,30 @@ def verify_limits(cli, probe, source, temp, plain, dictionary, lc, lp, pb, run):
             raise AssertionError(f"Vort reference prefix mismatch for {source.name}/{capacity}")
         reference_cases += 1
     return writer_cases, reference_cases
+
+
+def verify_alignment(cli, probe, source, temp, plain, dictionary, lc, lp, pb, run):
+    output = temp / "aligned.out"
+    native = temp / "aligned.microlzma"
+    cases = 0
+    for mode in ("literal-only", "greedy", "lazy"):
+        for alignment in (16, 512, 4096):
+            previous = 0
+            for capacity in sorted({6, 32, 256, 4096, len(plain) * 2 + 64}):
+                progress = consumed(run(cli, "encode-microlzma-aligned-prefix-file", source, native,
+                                        capacity, alignment, dictionary, lc, lp, pb, mode))
+                if progress > len(plain) or progress < previous:
+                    raise AssertionError(f"invalid aligned progress for {source.name}/{mode}/{alignment}/{capacity}")
+                if progress != len(plain) and progress % alignment:
+                    raise AssertionError(f"unaligned partial progress for {source.name}/{mode}/{alignment}/{capacity}")
+                previous = progress
+                if len(native.read_bytes()) > capacity:
+                    raise AssertionError("aligned stream exceeds destination capacity")
+                run(cli, "decode-microlzma-file", native, output, progress, dictionary)
+                if output.read_bytes() != plain[:progress]:
+                    raise AssertionError("Vort aligned prefix mismatch")
+                run(probe, "decode", native, output, progress, dictionary)
+                if output.read_bytes() != plain[:progress]:
+                    raise AssertionError("XZ Utils aligned prefix mismatch")
+                cases += 1
+    return cases

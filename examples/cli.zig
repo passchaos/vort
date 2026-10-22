@@ -701,6 +701,8 @@ pub fn main(init: std.process.Init) !void {
         try microlzma_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-microlzma-prefix-file")) {
         try microlzma_cli.encodeLimited(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-microlzma-aligned-prefix-file")) {
+        try microlzma_cli.encodeAlignedLimited(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-microlzma-file")) {
         try microlzma_cli.decode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "size-lzma-file")) {
@@ -2972,6 +2974,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Encode a complete raw MicroLZMA stream
         \\  encode-microlzma-prefix-file <in> <out> <capacity> [dictionary] [lc] [lp] [pb] [greedy|lazy|literal-only]
         \\                              Encode a terminated source prefix within capacity
+        \\  encode-microlzma-aligned-prefix-file <in> <out> <capacity> <alignment> [dictionary] [lc] [lp] [pb] [greedy|lazy|literal-only]
+        \\                              Align partial input consumption to a caller-selected boundary
         \\  decode-microlzma-file <in> <out> <decoded_size> [dictionary]
         \\                              Decode an exact-size raw MicroLZMA stream
         \\  size-lzma-file <path> [max_output]

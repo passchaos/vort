@@ -22481,3 +22481,18 @@ reuse, so production keeps the simpler independently owned plans.
   contains hundreds of lines of serialization and embedded tests. The
   relocated imports retain module ownership and test coverage: 81/81 EROFS
   and 65/65 MicroLZMA tests pass, with wasm32-wasi compilation also passing.
+
+
+- Added MicroLZMA input-aligned destination-capacity encoding, with allocating
+  and caller-buffer APIs. Positive arbitrary alignment constrains partial
+  input progress while allowing complete unaligned EOF tails. Matches are
+  split at boundaries, with one-byte residual pieces emitted as literals;
+  accepted range/byte checkpoints retain the latest fitting aligned prefix.
+  If no boundary fits, the encoder returns a valid empty stream and zero
+  consumption for container-level stored fallback. Alignment one preserves
+  ordinary capacity behavior. Focused tests pass 68/68, covering non-power-of-
+  two boundaries, all modes, zero-progress and EOF semantics, untouched output
+  tails, invalid alignment, and exhaustive OOM. XZ Utils 5.8.4 independently
+  decodes all 315 aligned outputs (`aligned_writer=315`), while the existing
+  186 unaligned Vort and 62 XZ Utils prefix cases still pass. This supplies
+  the range-budget primitive for physically bounded EROFS cluster planning.

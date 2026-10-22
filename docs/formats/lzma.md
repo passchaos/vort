@@ -98,6 +98,17 @@ accepted only when its range state plus final flush fits; the first rejected
 symbol is discarded. Increasing capacity cannot reduce the consumed prefix
 for the same input/options. Sufficient capacity preserves the complete-stream
 wire. Parser choices and consumed lengths need not match XZ Utils' presets.
+`encodeMicroLzmaAlignedDestSizeAlloc` and
+`encodeMicroLzmaAlignedDestSizeInto` additionally take a positive input
+alignment. Partial consumption is a multiple of that alignment; a completely
+encoded final input may have an unaligned length. Matches crossing a boundary
+are split into valid LZMA symbols, with one-byte pieces encoded as literals.
+Range and byte checkpoints retain the last fitting aligned boundary. If no
+aligned prefix fits, the result is a valid empty stream with `consumed = 0`,
+so callers can choose an enclosing format's stored fallback. Alignment one
+retains ordinary capacity encoding behavior. Destination bytes remain intact
+on errors, including zero alignment or capacity below six bytes.
+
 These are independent one-shot streams, with size and dictionary metadata
 still provided by the enclosing format. Greedy/lazy modes currently plan the
 complete input before applying the range budget; scratch memory therefore
@@ -138,6 +149,7 @@ zig build run -- decode-lzma-file input.lzma output.bin 268435456 67108864
 zig build run -- size-lzma-file input.lzma 268435456
 zig build run -- encode-microlzma-file input.bin output.microlzma 32768
 zig build run -- encode-microlzma-prefix-file input.bin prefix.microlzma 4096 32768
+zig build run -- encode-microlzma-aligned-prefix-file input.bin prefix.microlzma 4096 4096 32768
 zig build run -- decode-microlzma-file input.microlzma output.bin 1048576 32768
 zig build test-microlzma
 zig build run-microlzma-diff
@@ -210,3 +222,8 @@ but not a misleading flush/next-stream operation. A 40,000-byte repeated
 binary corpus crosses both multiple 1 KiB planning windows and the 32 KiB
 dictionary ring while matching one-shot greedy bytes under one-byte input and
 seven-byte output; literal-only known-size output is independently byte-exact.
+
+The aligned-prefix matrix independently decodes 315 Vort outputs with XZ
+Utils, including 16-, 512-, and 4,096-byte alignments in all parser modes and
+seven payload classes. It checks exact prefix bytes, physical capacity,
+monotonic progress, permitted complete EOF tails, and zero-consumption output.

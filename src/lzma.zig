@@ -37,6 +37,8 @@ pub const encodeMicroAppend = micro_writer.encodeAppend;
 pub const encodeMicroInto = micro_writer.encodeInto;
 pub const encodeMicroDestSizeAlloc = micro_writer.encodeDestSizeAlloc;
 pub const encodeMicroDestSizeInto = micro_writer.encodeDestSizeInto;
+pub const encodeMicroAlignedDestSizeAlloc = micro_writer.encodeAlignedDestSizeAlloc;
+pub const encodeMicroAlignedDestSizeInto = micro_writer.encodeAlignedDestSizeInto;
 pub const decodeZipPayloadInto = decoder.decodeZipPayloadInto;
 pub const decodeZipPayloadAllocLimited = decoder.decodeZipPayloadAllocLimited;
 pub const decodeChdPayloadAllocExactSize = decoder.decodeChdPayloadAllocExactSize;
@@ -56,6 +58,7 @@ test {
     _ = writer;
     _ = @import("lzma/micro_writer_tests.zig");
     _ = @import("lzma/micro_limited_tests.zig");
+    _ = @import("lzma/micro_aligned_tests.zig");
 }
 
 test "LZMA decoder safely wraps output larger than its dictionary" {

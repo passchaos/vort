@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from limited_diff import verify_limits
+from limited_diff import verify_limits, verify_alignment
 
 
 def run(*args: object, check: bool = True) -> subprocess.CompletedProcess[bytes]:
@@ -63,6 +63,7 @@ def main() -> None:
     external_writer_cases = 0
     limited_writer_cases = 0
     limited_reference_cases = 0
+    aligned_writer_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-microlzma-") as temp_text:
         temp = Path(temp_text)
@@ -163,6 +164,9 @@ def main() -> None:
                 )
                 limited_writer_cases += native_limits
                 limited_reference_cases += reference_limits
+                aligned_writer_cases += verify_alignment(
+                    args.cli, probe, source, temp, plain, dictionary, lc, lp, pb, run
+                )
 
         truncated = temp / "truncated.microlzma"
         truncated.write_bytes(encoded_fixture[:-1])
@@ -223,6 +227,7 @@ def main() -> None:
         f"external={external} writer={writer_cases} "
         f"external_writer={external_writer_cases} "
         f"limited_writer={limited_writer_cases} limited_reference={limited_reference_cases} "
+        f"aligned_writer={aligned_writer_cases} "
         f"malformed={malformed}"
     )
 

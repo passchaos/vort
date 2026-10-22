@@ -82,6 +82,39 @@ pub fn encodeDestSizeInto(
     return .{ .written = encoded.bytes.len, .consumed = encoded.consumed };
 }
 
+/// Encode a bounded stream whose partial input consumption is a multiple
+/// of `alignment`. A complete final input may have an unaligned length.
+/// If no aligned prefix fits, return a valid empty stream and consumed = 0.
+pub fn encodeAlignedDestSizeAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    capacity: usize,
+    alignment: usize,
+    options: Options,
+) Error!EncodedPrefix {
+    _ = try validateOptions(options);
+    return limited.encodeAlignedAlloc(allocator, input, capacity, alignment, .{
+        .properties = options.properties,
+        .dictionary_size = options.dictionary_size,
+        .mode = options.mode,
+        .end_marker = false,
+    });
+}
+
+pub fn encodeAlignedDestSizeInto(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    output: []u8,
+    alignment: usize,
+    options: Options,
+) Error!DestSizeResult {
+    var encoded = try encodeAlignedDestSizeAlloc(allocator, input, output.len, alignment, options);
+    defer encoded.deinit(allocator);
+    if (encoded.bytes.len > output.len) return error.OutputTooSmall;
+    @memcpy(output[0..encoded.bytes.len], encoded.bytes);
+    return .{ .written = encoded.bytes.len, .consumed = encoded.consumed };
+}
+
 fn validateOptions(options: Options) Error!u8 {
     const property = try encoder.propertyByte(options.properties);
     if (options.dictionary_size < 4096 or
