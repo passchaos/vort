@@ -18474,9 +18474,14 @@ reuse, so production keeps the simpler independently owned plans.
   and T24 reference groups, AOSP-compatible ARM/Thumb-2 mode detection, and
   executable-target validation. An independent `EA32` OTA generator, fixed
   upstream instruction vectors, malformed/quota cases, a valid fuzz seed, and
-  exhaustive OOM cover the path. DEX and ZTF reference correction remain
-  explicit follow-ups rather than silently treating unsupported executable
-  elements as raw data. See `docs/formats/android-ota.md`.
+  exhaustive OOM cover the path. DEX 035/037/038/039 support now covers all 42
+  AOSP reference types across 17 pools, including fixed tables, flattened
+  variable lists, annotations, bounded LEB128 code items, Dalvik instruction
+  indices, and relative code targets. A 42/42 group fixture, valid SHA-1 /
+  Adler-32 differential, raw-integrity deltas, block-tail NoOp, malformed and
+  quota cases, exhaustive OOM, and a valid fuzz seed cover the implementation.
+  ZTF reference correction remains the final explicit executable follow-up.
+  See `docs/formats/android-ota.md`.
 
 - Promoted the previously internal LZ4DIFF high-compression engine into public
   pure-Zig LZ4HC block and independent-frame APIs. Raw blocks reproduce
@@ -22119,10 +22124,10 @@ reuse, so production keeps the simpler independently owned plans.
   accounting in the CLI. Unit tests cover 3/5/7/17-byte reads, raw/Bzip2/XZ/
   ZERO, SOURCE_COPY, operation limits, corrupt old-image hashes and exhaustive
   OOM. The independent differential adds four writer, Python mixed,
-  SOURCE_COPY, SOURCE_BSDIFF, PUFFDIFF, six LZ4DIFF and seven Zucchini file-source
-  extractions (`source_reader=21`, `source_inspect=4`), while Rust
+  SOURCE_COPY, SOURCE_BSDIFF, PUFFDIFF, six LZ4DIFF and eight Zucchini file-source
+  extractions (`source_reader=22`, `source_inspect=4`), while Rust
   `payload_dumper` independently retains all four writer checks. The optional
-  AOSP official full/delta corpus raises source coverage to 25 with four real
+  AOSP official full/delta corpus raises source coverage to 26 with four real
   kernel/root cases, including genuine BROTLI_BSDIFF (`source_aosp=4`).
 
 - Added a two-pass Android OTA writer over stable seekable partition sources

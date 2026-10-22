@@ -68,9 +68,17 @@ jump, move, and address-load instructions. AArch32 sections reproduce AOSP's
 ARM-versus-Thumb-2 conditional-density heuristic and require branch targets to
 land in executable sections. The shared application engine reproduces
 Zucchini's source-pruned offset mapper, projected/extra target pools,
-nearest-key tie breaking, and global signed reference-delta order. DEX and ZTF
-elements are parsed but explicitly return
-`UnsupportedZucchiniPatch`.
+nearest-key tie breaking, and global signed reference-delta order.
+
+DEX 035/037/038/039 (`DEX `) elements are supported with bounded header/map
+parsing, fixed identifier tables, flattened type and annotation lists,
+annotation directories, ULEB128/SLEB128 code-item tails, Dalvik instruction
+layouts, and payload boundaries. All 42 AOSP reference types and 17 target
+pools are covered: string/type/proto/field/method/call-site/method-handle
+indices, variable-item offsets, annotations, encoded arrays, and 8-/16-/32-bit
+relative code targets. DEX SHA-1 and Adler-32 changes remain ordinary Zucchini
+raw deltas, matching upstream wire semantics. ZTF elements are parsed but
+explicitly return `UnsupportedZucchiniPatch`.
 
 The bsdiff patch
 reader accepts traditional `BSDIFF40` with three Bzip2 streams and Android's
@@ -263,17 +271,18 @@ a canonical Zucchini v1 NoOp patch with equivalences and raw deltas plus an
 `EA64` patch that retargets an AArch64 branch and `Ex86`/`Ex64` patches that
 retarget relocation, absolute, and rel32 references. Independent `Px86`/`Px64`
 fixtures cover the corresponding PE base-relocation and image-base semantics.
-An `EA32` fixture additionally retargets an ARM A24 branch. It wraps all seven
-in Brotli and verifies whole-partition and bounded-range OTA
-extraction.
+An `EA32` fixture additionally retargets an ARM A24 branch. A DEX 039 fixture
+with valid SHA-1/Adler-32 retargets a Dalvik string index while raw deltas update
+the integrity fields and a NoOp element preserves block padding. It wraps all
+eight in Brotli and verifies whole-partition and bounded-range OTA extraction.
 The required source-backed matrix uses real positional file callbacks for all
 four writer modes, the independent Python mixed payload, SOURCE_COPY,
-SOURCE_BSDIFF, PUFFDIFF, six LZ4/LZ4HC diff variants, and seven Zucchini variants.
+SOURCE_BSDIFF, PUFFDIFF, six LZ4/LZ4HC diff variants, and eight Zucchini variants.
 It writes outputs in 257-byte chunks, checks final bytes and SHA-256, reports
-physical read counts, and currently requires `source_reader=21` plus
+physical read counts, and currently requires `source_reader=22` plus
 `source_inspect=4`. Supplying the local AOSP update-engine corpus additionally
 requires both full and both delta kernel/root partitions through this path,
-raising the result to `source_reader=25`, `source_aosp=4`.
+raising the result to `source_reader=26`, `source_aosp=4`.
 The source writer differential forces three-byte input reads and five-byte sink
 writes for raw, Bzip2, XZ, and automatic policies, requires exact equality with
 the corresponding one-shot payloads, and independently decodes all four with
@@ -287,7 +296,7 @@ signatures, and unsigned payloads fail (`signature_cases=9`,
 
 Current explicit limitations are major-version-1 payloads, certificate-bundle
 trust-store discovery/revocation policy, and architecture-specific
-Zucchini reference correction for DEX and ZTF elements. DISCARD is
+Zucchini reference correction for ZTF elements. DISCARD is
 likewise rejected by default
 because Android defines its read-back contents as undefined; callers may opt
 into deterministic zero interpretation through `DecodeOptions.discard_as_zero`.

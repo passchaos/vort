@@ -3,6 +3,7 @@ const checksum = @import("../checksum.zig");
 const format = @import("format.zig");
 const aarch32 = @import("zucchini/aarch32.zig");
 const aarch64 = @import("zucchini/aarch64.zig");
+const dex = @import("zucchini/dex.zig");
 const intel = @import("zucchini/intel.zig");
 const pe = @import("zucchini/pe.zig");
 
@@ -66,6 +67,8 @@ pub const ParseOptions = struct {
     max_elf_sections: usize = 1 << 20,
     max_pe_sections: usize = 1 << 20,
     max_pe_reloc_blocks: usize = 1 << 20,
+    max_dex_map_items: usize = 21,
+    max_dex_items: usize = 1 << 24,
     max_references: usize = 1 << 24,
     max_targets: usize = 1 << 24,
 };
@@ -190,6 +193,20 @@ pub const Patch = struct {
                     pe.Options{
                         .max_sections = options.max_pe_sections,
                         .max_reloc_blocks = options.max_pe_reloc_blocks,
+                        .max_references = options.max_references,
+                    },
+                    allocator,
+                    old_element,
+                    new_element,
+                    element,
+                    self.target_pools[element.pool_start..][0..element.pool_count],
+                    options,
+                ),
+                .dex => try applyExecutableReferences(
+                    dex,
+                    dex.Options{
+                        .max_map_items = options.max_dex_map_items,
+                        .max_items = options.max_dex_items,
                         .max_references = options.max_references,
                     },
                     allocator,
@@ -1313,6 +1330,77 @@ test "Android OTA Zucchini AArch32 releases every allocation failure" {
     );
 }
 
+test "Android OTA Zucchini corrects DEX table and code references" {
+    const allocator = std.testing.allocator;
+    const source = dex.testDex(0);
+    const expected = dex.testDex(1);
+    const encoded = try testDexPatchAlloc(allocator, &source, &expected);
+    defer allocator.free(encoded);
+    const output = try applyAlloc(
+        allocator,
+        &source,
+        encoded,
+        expected.len,
+        .{},
+    );
+    defer allocator.free(output);
+    try std.testing.expectEqualSlices(u8, &expected, output);
+    try std.testing.expectError(
+        error.InvalidZucchiniPatch,
+        applyAlloc(
+            allocator,
+            &source,
+            encoded,
+            expected.len,
+            .{ .max_dex_map_items = 4 },
+        ),
+    );
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        applyAlloc(
+            allocator,
+            &source,
+            encoded,
+            expected.len,
+            .{ .max_references = 0 },
+        ),
+    );
+}
+
+test "Android OTA Zucchini DEX releases every allocation failure" {
+    const source = dex.testDex(0);
+    const expected = dex.testDex(1);
+    const encoded = try testDexPatchAlloc(
+        std.testing.allocator,
+        &source,
+        &expected,
+    );
+    defer std.testing.allocator.free(encoded);
+    const Test = struct {
+        fn run(
+            allocator: std.mem.Allocator,
+            source_bytes: []const u8,
+            patch_bytes: []const u8,
+            expected_bytes: []const u8,
+        ) !void {
+            const output = try applyAlloc(
+                allocator,
+                source_bytes,
+                patch_bytes,
+                expected_bytes.len,
+                .{},
+            );
+            defer allocator.free(output);
+            try std.testing.expectEqualSlices(u8, expected_bytes, output);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(
+        std.testing.allocator,
+        Test.run,
+        .{ &source, encoded, &expected },
+    );
+}
+
 pub const test_aosp_reader_fixture = [_]u8{
     0x5a, 0x75, 0x63, 0x63, 0x01, 0x00, 0x00, 0x00,
     0x10, 0x32, 0x54, 0x76, 0x00, 0x11, 0x22, 0x33,
@@ -1663,6 +1751,65 @@ pub fn testAarch32PatchAlloc(
     try output.append(allocator, 2);
     try appendBuffer(allocator, &output, &.{ 0x8c, 0x02 });
     return output.toOwnedSlice(allocator);
+}
+
+pub fn testDexPatchAlloc(
+    allocator: std.mem.Allocator,
+    source: []const u8,
+    expected: []const u8,
+) ![]u8 {
+    var raw_skips: std.ArrayList(u8) = .empty;
+    defer raw_skips.deinit(allocator);
+    var raw_diffs: std.ArrayList(u8) = .empty;
+    defer raw_diffs.deinit(allocator);
+    var compensation: usize = 0;
+    for (source, expected, 0..) |old_byte, new_byte, index| {
+        if (old_byte == new_byte or (index >= 0xce and index < 0xd0)) continue;
+        try appendTestVarUInt(allocator, &raw_skips, index - compensation);
+        try raw_diffs.append(allocator, new_byte -% old_byte);
+        compensation = index + 1;
+    }
+
+    var output: std.ArrayList(u8) = .empty;
+    errdefer output.deinit(allocator);
+    try output.appendSlice(allocator, magic);
+    try appendU16(allocator, &output, major_version);
+    try appendU16(allocator, &output, 0);
+    try appendU32(allocator, &output, @intCast(source.len));
+    try appendU32(allocator, &output, checksum.crc32(source));
+    try appendU32(allocator, &output, @intCast(expected.len));
+    try appendU32(allocator, &output, checksum.crc32(expected));
+    try appendU32(allocator, &output, 1);
+    try appendU32(allocator, &output, 0);
+    try appendU32(allocator, &output, @intCast(source.len));
+    try appendU32(allocator, &output, 0);
+    try appendU32(allocator, &output, @intCast(expected.len));
+    try output.appendSlice(allocator, "DEX ");
+    try appendU16(allocator, &output, 1);
+    try appendBuffer(allocator, &output, &.{0});
+    try appendBuffer(allocator, &output, &.{0});
+    try appendBuffer(allocator, &output, &.{ 0xdc, 0x01 });
+    try appendBuffer(allocator, &output, "");
+    try appendBuffer(allocator, &output, raw_skips.items);
+    try appendBuffer(allocator, &output, raw_diffs.items);
+    try appendBuffer(allocator, &output, &.{ 0, 2, 0, 0, 0 });
+    try appendU32(allocator, &output, 1);
+    try output.append(allocator, 0);
+    try appendBuffer(allocator, &output, &.{ 0xb4, 0x01 });
+    return output.toOwnedSlice(allocator);
+}
+
+fn appendTestVarUInt(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    input: usize,
+) !void {
+    var value = input;
+    while (value >= 0x80) {
+        try output.append(allocator, @as(u8, @truncate(value)) | 0x80);
+        value >>= 7;
+    }
+    try output.append(allocator, @intCast(value));
 }
 
 fn appendBuffer(

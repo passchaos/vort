@@ -203,7 +203,10 @@ fixtures plus an `EA32` ELF generator must match through complete,
 source-backed, and bounded-range OTA extraction. The AArch32 fixture covers
 `R_ARM_RELATIVE`, absolute pointers, ARM-mode detection, and A24 branch
 correction; AOSP-derived fixed vectors separately pin all five ARM/Thumb-2
-branch encodings.
+branch encodings. A valid DEX 039 generator carries correct SHA-1 and Adler-32,
+splits block-tail padding into a NoOp element, applies raw integrity deltas, and
+retargets a Dalvik `const-string` through the DEX string-ID pool. All eight
+fixtures exercise complete, source-backed, and bounded-range extraction.
 
 `run-br-real-corpus-diff` reads the repository-owned
 `tools/br/real_corpus_manifest.json` and requires source, documentation,

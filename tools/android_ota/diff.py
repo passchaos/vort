@@ -996,6 +996,114 @@ def zucchini_pe_payload(is_64: bool) -> tuple[bytes, bytes, bytes]:
     return payload, source, target
 
 
+def test_dex(string_index: int) -> bytes:
+    image = bytearray(0xDC)
+    image[:8] = b"dex\n039\0"
+    struct.pack_into("<III", image, 32, len(image), 0x70, 0x12345678)
+    struct.pack_into("<I", image, 52, 0x70)
+    struct.pack_into("<II", image, 56, 2, 0xB0)
+    struct.pack_into("<II", image, 64, 1, 0xB8)
+    struct.pack_into("<II", image, 104, len(image) - 0xBC, 0xBC)
+    struct.pack_into("<I", image, 0x70, 5)
+
+    def map_item(index: int, kind: int, count: int, offset: int) -> None:
+        struct.pack_into("<HHII", image, 0x74 + index * 12, kind, 0, count, offset)
+
+    map_item(0, 0x0000, 1, 0)
+    map_item(1, 0x0001, 2, 0xB0)
+    map_item(2, 0x0002, 1, 0xB8)
+    map_item(3, 0x2001, 1, 0xBC)
+    map_item(4, 0x2002, 2, 0xD6)
+    struct.pack_into("<II", image, 0xB0, 0xD6, 0xD9)
+    struct.pack_into("<I", image, 0xB8, 0)
+    struct.pack_into("<I", image, 0xC8, 5)
+    image[0xCC] = 0x1A
+    struct.pack_into("<H", image, 0xCE, string_index)
+    image[0xD0] = 0x29
+    struct.pack_into("<h", image, 0xD2, 2)
+    image[0xD4] = 0x0E
+    image[0xD6:0xDC] = b"\1A\0\1B\0"
+    image[12:32] = hashlib.sha1(image[32:]).digest()
+    struct.pack_into("<I", image, 8, zlib.adler32(image[12:]) & 0xFFFFFFFF)
+    return bytes(image)
+
+
+def zucchini_dex_payload() -> tuple[bytes, bytes, bytes]:
+    if python_brotli is None:
+        raise AssertionError("python brotli module is unavailable")
+    source_dex = test_dex(0)
+    target_dex = test_dex(1)
+    source = source_dex + bytes(BLOCK_SIZE - len(source_dex))
+    target = target_dex + bytes(BLOCK_SIZE - len(target_dex))
+    raw_skips = bytearray()
+    raw_diffs = bytearray()
+    compensation = 0
+    for index, (old_byte, new_byte) in enumerate(zip(source_dex, target_dex)):
+        if old_byte == new_byte or 0xCE <= index < 0xD0:
+            continue
+        raw_skips += varint(index - compensation)
+        raw_diffs.append((new_byte - old_byte) & 0xFF)
+        compensation = index + 1
+
+    patch = bytearray(b"Zucc")
+    patch += struct.pack(
+        "<HHIIII",
+        1,
+        0,
+        len(source),
+        zlib.crc32(source) & 0xFFFFFFFF,
+        len(target),
+        zlib.crc32(target) & 0xFFFFFFFF,
+    )
+    patch += struct.pack("<I", 2)
+    patch += struct.pack(
+        "<IIII4sH",
+        0,
+        len(source_dex),
+        0,
+        len(target_dex),
+        b"DEX ",
+        1,
+    )
+    for stream in (
+        b"\0",
+        b"\0",
+        varint(len(source_dex)),
+        b"",
+        bytes(raw_skips),
+        bytes(raw_diffs),
+        b"\0\2\0\0\0",
+    ):
+        patch += struct.pack("<I", len(stream)) + stream
+    patch += struct.pack("<I", 1) + b"\0" + struct.pack("<I", 2) + b"\xb4\1"
+    padding = BLOCK_SIZE - len(source_dex)
+    patch += struct.pack(
+        "<IIII4sH",
+        len(source_dex),
+        padding,
+        len(target_dex),
+        padding,
+        b"NoOp",
+        1,
+    )
+    for stream in (b"\0", b"\0", varint(padding), b"", b"", b"", b""):
+        patch += struct.pack("<I", len(stream)) + stream
+    patch += struct.pack("<I", 0)
+    compressed_patch = python_brotli.compress(bytes(patch), quality=9)
+    operation_message = bytearray(vfield(1, ZUCCHINI))
+    operation_message += vfield(2, 0) + vfield(3, len(compressed_patch))
+    operation_message += bfield(4, extent(0, 1)) + bfield(6, extent(0, 1))
+    operation_message += bfield(8, hashlib.sha256(compressed_patch).digest())
+    operation_message += bfield(9, hashlib.sha256(source).digest())
+    partition = bytearray(bfield(1, b"zucchini-dex"))
+    partition += bfield(6, partition_info(source))
+    partition += bfield(7, partition_info(target))
+    partition += bfield(8, bytes(operation_message))
+    manifest = vfield(3, BLOCK_SIZE) + vfield(12, 5) + bfield(13, bytes(partition))
+    payload = MAGIC + struct.pack(">QQI", 2, len(manifest), 0) + manifest + compressed_patch
+    return payload, source, target
+
+
 def source_bsdiff_payload(source: bytes) -> tuple[bytes, bytes, bytes]:
     if len(source) != 2 * BLOCK_SIZE:
         raise AssertionError("SOURCE_BSDIFF fixture must be two blocks")
@@ -1732,6 +1840,7 @@ def main() -> None:
                 ("x64", "zucchini-x64", lambda: zucchini_intel_payload(True)),
                 ("pe-x86", "zucchini-pe-x86", lambda: zucchini_pe_payload(False)),
                 ("pe-x64", "zucchini-pe-x64", lambda: zucchini_pe_payload(True)),
+                ("dex", "zucchini-dex", zucchini_dex_payload),
             ):
                 zucchini_data, zucchini_source, zucchini_expected = fixture()
                 zucchini_payload_path = temp / f"zucchini-{name}.bin"

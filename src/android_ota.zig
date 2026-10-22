@@ -87,4 +87,5 @@ test {
     _ = zucchini;
     _ = writer;
     _ = @import("android_ota/test.zig");
+    _ = @import("android_ota/zucchini/dex_test.zig");
 }
