@@ -17,4 +17,5 @@ test {
     _ = @import("tests/configuration.zig");
     _ = @import("tests/index_encoding.zig");
     _ = @import("tests/index_chains.zig");
+    _ = @import("tests/compact_width.zig");
 }

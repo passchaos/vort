@@ -101,15 +101,17 @@ pub fn compactPhysicalBaseOffset(view: View, cluster_index: usize, cluster_count
 
 pub fn readCompactInput(metadata: input_module.Input, view: View, cluster_index: usize, cluster_count: usize) Error!Index {
     const pack = try compactPack(view, cluster_index, cluster_count);
-    var buffer: [32]u8 = undefined;
-    const data = buffer[0..pack.size];
-    try metadata.read(pack.start, data);
     const pack_size = pack.size;
     const item_index = pack.item;
     const value_count: usize = if (pack_size == 8) 2 else 16;
-    const logical_bits = @max(view.cluster_bits, 12);
-    if (logical_bits > 14) return error.UnsupportedErofsFeature;
+    const logical_bits: usize = @max(view.cluster_bits, 12);
     const encoded_bits: usize = (pack_size - 4) * 8 / value_count;
+    // Every item needs both type bits in addition to its logical-offset
+    // field. A COMPACTED_2B flag alone does not imply a two-byte pack.
+    if (logical_bits > encoded_bits - 2) return error.UnsupportedErofsFeature;
+    var buffer: [32]u8 = undefined;
+    const data = buffer[0..pack.size];
+    try metadata.read(pack.start, data);
     const value = readPackedBits(
         data[0 .. pack_size - 4],
         encoded_bits * item_index,
