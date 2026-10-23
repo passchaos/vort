@@ -6,8 +6,9 @@ const format = @import("lzfse/format.zig");
 const decoder = @import("lzfse/decoder.zig");
 const container = @import("lzfse/container.zig");
 const encoder = @import("lzfse/encoder.zig");
+const incremental = @import("lzfse/incremental_decoder.zig");
 
-pub const Error = container.Error || std.mem.Allocator.Error;
+pub const Error = container.Error || incremental.Decoder.Error || std.mem.Allocator.Error;
 
 pub const Archive = container.Archive;
 pub const Block = container.Block;
@@ -21,6 +22,8 @@ pub const Encoded = encoder.Encoded;
 pub const EncodePlan = encoder.Plan;
 pub const EncodeRecord = encoder.Record;
 pub const encodeFsePlanAlloc = encoder.encodeFsePlanAlloc;
+pub const IncrementalDecoder = incremental.Decoder;
+pub const IncrementalDecodeOptions = incremental.Decoder.Options;
 
 pub const parse = container.parse;
 pub const parseLimited = container.parseLimited;
@@ -54,4 +57,7 @@ test {
     _ = @import("lzfse/encoder/match_finder.zig");
     _ = @import("lzfse/encoder/block_encoder.zig");
     _ = @import("lzfse/encoder_tests.zig");
+    _ = @import("lzfse/incremental/fse_cursor.zig");
+    _ = @import("lzfse/incremental/lzvn_cursor.zig");
+    _ = incremental;
 }

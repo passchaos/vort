@@ -55,9 +55,9 @@ pub const StepResult = struct {
     };
 };
 
-/// How incremental frame decoders retain encoded data before publishing it.
-/// Block streaming is the normal bounded-memory mode; callers may opt into
-/// complete-frame validation when they require that publication contract.
+/// How incremental frame decoders retain encoded data. Block streaming is the
+/// normal bounded-memory mode; prevalidated_frame preserves the established
+/// complete-frame preflight/direct paths and their validation timing.
 pub const CompressedInputPolicy = enum { block_stream, prevalidated_frame };
 
 pub const StreamingDiagnostics = struct {

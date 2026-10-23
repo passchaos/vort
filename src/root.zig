@@ -1349,6 +1349,8 @@ pub const LzfseEncodeSummary = lzfse.Summary;
 pub const LzfseEncoded = lzfse.Encoded;
 pub const LzfseEncodePlan = lzfse.EncodePlan;
 pub const LzfseEncodeRecord = lzfse.EncodeRecord;
+pub const LzfseIncrementalDecoder = lzfse.IncrementalDecoder;
+pub const LzfseIncrementalDecodeOptions = lzfse.IncrementalDecodeOptions;
 pub const LzfseError = lzfse.Error;
 pub const parseLzfse = lzfse.parse;
 pub const parseLzfseLimited = lzfse.parseLimited;
@@ -2943,6 +2945,7 @@ pub const zstdDecodedNativeConcatenatedFrameChunksSizeWithDictionarySet = zstd.d
 pub const zstdDecodedNativeConcatenatedFrameChunksSizeLimitedWithDictionarySet = zstd.decodedNativeConcatenatedFrameChunksSizeLimitedWithDictionarySet;
 
 pub const Error = core.Error;
+pub const CompressedInputPolicy = core.CompressedInputPolicy;
 pub const DeflateError = deflate.Error;
 pub const Deflate64Error = deflate64.Error;
 pub const Deflate64DecodeResult = deflate64.DecodeResult;
