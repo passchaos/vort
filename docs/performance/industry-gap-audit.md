@@ -15,12 +15,12 @@ encoder quality and throughput are separate claims.
 | Zstandard | Raw/RLE/Huffman/FSE sequence frames, dictionary sets and recovery, incremental encoding/decoding, levels 0...22, explicit window logs 10...41, COVER-class training and seekable streams | Negative fast levels and the full public libzstd strategy control surface are absent. Internal match history is bounded through 64 MiB. Complete FastCover training and broad encoder quality/speed parity remain open. |
 | LZ4 | Block/frame/legacy formats, linked blocks, dictionaries, incremental fast/HC encoding and bounded decoding; HC levels 1...12 with byte-exact liblz4 1.9.3 reference gates | No equivalent public fast-acceleration knob. Full corpus/platform performance leadership is unproven. |
 | Snappy | Raw/native framed/Xerial/Hadoop encoding and decoding, CRC32C, incremental I/O, COPY4, validated replay, work/output budgets and exact failed-call progress | Raw decoder benchmark wins do not establish framed/incremental encoder and decoder leadership across real corpora. |
-| Brotli | RFC decoding, all 256 entropy block types, static/shared dictionaries, opt-in Large Window extension, incremental I/O and Vort-native q0...q11 generic/text/font presets | q10/q11 remain bounded Vort search rather than complete libbrotli HQ/Zopfli parity. Quality numbers do not imply matching libbrotli ratio or speed. Large-stream planning and worst-case decode performance remain open. |
+| Brotli | RFC decoding, all 256 entropy block types, static/shared dictionaries, opt-in Large Window extension, incremental I/O and Vort-native q0...q11 generic/text/font presets | q10/q11 remain bounded Vort search rather than complete libbrotli HQ/Zopfli parity. Quality numbers do not imply matching libbrotli ratio or speed. Global/HQ cost planning across large streams and worst-case decode performance remain open; bounded arbitrary-size multi-meta-block encoding is already implemented. |
 | Bzip2 | BZh1...BZh9, legacy randomized blocks, concatenated streams, CRC validation, incremental encode/decode and bounded checked plaintext replay | Broad competitor throughput, ratio and RSS comparisons are missing. |
-| XZ / LZMA | LZMA-Alone/MicroLZMA/ZIP-LZMA and raw LZMA2; XZ checks, Index/Footer, Delta and all eight BCJ filters; greedy/lazy encoding and progressive decoding | Full liblzma preset 0...9/extreme and match-finder controls are absent. Existing LZMA/XZ one-shot `Into` and decoded-size paths still allocate complete plaintext before copying/counting. |
+| XZ / LZMA | LZMA-Alone/MicroLZMA/ZIP-LZMA and raw LZMA2; XZ checks, Index/Footer, Delta and all eight BCJ filters; greedy/lazy encoding and progressive decoding | Full liblzma preset 0...9/extreme and match-finder controls are absent. Existing LZMA/XZ one-shot decode-into and decoded-size paths still allocate complete plaintext before copying/counting. |
 
 The last row is distinct from the bounded progressive decoders. Existing
-one-shot LZMA/XZ `Into` calls also preserve caller output on failure; replacing
+one-shot LZMA/XZ decode-into calls also preserve caller output on failure; replacing
 them must retain that contract or expose a separate explicit partial-output API.
 
 The [native status](../native-lz4-zstd-status.md),
@@ -61,13 +61,14 @@ memory comparison.
 ## Next work, functionality first
 
 1. Remove complete plaintext allocation from LZMA/XZ one-shot caller-buffer
-   and decoded-size paths using reusable bounded state, preserving validation
+   decode and decoded-size paths using reusable bounded state, preserving validation
    and failure semantics.
 2. Add Zstd negative fast levels and explicit strategy controls while preserving
-   the existing level 0...22 behavior. Then extend Brotli HQ models and
-   larger-stream planning, FastCover training, and XZ/LZMA preset/match-finder
-   controls as separately validated increments. API numbering alone must not
-   imply equivalent competitor ratio or speed.
+   the existing level 0...22 behavior, then add XZ/LZMA preset/match-finder
+   controls and FastCover training as separately validated increments.
+   Improving Brotli HQ models and global cost planning across large streams
+   is subsequent quality/performance work. API numbering alone must not imply
+   equivalent competitor ratio or speed.
 3. Rebenchmark current public APIs against versioned competitors on shared
    text/JSON/source/log/binary/small/already-compressed corpora. Record ratio,
    encode/decode throughput, requested peak memory and RSS, cold/warm behavior,
