@@ -291,6 +291,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   working allocation limits and chunk deduplication using source locations,
   byte-identical source/sink/memory output, owning Source archives with bounded
   metadata/extent working memory and direct file/range Sink extraction,
+  allocation-free full/compact NONHEAD backward-chain validation shared by
+  range and inline/fragment-tail scans (with independent positional erofs-utils
+  differentials),
   resumable caller-owned extraction with bounded decoded-extent caching,
   resumable positional encoding with bounded current-cluster storage,
   streamed directory traversal and lookup shared by slice/Source readers,

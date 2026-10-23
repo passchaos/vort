@@ -22885,3 +22885,31 @@ reuse, so production keeps the simpler independently owned plans.
   Broad check (125 steps), wasm compilation and the CLI help page pass.
   The final Debug repository suite passes 3518/3518 tests (3511 root tests
   plus seven separate Brotli object/classifier cases).
+
+- Added allocation-free sequential validation of full/compact EROFS NONHEAD
+  backward chains in the shared slice/Source extent walker and inode tail
+  scanner. Normalized CBLKCNT and compact pack-final distances preserve valid
+  linked chains while rejecting zero/oversized links, links crossing the
+  current head, misplaced physical counts and head offsets outside a cluster.
+  Fixed validator state proves termination without storing an index table,
+  recursively following links or issuing additional Source reads. Nine new
+  regressions cover two-/sixteen-item compact packs, final big pclusters,
+  initial/final pack transitions, inline/fragments, zero working budgets,
+  sticky errors, output/position preservation and unfinished Sinks after a
+  previously delivered extent. ReleaseFast passes 208 EROFS tests plus 12
+  independent I/O tests (220 total). An unmodified liberofs 1.9.4-g5fcb2f76
+  positional oracle validates 22 legal whole/boundary ranges and rejects six
+  damaged full/compact/two-byte chains; Vort's public slice/Source APIs agree,
+  and the CLI preserves existing output and removes temporary files on every
+  damaged image. The oracle is reproducible through the checked-in C probe
+  and `--range-oracle` differential option; fsck whole-file success alone
+  does not exercise all backward links. Forward lookahead remains a separate
+  compatibility slice, including the original reader's pre-1.0 zero-delta1
+  behavior.
+  The complete 536-mode writer and existing reader matrix also passes with
+  the ReleaseFast CLI (`nonhead_reader=22`, `nonhead_errors=6`,
+  `dual_algorithm_reader=84`, `configuration_reader=5`,
+  `configuration_errors=6`).
+  Broad check (125 steps), wasm compilation and the CLI help page pass.
+  The final Debug repository suite passes 3527/3527 tests (3520 root tests
+  plus seven separate Brotli object/classifier cases).

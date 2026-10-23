@@ -22,7 +22,8 @@ The validator retains only the next index and the current head index. Since
 each previous link was checked before the next one, every accepted backward
 chain terminates at the head. Validation needs no index table, recursive
 walk, allocation or additional Source reads. It does not check forward
-lookahead consistency.
+lookahead consistency. Future forward-distance checks must retain the original
+reader's compatibility handling for zero delta1 values from pre-1.0 mkfs.
 
 Malformed links return `InvalidErofs` while the existing `IntegerOverflow`,
 `TruncatedFrame` and Source errors retain their meanings. Extraction failures

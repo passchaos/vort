@@ -42,5 +42,19 @@ predecessor of the pack-final item, whose backward distance is derived rather
 than stored directly. Superblock CRC-32C is recomputed after each mutation so
 these checks reach index validation.
 
+The pinned fixture positions used by the regression are:
+
+| Fixture | File NID / size | Index start | Corrupt backward field |
+| --- | --- | --- | --- |
+| `lz4-full-final-big` | 40 / 16384 | 1328 | delta0 of index 3 at byte 1356 |
+| `lz4-compact-final-big` | 40 / 16384 | 1320 | lo of index 2 at byte 1328; index 3 derives its distance |
+| `lz4-compact-big` | 39 / 250000 | 1288 | item 14 in the 32-byte pack at byte 1312; logical index 21 derives its distance from logical index 20 |
+
+The large compact fixture has six initial four-byte indexes, 48 two-byte
+indexes and eight trailing four-byte indexes. Its range checks cross both
+encoding transitions and the first sixteen-item pack boundary. The two
+final-big fixtures also test whole-file output, cross-cluster reads and
+direct reads from the last NONHEAD cluster.
+
 When `--range-oracle` is omitted, the differential reports zero NONHEAD oracle
 cases; Zig's index and range regressions still run with `zig build test-erofs`.
