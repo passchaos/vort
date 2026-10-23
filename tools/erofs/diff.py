@@ -13,6 +13,7 @@ from source_reader_diff import verify_source_readers
 from directory_diff import verify_directory_streams
 from prefix_diff import verify_packed_prefixes
 from partial_diff import verify_partial_extents
+from device_diff import verify_device_readers
 
 
 def run(*args: object, check: bool = True) -> subprocess.CompletedProcess[bytes]:
@@ -217,6 +218,7 @@ def main() -> None:
     packed_prefix_reader_cases = 0
     partial_extent_reader_cases = 0
     partial_extent_error_cases = 0
+    device_reader_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -697,6 +699,7 @@ def main() -> None:
         directory_stream_cases += verify_directory_streams(args.cli, args.directory_writer, fsck, temp, run)
         packed_prefix_reader_cases += verify_packed_prefixes(args.cli, mkfs, fsck, temp, run)
         partial_extent_reader_cases, partial_extent_error_cases = verify_partial_extents(args.cli, fsck, temp, run)
+        device_reader_cases = verify_device_readers(args.cli, args.writer, fsck, temp, run)
 
     print(
         f"fixture_cases={fixture_cases} tools={mkfs is not None} "
@@ -736,6 +739,7 @@ def main() -> None:
         f"packed_prefix_reader={packed_prefix_reader_cases} "
         f"partial_extent_reader={partial_extent_reader_cases} "
         f"partial_extent_errors={partial_extent_error_cases} "
+        f"device_reader={device_reader_cases} "
         f"malformed={malformed}"
     )
 
