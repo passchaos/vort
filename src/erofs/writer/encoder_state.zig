@@ -137,7 +137,7 @@ pub const Encoder = struct {
         const plan = &self.plan.?;
         while (true) {
             if (self.node_index == plan.filesystem.nodes.len) {
-                if (plan.grouped and self.pass == .normal) {
+                if (plan.options.metabox and self.pass == .normal) {
                     self.pass = .metabox;
                     self.node_index = 0;
                     continue;
@@ -146,7 +146,7 @@ pub const Encoder = struct {
                 return null;
             }
             const role = plan.filesystem.nodes[self.node_index].hidden_role;
-            if ((plan.grouped and self.pass == .normal and role == .metabox) or (self.pass == .metabox and role != .metabox)) {
+            if ((plan.options.metabox and self.pass == .normal and role == .metabox) or (self.pass == .metabox and role != .metabox)) {
                 self.node_index += 1;
                 continue;
             }

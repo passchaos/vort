@@ -365,8 +365,7 @@ primary metadata zone before regular-file payloads, matching the placement
 selected by erofs-utils `--MZ=id`. Inline directory tails stay adjacent to their
 inode in its primary or metabox storage. This option works with stored and all
 four codecs, ordinary/grouped/physically bounded file compression,
-48-bit/extended inodes and local/external stored chunks. It also works with
-file-tail packing when `metabox` is disabled. It is
+48-bit/extended inodes, file-tail packing and local/external stored chunks. It is
 independent of `metabox`; enabling both keeps visible inode/inline metadata in
 the MZi inode while directory blocks remain in the primary metadata zone.
 `compress_directories` and `directory_metadata_zone` select different directory
@@ -382,15 +381,34 @@ directories and tails, xattr ibodies, and compression indexes are planned in a
 separate block-padded metadata stream; directory entries and the superblock use
 bit-63 NIDs. One low-NID hidden inode in the primary metadata owns that stream,
 using stored blocks or the selected LZ4/MicroLZMA/raw-Deflate/Zstandard
-full-index codec. With larger groups, all non-metabox physical addresses are
-assigned first, visible metabox metadata is populated, and the metadata inode
-is compressed last; its actual physical size never changes earlier addresses.
+full-index codec. The encoder finishes every non-metabox node and packed index
+before populating the visible metabox metadata, then encodes the metadata inode
+last. With larger groups, its actual physical size never changes earlier
+addresses. Fixed-size layouts retain their preassigned addresses while using
+the same completion order.
 The extended 144-byte superblock carries `metabox_nid` and enables 48-bit
 addressing for the high-bit root NID. Physical file and large-directory blocks
-remain in the primary image unless directory compression is selected. Metabox
-output currently rejects chunk mode, regular-file tail fragments, and
-compressed-inline pclusters explicitly instead of combining unimplemented
-layouts.
+remain in the primary image unless directory compression is selected.
+Metabox output supports local/external stored chunks, regular-file tail
+fragments and compressed-inline pclusters. Chunk indexes live with their inode
+in metabox storage while local/device bytes remain in the primary/external
+payload. Packed data uses a low-NID hidden primary inode. Inline compressed
+tails live beside the high-NID file inode and preserve their metabox-relative
+address. Shared xattrs and plain long-prefix tables retain their primary
+metadata address space. Existing chunk rules still require stored compression
+and reject combining chunks with compressed file tails or compressed directories.
+
+erofs-utils 1.9.4-g5fcb2f76 maps metabox compressed-inline tails correctly but
+reads the resulting metadata offset from the primary image in both fsck and
+dump. Such complete-file checks use an explicitly supplied independent copy
+with the small address-space fix documented in
+[`metabox-inline-oracle.md`](../../tools/erofs/metabox-inline-oracle.md).
+That copy also invalidates its metadata cache when switching address spaces,
+so metabox ibodies and shared primary xattrs do not reuse a same-block cache.
+The original tools continue to validate ordinary modes and complete file bytes
+in metabox chunk/fragment modes; the differential reports corrected combined
+and inline-oracle counts separately. The fix uses erofs-utils' own metadata
+reader and codec code.
 
 Writer entries use safe relative paths. Missing parent directories are created
 automatically, while absolute paths, empty components, `.`/`..`, NUL bytes,

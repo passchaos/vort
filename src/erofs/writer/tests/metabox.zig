@@ -136,42 +136,36 @@ test "EROFS writer emits interoperable MZi metadata for every codec" {
     }
 }
 
-test "EROFS metabox writer rejects unsupported layout combinations" {
+test "EROFS metabox writer round trips file tails and local external chunks" {
     const allocator = std.testing.allocator;
     const entries = [_]writer.Entry{.{
         .path = "file",
         .data = "payload",
     }};
-    try std.testing.expectError(
-        error.InvalidErofs,
-        writer.encodeAlloc(allocator, &entries, .{
-            .compression = .lz4,
-            .tail_packing = .fragments,
-            .metabox = true,
-        }),
-    );
-    try std.testing.expectError(
-        error.InvalidErofs,
-        writer.encodeAlloc(allocator, &entries, .{
-            .compression = .lz4,
-            .tail_packing = .compressed_inline,
-            .metabox = true,
-        }),
-    );
-    try std.testing.expectError(
-        error.InvalidErofs,
-        writer.encodeAlloc(allocator, &entries, .{
-            .chunk_size = block_size,
-            .metabox = true,
-        }),
-    );
-    try std.testing.expectError(
-        error.InvalidErofs,
-        writer.encodeExternalChunksAlloc(allocator, &entries, .{
-            .chunk_size = block_size,
-            .metabox = true,
-        }),
-    );
+    for ([_]writer.Options{
+        .{ .compression = .lz4, .tail_packing = .fragments },
+        .{ .compression = .lz4, .tail_packing = .compressed_inline },
+        .{ .chunk_size = block_size },
+    }) |variant| {
+        var options = variant;
+        options.metabox = true;
+        const image = try writer.encodeAlloc(allocator, &entries, options);
+        defer allocator.free(image);
+        const base = try archive.Archive.init(image);
+        var loaded = try base.loadMetaboxAllocLimited(allocator, 1024 * 1024, 1024 * 1024);
+        defer loaded.deinit();
+        const decoded = try loaded.archive.extractByPathAllocLimited(allocator, "file", 7, 4096);
+        defer allocator.free(decoded);
+        try std.testing.expectEqualStrings("payload", decoded);
+    }
+    var external = try writer.encodeExternalChunksAlloc(allocator, &entries, .{ .chunk_size = block_size, .metabox = true });
+    defer external.deinit(allocator);
+    const base = try archive.Archive.initWithDevices(external.image, &.{external.device});
+    var loaded = try base.loadMetaboxAllocLimited(allocator, 1024 * 1024, 1024 * 1024);
+    defer loaded.deinit();
+    const decoded = try loaded.archive.extractByPathAllocLimited(allocator, "file", 7, 4096);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualStrings("payload", decoded);
 }
 
 test "EROFS writer spans multi-block metabox and directory data" {

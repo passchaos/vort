@@ -66,7 +66,8 @@ pub fn writeNodes(
     fixed_nsec: u32,
 ) Error!void {
     const metabox_data = writer_metabox.data(filesystem.nodes);
-    for (filesystem.nodes, 0..) |*node, node_index| {
+    for ([_]bool{ false, true }) |metabox_pass| for (filesystem.nodes, 0..) |*node, node_index| {
+        if ((node.hidden_role == .metabox) != metabox_pass) continue;
         const metadata = if (node.in_metabox)
             metabox_data orelse return error.InvalidErofs
         else
@@ -91,7 +92,7 @@ pub fn writeNodes(
             epoch,
             fixed_nsec,
         );
-    }
+    };
 }
 
 fn writeFlatData(

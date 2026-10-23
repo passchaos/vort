@@ -41,9 +41,6 @@ pub fn validate(options: Options, external_chunks: bool) Error!bool {
         (options.compression != .stored or options.tail_packing != .none or
             options.compress_directories))
         return error.InvalidErofs;
-    if (options.metabox and
-        (options.tail_packing != .none or options.chunk_size != null or external_chunks))
-        return error.InvalidErofs;
     if (external_chunks and options.chunk_size == null) return error.InvalidErofs;
 
     return grouped;
