@@ -1,6 +1,11 @@
 const std = @import("std");
 const core = @import("../core.zig");
 const filters = @import("filters.zig");
+const raw_lzma2 = @import("lzma2_incremental_decoder.zig");
+
+test {
+    _ = @import("lzma2/one_shot_tests.zig");
+}
 
 pub const Error = core.Error || error{
     InvalidXzHeader,
@@ -228,7 +233,7 @@ pub fn decodeIncrementalBlockAlloc(
     for (input[data_end..padding_end]) |byte| if (byte != 0) return error.InvalidXzStream;
     const check_end = try checkedEnd(padding_end, check_size, input.len);
 
-    const decoded = try decodeLzma2Alloc(allocator, input[0..data_end], scan.unpacked_size);
+    const decoded = try decodeLzma2Alloc(allocator, input[0..data_end], scan.unpacked_size, try dictionaryPropertyForSize(header.dictionary_size));
     errdefer allocator.free(decoded);
     filters.decodeChain(decoded, header.filters[0..header.filter_count]);
     try verifyCheck(check, decoded, input[padding_end..check_end]);
@@ -515,27 +520,53 @@ fn decodeLzma2Alloc(
     allocator: std.mem.Allocator,
     input: []const u8,
     expected_size: usize,
+    dictionary_property: u8,
 ) ![]u8 {
-    // Zig 0.16's LZMA probability-table reset releases the old allocation
-    // before allocating its replacement. If that replacement fails, calling
-    // Decode.deinit would free the stale pointer again. Keep the complete
-    // transient decoder/output graph in an arena so every success and partial
-    // OOM state has one safe teardown operation.
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const work_allocator = arena.allocator();
-    var source: std.Io.Reader = .fixed(input);
-    var output = try std.Io.Writer.Allocating.initCapacity(work_allocator, expected_size);
-    var decoder = std.compress.lzma2.Decode.init(work_allocator) catch |err| switch (err) {
+    // Use the same dictionary window, reset transitions and range termination
+    // checks as streaming callers. The exact output allocation is the returned
+    // owner; no accumulator, arena or final duplicate is required.
+    var decoder = raw_lzma2.Decoder.init(allocator, .{
+        .dictionary_property = dictionary_property,
+        .max_output_len = expected_size,
+        .expected_output_len = expected_size,
+    }) catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
         else => return error.InvalidXzStream,
     };
-    const consumed = decoder.decompress(&source, &output) catch |err| switch (err) {
-        error.OutOfMemory => return error.OutOfMemory,
-        else => return error.InvalidXzStream,
-    };
-    if (consumed != input.len or output.written().len != expected_size) return error.SizeMismatch;
-    return allocator.dupe(u8, output.written());
+    defer decoder.deinit();
+    const output = try allocator.alloc(u8, expected_size);
+    errdefer allocator.free(output);
+    var read: usize = 0;
+    var written: usize = 0;
+    while (true) {
+        const step = decoder.step(input[read..], output[written..]) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            // Preserve the container's existing payload-error class. Its
+            // scan/header preflight still owns public limit and truncation
+            // precedence before this decode helper is entered.
+            else => return error.InvalidXzStream,
+        };
+        read += step.progress.input_read;
+        written += step.progress.output_written;
+        if (step.status == .done) break;
+        if (step.status == .need_input and read == input.len) {
+            decoder.finish();
+            continue;
+        }
+        if ((step.status == .need_output and written == output.len) or
+            (step.progress.input_read == 0 and step.progress.output_written == 0))
+            return error.SizeMismatch;
+    }
+    if (read != input.len or written != expected_size) return error.SizeMismatch;
+    return output;
+}
+
+fn dictionaryPropertyForSize(size: u64) Error!u8 {
+    var property: u8 = 0;
+    while (property <= 40) : (property += 1) {
+        if (lzma2DictionarySize(property) == size) return property;
+    }
+    return error.InvalidXzHeader;
 }
 
 /// Decode a raw LZMA2 payload stored by a 7z coder. The property byte and
@@ -553,7 +584,7 @@ pub fn decode7zPayloadAllocLimited(
     const scan = try scanLzma2(input, expected_size);
     if (scan.packed_size != input.len or scan.unpacked_size != expected_size)
         return error.SizeMismatch;
-    return decodeLzma2Alloc(allocator, input, expected_size);
+    return decodeLzma2Alloc(allocator, input, expected_size, dictionary_property);
 }
 
 /// Decode a raw LZMA2 payload when the caller only has an output ceiling.
@@ -571,7 +602,7 @@ pub fn decode7zPayloadAllocUnknownSizeLimited(
         return error.OutputLimitExceeded;
     const scan = try scanLzma2(input, max_output_len);
     if (scan.packed_size != input.len) return error.SizeMismatch;
-    return decodeLzma2Alloc(allocator, input, scan.unpacked_size);
+    return decodeLzma2Alloc(allocator, input, scan.unpacked_size, dictionary_property);
 }
 
 fn verifyCheck(check: Check, decoded: []const u8, stored: []const u8) Error!void {
