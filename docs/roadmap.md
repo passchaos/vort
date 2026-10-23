@@ -22706,3 +22706,26 @@ reuse, so production keeps the simpler independently owned plans.
   passes all 156 focused cases.
   The final Debug repository suite passes 3463/3463 tests (3456 root tests
   plus seven separate Brotli object/classifier cases).
+
+- Added shared long-xattr-prefix address resolution for plain, metabox and
+  packed inode tables, including the primary-image fallback and metabox
+  priority. Packed reads retain only at most 128 * 260 bytes of prefix records
+  and the current decoded extent; the final payload may end at packed EOF
+  without alignment bytes. Exact-range metadata validation still detects a
+  corrupt later extent without decompressing unrelated packed data.
+  `ErofsXattrReadLimits` and `readXattrsAllocWithLimits` independently bound
+  count, returned bytes and decoded packed extents while retaining the old
+  convenience API. The slice metabox loader now frees decoded metadata when
+  subsequent prefix validation fails. Tests cover real erofs-utils images in
+  every codec, nonzero offsets, cross-block records, 255-byte names, 128
+  prefixes, exact truncation/feature errors, modern extents, Source/output
+  failures and exhaustive allocation failures. A 4 MiB stored packed file
+  reads its prefixes within a 64 KiB working budget without reading unrelated
+  payload; 32 KiB is rejected and all work is released. Debug passes 152 EROFS
+  cases; ReleaseFast passes those plus 12 independent I/O cases (164 total).
+  The complete 432-mode erofs-utils 1.9.4-g5fcb2f76 matrix passes, alongside
+  nine fresh stored/full/compact packed-prefix modes (`packed_prefix_reader=9`)
+  with root, shared, inline and directory xattrs and 17-byte output slices.
+  Broad check, wasm compilation and the CLI help page pass.
+  The final Debug repository suite passes 3471/3471 tests (3464 root tests
+  plus seven separate Brotli object/classifier cases).

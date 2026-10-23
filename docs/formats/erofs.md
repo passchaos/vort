@@ -5,8 +5,9 @@ filesystem format used by Android, embedded Linux, and container images.
 
 `ErofsSourceArchive.init(allocator, source, limits)` opens a borrowed stable
 `ByteSource`; `initWithDevices` additionally borrows an ordered Source array.
-It reads only the superblock/checksum block initially, parses metadata on
-demand, and owns bounded metabox metadata when present. `deinit()` releases
+It initially validates bounded superblock/checksum metadata, device tables and
+prefix tables in the primary image, parses inodes on demand, and can own a
+bounded decoded metabox. `deinit()` releases
 that metadata and leaves source handles and contexts with the caller. All
 source bytes, lengths and contexts, including the device array, must remain
 stable and valid throughout the archive's lifetime. Reads are bounded to the
@@ -691,3 +692,15 @@ lookup and erofs-utils validation (`directory_stream=3`), alongside the 432
 ordinary modes, six Source file and 18 output-slice cases.
 Final Debug repository validation passes 3463/3463 tests. Broad check, wasm,
 CLI help and all 156 post-rebase focused cases also pass.
+
+Packed xattr prefixes pass all 152 EROFS cases in Debug and ReleaseFast, with
+the latter also passing 12 independent I/O cases (164 total). Five committed
+erofs-utils fixtures cover stored and every compressed codec. Fresh differential
+validation adds nine stored/full/compact packed-prefix modes with root, shared,
+inline and directory attributes (`packed_prefix_reader=9`) to the existing
+432-mode matrix. A 4 MiB stored packed file reads only its prefix records under
+a 64 KiB working limit; 128 prefixes also fit a 40 KiB slice allocator.
+Truncation, invalid records, late modern-extent metadata errors, independent
+Source/output/work limits, metabox priority/failed loading, and exhaustive
+allocation failures are covered. Final Debug repository validation passes
+3471/3471 tests; broad check (125 steps), wasm compilation and CLI help pass.
