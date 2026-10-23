@@ -373,6 +373,12 @@ pub fn build(b: *std.Build) void {
     const run_lzfse_tests = b.addRunArtifact(lzfse_tests);
     const lzfse_test_step = b.step("test-lzfse", "Run focused LZFSE and LZVN tests");
     lzfse_test_step.dependOn(&run_lzfse_tests.step);
+    const lzfse_stream_tests = b.addTest(.{ .name = "vort-lzfse-stream-tests", .root_module = b.createModule(.{ .root_source_file = b.path("src/lzfse.zig"), .target = target, .optimize = optimize }), .filters = &.{ "LZFSE stream", "LZFSE incremental", "LZVN cursor", "LZFSE FSE cursor", "LZFSE history" } });
+    const lzfse_stream_test_step = b.step("test-lzfse-stream", "Run bounded LZFSE streaming decoder tests");
+    lzfse_stream_test_step.dependOn(&b.addRunArtifact(lzfse_stream_tests).step);
+    const lz4_tests = b.addTest(.{ .name = "vort-lz4-tests", .root_module = b.createModule(.{ .root_source_file = b.path("src/lz4.zig"), .target = target, .optimize = optimize, .link_libc = true }), .filters = &.{"LZ4"} });
+    const lz4_test_step = b.step("test-lz4", "Run focused LZ4 codec and incremental tests");
+    lz4_test_step.dependOn(&b.addRunArtifact(lz4_tests).step);
     const decmpfs_tests = b.addTest(.{
         .name = "vort-decmpfs-tests",
         .root_module = tests_mod,
@@ -1619,6 +1625,17 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| lzfse_cli_diff.addArgs(args);
     const lzfse_cli_diff_step = b.step("run-lzfse-cli-diff", "Validate LZFSE CLI strategies, limits, atomic failures and same-path replacement");
     lzfse_cli_diff_step.dependOn(&lzfse_cli_diff.step);
+    const lzfse_stream_probe = b.addExecutable(.{
+        .name = "vort-lzfse-stream-probe",
+        .root_module = b.createModule(.{ .root_source_file = b.path("tools/lzfse/stream_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "lzfse", .module = lzfse_fse_probe_mod }} }),
+    });
+    const lzfse_stream_diff = b.addSystemCommand(&.{ "python3", "tools/lzfse/stream_diff.py", "--probe" });
+    lzfse_stream_diff.addArtifactArg(lzfse_stream_probe);
+    lzfse_stream_diff.addArg("--encode-probe");
+    lzfse_stream_diff.addArtifactArg(lzfse_fse_probe);
+    if (b.args) |args| lzfse_stream_diff.addArgs(args);
+    const lzfse_stream_diff_step = b.step("run-lzfse-stream-diff", "Validate bounded LZFSE input/output streaming against Apple corpus");
+    lzfse_stream_diff_step.dependOn(&lzfse_stream_diff.step);
 
     const decmpfs_diff = b.addSystemCommand(&.{ "python3", "tools/decmpfs/diff.py", "--cli" });
     decmpfs_diff.addArtifactArg(cli_exe);
