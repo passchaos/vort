@@ -22761,3 +22761,28 @@ reuse, so production keeps the simpler independently owned plans.
   Broad check (125 steps), wasm compilation and the CLI help page pass.
   The final Debug repository suite passes 3486/3486 tests (3479 root tests
   plus seven separate Brotli object/classifier cases).
+
+- Added shared physical-byte device mapping for flat plain/inline data,
+  legacy full/compact compression, modern extents, packed data/directories and
+  metabox loading. The resolver retains unaligned offsets, checks the complete
+  encoded/raw region against device geometry and preserves u64 Source offsets.
+  Logical cropping precedes address resolution, so holes and unrequested device
+  extents need no blob; metadata and inline storage retain their own inputs.
+  Explicit-ID-only slots with zero unified addresses now work without shadowing
+  primary block zero. Primary byte reads are bounded by declared image size
+  even when slice inputs contain trailing bytes. Nonempty mapped ranges retain
+  ordering/overlap and checked byte-end validation. CLI list/xattr/extract
+  commands share stable adapter ownership and ordered device Sources; xattr
+  listing additionally exposes a working limit. Tests cover every codec,
+  4/8/16/32-byte modern layouts, flat/full/compact/packed/MZi/directory paths,
+  offsets crossing physical blocks, missing/short devices, range isolation,
+  sticky failures, cache reuse without extra reads and exhaustive allocation
+  failures. Virtual device byte offsets above 4 GiB need no blob allocation.
+  Debug passes 177 EROFS cases; ReleaseFast passes those plus 12 independent I/O
+  cases (189 total). The complete 432-mode erofs-utils 1.9.4-g5fcb2f76 matrix
+  passes with 70 further real-file device cases (`device_reader=70`), including
+  all four compressed codecs, legacy heads, compact packed data, flat data,
+  compressed directories and metabox Sources.
+  Broad check (125 steps), wasm compilation and the CLI help page pass.
+  The final Debug repository suite passes 3496/3496 tests (3489 root tests
+  plus seven separate Brotli object/classifier cases).

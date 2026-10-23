@@ -765,3 +765,15 @@ validation, sticky failures, tiny output schedules and exhaustive OOM.
 The final Debug repository suite passes 3486/3486 tests; broad check (125
 steps), wasm compilation, CLI help and dedicated default DEFLATE/MicroLZMA
 decoder regression checks also pass.
+
+Unified device reading passes 177 EROFS cases in Debug and ReleaseFast, plus
+12 independent I/O cases in ReleaseFast (189 total). The original 432-mode
+erofs-utils 1.9.4-g5fcb2f76 matrix and 70 additional actual-file device cases
+pass (`device_reader=70`). The latter cover unaligned 4/8/16/32-byte records,
+all four codecs, legacy heads, compact packed data, flat files, compressed
+directories, metabox Sources and CLI device listing/xattrs/extraction.
+Native tests additionally cover explicit-ID-only slots, u64 offsets above
+4 GiB without allocating a blob, range isolation, short/failing devices,
+decoder cache reuse, declared primary-image bounds and exhaustive OOM.
+Final Debug repository validation passes 3496/3496 tests. Broad check (125
+steps), wasm compilation and CLI help also pass.
