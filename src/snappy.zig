@@ -7,8 +7,14 @@ const incremental_frame = @import("snappy/incremental/frame_decoder.zig");
 const incremental_encoder = @import("snappy/incremental/frame_encoder.zig");
 const incremental_tests = @import("snappy/incremental/tests.zig");
 const match_copy = @import("snappy/match_copy.zig");
+const incremental_block = @import("snappy/incremental/block_decoder.zig");
+const stream_contract_tests = @import("snappy/incremental/contracts_tests.zig");
+const resources_tests = @import("snappy/incremental/resources_tests.zig");
 
-pub const Error = core.Error || std.mem.Allocator.Error;
+pub const Error = core.Error || std.mem.Allocator.Error || error{WorkingMemoryLimitExceeded};
+pub const BlockPlan = incremental_block.Plan;
+pub const BlockCursor = incremental_block.Cursor;
+pub const planBlock = incremental_block.plan;
 
 pub const max_uncompressed_chunk_len =
     frame_format.max_uncompressed_chunk_len;
@@ -75,6 +81,10 @@ const IncrementalFrameCodec = struct {
     pub fn verifyChecksum(payload: []const u8, expected: u32) snappy.Error!void {
         return snappy.verifyMaskedChecksum(payload, expected);
     }
+
+    pub fn verifyChecksumHash(actual: u32, expected: u32) snappy.Error!void {
+        if (((actual >> 15) | (actual << 17)) +% 0xa282_ead8 != expected) return error.ChecksumMismatch;
+    }
 };
 
 const snappy = @This();
@@ -106,6 +116,8 @@ pub const IncrementalFrameEncoder = incremental_encoder.Encoder(Encoder, Increme
 
 test {
     _ = incremental_tests;
+    _ = stream_contract_tests;
+    _ = resources_tests;
 }
 
 pub fn encodedBlockBound(input_len: usize) Error!usize {
