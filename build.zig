@@ -393,6 +393,20 @@ pub fn build(b: *std.Build) void {
     stream_contracts_test_step.dependOn(&b.addRunArtifact(zstd_limits_tests).step);
     stream_contracts_test_step.dependOn(&b.addRunArtifact(lz4_limits_tests).step);
     stream_contracts_test_step.dependOn(&run_zlib_stream_tests.step);
+    const xz_tests_mod = b.createModule(.{ .root_source_file = b.path("src/xz.zig"), .target = target, .optimize = optimize });
+    const xz_tests = b.addTest(.{ .name = "vort-xz-tests", .root_module = xz_tests_mod, .filters = &.{ "XZ", "LZMA2" } });
+    const xz_test_step = b.step("test-xz", "Run XZ, LZMA2 and incremental filter tests");
+    xz_test_step.dependOn(&b.addRunArtifact(xz_tests).step);
+    const xz_progressive_tests = b.addTest(.{ .name = "vort-xz-progressive-tests", .root_module = xz_tests_mod, .filters = &.{ "XZ progressive", "LZMA2 progressive" } });
+    const xz_progressive_test_step = b.step("test-xz-progressive", "Run progressive XZ and LZMA2 resource and progress tests");
+    xz_progressive_test_step.dependOn(&b.addRunArtifact(xz_progressive_tests).step);
+    const xz_consumer_tests = b.addTest(.{
+        .name = "vort-xz-consumer-tests",
+        .root_module = tests_mod,
+        .filters = &.{ "7z reader decodes a real LZMA2", "7z writer round trips an LZMA2", "PBZX", "WIA" },
+    });
+    const xz_consumer_test_step = b.step("test-xz-consumers", "Run LZMA2 integration tests in 7z, PBZX and WIA/RVZ");
+    xz_consumer_test_step.dependOn(&b.addRunArtifact(xz_consumer_tests).step);
     const decmpfs_tests = b.addTest(.{
         .name = "vort-decmpfs-tests",
         .root_module = tests_mod,
@@ -1939,6 +1953,21 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| xz_diff.addArgs(args);
     const xz_diff_step = b.step("run-xz-diff", "Validate XZ/LZMA2 and standard filter interoperability with Python lzma and xz");
     xz_diff_step.dependOn(&xz_diff.step);
+
+    const xz_progressive_probe = b.addExecutable(.{
+        .name = "vort-xz-progressive-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/xz/progressive_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "xz", .module = xz_tests_mod }},
+        }),
+    });
+    const xz_progressive_diff = b.addSystemCommand(&.{ "python3", "tools/xz/progressive_diff.py", "--probe" });
+    xz_progressive_diff.addArtifactArg(xz_progressive_probe);
+    if (b.args) |args| xz_progressive_diff.addArgs(args);
+    const xz_progressive_diff_step = b.step("run-xz-progressive-diff", "Validate progressive XZ and raw LZMA2 against system liblzma");
+    xz_progressive_diff_step.dependOn(&xz_progressive_diff.step);
 
     const xz_encode_bench_exe = b.addExecutable(.{
         .name = "vort-xz-encode-bench",
@@ -6167,6 +6196,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_native_dictionary_probe_exe.step);
     check_step.dependOn(&lz4_native_dictionary_probe_exe.step);
     check_step.dependOn(&lzma2_incremental_report_exe.step);
+    check_step.dependOn(&xz_progressive_probe.step);
 
     const ci_smoke_step = b.step("ci-smoke", "Run local CI smoke validation across tests, fuzz, differential, and benchmark reports");
     ci_smoke_step.dependOn(test_step);
