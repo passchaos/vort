@@ -56,6 +56,7 @@ const incremental_literal = @import("br/incremental/literal_decoder.zig");
 const incremental_literal_tests = @import("br/incremental/literal_tests.zig");
 const incremental_copy = @import("br/incremental/copy_decoder.zig");
 const incremental_copy_tests = @import("br/incremental/copy_tests.zig");
+const incremental_contracts_tests = @import("br/incremental/contracts_tests.zig");
 const incremental_owned_copy = @import("br/incremental/owned_copy_decoder.zig");
 const incremental_rle = @import("br/incremental/rle_decoder.zig");
 const incremental_rle_tests = @import("br/incremental/rle_tests.zig");
@@ -102,7 +103,7 @@ const adaptive_split_text_section = code_sections.adaptive_split;
 const distance_parameter_text_section = code_sections.distance_parameters;
 const command_state_text_section = code_sections.command_state;
 
-pub const Error = core.Error || std.mem.Allocator.Error;
+pub const Error = core.Error || std.mem.Allocator.Error || error{WorkingMemoryLimitExceeded};
 pub const default_incremental_compressed_header_bytes: usize = 16 * 1024;
 pub const PlannedEncodeStats = encoder_stats.PlannedEncodeStats;
 pub const RatioEncodeProfile = encoder_stats.RatioEncodeProfile;
@@ -1248,7 +1249,8 @@ const IncrementalOwnedCodec = struct {
             else => return err,
         };
         const advertised = (@as(usize, 1) << window.bits) - 16;
-        const required = @max(1, @min(output_bound, advertised));
+        const required = @min(output_bound, advertised);
+        if (required == 0) return .{ .allocation_len = 0, .capped = false };
         if (max_history_len == 0) return error.OutputLimitExceeded;
         return .{
             .allocation_len = @min(required, max_history_len),
@@ -2037,6 +2039,7 @@ test {
     _ = incremental_tests;
     _ = incremental_literal_tests;
     _ = incremental_copy_tests;
+    _ = incremental_contracts_tests;
     _ = incremental_rle_tests;
     _ = incremental_stored_tests;
     _ = incremental_planned_encoder_tests;
