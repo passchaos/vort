@@ -1725,9 +1725,20 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const erofs_diff = b.addSystemCommand(&.{ "python3", "tools/erofs/diff.py", "--cli" });
+    const erofs_directory_probe = b.addExecutable(.{
+        .name = "vort-erofs-directory-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/erofs/directory_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
     erofs_diff.addArtifactArg(cli_exe);
     erofs_diff.addArg("--writer");
     erofs_diff.addArtifactArg(erofs_writer_probe);
+    erofs_diff.addArg("--directory-writer");
+    erofs_diff.addArtifactArg(erofs_directory_probe);
     if (b.args) |args| erofs_diff.addArgs(args);
     const erofs_diff_step = b.step("run-erofs-diff", "Validate EROFS reading and writing against optional erofs-utils");
     erofs_diff_step.dependOn(&erofs_diff.step);

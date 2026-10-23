@@ -283,6 +283,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   metadata/extent working memory and direct file/range Sink extraction,
   resumable caller-owned extraction with bounded decoded-extent caching,
   resumable positional encoding with bounded current-cluster storage,
+  streamed directory traversal and lookup shared by slice/Source readers,
   all with
   bidirectional erofs-utils interoperability;
 - dependency-free WIM/ESD/SWM parsing with strict 208-byte headers, compression

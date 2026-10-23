@@ -32,7 +32,7 @@ must fit the working budget, even when the independent metabox size cap fits.
 `max_packed_extent_len` additionally bounds decoded packed extents.
 
 The working budget includes retained metabox bytes, encoded/decoded extents,
-xattr scanning scratch and temporary lookup directories. It excludes stack,
+xattr scanning scratch and active directory block buffers. It excludes stack,
 backing allocator bookkeeping/remap transients and caller-owned Source/Sink
 storage or returned file/directory/xattr buffers. `ErofsSourceReadResult`
 returns `decoded_size` and the archive lifetime's monotonic
@@ -44,6 +44,47 @@ Source/Sink callback errors preserve their public error classes. Extraction
 sets final Sink length only after successful data emission; failures can leave
 partial caller output. File, directory and xattr convenience results own their
 buffers independently of the Source archive.
+
+`initDirectoryIterator(inode, max_directory_size)` returns a caller-owned
+`ErofsDirectoryIterator`. It retains one directory block and the current
+decoded extent, then returns one `DirectoryEntry` per `next()` call. Names
+borrow iterator storage until the next call or `deinit()`; NIDs and file types
+are values. The byte cap is checked against the directory's declared size
+before reading. Directories can span many blocks without a complete directory
+allocation or an array of all entries.
+
+The same block parser serves streamed and allocating directory APIs. A fixed
+255-byte key preserves strictly increasing name order across reused blocks,
+and reserved dot entries are omitted. Lookup scans to validated EOF even after
+finding a candidate, retaining only its NID; corrupt later names, Source errors
+and unfinished compressed metadata therefore remain errors. `diagnostics()`
+returns decoded directory `bytes_read`, `entries_yielded` and logical
+`entry_offset`, including the record at a parser failure. Errors remain sticky.
+
+Source directory block buffers and decoder caches count against the archive's
+working budget. Always release the iterator before deinitializing or moving
+the archive. Multiple active directory/extraction states share that budget.
+CLI listing uses this iterator recursively and accepts
+`--working-memory-limit=bytes` and `--max-directory-bytes=bytes`.
+
+```zig
+var directory = try archive.initDirectoryIterator(try archive.rootInode(),
+    64 * 1024 * 1024);
+defer directory.deinit();
+while (try directory.next()) |entry| {
+    try consumeEntry(entry.nid, entry.name, entry.file_type);
+}
+```
+
+Borrowed slice `ErofsArchive` uses the same extraction, range, directory and
+xattr core. Its `initExtractor`, `initRangeExtractor`, `initPathExtractor`,
+`initDirectoryIterator`, `readToSink` and `readRangeToSink` receive an explicit
+allocator first. `ErofsSliceExtractor` and `ErofsSliceDirectoryIterator` own
+working buffers while borrowing archive/image/metabox storage. Slice paths
+borrow encoded extents, ibodies and shared attributes directly; Source paths
+retain bounded read buffers. Allocating output APIs retain their caller-owned
+results, and slice methods retain the supplied allocator's policy rather than
+introducing a separate implicit working budget.
 
 `initExtractor(inode, limits)`, `initRangeExtractor(inode, start, size, limits)`
 and `initPathExtractor(path, limits, max_directory_size)` create a caller-owned
@@ -619,3 +660,11 @@ Thirteen actual CLI creation cases also use 17-byte output buffers, covering
 stored/default/grouped/bounded codecs and existing atomic replacement checks.
 Final Debug repository validation passes 3455/3455 tests. Broad check, wasm,
 CLI help and all 148 post-rebase focused cases also pass.
+
+Streamed directories and unified slice reading pass 144 EROFS plus 12 I/O
+tests in Debug/ReleaseFast. Stored and compressed 10,000-entry directories
+larger than their working limits traverse and look up under 32 KiB/128 KiB
+heap budgets, and a slice iterator succeeds with a 16 KiB allocator. Three
+real stored/compressed/metabox directory images pass CLI listing, last-entry
+lookup and erofs-utils validation (`directory_stream=3`), alongside the 432
+ordinary modes, six Source file and 18 output-slice cases.

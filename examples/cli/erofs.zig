@@ -92,10 +92,17 @@ pub fn list(
     stdout: *std.Io.Writer,
 ) !void {
     const input_path = args.next() orelse return error.MissingCorpusPath;
+    var working_limit: usize = 64 * 1024 * 1024;
+    var directory_limit: usize = max_directory_size;
+    while (args.next()) |argument| {
+        const work_option = "--working-memory-limit=";
+        const dir_option = "--max-directory-bytes=";
+        if (std.mem.startsWith(u8, argument, work_option)) working_limit = try std.fmt.parseInt(usize, argument[work_option.len..], 10) else if (std.mem.startsWith(u8, argument, dir_option)) directory_limit = try std.fmt.parseInt(usize, argument[dir_option.len..], 10) else return error.InvalidBlockPlan;
+    }
     const input_file = try std.Io.Dir.cwd().openFile(init.io, input_path, .{});
     defer input_file.close(init.io);
     var input_adapter = try vort.FileByteSource.init(init.io, input_file);
-    var archive = try vort.ErofsSourceArchive.init(init.gpa, input_adapter.source(), .{ .max_metabox_size = max_metabox_size });
+    var archive = try vort.ErofsSourceArchive.init(init.gpa, input_adapter.source(), .{ .max_metabox_size = max_metabox_size, .max_working_memory = working_limit });
     defer archive.deinit();
     try stdout.print(
         "erofs_inodes={d} blocks={d} block_size={d} root_nid={d} compression_mask={d}\n",
@@ -108,7 +115,7 @@ pub fn list(
         },
     );
     const root = try archive.rootInode();
-    try listDirectory(init, &archive, root, "", 0, stdout);
+    try listDirectory(init, &archive, root, "", 0, directory_limit, stdout);
 }
 
 fn listDirectory(
@@ -117,16 +124,13 @@ fn listDirectory(
     inode: vort.ErofsInode,
     prefix: []const u8,
     depth: usize,
+    directory_limit: usize,
     stdout: *std.Io.Writer,
 ) !void {
     if (depth >= max_depth) return error.OutputLimitExceeded;
-    var directory = try archive.readDirectoryAlloc(
-        init.gpa,
-        inode,
-        max_directory_size,
-    );
+    var directory = try archive.initDirectoryIterator(inode, directory_limit);
     defer directory.deinit();
-    for (directory.entries) |entry| {
+    while (try directory.next()) |entry| {
         const path = if (prefix.len == 0)
             try init.gpa.dupe(u8, entry.name)
         else
@@ -140,7 +144,7 @@ fn listDirectory(
             @tagName(child.layout),
         });
         if (try child.fileType() == .directory)
-            try listDirectory(init, archive, child, path, depth + 1, stdout);
+            try listDirectory(init, archive, child, path, depth + 1, directory_limit, stdout);
     }
 }
 

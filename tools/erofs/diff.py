@@ -10,6 +10,7 @@ from pathlib import Path
 from final_big_diff import verify_final_big_pclusters
 from file_source_diff import verify_file_sources
 from source_reader_diff import verify_source_readers
+from directory_diff import verify_directory_streams
 
 
 def run(*args: object, check: bool = True) -> subprocess.CompletedProcess[bytes]:
@@ -164,6 +165,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
     parser.add_argument("--writer", required=True, type=Path)
+    parser.add_argument("--directory-writer", type=Path)
     parser.add_argument("--mkfs", type=Path)
     parser.add_argument("--fsck", type=Path)
     args = parser.parse_args()
@@ -209,6 +211,7 @@ def main() -> None:
     file_source_writer_cases = 0
     source_reader_cases = 0
     resumable_reader_cases = 0
+    directory_stream_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -686,6 +689,7 @@ def main() -> None:
         malformed += 1
 
         source_reader_cases += verify_source_readers(args.cli, temp, run)
+        directory_stream_cases += verify_directory_streams(args.cli, args.directory_writer, fsck, temp, run)
 
     print(
         f"fixture_cases={fixture_cases} tools={mkfs is not None} "
@@ -721,6 +725,7 @@ def main() -> None:
         f"file_source_writer={file_source_writer_cases} "
         f"source_reader={source_reader_cases} "
         f"resumable_reader={resumable_reader_cases} "
+        f"directory_stream={directory_stream_cases} "
         f"malformed={malformed}"
     )
 
