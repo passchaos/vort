@@ -22946,8 +22946,29 @@ reuse, so production keeps the simpler independently owned plans.
   Broad check passes 125 steps, including wasm compilation.
   The final Debug repository suite passes 3535/3535 tests (3528 root tests
   plus seven separate Brotli object/classifier cases).
-  Next compatibility priority: reject compact item widths which cannot hold
-  logical offset bits plus both type bits, while preserving legal wide
-  four-byte packs and unused COMPACTED_2B flags in short images. An independent
-  positional audit already reproduces acceptance of an unsupported 8 KiB
-  two-byte pack and confirms valid 8/16 KiB four-byte controls.
+  The following compatibility slice closes the actual compact item-width
+  boundary identified by its independent positional audit.
+
+- Compact EROFS parsing now verifies that an item can represent its logical
+  offset and both type bits before reading the pack. Paired four-byte items
+  retain support through 14 logical-cluster bits, and sixteen-item two-byte
+  packs reject declarations above 12. The actual pack width decides support,
+  preserving short 8/16 KiB layouts with an unused COMPACTED_2B flag.
+  Four regressions cover Source-read precedence, invalid declarations including
+  extreme bit counts, exact public slice/Source errors, zero work budgets,
+  output/position preservation, sticky failures, unfinished Sinks and previously
+  delivered complete/prefix output. Independently encoded LZ4 blocks isolate
+  the format-width failure from codec errors. The existing range oracle now
+  checks 30 legal whole/boundary reads and two unsupported width layouts,
+  including successful initial four-byte prefixes and reference -EOPNOTSUPP
+  when a query enters the two-byte pack. CLI failures retain atomic output.
+  Debug EROFS passes 220 cases and ReleaseFast passes those plus 12 I/O cases
+  (232 total). The complete 536-mode default writer/reader matrix passes with
+  `compact_width_reader=30`, `compact_width_errors=2`, all 14/3 compact CLI
+  success/failure cases, 22/6 NONHEAD cases, 84 dual-algorithm cases and 5/6
+  configuration cases. Broad check passes 125 steps, including wasm; CLI help
+  passes. The next functional priority is LZMS LZ/delta match encoding beyond
+  the current adaptive-literal writer, backed by the existing complete decoder
+  and pinned local wimlib reference.
+  The final Debug repository suite passes 3539/3539 tests (3532 root tests
+  plus seven separate Brotli object/classifier cases).

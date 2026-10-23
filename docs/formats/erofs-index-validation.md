@@ -18,6 +18,15 @@ backward distance comes from the predecessor: one after a head, two after a
 CBLKCNT, or predecessor distance plus one after an ordinary NONHEAD. A final
 CBLKCNT itself still has backward distance one.
 
+Compact item width is checked before reading its pack. Four-byte paired
+items have 16 encoded bits and support logical-cluster bits through 14;
+two-byte items have 14 encoded bits and support bits through 12. Each needs
+two type bits in addition to `max(cluster_bits, 12)` offset bits. Wider
+declarations return `UnsupportedErofsFeature`. A short inode can advertise
+COMPACTED_2B while using only four-byte packs, so the actual pack width decides
+support rather than that flag alone. Legal 8/16 KiB four-byte layouts remain
+readable, including those with an unused COMPACTED_2B flag.
+
 The validator retains only the next index and the current head index. Since
 each previous link was checked before the next one, every accepted backward
 chain terminates at the head. Validation needs no index table, recursive
