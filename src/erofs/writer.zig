@@ -14,6 +14,7 @@ pub const Source = tree.Source;
 pub const Compression = writer_options.Compression;
 pub const TailPacking = writer_options.TailPacking;
 pub const InodeVersion = writer_options.InodeVersion;
+pub const IndexFormat = writer_options.IndexFormat;
 pub const Options = writer_options.Options;
 pub const Sink = byte_sink.Sink;
 pub const Encoder = encoder_state.Encoder;

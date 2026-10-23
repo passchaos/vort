@@ -5,9 +5,13 @@ const Xattr = @import("tree.zig").Xattr;
 pub const Compression = writer_codec.Compression;
 pub const TailPacking = enum { none, fragments, compressed_inline };
 pub const InodeVersion = writer_inode.Version;
+pub const IndexFormat = enum { full, compact_4byte, compact };
 
 pub const Options = struct {
     compression: Compression = .stored,
+    /// Legacy full indexes, four-byte compact packs, or mixed two-/four-byte
+    /// compact packs. Whole-file fragments and offsets above u32 use full.
+    compressed_index_format: IndexFormat = .full,
     /// Maximum decoded bytes per compressed extent (4 KiB...1 MiB).
     compression_extent_size: usize = 4096,
     /// Optional maximum physical bytes per pcluster, in 4 KiB multiples.

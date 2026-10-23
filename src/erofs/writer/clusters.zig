@@ -85,7 +85,7 @@ pub fn emitNode(
     else
         null;
     defer if (scratch) |bytes| allocator.free(bytes);
-    node.compressed_advise = if (extent_size > block_size or max_pcluster_size != null) 2 else 0;
+    node.compressed_advise = (node.compressed_advise & 1) | (if (extent_size > block_size or max_pcluster_size != null) @as(u16, 2) else 0);
     var position: usize = 0;
     while (position < length) {
         const window_end = position + @min(extent_size, length - position);

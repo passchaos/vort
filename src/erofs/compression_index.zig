@@ -53,9 +53,9 @@ pub fn readCompact(metadata: []const u8, view: View, cluster_index: usize, clust
     return readCompactInput(.{ .slice = metadata }, view, cluster_index, cluster_count);
 }
 
-const Pack = struct { start: usize, size: usize, item: usize };
+pub const Pack = struct { start: usize, size: usize, item: usize };
 
-fn packFor(view: View, cluster_index: usize, cluster_count: usize) Error!Pack {
+pub fn compactPack(view: View, cluster_index: usize, cluster_count: usize) Error!Pack {
     const entry_base = view.index_start;
     const initial_4byte = ((32 - entry_base % 32) / 4) & 7;
     const compact_2byte = if (view.advise & 1 != 0 and
@@ -89,18 +89,18 @@ fn packFor(view: View, cluster_index: usize, cluster_count: usize) Error!Pack {
 
 pub fn compactIndexEnd(view: View, cluster_count: usize) Error!usize {
     if (cluster_count == 0) return view.index_start;
-    const pack = try packFor(view, cluster_count - 1, cluster_count);
+    const pack = try compactPack(view, cluster_count - 1, cluster_count);
     return std.math.add(usize, pack.start, pack.size) catch return error.IntegerOverflow;
 }
 
 /// Byte position of the shared physical-block base for a compact index pack.
 pub fn compactPhysicalBaseOffset(view: View, cluster_index: usize, cluster_count: usize) Error!usize {
-    const pack = try packFor(view, cluster_index, cluster_count);
+    const pack = try compactPack(view, cluster_index, cluster_count);
     return std.math.add(usize, pack.start, pack.size - 4) catch return error.IntegerOverflow;
 }
 
 pub fn readCompactInput(metadata: input_module.Input, view: View, cluster_index: usize, cluster_count: usize) Error!Index {
-    const pack = try packFor(view, cluster_index, cluster_count);
+    const pack = try compactPack(view, cluster_index, cluster_count);
     var buffer: [32]u8 = undefined;
     const data = buffer[0..pack.size];
     try metadata.read(pack.start, data);

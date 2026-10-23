@@ -23,7 +23,7 @@ pub const Cursor = struct {
     pub fn init(allocator: std.mem.Allocator, node: *tree.Node, encoder: *codec.Encoder, extent_size: usize, max_pcluster_size: ?usize) Error!Cursor {
         if (extent_size < block_size or extent_size > clusters.max_extent_size or !std.math.isPowerOfTwo(extent_size) or node.compressed_data != null) return error.InvalidErofs;
         const length = try clusters.prefixLength(node);
-        node.compressed_advise = if (extent_size > block_size or max_pcluster_size != null) 2 else 0;
+        node.compressed_advise = (node.compressed_advise & 1) | (if (extent_size > block_size or max_pcluster_size != null) @as(u16, 2) else 0);
         return .{
             .allocator = allocator,
             .node = node,

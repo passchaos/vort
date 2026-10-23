@@ -7,11 +7,12 @@ const writer_metabox = @import("metabox.zig");
 const writer_inode = @import("inode.zig");
 const writer_clusters = @import("clusters.zig");
 const writer_wire = @import("wire.zig");
+const compression_metadata = @import("compression_metadata.zig");
 const writer_directories = @import("directories.zig");
 const xattr = @import("../xattr.zig");
 const options_module = @import("options.zig");
 const math = @import("math.zig");
-pub const Error = tree.Error || writer_codec.Error || writer_xattrs.Error || writer_metabox.Error || writer_inode.Error || writer_clusters.Error || xattr.Error || math.Error;
+pub const Error = tree.Error || writer_codec.Error || writer_xattrs.Error || writer_metabox.Error || writer_inode.Error || writer_clusters.Error || compression_metadata.Error || xattr.Error || math.Error;
 const Options = options_module.Options;
 const Compression = options_module.Compression;
 const TailPacking = options_module.TailPacking;
@@ -33,6 +34,7 @@ pub fn planMetadata(
     const compression = options.compression;
     const xattr_prefixes = options.xattr_prefixes;
     const tail_packing = options.tail_packing;
+    const index_format = options.compressed_index_format;
     const metabox = options.metabox;
     const inode_version = options.inode_version;
     const epoch = options.epoch;
@@ -62,6 +64,7 @@ pub fn planMetadata(
                 compression,
                 xattr_prefixes,
                 tail_packing,
+                index_format,
                 block_encoder,
                 shared_xattr_plan,
             );
@@ -86,6 +89,7 @@ pub fn planMetadata(
                 compression,
                 xattr_prefixes,
                 tail_packing,
+                index_format,
                 block_encoder,
                 shared_xattr_plan,
             );
@@ -100,6 +104,7 @@ pub fn planMetadata(
                 compression,
                 xattr_prefixes,
                 tail_packing,
+                index_format,
                 block_encoder,
                 shared_xattr_plan,
             );
@@ -127,6 +132,7 @@ fn planNodeMetadata(
     compression: Compression,
     xattr_prefixes: []const []const u8,
     tail_packing: TailPacking,
+    index_format: options_module.IndexFormat,
     block_encoder: ?*writer_codec.Encoder,
     shared_xattr_plan: ?*const writer_xattrs.Plan,
 ) Error!void {
@@ -161,9 +167,12 @@ fn planNodeMetadata(
         (node.kind == .directory and node.fragment_size != 0 and
             node.fragment_size == content_size);
     if (compression != .stored and compress_content) {
-        node.layout = @intFromEnum(format.Layout.compressed_full);
         const whole_fragment = node.fragment_size != 0 and
             node.fragment_size == content_size;
+        const compact = index_format != .full and !whole_fragment and
+            (node.fragment_offset == null or node.fragment_offset.? <= std.math.maxInt(u32));
+        node.layout = @intFromEnum(if (compact) format.Layout.compressed_compact else format.Layout.compressed_full);
+        node.compressed_advise = if (compact and index_format == .compact) 1 else 0;
         const cluster_count = if (whole_fragment) 0 else try blockCount(content_size);
         node.compressed_indexes = try allocator.alloc(tree.Node.CompressionIndex, cluster_count);
         @memset(node.compressed_indexes.?, .{
@@ -185,11 +194,7 @@ fn planNodeMetadata(
                 .physical_block = @intCast(fragment_offset >> 32),
             };
         }
-        const header_start = try alignForward(xattr_end, 8);
-        const metadata_end = try checkedAdd(
-            header_start,
-            try checkedAdd(16, try checkedMul(cluster_count, 8)),
-        );
+        const metadata_end = try compression_metadata.end(node);
         if (tail_packing == .compressed_inline and node.kind == .file and !node.hidden) {
             const encoder = block_encoder orelse return error.InvalidErofs;
             const tail_start = (content_size - 1) & ~(block_size - 1);
@@ -252,14 +257,13 @@ pub fn assignNodeDataBlocks(node: *tree.Node, next_block: *usize) Error!void {
     const physical_content_len = try writer_clusters.prefixLength(node);
     const blocks = switch (std.enums.fromInt(format.Layout, node.layout) orelse
         return error.InvalidErofs) {
-        .compressed_full => if (node.compressed_data) |bytes|
+        .compressed_full, .compressed_compact => if (node.compressed_data) |bytes|
             bytes.len / block_size
         else
             try blockCount(physical_content_len),
         .flat_inline => content_len / block_size,
         .flat_plain => try blockCount(content_len),
         .chunk_based => 0,
-        else => return error.InvalidErofs,
     };
     node.compressed_block_count = if (node.compressed_indexes != null) blocks else 0;
     if (blocks == 0) return;

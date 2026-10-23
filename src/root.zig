@@ -1747,6 +1747,7 @@ pub const ErofsXattr = erofs.Xattr;
 pub const ErofsXattrs = erofs.Xattrs;
 pub const ErofsWriterCompression = erofs.WriterCompression;
 pub const ErofsWriterInodeVersion = erofs.WriterInodeVersion;
+pub const ErofsWriterIndexFormat = erofs.WriterIndexFormat;
 pub const ErofsEncodedExternalChunks = erofs.EncodedExternalChunks;
 pub const ErofsWriterOptions = erofs.WriterOptions;
 pub const ErofsEncoder = erofs.Encoder;

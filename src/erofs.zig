@@ -40,6 +40,7 @@ pub const Layout = format.Layout;
 pub const Superblock = format.Superblock;
 pub const WriterCompression = writer.Compression;
 pub const WriterInodeVersion = writer.InodeVersion;
+pub const WriterIndexFormat = writer.IndexFormat;
 pub const EncodedExternalChunks = writer.EncodedExternalChunks;
 pub const WriterOptions = writer.Options;
 pub const Encoder = writer.Encoder;
@@ -76,6 +77,8 @@ test {
     _ = @import("erofs/writer/tests/directories.zig");
     _ = @import("erofs/writer/tests/clusters.zig");
     _ = @import("erofs/writer/tests/cluster_cursor.zig");
+    _ = @import("erofs/writer/tests/compact_packs.zig");
+    _ = @import("erofs/writer/tests/compact.zig");
     _ = @import("erofs/writer/tests/encoder.zig");
     _ = @import("erofs/writer/tests/encoder_limits.zig");
     _ = @import("erofs/writer/tests/physical_limit.zig");

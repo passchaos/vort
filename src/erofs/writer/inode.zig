@@ -59,7 +59,7 @@ pub fn writeHeader(
     writeU16(metadata, location, inode_format);
     writeU16(metadata, location + 2, try xattr.ibodyIcount(node.xattr_size));
     writeU16(metadata, location + 4, mode(node.*));
-    const data_value: u32 = if (layout == .compressed_full)
+    const data_value: u32 = if (layout == .compressed_full or layout == .compressed_compact)
         @intCast(node.compressed_block_count)
     else if (layout == .chunk_based)
         0

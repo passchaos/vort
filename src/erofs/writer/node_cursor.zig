@@ -25,7 +25,7 @@ pub const Cursor = struct {
         const layout = std.enums.fromInt(format.Layout, node.layout) orelse return error.InvalidErofs;
         var cursor = Cursor{ .node = node, .capacity = capacity };
         if (node.directory_in_metadata_zone) return cursor;
-        if (layout == .compressed_full) {
+        if (layout == .compressed_full or layout == .compressed_compact) {
             cursor.compressed = try cluster_cursor.Cursor.init(allocator, node, encoder orelse return error.InvalidErofs, settings.compression_extent_size, settings.max_pcluster_size);
         } else if (layout != .chunk_based) {
             cursor.content_size = if (layout == .flat_inline) node.contentSize() / block_size * block_size else node.contentSize();

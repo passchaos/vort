@@ -9,11 +9,12 @@ const writer_xattrs = @import("xattrs.zig");
 const writer_inode = @import("inode.zig");
 const writer_clusters = @import("clusters.zig");
 const writer_options = @import("options.zig");
+const compression_metadata = @import("compression_metadata.zig");
 const xattr = @import("../xattr.zig");
 
 pub const Error = core.Error || format.Error || tree.Error || writer_codec.Error ||
     writer_chunks.Error || writer_metabox.Error || writer_xattrs.Error ||
-    writer_inode.Error || writer_clusters.Error || xattr.Error;
+    writer_inode.Error || writer_clusters.Error || compression_metadata.Error || xattr.Error;
 const Compression = writer_options.Compression;
 const Options = writer_options.Options;
 const block_size: usize = 4096;
@@ -74,7 +75,7 @@ pub fn writeNodes(
             image;
         const layout = std.enums.fromInt(format.Layout, node.layout) orelse
             return error.InvalidErofs;
-        if (layout == .compressed_full) {
+        if (compression_metadata.isCompressed(layout)) {
             const encoder = block_encoder orelse return error.InvalidErofs;
             try writeCompressedData(image, node, encoder);
         } else if (layout == .chunk_based) {
@@ -219,56 +220,8 @@ fn writeInode(
         return;
     }
 
-    if (layout == .compressed_full) {
-        const header_start = try alignForward(xattr_end, 8);
-        const index_start = try checkedAdd(header_start, 16);
-        if (try checkedAdd(index_start, try checkedMul(node.compressed_indexes.?.len, 8)) > metadata.len)
-            return error.InvalidErofs;
-        if (node.fragment_size == node.contentSize() and node.fragment_size != 0) {
-            const fragment_offset = node.fragment_offset orelse return error.InvalidErofs;
-            if (fragment_offset >> 63 != 0 or node.compressed_indexes.?.len != 0)
-                return error.InvalidErofs;
-            writeU64(metadata, header_start, fragment_offset | (@as(u64, 1) << 63));
-            return;
-        }
-        const fragment_offset = node.fragment_offset;
-        const inline_data = node.compressed_inline_data;
-        if (fragment_offset != null and inline_data != null) return error.InvalidErofs;
-        if (inline_data) |bytes| {
-            if (bytes.len == 0 or bytes.len > std.math.maxInt(u16))
-                return error.InvalidErofs;
-            writeU16(metadata, header_start + 2, @intCast(bytes.len));
-            writeU16(metadata, header_start + 4, node.compressed_advise | 0x08);
-        } else {
-            writeU32(
-                metadata,
-                header_start,
-                if (fragment_offset) |offset| @truncate(offset) else 0,
-            );
-            writeU16(metadata, header_start + 4, node.compressed_advise | (if (fragment_offset != null) @as(u16, 0x20) else 0));
-        }
-        metadata[header_start + 6] = @intFromEnum(
-            writer_codec.algorithm(compression) orelse return error.InvalidErofs,
-        );
-        metadata[header_start + 7] = 0;
-        for (node.compressed_indexes.?, 0..) |index, cluster_index| {
-            const offset = index_start + cluster_index * 8;
-            writeU16(metadata, offset, index.kind);
-            writeU16(metadata, offset + 2, index.logical_offset);
-            writeU32(metadata, offset + 4, index.physical_block);
-        }
-        if (inline_data) |bytes| {
-            const inline_start = try checkedAdd(
-                index_start,
-                try checkedMul(node.compressed_indexes.?.len, 8),
-            );
-            const inline_end = try checkedAdd(inline_start, bytes.len);
-            if (inline_end > metadata.len or
-                inline_start / block_size != (inline_end - 1) / block_size)
-                return error.InvalidErofs;
-            @memcpy(metadata[inline_start..inline_end], bytes);
-        }
-    }
+    if (compression_metadata.isCompressed(layout))
+        try compression_metadata.write(metadata, node, compression);
 }
 
 pub fn writeSuperblock(
