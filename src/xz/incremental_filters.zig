@@ -12,6 +12,7 @@ pub const Decoder = struct {
     scratch_a: std.ArrayList(u8) = .empty,
     scratch_b: std.ArrayList(u8) = .empty,
     finished: bool = false,
+    cached_bcj: [3]?Bcj = @splat(null),
 
     pub fn init(allocator: std.mem.Allocator, chain: []const filters.Filter) Error!Decoder {
         try filters.validateChain(chain);
@@ -27,9 +28,43 @@ pub const Decoder = struct {
 
     pub fn deinit(self: *Decoder) void {
         for (self.stages[0..self.stage_count]) |*stage| stage.deinit(self.allocator);
+        for (&self.cached_bcj) |*cached| if (cached.*) |*state| state.deinit(self.allocator);
         self.scratch_a.deinit(self.allocator);
         self.scratch_b.deinit(self.allocator);
         self.* = undefined;
+    }
+
+    /// Reset an independent filter chain without releasing BCJ or scratch
+    /// capacities. Cached BCJ buffers also survive a temporary delta stage.
+    pub fn resetRetaining(self: *Decoder, chain: []const filters.Filter) Error!void {
+        try filters.validateChain(chain);
+        for (0..3) |index| {
+            var bcj = self.cached_bcj[index];
+            if (index < self.stage_count) switch (self.stages[index]) {
+                .delta => {},
+                .bcj => |state| {
+                    std.debug.assert(bcj == null);
+                    bcj = state;
+                },
+            };
+            self.cached_bcj[index] = null;
+            if (index < chain.len and chain[index].kind != .delta) {
+                var next = bcj orelse Bcj.init(chain[index]);
+                next.filter = chain[index];
+                next.original.clearRetainingCapacity();
+                next.work.clearRetainingCapacity();
+                next.window_start = 0;
+                next.emitted = 0;
+                self.stages[index] = .{ .bcj = next };
+            } else {
+                self.cached_bcj[index] = bcj;
+                if (index < chain.len) self.stages[index] = Stage.init(chain[index]);
+            }
+        }
+        self.stage_count = chain.len;
+        self.scratch_a.clearRetainingCapacity();
+        self.scratch_b.clearRetainingCapacity();
+        self.finished = false;
     }
 
     pub fn push(

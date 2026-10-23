@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("../core.zig");
 const filters = @import("filters.zig");
 const raw_lzma2 = @import("lzma2_incremental_decoder.zig");
+const one_shot = @import("one_shot/workspace.zig");
 
 test {
     _ = @import("lzma2/one_shot_tests.zig");
@@ -78,13 +79,9 @@ pub const DecodedBlock = struct {
 };
 
 pub fn decodeInto(allocator: std.mem.Allocator, input: []const u8, output: []u8) !usize {
-    const decoded = decodeAllocLimited(allocator, input, output.len) catch |err| switch (err) {
-        error.OutputLimitExceeded => return error.OutputTooSmall,
-        else => |decode_error| return decode_error,
-    };
-    defer allocator.free(decoded);
-    @memcpy(output[0..decoded.len], decoded);
-    return decoded.len;
+    var workspace = one_shot.DecodeWorkspace.init(allocator);
+    defer workspace.deinit();
+    return workspace.decodeInto(input, output);
 }
 
 pub fn decodeAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
@@ -125,19 +122,15 @@ pub fn decodedSize(allocator: std.mem.Allocator, input: []const u8) !usize {
 }
 
 pub fn decodedSizeLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) !usize {
-    const decoded = try decodeAllocLimited(allocator, input, max_output_len);
-    defer allocator.free(decoded);
-    return decoded.len;
+    var workspace = try one_shot.DecodeWorkspace.initWithOptions(allocator, .{ .max_output_len = max_output_len });
+    defer workspace.deinit();
+    return workspace.decodedSize(input);
 }
 
 pub fn decodeConcatenatedInto(allocator: std.mem.Allocator, input: []const u8, output: []u8) !usize {
-    const decoded = decodeConcatenatedAllocLimited(allocator, input, output.len) catch |err| switch (err) {
-        error.OutputLimitExceeded => return error.OutputTooSmall,
-        else => |decode_error| return decode_error,
-    };
-    defer allocator.free(decoded);
-    @memcpy(output[0..decoded.len], decoded);
-    return decoded.len;
+    var workspace = one_shot.DecodeWorkspace.init(allocator);
+    defer workspace.deinit();
+    return workspace.decodeConcatenatedInto(input, output);
 }
 
 pub fn decodeConcatenatedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
@@ -171,24 +164,15 @@ pub fn decodedSizeConcatenatedLimited(
     input: []const u8,
     max_output_len: usize,
 ) !usize {
-    const decoded = try decodeConcatenatedAllocLimited(allocator, input, max_output_len);
-    defer allocator.free(decoded);
-    return decoded.len;
+    var workspace = try one_shot.DecodeWorkspace.initWithOptions(allocator, .{ .max_output_len = max_output_len });
+    defer workspace.deinit();
+    return workspace.decodedSizeConcatenated(input);
 }
 
 pub fn inspect(allocator: std.mem.Allocator, input: []const u8) !StreamInfo {
-    var output: std.ArrayList(u8) = .empty;
-    defer output.deinit(allocator);
-    const parsed = try decodeOneWithInfo(
-        allocator,
-        input,
-        &output,
-        std.math.maxInt(usize),
-        std.math.maxInt(usize),
-    );
-    const end = try skipStreamPadding(input, parsed.info.compressed_size);
-    if (end != input.len) return error.TrailingData;
-    return parsed.info;
+    var workspace = one_shot.DecodeWorkspace.init(allocator);
+    defer workspace.deinit();
+    return workspace.inspect(input);
 }
 
 const DecodedStream = struct { consumed: usize, info: StreamInfo };
@@ -424,7 +408,7 @@ fn decodeOneWithInfo(
     };
 }
 
-fn parseBlockHeader(input: []const u8, start: usize) Error!BlockHeader {
+pub fn parseBlockHeader(input: []const u8, start: usize) Error!BlockHeader {
     const size_byte = try byteAt(input, start);
     if (size_byte == 0) return error.InvalidXzStream;
     const header_without_crc = @as(usize, size_byte) * 4;
@@ -472,7 +456,7 @@ fn parseBlockHeader(input: []const u8, start: usize) Error!BlockHeader {
     };
 }
 
-fn scanLzma2(input: []const u8, output_limit: usize) Error!Lzma2Scan {
+pub fn scanLzma2(input: []const u8, output_limit: usize) Error!Lzma2Scan {
     var offset: usize = 0;
     var unpacked_size: usize = 0;
     var dictionary_initialized = false;
@@ -636,7 +620,7 @@ fn lzma2DictionarySize(property: u8) u64 {
     return @as(u64, 2 | (property & 1)) << @intCast(property / 2 + 11);
 }
 
-fn skipStreamPadding(input: []const u8, start: usize) Error!usize {
+pub fn skipStreamPadding(input: []const u8, start: usize) Error!usize {
     var offset = start;
     while (offset < input.len and input[offset] == 0) : (offset += 1) {}
     if ((offset - start) % 4 != 0) return error.InvalidXzStream;

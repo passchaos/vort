@@ -23,6 +23,10 @@ pub const Decoder = struct {
     compressed_consumed: usize = 0,
     compressed_offset: usize = 0,
     lzma: ?std.compress.lzma.Decode = null,
+    /// Opt-in one-shot reuse; ordinary incremental streams keep their existing
+    /// single-model allocation and replacement behavior.
+    retain_property_workspaces: bool = false,
+    property_workspaces: [5]?std.compress.lzma.Decode = @splat(null),
     range_decoder: ?std.compress.lzma.RangeDecoder = null,
     dictionary: lzma_decoder.CircularBuffer,
     chunk_dictionary_end: usize = 0,
@@ -85,6 +89,7 @@ pub const Decoder = struct {
     }
     fn deinitBuffers(self: *Decoder) void {
         if (self.lzma) |*decoder| decoder.deinit(self.budget.allocator());
+        for (&self.property_workspaces) |*cached| if (cached.*) |*decoder| decoder.deinit(self.budget.allocator());
         self.dictionary.deinit(self.budget.allocator());
         self.compressed.deinit(self.budget.allocator());
         std.debug.assert(self.budget.live == 0);
@@ -100,12 +105,23 @@ pub const Decoder = struct {
         var compressed = self.compressed;
         compressed.clearRetainingCapacity();
         var state = self.lzma;
+        const property_workspaces = self.property_workspaces;
         if (state) |*decoder| decoder.resetState(self.budget.allocator(), decoder.properties) catch unreachable;
         var budget = self.budget;
         budget.peak = budget.live;
         budget.hit_limit = false;
         budget.last_failure_was_limit = false;
-        self.* = .{ .allocator = self.allocator, .options = self.options, .budget = budget, .dictionary = dictionary, .compressed = compressed, .lzma = state };
+        self.* = .{ .allocator = self.allocator, .options = self.options, .budget = budget, .dictionary = dictionary, .compressed = compressed, .lzma = state, .retain_property_workspaces = self.retain_property_workspaces, .property_workspaces = property_workspaces };
+    }
+    /// Reconfigure an independent raw payload while preserving warmed buffers.
+    /// Validation happens before the old logical state changes.
+    pub fn resetRetainingWithOptions(self: *Decoder, options: Options) Error!void {
+        const size = try options.validate();
+        self.reset();
+        self.options = options;
+        self.dictionary.dictionary_size = size;
+        self.dictionary.output_limit = options.max_output_len;
+        self.budget.limit = options.max_working_memory;
     }
     pub fn resetWithOptions(self: *Decoder, options: Options) Error!void {
         _ = try options.validate();
@@ -375,6 +391,28 @@ pub const Decoder = struct {
         }
     }
     fn resetLzmaState(self: *Decoder, properties: std.compress.lzma.Decode.Properties) Error!void {
+        if (self.retain_property_workspaces) {
+            const shape = properties.lc + properties.lp;
+            if (self.lzma) |*decoder| {
+                if (decoder.properties.lc + decoder.properties.lp == shape) {
+                    decoder.resetState(self.budget.allocator(), properties) catch |err| return mapProcessError(err);
+                    return;
+                }
+            }
+            // A missing shape is allocated transactionally while the old
+            // active model and cached tables remain live and budgeted.
+            var replacement = self.property_workspaces[shape] orelse
+                (std.compress.lzma.Decode.init(self.budget.allocator(), properties) catch |err| return mapProcessError(err));
+            replacement.resetState(self.budget.allocator(), properties) catch |err| return mapProcessError(err);
+            if (self.lzma) |decoder| {
+                const old_shape = decoder.properties.lc + decoder.properties.lp;
+                std.debug.assert(self.property_workspaces[old_shape] == null);
+                self.property_workspaces[old_shape] = decoder;
+            }
+            self.property_workspaces[shape] = null;
+            self.lzma = replacement;
+            return;
+        }
         if (self.lzma) |*decoder| {
             if (decoder.properties.lc + decoder.properties.lp == properties.lc + properties.lp) {
                 decoder.resetState(self.budget.allocator(), properties) catch |err| return mapProcessError(err);

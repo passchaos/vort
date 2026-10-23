@@ -11,12 +11,15 @@ const lzma2_incremental_decoder = @import("xz/lzma2_incremental_decoder.zig");
 const lzma2_incremental_encoder = @import("xz/lzma2_incremental_encoder.zig");
 const lzma2_writer = @import("xz/lzma2_writer.zig");
 const writer = @import("xz/writer.zig");
+const one_shot = @import("xz/one_shot/workspace.zig");
 
 pub const Error = container.Error || writer.Error || incremental_decoder.Decoder.Error ||
     incremental_encoder.Encoder.Error || lzma2_incremental_decoder.Decoder.Error ||
     lzma2_incremental_encoder.Encoder.Error;
 pub const Check = container.Check;
 pub const StreamInfo = container.StreamInfo;
+pub const DecodeOptions = one_shot.Options;
+pub const DecodeWorkspace = one_shot.DecodeWorkspace;
 pub const IncrementalDecoder = incremental_decoder.Decoder;
 pub const IncrementalEncoder = incremental_encoder.Encoder;
 pub const RawLzma2IncrementalDecoder = lzma2_incremental_decoder.Decoder;
@@ -52,6 +55,8 @@ pub const decodedSizeConcatenated = container.decodedSizeConcatenated;
 pub const decodedSizeConcatenatedLimited = container.decodedSizeConcatenatedLimited;
 
 test {
+    _ = @import("xz/one_shot/contracts_tests.zig");
+    _ = @import("xz/one_shot/resources_tests.zig");
     _ = container;
     _ = incremental_decoder;
     _ = incremental_encoder;

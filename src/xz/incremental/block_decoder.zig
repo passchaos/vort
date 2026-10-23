@@ -85,6 +85,27 @@ pub const Decoder = struct {
         self.* = undefined;
     }
 
+    /// Start an independent block using the already warmed raw, inverse filter
+    /// and staging allocations. Used by strict one-shot validation and replay.
+    pub fn resetRetaining(self: *Decoder, header: container.BlockHeader, check: container.Check, output_limit: usize, limit_from_pledge: bool, body_limit: usize, compressed_limit: usize, staging_limit: usize, dictionary_limit: usize) Error!void {
+        var next = try init(self.allocator, header, check, output_limit, limit_from_pledge, body_limit, compressed_limit, staging_limit, dictionary_limit);
+        const raw_options = next.raw.options;
+        next.raw.deinit();
+        try self.raw.resetRetainingWithOptions(raw_options);
+        if (self.inverse) |*inverse| try inverse.resetRetaining(next.inverse_chain[0..header.filter_count]);
+        self.staged.clearRetainingCapacity();
+        next.raw = self.raw;
+        next.inverse = self.inverse;
+        next.staged = self.staged;
+        next.staging_budget = self.staging_budget;
+        next.staging_budget.limit = staging_limit;
+        next.staging_budget.peak = next.staging_budget.live;
+        next.staging_budget.hit_limit = false;
+        next.staging_budget.last_failure_was_limit = false;
+        self.* = next;
+        self.rebindAllocator(self.allocator);
+    }
+
     pub fn stagingAllocator(self: *Decoder) std.mem.Allocator {
         return self.staging_budget.allocator();
     }
