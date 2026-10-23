@@ -33,6 +33,9 @@ const incremental_history_match = @import("zstd/incremental/encoder/history_matc
 const incremental_history = @import("zstd/incremental/encoder/history.zig");
 const incremental_history_index = @import("zstd/incremental/encoder/history_index.zig");
 const double_fast_match = @import("zstd/match/double_fast.zig");
+const encode_controls = @import("zstd/encode/controls.zig");
+const controlled_source = @import("zstd/match/controlled_source.zig");
+const controlled_encoder = @import("zstd/encode/controlled_frame.zig");
 const double_fast_sequence_plan = @import("zstd/match/double_fast/sequence_plan.zig");
 const large_sequence_record_values = @import("zstd/sequence/large/record_values.zig");
 const large_state_handoff_test = if (builtin.is_test) @import("zstd/sequence/large/state_handoff_test.zig") else struct {};
@@ -89,8 +92,10 @@ const small_sequence_stack_scratch_len = 4096;
 pub const Error = core.Error || std.mem.Allocator.Error || error{WorkingMemoryLimitExceeded};
 
 pub const default_compression_level: c_int = 1;
-pub const min_compression_level: c_int = 0;
+pub const min_compression_level: c_int = encode_controls.min_level;
 pub const max_compression_level: c_int = 22;
+pub const Strategy = encode_controls.Strategy;
+pub const EncoderControlProfile = encode_controls.Profile;
 var test_disable_indexed_single_lower_bound = false;
 var test_decisive_single_lower_bound_hits: usize = 0;
 var test_disable_small_single_emit_prune = false;
@@ -476,6 +481,13 @@ pub const FrameOptions = struct {
     /// Optional encode-side history budget in bytes. Requires `window_log` and
     /// accepts 1 KiB...64 MiB; null selects the explicit-window 16 MiB default.
     max_match_history_len: ?usize = null,
+    /// Explicit parser selection; auto/null preserves the legacy level policy.
+    strategy: Strategy = .auto,
+    /// Match sampling acceleration for fast/double_fast (1...131072). Auto
+    /// with an acceleration selects fast; negative levels supply their magnitude.
+    fast_acceleration: ?u32 = null,
+    /// Optional caller-owned counters, accumulated across operations.
+    control_profile: ?*EncoderControlProfile = null,
 };
 
 pub const NativeFrameSelection = enum {
@@ -499,17 +511,26 @@ pub const NativeFrameOptions = struct {
     selection: NativeFrameSelection = .auto,
     block_size_max: usize = std.compress.zstd.block_size_max,
     dictionary_id: u32 = 0,
-    /// Maximum branch states visited by the bootstrap mixed-match planner.
-    ///
-    /// Lower values trade away ratio-seeking lookahead for predictable encode
-    /// latency. A value of zero disables generic duplicate/repeated match
-    /// planning and mixed dictionary/duplicate/repeated branch search; explicit
-    /// dictionary-only match emitters remain available when callers provide a
-    /// dictionary.
+    /// Candidate-probe budget for controlled greedy/lazy/optimal parsers, or
+    /// branch-state budget for the legacy mixed-match planner (0...512).
+    /// Controlled zero-budget search emits no match records; controlled fast
+    /// and double_fast require the default budget and use acceleration instead.
+    /// Legacy zero-budget behavior keeps explicit dictionary-only emitters.
     match_search_budget: usize = mixed_match_path_search_budget,
     /// Enable the bounded recent-offset beam parser used by selected one-shot
     /// levels. Incremental and explicitly latency-oriented callers leave it off.
     rep_beam_search: bool = false,
+    /// Explicit parser selection; auto/null preserves the legacy level policy.
+    strategy: Strategy = .auto,
+    /// Match sampling acceleration for fast/double_fast (1...131072). Auto
+    /// with an acceleration selects fast; negative levels supply their magnitude.
+    fast_acceleration: ?u32 = null,
+    control_profile: ?*EncoderControlProfile = null,
+
+    pub fn validate(self: NativeFrameOptions) Error!void {
+        _ = try nativeBlockSizeMax(self);
+        _ = try nativeMatchSearchBudget(self);
+    }
 };
 
 pub const FrameSelection = NativeFrameSelection;
@@ -550,14 +571,25 @@ const IncrementalEncoderCodec = struct {
         try emitBlock(allocator, out, block, last);
     }
     pub fn writeEntropy(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, options: Options, state: *State, dictionary: ?IncrementalEncoderCodec.Dictionary, frame_history: HistoryView, frame_offset: usize) zstd.Error!void {
+        if (encode_controls.active(options)) return writeControlled(allocator, out, block, last, options, state, dictionary, frame_history, frame_offset);
         try emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl(false, allocator, out, block, last, state, dictionary, frame_history, frame_offset, options.match_search_budget, false, null, null, null, try nativeMatchWindowLenForBlock(options, frame_offset, block.len, last));
     }
-    pub fn writeFastCompressed(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, options: Options, state: *State, dictionary: ?IncrementalEncoderCodec.Dictionary, frame_offset: usize) zstd.Error!void {
+    pub fn writeFastCompressed(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, options: Options, state: *State, dictionary: ?IncrementalEncoderCodec.Dictionary, frame_history: HistoryView, frame_offset: usize) zstd.Error!void {
+        if (encode_controls.active(options)) return writeControlled(allocator, out, block, last, options, state, dictionary, frame_history, frame_offset);
         var block_scratch: NativeBlockEncodeScratch = .{};
         defer block_scratch.deinit(allocator);
         var large_sequence_scratch: LargeSequenceScratch = .{};
         defer large_sequence_scratch.deinit(allocator);
         try emitFastCompressedBlockWithScratch(allocator, out, block, last, state, dictionaryVisibleAtOffset(dictionary, frame_offset, try nativeMatchWindowLenForBlock(options, frame_offset, block.len, last)), &large_sequence_scratch, &block_scratch);
+    }
+    fn writeControlled(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, options: Options, state: *State, dictionary: ?IncrementalEncoderCodec.Dictionary, frame_history: HistoryView, frame_offset: usize) zstd.Error!void {
+        var records: std.ArrayList(controlled_source.Record) = .empty;
+        defer records.deinit(allocator);
+        var sequence_scratch: LargeSequenceScratch = .{};
+        defer sequence_scratch.deinit(allocator);
+        var block_scratch: NativeBlockEncodeScratch = .{};
+        defer block_scratch.deinit(allocator);
+        try ControlledFrameEncoder.writeBlock(allocator, out, block, last, options, state, dictionary, frame_history.bytes, frame_offset, &records, &sequence_scratch, &block_scratch);
     }
     pub fn writeChecksum(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options, hasher: *std.hash.XxHash64) zstd.Error!void {
         if (!options.content_checksum) return;
@@ -571,6 +603,69 @@ const IncrementalEncoderCodec = struct {
 };
 
 const IncrementalBlockEmitter = incremental_block_emitter.Emitter(IncrementalEncoderCodec);
+
+const ControlledEncoderCodec = struct {
+    pub const Error = zstd.Error;
+    pub const Options = NativeFrameOptions;
+    pub const Dictionary = NativeDictionary;
+    pub const State = LiteralOnlyEncoderState;
+    pub const SequenceScratch = LargeSequenceScratch;
+    pub const BlockScratch = NativeBlockEncodeScratch;
+    pub fn writeHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input_len: usize, options: Options) zstd.Error!void {
+        try emitFrameHeader(allocator, out, try checkedUsizeToU64(input_len), options);
+    }
+    pub fn blockSize(options: Options) zstd.Error!usize {
+        return nativeBlockSizeMax(options);
+    }
+    pub fn matchWindow(options: Options, frame_offset: usize, block_len: usize, last: bool) zstd.Error!usize {
+        return (try nativeMatchWindowLenForBlock(options, frame_offset, block_len, last)) orelse try nativeEncoderWindowLen(options);
+    }
+    pub fn ensureState(state: *State, dictionary: ?ControlledEncoderCodec.Dictionary) zstd.Error!void {
+        try ensureEncoderSequenceState(state, dictionary);
+    }
+    pub fn clearBlockScratch(scratch: *BlockScratch) void {
+        scratch.clearRetainingCapacity();
+    }
+    pub fn rle(block: []const u8) bool {
+        return rleByte(block) != null;
+    }
+    pub fn writeRaw(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) zstd.Error!void {
+        try emitBlock(allocator, out, block, last);
+    }
+    pub fn writeHuffman(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, plan: *?SmallHuffmanLiteralPlan) zstd.Error!bool {
+        return emitSmallHuffmanLiteralBlock(allocator, out, block, last, plan);
+    }
+    pub fn writeSequences(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, records: []const controlled_source.Record, scratch: *SequenceScratch, block_scratch: *BlockScratch, state: *State) zstd.Error!bool {
+        if (records.len == 0 or records.len > max_large_native_sequence_count) return false;
+        const count = records.len;
+        try scratch.values.resize(allocator, std.math.mul(usize, count, 4) catch return error.IntegerOverflow);
+        const literal_lens = scratch.values.items[0..count];
+        const offsets = scratch.values.items[count .. count * 2];
+        const match_lens = scratch.values.items[count * 2 .. count * 3];
+        const literal_ends = scratch.values.items[count * 3 .. count * 4];
+        for (records, 0..) |record, index| {
+            literal_lens[index] = record.literal_len;
+            offsets[index] = record.distance;
+            match_lens[index] = record.match_len;
+            literal_ends[index] = record.match_end;
+        }
+        const tail_start = records[records.len - 1].match_end;
+        _ = state; // Frame state is applied once by prepareSequences.
+        if (count > max_native_sequence_count)
+            return emitLargeSequenceCompressedBlockWithState(allocator, out, block, last, literal_lens, offsets, match_lens, literal_ends, tail_start, scratch, null, initial_repeated_offsets);
+        return emitBestSequenceCompressedBlockWithScratch(allocator, out, block, last, literal_lens, offsets, match_lens, literal_ends, tail_start, &block_scratch.single_sequence_emit);
+    }
+    pub fn prepareSequences(allocator: std.mem.Allocator, candidate: *std.ArrayList(u8), block: []const u8, last: bool, state: *State, scratch: *SequenceScratch) zstd.Error!bool {
+        return prepareSequenceCandidateForFrameWithScratch(allocator, candidate, block, last, &state.sequence_state, scratch);
+    }
+    pub fn commitSequences(allocator: std.mem.Allocator, out: *std.ArrayList(u8), candidate: []const u8, last: bool, state: *State) zstd.Error!void {
+        try appendSequenceCandidateAndCommit(allocator, out, candidate, last, &state.sequence_state);
+    }
+    pub fn writeChecksum(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: Options) zstd.Error!void {
+        try emitContentChecksum(allocator, out, input, options);
+    }
+};
+const ControlledFrameEncoder = controlled_encoder.Encoder(ControlledEncoderCodec);
 
 const zstd = @This();
 pub const NativeIncrementalFrameEncoder = incremental_encoder.Encoder(IncrementalEncoderCodec, IncrementalBlockEmitter);
@@ -591,6 +686,10 @@ test {
     _ = large_transition;
     _ = large_fast_plan;
     _ = large_predefined;
+    _ = @import("zstd/match/controlled_search_tests.zig");
+    _ = @import("zstd/match/controlled_fast_tests.zig");
+    _ = @import("zstd/encode/controls_tests.zig");
+    _ = @import("zstd/encode/controls_resource_tests.zig");
 }
 
 pub const StandardDictionaryView = dictionary_format.View;
@@ -3293,9 +3392,11 @@ pub const encodeFrameIntoSliceWithAdvancedOptionsAndDictionary = encodeNativeFra
 pub const encodeFrameIntoSliceWithAdvancedOptionsAndDictionarySet = encodeNativeFrameIntoSliceWithDictionarySet;
 
 fn nativeBlockSizeMax(options: NativeFrameOptions) Error!usize {
+    try encode_controls.validateNative(options);
     if (options.block_size_max == 0 or options.block_size_max > std.compress.zstd.block_size_max) return error.InvalidBlockPlan;
     const window_len = try nativeEncoderWindowLen(options);
-    return @min(options.block_size_max, window_len);
+    const controlled_limit = if (encode_controls.strategy(options) == .optimal) encode_controls.optimal_block_limit else std.compress.zstd.block_size_max;
+    return @min(@min(options.block_size_max, window_len), controlled_limit);
 }
 
 fn nativeMatchSearchBudget(options: NativeFrameOptions) Error!usize {
@@ -7088,6 +7189,7 @@ pub const LevelFrameEncoder = struct {
 
     pub fn encodeScratchWithOptions(self: *LevelFrameEncoder, input: []const u8, level: c_int, options: FrameOptions) Error![]const u8 {
         const primary_options = try nativeFrameOptionsForLevel(level, options);
+        if (encode_controls.active(primary_options)) return (try self.primary.encodeScratch(input, primary_options)).frame;
         if (level <= 0 or input.len <= 8 * 1024)
             return (try self.primary.encodeScratch(input, primary_options)).frame;
 
@@ -7122,6 +7224,8 @@ pub const LevelFrameEncoder = struct {
     }
 
     pub fn encodeWithOptionsAlloc(self: *LevelFrameEncoder, input: []const u8, level: c_int, options: FrameOptions) Error![]u8 {
+        const emission = encode_controls.EmissionTransaction.init(options.control_profile);
+        errdefer emission.rollback();
         return try self.allocator.dupe(u8, try self.encodeScratchWithOptions(input, level, options));
     }
 
@@ -7130,6 +7234,8 @@ pub const LevelFrameEncoder = struct {
     }
 
     pub fn encodeIntoWithOptions(self: *LevelFrameEncoder, input: []const u8, level: c_int, options: FrameOptions, output: []u8) Error!usize {
+        const emission = encode_controls.EmissionTransaction.init(options.control_profile);
+        errdefer emission.rollback();
         const frame = try self.encodeScratchWithOptions(input, level, options);
         if (output.len < frame.len) return error.OutputTooSmall;
         @memcpy(output[0..frame.len], frame);
@@ -7141,6 +7247,8 @@ pub const LevelFrameEncoder = struct {
     }
 
     pub fn encodeAppendWithOptions(self: *LevelFrameEncoder, out: *std.ArrayList(u8), input: []const u8, level: c_int, options: FrameOptions) Error!usize {
+        const emission = encode_controls.EmissionTransaction.init(options.control_profile);
+        errdefer emission.rollback();
         const frame = try self.encodeScratchWithOptions(input, level, options);
         try out.appendSlice(self.allocator, frame);
         return frame.len;
@@ -7250,6 +7358,8 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
     level: c_int,
     options: FrameOptions,
 ) Error![]u8 {
+    const resolved = try resolveFrameOptionsForLevel(level, options);
+    if (encode_controls.active(resolved)) return (try encodeNativeFrameWithOptionsAlloc(allocator, input, resolved)).frame;
     if (input.len > std.compress.zstd.block_size_max)
         if (try probeDecisiveLargerAdaptiveFrame(allocator, input, level, options)) |larger|
             return larger.frame;
@@ -7608,44 +7718,12 @@ pub fn encodeFrameIntoSliceWithLevelAndOptionsAndDictionarySet(allocator: std.me
     return result.written;
 }
 
-fn nativeFrameOptionsForLevel(level: c_int, options: FrameOptions) Error!NativeFrameOptions {
-    if (level < min_compression_level or level > max_compression_level) return error.InvalidBlockPlan;
-    var native_options: NativeFrameOptions = .{
-        .content_checksum = options.content_checksum,
-        .include_content_size = options.include_content_size,
-        .window_log = options.window_log,
-        .max_match_history_len = options.max_match_history_len,
-    };
-    if (level <= 0) {
-        native_options.selection = .raw_or_rle;
-        native_options.match_search_budget = 0;
-    } else {
-        // The bootstrap planner's budget is an explicit upper bound on branch
-        // states, so it is the first meaningful level control available to the
-        // native encoder. Keep level 1 latency bounded and spend progressively
-        // more search through level 9; higher levels currently share the most
-        // exhaustive supported search until additional parser strategies land.
-        native_options.match_search_budget = switch (level) {
-            1 => 16,
-            2 => 32,
-            3 => 64,
-            4 => 96,
-            5 => 128,
-            else => 96,
-        };
-        // Upstream zstd's fast, double-fast, and greedy strategies check recent
-        // offsets directly in their match loops. Enable Vort's bounded repeat
-        // beam at levels 1-3 as well as ratio levels; level 1 uses its isolated
-        // one-state variant. Level 3 may accept that fast candidate only behind
-        // a conservative double-fast margin, while its fallback and the other
-        // levels retain two states.
-        // Outside that bounded speed-policy shortcut, complete block/frame
-        // arbitration still rejects it whenever the repeat-aware stream is not
-        // smaller.
-        native_options.rep_beam_search = (level >= 1 and level <= 3) or level >= 9;
-    }
+pub fn resolveFrameOptionsForLevel(level: c_int, options: FrameOptions) Error!NativeFrameOptions {
+    const native_options = try encode_controls.resolve(NativeFrameOptions, level, options);
+    try native_options.validate();
     return native_options;
 }
+pub const nativeFrameOptionsForLevel = resolveFrameOptionsForLevel;
 
 fn adaptiveLevelBlockSizes(level: c_int) [2]usize {
     return switch (level) {
@@ -7771,6 +7849,7 @@ pub fn encodeRawOrRleFrameAppend(
     input: []const u8,
     options: NativeFrameOptions,
 ) Error!void {
+    if (encode_controls.active(options)) return error.InvalidBlockPlan;
     _ = try nativeMatchSearchBudget(options);
     try emitFrameHeader(allocator, out, try checkedUsizeToU64(input.len), options);
     const block_size_max = try nativeBlockSizeMax(options);
@@ -7937,6 +8016,7 @@ pub fn encodeLiteralOnlyFrameAppend(
     input: []const u8,
     options: NativeFrameOptions,
 ) Error!void {
+    if (encode_controls.active(options)) return error.InvalidBlockPlan;
     var rep_beam_scratch: lz77.RepBeamScratch = .{};
     defer rep_beam_scratch.deinit(allocator);
     var large_sequence_scratch: LargeSequenceScratch = .{};
@@ -8175,12 +8255,14 @@ pub const NativeFrameEncoder = struct {
     rep_beam_scratch: lz77.RepBeamScratch = .{},
     large_sequence_scratch: LargeSequenceScratch = .{},
     block_scratch: NativeBlockEncodeScratch = .{},
+    controlled_records: std.ArrayList(controlled_source.Record) = .empty,
 
     pub fn init(allocator: std.mem.Allocator) NativeFrameEncoder {
         return .{ .allocator = allocator };
     }
 
     pub fn deinit(self: *NativeFrameEncoder) void {
+        self.controlled_records.deinit(self.allocator);
         self.block_scratch.deinit(self.allocator);
         self.large_sequence_scratch.deinit(self.allocator);
         self.rep_beam_scratch.deinit(self.allocator);
@@ -8200,6 +8282,8 @@ pub const NativeFrameEncoder = struct {
         input: []const u8,
         options: NativeFrameOptions,
     ) Error!NativeFrameEncodeResult {
+        const emission = encode_controls.EmissionTransaction.init(options.control_profile);
+        errdefer emission.rollback();
         var out: std.ArrayList(u8) = .empty;
         errdefer out.deinit(self.allocator);
         const mode = try self.encodeAppend(&out, input, options);
@@ -8215,6 +8299,8 @@ pub const NativeFrameEncoder = struct {
         options: NativeFrameOptions,
         dictionary: NativeDictionary,
     ) Error!NativeFrameEncodeResult {
+        const emission = encode_controls.EmissionTransaction.init(options.control_profile);
+        errdefer emission.rollback();
         var out: std.ArrayList(u8) = .empty;
         errdefer out.deinit(self.allocator);
         const mode = try self.encodeAppendWithDictionary(&out, input, options, dictionary);
@@ -8273,6 +8359,8 @@ pub const NativeFrameEncoder = struct {
         options: NativeFrameOptions,
         output: []u8,
     ) Error!NativeFrameEncodeIntoResult {
+        const emission = encode_controls.EmissionTransaction.init(options.control_profile);
+        errdefer emission.rollback();
         const result = try self.encodeScratch(input, options);
         if (output.len < result.frame.len) return error.OutputTooSmall;
         @memcpy(output[0..result.frame.len], result.frame);
@@ -8289,6 +8377,8 @@ pub const NativeFrameEncoder = struct {
         dictionary: NativeDictionary,
         output: []u8,
     ) Error!NativeFrameEncodeIntoResult {
+        const emission = encode_controls.EmissionTransaction.init(options.control_profile);
+        errdefer emission.rollback();
         const result = try self.encodeScratchWithDictionary(input, options, dictionary);
         if (output.len < result.frame.len) return error.OutputTooSmall;
         @memcpy(output[0..result.frame.len], result.frame);
@@ -8342,6 +8432,12 @@ pub const NativeFrameEncoder = struct {
         dictionary: ?NativeDictionary,
     ) Error!NativeFrameMode {
         const frame_options = optionsWithNativeDictionary(options, dictionary);
+        try frame_options.validate();
+        if (encode_controls.active(frame_options)) {
+            if (dictionary == null and frame_options.dictionary_id != 0) return error.NeedDictionary;
+            try ControlledFrameEncoder.append(self.allocator, out, input, frame_options, dictionary, &self.controlled_records, &self.large_sequence_scratch, &self.block_scratch);
+            return .fast_compressed;
+        }
         switch (options.selection) {
             .raw_or_rle => {
                 try encodeRawOrRleFrameAppend(self.allocator, out, input, frame_options);
@@ -15989,6 +16085,7 @@ pub fn encodeNativeSeekableStreamIntoSliceWithDictionarySet(allocator: std.mem.A
 
 fn validateNativeSeekableOptions(options: NativeSeekableOptions) Error!void {
     if (options.frame_size == 0 or options.frame_size > seekable.max_frame_decompressed_size or options.frame_options.dictionary_id != 0) return error.InvalidBlockPlan;
+    try options.frame_options.validate();
 }
 
 fn nativeSeekableFrameCount(input_len: usize, frame_size: usize) Error!usize {
@@ -16004,6 +16101,7 @@ const ParallelNativeSeekableFrameResult = struct {
     options: NativeFrameOptions,
     dictionary: ?NativeDictionary,
     seek_checksums: bool,
+    profile: EncoderControlProfile = .{},
     entry: *NativeSeekTableFrameSize,
     frame: ?[]u8 = null,
     err: ?Error = null,
@@ -16073,6 +16171,7 @@ fn encodeNativeSeekableStreamParallelInternal(
             .seek_checksums = options.seek_checksums,
             .entry = &entries[frame_index],
         };
+        result.options.control_profile = if (options.frame_options.control_profile != null) &result.profile else null;
     }
     defer for (results) |result| if (result.frame) |frame| parallel_allocator.free(frame);
 
@@ -16086,6 +16185,10 @@ fn encodeNativeSeekableStreamParallelInternal(
     }
     queue.run();
     for (threads[0..spawned]) |thread| thread.join();
+
+    if (options.frame_options.control_profile) |profile| {
+        for (results) |result| profile.mergeWork(result.profile);
+    }
 
     for (results) |result| if (result.err) |err| return err;
     var total_len = try encodedNativeSeekTableBound(frame_count, options.seek_checksums);
@@ -16101,6 +16204,9 @@ fn encodeNativeSeekableStreamParallelInternal(
     }
     written += try encodeNativeSeekTableInto(entries, options.seek_checksums, stream[written..]);
     if (written != stream.len) return error.CorruptFrame;
+    if (options.frame_options.control_profile) |profile| {
+        for (results) |result| profile.mergeEmitted(result.profile.emitted());
+    }
     return stream;
 }
 
@@ -16126,6 +16232,8 @@ pub const NativeSeekableStreamEncoder = struct {
     }
 
     pub fn encodeAlloc(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions) Error![]u8 {
+        const emission = encode_controls.EmissionTransaction.init(options.frame_options.control_profile);
+        errdefer emission.rollback();
         var out: std.ArrayList(u8) = .empty;
         errdefer out.deinit(self.allocator);
         try self.encodeAppend(&out, input, options);
@@ -16133,6 +16241,8 @@ pub const NativeSeekableStreamEncoder = struct {
     }
 
     pub fn encodeWithDictionaryAlloc(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions, dictionary: NativeDictionary) Error![]u8 {
+        const emission = encode_controls.EmissionTransaction.init(options.frame_options.control_profile);
+        errdefer emission.rollback();
         var out: std.ArrayList(u8) = .empty;
         errdefer out.deinit(self.allocator);
         try self.encodeAppendWithDictionary(&out, input, options, dictionary);
@@ -16205,6 +16315,8 @@ pub const NativeSeekableStreamEncoder = struct {
     }
 
     fn encodeAppendInternal(self: *NativeSeekableStreamEncoder, out: *std.ArrayList(u8), input: []const u8, options: NativeSeekableOptions, dictionary: ?NativeDictionary) Error!void {
+        const emission = encode_controls.EmissionTransaction.init(options.frame_options.control_profile);
+        errdefer emission.rollback();
         const entries = try self.prepareEntries(input.len, options.frame_size);
         const original_len = out.items.len;
         errdefer out.shrinkRetainingCapacity(original_len);
@@ -16223,6 +16335,8 @@ pub const NativeSeekableStreamEncoder = struct {
     }
 
     fn encodeIntoSliceInternal(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions, dictionary: ?NativeDictionary, output: []u8) Error!usize {
+        const emission = encode_controls.EmissionTransaction.init(options.frame_options.control_profile);
+        errdefer emission.rollback();
         const entries = try self.prepareEntries(input.len, options.frame_size);
         var written: usize = 0;
         for (entries, 0..) |*entry_value, frame_index| {
@@ -34599,7 +34713,14 @@ test "zstd compression levels map to increasing search budgets" {
     try std.testing.expect(level9.match_search_budget > level3.match_search_budget);
     try std.testing.expect(!level3.include_content_size);
     try std.testing.expect(level3.content_checksum);
-    try std.testing.expectError(error.InvalidBlockPlan, nativeFrameOptionsForLevel(-1, options));
+    const negative = try nativeFrameOptionsForLevel(-1, options);
+    try std.testing.expectEqual(Strategy.fast, negative.strategy);
+    try std.testing.expectEqual(@as(?u32, 1), negative.fast_acceleration);
+    try std.testing.expectEqual(NativeFrameSelection.fast_compressed, negative.selection);
+    try std.testing.expectEqual(mixed_match_path_search_budget, negative.match_search_budget);
+    try std.testing.expect(!negative.rep_beam_search);
+    try std.testing.expect(!negative.include_content_size and negative.content_checksum);
+    try std.testing.expectError(error.InvalidBlockPlan, nativeFrameOptionsForLevel(min_compression_level - 1, options));
     try std.testing.expectError(error.InvalidBlockPlan, nativeFrameOptionsForLevel(max_compression_level + 1, options));
 }
 

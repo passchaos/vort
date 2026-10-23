@@ -27,6 +27,7 @@ pub fn Emitter(comptime Codec: type) type {
                     options,
                     state,
                     dictionary,
+                    frame_history,
                     frame_offset,
                 ),
                 .literal_only, .auto => try Codec.writeEntropy(
