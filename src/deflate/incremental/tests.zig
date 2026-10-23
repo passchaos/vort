@@ -9,6 +9,7 @@ const partial_flush_tests = @import("tests/partial_flush.zig");
 const rolling_hash_tests = @import("tests/rolling_hash.zig");
 const sync_recovery_tests = @import("tests/sync_recovery.zig");
 const wrapper_continuation_tests = @import("tests/wrapper_continuation.zig");
+const zlib_dictionary_tests = @import("decoder/zlib_dictionary_tests.zig");
 
 test {
     _ = block_flush_tests;
@@ -19,6 +20,7 @@ test {
     _ = rolling_hash_tests;
     _ = sync_recovery_tests;
     _ = wrapper_continuation_tests;
+    _ = zlib_dictionary_tests;
 }
 
 test "raw deflate incremental stored encoder splits flushes and resumes" {

@@ -15,7 +15,9 @@ pub fn Decoder(comptime Codec: type) type {
         footer_received: usize = 0,
         dictid: [4]u8 = undefined,
         dictid_received: usize = 0,
+        required_dictionary_id: ?u32 = null,
         dictionary: []const u8 = &.{},
+        dictionary_available: bool = false,
         dictionaries: ?Codec.DictionarySet = null,
         adler: Codec.Adler32 = Codec.Adler32.init(),
         input_finished: bool = false,
@@ -29,6 +31,8 @@ pub fn Decoder(comptime Codec: type) type {
         last_error_stream_index: ?usize = null,
         last_error_stream_offset: ?usize = null,
         last_error_input_offset: ?usize = null,
+        last_error_output_offset: ?usize = null,
+        last_step_progress: core.Progress = .{},
 
         const Self = @This();
         pub const Error = Codec.Error;
@@ -55,6 +59,8 @@ pub fn Decoder(comptime Codec: type) type {
             last_error_stream_index: ?usize,
             last_error_stream_offset: ?usize,
             last_error_input_offset: ?usize,
+            last_error_output_offset: ?usize,
+            last_step_progress: core.Progress,
             done: bool,
         };
 
@@ -68,17 +74,24 @@ pub fn Decoder(comptime Codec: type) type {
                 }, history),
             };
         }
+        /// Keep the configured dictionary borrowed for DICTID validation on
+        /// this stream, reset, and later concatenated members. After a member
+        /// is seeded, decoding uses its copied history suffix rather than the
+        /// borrowed bytes; retain the configuration for any future reuse.
         pub fn initWithDictionary(options: Options, history: []u8, dictionary: []const u8) Error!Self {
             return .{
                 .options = options,
-                .raw = try Codec.RawDecoder.initWithDictionary(.{
+                .raw = try Codec.RawDecoder.initWithHistory(.{
                     .max_output_len = initialRawLimit(options),
                     .expected_output_len = if (options.allow_concatenated) null else options.expected_output_len,
                     .allow_trailing_data = true,
-                }, history, dictionary),
+                }, history),
                 .dictionary = dictionary,
+                .dictionary_available = true,
             };
         }
+        /// The set and its dictionary bytes remain borrowed for member lookup.
+        /// A missing entry may be supplied explicitly for the current member.
         pub fn initWithDictionarySet(options: Options, history: []u8, dictionaries: Codec.DictionarySet) Error!Self {
             return .{
                 .options = options,
@@ -96,6 +109,7 @@ pub fn Decoder(comptime Codec: type) type {
             self.header_received = 0;
             self.footer_received = 0;
             self.dictid_received = 0;
+            self.required_dictionary_id = null;
             self.adler = Codec.Adler32.init();
             self.input_finished = false;
             self.total_input = 0;
@@ -104,11 +118,28 @@ pub fn Decoder(comptime Codec: type) type {
             self.stream_count = 0;
             self.stream_offset = 0;
             self.configureRawForStream();
-            self.last_error_name = "";
-            self.last_error_phase = .header;
-            self.last_error_stream_index = null;
-            self.last_error_stream_offset = null;
-            self.last_error_input_offset = null;
+            self.clearError();
+            self.last_step_progress = .{};
+        }
+
+        /// Available only after all four DICTID bytes were accepted and while
+        /// that request remains unresolved. Success, reset, and a new member
+        /// clear it; a partial DICTID or a stream without FDICT returns null.
+        pub fn requiredDictionaryId(self: *const Self) ?u32 {
+            if (self.phase != .dictid or self.dictid_received != self.dictid.len) return null;
+            return self.required_dictionary_id;
+        }
+
+        /// Borrow bytes only during this call, verify their Adler-32 ID, and
+        /// copy the required suffix into caller-owned raw history. The bytes
+        /// may be released after return: this override is not cached for reset
+        /// or later members. On mismatch the same request remains resumable.
+        /// Supply the unconsumed input suffix again after successful provision.
+        pub fn provideDictionary(self: *Self, dictionary: []const u8) Error!void {
+            const id = self.requiredDictionaryId() orelse return error.InvalidStreamState;
+            if (self.input_finished) return error.InvalidStreamState;
+            if (Codec.Adler32.hash(dictionary) != id) return self.fail(.dictid, error.DictionaryMismatch);
+            self.acceptDictionary(dictionary);
         }
         pub fn snapshot(self: *const Self) Snapshot {
             return .{
@@ -128,22 +159,34 @@ pub fn Decoder(comptime Codec: type) type {
                 .last_error_stream_index = self.last_error_stream_index,
                 .last_error_stream_offset = self.last_error_stream_offset,
                 .last_error_input_offset = self.last_error_input_offset,
+                .last_error_output_offset = self.last_error_output_offset,
+                .last_step_progress = self.last_step_progress,
                 .done = self.phase == .done,
             };
         }
         pub fn diagnostics(self: *const Self) core.StreamingDiagnostics {
             return .{
                 .phase_name = @tagName(self.phase),
+                .input_read = self.total_input,
                 .header_received = self.header_received,
                 .frame_input_read = self.total_input,
                 .output_written = self.total_output,
                 .expected_output_len = self.options.expected_output_len,
                 .last_error_name = self.last_error_name,
                 .last_error_phase_name = if (self.last_error_name.len == 0) "" else @tagName(self.last_error_phase),
-                .recoverability_hint_name = if (std.mem.eql(u8, self.last_error_name, @errorName(error.TruncatedFrame))) "truncated_input" else if (std.mem.eql(u8, self.last_error_name, @errorName(error.NeedDictionary))) "retry_with_dictionary" else if (self.last_error_name.len == 0) "none" else "payload_corrupt",
+                .error_input_offset = self.last_error_input_offset,
+                .error_output_offset = self.last_error_output_offset,
+                .last_step_progress = self.last_step_progress,
+                .recoverability_hint_name = if (std.mem.eql(u8, self.last_error_name, @errorName(error.TruncatedFrame))) "truncated_input" else if (std.mem.eql(u8, self.last_error_name, @errorName(error.NeedDictionary)) or std.mem.eql(u8, self.last_error_name, @errorName(error.DictionaryMismatch))) "retry_with_dictionary" else if (self.last_error_name.len == 0) "none" else "payload_corrupt",
             };
         }
+        /// A complete unresolved DICTID takes precedence over EOF: return
+        /// NeedDictionary without sealing input, so the caller may supply the
+        /// dictionary and resubmit bytes this decoder has not accepted. Call
+        /// finish again after recovery and input consumption. All other finish
+        /// calls seal input; nonempty input afterward is rejected.
         pub fn finish(self: *Self) Error!void {
+            if (self.requiredDictionaryId() != null) return self.fail(.dictid, error.NeedDictionary);
             self.input_finished = true;
             if (self.options.allow_concatenated and self.phase == .between_streams) {
                 try self.validateExpectedOutput();
@@ -155,9 +198,24 @@ pub fn Decoder(comptime Codec: type) type {
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+            self.last_step_progress = .{};
+            const before = core.Progress{ .input_read = self.total_input, .output_written = self.total_output };
+            const stepped = self.stepInternal(input, output) catch |err| {
+                self.last_step_progress = .{
+                    .input_read = self.total_input - before.input_read,
+                    .output_written = self.total_output - before.output_written,
+                };
+                return self.fail(self.phase, err);
+            };
+            self.last_step_progress = stepped.progress;
+            return stepped;
+        }
+
+        fn stepInternal(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
             if (self.input_finished) {
                 if (input.len != 0) return self.fail(self.phase, error.TrailingData);
-                return .{ .status = if (self.phase == .done) .done else .need_input };
+                if (self.phase != .done) return self.fail(self.phase, error.TruncatedFrame);
+                return .{ .status = .done };
             }
             var input_read: usize = 0;
             var output_written: usize = 0;
@@ -184,14 +242,19 @@ pub fn Decoder(comptime Codec: type) type {
                     }
                     if (self.dictid_received != self.dictid.len) return result(input_read, output_written, .need_input);
                     const id = std.mem.readInt(u32, &self.dictid, .big);
+                    self.required_dictionary_id = id;
                     if (self.dictionaries) |dictionaries| {
-                        self.dictionary = dictionaries.find(id) orelse return self.fail(.dictid, error.NeedDictionary);
-                        self.raw.seedDictionary(self.dictionary);
-                    } else {
-                        if (self.dictionary.len == 0 or id != Codec.Adler32.hash(self.dictionary)) return self.fail(.dictid, error.NeedDictionary);
-                        self.raw.seedDictionary(self.dictionary);
+                        if (dictionaries.find(id)) |dictionary| {
+                            if (Codec.Adler32.hash(dictionary) == id) {
+                                self.acceptDictionary(dictionary);
+                                continue;
+                            }
+                        }
+                    } else if (self.dictionary_available and id == Codec.Adler32.hash(self.dictionary)) {
+                        self.acceptDictionary(self.dictionary);
+                        continue;
                     }
-                    self.phase = .raw;
+                    return self.fail(.dictid, error.NeedDictionary);
                 },
                 .raw => {
                     // Drain the raw bit reservoir before supplying another byte.
@@ -199,8 +262,7 @@ pub fn Decoder(comptime Codec: type) type {
                     // exactly on the final literal/match, the EOB may already
                     // be buffered and can advance us to the Adler footer
                     // without asking for an unnecessary extra output buffer.
-                    const drained = self.raw.step("", output[output_written..]) catch |err| return self.failRaw(err);
-                    self.recordRawProgress(drained, output, &input_read, &output_written);
+                    const drained = try self.stepRaw("", output, &input_read, &output_written);
                     if (drained.status == .done) {
                         self.phase = .footer;
                         continue;
@@ -217,8 +279,7 @@ pub fn Decoder(comptime Codec: type) type {
                     }
                     if (input_read == input.len) return result(input_read, output_written, .need_input);
 
-                    const supplied = self.raw.step(input[input_read..], output[output_written..]) catch |err| return self.failRaw(err);
-                    self.recordRawProgress(supplied, output, &input_read, &output_written);
+                    const supplied = try self.stepRaw(input[input_read..], output, &input_read, &output_written);
                     if (supplied.status == .done) {
                         self.phase = .footer;
                         continue;
@@ -264,6 +325,7 @@ pub fn Decoder(comptime Codec: type) type {
             self.header_received = 0;
             self.footer_received = 0;
             self.dictid_received = 0;
+            self.required_dictionary_id = null;
             self.dictionary = if (self.dictionaries == null) self.dictionary else "";
             self.adler = Codec.Adler32.init();
             self.stream_output = 0;
@@ -279,6 +341,33 @@ pub fn Decoder(comptime Codec: type) type {
         fn validateExpectedOutput(self: *Self) Error!void {
             if (self.options.expected_output_len) |expected|
                 if (self.total_output != expected) return self.fail(self.phase, error.SizeMismatch);
+        }
+        fn acceptDictionary(self: *Self, dictionary: []const u8) void {
+            self.raw.seedDictionary(dictionary);
+            self.required_dictionary_id = null;
+            self.phase = .raw;
+            self.clearError();
+        }
+        fn clearError(self: *Self) void {
+            self.last_error_name = "";
+            self.last_error_phase = .header;
+            self.last_error_stream_index = null;
+            self.last_error_stream_offset = null;
+            self.last_error_input_offset = null;
+            self.last_error_output_offset = null;
+        }
+        fn stepRaw(self: *Self, input: []const u8, output: []u8, input_read: *usize, output_written: *usize) Error!core.StepResult {
+            const before = core.Progress{ .input_read = self.raw.total_input, .output_written = self.raw.total_output };
+            const stepped = self.raw.step(input, output[output_written.*..]) catch |err| {
+                const partial: core.StepResult = .{ .progress = .{
+                    .input_read = self.raw.total_input - before.input_read,
+                    .output_written = self.raw.total_output - before.output_written,
+                } };
+                self.recordRawProgress(partial, output, input_read, output_written);
+                return self.failRaw(err);
+            };
+            self.recordRawProgress(stepped, output, input_read, output_written);
+            return stepped;
         }
         fn recordRawProgress(self: *Self, raw_result: core.StepResult, output: []const u8, input_read: *usize, output_written: *usize) void {
             input_read.* += raw_result.progress.input_read;
@@ -314,6 +403,7 @@ pub fn Decoder(comptime Codec: type) type {
             self.last_error_stream_index = self.diagnosticStreamIndex(phase);
             self.last_error_stream_offset = self.stream_offset;
             self.last_error_input_offset = self.total_input;
+            self.last_error_output_offset = self.total_output;
             return err;
         }
         fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
