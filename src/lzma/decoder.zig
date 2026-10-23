@@ -431,73 +431,7 @@ fn decodeRawAlloc(
     return decoded;
 }
 
-pub const CircularBuffer = struct {
-    bytes: std.ArrayList(u8) = .empty,
-    dictionary_size: usize,
-    output_limit: usize,
-    cursor: usize = 0,
-    len: usize = 0,
-    allow_partial: bool = false,
-
-    pub fn init(dictionary_size: usize, output_limit: usize) CircularBuffer {
-        return .{
-            .dictionary_size = dictionary_size,
-            .output_limit = output_limit,
-        };
-    }
-
-    pub fn deinit(self: *CircularBuffer, allocator: std.mem.Allocator) void {
-        self.bytes.deinit(allocator);
-    }
-
-    pub fn lastOr(self: CircularBuffer, default: u8) u8 {
-        if (self.len == 0) return default;
-        const index = (self.dictionary_size + self.cursor - 1) % self.dictionary_size;
-        return self.bytes.items[index];
-    }
-
-    pub fn lastN(self: CircularBuffer, distance: usize) !u8 {
-        if (distance == 0 or distance > self.dictionary_size or distance > self.len)
-            return error.CorruptInput;
-        const index = (self.dictionary_size + self.cursor - distance) % self.dictionary_size;
-        return self.bytes.items[index];
-    }
-
-    pub fn appendLiteral(
-        self: *CircularBuffer,
-        allocator: std.mem.Allocator,
-        byte: u8,
-        writer: *std.Io.Writer,
-    ) !void {
-        if (self.len >= self.output_limit) return error.OutputLimitExceeded;
-        if (self.cursor < self.bytes.items.len) {
-            self.bytes.items[self.cursor] = byte;
-        } else {
-            try self.bytes.append(allocator, byte);
-        }
-        try writer.writeByte(byte);
-        self.cursor += 1;
-        if (self.cursor == self.dictionary_size) self.cursor = 0;
-        self.len += 1;
-    }
-
-    pub fn appendLz(
-        self: *CircularBuffer,
-        allocator: std.mem.Allocator,
-        length: usize,
-        distance: usize,
-        writer: *std.Io.Writer,
-    ) !void {
-        if (distance == 0 or distance > self.dictionary_size or distance > self.len)
-            return error.CorruptInput;
-        const remaining = self.output_limit -| self.len;
-        if (!self.allow_partial and length > remaining) return error.OutputLimitExceeded;
-        for (0..@min(length, remaining)) |_| {
-            const byte = try self.lastN(distance);
-            try self.appendLiteral(allocator, byte, writer);
-        }
-    }
-};
+pub const CircularBuffer = @import("history.zig").CircularBuffer;
 
 const DecodeError = Error || std.mem.Allocator.Error;
 
