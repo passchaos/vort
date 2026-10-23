@@ -22812,3 +22812,29 @@ reuse, so production keeps the simpler independently owned plans.
   Broad check (125 steps), wasm compilation and the CLI help page pass.
   The final Debug repository suite passes 3501/3501 tests (3494 root tests
   plus seven separate Brotli object/classifier cases).
+
+- Added metabox writing combined with local/external stored chunks and all
+  four codecs' file fragments/compressed-inline tails. The resumable encoder
+  processes every visible and packed node before encoding the metabox for both
+  fixed and grouped output; the retained writer follows the same dependency
+  order. Visible chunk indexes and inline tails retain high-NID metadata
+  storage, while packed data remains in a hidden primary inode. Tests compare
+  reference, allocating, Source and tiny-output encoder bytes across ordinary,
+  grouped, physically bounded and directory-compressed cases, and verify
+  shared/long-prefix xattrs, deduplication, holes, padding and boundary ranges.
+  Source failures cover planning and streaming with unique input so chunk
+  deduplication cannot accidentally bypass the failing Source. Sticky failures,
+  output preservation, dual-Sink finish order, budgets and exhaustive OOM pass.
+  Debug passes 187 EROFS cases; ReleaseFast passes those plus 12 independent I/O
+  cases (199 total). The writer matrix grows from 432 to 536 modes, including
+  134 memory/Source/Sink/encoder variants each. Original erofs-utils
+  1.9.4-g5fcb2f76 validates complete file data for 488 modes. Its metabox inline
+  data reads use the wrong address space and its shared-xattr cache omits
+  address-space identity; a separate copy with a documented minimal `data.c`
+  fix independently validates all 104 new metabox combinations, including
+  48 compressed-inline cases and restored shared xattrs. The separate counters
+  (`original_fsck_writer=488`, `metabox_combined_oracle=104`,
+  `metabox_inline_oracle=48`) preserve that distinction. Broad check (125 steps),
+  wasm compilation and the CLI help page pass.
+  The final Debug repository suite passes 3506/3506 tests (3499 root tests
+  plus seven separate Brotli object/classifier cases).

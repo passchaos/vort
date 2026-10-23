@@ -824,3 +824,17 @@ and file physical blocks; dump independently checks the complete stored-metabox
 regular file because fsck 1.9.4's raw inline-tail path reads primary storage.
 Final Debug repository validation passes 3501/3501 tests. Broad check (125
 steps), wasm compilation and CLI help also pass.
+
+Metabox chunk/fragment/compressed-inline combinations pass 187 EROFS tests in
+Debug and ReleaseFast, plus 12 independent I/O tests in ReleaseFast (199 total).
+The writer matrix passes 536 modes across allocating, Source, Sink and
+resumable encoder inputs. Original erofs-utils 1.9.4-g5fcb2f76 validates file
+data for 488 modes; the separately built metadata-address/cache oracle verifies
+all 104 new metabox combinations, including 48 compressed-inline cases and
+restored shared xattrs (`original_fsck_writer=488`,
+`metabox_combined_oracle=104`, `metabox_inline_oracle=48`). Native regressions
+cover tiny outputs, grouped/physically bounded layouts, chunk deduplication,
+holes, ranges, planning/streaming Source failures, dual-Sink finish order,
+working limits and exhaustive allocation failures. Final Debug repository
+validation passes 3506/3506 tests; broad check (125 steps), wasm compilation
+and CLI help also pass.
