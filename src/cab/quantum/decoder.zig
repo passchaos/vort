@@ -23,10 +23,18 @@ pub fn decodeAlloc(
     errdefer allocator.free(output);
     if (output.len == 0) return output;
 
+    try decodeInto(input, output, window_bits);
+    return output;
+}
+
+/// Caller-owned exact-size output. Malformed streams may leave a decoded
+/// prefix; the caller's output limit is enforced by the allocating facade.
+pub fn decodeInto(input: []const u8, output: []u8, window_bits: u5) !void {
+    if (window_bits < min_window_bits or window_bits > max_window_bits) return error.UnsupportedCabinetFeature;
+    if (output.len == 0) return;
     var decoder = Decoder.init(input, output, window_bits);
     try decoder.decode();
     if (decoder.written != output.len) return error.SizeMismatch;
-    return output;
 }
 
 pub const Decoder = struct {

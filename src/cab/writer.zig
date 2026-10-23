@@ -32,6 +32,11 @@ pub const EncodeOptions = struct {
     lzx_window_bits: u5 = 15,
     quantum_window_bits: u5 = 18,
     quantum_level: u4 = 1,
+    quantum_strategy: quantum.Strategy = .greedy,
+    quantum_hash_log: u8 = 15,
+    quantum_max_match_distance: usize = std.math.maxInt(usize),
+    quantum_max_working_memory: usize = std.math.maxInt(usize),
+    quantum_max_output_len: usize = std.math.maxInt(usize),
 };
 
 const fixed_header_len: usize = 36;
@@ -76,7 +81,7 @@ pub fn encodeAlloc(
         1 + (folder_data.items.len - 1) / options.block_size;
     if (block_count > std.math.maxInt(u16)) return error.CabinetLimitExceeded;
     var data_start: usize = 0;
-    var quantum_encoder = quantum.LiteralEncoder.init();
+    var quantum_encoder = try quantum.Encoder.init(if (options.compression == .quantum) quantumOptions(options) else .{});
     var lzx_state = try lzx_encoder.CabinetEncoder.init(if (options.compression == .lzx) options.lzx_window_bits else 15);
     while (data_start < folder_data.items.len) {
         const data_end = @min(folder_data.items.len, data_start + options.block_size);
@@ -116,7 +121,7 @@ pub fn encodeAlloc(
                 try appendDataBlock(allocator, &out, encoded, block.len, options.checksum);
             },
             .quantum => {
-                const encoded = try quantum_encoder.encodeFrameAlloc(allocator, block);
+                const encoded = try quantum_encoder.encodeFrameAlloc(allocator, folder_data.items, data_start, data_end);
                 defer allocator.free(encoded);
                 try appendDataBlock(allocator, &out, encoded, block.len, options.checksum);
             },
@@ -189,6 +194,7 @@ fn validateInputs(entries: []const EncodeEntry, options: EncodeOptions) Error!us
             options.quantum_level < 1 or
             options.quantum_level > 7))
         return error.InvalidCabinetOptions;
+    if (options.compression == .quantum) quantumOptions(options).validate() catch return error.InvalidCabinetOptions;
     if (options.block_size == 0 or options.block_size > 32 * 1024)
         return error.InvalidCabinetOptions;
     if (entries.len > std.math.maxInt(u16)) return error.CabinetLimitExceeded;
@@ -209,6 +215,17 @@ fn validateInputs(entries: []const EncodeEntry, options: EncodeOptions) Error!us
         options.block_size != 32 * 1024)
         return error.InvalidCabinetOptions;
     return folder_size;
+}
+
+fn quantumOptions(options: EncodeOptions) quantum.Options {
+    return .{
+        .window_bits = options.quantum_window_bits,
+        .strategy = options.quantum_strategy,
+        .hash_log = options.quantum_hash_log,
+        .max_match_distance = options.quantum_max_match_distance,
+        .max_working_memory = options.quantum_max_working_memory,
+        .max_output_len = options.quantum_max_output_len,
+    };
 }
 
 fn appendFile(
