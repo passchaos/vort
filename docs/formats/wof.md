@@ -49,8 +49,9 @@ defer allocator.free(range);
 
 The deterministic writer uses the shared XPRESS-Huffman encoder for all three
 XPRESS modes and selects raw chunks whenever compression would not save space.
-LZX writing currently emits valid raw chunks; compressed LZX planning remains
-future ratio work.
+LZX uses the shared adaptive verbatim/aligned WIM-LZX encoder with long matches,
+repeat offsets and mandatory E8 preprocessing. It also retains raw chunks when
+compression does not save space, preserving independent range access.
 
 ```sh
 zig build run -- encode-wof-file input.bin backing.bin xpress16k

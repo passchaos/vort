@@ -107,10 +107,15 @@ non-zero CFDATA checksums, deterministic DOS dates, automatic UTF-8 attributes,
 and a caller-selected set ID. Stored/MSZIP permit configurable 1–32 KiB CFDATA
 blocks. MSZIP independently chooses fixed-Huffman or stored Deflate for each
 block while retaining the prior 32 KiB folder tail as its dictionary. The
-reference LZX writer emits interoperable uncompressed LZX blocks, selectable
-15–21 bit windows, mandatory 32 KiB non-final CFDATA records, restored recent
-offsets, word alignment, and odd final-block padding. Entropy-coded LZX writing
-is a later ratio optimization, not a distinct compatibility surface.
+LZX writer emits adaptive verbatim/aligned blocks with 2...257-byte matches,
+all three repeat-offset slots, modulo-17 tree deltas and compressed code-length
+runs. Its bounded matcher indexes only the selected 15–21 bit window and
+preserves trees/recent offsets across mandatory 32 KiB non-final CFDATA records.
+Complete block bytes select compressed or uncompressed representation; raw
+blocks restore the current offsets and preserve prior trees. Word alignment and
+odd raw final-block padding remain required. The same state survives split
+CFDATA in multi-cabinet sets. Optimal parsing and calibrated levels remain
+ratio/performance work. The public raw LZX APIs are documented in [LZX](lzx.md).
 The reference Quantum writer emits literal-only adaptive arithmetic frames,
 persists selector/literal models across 32 KiB CFDATA records, supports 10–21
 bit windows and declared levels 1–7, and writes bounded null padding before the
@@ -144,5 +149,6 @@ both directions, reserve bytes, and six independently hashed outputs.
 Vort-written Stored/MSZIP/LZX cabinets are
 decoded byte-exactly by libarchive, including multi-frame LZX output with an
 odd final block. Cabextract/libmspack independently decodes Vort's multi-frame
-Quantum output and all four Vort-written linked cabinet-set modes. Entropy-coded
-LZX blocks and Quantum match encoding remain future ratio work.
+Quantum output and all four Vort-written linked cabinet-set modes.
+Quantum match encoding remains future codec work; deeper LZX parsing remains
+ratio/performance work.

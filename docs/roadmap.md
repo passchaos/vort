@@ -23001,3 +23001,30 @@ reuse, so production keeps the simpler independently owned plans.
   Final Debug repository validation passes 3554/3554 tests (3547 root tests and
   seven separate Brotli object/classifier cases); all 125 build-check steps
   succeed. ReleaseFast AArch64 Linux compile-only validation also succeeds.
+
+- LZX writing now uses a shared bounded adaptive encoder across CAB, WIM and
+  WOF. Greedy two-/three-byte indexing emits 2...257-byte ordinary and all
+  three repeated-offset matches; complete canonical main/length/aligned trees
+  use modulo-17 previous-length deltas and pretree zero/equal-length runs.
+  CAB retains tree/recent state across compressed/raw 32 KiB CFDATA frames and
+  split cabinet fragments; allocation errors preserve caller-owned state and
+  continuation after a partial frame is rejected. WIM keeps bit packing and
+  history continuous across bounded 32 KiB plans inside 32 KiB...2 MiB chunks,
+  applies the mandatory E8 transform, and selects against the retained short-
+  match reference. WOF now emits real compressed LZX chunks with raw fallback.
+  The public LZX facade exposes allocating/transactional caller-buffer/append
+  encoding, exact-size caller-buffer and output-limited decode, explicit format
+  and window selection, and block summaries. Reference encoding, word writing,
+  tree emission, matching and regression tests live in separate modules.
+  Standalone Debug LZX/WOF suites pass 86/95 cases; ReleaseFast focused
+  LZX/CAB/WOF/WIM validation passes 351/351; all 125 build-check steps pass,
+  including wasm32-wasi compilation. AArch64 Linux ReleaseFast compile-
+  only validation succeeds. The 136-row independent matrix validates 42 CAB
+  cases with libarchive/libmspack, 85 WIM chunks with wimlib, six WOF streams
+  and three compressed split-CAB sets with 2 KiB part limits. Existing CAB,
+  WOF and the complete WIM edit/split/pipable/integrity differential matrices
+  pass. Retained repeated-text WIM bytes improve from 6858 to 120 for 32 KiB
+  and from 13616 to 246 for 66000 bytes; a complete 2 MiB chunk improves from
+  1521290 to 70816. These are functional/reference-wire observations, not
+  upstream ratio/throughput leadership. Quantum matching, LZFSE FSE writing,
+  deeper LZX parsing, levels and memory/throughput calibration remain open.

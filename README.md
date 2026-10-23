@@ -117,7 +117,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - dependency-free WOF/CompactOS file-provider metadata and backing-stream
   support with XPRESS4K/8K/16K and WIM-LZX chunks, strict 32-/64-bit cumulative
   offset tables, raw-chunk fallback, bounded whole-file and random-range decode,
-  deterministic XPRESS compression plus LZX raw writing, reparse/ioctl metadata
+  deterministic XPRESS and matched WIM-LZX compression with per-chunk raw
+  fallback, reparse/ioctl metadata
   parsing, pinned fixtures, fuzzing, and bidirectional wimlib differentials;
 - pure Zig Apple LZFSE stream and raw LZVN support with `bvx-`, `bvxn`, `bvx1`,
   and `bvx2` decoding, compressed frequency-table and four-way literal FSE
@@ -552,7 +553,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   ciphertext, with RAR, 7-Zip, and rars interoperability;
 - dependency-free deterministic Microsoft CAB writing plus parsing and bounded
   extraction for Stored, MSZIP, 15–21 bit LZX, and 10–21 bit Quantum folders,
-  including Stored/MSZIP, reference uncompressed-block LZX, and literal
+  including Stored/MSZIP, adaptive verbatim/aligned LZX with 2...257-byte
+  matches, repeat offsets and raw-block fallback, and literal
   arithmetic Quantum writing, reserve areas, checksum validation, cross-block
   history, complete LZX decode modes, Intel E8 postprocessing, adaptive Quantum
   models, deterministic size-bounded multi-cabinet writing and explicitly

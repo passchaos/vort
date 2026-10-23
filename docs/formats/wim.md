@@ -187,13 +187,14 @@ Compressed modes default to 32 KiB chunks; explicitly selected LZX
 windows from 64 KiB through 2 MiB use the corresponding wimlib extension.
 Chunks independently select compressed or raw representation, and the writer
 emits the original cumulative chunk table.
-The deterministic LZX reference encoder writes standard verbatim blocks with
-3...8-byte explicit-offset matches and WIM's fixed-size E8 preprocessing. Its
-current matcher retains one candidate per 3-byte hash; longer matches,
-secondary lengths, aligned blocks, deeper chains, and ratio tuning remain
-optimization work rather than wire-format gaps. LZMS uses the native adaptive
-literal encoder and retains raw chunks when they are smaller; LZ and delta
-matches remain ratio work. Image metadata and ordinary
+The deterministic LZX encoder writes adaptive verbatim/aligned blocks with
+2...257-byte ordinary/repeated-offset matches, secondary lengths and WIM's
+fixed-size E8 preprocessing. Plans are bounded to 32 KiB while history and tree
+state persist through the complete selected chunk window. Whole-chunk bytes
+are compared with the retained 3...8-byte reference encoder; the smaller stream
+is selected before per-chunk raw fallback. Deeper parsing and ratio/throughput
+calibration remain work. LZMS uses bounded greedy LZ/delta/repeat matching with
+complete literal-reference arbitration and the same raw fallback. Image metadata and ordinary
 file blobs use the selected codec, while the lookup table and UTF-16LE XML
 remain uncompressed for Microsoft compatibility. A 10 MiB-chunk integrity
 table covers the bytes from offset 208 through the lookup table. Output is
