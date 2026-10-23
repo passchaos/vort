@@ -23146,3 +23146,21 @@ reuse, so production keeps the simpler independently owned plans.
   XZ progressive block decoding remains the next functional priority; broader
   real-file throughput, ratio, allocation and RSS comparisons still prevent
   a broad industry-best claim.
+
+- XZ now defaults to progressive LZMA2 symbols, inverse filters and caller
+  output, with explicit check-before-output blocks retained as a policy.
+  Encoded input follows a 64-byte range guard, decoded raw staging is fixed at
+  273 bytes, and Index/Footer fields parse without whole-Index staging. Strict
+  dictionary/range validation is shared by XZ inspection, one-shot and 7z
+  allocating payload APIs. Delta distance 256, maximum-window index arithmetic,
+  input/capacity overflow, decoded-storage growth and active-state allocator
+  movement regressions are fixed and covered. The full XZ and consumer suites
+  pass 152 ReleaseFast tests; the Debug and post-rebase ReleaseFast progressive
+  gates each pass 29.
+  Final build checks pass all 127 steps, including wasm32-wasi.
+  A 431-case independent liblzma/XZ/7-Zip campaign covers 133 corpora, 75 legal
+  properties, every BCJ filter, allocation failures and exact resource limits;
+  provenance is recorded in
+  [the XZ baseline](performance/xz-progressive-functional-baseline.md).
+  Further cross-codec dictionary/resource API parity and real-file performance
+  evidence remain before any broad industry-best claim.

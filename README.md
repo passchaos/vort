@@ -393,15 +393,20 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   handling, bounded APIs and metadata inspection, plus deterministic
   filter-aware XZ writing with greedy LZMA matches, repeat distances, a stored
   fallback, caller-selected 4 KiB...64 MiB cross-chunk LZMA2 dictionary reuse,
-  and separate greedy/lazy ratio encode APIs, plus block-bounded
+  and separate greedy/lazy ratio encode APIs, plus symbol-progressive
   caller-output incremental decoding with
   arbitrary input fragmentation, zero-output backpressure, stream padding,
   concatenated members, independent compressed/decoded/dictionary/Index
-  limits, exact-size pledges, and reusable container scratch, plus block-bounded
+  limits, exact-size pledges, live working-allocation budgets, true failed-call
+  progress, stopped-stream continuation, and reusable container scratch. The
+  default emits before complete blocks; explicit `prevalidated_block` holds
+  decoded bytes until their check succeeds. Both share the same dictionary-
+  bounded raw core and progressive Index/Footer parser, plus block-bounded
   incremental compressed/stored encoding with split-independent wire,
   Delta/BCJ filters, selectable checks, flushable blocks, Index/Footer
   generation, concatenated continuation, pledged input, and output backpressure,
-  plus a chunk-bounded raw LZMA2 caller-output decoder with persistent
+  plus a raw LZMA2 caller-output decoder with a 64-byte symbol guard, fixed
+  273-byte symbol staging, exact range termination and persistent
   probability/dictionary state for embedding formats such as 7z;
 - dependency-free LZMA-Alone encoding and decoding with known-size or
   end-marker streams, caller-selected output/dictionary limits, caller-owned

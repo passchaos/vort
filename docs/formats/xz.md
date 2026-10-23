@@ -61,10 +61,13 @@ const ratio_encoded = try vort.encodeXzLazyAlloc(allocator, input, .{
 defer allocator.free(ratio_encoded);
 ```
 
-`XzIncrementalDecoder` exposes the same validation through a caller-driven,
-block-bounded state machine. It retains only the current compressed block or
-Index/Footer candidate plus one check-validated decoded block, rather than
-joining a complete multi-block or concatenated stream:
+`XzIncrementalDecoder` exposes the same format validation through a
+caller-driven state machine. Its default `Options.input_policy` is
+`.progressive_block`: LZMA2 range symbols advance through bounded input, inverse
+filters retain only their required suffixes, and decoded output can be
+published before the block is complete. Unfiltered blocks write into caller
+output directly. `.prevalidated_block` retains the complete decoded block until
+its check succeeds and uses the same bounded encoded-symbol input.
 
 ```zig
 var decoder = vort.XzIncrementalDecoder.initWithOptions(allocator, .{
@@ -72,6 +75,9 @@ var decoder = vort.XzIncrementalDecoder.initWithOptions(allocator, .{
     .max_dictionary_size = 64 * 1024 * 1024,
     .max_compressed_block_len = 64 * 1024 * 1024,
     .max_decoded_block_len = 64 * 1024 * 1024,
+    .max_compressed_buffer_len = 128 * 1024,
+    .max_decoded_buffer_len = 4096,
+    .max_working_memory = 128 * 1024 * 1024,
     .max_index_footer_len = 16 * 1024 * 1024,
     .max_block_count = 1024 * 1024,
     .expected_output_len = expected_size,
@@ -98,25 +104,67 @@ while (true) {
 
 Available decoding forms include caller-owned output, bounded allocation,
 separate decoded-output and LZMA2-dictionary limits, validated decoded-size
-preflight, explicit concatenated-stream variants, and block-bounded incremental
+preflight, explicit concatenated-stream variants, and progressive incremental
 decode with snapshots and phase diagnostics.
 The compressed and stored writers provide alloc, transactional append, and
 caller-owned output APIs.
 
-The incremental decoder verifies the stream and block headers before accepting
-payload limits, applies Delta/BCJ filters only after complete LZMA2 decode, and
-publishes a block only after its none/CRC-32/CRC-64/SHA-256 check succeeds.
-Index records, Index CRC, Footer CRC/backward size/flags/magic, four-byte stream
-padding, and concatenated stream headers are then validated incrementally.
-Incomplete block and Index candidates are retried at exponentially growing
-input thresholds so one-byte fragmentation does not trigger a full reparse on
-every byte.
+Stream and block headers validate before payload decoding. Default LZMA2 input
+uses a conservative 64-byte range-symbol guard and fixed staging for one
+literal/match of at most 273 bytes. It does not collect an entire compressed
+chunk or decoded XZ block before output. Delta and BCJ stages apply in inverse
+chain order, including their final suffix flush. The selected none/CRC-32/
+CRC-64/SHA-256 check is accumulated over final decoded bytes; a late block check
+failure can follow already-published output. `validated_output` advances only
+when the complete block check succeeds, while `output_written` reports bytes
+already delivered to the caller.
 
-Transient Zig 0.16 LZMA2 state is owned by a per-block arena. This avoids a
-standard-library partial-reset double-free when probability-table allocation
-fails, while preserving caller allocator accounting and deterministic cleanup.
-Decoded output is copied out of that arena only after the complete block check
-passes.
+Index records, Index CRC, Footer CRC/backward size/flags/magic, stream padding
+and following stream headers retain strict validation. Explicit
+`.prevalidated_block` keeps check-before-output behavior. Its decoded storage is
+bounded by the configured decoded-buffer, decoded-block and working-memory
+limits. The decoded-buffer cap covers live requested allocations for filter
+suffix/work buffers and publication staging, including a withheld complete
+decoded block. It defaults to unlimited, while the progressive execution window
+remains structurally small.
+
+`max_output_len` bounds cumulative logical output, including concatenated or
+explicitly resumed streams. Block limits remain independent of retained-buffer
+limits. `max_working_memory` bounds live requested allocations across the
+container, LZMA2 probabilities/history, filters, records and temporary decode
+storage. It excludes caller buffers, fixed state, stack staging and allocator
+bookkeeping. Budget rejection reports `WorkingMemoryLimitExceeded`; backing
+allocator failure reports `OutOfMemory`.
+
+On `step` failure, `snapshot().last_step_progress` records input accepted and
+output published during that call, with global detection offsets. Fatal errors
+are sticky until reset. Advance caller input/output by those deltas before
+handling the error. `reset()` retains reusable storage and resets operation
+counters; `resetWithOptions()` validates new settings and releases old owned
+buffers on successful reconfiguration. Its existing void signature records an
+invalid configuration for the next `step`; callers can use `Options.validate()`
+first when they need an immediate result.
+
+`stop_after_first_stream` stops after validated Index/Footer. Preserve both
+`trailingInput()` and the unconsumed caller-input suffix. `nextStream()` resumes
+that boundary while retaining cumulative output limits, counters and allocation
+peak. The exact output pledge may span multiple stopped streams. `finish()`
+declares input EOF; remaining output and terminal validation drain through
+`step("", output)`.
+
+An active decoder value can be moved while retaining single ownership; discard
+the old value. Stateful methods rebind nested allocator callbacks before
+processing or releasing owned storage.
+
+`RawLzma2IncrementalDecoder` exposes the same symbol-progressive core to
+containers carrying `dictionary_property` out of band. It retains at most the
+configured compressed guard and one fixed 273-byte decoded symbol, alongside
+the bounded dictionary and probability state. Its default guard cap is 64
+bytes; stored chunks also work with a compressed-buffer cap of zero.
+`stop_after_end_marker` stops at LZMA2 control byte zero without accepting the
+following container bytes. The default instead rejects trailing input. Raw
+snapshots expose actual input/output progress and live/peak working allocation;
+`resetWithOptions()` returns errors directly after validating new settings.
 
 `XzIncrementalEncoder` provides the symmetric block-bounded writer for both
 compressed and explicitly stored LZMA2 payloads. It reuses the one-shot stream
@@ -171,6 +219,10 @@ zig build run -- decode-xz-concat-file streams.xz output.bin 268435456
 zig build run -- size-xz-file input.xz 268435456
 zig build run -- inspect-xz-file input.xz
 zig build run-xz-diff
+zig build test-xz test-xz-progressive -Doptimize=ReleaseFast
+zig build test-xz-consumers -Doptimize=ReleaseFast
+zig build run-xz-progressive-diff -Doptimize=ReleaseFast -- \
+  --seven-zip /path/to/modern/7zz --report /tmp/xz-progressive.json
 zig build -Doptimize=ReleaseFast run-xz-encode-bench-gate
 zig build run-lzma2-incremental-report -- 3
 ```
@@ -219,3 +271,7 @@ or repeat-distance state.
 This lets a match cross a 64 KiB chunk boundary without making chunks dependent
 on hidden state outside their XZ block. Adaptive price modeling and deeper
 optimal parsing remain later ratio and performance work.
+
+Progress, allocation, compatibility and error evidence for the progressive
+decoder is recorded in
+[the functional baseline](../performance/xz-progressive-functional-baseline.md).
