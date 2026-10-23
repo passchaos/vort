@@ -23050,7 +23050,8 @@ reuse, so production keeps the simpler independently owned plans.
   carry 0xff; CAB extraction injects it at logical CFDATA boundaries.
   Debug public codec tests pass 48/48; the complete CAB/dependency suite passes
   566/566. Focused ReleaseFast Quantum/CAB tests pass 185/185, and AArch64 Linux
-  compile-only succeeds. The 596-case independent libmspack 0.11alpha matrix
+  compile-only succeeds. Final build checks pass 125/125, including wasm32-wasi
+  compilation. The 596-case independent libmspack 0.11alpha matrix
   covers 444 raw cases, 120 CABs, eight split sets with 2 KiB parts and 24
   resource/caller-output checks across every 10...21-bit window, window wrap,
   full/partial frames, near/far offsets, extra fields and model continuity.
