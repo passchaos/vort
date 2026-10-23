@@ -165,7 +165,7 @@ fn transformDelta(bytes: []u8, distance: usize, encode: bool) void {
     var position: u8 = 0;
     for (bytes) |*byte| {
         const original = byte.*;
-        byte.* -%= history[position +% @as(u8, @intCast(distance))];
+        byte.* -%= history[position +% @as(u8, @truncate(distance))];
         history[position] = original;
         position -%= 1;
     }

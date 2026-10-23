@@ -164,7 +164,7 @@ const Delta = struct {
     ) !void {
         try output.ensureUnusedCapacity(allocator, input.len);
         for (input) |source| {
-            const prior = self.history[self.position +% @as(u8, @intCast(self.distance))];
+            const prior = self.history[self.position +% @as(u8, @truncate(self.distance))];
             const transformed = if (encode) source -% prior else source +% prior;
             self.history[self.position] = if (encode) source else transformed;
             self.position -%= 1;

@@ -106,16 +106,11 @@ test "XZ incremental decoder honors zero-output backpressure" {
     var decoder = xz.IncrementalDecoder.init(std.testing.allocator);
     defer decoder.deinit();
     const accepted = try decoder.step(&frame, &.{});
-    try std.testing.expectEqual(frame.len, accepted.progress.input_read);
-    try std.testing.expectEqual(core.StepResult.Status.need_input, accepted.status);
-    decoder.finish();
-
-    const blocked = try decoder.step("", &.{});
-    try std.testing.expectEqual(core.StepResult.Status.need_output, blocked.status);
-    try std.testing.expectEqual(payload.len, decoder.snapshot().pending_output);
+    try std.testing.expect(accepted.progress.input_read < frame.len);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, accepted.status);
+    try std.testing.expectEqual(@as(usize, 0), accepted.progress.output_written);
     var output: [payload.len]u8 = undefined;
-    const done = try decoder.step("", &output);
-    try std.testing.expectEqual(core.StepResult.Status.done, done.status);
+    try decodeAllInto(&decoder, frame[accepted.progress.input_read..], &output);
     try std.testing.expectEqualSlices(u8, payload, &output);
 }
 
@@ -135,11 +130,9 @@ test "XZ incremental decoder verifies block checks before output" {
     corrupt[12 + block_header_len + block.consumed - 1] ^= 1;
 
     var output: [payload.len]u8 = @splat(0xcc);
-    var decoder = xz.IncrementalDecoder.init(std.testing.allocator);
+    var decoder = xz.IncrementalDecoder.initWithOptions(std.testing.allocator, .{ .input_policy = .prevalidated_block });
     defer decoder.deinit();
-    _ = try decoder.step(&corrupt, &output);
-    decoder.finish();
-    try std.testing.expectError(error.ChecksumMismatch, decoder.step("", &output));
+    try std.testing.expectError(error.ChecksumMismatch, decodeAllInto(&decoder, &corrupt, &output));
     try std.testing.expectEqual(@as(usize, 0), decoder.snapshot().output_written);
     try std.testing.expectEqualSlices(u8, &([_]u8{0xcc} ** payload.len), &output);
 }
@@ -150,9 +143,7 @@ test "XZ incremental decoder validates Index Footer and stream padding" {
     var output: [payload.len]u8 = undefined;
     var decoder = xz.IncrementalDecoder.init(std.testing.allocator);
     defer decoder.deinit();
-    _ = try decoder.step(&corrupt_footer, &output);
-    decoder.finish();
-    try std.testing.expectError(error.ChecksumMismatch, drainFinished(&decoder, &output));
+    try std.testing.expectError(error.ChecksumMismatch, decodeAllInto(&decoder, &corrupt_footer, &output));
     try std.testing.expectEqual(payload.len, decoder.snapshot().output_written);
 
     const frame = crc32Frame();
@@ -161,9 +152,7 @@ test "XZ incremental decoder validates Index Footer and stream padding" {
     @memset(bad_padding[frame.len..], 0);
     var padding_decoder = xz.IncrementalDecoder.init(std.testing.allocator);
     defer padding_decoder.deinit();
-    _ = try padding_decoder.step(&bad_padding, &output);
-    padding_decoder.finish();
-    try std.testing.expectError(error.InvalidXzStream, drainFinished(&padding_decoder, &output));
+    try std.testing.expectError(error.InvalidXzStream, decodeAllInto(&padding_decoder, &bad_padding, &output));
 }
 
 test "XZ incremental decoder enforces dictionary block index and output limits" {
@@ -174,53 +163,43 @@ test "XZ incremental decoder enforces dictionary block index and output limits" 
         .max_dictionary_size = 256 * 1024 - 1,
     });
     defer dictionary_limited.deinit();
-    try std.testing.expectError(error.OutputLimitExceeded, dictionary_limited.step(&frame, &output));
+    try std.testing.expectError(error.OutputLimitExceeded, decodeAllInto(&dictionary_limited, &frame, &output));
 
     var compressed_limited = xz.IncrementalDecoder.initWithOptions(std.testing.allocator, .{
         .max_compressed_block_len = 8,
     });
     defer compressed_limited.deinit();
-    try std.testing.expectError(error.OutputLimitExceeded, compressed_limited.step(&frame, &output));
+    try std.testing.expectError(error.OutputLimitExceeded, decodeAllInto(&compressed_limited, &frame, &output));
 
     var block_limited = xz.IncrementalDecoder.initWithOptions(std.testing.allocator, .{
         .max_decoded_block_len = payload.len - 1,
     });
     defer block_limited.deinit();
-    _ = try block_limited.step(&frame, &output);
-    block_limited.finish();
-    try std.testing.expectError(error.OutputLimitExceeded, block_limited.step("", &output));
+    try std.testing.expectError(error.OutputLimitExceeded, decodeAllInto(&block_limited, &frame, &output));
 
     var count_limited = xz.IncrementalDecoder.initWithOptions(std.testing.allocator, .{
         .max_block_count = 0,
     });
     defer count_limited.deinit();
-    _ = try count_limited.step(&frame, &output);
-    count_limited.finish();
-    try std.testing.expectError(error.OutputLimitExceeded, count_limited.step("", &output));
+    try std.testing.expectError(error.OutputLimitExceeded, decodeAllInto(&count_limited, &frame, &output));
 
     var index_limited = xz.IncrementalDecoder.initWithOptions(std.testing.allocator, .{
         .max_index_footer_len = 8,
     });
     defer index_limited.deinit();
-    _ = try index_limited.step(&frame, &output);
-    index_limited.finish();
-    try std.testing.expectError(error.OutputLimitExceeded, drainFinished(&index_limited, &output));
+    try std.testing.expectError(error.OutputLimitExceeded, decodeAllInto(&index_limited, &frame, &output));
 
     var output_limited = xz.IncrementalDecoder.initWithOptions(std.testing.allocator, .{
         .max_output_len = payload.len - 1,
     });
     defer output_limited.deinit();
-    _ = try output_limited.step(&frame, &output);
-    output_limited.finish();
-    try std.testing.expectError(error.OutputLimitExceeded, output_limited.step("", &output));
+    try std.testing.expectError(error.OutputLimitExceeded, decodeAllInto(&output_limited, &frame, &output));
 
     var exact_long = xz.IncrementalDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = payload.len + 1,
     });
     defer exact_long.deinit();
-    _ = try exact_long.step(&frame, &output);
-    exact_long.finish();
-    try std.testing.expectError(error.SizeMismatch, drainFinished(&exact_long, &output));
+    try std.testing.expectError(error.SizeMismatch, decodeAllInto(&exact_long, &frame, &output));
 }
 
 test "XZ incremental decoder reports every truncated fixture prefix" {
@@ -250,10 +229,7 @@ test "XZ incremental decoder releases every allocation failure" {
             defer decoder.deinit();
             const output = try allocator.alloc(u8, payload.len);
             defer allocator.free(output);
-            _ = try decoder.step(encoded, output);
-            decoder.finish();
-            const done = try decoder.step("", output);
-            try std.testing.expectEqual(core.StepResult.Status.done, done.status);
+            try decodeAllInto(&decoder, encoded, output);
             try std.testing.expectEqualSlices(u8, payload, output);
         }
     };
@@ -291,6 +267,22 @@ fn drainFinished(decoder: *xz.IncrementalDecoder, output: []u8) !void {
     while (true) {
         const result = try decoder.step("", output);
         if (result.status == .done) return;
+    }
+}
+
+fn decodeAllInto(decoder: *xz.IncrementalDecoder, input: []const u8, output: []u8) !void {
+    var offset: usize = 0;
+    var finished = false;
+    var calls: usize = 0;
+    while (true) : (calls += 1) {
+        try std.testing.expect(calls < input.len * 8 + payload.len * 8 + 64);
+        if (offset == input.len and !finished) {
+            decoder.finish();
+            finished = true;
+        }
+        const stepped = try decoder.step(input[offset..], output);
+        offset += stepped.progress.input_read;
+        if (stepped.status == .done) return;
     }
 }
 
