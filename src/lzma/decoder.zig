@@ -23,6 +23,8 @@ pub const DecodeOptions = struct {
 pub const MicroDecodeOptions = struct {
     dictionary_size: u32 = 8 * 1024 * 1024,
     max_output_len: usize = std.math.maxInt(usize),
+    /// Decode a prefix without requiring range-code EOF or complete matches.
+    allow_partial: bool = false,
 };
 
 const alone_header_len: usize = 13;
@@ -153,6 +155,7 @@ pub fn decodeMicroAllocWithOptions(
     }) catch |err| return mapInitError(err);
     defer decoder.deinit(allocator);
     var dictionary = CircularBuffer.init(options.dictionary_size, expected_size);
+    dictionary.allow_partial = options.allow_partial;
     defer dictionary.deinit(allocator);
     var output = std.Io.Writer.Allocating.init(allocator);
     defer output.deinit();
@@ -177,8 +180,10 @@ pub fn decodeMicroAllocWithOptions(
     const decoded = try output.toOwnedSlice();
     errdefer allocator.free(decoded);
     if (decoded.len != expected_size) return error.SizeMismatch;
-    if (!range_decoder.isFinished()) return error.InvalidLzmaStream;
-    if (input_reader.seek != input.len - 5) return error.TrailingData;
+    if (!options.allow_partial) {
+        if (!range_decoder.isFinished()) return error.InvalidLzmaStream;
+        if (input_reader.seek != input.len - 5) return error.TrailingData;
+    }
     return decoded;
 }
 
@@ -432,6 +437,7 @@ pub const CircularBuffer = struct {
     output_limit: usize,
     cursor: usize = 0,
     len: usize = 0,
+    allow_partial: bool = false,
 
     pub fn init(dictionary_size: usize, output_limit: usize) CircularBuffer {
         return .{
@@ -484,8 +490,9 @@ pub const CircularBuffer = struct {
     ) !void {
         if (distance == 0 or distance > self.dictionary_size or distance > self.len)
             return error.CorruptInput;
-        if (length > self.output_limit -| self.len) return error.OutputLimitExceeded;
-        for (0..length) |_| {
+        const remaining = self.output_limit -| self.len;
+        if (!self.allow_partial and length > remaining) return error.OutputLimitExceeded;
+        for (0..@min(length, remaining)) |_| {
             const byte = try self.lastN(distance);
             try self.appendLiteral(allocator, byte, writer);
         }

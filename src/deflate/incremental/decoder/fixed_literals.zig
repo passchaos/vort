@@ -66,6 +66,9 @@ pub fn DecoderWithFormat(comptime format: Format) type {
             /// Stop at the first final block and leave any suffix unconsumed.
             /// Format wrappers use this to retain ownership of their footer.
             allow_trailing_data: bool = false,
+            /// Return need_output at max_output_len, retaining a valid prefix
+            /// even when its final stored chunk or match continues beyond it.
+            stop_at_output_limit: bool = false,
         };
         pub const Phase = enum { block_header, stored_lengths, stored_payload, dynamic_counts, dynamic_code_lengths, dynamic_lengths, dynamic_repeat, symbols, length_extra, distance_symbol, distance_extra, match_copy, done };
 
@@ -156,7 +159,11 @@ pub fn DecoderWithFormat(comptime format: Format) type {
             if (self.phase != .done) return self.fail(self.phase, error.TruncatedFrame);
         }
 
-        pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+        pub fn step(self: *Self, input: []const u8, provided_output: []u8) Error!core.StepResult {
+            const output = if (self.options.stop_at_output_limit)
+                provided_output[0..@min(provided_output.len, self.options.max_output_len -| self.total_output)]
+            else
+                provided_output;
             if (self.input_finished) {
                 if (input.len != 0 and !self.options.allow_trailing_data)
                     return self.fail(self.phase, error.TrailingData);
@@ -164,7 +171,7 @@ pub fn DecoderWithFormat(comptime format: Format) type {
             }
             var input_read: usize = 0;
             var output_written: usize = 0;
-            while (true) switch (self.phase) {
+            while (!self.options.stop_at_output_limit or self.total_output < self.options.max_output_len) switch (self.phase) {
                 .block_header => {
                     const header = self.readBits(input, &input_read, 3) orelse return result(input_read, output_written, .need_input);
                     self.final_block = (header & 1) != 0;
@@ -194,7 +201,7 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                     const len = std.mem.readInt(u16, self.stored_lengths[0..2], .little);
                     const nlen = std.mem.readInt(u16, self.stored_lengths[2..4], .little);
                     if (nlen != ~len) return self.fail(.stored_lengths, error.StoredLengthMismatch);
-                    if (self.total_output > self.options.max_output_len or len > self.options.max_output_len - self.total_output) return self.fail(.stored_lengths, error.OutputLimitExceeded);
+                    if (!self.options.stop_at_output_limit and (self.total_output > self.options.max_output_len or len > self.options.max_output_len - self.total_output)) return self.fail(.stored_lengths, error.OutputLimitExceeded);
                     if (self.options.expected_output_len) |expected| {
                         if (self.total_output > expected or len > expected - self.total_output) return self.fail(.stored_lengths, error.SizeMismatch);
                     }
@@ -394,6 +401,7 @@ pub fn DecoderWithFormat(comptime format: Format) type {
                     return result(input_read, output_written, .done);
                 },
             };
+            return result(input_read, output_written, .need_output);
         }
 
         fn readFixedSymbol(self: *Self, input: []const u8, input_read: *usize) Error!?u16 {
@@ -433,7 +441,7 @@ pub fn DecoderWithFormat(comptime format: Format) type {
         fn beginMatch(self: *Self) Error!void {
             if (self.history.len == 0) return self.fail(.match_copy, error.OutputTooSmall);
             if (self.match_distance == 0 or self.match_distance > self.history_len) return self.fail(.match_copy, error.InvalidMatch);
-            if (self.total_output > self.options.max_output_len or self.match_len > self.options.max_output_len - self.total_output) return self.fail(.match_copy, error.OutputLimitExceeded);
+            if (!self.options.stop_at_output_limit and (self.total_output > self.options.max_output_len or self.match_len > self.options.max_output_len - self.total_output)) return self.fail(.match_copy, error.OutputLimitExceeded);
             if (self.options.expected_output_len) |expected| {
                 if (self.total_output > expected or self.match_len > expected - self.total_output) return self.fail(.match_copy, error.SizeMismatch);
             }

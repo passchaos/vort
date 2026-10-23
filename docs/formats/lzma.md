@@ -82,6 +82,14 @@ so callers must provide the exact decoded size and dictionary limit out of
 band. Vort verifies the final range state and requires every compressed byte to
 be consumed; it does not treat LZMA-Alone bytes as MicroLZMA.
 
+`MicroDecodeOptions.allow_partial = true` explicitly treats the supplied size
+as a decoded prefix length. It clips a final match to that prefix and releases
+the model/dictionary without requiring range-code EOF or consuming an unused
+encoded suffix. Required properties, range-code bytes and match distances
+remain validated. The option defaults to false; complete-stream decoding
+retains its exact-size, range-finish and trailing-input checks. EROFS uses the
+prefix mode only for marked partial-reference extents.
+
 `encodeMicroLzmaAlloc`, `encodeMicroLzmaAppend`, and `encodeMicroLzmaInto`
 encode a complete stream using `MicroLzmaEncodeOptions`. The default is a
 32 KiB dictionary with lc/lp/pb = 3/0/2 and greedy matching. Dictionaries from
