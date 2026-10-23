@@ -5,8 +5,9 @@ filesystem format used by Android, embedded Linux, and container images.
 
 `ErofsSourceArchive.init(allocator, source, limits)` opens a borrowed stable
 `ByteSource`; `initWithDevices` additionally borrows an ordered Source array.
-It initially validates bounded superblock/checksum metadata, device tables and
-prefix tables in the primary image, parses inodes on demand, and can own a
+It initially validates bounded superblock/checksum metadata, compression
+configuration records, device tables and prefix tables in the primary image,
+parses inodes on demand, and can own a
 bounded decoded metabox. `deinit()` releases
 that metadata and leaves source handles and contexts with the caller. All
 source bytes, lengths and contexts, including the device array, must remain
@@ -887,3 +888,17 @@ matrix. Native tests additionally cover full/compact metabox inline metadata,
 ranges, tiny outputs, late Source errors, invalid IDs and exhaustive OOM.
 Final Debug repository validation passes 3510/3510 tests. Broad check (125
 steps), wasm compilation and CLI help also pass.
+
+Compression configuration validation passes 199 EROFS cases in Debug and
+ReleaseFast plus 12 independent I/O cases in ReleaseFast (211 total). The
+complete 536-mode writer and existing reader matrix passes, including five
+legal configuration variants and six malformed length/mask/declaration cases
+checked by original fsck.erofs (`configuration_reader=5`,
+`configuration_errors=6`). Malformed CLI reads preserve existing output and
+remove temporary files. Native regressions cover cross-block extensions,
+Source failures, declared image boundaries, allocation-free initialization
+under zero working budgets, late undeclared algorithms and codec history/window
+limits. Independent zlib/XZ Utils streams validate rejection of 8 KiB-distance
+matches under a declared 4 KiB history, including partial reads. All 37 raw
+Deflate incremental regressions pass. Final Debug repository validation passes
+3518/3518 tests; broad check (125 steps), wasm compilation and CLI help pass.

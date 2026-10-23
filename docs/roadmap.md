@@ -22856,3 +22856,32 @@ reuse, so production keeps the simpler independently owned plans.
   Broad check (125 steps), wasm compilation and the CLI help page pass.
   The final Debug repository suite passes 3510/3510 tests (3503 root tests
   plus seven separate Brotli object/classifier cases).
+
+- Added allocation-free EROFS compression configuration parsing shared by
+  slice and Source archives. Algorithm-ID-ordered u16-length records are
+  aligned before each payload, known minimum sizes and field ranges are
+  checked, and extensions are scanned with 256-byte scratch without hiding
+  Source failures. Unknown bitmap bits/formats and truncated records have
+  explicit error classes. Actual compressed extent selection must use a
+  declared algorithm while unused header slots and metadata inspection remain
+  available. Legacy LZ4 distance fields and single-block defaults are preserved.
+  Retained settings constrain LZ4 distances/pcluster counts, MicroLZMA
+  dictionaries, Deflate match distances and Zstandard frame windows across
+  complete, partial, inline, packed, metabox and device decoding. Deflate's
+  opt-in distance cap retains the full default window for ordinary callers.
+  Tests cover every codec, reserved/extended records, cross-block scanning,
+  declared-image bounds, zero-budget/no-allocation initialization, sticky late
+  errors/output preservation and exhaustive restricted-history OOM. Independent
+  zlib 1.2.11 and XZ Utils 5.8.4 streams prove that a 4 KiB declared history
+  accepts a valid prefix then rejects an 8 KiB-distance match in full/partial
+  modes. Debug passes 199 EROFS cases; ReleaseFast passes those plus 12
+  independent I/O cases (211 total). All 37 raw Deflate incremental regressions
+  pass. Original fsck.erofs 1.9.4-g5fcb2f76 validates five legal configuration
+  variants, including a cross-block extension, and rejects six malformed
+  records/masks/declarations; CLI errors preserve existing output and remove
+  temporary files.
+  The complete 536-mode writer and existing reader matrix also passes
+  (`configuration_reader=5`, `configuration_errors=6`).
+  Broad check (125 steps), wasm compilation and the CLI help page pass.
+  The final Debug repository suite passes 3518/3518 tests (3511 root tests
+  plus seven separate Brotli object/classifier cases).
