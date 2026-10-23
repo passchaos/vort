@@ -436,6 +436,11 @@ pub fn build(b: *std.Build) void {
     const xz_tests = b.addTest(.{ .name = "vort-xz-tests", .root_module = xz_tests_mod, .filters = &.{ "XZ", "LZMA2" } });
     const xz_test_step = b.step("test-xz", "Run XZ, LZMA2 and incremental filter tests");
     xz_test_step.dependOn(&b.addRunArtifact(xz_tests).step);
+    const lzma_one_shot_tests = b.addTest(.{ .name = "vort-lzma-one-shot-tests", .root_module = lzma_contracts_mod, .filters = &.{ "LZMA one shot", "LZMA one-shot" } });
+    const xz_one_shot_tests = b.addTest(.{ .name = "vort-xz-one-shot-tests", .root_module = xz_tests_mod, .filters = &.{ "XZ one shot", "XZ one-shot" } });
+    const one_shot_contract_step = b.step("test-lzma-xz-one-shot-contracts", "Run bounded atomic LZMA and XZ caller-buffer and size-query contracts");
+    one_shot_contract_step.dependOn(&b.addRunArtifact(lzma_one_shot_tests).step);
+    one_shot_contract_step.dependOn(&b.addRunArtifact(xz_one_shot_tests).step);
     const xz_progressive_tests = b.addTest(.{ .name = "vort-xz-progressive-tests", .root_module = xz_tests_mod, .filters = &.{ "XZ progressive", "LZMA2 progressive" } });
     const xz_progressive_test_step = b.step("test-xz-progressive", "Run progressive XZ and LZMA2 resource and progress tests");
     xz_progressive_test_step.dependOn(&b.addRunArtifact(xz_progressive_tests).step);
@@ -1610,6 +1615,13 @@ pub fn build(b: *std.Build) void {
     const lzma_contract_diff_step = b.step("run-lzma-contract-diff", "Validate LZMA-Alone allocation and progress contracts against independent streams");
     lzma_contract_diff_step.dependOn(&lzma_contract_diff.step);
 
+    const lzma_one_shot_probe = b.addExecutable(.{ .name = "vort-lzma-one-shot-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/lzma/one_shot_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "lzma", .module = lzma_contracts_mod }} }) });
+    const lzma_one_shot_diff = b.addSystemCommand(&.{ "python3", "tools/lzma/one_shot_diff.py", "--probe" });
+    lzma_one_shot_diff.addArtifactArg(lzma_one_shot_probe);
+    if (b.args) |args| lzma_one_shot_diff.addArgs(args);
+    const lzma_one_shot_diff_step = b.step("run-lzma-one-shot-diff", "Validate bounded atomic LZMA caller-buffer decoding against independent streams");
+    lzma_one_shot_diff_step.dependOn(&lzma_one_shot_diff.step);
+
     const br_contract_probe = b.addExecutable(.{ .name = "vort-br-stream-contract-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/br/stream_contract_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "br", .module = br_tests_mod }} }) });
     const br_contract_diff = b.addSystemCommand(&.{ "python3", "tools/br/stream_contract_diff.py", "--probe" });
     br_contract_diff.addArtifactArg(br_contract_probe);
@@ -2048,6 +2060,13 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| xz_progressive_diff.addArgs(args);
     const xz_progressive_diff_step = b.step("run-xz-progressive-diff", "Validate progressive XZ and raw LZMA2 against system liblzma");
     xz_progressive_diff_step.dependOn(&xz_progressive_diff.step);
+
+    const xz_one_shot_probe = b.addExecutable(.{ .name = "vort-xz-one-shot-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/xz/one_shot_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "xz", .module = xz_tests_mod }} }) });
+    const xz_one_shot_diff = b.addSystemCommand(&.{ "python3", "tools/xz/one_shot_diff.py", "--probe" });
+    xz_one_shot_diff.addArtifactArg(xz_one_shot_probe);
+    if (b.args) |args| xz_one_shot_diff.addArgs(args);
+    const xz_one_shot_diff_step = b.step("run-xz-one-shot-diff", "Validate bounded atomic XZ caller-buffer decoding against system liblzma");
+    xz_one_shot_diff_step.dependOn(&xz_one_shot_diff.step);
 
     const xz_encode_bench_exe = b.addExecutable(.{
         .name = "vort-xz-encode-bench",
@@ -6204,6 +6223,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_dictionary_resume_probe.step);
     check_step.dependOn(&lz4_dictionary_resume_probe.step);
     check_step.dependOn(&lzma_contract_probe.step);
+    check_step.dependOn(&lzma_one_shot_probe.step);
     check_step.dependOn(&br_contract_probe.step);
     check_step.dependOn(&gzip_diff_exe.step);
     check_step.dependOn(&zip_writer_probe_exe.step);
@@ -6284,6 +6304,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&lz4_native_dictionary_probe_exe.step);
     check_step.dependOn(&lzma2_incremental_report_exe.step);
     check_step.dependOn(&xz_progressive_probe.step);
+    check_step.dependOn(&xz_one_shot_probe.step);
 
     const ci_smoke_step = b.step("ci-smoke", "Run local CI smoke validation across tests, fuzz, differential, and benchmark reports");
     ci_smoke_step.dependOn(test_step);
