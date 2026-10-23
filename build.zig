@@ -290,9 +290,28 @@ pub fn build(b: *std.Build) void {
     const run_bgzf_tests = b.addRunArtifact(bgzf_tests);
     const bgzf_test_step = b.step("test-bgzf", "Run focused BGZF block and range tests");
     bgzf_test_step.dependOn(&run_bgzf_tests.step);
+    const bzip2_tests_mod = b.createModule(.{ .root_source_file = b.path("src/bzip2.zig"), .target = target, .optimize = optimize });
+    const snappy_tests_mod = b.createModule(.{ .root_source_file = b.path("src/snappy.zig"), .target = target, .optimize = optimize });
+    const snappy_framing_tests_mod = b.createModule(.{ .root_source_file = b.path("src/snappy_framing.zig"), .target = target, .optimize = optimize });
+    const bzip2_tests = b.addTest(.{ .name = "vort-bzip2-tests", .root_module = bzip2_tests_mod });
+    const bzip2_test_step = b.step("test-bzip2", "Run Bzip2 codec and incremental replay tests");
+    bzip2_test_step.dependOn(&b.addRunArtifact(bzip2_tests).step);
+    const snappy_tests = b.addTest(.{ .name = "vort-snappy-tests", .root_module = snappy_tests_mod });
+    const snappy_test_step = b.step("test-snappy", "Run Snappy raw-block and framed-stream tests");
+    snappy_test_step.dependOn(&b.addRunArtifact(snappy_tests).step);
+    const bzip2_snappy_contracts_step = b.step("test-bzip2-snappy-contracts", "Run Bzip2 and Snappy allocation and progress contracts");
+    const bzip2_contracts = b.addTest(.{ .name = "vort-bzip2-contract-tests", .root_module = bzip2_tests_mod, .filters = &.{"Bzip2 stream contracts"} });
+    const snappy_contracts = b.addTest(.{ .name = "vort-snappy-contract-tests", .root_module = snappy_tests_mod, .filters = &.{"Snappy stream contracts"} });
+    const snappy_framing_contracts = b.addTest(.{ .name = "vort-snappy-framing-contract-tests", .root_module = snappy_framing_tests_mod, .filters = &.{"Snappy framing contracts"} });
+    bzip2_snappy_contracts_step.dependOn(&b.addRunArtifact(bzip2_contracts).step);
+    bzip2_snappy_contracts_step.dependOn(&b.addRunArtifact(snappy_contracts).step);
+    bzip2_snappy_contracts_step.dependOn(&b.addRunArtifact(snappy_framing_contracts).step);
+    const bzip2_consumer_tests = b.addTest(.{ .name = "vort-bzip2-stream-consumer-tests", .root_module = tests_mod, .filters = &.{ "ZIP incremental reader streams Bzip2", "ZIP method 12 round trips" } });
+    const bzip2_consumer_step = b.step("test-bzip2-stream-consumers", "Run ZIP method 12 and descriptor-stream Bzip2 integration");
+    bzip2_consumer_step.dependOn(&b.addRunArtifact(bzip2_consumer_tests).step);
     const snappy_framing_tests = b.addTest(.{
         .name = "vort-snappy-framing-tests",
-        .root_module = tests_mod,
+        .root_module = snappy_framing_tests_mod,
         .filters = &.{ "Xerial Snappy", "Hadoop Snappy", "Snappy framing" },
     });
     const run_snappy_framing_tests = b.addRunArtifact(snappy_framing_tests);
@@ -1991,6 +2010,23 @@ pub fn build(b: *std.Build) void {
     bzip2_diff.addArtifactArg(cli_exe);
     const bzip2_diff_step = b.step("run-bzip2-diff", "Validate dependency-free Bzip2 encode/decode against Python bz2");
     bzip2_diff_step.dependOn(&bzip2_diff.step);
+
+    const bzip2_contract_probe = b.addExecutable(.{ .name = "vort-bzip2-stream-contract-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/bzip2/stream_contract_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "bzip2", .module = bzip2_tests_mod }} }) });
+    const bzip2_contract_diff = b.addSystemCommand(&.{ "python3", "tools/bzip2/stream_contract_diff.py", "--probe" });
+    bzip2_contract_diff.addArtifactArg(bzip2_contract_probe);
+    if (b.args) |args| bzip2_contract_diff.addArgs(args);
+    const bzip2_contract_diff_step = b.step("run-bzip2-stream-contract-diff", "Validate Bzip2 replay, allocation and progress against system bzip2");
+    bzip2_contract_diff_step.dependOn(&bzip2_contract_diff.step);
+
+    const snappy_contract_probe = b.addExecutable(.{ .name = "vort-snappy-stream-contract-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/snappy/stream_contract_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "codec", .module = snappy_tests_mod }} }) });
+    const snappy_framing_contract_probe = b.addExecutable(.{ .name = "vort-snappy-framing-contract-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/snappy/stream_contract_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "codec", .module = snappy_framing_tests_mod }} }) });
+    const snappy_contract_diff = b.addSystemCommand(&.{ "python3", "tools/snappy/stream_contract_diff.py", "--probe" });
+    snappy_contract_diff.addArtifactArg(snappy_contract_probe);
+    snappy_contract_diff.addArg("--framing-probe");
+    snappy_contract_diff.addArtifactArg(snappy_framing_contract_probe);
+    if (b.args) |args| snappy_contract_diff.addArgs(args);
+    const snappy_contract_diff_step = b.step("run-snappy-stream-contract-diff", "Validate native, Xerial and Hadoop Snappy streaming resources against C and Java references");
+    snappy_contract_diff_step.dependOn(&snappy_contract_diff.step);
 
     const xz_diff = b.addSystemCommand(&.{ "python3", "tools/xz/diff.py", "--cli" });
     xz_diff.addArtifactArg(cli_exe);
@@ -6201,6 +6237,9 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&snappy_report_exe.step);
     check_step.dependOn(&snappy_reference_bench_exe.step);
     check_step.dependOn(&snappy_interop_probe_exe.step);
+    check_step.dependOn(&bzip2_contract_probe.step);
+    check_step.dependOn(&snappy_contract_probe.step);
+    check_step.dependOn(&snappy_framing_contract_probe.step);
     check_step.dependOn(&lz4_reference_bench_exe.step);
     check_step.dependOn(&lz4_hc_reference_bench_exe.step);
     check_step.dependOn(&lz4_decode_profile_exe.step);
