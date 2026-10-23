@@ -22786,3 +22786,29 @@ reuse, so production keeps the simpler independently owned plans.
   Broad check (125 steps), wasm compilation and the CLI help page pass.
   The final Debug repository suite passes 3496/3496 tests (3489 root tests
   plus seven separate Brotli object/classifier cases).
+
+- Added `directory_metadata_zone` to place ordinary directory blocks before
+  file payloads in the primary metadata reservation, matching erofs-utils
+  `--MZ=id` placement. This is independent of `metabox`: MZi inode/inline
+  metadata remains in the hidden metadata file while directory full blocks
+  stay in primary storage. Fixed and grouped planning reserve those addresses
+  before file Sources are read; the encoder emits directory bytes during its
+  metadata phase instead of streaming duplicate data blocks. The option works
+  with stored and all four codecs, larger/physically bounded groups, extended
+  inodes, shared/long-prefix xattrs, local/external stored chunks and ordinary
+  file-tail strategies. Combining it with `compress_directories` is rejected.
+  Tests compare the public allocating/Sink encoder and retained reference,
+  exercise tiny/empty output schedules, multi-block directories, metabox and
+  Source reading, pre-read layout reservations, work limits and exhaustive OOM.
+  Debug passes 182 EROFS cases; ReleaseFast passes those plus 12 independent I/O
+  cases (194 total). Ten actual-file metadata-zone writer cases pass fsck/Vort
+  directory and xattr checks. For stored-metabox flat-inline regular files,
+  fsck.erofs 1.9.4 reads the final tail from primary storage; dump.erofs's metadata
+  path independently reconstructs the complete file. The differential gate
+  therefore verifies its full physical blocks with fsck and its complete file
+  with dump, preserving an external oracle for the affected tail.
+  The complete 432-mode erofs-utils 1.9.4-g5fcb2f76 matrix passes, including
+  those ten additional metadata-zone writer cases (`metadata_zone_writer=10`).
+  Broad check (125 steps), wasm compilation and the CLI help page pass.
+  The final Debug repository suite passes 3501/3501 tests (3494 root tests
+  plus seven separate Brotli object/classifier cases).

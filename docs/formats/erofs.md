@@ -794,3 +794,15 @@ Native tests additionally cover explicit-ID-only slots, u64 offsets above
 decoder cache reuse, declared primary-image bounds and exhaustive OOM.
 Final Debug repository validation passes 3496/3496 tests. Broad check (125
 steps), wasm compilation and CLI help also pass.
+
+Directory metadata-zone writing passes 182 EROFS tests in Debug and
+ReleaseFast, plus 12 independent I/O tests in ReleaseFast (194 total).
+Allocating/reference/Sink/resumable encoder outputs agree across stored and all
+four codecs, ordinary/grouped/physically bounded output, metabox metadata,
+shared/long-prefix attributes, local/external chunks and file-tail layouts.
+The 432-mode erofs-utils matrix passes alongside ten metadata-zone writer
+cases (`metadata_zone_writer=10`). fsck validates directory entries, attributes
+and file physical blocks; dump independently checks the complete stored-metabox
+regular file because fsck 1.9.4's raw inline-tail path reads primary storage.
+Final Debug repository validation passes 3501/3501 tests. Broad check (125
+steps), wasm compilation and CLI help also pass.
