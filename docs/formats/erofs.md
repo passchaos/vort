@@ -196,6 +196,27 @@ read boundary are validated. Metadata-only parsing and listing work without
 devices, while extraction reports `ErofsMissingDevice` until the required blob
 is supplied.
 
+The same device resolver serves flat data, legacy full/compact compression,
+modern extent records, packed fragments/directories and metabox loading. Byte
+addresses retain the intra-block offset; the complete encoded or raw region,
+including the skipped first-block bytes, must fit the selected device. An
+unaligned 4 KiB encoded region can therefore require two device blocks.
+Sources keep u64 physical offsets without loading a complete blob. Returned
+slice regions borrow the selected device bytes.
+
+Physical addresses are resolved after logical range cropping. Unrequested
+device extents and holes do not require a supplied device, while remaining
+metadata ordering and format validation still completes before `done`.
+Metadata/inline payloads use their original primary or metabox address space
+and are not remapped as data addresses. A zero unified address denotes an
+explicit-ID-only slot; it does not shadow primary block zero. Mapped device
+ranges retain checked ordering, overlap and byte-length validation.
+
+`list-erofs-file` and `list-erofs-xattrs` accept ordered device filenames,
+matching extraction. Xattr listing also accepts `--working-memory-limit=bytes`.
+All three CLI readers share file adapter ownership, prepare stable Source
+arrays before opening the archive, and release states before closing devices.
+
 The 48-bit incompatible feature extends superblock block counts/root NIDs, flat
 inode starts, chunk indexes, and device slots. Compressed full inodes additionally
 support 4/8/16/32-byte extent records: compact records derive logical starts

@@ -1,5 +1,6 @@
 const std = @import("std");
 const vort = @import("vort");
+const file_devices = @import("erofs/file_devices.zig");
 
 const max_file_size = 512 * 1024 * 1024;
 const max_directory_size = 64 * 1024 * 1024;
@@ -94,15 +95,17 @@ pub fn list(
     const input_path = args.next() orelse return error.MissingCorpusPath;
     var working_limit: usize = 64 * 1024 * 1024;
     var directory_limit: usize = max_directory_size;
+    var devices = file_devices.Set.init(init.gpa, init.io);
+    defer devices.deinit();
     while (args.next()) |argument| {
         const work_option = "--working-memory-limit=";
         const dir_option = "--max-directory-bytes=";
-        if (std.mem.startsWith(u8, argument, work_option)) working_limit = try std.fmt.parseInt(usize, argument[work_option.len..], 10) else if (std.mem.startsWith(u8, argument, dir_option)) directory_limit = try std.fmt.parseInt(usize, argument[dir_option.len..], 10) else return error.InvalidBlockPlan;
+        if (std.mem.startsWith(u8, argument, work_option)) working_limit = try std.fmt.parseInt(usize, argument[work_option.len..], 10) else if (std.mem.startsWith(u8, argument, dir_option)) directory_limit = try std.fmt.parseInt(usize, argument[dir_option.len..], 10) else try devices.add(argument);
     }
     const input_file = try std.Io.Dir.cwd().openFile(init.io, input_path, .{});
     defer input_file.close(init.io);
     var input_adapter = try vort.FileByteSource.init(init.io, input_file);
-    var archive = try vort.ErofsSourceArchive.init(init.gpa, input_adapter.source(), .{ .max_metabox_size = max_metabox_size, .max_working_memory = working_limit });
+    var archive = try vort.ErofsSourceArchive.initWithDevices(init.gpa, input_adapter.source(), try devices.view(), .{ .max_metabox_size = max_metabox_size, .max_working_memory = working_limit });
     defer archive.deinit();
     try stdout.print(
         "erofs_inodes={d} blocks={d} block_size={d} root_nid={d} compression_mask={d}\n",
@@ -163,11 +166,8 @@ pub fn extract(
     const input_file = try std.Io.Dir.cwd().openFile(init.io, input_path, .{});
     defer input_file.close(init.io);
     var input_adapter = try vort.FileByteSource.init(init.io, input_file);
-    var adapters: std.ArrayList(vort.FileByteSource) = .empty;
-    defer {
-        for (adapters.items) |adapter| adapter.file.close(init.io);
-        adapters.deinit(init.gpa);
-    }
+    var devices = file_devices.Set.init(init.gpa, init.io);
+    defer devices.deinit();
     var working_limit: usize = 64 * 1024 * 1024;
     var output_chunk_size: usize = 64 * 1024;
     const working_option = "--working-memory-limit=";
@@ -183,20 +183,9 @@ pub fn extract(
             if (output_chunk_size > 1024 * 1024) return error.OutputLimitExceeded;
             continue;
         }
-        const file = try std.Io.Dir.cwd().openFile(init.io, argument, .{});
-        const adapter = vort.FileByteSource.init(init.io, file) catch |err| {
-            file.close(init.io);
-            return err;
-        };
-        adapters.append(init.gpa, adapter) catch |err| {
-            file.close(init.io);
-            return err;
-        };
+        try devices.add(argument);
     }
-    const devices = try init.gpa.alloc(vort.ByteSource, adapters.items.len);
-    defer init.gpa.free(devices);
-    for (adapters.items, 0..) |*adapter, index| devices[index] = adapter.source();
-    var archive = try vort.ErofsSourceArchive.initWithDevices(init.gpa, input_adapter.source(), devices, .{
+    var archive = try vort.ErofsSourceArchive.initWithDevices(init.gpa, input_adapter.source(), try devices.view(), .{
         .max_working_memory = working_limit,
         .max_metabox_size = max_metabox_size,
     });
@@ -231,10 +220,17 @@ pub fn listXattrs(
 ) !void {
     const input_path = args.next() orelse return error.MissingCorpusPath;
     const entry_path = args.next() orelse return error.MissingCorpusPath;
+    var devices = file_devices.Set.init(init.gpa, init.io);
+    defer devices.deinit();
+    var working_limit: usize = 64 * 1024 * 1024;
+    while (args.next()) |argument| {
+        const option = "--working-memory-limit=";
+        if (std.mem.startsWith(u8, argument, option)) working_limit = try std.fmt.parseInt(usize, argument[option.len..], 10) else try devices.add(argument);
+    }
     const input_file = try std.Io.Dir.cwd().openFile(init.io, input_path, .{});
     defer input_file.close(init.io);
     var input_adapter = try vort.FileByteSource.init(init.io, input_file);
-    var archive = try vort.ErofsSourceArchive.init(init.gpa, input_adapter.source(), .{ .max_metabox_size = max_metabox_size });
+    var archive = try vort.ErofsSourceArchive.initWithDevices(init.gpa, input_adapter.source(), try devices.view(), .{ .max_metabox_size = max_metabox_size, .max_working_memory = working_limit });
     defer archive.deinit();
     const inode = try archive.lookup(
         entry_path,
