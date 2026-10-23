@@ -50,6 +50,7 @@ const lha_cli = @import("cli/lha.zig");
 const lzop_cli = @import("cli/lzop.zig");
 const seven_zip_cli = @import("cli/seven_zip.zig");
 const snappy_framing_cli = @import("cli/snappy_framing.zig");
+const zstd_controls_cli = @import("cli/zstd_controls.zig");
 
 pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [2048]u8 = undefined;
@@ -1593,61 +1594,13 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-zstd-native-hex")) {
-        const payload = args.next() orelse "";
-        const selection = try parseZstdNativeSelection(args.next());
-        const checksum = try parseOptionalBool(args.next(), true);
-        const content_size = try parseOptionalBool(args.next(), true);
-        const result = try vort.zstdEncodeNativeFrameWithOptionsAlloc(init.gpa, payload, .{
-            .selection = selection,
-            .content_checksum = checksum,
-            .include_content_size = content_size,
-        });
-        defer init.gpa.free(result.frame);
-        try printHex(stdout, result.frame);
+        try zstd_controls_cli.encodeTextHex(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-zstd-native-bytes-hex")) {
-        const hex = args.next() orelse return error.MissingHexInput;
-        const payload = try hexToOwnedBytes(init.gpa, hex);
-        defer init.gpa.free(payload);
-        const selection = try parseZstdNativeSelection(args.next());
-        const checksum = try parseOptionalBool(args.next(), true);
-        const content_size = try parseOptionalBool(args.next(), true);
-        const result = try vort.zstdEncodeNativeFrameWithOptionsAlloc(init.gpa, payload, .{
-            .selection = selection,
-            .content_checksum = checksum,
-            .include_content_size = content_size,
-        });
-        defer init.gpa.free(result.frame);
-        try printHex(stdout, result.frame);
+        try zstd_controls_cli.encodeBytesHex(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-zstd-native-file-hex")) {
-        const path = args.next() orelse return error.MissingCorpusPath;
-        const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
-        defer init.gpa.free(payload);
-        const selection = try parseZstdNativeSelection(args.next());
-        const checksum = try parseOptionalBool(args.next(), true);
-        const content_size = try parseOptionalBool(args.next(), true);
-        const result = try vort.zstdEncodeNativeFrameWithOptionsAlloc(init.gpa, payload, .{
-            .selection = selection,
-            .content_checksum = checksum,
-            .include_content_size = content_size,
-        });
-        defer init.gpa.free(result.frame);
-        try printHex(stdout, result.frame);
+        try zstd_controls_cli.encodeFileHex(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-zstd-native-file")) {
-        const input_path = args.next() orelse return error.MissingCorpusPath;
-        const output_path = args.next() orelse return error.MissingCorpusPath;
-        const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
-        defer init.gpa.free(payload);
-        const selection = try parseZstdNativeSelection(args.next());
-        const checksum = try parseOptionalBool(args.next(), true);
-        const content_size = try parseOptionalBool(args.next(), true);
-        const result = try vort.zstdEncodeNativeFrameWithOptionsAlloc(init.gpa, payload, .{
-            .selection = selection,
-            .content_checksum = checksum,
-            .include_content_size = content_size,
-        });
-        defer init.gpa.free(result.frame);
-        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = result.frame });
-        try stdout.print("zstd_native_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ result.frame.len, payload.len, output_path });
+        try zstd_controls_cli.encodeFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-zstd-native-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -3027,13 +2980,17 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Sequentially parse and extract a supported ZIP entry
         \\  size-br-file <path> [max_output]
         \\                              Preflight dependency-free Brotli stored stream decoded size
-        \\  encode-zstd-native-hex [text] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size]
+        \\  encode-zstd-native-hex [text] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
         \\                              Encode text as dependency-free native-subset Zstandard hex
-        \\  encode-zstd-native-bytes-hex [hex] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size]
+        \\  encode-zstd-native-bytes-hex [hex] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
         \\                              Encode bytes as dependency-free native-subset Zstandard hex
-        \\  encode-zstd-native-file-hex [path] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size]
+        \\  encode-zstd-native-file-hex [path] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
         \\                              Encode file bytes as dependency-free native-subset Zstandard hex
-        \\  encode-zstd-native-file <in> <out> [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size]
+        \\  encode-zstd-native-file <in> <out> [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
+        \\    zstd_options: --level=N | --level N (-131072..22)
+        \\                  --strategy=auto|fast|double_fast|greedy|lazy|optimal
+        \\                  --fast-acceleration=N (1..131072; fast or double_fast)
+        \\    Negative level -N selects fast acceleration N. New controls default to level 1.
         \\                              Encode file bytes as dependency-free native-subset Zstandard file
         \\  decode-zstd-native-hex [hex] [max_output]
         \\                              Decode dependency-free native-subset Zstandard hex
@@ -4136,15 +4093,6 @@ fn parseCompressionOptions(text: ?[]const u8) vort.CompressionOptions {
     if (std.mem.eql(u8, value, "lazy")) return .{ .parser = .lazy };
     if (std.mem.eql(u8, value, "optimal")) return .{ .parser = .optimal };
     return vort.optionsForCompressionLevel(.default);
-}
-
-fn parseZstdNativeSelection(text: ?[]const u8) !vort.ZstdNativeFrameSelection {
-    const value = text orelse return .auto;
-    if (std.mem.eql(u8, value, "auto")) return .auto;
-    if (std.mem.eql(u8, value, "raw_or_rle") or std.mem.eql(u8, value, "raw-rle")) return .raw_or_rle;
-    if (std.mem.eql(u8, value, "literal_only") or std.mem.eql(u8, value, "literal-only")) return .literal_only;
-    if (std.mem.eql(u8, value, "fast_compressed") or std.mem.eql(u8, value, "fast-compressed")) return .fast_compressed;
-    return error.InvalidZstdNativeSelection;
 }
 
 fn parseOptionalBool(text: ?[]const u8, default: bool) !bool {
