@@ -15,6 +15,7 @@ from prefix_diff import verify_packed_prefixes
 from partial_diff import verify_partial_extents
 from device_diff import verify_device_readers
 from metadata_zone_diff import verify_metadata_zones
+from dual_algorithm_diff import verify_dual_algorithms
 
 
 def run(*args: object, check: bool = True) -> subprocess.CompletedProcess[bytes]:
@@ -233,6 +234,7 @@ def main() -> None:
     metabox_inline_oracle_cases = 0
     metabox_combined_oracle_cases = 0
     original_fsck_writer_cases = 0
+    dual_algorithm_reader_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -742,6 +744,7 @@ def main() -> None:
         partial_extent_reader_cases, partial_extent_error_cases = verify_partial_extents(args.cli, fsck, temp, run)
         device_reader_cases = verify_device_readers(args.cli, args.writer, fsck, temp, run)
         metadata_zone_writer_cases = verify_metadata_zones(args.cli, args.metadata_zone_writer, fsck, dump, temp, run)
+        dual_algorithm_reader_cases = verify_dual_algorithms(args.cli, fsck, temp, run)
 
     print(
         f"fixture_cases={fixture_cases} tools={mkfs is not None} "
@@ -786,6 +789,7 @@ def main() -> None:
         f"metabox_inline_oracle={metabox_inline_oracle_cases} "
         f"metabox_combined_oracle={metabox_combined_oracle_cases} "
         f"original_fsck_writer={original_fsck_writer_cases} "
+        f"dual_algorithm_reader={dual_algorithm_reader_cases} "
         f"malformed={malformed}"
     )
 
