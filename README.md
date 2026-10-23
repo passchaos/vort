@@ -279,7 +279,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   plain prefix tables, multi-block directories, compression-configuration
   records, compact/extended/automatic inode writing with 32-bit IDs and
   nanosecond timestamps, and per-cluster
-  compressed-or-plain full-index selection, optional 4 KiB...1 MiB decoded
+  compressed-or-plain selection with caller-selected legacy full, four-byte
+  compact or mixed two/four-byte compact index writing, optional 4 KiB...1 MiB decoded
   groups with actual-sized big pclusters, optional physical byte caps, aligned
   prefix planning, and stored fallback, plus standard MZi stored/LZ4/MicroLZMA/raw-
   Deflate/Zstandard metabox writing with a hidden low-NID metadata inode and

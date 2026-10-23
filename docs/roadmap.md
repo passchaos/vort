@@ -22913,3 +22913,41 @@ reuse, so production keeps the simpler independently owned plans.
   Broad check (125 steps), wasm compilation and the CLI help page pass.
   The final Debug repository suite passes 3527/3527 tests (3520 root tests
   plus seven separate Brotli object/classifier cases).
+
+- Added caller-selected EROFS compressed index writing through
+  `compressed_index_format`: legacy full (default), paired four-byte compact,
+  and mixed two-/four-byte compact packs. Separate compact physical-progress
+  and compression-metadata modules share sizing/inline placement across
+  allocating, callback Source, Sink and resumable encoding. Both compact
+  big-pcluster flags are emitted together, final ordinary NONHEAD entries
+  retain lookahead, final CBLKCNT entries retain explicit counts, and final
+  paired packs are padded deterministically. Whole-file fragments and fragment
+  offsets above u32 retain the required full representation. Existing codecs,
+  physical caps, PLAIN fallback, working limits, xattrs, extended inodes,
+  MZi/MZ=id and tail modes share the same public core. The CLI exposes
+  `--compressed-index-format=full|compact-4byte|compact` with atomic output and
+  same-path source replacement.
+  Eight new regressions cover an exact independent final-big index fixture,
+  every pack alignment/final count through 70 clusters, mixed physical spans,
+  1 MiB decoded groups, empty/tiny/exact-block files, Source/sticky failures,
+  high fragment offsets and exhaustive allocation failures. ReleaseFast
+  passes 216 EROFS tests plus 12 I/O cases (228 total). The shared writer mode
+  catalog drives 992 compact memory/Source/Sink/resumable modes, all with exact
+  repeated/surface output comparisons and whole/range/xattr public-API checks.
+  All 992 external reads pass: original erofs-utils 1.9.4-g5fcb2f76 covers
+  ordinary modes, while the existing separate metabox ownership oracle covers
+  192 tail combinations. The original unmodified liberofs positional probe
+  also passes 3840 compact range reads.
+  The complete default-format 536-mode writer/reader matrix passes, retaining
+  `dual_algorithm_reader=84`, `configuration_reader=5`,
+  `configuration_errors=6`, `nonhead_reader=22`, `nonhead_errors=6`.
+  All 14 new CLI format/create/read/same-path cases and three atomic-failure
+  cases pass (`compact_cli=14`, `compact_cli_errors=3`). CLI help passes.
+  Broad check passes 125 steps, including wasm compilation.
+  The final Debug repository suite passes 3535/3535 tests (3528 root tests
+  plus seven separate Brotli object/classifier cases).
+  Next compatibility priority: reject compact item widths which cannot hold
+  logical offset bits plus both type bits, while preserving legal wide
+  four-byte packs and unused COMPACTED_2B flags in short images. An independent
+  positional audit already reproduces acceptance of an unsupported 8 KiB
+  two-byte pack and confirms valid 8/16 KiB four-byte controls.
