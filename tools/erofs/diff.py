@@ -17,6 +17,7 @@ from device_diff import verify_device_readers
 from metadata_zone_diff import verify_metadata_zones
 from dual_algorithm_diff import verify_dual_algorithms
 from configuration_diff import verify_configurations
+from nonhead_diff import verify_nonhead_chains
 
 
 def run(*args: object, check: bool = True) -> subprocess.CompletedProcess[bytes]:
@@ -173,6 +174,9 @@ def main() -> None:
     parser.add_argument("--writer", required=True, type=Path)
     parser.add_argument("--directory-writer", type=Path)
     parser.add_argument("--metadata-zone-writer", type=Path)
+    parser.add_argument("--range-reader", type=Path)
+    parser.add_argument("--range-oracle", type=Path,
+                        help="range_oracle.c linked against an unmodified liberofs")
     parser.add_argument("--mkfs", type=Path)
     parser.add_argument("--fsck", type=Path)
     parser.add_argument("--dump", type=Path)
@@ -238,6 +242,8 @@ def main() -> None:
     dual_algorithm_reader_cases = 0
     configuration_reader_cases = 0
     configuration_error_cases = 0
+    nonhead_reader_cases = 0
+    nonhead_error_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -749,6 +755,7 @@ def main() -> None:
         metadata_zone_writer_cases = verify_metadata_zones(args.cli, args.metadata_zone_writer, fsck, dump, temp, run)
         dual_algorithm_reader_cases = verify_dual_algorithms(args.cli, fsck, temp, run)
         configuration_reader_cases, configuration_error_cases = verify_configurations(args.cli, fsck, temp, run)
+        nonhead_reader_cases, nonhead_error_cases = verify_nonhead_chains(args.cli, args.range_reader, args.range_oracle, temp, run)
 
     print(
         f"fixture_cases={fixture_cases} tools={mkfs is not None} "
@@ -796,6 +803,8 @@ def main() -> None:
         f"dual_algorithm_reader={dual_algorithm_reader_cases} "
         f"configuration_reader={configuration_reader_cases} "
         f"configuration_errors={configuration_error_cases} "
+        f"nonhead_reader={nonhead_reader_cases} "
+        f"nonhead_errors={nonhead_error_cases} "
         f"malformed={malformed}"
     )
 

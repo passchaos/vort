@@ -1750,6 +1750,17 @@ pub fn build(b: *std.Build) void {
     erofs_diff.addArtifactArg(erofs_directory_probe);
     erofs_diff.addArg("--metadata-zone-writer");
     erofs_diff.addArtifactArg(erofs_metadata_zone_probe);
+    const erofs_range_probe = b.addExecutable(.{
+        .name = "vort-erofs-range-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/erofs/range_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    erofs_diff.addArg("--range-reader");
+    erofs_diff.addArtifactArg(erofs_range_probe);
     if (b.args) |args| erofs_diff.addArgs(args);
     const erofs_diff_step = b.step("run-erofs-diff", "Validate EROFS reading and writing against optional erofs-utils");
     erofs_diff_step.dependOn(&erofs_diff.step);
