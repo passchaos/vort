@@ -13,7 +13,8 @@ const Scanner = struct {
     shared_block: u32,
     prefix_start: u32,
     prefix_count: u8,
-    ibody: []u8,
+    ibody: []const u8,
+    owns_ibody: bool,
     shared_count: usize,
     shared_index: usize = 0,
     inline_position: usize,
@@ -23,21 +24,26 @@ const Scanner = struct {
     fn init(allocator: std.mem.Allocator, prefix: Input, shared: Input, ibody: Input, block_size: usize, shared_block: u32, prefix_start: u32, prefix_count: u8, ibody_start: usize, ibody_size: usize) Error!Scanner {
         if (ibody_size != 0 and (ibody_size < 12 or ibody_size & 3 != 0)) return error.InvalidErofs;
         _ = try ibody.end(ibody_start, ibody_size);
-        const bytes = try allocator.alloc(u8, ibody_size);
-        errdefer allocator.free(bytes);
-        try ibody.read(ibody_start, bytes);
+        const owns = ibody != .slice;
+        const bytes: []const u8 = if (!owns) ibody.slice[ibody_start..][0..ibody_size] else data: {
+            const storage = try allocator.alloc(u8, ibody_size);
+            errdefer allocator.free(storage);
+            try ibody.read(ibody_start, storage);
+            break :data storage;
+        };
+        errdefer if (owns) allocator.free(bytes);
         const shared_count: usize = if (bytes.len == 0) 0 else bytes[4];
         const position = if (bytes.len == 0) 0 else try add(12, shared_count * 4);
         if (position > bytes.len) return error.InvalidErofs;
         if (bytes.len != 0) for (bytes[5..12]) |reserved| {
             if (reserved != 0) return error.InvalidErofs;
         };
-        return .{ .prefix = prefix, .shared = shared, .block_size = block_size, .shared_block = shared_block, .prefix_start = prefix_start, .prefix_count = prefix_count, .ibody = bytes, .shared_count = shared_count, .inline_position = position };
+        return .{ .prefix = prefix, .shared = shared, .block_size = block_size, .shared_block = shared_block, .prefix_start = prefix_start, .prefix_count = prefix_count, .ibody = bytes, .owns_ibody = owns, .shared_count = shared_count, .inline_position = position };
     }
 
     fn deinit(self: *Scanner, allocator: std.mem.Allocator) void {
         self.entry.deinit(allocator);
-        allocator.free(self.ibody);
+        if (self.owns_ibody) allocator.free(self.ibody);
     }
 
     fn reset(self: *Scanner) void {
@@ -63,6 +69,7 @@ const Scanner = struct {
             const base = std.math.mul(usize, self.shared_block, self.block_size) catch return error.IntegerOverflow;
             const relative = std.math.mul(usize, id, 4) catch return error.IntegerOverflow;
             const start = try add(base, relative);
+            if (self.shared == .slice) return try self.parse(self.shared.slice, start);
             var header: [4]u8 = undefined;
             try self.shared.read(start, &header);
             const size = try align4(try add(4, try add(header[0], format.readU16(&header, 2))));

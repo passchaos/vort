@@ -1,7 +1,6 @@
 const std = @import("std");
 const metadata = @import("inode.zig");
 const devices_module = @import("devices.zig");
-const source_module = @import("../../io/source.zig");
 const input_module = @import("input.zig");
 const codec = @import("../codec.zig");
 const format = @import("../format.zig");
@@ -16,7 +15,7 @@ pub const Limits = struct {
 pub const Context = struct {
     allocator: std.mem.Allocator,
     reader: metadata.Reader,
-    devices: devices_module.Devices(source_module.Source),
+    devices: devices_module.Access,
     limits: Limits,
 
     pub fn encoded(self: Context, input: input_module.Input, start: u64, size: usize) Error![]u8 {
@@ -30,6 +29,11 @@ pub const Context = struct {
 
     pub fn decode(self: Context, algorithm: format.Compression, input: input_module.Input, start: u64, encoded_size: usize, decoded_size: usize) Error![]u8 {
         if (decoded_size > self.limits.max_decoded_extent_size) return error.OutputLimitExceeded;
+        if (encoded_size > self.limits.max_encoded_extent_size) return error.OutputLimitExceeded;
+        if (input == .slice) {
+            const end = try input.endAt(start, encoded_size);
+            return codec.decodeExtentAlloc(self.allocator, algorithm, input.slice[@intCast(start)..@intCast(end)], decoded_size, self.reader.superblock.feature_incompat & 1 != 0);
+        }
         const encoded_bytes = try self.encoded(input, start, encoded_size);
         defer self.allocator.free(encoded_bytes);
         return codec.decodeExtentAlloc(self.allocator, algorithm, encoded_bytes, decoded_size, self.reader.superblock.feature_incompat & 1 != 0);

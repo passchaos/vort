@@ -22682,3 +22682,23 @@ reuse, so production keeps the simpler independently owned plans.
   passes all 148 focused cases.
   The final Debug repository suite passes 3455/3455 tests (3448 root tests
   plus seven separate Brotli object/classifier cases).
+
+- Added a no-allocation EROFS directory block parser and fixed-size cross-block
+  ordering validator. `ErofsDirectoryIterator` retains one decoded block plus
+  the current extent, returns borrowed names, preserves sticky errors and
+  reports logical record offsets. Source lookup validates the full directory
+  after finding a candidate and retains only its NID; no complete directory
+  or entry-array workspace is needed. Slice extraction, range, directory and
+  xattr APIs now share the same core and expose explicit-allocator streaming
+  states/Sink methods. Slice inputs borrow encoded/attribute bytes directly,
+  while Sources use bounded buffers. The legacy archive facade reduces to
+  roughly 320 lines instead of retaining hundreds of duplicate decode lines.
+  Tests cover all codecs, metabox/packed directories, 10,000-entry directories
+  larger than working limits, a 16 KiB slice allocator, Source/allocator error
+  cleanup and corrupt suffix detection after a matched name. CLI listing uses
+  the streamed iterator and supports work/directory-size limits; a public-API
+  writer probe supplies real stored/compressed/metabox directory images.
+  Debug and ReleaseFast pass 144 EROFS plus 12 I/O cases, with wasm compilation
+  passing. The full 432-mode erofs-utils 1.9.4-g5fcb2f76 matrix passes, including
+  three real large directory list/lookup cases (`directory_stream=3`) under
+  32 KiB/128 KiB/1 MiB working limits.

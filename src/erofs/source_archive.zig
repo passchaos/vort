@@ -10,12 +10,13 @@ const devices_module = @import("reader/devices.zig");
 const context_module = @import("reader/context.zig");
 const stream = @import("reader/stream.zig");
 const directory = @import("reader/directory.zig");
+const directory_stream = @import("reader/directory_stream.zig");
 const types = @import("reader/types.zig");
 const xattr = @import("xattr.zig");
 const source_xattrs = @import("reader/xattrs.zig");
 const format = @import("format.zig");
 
-pub const Error = stream.Error || sink_module.Error || source_xattrs.Error || directory.Error || error{
+pub const Error = directory_stream.Error || stream.Error || sink_module.Error || source_xattrs.Error || directory.Error || error{
     ErofsNotDirectory,
     ErofsEntryNotFound,
     ErofsNotRegularFile,
@@ -31,6 +32,7 @@ pub const Limits = struct {
 pub const ReadLimits = archive_module.ReadLimits;
 pub const ReadResult = struct { decoded_size: u64, peak_working_bytes: usize };
 pub const ExtractProgress = stream.Progress;
+pub const DirectoryDiagnostics = directory_stream.Diagnostics;
 
 /// Owns only bounded metabox metadata and working-allocation accounting.
 /// Source contexts and device arrays remain borrowed and stable for its lifetime.
@@ -91,7 +93,7 @@ pub const SourceArchive = struct {
     }
 
     fn context(self: *SourceArchive, limits: ReadLimits) context_module.Context {
-        return .{ .allocator = self.working.allocator(), .reader = self.reader(), .devices = self.deviceReader(), .limits = .{ .max_encoded_extent_size = self.limits.max_encoded_extent_size, .max_decoded_extent_size = self.limits.max_decoded_extent_size, .max_packed_extent_size = limits.max_packed_extent_len } };
+        return .{ .allocator = self.working.allocator(), .reader = self.reader(), .devices = .{ .sources = self.deviceReader() }, .limits = .{ .max_encoded_extent_size = self.limits.max_encoded_extent_size, .max_decoded_extent_size = self.limits.max_decoded_extent_size, .max_packed_extent_size = limits.max_packed_extent_len } };
     }
 
     pub fn inode(self: *const SourceArchive, nid: u64) Error!types.Inode {
@@ -208,15 +210,31 @@ pub const SourceArchive = struct {
         return self.readDirectoryInternal(allocator, value, max_size) catch |err| self.failure(err);
     }
 
+    fn initDirectoryIteratorInternal(self: *SourceArchive, value: types.Inode, max_size: usize) Error!DirectoryIterator {
+        var state = try directory_stream.Reader.init(self.context(.{ .max_output_len = max_size }), value, max_size);
+        errdefer state.deinit();
+        self.active_extractors = std.math.add(usize, self.active_extractors, 1) catch return error.IntegerOverflow;
+        return .{ .archive = self, .state = state };
+    }
+
+    /// Names borrow iterator storage until the next next() call or deinit().
+    pub fn initDirectoryIterator(self: *SourceArchive, value: types.Inode, max_size: usize) Error!DirectoryIterator {
+        self.begin();
+        return self.initDirectoryIteratorInternal(value, max_size) catch |err| self.failure(err);
+    }
+
     fn lookupInternal(self: *SourceArchive, path: []const u8, max_file_size: usize, max_directory_size: usize) Error!types.Inode {
         var current = try self.rootInode();
         var components = std.mem.tokenizeScalar(u8, path, '/');
         while (components.next()) |component| {
             if (!directory.validName(component)) return error.InvalidErofs;
-            var listing = try self.readDirectoryInternal(self.working.allocator(), current, max_directory_size);
+            var listing = try self.initDirectoryIteratorInternal(current, max_directory_size);
             defer listing.deinit();
-            const entry = listing.find(component) orelse return error.ErofsEntryNotFound;
-            current = try self.inode(entry.nid);
+            var found: ?u64 = null;
+            while (try listing.next()) |entry| if (std.mem.eql(u8, entry.name, component)) {
+                found = entry.nid;
+            };
+            current = try self.inode(found orelse return error.ErofsEntryNotFound);
             if (current.file_size > max_file_size and (try current.fileType() == .regular or try current.fileType() == .symlink)) return error.OutputLimitExceeded;
         }
         return current;
@@ -287,10 +305,37 @@ pub const Extractor = struct {
     }
 
     pub fn position(self: *const Extractor) usize {
-        return self.state.position;
+        return self.state.position();
     }
 
     pub fn deinit(self: *Extractor) void {
+        self.state.deinit();
+        std.debug.assert(self.archive.active_extractors != 0);
+        self.archive.active_extractors -= 1;
+        self.* = undefined;
+    }
+};
+
+pub const DirectoryIterator = struct {
+    archive: *SourceArchive,
+    state: directory_stream.Reader,
+    failed: ?Error = null,
+
+    pub fn next(self: *DirectoryIterator) Error!?types.DirectoryEntry {
+        if (self.failed) |err| return err;
+        self.archive.begin();
+        return self.state.next() catch |err| {
+            const mapped = self.archive.failure(err);
+            self.failed = mapped;
+            return mapped;
+        };
+    }
+
+    pub fn diagnostics(self: *const DirectoryIterator) DirectoryDiagnostics {
+        return self.state.diagnostics();
+    }
+
+    pub fn deinit(self: *DirectoryIterator) void {
         self.state.deinit();
         std.debug.assert(self.archive.active_extractors != 0);
         self.archive.active_extractors -= 1;

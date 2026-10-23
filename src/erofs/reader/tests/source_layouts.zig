@@ -191,4 +191,8 @@ test "EROFS Source archive routes packed fragments through modern extent records
         if (progress.status == .done) break;
     }
     try std.testing.expectEqualStrings(expected, &partial);
+    const slice = try archive_module.Archive.init(image);
+    const slice_decoded = try slice.extractByPathAllocLimited(allocator, "file", 4096, 4096);
+    defer allocator.free(slice_decoded);
+    try std.testing.expectEqualStrings(expected, slice_decoded);
 }

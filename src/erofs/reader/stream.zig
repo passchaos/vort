@@ -17,7 +17,7 @@ pub const Reader = struct {
     context: context_module.Context,
     iterator: iterator_module.Iterator,
     size: usize,
-    position: usize = 0,
+    delivered: usize = 0,
     segment: ?spans.Segment = null,
     segment_read: usize = 0,
     cached: ?[]u8 = null,
@@ -31,6 +31,10 @@ pub const Reader = struct {
     fn release(self: *Reader) void {
         if (self.cached) |bytes| self.context.allocator.free(bytes);
         self.cached = null;
+    }
+
+    pub fn position(self: *const Reader) usize {
+        return self.delivered;
     }
 
     pub fn deinit(self: *Reader) void {
@@ -48,17 +52,17 @@ pub const Reader = struct {
     }
 
     fn readInternal(self: *Reader, output: []u8) Error!Progress {
-        if (self.done) return .{ .output_written = 0, .position = self.position, .status = .done };
-        if (self.position == self.size) {
+        if (self.done) return .{ .output_written = 0, .position = self.delivered, .status = .done };
+        if (self.delivered == self.size) {
             if (try self.iterator.next() != null) return error.InvalidErofs;
             self.done = true;
             self.release();
-            return .{ .output_written = 0, .position = self.position, .status = .done };
+            return .{ .output_written = 0, .position = self.delivered, .status = .done };
         }
-        if (output.len == 0) return .{ .output_written = 0, .position = self.position, .status = .need_output };
+        if (output.len == 0) return .{ .output_written = 0, .position = self.delivered, .status = .need_output };
         if (self.segment == null) {
             const segment = try self.iterator.next() orelse return error.InvalidErofs;
-            if (segment.start != self.position or segment.size == 0 or segment.size > self.size - self.position) return error.InvalidErofs;
+            if (segment.start != self.delivered or segment.size == 0 or segment.size > self.size - self.delivered) return error.InvalidErofs;
             self.segment = segment;
             self.segment_read = 0;
             if (segment.content == .encoded) {
@@ -93,12 +97,12 @@ pub const Reader = struct {
                 @memcpy(output[0..size], scratch[0..size]);
             },
         }
-        self.position += size;
+        self.delivered += size;
         self.segment_read += size;
         if (self.segment_read == segment.size) {
             self.release();
             self.segment = null;
         }
-        return .{ .output_written = size, .position = self.position, .status = .need_output };
+        return .{ .output_written = size, .position = self.delivered, .status = .need_output };
     }
 };

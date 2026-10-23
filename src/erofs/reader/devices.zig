@@ -8,6 +8,18 @@ pub const Error = types.Error || input_module.Error || error{ErofsMissingDevice}
 pub const DeviceInfo = types.DeviceInfo;
 pub const Region = struct { input: input_module.Input, start: u64 };
 
+pub const Access = union(enum) {
+    sources: Devices(source_module.Source),
+    slices: Devices([]const u8),
+
+    pub fn resolve(self: Access, id: u16, block: u64, size: usize) Error!Region {
+        return switch (self) {
+            .sources => |devices| devices.resolve(id, block, size),
+            .slices => |devices| devices.resolve(id, block, size),
+        };
+    }
+};
+
 /// Device tables and unified/explicit addresses share identical rules for
 /// borrowed slices and Sources. Device payloads are never retained here.
 pub fn Devices(comptime Device: type) type {
