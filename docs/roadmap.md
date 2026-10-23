@@ -18,6 +18,16 @@ dated competitor measurements and the next functionality-first increments.
 It supersedes the earlier gap inventory below where later work has closed a
 gap, including COVER-class training and bounded progressive codec decoding.
 
+The [LZMA/XZ one-shot allocation milestone](performance/lzma-xz-one-shot-functional-baseline.md)
+now closes complete plaintext staging in caller-buffer decode, size queries and
+XZ inspection. Both families validate before caller writes and replay through
+retained bounded state, including overlap protection and work budgets. Current
+evidence passes 29 Debug/ReleaseFast contracts, 74 LZMA and 89 XZ family tests,
+146 consumer tests, independent LZMA 316-run and XZ 75-case campaigns, and all
+136 build-check steps. The next functionality slice is Zstd negative fast levels
+and explicit strategy control; this milestone does not complete industry-best
+functionality or performance.
+
 ### Earlier detailed completion audit (started 2026-09-11)
 
 The long-term objective is **not complete**. Current evidence still leaves these

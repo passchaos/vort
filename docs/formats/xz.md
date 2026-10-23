@@ -109,6 +109,42 @@ decode with snapshots and phase diagnostics.
 The compressed and stored writers provide alloc, transactional append, and
 caller-owned output APIs.
 
+One-shot caller-buffer decoding, decoded-size queries and inspection use a
+reusable bounded workspace rather than complete plaintext storage. A count
+pass validates all block checks, Index/Footer records, stream padding and
+single/concatenated-stream termination before replay starts. The replay reuses
+probability tables, dictionary history and filter scratch without new
+allocations, preserving destination bytes on every error, including a late
+check or footer failure. Overlapping input/output is supported by a budgeted
+compressed-input copy when needed.
+
+```zig
+var workspace = try vort.XzDecodeWorkspace.initWithOptions(allocator, .{
+    .max_output_len = 256 * 1024 * 1024,
+    .max_dictionary_size = 64 * 1024 * 1024,
+    .max_working_memory = 128 * 1024 * 1024,
+});
+defer workspace.deinit();
+const written = try workspace.decodeInto(compressed, output);
+```
+
+`decodeConcatenatedInto`, `decodedSize`, `decodedSizeConcatenated` and `inspect`
+use the same workspace. Initialization validates options without allocating;
+`reset()` retains capacity and fallible `resetWithOptions()` validates before
+reconfiguration. `workingMemoryBytes()` and `peakWorkingMemoryBytes()` include
+retained block plans, dictionary/probability shapes, filter storage and any
+compressed-input copy. Fixed state, stack and caller storage are excluded;
+these counters do not represent process RSS.
+
+For separate validation and replay, `prepare(input, .single)` or
+`prepare(input, .concatenated)` borrows input that must remain unchanged until
+the next preparation, reset or deinit, including across repeated replays.
+`replayInto(output)` performs no allocation and rejects
+overlap with that borrowed input before writing. Use
+`prepareInto(input, output, mode)` when the output may overlap input; it retains
+the needed compressed copy during preparation. The convenience `decodeInto`
+methods use this overlap-aware preparation automatically.
+
 Stream and block headers validate before payload decoding. Default LZMA2 input
 uses a conservative 64-byte range-symbol guard and fixed staging for one
 literal/match of at most 273 bytes. It does not collect an entire compressed

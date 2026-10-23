@@ -392,7 +392,10 @@ The library is under active development. Its current capabilities include:
 - dependency-free XZ decoding for LZMA2 streams with optional Delta and all
   eight BCJ filters including ARM64/RISC-V, strict stream/block/index/footer validation,
   none/CRC-32/CRC-64/SHA-256 checks, multi-block and concatenated-stream
-  handling, bounded APIs and metadata inspection, plus deterministic
+  handling, bounded APIs and metadata inspection, complete-stream-validated
+  caller-buffer replay and count-only size/inspection without full plaintext
+  staging, reusable budgeted one-shot workspaces with retained probability,
+  dictionary and filter scratch, plus deterministic
   filter-aware XZ writing with greedy LZMA matches, repeat distances, a stored
   fallback, caller-selected 4 KiB...64 MiB cross-chunk LZMA2 dictionary reuse,
   and separate greedy/lazy ratio encode APIs, plus symbol-progressive
@@ -412,7 +415,9 @@ The library is under active development. Its current capabilities include:
   probability/dictionary state for embedding formats such as 7z;
 - dependency-free LZMA-Alone encoding and decoding with known-size or
   end-marker streams, caller-selected output/dictionary limits, caller-owned
-  output, MicroLZMA complete-stream encoding and exact-size decoding with inverted
+  output, validated caller-buffer and count-only decoding without full plaintext
+  staging, reusable working-budgeted Alone/Micro/ZIP decoder scratch and
+  allocation limits including allocating Alone output, MicroLZMA complete-stream encoding and exact-size decoding with inverted
   properties, strict compressed-size/range termination, and dictionaries
   through 64 MiB, destination-capacity-limited MicroLZMA prefix encoding with
   explicit consumed/written progress, and ZIP method-14 writing/extraction

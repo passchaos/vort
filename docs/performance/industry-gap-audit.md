@@ -1,6 +1,6 @@
 # Mainstream codec and industry gap audit
 
-Date: 2026-10-24. Production source revision: `ab40ff77`.
+Date: 2026-10-24. Source and tools revision: `96c1bb2a`.
 
 Vort has broad Zig-native format coverage and some measured performance wins.
 The objective of exceeding the best competing libraries in both functionality
@@ -17,11 +17,14 @@ encoder quality and throughput are separate claims.
 | Snappy | Raw/native framed/Xerial/Hadoop encoding and decoding, CRC32C, incremental I/O, COPY4, validated replay, work/output budgets and exact failed-call progress | Raw decoder benchmark wins do not establish framed/incremental encoder and decoder leadership across real corpora. |
 | Brotli | RFC decoding, all 256 entropy block types, static/shared dictionaries, opt-in Large Window extension, incremental I/O and Vort-native q0...q11 generic/text/font presets | q10/q11 remain bounded Vort search rather than complete libbrotli HQ/Zopfli parity. Quality numbers do not imply matching libbrotli ratio or speed. Global/HQ cost planning across large streams and worst-case decode performance remain open; bounded arbitrary-size multi-meta-block encoding is already implemented. |
 | Bzip2 | BZh1...BZh9, legacy randomized blocks, concatenated streams, CRC validation, incremental encode/decode and bounded checked plaintext replay | Broad competitor throughput, ratio and RSS comparisons are missing. |
-| XZ / LZMA | LZMA-Alone/MicroLZMA/ZIP-LZMA and raw LZMA2; XZ checks, Index/Footer, Delta and all eight BCJ filters; greedy/lazy encoding and progressive decoding | Full liblzma preset 0...9/extreme and match-finder controls are absent. Existing LZMA/XZ one-shot decode-into and decoded-size paths still allocate complete plaintext before copying/counting. |
+| XZ / LZMA | LZMA-Alone/MicroLZMA/ZIP-LZMA and raw LZMA2; XZ checks, Index/Footer, Delta and all eight BCJ filters; greedy/lazy encoding and progressive decoding; fully validated caller-buffer/count-only replay with reusable working budgets | Full liblzma preset 0...9/extreme and match-finder controls are absent. Broad encoder speed/ratio parity is still unproven. |
 
-The last row is distinct from the bounded progressive decoders. Existing
-one-shot LZMA/XZ decode-into calls also preserve caller output on failure; replacing
-them must retain that contract or expose a separate explicit partial-output API.
+The former LZMA/XZ complete plaintext staging gap is now closed in
+caller-buffer decoding and size queries, while preserving caller output on
+failure and legacy overlap behavior. Strict XZ inspection uses the same bounded
+workspace. The [one-shot allocation baseline](lzma-xz-one-shot-functional-baseline.md)
+records the current contracts and independent evidence; allocating APIs still
+return caller-owned complete output as their API requires.
 
 The [native status](../native-lz4-zstd-status.md),
 [Brotli quality matrix](brotli-quality-presets.md),
@@ -60,23 +63,23 @@ memory comparison.
 
 ## Next work, functionality first
 
-1. Remove complete plaintext allocation from LZMA/XZ one-shot caller-buffer
-   decode and decoded-size paths using reusable bounded state, preserving validation
-   and failure semantics.
-2. Add Zstd negative fast levels and explicit strategy controls while preserving
+1. Add Zstd negative fast levels and explicit strategy controls while preserving
    the existing level 0...22 behavior, then add XZ/LZMA preset/match-finder
    controls and FastCover training as separately validated increments.
    Improving Brotli HQ models and global cost planning across large streams
    is subsequent quality/performance work. API numbering alone must not imply
    equivalent competitor ratio or speed.
-3. Rebenchmark current public APIs against versioned competitors on shared
+2. Rebenchmark current public APIs against versioned competitors on shared
    text/JSON/source/log/binary/small/already-compressed corpora. Record ratio,
    encode/decode throughput, requested peak memory and RSS, cold/warm behavior,
    build/CPU provenance and weakest cases on x86-64 and ARM64. Use independent
    parallel work for implementation and verification; keep timed measurements
    free of competing build load.
 
-The latest Bzip2/Snappy increment passed the 46-test contract aggregate in
+The preceding Bzip2/Snappy increment passed the 46-test contract aggregate in
 Debug and ReleaseFast, independent Bzip2 92-case and Snappy 255-run reference
 campaigns, consumer checks, and all 134 build-check steps including wasm32-wasi.
 These complete that functional increment; they do not complete this objective.
+The current LZMA/XZ one-shot increment separately passes 29 contracts in Debug
+and ReleaseFast, complete family and consumer suites, LZMA 316-run and XZ
+75-case independent campaigns, and all 136 build-check steps.

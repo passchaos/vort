@@ -79,13 +79,53 @@ A complete positive symbol commits only with output space. An end marker can
 commit without output, preserving short streams and their caller-owned suffix.
 Known-size completion keeps its existing coded-tail consumption behavior.
 
+The one-shot caller-buffer decoder and decoded-size queries use a checked
+count pass followed by replay through retained probability and dictionary
+storage. They do not allocate the complete plaintext. All format, termination,
+output-capacity and allocation checks finish before the first caller-output
+write; an error preserves the destination. Overlapping input/output remains
+supported by retaining the consumed compressed prefix when necessary.
+
+`LzmaDecodeWorkspace` makes that scratch reusable across operations:
+
+```zig
+var workspace = try vort.LzmaDecodeWorkspace.initWithOptions(allocator, .{
+    .max_output_len = 256 * 1024 * 1024,
+    .max_dictionary_size = 64 * 1024 * 1024,
+    .max_working_memory = 96 * 1024 * 1024,
+});
+defer workspace.deinit();
+const written = try workspace.decodeInto(compressed, output);
+```
+
+Initialization validates options without allocating. `reset()` retains
+capacity, while fallible `resetWithOptions()` validates before replacing the
+configuration. `workingMemoryBytes()` and `peakWorkingMemoryBytes()` report
+requested scratch allocation bytes, including probability-table replacement
+peaks and any compressed-input copy. Caller buffers, fixed state, stack and
+allocator bookkeeping are excluded. Allocating LZMA-Alone decoding also honors
+`DecodeOptions.max_working_memory`, including the returned output allocation;
+the resulting slice is freed through the original caller allocator.
+
+The same workspace supplies exact MicroLZMA caller-buffer decoding, its explicit
+partial-prefix mode, and ZIP method-14 raw-payload decoding. Known-size Alone
+and non-EOS ZIP retain their existing coded-tail behavior; unknown-size Alone
+and EOS ZIP retain complete end-marker/input validation. For the raw EOS ZIP
+helper, the supplied size is an output ceiling; the archive layer separately
+checks the entry's exact uncompressed size.
+
 Available APIs:
 
 - `parseLzmaHeader`;
 - `decodeLzmaInto`;
+- `decodeLzmaIntoWithOptions` and `LzmaDecodeWorkspace` for requested work
+  budgets and retained one-shot scratch;
 - `decodeLzmaAlloc` and `decodeLzmaAllocLimited`;
-- `decodeLzmaAllocWithOptions` for independent output and dictionary limits;
+- `decodeLzmaAllocWithOptions` for independent output, dictionary and working
+  allocation limits;
 - `lzmaDecodedSize` and `lzmaDecodedSizeLimited`;
+- `lzmaDecodedSizeWithOptions` for independent output, dictionary and work
+  limits without complete plaintext storage;
 - `LzmaIncrementalDecoder` for fragmented caller input/output, resettable
   state, snapshots, diagnostics, and exact output pledges;
 - `encodeLzmaAlloc`, `encodeLzmaInto`, and transactional `encodeLzmaAppend`;
@@ -93,7 +133,7 @@ Available APIs:
   bounded dictionaries, and greedy/lazy one-shot parsing.
 
 ZIP method 14 uses a related raw LZMA payload with a ZIP-specific properties
-prefix and mandatory end marker. Vort reads and writes those entries through
+prefix and an entry-controlled end-marker convention. Vort reads and writes those entries through
 the ZIP APIs; `ZipEncodeOptions.lzma_options` selects the properties,
 dictionary size, and parser mode. Allocating ZIP extraction APIs work directly;
 caller-owned extraction must use
