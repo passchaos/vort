@@ -23179,3 +23179,22 @@ reuse, so production keeps the simpler independently owned plans.
   are in [the dictionary/memory baseline](performance/dictionary-memory-contracts-functional-baseline.md).
   Bzip2/Snappy working budgets, error contracts and decoded-storage reductions
   remain next priorities before broader ratio/speed/memory comparisons.
+
+- Bzip2 now retains compressed candidates, transformed BWT bytes and inverse
+  links, checks length/CRC in a numeric pre-scan and replays plaintext spans
+  without whole-plaintext staging. Snappy native/Xerial/Hadoop use validated
+  token cursors and maximum-distance histories, preserving native CRC-before-
+  output and Hadoop outer pledges. Requested work budgets, sticky fatal errors,
+  actual failed-call progress, retained reset and safe moves are implemented.
+  The shared framing's Hadoop LZ4 user has a bounded existing-cursor adapter.
+  Complete Bzip2/Snappy suites pass 50/99 tests, contract aggregates pass 46 in
+  Debug/ReleaseFast, ZIP and Hadoop LZ4 consumers pass 65/61, and independent
+  reference campaigns pass 92/255 cases. Final checks pass 134 steps including
+  wasm32-wasi. Forty MiB Bzip2 RLE plaintext uses 4112120 requested work bytes
+  in the recorded corpus, without decoded heap storage; this is functional
+  allocation evidence, not industry-wide memory or throughput leadership.
+  Source/runtime provenance is recorded in
+  [the streaming baseline](performance/bzip2-snappy-streaming-functional-baseline.md).
+  Continue auditing practical API parity and comprehensive real-corpus
+  compression-ratio, throughput and memory tradeoffs before the broad goal can
+  be considered achieved.

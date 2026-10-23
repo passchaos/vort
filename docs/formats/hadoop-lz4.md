@@ -23,7 +23,16 @@ is byte-exact with one-shot output. `flush` explicitly closes the current outer
 block and repeated empty flushes are idempotent.
 
 Options bound input, pending encoded output, compressed chunk retention,
-decoded chunk scratch, aggregate output, and optional exact input/output sizes.
+decoded chunk length, aggregate output, and optional exact input/output sizes.
+
+Incremental decoding now prevalidates each retained raw block, then wraps the
+existing LZ4 cursor with a conservative history ring of at most 64 KiB. It does
+not retain a complete decoded chunk. History capacity is reserved before caller
+output is written, and successful/error deltas are recorded before any
+allocation-free ring update. The shared framing work budget accounts for
+compressed and history capacities and their transient replacement peaks.
+Reset retains capacity, explicit reconfiguration validates first, and active
+values can move without leaving self-referential allocator callbacks.
 Both directions support zero-output backpressure, retained-capacity reset,
 snapshots, and malformed/truncated outer-block diagnostics.
 
@@ -37,6 +46,7 @@ defer encoder.deinit();
 
 var decoder = vort.HadoopLz4IncrementalDecoder.initWithOptions(allocator, .{
     .max_output_len = input.len,
+    .max_working_memory = 8 * 1024 * 1024,
     .expected_output_len = input.len,
 });
 defer decoder.deinit();
