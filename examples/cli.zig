@@ -2728,7 +2728,9 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  decode-wof-file <in> <out> <algorithm> <decoded_size> [max_output]
         \\  decode-wof-range <in> <out> <algorithm> <decoded_size> <offset> <length>
         \\  inspect-wof-file <in> <algorithm> <decoded_size>
-        \\  encode-lzfse-file <in> <out> [block_size] [lzvn|stored]
+        \\  encode-lzfse-file <in> <out> [block_size] [auto|fse|lzvn|stored]
+        \\    [--fse-version=v1|v2] [--hash-log=8..20] [--max-distance=bytes]
+        \\    [--working-memory-limit=bytes] [--output-limit=bytes]
         \\  decode-lzfse-file <in> <out> [max_output]
         \\  inspect-lzfse-file <path> [max_output]
         \\  inspect-decmpfs <xattr> [resource|-]

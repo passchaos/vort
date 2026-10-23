@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 import argparse
+from datetime import datetime, timezone
+import hashlib
+import json
 import shutil
 import struct
 import subprocess
 import tempfile
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[2]
 
 MAGIC_END = b"bvx$"
 MAGIC_RAW = b"bvx-"
@@ -22,7 +26,24 @@ def run(*args: object, check: bool = True) -> subprocess.CompletedProcess[bytes]
         check=check,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        cwd=ROOT,
     )
+
+
+def build_apple_status_probe(reference: Path, workspace: Path, reference_dir: Path | None = None,
+                             required: bool = False) -> Path | None:
+    checkout = run("git", "-C", reference_dir or reference.parent, "rev-parse", "--show-toplevel", check=False)
+    if checkout.returncode == 0:
+        root = Path(checkout.stdout.decode().strip())
+        static_library = root / "build/bin/liblzfse.a"
+        if static_library.exists():
+            probe = workspace / "apple-status-probe"
+            run("cc", "-O2", f"-I{root / 'src'}", ROOT / "tools/lzfse/apple_status_probe.c",
+                static_library, "-o", probe)
+            return probe
+    if required:
+        raise RuntimeError("Apple status probe requires the reference checkout's build/bin/liblzfse.a")
+    return None
 
 
 def scan(data: bytes) -> list[tuple[str, int, int, int]]:
@@ -218,46 +239,77 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
     parser.add_argument("--lzfse", type=Path)
+    parser.add_argument("--report", type=Path)
     args = parser.parse_args()
+    args.cli = args.cli.resolve()
     reference = args.lzfse or (Path(found) if (found := shutil.which("lzfse")) else None)
+    if reference is not None:
+        reference = reference.resolve()
     self_cases = 0
     external_encode = 0
     external_decode = 0
     v1_cases = 0
     malformed = 0
     kind_counts = {"raw": 0, "lzvn": 0, "v1": 0, "v2": 0}
+    vort_kind_counts = dict.fromkeys(kind_counts, 0)
+    rows = []
+    apple_status_sha256 = None
 
     with tempfile.TemporaryDirectory(prefix="vort-lzfse-") as temp_text:
         temp = Path(temp_text)
+        apple_status = build_apple_status_probe(reference, temp) if reference else None
+        if apple_status:
+            apple_status_sha256 = hashlib.sha256(apple_status.read_bytes()).hexdigest()
         valid_for_malformed: Path | None = None
         v2_for_malformed: Path | None = None
         for name, payload in payloads():
             source = temp / f"{name}.bin"
             source.write_bytes(payload)
-            encoded = temp / f"{name}.vort.lzfse"
-            repeated = temp / f"{name}.repeat.lzfse"
-            decoded = temp / f"{name}.vort.out"
-            run(args.cli, "encode-lzfse-file", source, encoded, 32768, "lzvn")
-            run(args.cli, "encode-lzfse-file", source, repeated, 32768, "lzvn")
-            if encoded.read_bytes() != repeated.read_bytes():
-                raise AssertionError(f"non-deterministic Vort LZFSE output for {name}")
-            blocks = scan(encoded.read_bytes())
-            listing = run(args.cli, "inspect-lzfse-file", encoded, len(payload)).stdout
-            if f"decoded_bytes={len(payload)}".encode() not in listing:
-                raise AssertionError(f"Vort LZFSE metadata mismatch for {name}: {listing!r}")
-            run(args.cli, "decode-lzfse-file", encoded, decoded, len(payload))
-            if decoded.read_bytes() != payload:
-                raise AssertionError(f"Vort LZFSE round trip mismatch for {name}")
-            self_cases += 1
-            if payload and valid_for_malformed is None:
-                valid_for_malformed = encoded
+            for strategy in ("auto", "fse", "lzvn", "stored"):
+                encoded = temp / f"{name}.{strategy}.vort.lzfse"
+                repeated = temp / f"{name}.{strategy}.repeat.lzfse"
+                decoded = temp / f"{name}.{strategy}.vort.out"
+                run(args.cli, "encode-lzfse-file", source, encoded, 32768, strategy)
+                run(args.cli, "encode-lzfse-file", source, repeated, 32768, strategy)
+                wire = encoded.read_bytes()
+                if wire != repeated.read_bytes():
+                    raise AssertionError(f"non-deterministic Vort LZFSE output for {name}/{strategy}")
+                blocks = scan(wire)
+                for kind, _, _, _ in blocks:
+                    vort_kind_counts[kind] += 1
+                listing = run(args.cli, "inspect-lzfse-file", encoded, len(payload)).stdout
+                if f"decoded_bytes={len(payload)}".encode() not in listing:
+                    raise AssertionError(f"Vort LZFSE metadata mismatch for {name}/{strategy}: {listing!r}")
+                run(args.cli, "decode-lzfse-file", encoded, decoded, len(payload))
+                if decoded.read_bytes() != payload:
+                    raise AssertionError(f"Vort LZFSE round trip mismatch for {name}/{strategy}")
+                self_cases += 1
+                if payload and valid_for_malformed is None:
+                    valid_for_malformed = encoded
+                rows.append({"case": name, "strategy": strategy, "input_bytes": len(payload),
+                             "encoded_bytes": len(wire), "input_sha256": hashlib.sha256(payload).hexdigest(),
+                             "output_sha256": hashlib.sha256(wire).hexdigest(),
+                             "blocks": {kind: sum(block[0] == kind for block in blocks) for kind in kind_counts}})
+                if reference is not None and (payload or apple_status):
+                    reference_decoded = temp / f"{name}.{strategy}.reference.out"
+                    if payload:
+                        run(reference, "-decode", "-i", encoded, "-o", reference_decoded)
+                    else:
+                        run(apple_status, encoded, reference_decoded, 0)
+                    if reference_decoded.read_bytes() != payload:
+                        raise AssertionError(f"Apple decoder rejected Vort output for {name}/{strategy}")
+                    external_decode += 1
+                    converted, converted_count = convert_v2_to_v1(wire)
+                    if converted_count:
+                        converted_path = temp / f"{name}.{strategy}.vort-v1.lzfse"
+                        converted_path.write_bytes(converted)
+                        run(args.cli, "decode-lzfse-file", converted_path, decoded, len(payload))
+                        run(reference, "-decode", "-i", converted_path, "-o", reference_decoded)
+                        if decoded.read_bytes() != payload or reference_decoded.read_bytes() != payload:
+                            raise AssertionError(f"Vort V2-to-V1 conversion mismatch for {name}/{strategy}")
+                        v1_cases += converted_count
 
             if reference is not None and payload:
-                reference_decoded = temp / f"{name}.reference.out"
-                run(reference, "-decode", "-i", encoded, "-o", reference_decoded)
-                if reference_decoded.read_bytes() != payload:
-                    raise AssertionError(f"Apple decoder rejected Vort output for {name}")
-                external_decode += 1
 
                 reference_encoded = temp / f"{name}.reference.lzfse"
                 run(reference, "-encode", "-i", source, "-o", reference_encoded)
@@ -347,10 +399,31 @@ def main() -> None:
             )
             malformed += 1
 
+    if vort_kind_counts["v1"] + vort_kind_counts["v2"] == 0:
+        raise AssertionError("Vort writer produced no real FSE blocks")
+    if args.report:
+        reference_git = run("git", "-C", reference.parent, "rev-parse", "HEAD", check=False) if reference else None
+        source_paths = [ROOT / "src/lzfse.zig", *sorted((ROOT / "src/lzfse").rglob("*.zig")),
+                        Path(__file__).resolve(), ROOT / "tools/lzfse/apple_status_probe.c"]
+        report = {"schema": "vort-lzfse-cli-diff-v2",
+                  "claim": "functional interoperability and deterministic wire sizes; no throughput claim",
+                  "created_utc": datetime.now(timezone.utc).isoformat(),
+                  "repository_commit": run("git", "rev-parse", "HEAD").stdout.decode().strip(),
+                  "cli_sha256": hashlib.sha256(args.cli.read_bytes()).hexdigest(),
+                  "reference_probe_sha256": hashlib.sha256(reference.read_bytes()).hexdigest() if reference else None,
+                  "apple_status_probe_sha256": apple_status_sha256,
+                  "reference_git": reference_git.stdout.decode().strip() if reference_git and reference_git.returncode == 0 else None,
+                  "source_sha256": {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest() for path in source_paths},
+                  "vort_blocks": vort_kind_counts, "reference_blocks": kind_counts, "rows": rows}
+        args.report.parent.mkdir(parents=True, exist_ok=True)
+        args.report.write_text(json.dumps(report, indent=2) + "\n")
     print(
         f"self_cases={self_cases} lzfse={reference is not None} "
         f"external_encode={external_encode} external_decode={external_decode} "
         f"v1_cases={v1_cases} malformed={malformed} "
+        f"vort_fse_blocks={vort_kind_counts['v1'] + vort_kind_counts['v2']} "
+        f"vort_kinds=raw:{vort_kind_counts['raw']},lzvn:{vort_kind_counts['lzvn']},"
+        f"v1:{vort_kind_counts['v1']},v2:{vort_kind_counts['v2']} "
         f"kinds=raw:{kind_counts['raw']},lzvn:{kind_counts['lzvn']},"
         f"v1:{kind_counts['v1']},v2:{kind_counts['v2']}"
     )

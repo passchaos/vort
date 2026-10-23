@@ -1602,6 +1602,23 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| lzfse_diff.addArgs(args);
     const lzfse_diff_step = b.step("run-lzfse-diff", "Validate LZFSE and LZVN streams against the optional Apple reference CLI");
     lzfse_diff_step.dependOn(&lzfse_diff.step);
+    const lzfse_fse_probe_mod = b.createModule(.{ .root_source_file = b.path("src/lzfse.zig"), .target = target, .optimize = optimize });
+    const lzfse_fse_probe = b.addExecutable(.{
+        .name = "vort-lzfse-fse-probe",
+        .root_module = b.createModule(.{ .root_source_file = b.path("tools/lzfse/fse_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "lzfse", .module = lzfse_fse_probe_mod }} }),
+    });
+    const lzfse_fse_diff = b.addSystemCommand(&.{ "python3", "tools/lzfse/fse_match_diff.py", "--probe" });
+    lzfse_fse_diff.addArtifactArg(lzfse_fse_probe);
+    if (b.args) |args| lzfse_fse_diff.addArgs(args);
+    const lzfse_fse_diff_step = b.step("run-lzfse-fse-diff", "Validate matched LZFSE V1/V2 writing and resource limits against Apple LZFSE");
+    lzfse_fse_diff_step.dependOn(&lzfse_fse_diff.step);
+    const lzfse_cli_diff = b.addSystemCommand(&.{ "python3", "tools/lzfse/cli_fse_diff.py", "--cli" });
+    lzfse_cli_diff.addArtifactArg(cli_exe);
+    lzfse_cli_diff.addArg("--probe");
+    lzfse_cli_diff.addArtifactArg(lzfse_fse_probe);
+    if (b.args) |args| lzfse_cli_diff.addArgs(args);
+    const lzfse_cli_diff_step = b.step("run-lzfse-cli-diff", "Validate LZFSE CLI strategies, limits, atomic failures and same-path replacement");
+    lzfse_cli_diff_step.dependOn(&lzfse_cli_diff.step);
 
     const decmpfs_diff = b.addSystemCommand(&.{ "python3", "tools/decmpfs/diff.py", "--cli" });
     decmpfs_diff.addArtifactArg(cli_exe);
