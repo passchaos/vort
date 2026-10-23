@@ -23028,3 +23028,35 @@ reuse, so production keeps the simpler independently owned plans.
   1521290 to 70816. These are functional/reference-wire observations, not
   upstream ratio/throughput leadership. Quantum matching, LZFSE FSE writing,
   deeper LZX parsing, levels and memory/throughput calibration remain open.
+
+- Quantum writing now emits literal, fixed-three/four-byte and variable
+  5...259-byte match selectors using a shared checked item encoder. The
+  arithmetic-only tape/replay cursor establishes 16-bit lookahead placement
+  for length/position extras, including multiple fields at the same cursor;
+  a second replay validates symbols/extras and complete-frame null padding.
+  Arithmetic state resets at 32 KiB boundaries while all adaptive models
+  persist. The literal reference preserves prior bytes and now rolls back
+  models on OOM. A bounded anchor/latest three-byte matcher borrows the chosen
+  1 KiB...2 MiB window and stores only one 32 KiB plan. Complete per-frame
+  candidate/reference arbitration commits only selected model state. Ordinary
+  and split CAB writers use greedy matching by default and expose strategy,
+  hash/distance and per-frame working/output limits; declared Quantum levels
+  remain header metadata rather than calibrated native quality policies.
+  Public standalone alloc/into/append, output-limited/caller-buffer decode,
+  frame summaries and separate caller-history frame APIs share the core. The
+  latter bounds temporary context to historyLimit()+32768, retains no input
+  slice, preserves full-prefix wire with the complete suffix, and supports
+  allocation-error retry without state changes. Standalone complete frames
+  carry 0xff; CAB extraction injects it at logical CFDATA boundaries.
+  Debug public codec tests pass 48/48; the complete CAB/dependency suite passes
+  566/566. Focused ReleaseFast Quantum/CAB tests pass 185/185, and AArch64 Linux
+  compile-only succeeds. The 596-case independent libmspack 0.11alpha matrix
+  covers 444 raw cases, 120 CABs, eight split sets with 2 KiB parts and 24
+  resource/caller-output checks across every 10...21-bit window, window wrap,
+  full/partial frames, near/far offsets, extra fields and model continuity.
+  Separate item regression covers all 257 lengths and 1884 position endpoints.
+  The generated window-18 text observation changes 34807 literal bytes to
+  270 greedy bytes for 66019 input bytes. This is functionality and internal
+  strategy-size evidence, not upstream throughput/HQ leadership. LZFSE FSE
+  writing, deeper parsing, calibrated quality levels, progressive Quantum
+  decode and uniform real-corpus ratio/speed/memory evidence remain open.
