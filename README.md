@@ -52,6 +52,11 @@ The library is under active development. Its current capabilities include:
   RLE/predefined/compressed-FSE table arbitration, transactional cross-block
   sequence-table Repeat_Mode and repcode state, including wide blocks with more
   than 512 sequences, and
+  signed compression levels `-131072...22` with actual negative-magnitude
+  acceleration, explicit fast/double-fast/greedy/lazy/bounded-optimal matching
+  over dictionary and frame history, a shared public level resolver across
+  one-shot/reusable/incremental/seekable APIs, and optional caller-owned work
+  profiles with transactional emission and deterministic parallel merge,
   frequency-aware single-/four-stream Huffman literal emission
   (covering the full direct-tree symbol range `0...128`, FSE-compressed
   high-byte weights, non-4-divisible four-stream splits, and treeless repeat

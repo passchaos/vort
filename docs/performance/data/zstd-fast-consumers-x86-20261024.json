@@ -1,0 +1,141 @@
+{
+  "zstd_version": "1.4.8",
+  "payload_bytes": 43008,
+  "reference_zstd_encode_vort_decode": 21,
+  "vort_encode_reference_zstd_decode": 21,
+  "chd_vort_fast_hunk_reference_zstd_decode": 7,
+  "levels": [
+    {
+      "native_level": -1,
+      "wire_level": 103,
+      "vort_frame_bytes": 61
+    },
+    {
+      "native_level": -2,
+      "wire_level": 104,
+      "vort_frame_bytes": 61
+    },
+    {
+      "native_level": -3,
+      "wire_level": 105,
+      "vort_frame_bytes": 61
+    },
+    {
+      "native_level": -4,
+      "wire_level": 106,
+      "vort_frame_bytes": 87
+    },
+    {
+      "native_level": -5,
+      "wire_level": 107,
+      "vort_frame_bytes": 87
+    },
+    {
+      "native_level": -6,
+      "wire_level": 108,
+      "vort_frame_bytes": 61
+    },
+    {
+      "native_level": -7,
+      "wire_level": 109,
+      "vort_frame_bytes": 61
+    },
+    {
+      "native_level": -8,
+      "wire_level": 110,
+      "vort_frame_bytes": 87
+    },
+    {
+      "native_level": -9,
+      "wire_level": 111,
+      "vort_frame_bytes": 106
+    },
+    {
+      "native_level": -10,
+      "wire_level": 112,
+      "vort_frame_bytes": 87
+    },
+    {
+      "native_level": -20,
+      "wire_level": 113,
+      "vort_frame_bytes": 178
+    },
+    {
+      "native_level": -30,
+      "wire_level": 114,
+      "vort_frame_bytes": 149
+    },
+    {
+      "native_level": -40,
+      "wire_level": 115,
+      "vort_frame_bytes": 395
+    },
+    {
+      "native_level": -50,
+      "wire_level": 116,
+      "vort_frame_bytes": 305
+    },
+    {
+      "native_level": -60,
+      "wire_level": 117,
+      "vort_frame_bytes": 259
+    },
+    {
+      "native_level": -70,
+      "wire_level": 118,
+      "vort_frame_bytes": 149
+    },
+    {
+      "native_level": -80,
+      "wire_level": 119,
+      "vort_frame_bytes": 838
+    },
+    {
+      "native_level": -90,
+      "wire_level": 120,
+      "vort_frame_bytes": 368
+    },
+    {
+      "native_level": -100,
+      "wire_level": 121,
+      "vort_frame_bytes": 620
+    },
+    {
+      "native_level": -500,
+      "wire_level": 122,
+      "vort_frame_bytes": 4972
+    },
+    {
+      "native_level": -1000,
+      "wire_level": 123,
+      "vort_frame_bytes": 10412
+    }
+  ],
+  "source_sha256": {
+    "src/chd/writer.zig": "36a1aa268e8d012d599f16031ee12040a62dad69cfdf31cecb4e6b0f9bc17b0a",
+    "src/chd/zstd_levels_tests.zig": "2d5252b6f00f0d596450a87f70a16edacd21fa6c67dd79cdce0135683c56aad2",
+    "src/zfs/block.zig": "91145352c0dd28466d13034c91eccefc9be0e1296814faa97b56dc8d1c726fed",
+    "src/zfs/fast_levels_tests.zig": "9a5951d7ac359fa265926d1967d24f0c4cc075f55699cf4939abb5eb9691ee54",
+    "examples/cli/chd.zig": "5cec87d985da35f76e9193548f33ae650e05c489d46a867e133b77b70d0909cf",
+    "examples/cli/zfs.zig": "266bce616e214d71b7e2d11746eeaea8bd256f5c963b498e76197e82f6ed67f1"
+  },
+  "reference": {
+    "tag": "OpenZFS zfs-2.4.0",
+    "files": [
+      {
+        "url": "https://raw.githubusercontent.com/openzfs/zfs/zfs-2.4.0/include/sys/zio_compress.h",
+        "sha256": "0a3ca8c8fff24ea25061564911ac1fb50d5c45c2bd7ead3d6af7b701017fdf65"
+      },
+      {
+        "url": "https://raw.githubusercontent.com/openzfs/zfs/zfs-2.4.0/module/zstd/zfs_zstd.c",
+        "sha256": "a15a43c4898372b95bc37d05b750b6df0f5d92e3e5da6d044e5a3c55c3a12234"
+      }
+    ],
+    "zstd_cli_sha256": "d304445daa7e6429293dc02035063b7993fb6a489ee90d8851bff497952836dc"
+  },
+  "integration": {
+    "source_and_tools_revision": "4f6d5b97aa73cafb56486089ccacf4ba5bba58b9",
+    "checked_utc": "2026-10-23T21:37:06.778340+00:00",
+    "matched_source_hashes": 6
+  }
+}

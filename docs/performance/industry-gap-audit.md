@@ -1,6 +1,6 @@
 # Mainstream codec and industry gap audit
 
-Date: 2026-10-24. Source and tools revision: `96c1bb2a`.
+Date: 2026-10-24. Source and tools revision: `4f6d5b97`.
 
 Vort has broad Zig-native format coverage and some measured performance wins.
 The objective of exceeding the best competing libraries in both functionality
@@ -12,7 +12,7 @@ encoder quality and throughput are separate claims.
 | Family | Implemented public functionality | Remaining gap |
 | --- | --- | --- |
 | DEFLATE / zlib / gzip | Stored/fixed/dynamic/best encoding, full block decoding, dictionaries, incremental I/O, block/partial flush, runtime parameter changes and full-flush recovery | Full zlib API equivalence is not established. The project does not offer a `z_stream`/`gzFile` drop-in C ABI; that ABI is outside the active roadmap. Broader ratio/throughput evidence is still needed. |
-| Zstandard | Raw/RLE/Huffman/FSE sequence frames, dictionary sets and recovery, incremental encoding/decoding, levels 0...22, explicit window logs 10...41, COVER-class training and seekable streams | Negative fast levels and the full public libzstd strategy control surface are absent. Internal match history is bounded through 64 MiB. Complete FastCover training and broad encoder quality/speed parity remain open. |
+| Zstandard | Raw/RLE/Huffman/FSE sequence frames, dictionary sets and recovery, incremental encoding/decoding, signed levels -131072...22, five explicit dictionary/history-aware match strategies, work profiles, window logs 10...41, COVER-class training and seekable streams | Full libzstd binary-tree/HQ models and strategy/quality parity remain open. Internal match history is bounded through 64 MiB. Complete FastCover training and broad encoder quality/speed parity remain open. |
 | LZ4 | Block/frame/legacy formats, linked blocks, dictionaries, incremental fast/HC encoding and bounded decoding; HC levels 1...12 with byte-exact liblz4 1.9.3 reference gates | No equivalent public fast-acceleration knob. Full corpus/platform performance leadership is unproven. |
 | Snappy | Raw/native framed/Xerial/Hadoop encoding and decoding, CRC32C, incremental I/O, COPY4, validated replay, work/output budgets and exact failed-call progress | Raw decoder benchmark wins do not establish framed/incremental encoder and decoder leadership across real corpora. |
 | Brotli | RFC decoding, all 256 entropy block types, static/shared dictionaries, opt-in Large Window extension, incremental I/O and Vort-native q0...q11 generic/text/font presets | q10/q11 remain bounded Vort search rather than complete libbrotli HQ/Zopfli parity. Quality numbers do not imply matching libbrotli ratio or speed. Global/HQ cost planning across large streams and worst-case decode performance remain open; bounded arbitrary-size multi-meta-block encoding is already implemented. |
@@ -63,9 +63,10 @@ memory comparison.
 
 ## Next work, functionality first
 
-1. Add Zstd negative fast levels and explicit strategy controls while preserving
-   the existing level 0...22 behavior, then add XZ/LZMA preset/match-finder
-   controls and FastCover training as separately validated increments.
+1. Add XZ/LZMA preset/match-finder controls and FastCover training as separately
+   validated increments. Zstd signed levels and five explicit strategy controls
+   are now implemented and recorded in the
+   [encoding-control baseline](zstd-encode-controls-functional-baseline.md).
    Improving Brotli HQ models and global cost planning across large streams
    is subsequent quality/performance work. API numbering alone must not imply
    equivalent competitor ratio or speed.
@@ -83,3 +84,7 @@ These complete that functional increment; they do not complete this objective.
 The current LZMA/XZ one-shot increment separately passes 29 contracts in Debug
 and ReleaseFast, complete family and consumer suites, LZMA 316-run and XZ
 75-case independent campaigns, and all 136 build-check steps.
+The subsequent Zstd controls increment separately passes 431 independent
+cases, exact legacy wire comparisons, 1146 ReleaseFast test executions, final
+CLI and control contracts, and all 137 build-check steps. These are functional
+and parameter-effect milestones, not a broad competitor throughput ranking.

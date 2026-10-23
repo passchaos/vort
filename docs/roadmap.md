@@ -24,9 +24,21 @@ XZ inspection. Both families validate before caller writes and replay through
 retained bounded state, including overlap protection and work budgets. Current
 evidence passes 29 Debug/ReleaseFast contracts, 74 LZMA and 89 XZ family tests,
 146 consumer tests, independent LZMA 316-run and XZ 75-case campaigns, and all
-136 build-check steps. The next functionality slice is Zstd negative fast levels
-and explicit strategy control; this milestone does not complete industry-best
+136 build-check steps. This milestone does not complete industry-best
 functionality or performance.
+
+The [Zstd encoding-control milestone](performance/zstd-encode-controls-functional-baseline.md)
+now adds signed levels -131072...22, five real dictionary/history-aware match
+strategies, centralized API resolution, actual work profiles and failure-safe
+emission statistics, private parallel seekable profile merging, CLI controls,
+and signed CHD/OpenZFS FAST writers. Evidence passes 431 independent cases,
+217 exact legacy outputs, 1146 ReleaseFast test executions, 34 Debug/RF control
+contracts, 117 CLI checks and all 137 build-check steps. The
+[profile tooling change](performance/deflate-profile-runtime-inputs.md) also
+removes large compile-time sample generation while preserving CSV data.
+Remaining priorities include FastCover training, richer XZ/LZMA encoder
+presets and Brotli/Zstd HQ model coverage, then current-source real-corpus
+speed/ratio/memory leadership evidence across platforms.
 
 ### Earlier detailed completion audit (started 2026-09-11)
 

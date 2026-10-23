@@ -1,0 +1,81 @@
+{
+  "rows": [
+    {
+      "name": "native-1",
+      "level": -1,
+      "vort_bytes": 61,
+      "reference_bytes": 61,
+      "binary_sha256": "f7e56d67838c4f194e81576f7bf43d7590792c06af6bfdce5fcc7f6dcc039ef2",
+      "csv": "/tmp/vort-zstd-controls-cli/bench-final-native-1.csv"
+    },
+    {
+      "name": "native-13",
+      "level": -13,
+      "vort_bytes": 358,
+      "reference_bytes": 61,
+      "binary_sha256": "f7e56d67838c4f194e81576f7bf43d7590792c06af6bfdce5fcc7f6dcc039ef2",
+      "csv": "/tmp/vort-zstd-controls-cli/bench-final-native-13.csv"
+    },
+    {
+      "name": "greedy",
+      "level": 3,
+      "vort_bytes": 61,
+      "reference_bytes": 61,
+      "binary_sha256": "f7e56d67838c4f194e81576f7bf43d7590792c06af6bfdce5fcc7f6dcc039ef2",
+      "csv": "/tmp/vort-zstd-controls-cli/bench-final-greedy.csv"
+    },
+    {
+      "name": "lazy",
+      "level": 3,
+      "vort_bytes": 61,
+      "reference_bytes": 61,
+      "binary_sha256": "f7e56d67838c4f194e81576f7bf43d7590792c06af6bfdce5fcc7f6dcc039ef2",
+      "csv": "/tmp/vort-zstd-controls-cli/bench-final-lazy.csv"
+    },
+    {
+      "name": "optimal",
+      "level": 3,
+      "vort_bytes": 61,
+      "reference_bytes": 61,
+      "binary_sha256": "f7e56d67838c4f194e81576f7bf43d7590792c06af6bfdce5fcc7f6dcc039ef2",
+      "csv": "/tmp/vort-zstd-controls-cli/bench-final-optimal.csv"
+    },
+    {
+      "name": "legacy-positive",
+      "level": 1,
+      "vort_bytes": 61,
+      "reference_bytes": 61,
+      "binary_sha256": "f7e56d67838c4f194e81576f7bf43d7590792c06af6bfdce5fcc7f6dcc039ef2",
+      "csv": "/tmp/vort-zstd-controls-cli/bench-final-legacy-positive.csv"
+    }
+  ],
+  "old_csv_columns_exact": true,
+  "invalid_csv_preservation_cases": 24,
+  "negative_magnitude_changes_with_native_selection": true,
+  "help_ok": true,
+  "schema": 1,
+  "actual_executed_binary": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/c530eac2e3315a4c46f5b8d4fd0dd292/vort-zstd-encode-bench",
+  "binary_sha256": "f7e56d67838c4f194e81576f7bf43d7590792c06af6bfdce5fcc7f6dcc039ef2",
+  "driver_sha256": "0be9f6562d4d684210f46aef58537bb6aab621f4c0317b3262dbf63fbeb308a7",
+  "canonical_build_log": "/tmp/vort-zstd-controls-final-bench-build.log",
+  "canonical_build_log_sha256": "dd8633d09706b5a44d78206ba17f6efa0b47142a3f6267b35ce82a4041eb1881",
+  "source_sha256": {
+    "examples/cli.zig": "250c27e88e5784f94f6056bc1f880ce0aa64bbdb400d97b9d749426a5464e22b",
+    "examples/cli/zstd_controls.zig": "58e2352b3257c6ceeaf04b788016d561103e9372a3d3e46e2fcd33e1b75c2c70",
+    "tools/zstd/encode_bench.zig": "eac4855ed2c6aac6e23bd68c668513e73834008fa7e37fee1a76e8ab21828d42",
+    "tools/zstd/libzstd_runtime.zig": "292d74b97167517742a2124e7a1e9e1d5589e9fccac2c8de97402a2d331f40d6",
+    "tools/benchmark_provenance.zig": "5fd569e5878bfdd7588054940d86be88ed23371fed85d7ca5803386c789b90e1",
+    "src/zstd.zig": "49351ce756f7b7687d6fbd521f5de4934623cf423f49c807ca56c3663b715a73",
+    "src/zstd/encode/controls.zig": "194e55b3ba5f1257627f118138bb683182a15d363e8b6e1c24961f3e7f42206e",
+    "src/zstd/encode/controlled_frame.zig": "a52d427eab1a7ae4117e1e55eabce4d4c8d5271cb636ef646bc2cfe1a661fd79",
+    "src/zstd/match/controlled_fast.zig": "eb9813384c70f7d00923714fd86dfa5f12aea26fd9a246c79d1a4474e16cb751",
+    "src/zstd/match/controlled_search.zig": "4964aa5177c4bf68b280e717aedfd3862fbb72be6ec3730ca0ecf5af577f224c"
+  },
+  "reference_version": "1.4.8",
+  "integration": {
+    "source_and_tools_revision": "4f6d5b97aa73cafb56486089ccacf4ba5bba58b9",
+    "checked_utc": "2026-10-23T21:37:06.772603+00:00",
+    "matched_source_hashes": 10,
+    "artifact_hashes_matched": true
+  }
+}

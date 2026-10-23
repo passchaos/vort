@@ -5,6 +5,15 @@ native LZ4 and Zstd support in Zig, with library-call APIs prioritized over CLI
 surfaces. It records concrete deliverables, current artifact evidence, and the
 remaining gaps. It is **not** a completion declaration.
 
+Zstd encoding now also supports signed levels -131072...22 and explicit
+fast/double-fast/greedy/lazy/bounded-optimal match strategies with real
+dictionary/history use and caller-owned work profiles. The current
+[encoding-controls contract](formats/zstd-encode-controls.md) and
+[functional baseline](performance/zstd-encode-controls-functional-baseline.md)
+record exact option conflicts, parser limits, legacy-wire comparisons and
+independent validation. This increment does not establish complete libzstd
+strategy, ratio or throughput parity.
+
 ## Objective as deliverables
 
 Native LZ4/Zstd support means the repository should provide, through Zig library
