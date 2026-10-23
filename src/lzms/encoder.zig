@@ -4,6 +4,10 @@ const adaptive = @import("adaptive_huffman.zig");
 const probability = @import("probability.zig");
 const tables = @import("tables.zig");
 const x86 = @import("x86.zig");
+const streams = @import("stream_encoder.zig");
+const RangeEncoder = streams.RangeEncoder;
+const BackwardBitWriter = streams.BackwardBitWriter;
+const appendU16AssumeCapacity = streams.appendU16AssumeCapacity;
 
 pub const Error = core.Error || adaptive.Error || std.mem.Allocator.Error || error{
     InvalidLzms,
@@ -97,104 +101,4 @@ fn encodeDecisionBit(
     const predicted = entry.probability();
     entry.update(bit);
     try range.encodeBit(allocator, bit, predicted);
-}
-
-const RangeEncoder = struct {
-    bytes: std.ArrayList(u8) = .empty,
-    lower_bound: u64 = 0,
-    range_size: u32 = std.math.maxInt(u32),
-    cache: u16 = 0,
-    cache_size: u32 = 1,
-    started: bool = false,
-
-    fn encodeBit(
-        self: *RangeEncoder,
-        allocator: std.mem.Allocator,
-        bit: u1,
-        zero_probability: u32,
-    ) !void {
-        if (self.range_size <= 0xffff) {
-            self.range_size <<= 16;
-            try self.shiftLow(allocator);
-        }
-        const bound = (self.range_size >> probability.bits) * zero_probability;
-        if (bit == 0) {
-            self.range_size = bound;
-        } else {
-            self.lower_bound += bound;
-            self.range_size -= bound;
-        }
-    }
-
-    fn shiftLow(self: *RangeEncoder, allocator: std.mem.Allocator) !void {
-        const low: u32 = @truncate(self.lower_bound);
-        const carry: u16 = @truncate(self.lower_bound >> 32);
-        if (low < 0xffff_0000 or carry != 0) {
-            var pending = self.cache_size;
-            self.cache_size = 0;
-            while (pending != 0) : (pending -= 1) {
-                if (self.started) {
-                    try appendU16(allocator, &self.bytes, self.cache +% carry);
-                } else {
-                    self.started = true;
-                }
-                self.cache = 0xffff;
-            }
-            self.cache = @truncate(self.lower_bound >> 16);
-        }
-        self.cache_size += 1;
-        self.lower_bound = (self.lower_bound & 0xffff) << 16;
-    }
-
-    fn finish(self: *RangeEncoder, allocator: std.mem.Allocator) !void {
-        for (0..4) |_|
-            try self.shiftLow(allocator);
-        if (self.bytes.items.len < 4 or self.bytes.items.len & 1 != 0)
-            return error.InvalidLzms;
-    }
-};
-
-const BackwardBitWriter = struct {
-    allocator: std.mem.Allocator,
-    words: std.ArrayList(u16) = .empty,
-    bit_buffer: u64 = 0,
-    bit_count: u6 = 0,
-
-    pub fn writeBits(self: *BackwardBitWriter, value: u16, count: u4) !void {
-        std.debug.assert(count != 0 and count <= 15);
-        self.bit_count += count;
-        self.bit_buffer = (self.bit_buffer << count) | value;
-        while (self.bit_count >= 16) {
-            self.bit_count -= 16;
-            try self.words.append(
-                self.allocator,
-                @truncate(self.bit_buffer >> @intCast(self.bit_count)),
-            );
-        }
-    }
-
-    fn finish(self: *BackwardBitWriter) !void {
-        if (self.bit_count == 0) return;
-        try self.words.append(
-            self.allocator,
-            @truncate(self.bit_buffer << @intCast(16 - self.bit_count)),
-        );
-        self.bit_count = 0;
-        self.bit_buffer = 0;
-    }
-};
-
-fn appendU16(
-    allocator: std.mem.Allocator,
-    output: *std.ArrayList(u8),
-    value: u16,
-) !void {
-    try output.ensureUnusedCapacity(allocator, 2);
-    appendU16AssumeCapacity(output, value);
-}
-
-fn appendU16AssumeCapacity(output: *std.ArrayList(u8), value: u16) void {
-    var bytes: [2]u8 = undefined;
-    std.mem.writeInt(u16, &bytes, value, .little);
-    output.appendSliceAssumeCapacity(&bytes);
 }
