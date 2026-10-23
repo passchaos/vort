@@ -14,8 +14,9 @@ const stream = @import("reader/stream.zig");
 const reader_context = @import("reader/context.zig");
 const devices_reader = @import("reader/devices.zig");
 const byte_sink = @import("../io/sink.zig");
+const prefix_table = @import("reader/prefix_table.zig");
 
-pub const Error = stream.Error || directory_stream.Error || byte_sink.Error || metadata_reader.Error || core.Error || format.Error || codec.Error || chunk.Error || extent_reader.Error || xattr.Error ||
+pub const Error = prefix_table.Error || stream.Error || directory_stream.Error || byte_sink.Error || metadata_reader.Error || core.Error || format.Error || codec.Error || chunk.Error || extent_reader.Error || xattr.Error ||
     std.mem.Allocator.Error || error{
     InvalidErofs,
     ErofsEntryNotFound,
@@ -30,6 +31,12 @@ pub const default_packed_extent_limit: usize = 8 * 1024 * 1024;
 
 pub const ReadLimits = struct {
     max_output_len: usize,
+    max_packed_extent_len: usize = default_packed_extent_limit,
+};
+
+pub const XattrReadLimits = struct {
+    max_count: usize,
+    max_total_bytes: usize,
     max_packed_extent_len: usize = default_packed_extent_limit,
 };
 
@@ -67,8 +74,7 @@ pub const Archive = struct {
         devices: []const []const u8,
     ) Error!Archive {
         const superblock = try format.parseSuperblock(bytes);
-        if (superblock.feature_compat & format.feature_compat_plain_xattr_prefixes != 0 or
-            superblock.xattr_prefix_count == 0)
+        if (prefix_table.isPrimary(superblock))
             try xattr.validatePrefixTable(
                 bytes,
                 superblock.xattr_prefix_start,
@@ -98,6 +104,7 @@ pub const Archive = struct {
             .max_output_len = max_metabox_len,
             .max_packed_extent_len = max_packed_extent_len,
         });
+        errdefer allocator.free(bytes);
         var loaded = self;
         loaded.metabox_bytes = bytes;
         if (self.superblock.xattr_prefix_count != 0 and
@@ -144,17 +151,18 @@ pub const Archive = struct {
         max_count: usize,
         max_total_bytes: usize,
     ) Error!Xattrs {
+        return self.readXattrsAllocWithLimits(allocator, inode_value, .{ .max_count = max_count, .max_total_bytes = max_total_bytes });
+    }
+
+    pub fn readXattrsAllocWithLimits(self: Archive, allocator: std.mem.Allocator, inode_value: Inode, limits: XattrReadLimits) Error!Xattrs {
         const ibody_start = std.math.add(
             usize,
             inode_value.location,
             inode_value.inode_size,
         ) catch return error.IntegerOverflow;
         const metadata = try self.metadataBytes(inode_value);
-        const prefix_metadata = if (self.superblock.xattr_prefix_count == 0 or
-            self.superblock.feature_compat & format.feature_compat_plain_xattr_prefixes != 0)
-            self.bytes
-        else
-            self.metabox_bytes orelse return error.ErofsMissingMetabox;
+        var prefix = try prefix_table.Table.init(self.context(allocator, .{ .max_output_len = 0, .max_packed_extent_len = limits.max_packed_extent_len }));
+        defer prefix.deinit(allocator);
         const shared_metadata = if (self.superblock.feature_compat &
             format.feature_compat_shared_xattrs_in_metabox != 0)
             self.metabox_bytes orelse return error.ErofsMissingMetabox
@@ -163,17 +171,17 @@ pub const Archive = struct {
         return reader_xattrs.readAllocLimited(
             allocator,
             allocator,
-            .{ .slice = prefix_metadata },
+            prefix.input,
             .{ .slice = shared_metadata },
             .{ .slice = metadata },
             self.superblock.block_size,
             self.superblock.xattr_block,
-            self.superblock.xattr_prefix_start,
-            self.superblock.xattr_prefix_count,
+            prefix.start,
+            prefix.count,
             ibody_start,
             inode_value.xattr_size,
-            max_count,
-            max_total_bytes,
+            limits.max_count,
+            limits.max_total_bytes,
         );
     }
 

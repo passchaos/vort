@@ -7,4 +7,5 @@ test {
     _ = @import("tests/resumable_corpus.zig");
     _ = @import("tests/directory_stream.zig");
     _ = @import("tests/slice_stream.zig");
+    _ = @import("tests/prefix_table.zig");
 }

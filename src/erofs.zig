@@ -20,6 +20,7 @@ pub const FileType = format.FileType;
 pub const Inode = archive.Inode;
 pub const LoadedMetaboxArchive = archive.LoadedMetaboxArchive;
 pub const ReadLimits = archive.ReadLimits;
+pub const XattrReadLimits = archive.XattrReadLimits;
 pub const Xattr = xattr.Attribute;
 pub const Xattrs = xattr.Attributes;
 pub const Source = writer.Source;

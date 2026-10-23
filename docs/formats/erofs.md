@@ -32,7 +32,8 @@ must fit the working budget, even when the independent metabox size cap fits.
 `max_packed_extent_len` additionally bounds decoded packed extents.
 
 The working budget includes retained metabox bytes, encoded/decoded extents,
-xattr scanning scratch and active directory block buffers. It excludes stack,
+xattr scanning scratch, temporary packed prefix tables and active directory
+block buffers. It excludes stack,
 backing allocator bookkeeping/remap transients and caller-owned Source/Sink
 storage or returned file/directory/xattr buffers. `ErofsSourceReadResult`
 returns `decoded_size` and the archive lifetime's monotonic
@@ -144,6 +145,25 @@ const result = try archive.extractByPathToSink("data/payload", output.sink(), .{
 _ = result;
 ```
 
+Long xattr prefix tables use the format's address priority: the plain flag
+selects the primary image; otherwise a metabox takes priority over a packed
+inode, with the primary image as fallback when neither is present. Plain and
+loaded-metabox tables borrow their storage. Packed tables read only the
+declared records through the shared streaming core, retain at most
+`xattr_prefix_count * 260` bytes (32.5 KiB for 128 prefixes), and release the
+current decoded extent before scanning xattrs. The last record can end at
+packed EOF without trailing alignment bytes. Exact-range metadata validation
+rejects malformed later extent records without decoding unrelated packed data.
+
+Both archive types expose `readXattrsAllocWithLimits(allocator, inode,
+ErofsXattrReadLimits)`. The options independently bound `max_count`,
+`max_total_bytes` and `max_packed_extent_len`; the last defaults to 8 MiB and
+bounds a decoded packed extent rather than the entire packed file. Source
+encoded/decoded caps and its working heap budget apply in addition. The
+existing `readXattrsAllocLimited` selects that default. Table, decoder and
+scanner buffers use the working allocator; returned attributes use the
+caller's output allocator and remain independently owned.
+
 CLI list, xattr and extraction commands use actual file Sources, including
 external devices. Input images and devices have no whole-file 512 MiB loading
 cap; extraction retains its explicit output cap. Extraction uses an atomic
@@ -161,8 +181,9 @@ ordering, names, NIDs, and exact allocation limits. Flat plain and flat inline
 files, directories, regular files, and symbolic links are supported. Bounded
 xattr decoding covers inline entries, shared IDs relative to `xattr_block`,
 empty values, standard full-name/user/POSIX-ACL/trusted/lustre/security name
-indexes, and incompatible-feature long indexes backed by bounded plain prefix
-tables. Reconstructed names and values are copied into one owned buffer; count
+indexes, and incompatible-feature long indexes backed by bounded
+plain/metabox/packed prefix tables. Reconstructed names and values are copied
+into one owned buffer; count
 and aggregate-byte limits are checked before allocation.
 
 Chunk-based regular files support per-inode chunk sizes, 4-byte local block
@@ -513,8 +534,8 @@ var encoded_chunks = try vort.encodeErofsExternalChunksAlloc(
 defer encoded_chunks.deinit(allocator);
 ```
 
-Prefix tables stored inside packed fragment inodes remain unsupported; plain and
-metabox prefix tables are supported. Compressed 48-bit `PARTIAL_REF` and
+Plain, metabox and packed-inode long xattr prefix tables are supported.
+Compressed 48-bit `PARTIAL_REF` and
 fragment-extent combinations remain explicitly unsupported. The writer does
 not yet expose MZ=id directory-data placement. Chunk output requires stored
 mode; fragment and compressed-inline output require a non-stored compression

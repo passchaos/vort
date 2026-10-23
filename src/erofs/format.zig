@@ -109,7 +109,7 @@ fn parseSuperblockInternal(input: []const u8, input_len: u64, host_size: bool) E
     const feature_incompat = readU32(bytes, 80);
     const feature_compat = readU32(bytes, 8);
     // The foundational reader handles legacy LZ4 padding and compressor
-    // configuration records and plain long-xattr-prefix tables. Other
+    // configuration records and long-xattr-prefix tables. Other
     // incompatible features alter addressing.
     if (feature_incompat & ~@as(u32, 0x0000_01ff) != 0)
         return error.UnsupportedErofsFeature;
@@ -133,9 +133,6 @@ fn parseSuperblockInternal(input: []const u8, input_len: u64, host_size: bool) E
         break :blk value;
     } else 0;
     if (feature_incompat & feature_incompat_xattr_prefixes != 0) {
-        if (feature_compat & feature_compat_plain_xattr_prefixes == 0 and
-            feature_incompat & feature_incompat_metabox == 0)
-            return error.UnsupportedErofsFeature;
         if (xattr_prefix_count == 0 or xattr_prefix_count > 0x80)
             return error.InvalidErofs;
     } else if (xattr_prefix_count != 0 or xattr_prefix_start != 0) {

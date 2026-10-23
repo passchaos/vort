@@ -1741,6 +1741,7 @@ pub const ErofsInode = erofs.Inode;
 pub const ErofsLoadedMetaboxArchive = erofs.LoadedMetaboxArchive;
 pub const ErofsLayout = erofs.Layout;
 pub const ErofsReadLimits = erofs.ReadLimits;
+pub const ErofsXattrReadLimits = erofs.XattrReadLimits;
 pub const ErofsSuperblock = erofs.Superblock;
 pub const ErofsXattr = erofs.Xattr;
 pub const ErofsXattrs = erofs.Xattrs;

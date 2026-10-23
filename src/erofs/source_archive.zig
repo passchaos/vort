@@ -14,9 +14,10 @@ const directory_stream = @import("reader/directory_stream.zig");
 const types = @import("reader/types.zig");
 const xattr = @import("xattr.zig");
 const source_xattrs = @import("reader/xattrs.zig");
+const prefix_table = @import("reader/prefix_table.zig");
 const format = @import("format.zig");
 
-pub const Error = directory_stream.Error || stream.Error || sink_module.Error || source_xattrs.Error || directory.Error || error{
+pub const Error = prefix_table.Error || directory_stream.Error || stream.Error || sink_module.Error || source_xattrs.Error || directory.Error || error{
     ErofsNotDirectory,
     ErofsEntryNotFound,
     ErofsNotRegularFile,
@@ -30,6 +31,7 @@ pub const Limits = struct {
     load_metabox: bool = true,
 };
 pub const ReadLimits = archive_module.ReadLimits;
+pub const XattrReadLimits = archive_module.XattrReadLimits;
 pub const ReadResult = struct { decoded_size: u64, peak_working_bytes: usize };
 pub const ExtractProgress = stream.Progress;
 pub const DirectoryDiagnostics = directory_stream.Diagnostics;
@@ -58,7 +60,7 @@ pub const SourceArchive = struct {
         var owner = SourceArchive{ .source = primary, .devices = devices, .superblock = header, .limits = limits, .working = working_module.WorkingAllocator.init(allocator, limits.max_working_memory) };
         errdefer owner.deinit();
         try owner.deviceReader().validate();
-        if (header.feature_compat & format.feature_compat_plain_xattr_prefixes != 0 or header.xattr_prefix_count == 0)
+        if (prefix_table.isPrimary(header))
             try xattr.validatePrefixTableInput(.{ .source = primary }, header.xattr_prefix_start, header.xattr_prefix_count);
         if (limits.load_metabox and header.metabox_nid != 0) try owner.loadMetabox();
         return owner;
@@ -274,16 +276,21 @@ pub const SourceArchive = struct {
     }
 
     pub fn readXattrsAllocLimited(self: *SourceArchive, allocator: std.mem.Allocator, value: types.Inode, max_count: usize, max_total_bytes: usize) Error!xattr.Attributes {
-        self.begin();
-        return self.readXattrsInternal(allocator, value, max_count, max_total_bytes) catch |err| self.failure(err);
+        return self.readXattrsAllocWithLimits(allocator, value, .{ .max_count = max_count, .max_total_bytes = max_total_bytes });
     }
 
-    fn readXattrsInternal(self: *SourceArchive, allocator: std.mem.Allocator, value: types.Inode, max_count: usize, max_total_bytes: usize) Error!xattr.Attributes {
+    pub fn readXattrsAllocWithLimits(self: *SourceArchive, allocator: std.mem.Allocator, value: types.Inode, limits: XattrReadLimits) Error!xattr.Attributes {
+        self.begin();
+        return self.readXattrsInternal(allocator, value, limits) catch |err| self.failure(err);
+    }
+
+    fn readXattrsInternal(self: *SourceArchive, allocator: std.mem.Allocator, value: types.Inode, limits: XattrReadLimits) Error!xattr.Attributes {
         const ibody_start = try context_module.add(value.location, value.inode_size);
         const ibody = try self.reader().metadataInput(value);
-        const prefix: input_module.Input = if (self.superblock.xattr_prefix_count == 0 or self.superblock.feature_compat & format.feature_compat_plain_xattr_prefixes != 0) .{ .source = self.source } else .{ .slice = self.metabox_bytes orelse return error.ErofsMissingMetabox };
+        var prefix = try prefix_table.Table.init(self.context(.{ .max_output_len = 0, .max_packed_extent_len = limits.max_packed_extent_len }));
+        defer prefix.deinit(self.working.allocator());
         const shared: input_module.Input = if (self.superblock.feature_compat & format.feature_compat_shared_xattrs_in_metabox != 0) .{ .slice = self.metabox_bytes orelse return error.ErofsMissingMetabox } else .{ .source = self.source };
-        return source_xattrs.readAllocLimited(self.working.allocator(), allocator, prefix, shared, ibody, self.superblock.block_size, self.superblock.xattr_block, self.superblock.xattr_prefix_start, self.superblock.xattr_prefix_count, ibody_start, value.xattr_size, max_count, max_total_bytes);
+        return source_xattrs.readAllocLimited(self.working.allocator(), allocator, prefix.input, shared, ibody, self.superblock.block_size, self.superblock.xattr_block, prefix.start, prefix.count, ibody_start, value.xattr_size, limits.max_count, limits.max_total_bytes);
     }
 };
 

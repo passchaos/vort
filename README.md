@@ -253,8 +253,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   fragments, with squashfs-tools interoperability;
 - dependency-free EROFS reading with CRC-32C superblock verification,
   compact/extended inodes, flat plain/inline data, sorted directories,
-  symlinks, bounded inline/shared xattrs with standard and plain long-prefix
-  name indexes, legacy full and modern compact compression indexes, big
+  symlinks, bounded inline/shared xattrs with standard and plain/metabox/packed
+  long-prefix name indexes and configurable packed-extent limits, legacy full
+  and modern compact compression indexes, big
   pclusters, whole/partial packed fragments, interlaced packed inodes, and
   compressed inline tail packing with caller-bounded packed-extent scratch,
   plus local/external chunk-based files with borrowed device tables, holes,

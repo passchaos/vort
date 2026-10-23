@@ -269,7 +269,11 @@ test "EROFS rejects malformed long xattr prefix tables and references" {
         .little,
     );
     refreshFixtureChecksum(bytes);
-    try std.testing.expectError(error.UnsupportedErofsFeature, Archive.init(bytes));
+    const fallback = try Archive.init(bytes);
+    const fallback_inode = try fallback.lookup(allocator, "file", 0, 4096);
+    var fallback_attrs = try fallback.readXattrsAllocLimited(allocator, fallback_inode, 8, 1024);
+    defer fallback_attrs.deinit();
+    try std.testing.expectEqualStrings("first-value", fallback_attrs.find("user.vort.long.first").?.value);
     std.mem.writeInt(u32, bytes[format.super_offset + 8 ..][0..4], compat, .little);
     refreshFixtureChecksum(bytes);
 
