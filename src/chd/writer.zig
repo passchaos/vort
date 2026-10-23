@@ -28,7 +28,9 @@ pub const EncodeOptions = struct {
     compression: Compression = .auto,
     hunk_bytes: u32 = 4096,
     unit_bytes: u32 = 512,
-    compression_level: u8 = 6,
+    /// Zlib and auto accept 0...9; explicit Zstd accepts its native signed
+    /// levels. Fixed-policy codecs retain legacy nonnegative hints (0...255).
+    compression_level: c_int = 6,
     metadata: []const EncodeMetadata = &.{},
     max_metadata_entries: usize = 1 << 16,
     /// Parent ownership remains with the caller for the duration of encoding.
@@ -55,11 +57,16 @@ fn validateOptions(options: EncodeOptions) Error!void {
         options.hunk_bytes % options.unit_bytes != 0)
         return error.InvalidChd;
     switch (options.compression) {
-        .zlib, .auto => if (options.compression_level > 9)
+        .zlib, .auto => if (options.compression_level < 0 or options.compression_level > 9)
             return error.InvalidChd,
-        .zstd => if (options.compression_level > 22)
+        .zstd => {
+            _ = zstd.resolveFrameOptionsForLevel(options.compression_level, .{
+                .include_content_size = true,
+                .content_checksum = false,
+            }) catch return error.InvalidChd;
+        },
+        .none, .lzma, .huffman => if (options.compression_level < 0 or options.compression_level > 255)
             return error.InvalidChd,
-        .none, .lzma, .huffman => {},
     }
     if (options.metadata.len > options.max_metadata_entries)
         return error.OutputLimitExceeded;
@@ -327,7 +334,7 @@ fn encodeCodecAlloc(
         .zstd => zstd.encodeFrameWithLevelAndOptionsAlloc(
             allocator,
             input,
-            @intCast(options.compression_level),
+            options.compression_level,
             .{ .include_content_size = true, .content_checksum = false },
         ),
         else => error.UnsupportedChdCodec,
@@ -590,4 +597,8 @@ fn samePaddedHunk(
         if (first != second) return false;
     }
     return true;
+}
+
+test {
+    _ = @import("zstd_levels_tests.zig");
 }
