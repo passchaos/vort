@@ -379,6 +379,20 @@ pub fn build(b: *std.Build) void {
     const lz4_tests = b.addTest(.{ .name = "vort-lz4-tests", .root_module = b.createModule(.{ .root_source_file = b.path("src/lz4.zig"), .target = target, .optimize = optimize, .link_libc = true }), .filters = &.{"LZ4"} });
     const lz4_test_step = b.step("test-lz4", "Run focused LZ4 codec and incremental tests");
     lz4_test_step.dependOn(&b.addRunArtifact(lz4_tests).step);
+    const zlib_stream_tests = b.addTest(.{
+        .name = "vort-zlib-stream-tests",
+        .root_module = b.createModule(.{ .root_source_file = b.path("src/deflate.zig"), .target = target, .optimize = optimize }),
+        .filters = &.{"zlib incremental"},
+    });
+    const run_zlib_stream_tests = b.addRunArtifact(zlib_stream_tests);
+    const zlib_stream_test_step = b.step("test-zlib-stream", "Run incremental zlib and dictionary recovery tests");
+    zlib_stream_test_step.dependOn(&run_zlib_stream_tests.step);
+    const zstd_limits_tests = b.addTest(.{ .name = "vort-zstd-stream-contract-tests", .root_module = zstd_tests_mod, .filters = &.{"Zstd incremental limits"} });
+    const lz4_limits_tests = b.addTest(.{ .name = "vort-lz4-stream-contract-tests", .root_module = lz4_tests.root_module, .filters = &.{"LZ4 incremental limits"} });
+    const stream_contracts_test_step = b.step("test-stream-contracts", "Run cumulative stream quotas, allocation budgets and zlib recovery tests");
+    stream_contracts_test_step.dependOn(&b.addRunArtifact(zstd_limits_tests).step);
+    stream_contracts_test_step.dependOn(&b.addRunArtifact(lz4_limits_tests).step);
+    stream_contracts_test_step.dependOn(&run_zlib_stream_tests.step);
     const decmpfs_tests = b.addTest(.{
         .name = "vort-decmpfs-tests",
         .root_module = tests_mod,
@@ -1510,6 +1524,21 @@ pub fn build(b: *std.Build) void {
     python_zlib_diff_dashboard.addArgs(&.{ "--summary", "zig-out/vort-python-zlib-diff-smoke.json" });
     const python_zlib_diff_dashboard_step = b.step("run-python-zlib-diff-dashboard", "Write Python zlib differential smoke summary to zig-out");
     python_zlib_diff_dashboard_step.dependOn(&python_zlib_diff_dashboard.step);
+
+    const zlib_dictionary_resume_probe = b.addExecutable(.{
+        .name = "vort-zlib-dictionary-resume-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zlib/dictionary_resume_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = zlib_stream_tests.root_module }},
+        }),
+    });
+    const zlib_dictionary_resume_diff = b.addSystemCommand(&.{ "python3", "tools/zlib/dictionary_resume_diff.py", "--probe" });
+    zlib_dictionary_resume_diff.addArtifactArg(zlib_dictionary_resume_probe);
+    if (b.args) |args| zlib_dictionary_resume_diff.addArgs(args);
+    const zlib_dictionary_resume_diff_step = b.step("run-zlib-dictionary-resume-diff", "Validate in-place incremental dictionary recovery against system zlib");
+    zlib_dictionary_resume_diff_step.dependOn(&zlib_dictionary_resume_diff.step);
 
     const gzip_cli_diff = b.addSystemCommand(&.{ "python3", "tools/gzip_cli_diff.py" });
     gzip_cli_diff.addArtifactArg(cli_exe);
@@ -6062,6 +6091,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&afl_smoke_exe.step);
     check_step.dependOn(&checksum_diff_exe.step);
     check_step.dependOn(&zlib_diff_exe.step);
+    check_step.dependOn(&zlib_dictionary_resume_probe.step);
     check_step.dependOn(&gzip_diff_exe.step);
     check_step.dependOn(&zip_writer_probe_exe.step);
     check_step.dependOn(&zip_incremental_writer_probe_exe.step);
