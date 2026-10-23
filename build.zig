@@ -393,6 +393,26 @@ pub fn build(b: *std.Build) void {
     stream_contracts_test_step.dependOn(&b.addRunArtifact(zstd_limits_tests).step);
     stream_contracts_test_step.dependOn(&b.addRunArtifact(lz4_limits_tests).step);
     stream_contracts_test_step.dependOn(&run_zlib_stream_tests.step);
+    const lzma_contracts_mod = b.createModule(.{ .root_source_file = b.path("src/lzma.zig"), .target = target, .optimize = optimize });
+    const lzma_tests = b.addTest(.{ .name = "vort-lzma-tests", .root_module = lzma_contracts_mod, .filters = &.{"LZMA"} });
+    const lzma_test_step = b.step("test-lzma", "Run LZMA-Alone, MicroLZMA and incremental tests");
+    lzma_test_step.dependOn(&b.addRunArtifact(lzma_tests).step);
+    const codec_contracts_step = b.step("test-codec-stream-contracts", "Run native dictionary recovery and LZMA/Brotli resource contracts");
+    const zstd_dictionary_contracts = b.addTest(.{ .name = "vort-zstd-dictionary-contract-tests", .root_module = zstd_tests_mod, .filters = &.{"Zstd dictionary resume"} });
+    const lz4_dictionary_contracts = b.addTest(.{ .name = "vort-lz4-dictionary-contract-tests", .root_module = lz4_tests.root_module, .filters = &.{"LZ4 dictionary resume"} });
+    const lzma_stream_contracts = b.addTest(.{ .name = "vort-lzma-stream-contract-tests", .root_module = lzma_contracts_mod, .filters = &.{"LZMA stream contracts"} });
+    const br_stream_contracts = b.addTest(.{ .name = "vort-br-stream-contract-tests", .root_module = br_tests_mod, .filters = &.{"Brotli stream contracts"} });
+    codec_contracts_step.dependOn(&b.addRunArtifact(zstd_dictionary_contracts).step);
+    codec_contracts_step.dependOn(&b.addRunArtifact(lz4_dictionary_contracts).step);
+    codec_contracts_step.dependOn(&b.addRunArtifact(lzma_stream_contracts).step);
+    codec_contracts_step.dependOn(&b.addRunArtifact(br_stream_contracts).step);
+    const stream_contract_consumer_tests = b.addTest(.{
+        .name = "vort-stream-contract-consumer-tests",
+        .root_module = tests_mod,
+        .filters = &.{ "ZIP incremental reader streams LZMA", "ZIP method 14 writer", "ZIP incremental writer emits ZIP LZMA", "TAR Brotli auto decode", "compressed CPIO auto decode is bounded and rejects non-CPIO Brotli", "TAR compression detection distinguishes raw TAR and LZMA-Alone" },
+    });
+    const stream_contract_consumer_step = b.step("test-stream-contract-consumers", "Run ZIP, TAR and CPIO integration for LZMA/Brotli streaming contracts");
+    stream_contract_consumer_step.dependOn(&b.addRunArtifact(stream_contract_consumer_tests).step);
     const xz_tests_mod = b.createModule(.{ .root_source_file = b.path("src/xz.zig"), .target = target, .optimize = optimize });
     const xz_tests = b.addTest(.{ .name = "vort-xz-tests", .root_module = xz_tests_mod, .filters = &.{ "XZ", "LZMA2" } });
     const xz_test_step = b.step("test-xz", "Run XZ, LZMA2 and incremental filter tests");
@@ -1553,6 +1573,30 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| zlib_dictionary_resume_diff.addArgs(args);
     const zlib_dictionary_resume_diff_step = b.step("run-zlib-dictionary-resume-diff", "Validate in-place incremental dictionary recovery against system zlib");
     zlib_dictionary_resume_diff_step.dependOn(&zlib_dictionary_resume_diff.step);
+
+    const zstd_dictionary_resume_probe = b.addExecutable(.{ .name = "vort-zstd-dictionary-resume-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/native/dictionary_resume_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "codec", .module = zstd_tests_mod }} }) });
+    const lz4_dictionary_resume_probe = b.addExecutable(.{ .name = "vort-lz4-dictionary-resume-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/native/dictionary_resume_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "codec", .module = lz4_tests.root_module }} }) });
+    const native_dictionary_resume_diff = b.addSystemCommand(&.{ "python3", "tools/native/dictionary_resume_diff.py", "--zstd-probe" });
+    native_dictionary_resume_diff.addArtifactArg(zstd_dictionary_resume_probe);
+    native_dictionary_resume_diff.addArg("--lz4-probe");
+    native_dictionary_resume_diff.addArtifactArg(lz4_dictionary_resume_probe);
+    if (b.args) |args| native_dictionary_resume_diff.addArgs(args);
+    const native_dictionary_resume_step = b.step("run-native-dictionary-resume-diff", "Validate native dictionary requests against libzstd and liblz4");
+    native_dictionary_resume_step.dependOn(&native_dictionary_resume_diff.step);
+
+    const lzma_contract_probe = b.addExecutable(.{ .name = "vort-lzma-contract-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/lzma/contract_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "lzma", .module = lzma_contracts_mod }} }) });
+    const lzma_contract_diff = b.addSystemCommand(&.{ "python3", "tools/lzma/contract_diff.py", "--probe" });
+    lzma_contract_diff.addArtifactArg(lzma_contract_probe);
+    if (b.args) |args| lzma_contract_diff.addArgs(args);
+    const lzma_contract_diff_step = b.step("run-lzma-contract-diff", "Validate LZMA-Alone allocation and progress contracts against independent streams");
+    lzma_contract_diff_step.dependOn(&lzma_contract_diff.step);
+
+    const br_contract_probe = b.addExecutable(.{ .name = "vort-br-stream-contract-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/br/stream_contract_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "br", .module = br_tests_mod }} }) });
+    const br_contract_diff = b.addSystemCommand(&.{ "python3", "tools/br/stream_contract_diff.py", "--probe" });
+    br_contract_diff.addArtifactArg(br_contract_probe);
+    if (b.args) |args| br_contract_diff.addArgs(args);
+    const br_contract_diff_step = b.step("run-br-stream-contract-diff", "Validate Brotli incremental resource contracts against libbrotli");
+    br_contract_diff_step.dependOn(&br_contract_diff.step);
 
     const gzip_cli_diff = b.addSystemCommand(&.{ "python3", "tools/gzip_cli_diff.py" });
     gzip_cli_diff.addArtifactArg(cli_exe);
@@ -6121,6 +6165,10 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&checksum_diff_exe.step);
     check_step.dependOn(&zlib_diff_exe.step);
     check_step.dependOn(&zlib_dictionary_resume_probe.step);
+    check_step.dependOn(&zstd_dictionary_resume_probe.step);
+    check_step.dependOn(&lz4_dictionary_resume_probe.step);
+    check_step.dependOn(&lzma_contract_probe.step);
+    check_step.dependOn(&br_contract_probe.step);
     check_step.dependOn(&gzip_diff_exe.step);
     check_step.dependOn(&zip_writer_probe_exe.step);
     check_step.dependOn(&zip_incremental_writer_probe_exe.step);
