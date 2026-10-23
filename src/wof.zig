@@ -37,11 +37,15 @@ test "WOF backing streams round trip all file-provider algorithms" {
         defer allocator.free(encoded);
         const backing = try Backing.init(encoded, algorithm, input.len);
         try std.testing.expect(backing.chunk_count > 1);
+        if (algorithm == .lzx) {
+            try std.testing.expect(encoded.len < input.len / 10);
+            try std.testing.expect(!(try backing.chunk(0)).isStored());
+        }
         const decoded = try decodeAllocLimited(allocator, backing, input.len);
         defer allocator.free(decoded);
         try std.testing.expectEqualStrings(input, decoded);
         const range_offset = algorithm.chunkSize() - 17;
-        const range_len = algorithm.chunkSize() + 43;
+        const range_len = @min(algorithm.chunkSize() + 43, input.len - range_offset);
         const range = try decodeRangeAllocLimited(
             allocator,
             backing,

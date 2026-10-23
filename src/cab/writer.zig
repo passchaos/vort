@@ -77,6 +77,7 @@ pub fn encodeAlloc(
     if (block_count > std.math.maxInt(u16)) return error.CabinetLimitExceeded;
     var data_start: usize = 0;
     var quantum_encoder = quantum.LiteralEncoder.init();
+    var lzx_state = try lzx_encoder.CabinetEncoder.init(if (options.compression == .lzx) options.lzx_window_bits else 15);
     while (data_start < folder_data.items.len) {
         const data_end = @min(folder_data.items.len, data_start + options.block_size);
         const block = folder_data.items[data_start..data_end];
@@ -105,10 +106,11 @@ pub fn encodeAlloc(
                 try appendDataBlock(allocator, &out, payload.items, block.len, options.checksum);
             },
             .lzx => {
-                const encoded = try lzx_encoder.encodeUncompressedBlockAlloc(
+                const encoded = try lzx_state.encodeBlockAlloc(
                     allocator,
-                    block,
-                    data_start == 0,
+                    folder_data.items,
+                    data_start,
+                    data_end,
                 );
                 defer allocator.free(encoded);
                 try appendDataBlock(allocator, &out, encoded, block.len, options.checksum);
@@ -360,7 +362,7 @@ test "CAB LZX writer supports every window and odd final CFDATA alignment" {
         var blocks = parsed.dataBlockIterator(folder);
         _ = (try blocks.next()).?;
         const second = (try blocks.next()).?;
-        try std.testing.expectEqual(@as(u8, 0), second.compressed[second.compressed.len - 1]);
+        try std.testing.expect(second.compressed.len < payload.len - 32768);
 
         const decoded = try decoder.extractByNameAlloc(allocator, parsed, "odd-blocks.bin");
         defer allocator.free(decoded);

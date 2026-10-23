@@ -59,6 +59,16 @@ pub fn decodeAllocWithFormat(
     errdefer allocator.free(raw);
     if (expected_output_len == 0) return raw;
 
+    try decodeInto(input, raw, window_bits, stream_format);
+    return raw;
+}
+
+/// Decode into caller-owned exact-size output. On a malformed stream, output
+/// may contain an already-decoded prefix, as with other progressive decoders.
+pub fn decodeInto(input: []const u8, raw: []u8, window_bits: u5, stream_format: StreamFormat) !void {
+    if (window_bits < min_window_bits or window_bits > max_window_bits)
+        return error.UnsupportedCabinetFeature;
+    if (raw.len == 0) return;
     var decoder = Decoder.init(input, raw, window_bits, stream_format);
     try decoder.decode();
     if (decoder.written != raw.len) return error.SizeMismatch;
@@ -69,7 +79,6 @@ pub fn decodeAllocWithFormat(
     }
     if (stream_format == .wim and decoder.may_have_e8)
         applyWimIntelE8(raw);
-    return raw;
 }
 
 const Decoder = struct {
