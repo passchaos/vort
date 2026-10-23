@@ -7,6 +7,7 @@ import struct
 import subprocess
 import tempfile
 from pathlib import Path
+from cli_match_diff import verify as verify_matching_cli
 
 
 def run(*args: object, check: bool = True) -> subprocess.CompletedProcess[bytes]:
@@ -73,6 +74,8 @@ def main() -> None:
     external_cases = 0
     vort_encode_cases = 0
     malformed = 0
+    matching_cli = 0
+    matching_cli_failures = 0
     with tempfile.TemporaryDirectory(prefix="vort-lzms-") as temp_text:
         temp = Path(temp_text)
         pinned_path = temp / "pinned.lzms"
@@ -170,10 +173,13 @@ def main() -> None:
         )
         malformed += 1
 
+        matching_cli, matching_cli_failures = verify_matching_cli(args.cli, temp, run)
+
     print(
         f"pinned={pinned_cases} wimlib={probe is not None} "
         f"external={external_cases} vort_encode={vort_encode_cases} "
         f"malformed={malformed}"
+        f" matching_cli={matching_cli} matching_cli_failures={matching_cli_failures}"
     )
 
 

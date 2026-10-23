@@ -1539,6 +1539,22 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| lzms_diff.addArgs(args);
     const lzms_diff_step = b.step("run-lzms-diff", "Validate Windows LZMS decoding against optional wimlib");
     lzms_diff_step.dependOn(&lzms_diff.step);
+    const lzms_probe_mod = b.createModule(.{ .root_source_file = b.path("src/lzms.zig"), .target = target, .optimize = optimize });
+    const lzms_match_probe = b.addExecutable(.{
+        .name = "vort-lzms-match-probe",
+        .root_module = b.createModule(.{ .root_source_file = b.path("tools/lzms/match_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "lzms", .module = lzms_probe_mod }} }),
+    });
+    const lzms_item_probe = b.addExecutable(.{
+        .name = "vort-lzms-item-probe",
+        .root_module = b.createModule(.{ .root_source_file = b.path("tools/lzms/item_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "lzms", .module = lzms_probe_mod }} }),
+    });
+    const lzms_match_diff = b.addSystemCommand(&.{ "python3", "tools/lzms/match_diff.py", "--probe" });
+    lzms_match_diff.addArtifactArg(lzms_match_probe);
+    lzms_match_diff.addArg("--item-probe");
+    lzms_match_diff.addArtifactArg(lzms_item_probe);
+    if (b.args) |args| lzms_match_diff.addArgs(args);
+    const lzms_match_step = b.step("run-lzms-match-diff", "Validate greedy LZ/delta encoding and literal-envelope sizes with wimlib");
+    lzms_match_step.dependOn(&lzms_match_diff.step);
 
     const microlzma_diff = b.addSystemCommand(&.{ "python3", "tools/microlzma/diff.py", "--cli" });
     microlzma_diff.addArtifactArg(cli_exe);

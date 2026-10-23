@@ -2722,7 +2722,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  encode-xpress-huffman-file <in> <out>
         \\  decode-xpress-huffman-file <in> <out> <decoded_size>
         \\  inspect-xpress-huffman-file <path> <decoded_size>
-        \\  encode-lzms-file <in> <out>
+        \\  encode-lzms-file <in> <out> [--strategy=greedy|literals] [--no-delta] [--hash-log=8..20] [--max-distance=bytes] [--working-memory-limit=bytes] [--output-limit=bytes]
         \\  decode-lzms-file <in> <out> <decoded_size>
         \\  encode-wof-file <in> <out> <xpress4k|xpress8k|xpress16k|lzx>
         \\  decode-wof-file <in> <out> <algorithm> <decoded_size> [max_output]
