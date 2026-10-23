@@ -111,8 +111,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   range coding, backward adaptive canonical Huffman codes, mandatory x86
   address transforms, reusable decoder state, exact-size/caller-owned APIs,
   pinned fixtures, fuzzing, and bidirectional wimlib text, delta, mixed, source,
-  and x86-code differentials. The reference encoder emits adaptive literal
-  items today; LZ/delta match parsing remains ratio work;
+  and x86-code differentials, bounded greedy LZ/delta and delayed-repeat
+  match encoding with literal-reference wire arbitration, explicit history/hash/
+  working/output limits and summary metrics, plus normal/solid WIM composition;
 - dependency-free WOF/CompactOS file-provider metadata and backing-stream
   support with XPRESS4K/8K/16K and WIM-LZX chunks, strict 32-/64-bit cumulative
   offset tables, raw-chunk fallback, bounded whole-file and random-range decode,

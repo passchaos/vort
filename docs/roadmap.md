@@ -22972,3 +22972,32 @@ reuse, so production keeps the simpler independently owned plans.
   and pinned local wimlib reference.
   The final Debug repository suite passes 3539/3539 tests (3532 root tests
   plus seven separate Brotli object/classifier cases).
+
+- LZMS writing now emits literal, LZ and delta items with explicit and delayed
+  repeat offsets through a separate item encoder and checked forward/backward
+  stream modules. The backward writer handles all 0...30-bit extra fields;
+  slot/reach/stride validation, sticky failures, fixed adaptive models and
+  independent recent lists retain the complete decoder's wire semantics.
+  A portable bounded greedy matcher searches normal bytes and all eight
+  difference/stride families, with an in-window anchor plus latest position
+  per fixed hash bucket. Complete literal-reference wire arbitration prevents
+  expansion beyond the retained explicit literal strategy. Public allocating,
+  caller-buffer and append APIs expose history/hash/delta/working/output limits
+  plus selected-path, maximum-offset and peak-allocation summaries. Normal and
+  solid WIM writing automatically use the same encoder and retain per-chunk
+  raw fallback. CLI encoding supports matching/reference strategies and limits,
+  atomic replacement and same-path source handling.
+  Standalone codec/primitive tests pass 95 cases. ReleaseFast focused LZMS/WIM
+  tests pass 90/152 (242 total); the existing normal/solid/pipable/split and
+  archive-edit wimlib matrices pass. The raw matching differential validates
+  39 input/strategy rows, 30 independent wimlib decodes and ten item plans,
+  including a 106 MiB decoded stream with 30-bit fields. Pinned wimlib's 1/2
+  byte decoder fault is explicitly recorded; native tiny tests retain coverage.
+  Six CLI success/same-path cases and five atomic-failure cases pass. Selected
+  measured text/delta/matrix output improves from 39398/25364/30998 literal
+  bytes to 38/12/16; source and x86 remain larger than wimlib level 50. No
+  throughput or optimal-parser parity is claimed. The format/API document and
+  retained functional size report describe the remaining ratio/performance work.
+  Final Debug repository validation passes 3554/3554 tests (3547 root tests and
+  seven separate Brotli object/classifier cases); all 125 build-check steps
+  succeed. ReleaseFast AArch64 Linux compile-only validation also succeeds.
