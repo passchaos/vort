@@ -5,6 +5,8 @@ const incremental_decoder = @import("lzma/incremental_decoder.zig");
 const incremental_encoder = @import("lzma/incremental_encoder.zig");
 const incremental_encoder_tests = @import("lzma/incremental_encoder_tests.zig");
 const incremental_tests = @import("lzma/incremental_tests.zig");
+const contracts_tests = @import("lzma/incremental/contracts_tests.zig");
+const resource_tests = @import("lzma/incremental/resource_tests.zig");
 const writer = @import("lzma/writer.zig");
 const micro_writer = @import("lzma/micro_writer.zig");
 
@@ -48,6 +50,8 @@ pub const encodeAppend = writer.encodeAppend;
 pub const encodeInto = writer.encodeInto;
 
 test {
+    _ = contracts_tests;
+    _ = resource_tests;
     _ = decoder;
     _ = chunk_encoder;
     _ = wide_match;

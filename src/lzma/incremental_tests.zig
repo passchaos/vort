@@ -125,15 +125,15 @@ test "LZMA incremental decoder honors zero-output backpressure" {
     const frame = pythonFrame();
     var decoder = lzma.IncrementalDecoder.init(std.testing.allocator);
     defer decoder.deinit();
-    _ = try decoder.step(&frame, &.{});
-    decoder.finish();
-    const blocked = try decoder.step("", &.{});
+    const accepted = try decoder.step(&frame, &.{});
+    const blocked = try decoder.step(frame[accepted.progress.input_read..], &.{});
     try std.testing.expectEqual(core.StepResult.Status.need_output, blocked.status);
     try std.testing.expect(blocked.progress.output_written == 0);
-    try std.testing.expect(decoder.snapshot().pending_output != 0);
-    var output: [python_payload.len]u8 = undefined;
-    try drainFinished(&decoder, &output);
-    try std.testing.expectEqualSlices(u8, python_payload, &output);
+    try std.testing.expectEqual(@as(usize, 0), decoder.snapshot().pending_output);
+    try std.testing.expectEqual(@as(usize, 0), decoder.snapshot().validated_output);
+    const decoded = try decodeSplit(&decoder, frame[accepted.progress.input_read + blocked.progress.input_read ..], 5, 7, null);
+    defer std.testing.allocator.free(decoded.bytes);
+    try std.testing.expectEqualSlices(u8, python_payload, decoded.bytes);
 }
 
 test "LZMA incremental decoder enforces input output dictionary and exact limits" {

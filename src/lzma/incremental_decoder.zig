@@ -1,6 +1,8 @@
 const std = @import("std");
 const core = @import("../core.zig");
 const lzma_decoder = @import("decoder.zig");
+const options_mod = @import("incremental/options.zig");
+const working = @import("../io/working_allocator.zig");
 
 /// True symbol-progressive LZMA-Alone decoder. The compressed staging window is
 /// bounded and compacted as range-coded bytes are consumed; decoded staging is
@@ -8,6 +10,7 @@ const lzma_decoder = @import("decoder.zig");
 pub const Decoder = struct {
     allocator: std.mem.Allocator,
     options: Options,
+    budget: working.WorkingAllocator,
     phase: Phase = .header,
     header_bytes: [13]u8 = undefined,
     header_len: usize = 0,
@@ -18,14 +21,20 @@ pub const Decoder = struct {
     decoder: ?std.compress.lzma.Decode = null,
     range_decoder: ?std.compress.lzma.RangeDecoder = null,
     dictionary: ?lzma_decoder.CircularBuffer = null,
-    staging: std.Io.Writer.Allocating,
+    staging: [options_mod.max_symbol_output]u8 = undefined,
+    staging_len: usize = 0,
     staging_offset: usize = 0,
     validated_output: usize = 0,
     output_written: usize = 0,
+    input_read: usize = 0,
     input_finished: bool = false,
     saw_end_marker: bool = false,
     last_error_name: []const u8 = "",
     last_error_phase: Phase = .header,
+    failure: ?Error = null,
+    error_input_offset: ?usize = null,
+    error_output_offset: ?usize = null,
+    last_step_progress: core.Progress = .{},
 
     const header_size: usize = 13;
     const range_prefix_len: usize = 5;
@@ -33,21 +42,10 @@ pub const Decoder = struct {
     // tree, a 6-bit position slot, 26 direct bits, and a 4-bit align tree.
     // Range normalization consumes at most one byte per bit, so 64 bytes is a
     // conservative non-final transaction guard.
-    const symbol_input_guard: usize = 64;
+    const symbol_input_guard: usize = options_mod.symbol_input_guard;
 
-    pub const Error = lzma_decoder.Error || std.mem.Allocator.Error;
-    pub const Options = struct {
-        max_output_len: usize = std.math.maxInt(usize),
-        max_dictionary_size: usize = std.math.maxInt(usize),
-        max_compressed_buffer_len: usize = 1024 * 1024,
-        expected_output_len: ?usize = null,
-        /// Stop after a validated LZMA end marker and retain accepted suffix
-        /// bytes for an outer container. Known-size streams are unaffected.
-        stop_after_end_marker: bool = false,
-        /// Optional compressed lookahead used while locating the end marker.
-        /// Zero keeps the normal 64-byte symbol guard.
-        end_marker_input_guard: usize = 0,
-    };
+    pub const Error = lzma_decoder.Error || std.mem.Allocator.Error || error{WorkingMemoryLimitExceeded};
+    pub const Options = options_mod.Options;
     pub const Phase = enum {
         header,
         range_prefix,
@@ -64,6 +62,7 @@ pub const Decoder = struct {
         pending_output: usize,
         validated_output: usize,
         output_written: usize,
+        input_read: usize,
         declared_output_len: ?usize,
         dictionary_size: ?u32,
         retained_compressed_capacity: usize,
@@ -74,6 +73,11 @@ pub const Decoder = struct {
         last_error_name: []const u8,
         last_error_phase: Phase,
         trailing_input_bytes: usize,
+        working_bytes: usize,
+        peak_working_bytes: usize,
+        last_step_progress: core.Progress,
+        error_input_offset: ?usize,
+        error_output_offset: ?usize,
     };
 
     pub fn init(allocator: std.mem.Allocator) Decoder {
@@ -84,36 +88,56 @@ pub const Decoder = struct {
         return .{
             .allocator = allocator,
             .options = options,
-            .staging = std.Io.Writer.Allocating.init(allocator),
+            .budget = working.WorkingAllocator.init(allocator, options.max_working_memory),
         };
     }
 
     pub fn deinit(self: *Decoder) void {
-        if (self.decoder) |*state| state.deinit(self.allocator);
-        if (self.dictionary) |*dictionary| dictionary.deinit(self.allocator);
-        self.staging.deinit();
-        self.compressed.deinit(self.allocator);
+        if (self.decoder) |*state| state.deinit(self.budget.allocator());
+        if (self.dictionary) |*dictionary| dictionary.deinit(self.budget.allocator());
+        self.compressed.deinit(self.budget.allocator());
+        std.debug.assert(self.budget.live == 0);
         self.* = undefined;
     }
 
     pub fn reset(self: *Decoder) void {
-        self.resetWithOptions(self.options);
+        var state = self.decoder;
+        var dictionary = self.dictionary;
+        var compressed = self.compressed;
+        var budget = self.budget;
+        if (state) |*model| model.resetState(self.budget.allocator(), model.properties) catch unreachable;
+        if (dictionary) |*history| {
+            history.bytes.clearRetainingCapacity();
+            history.cursor = 0;
+            history.len = 0;
+            history.output_limit = self.options.max_output_len;
+        }
+        compressed.clearRetainingCapacity();
+        budget.peak = budget.live;
+        budget.hit_limit = false;
+        budget.last_failure_was_limit = false;
+        self.* = initWithOptions(self.allocator, self.options);
+        self.decoder = state;
+        self.dictionary = dictionary;
+        self.compressed = compressed;
+        self.budget = budget;
     }
 
     pub fn resetWithOptions(self: *Decoder, options: Options) void {
-        const allocator = self.allocator;
-        if (self.decoder) |*state| state.deinit(allocator);
-        if (self.dictionary) |*dictionary| dictionary.deinit(allocator);
-        var staging = self.staging;
-        var compressed = self.compressed;
-        staging.clearRetainingCapacity();
-        compressed.clearRetainingCapacity();
-        self.* = .{
-            .allocator = allocator,
-            .options = options,
-            .staging = staging,
-            .compressed = compressed,
+        options.validate() catch |err| {
+            self.recordError(self.phase, err);
+            return;
         };
+        const allocator = self.allocator;
+        self.deinit();
+        self.* = initWithOptions(allocator, options);
+    }
+
+    pub fn workingMemoryBytes(self: *const Decoder) usize {
+        return self.budget.live;
+    }
+    pub fn peakWorkingMemoryBytes(self: *const Decoder) usize {
+        return self.budget.peak;
     }
 
     pub fn snapshot(self: *const Decoder) Snapshot {
@@ -121,19 +145,25 @@ pub const Decoder = struct {
             .phase = self.phase,
             .header_received = self.header_len,
             .buffered_compressed_bytes = self.bufferedCompressedLen(),
-            .pending_output = self.staging.writer.buffered().len - self.staging_offset,
+            .pending_output = self.staging_len - self.staging_offset,
             .validated_output = self.validated_output,
             .output_written = self.output_written,
+            .input_read = self.input_read,
             .declared_output_len = self.declared_size,
             .dictionary_size = if (self.header) |header| header.dictionary_size else null,
             .retained_compressed_capacity = self.compressed.capacity,
             .retained_dictionary_capacity = if (self.dictionary) |dictionary| dictionary.bytes.capacity else 0,
-            .retained_output_capacity = self.staging.writer.buffer.len,
+            .retained_output_capacity = options_mod.max_symbol_output,
             .input_finished = self.input_finished,
             .saw_end_marker = self.saw_end_marker,
             .last_error_name = self.last_error_name,
             .last_error_phase = self.last_error_phase,
             .trailing_input_bytes = self.trailingInput().len,
+            .working_bytes = self.budget.live,
+            .peak_working_bytes = self.budget.peak,
+            .last_step_progress = self.last_step_progress,
+            .error_input_offset = self.error_input_offset,
+            .error_output_offset = self.error_output_offset,
         };
     }
 
@@ -147,14 +177,23 @@ pub const Decoder = struct {
         const snap = self.snapshot();
         return .{
             .phase_name = @tagName(snap.phase),
+            .input_read = snap.input_read,
+            .frame_input_read = snap.input_read,
             .header_received = snap.header_received,
             .output_written = snap.output_written,
             .expected_output_len = self.options.expected_output_len,
             .payload_remaining = snap.pending_output,
             .last_error_name = snap.last_error_name,
             .last_error_phase_name = if (snap.last_error_name.len == 0) "" else @tagName(snap.last_error_phase),
+            .error_input_offset = snap.error_input_offset,
+            .error_output_offset = snap.error_output_offset,
+            .last_step_progress = snap.last_step_progress,
             .recoverability_hint_name = if (std.mem.eql(u8, snap.last_error_name, @errorName(error.TruncatedFrame)))
                 "truncated_input"
+            else if (std.mem.eql(u8, snap.last_error_name, @errorName(error.WorkingMemoryLimitExceeded)))
+                "raise_working_memory_limit"
+            else if (std.mem.eql(u8, snap.last_error_name, @errorName(error.OutOfMemory)))
+                "allocation_failure"
             else if (std.mem.eql(u8, snap.last_error_name, @errorName(error.OutputLimitExceeded)))
                 "raise_input_output_or_dictionary_limit"
             else if (snap.last_error_name.len == 0)
@@ -171,10 +210,23 @@ pub const Decoder = struct {
     }
 
     pub fn step(self: *Decoder, input: []const u8, output: []u8) Error!core.StepResult {
-        return self.stepInternal(input, output) catch |err| {
+        self.last_step_progress = .{};
+        if (self.failure) |err| return err;
+        self.budget.last_failure_was_limit = false;
+        const before = core.Progress{ .input_read = self.input_read, .output_written = self.output_written };
+        const stepped = self.stepChecked(input, output) catch |original| {
+            const err = if (original == error.OutOfMemory and self.budget.last_failure_was_limit) error.WorkingMemoryLimitExceeded else original;
+            self.last_step_progress = .{ .input_read = self.input_read - before.input_read, .output_written = self.output_written - before.output_written };
             self.recordError(self.phase, err);
             return err;
         };
+        self.last_step_progress = stepped.progress;
+        return stepped;
+    }
+    fn stepChecked(self: *Decoder, input: []const u8, output: []u8) Error!core.StepResult {
+        if (input.len > std.math.maxInt(usize) - self.input_read) return error.IntegerOverflow;
+        try self.options.validate();
+        return self.stepInternal(input, output);
     }
 
     fn stepInternal(self: *Decoder, input: []const u8, output: []u8) Error!core.StepResult {
@@ -193,6 +245,7 @@ pub const Decoder = struct {
                 @memcpy(self.header_bytes[self.header_len..][0..take], input[input_read..][0..take]);
                 self.header_len += take;
                 input_read += take;
+                self.input_read += take;
                 if (self.header_len != header_size) {
                     if (self.input_finished) return error.TruncatedFrame;
                     return result(input_read, output_written, .need_input);
@@ -206,15 +259,18 @@ pub const Decoder = struct {
                     return result(input_read, output_written, .need_input);
                 }
                 var reader: std.Io.Reader = .fixed(self.compressed.items[self.compressed_start..]);
-                self.range_decoder = std.compress.lzma.RangeDecoder.init(&reader) catch |err| switch (err) {
-                    error.EndOfStream => return error.TruncatedFrame,
-                    else => return error.InvalidLzmaStream,
+                self.range_decoder = std.compress.lzma.RangeDecoder.init(&reader) catch |err| {
+                    self.advanceCompressed(reader.seek);
+                    return switch (err) {
+                        error.EndOfStream => error.TruncatedFrame,
+                        else => error.InvalidLzmaStream,
+                    };
                 };
                 self.advanceCompressed(reader.seek);
                 self.phase = .decode;
             },
             .decode => {
-                const dictionary = &(self.dictionary orelse return error.InvalidLzmaStream);
+                const dictionary = &(self.dictionary.?);
                 if (self.declared_size) |size| {
                     if (dictionary.len == size) {
                         self.phase = .known_size_complete;
@@ -227,38 +283,67 @@ pub const Decoder = struct {
                     self.options.end_marker_input_guard
                 else
                     symbol_input_guard;
-                if (!self.input_finished and self.bufferedCompressedLen() < input_guard) {
+                const probe_needed = output_written == output.len or input_guard < symbol_input_guard;
+                if (!probe_needed and !self.input_finished and self.bufferedCompressedLen() < input_guard) {
                     if (input_read == input.len)
                         return result(input_read, output_written, .need_input);
                     try self.appendCompressedGuard(input_guard, input, &input_read);
                     continue;
                 }
 
+                if (probe_needed) {
+                    if (input_guard < symbol_input_guard and !self.input_finished and self.bufferedCompressedLen() < input_guard) {
+                        if (input_read == input.len) return result(input_read, output_written, .need_input);
+                        try self.appendCompressedGuard(input_guard, input, &input_read);
+                        continue;
+                    }
+                    const probed = self.probeSymbol() catch |err| {
+                        if (err == error.EndOfStream and !self.input_finished) {
+                            if (self.bufferedCompressedLen() >= symbol_input_guard) return error.InvalidLzmaStream;
+                            if (input_read == input.len) return result(input_read, output_written, .need_input);
+                            try self.appendCompressedGuard(self.bufferedCompressedLen() + 1, input, &input_read);
+                            continue;
+                        }
+                        return self.mapProcessError(err);
+                    };
+                    if (probed.end_marker) {
+                        self.decoder = probed.state;
+                        self.range_decoder = probed.range;
+                        self.advanceCompressed(probed.consumed);
+                        self.saw_end_marker = true;
+                        self.validated_output = dictionary.len;
+                        if (self.declared_size) |size| if (dictionary.len != size) return error.SizeMismatch;
+                        self.phase = .end_marker;
+                        continue;
+                    }
+                    if (output_written == output.len) return result(input_read, output_written, .need_output);
+                }
+
+                try self.reserveDictionary(@min(options_mod.max_symbol_output, dictionary.output_limit - dictionary.len));
+                var staging: std.Io.Writer.Allocating = .{
+                    .allocator = self.budget.allocator(),
+                    .writer = .fixed(&self.staging),
+                    .alignment = .of(u8),
+                };
+
                 var reader: std.Io.Reader = .fixed(self.compressed.items[self.compressed_start..]);
                 var bytes_read: u64 = 0;
                 const status = (&self.decoder.?).process(
                     &reader,
-                    &self.staging,
+                    &staging,
                     dictionary,
                     &self.range_decoder.?,
                     &bytes_read,
-                ) catch |err| switch (err) {
-                    error.EndOfStream => if (self.input_finished)
-                        return error.TruncatedFrame
-                    else
-                        return error.InvalidLzmaStream,
-                    error.OutputLimitExceeded => if (self.declared_size != null or self.options.expected_output_len != null)
-                        return error.SizeMismatch
-                    else
-                        return error.OutputLimitExceeded,
-                    error.OutOfMemory, error.WriteFailed => return error.OutOfMemory,
-                    error.Overflow => return error.IntegerOverflow,
-                    else => return error.InvalidLzmaStream,
+                ) catch |err| {
+                    self.advanceCompressed(reader.seek);
+                    self.validated_output = dictionary.len;
+                    return self.mapProcessError(err);
                 };
                 self.advanceCompressed(reader.seek);
                 switch (status) {
                     .more => {
-                        if (self.staging.written().len == 0) return error.InvalidLzmaStream;
+                        self.staging_len = staging.writer.buffered().len;
+                        if (self.staging_len == 0) return error.InvalidLzmaStream;
                         self.validated_output = dictionary.len;
                         self.staging_offset = 0;
                         self.phase = .output;
@@ -269,26 +354,28 @@ pub const Decoder = struct {
                         if (self.declared_size) |size|
                             if (dictionary.len != size) return error.SizeMismatch;
                         self.staging_offset = 0;
-                        self.phase = if (self.staging.written().len == 0) .end_marker else .output;
+                        self.staging_len = staging.writer.buffered().len;
+                        self.phase = if (self.staging_len == 0) .end_marker else .output;
                     },
                 }
             },
             .output => {
-                const remaining = self.staging.written()[self.staging_offset..];
+                const remaining = self.staging[self.staging_offset..self.staging_len];
                 const take = @min(output.len - output_written, remaining.len);
                 @memcpy(output[output_written..][0..take], remaining[0..take]);
                 self.staging_offset += take;
                 output_written += take;
                 self.output_written += take;
-                if (self.staging_offset != self.staging.written().len)
+                if (self.staging_offset != self.staging_len)
                     return result(input_read, output_written, .need_output);
-                self.staging.clearRetainingCapacity();
+                self.staging_len = 0;
                 self.staging_offset = 0;
                 self.phase = if (self.saw_end_marker) .end_marker else .decode;
             },
             .known_size_complete => {
                 self.compressed.clearRetainingCapacity();
                 self.compressed_start = 0;
+                self.input_read += input.len - input_read;
                 input_read = input.len;
                 if (!self.input_finished)
                     return result(input_read, output_written, .need_input);
@@ -330,16 +417,27 @@ pub const Decoder = struct {
             if (expected > self.options.max_output_len) return error.OutputLimitExceeded;
         }
         const output_limit = declared_size orelse self.options.expected_output_len orelse self.options.max_output_len;
-        const state = std.compress.lzma.Decode.init(self.allocator, .{
+        const properties = std.compress.lzma.Decode.Properties{
             .lc = parsed.lc,
             .lp = parsed.lp,
             .pb = parsed.pb,
-        }) catch |err| switch (err) {
-            error.OutOfMemory => return error.OutOfMemory,
-            error.Overflow => return error.IntegerOverflow,
         };
-        self.decoder = state;
-        self.dictionary = lzma_decoder.CircularBuffer.init(parsed.dictionary_size, output_limit);
+        if (self.decoder) |*state| {
+            if (state.properties.lc + state.properties.lp == properties.lc + properties.lp) {
+                state.resetState(self.budget.allocator(), properties) catch |err| return self.mapProcessError(err);
+            } else {
+                const replacement = std.compress.lzma.Decode.init(self.budget.allocator(), properties) catch |err| return self.mapProcessError(err);
+                state.deinit(self.budget.allocator());
+                self.decoder = replacement;
+            }
+        } else self.decoder = std.compress.lzma.Decode.init(self.budget.allocator(), properties) catch |err| return self.mapProcessError(err);
+        if (self.dictionary) |*history| {
+            history.bytes.clearRetainingCapacity();
+            history.dictionary_size = parsed.dictionary_size;
+            history.output_limit = output_limit;
+            history.cursor = 0;
+            history.len = 0;
+        } else self.dictionary = lzma_decoder.CircularBuffer.init(parsed.dictionary_size, output_limit);
         self.header = parsed;
         self.declared_size = declared_size;
     }
@@ -349,6 +447,72 @@ pub const Decoder = struct {
             if (self.validated_output != expected) return error.SizeMismatch;
         if (self.declared_size == null and !self.saw_end_marker)
             return error.InvalidLzmaStream;
+    }
+
+    fn reserveDictionary(self: *Decoder, additional: usize) Error!void {
+        const dictionary = &self.dictionary.?;
+        const active = @min(dictionary.bytes.items.len, dictionary.dictionary_size);
+        const needed = active + @min(additional, dictionary.dictionary_size - active);
+        if (needed > dictionary.bytes.capacity) {
+            const grown = std.math.add(usize, dictionary.bytes.capacity, dictionary.bytes.capacity / 2 + 8) catch dictionary.dictionary_size;
+            try dictionary.bytes.ensureTotalCapacityPrecise(self.budget.allocator(), @min(dictionary.dictionary_size, @max(needed, grown)));
+        }
+    }
+
+    const Probe = struct {
+        state: std.compress.lzma.Decode,
+        range: std.compress.lzma.RangeDecoder,
+        consumed: usize,
+        end_marker: bool,
+    };
+
+    /// A small enclosing-format guard cannot justify mutating a partial
+    /// symbol. Only its active literal context can be touched by process(),
+    /// so shadow that row and all inline state; history stays read-only.
+    fn probeSymbol(self: *Decoder) !Probe {
+        const original = self.decoder.?;
+        const dictionary = &self.dictionary.?;
+        const properties = original.properties;
+        const previous: usize = dictionary.lastOr(0);
+        const context = ((dictionary.len & ((@as(usize, 1) << properties.lp) - 1)) << properties.lc) +
+            (previous >> @intCast(8 - @as(usize, properties.lc)));
+        var probabilities: [0x300]u16 = undefined;
+        @memcpy(&probabilities, original.literal_probs.data[context * probabilities.len ..][0..probabilities.len]);
+        var state = original;
+        state.literal_probs = .{ .data = &probabilities, .cols = probabilities.len };
+        state.properties.lc = 0;
+        state.properties.lp = 0;
+        var range = self.range_decoder.?;
+        var history = ProbeHistory{
+            .original = dictionary,
+            .len = dictionary.len,
+            .output_limit = dictionary.output_limit,
+            .allow_partial = dictionary.allow_partial,
+        };
+        var output: [options_mod.max_symbol_output]u8 = undefined;
+        var staging: std.Io.Writer.Allocating = .{
+            .allocator = self.budget.allocator(),
+            .writer = .fixed(&output),
+            .alignment = .of(u8),
+        };
+        var reader: std.Io.Reader = .fixed(self.compressed.items[self.compressed_start..]);
+        var bytes_read: u64 = 0;
+        const status = try state.process(&reader, &staging, &history, &range, &bytes_read);
+        // An EOS commit may use this inline copy, but must never install the
+        // row's stack address or its temporary row-selector properties.
+        state.literal_probs = original.literal_probs;
+        state.properties = original.properties;
+        return .{ .state = state, .range = range, .consumed = reader.seek, .end_marker = status == .finished };
+    }
+
+    fn mapProcessError(self: *const Decoder, err: anyerror) Error {
+        return switch (err) {
+            error.EndOfStream => if (self.input_finished) error.TruncatedFrame else error.InvalidLzmaStream,
+            error.OutputLimitExceeded => if (self.declared_size != null or self.options.expected_output_len != null) error.SizeMismatch else error.OutputLimitExceeded,
+            error.OutOfMemory, error.WriteFailed => error.OutOfMemory,
+            error.Overflow => error.IntegerOverflow,
+            else => error.InvalidLzmaStream,
+        };
     }
 
     fn ensureCompressed(
@@ -363,9 +527,10 @@ pub const Decoder = struct {
         if (take != 0) {
             if (self.bufferedCompressedLen() + take > self.options.max_compressed_buffer_len)
                 return error.OutputLimitExceeded;
-            try self.compressed.ensureTotalCapacityPrecise(self.allocator, self.compressed.items.len + take);
-            try self.compressed.appendSlice(self.allocator, input[input_read.*..][0..take]);
+            try self.compressed.ensureTotalCapacityPrecise(self.budget.allocator(), self.compressed.items.len + take);
+            self.compressed.appendSliceAssumeCapacity(input[input_read.*..][0..take]);
             input_read.* += take;
+            self.input_read += take;
         }
         return self.bufferedCompressedLen() >= target;
     }
@@ -384,9 +549,10 @@ pub const Decoder = struct {
         if (target <= buffered) return error.OutputLimitExceeded;
         const take = @min(target - buffered, input.len - input_read.*);
         if (take == 0) return error.OutputLimitExceeded;
-        try self.compressed.ensureTotalCapacityPrecise(self.allocator, self.compressed.items.len + take);
-        try self.compressed.appendSlice(self.allocator, input[input_read.*..][0..take]);
+        try self.compressed.ensureTotalCapacityPrecise(self.budget.allocator(), self.compressed.items.len + take);
+        self.compressed.appendSliceAssumeCapacity(input[input_read.*..][0..take]);
         input_read.* += take;
+        self.input_read += take;
     }
 
     fn advanceCompressed(self: *Decoder, count: usize) void {
@@ -415,11 +581,46 @@ pub const Decoder = struct {
     }
 
     fn recordError(self: *Decoder, phase: Phase, err: Error) void {
+        self.failure = err;
         self.last_error_name = @errorName(err);
         self.last_error_phase = phase;
+        self.error_input_offset = self.input_read;
+        self.error_output_offset = self.output_written;
     }
 
     fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
         return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = status };
+    }
+};
+
+/// process() never reads history again after appending its single symbol.
+/// Validate exactly like CircularBuffer and count the shadow output, while
+/// preserving the original bytes, cursor, and sparse allocation state.
+const ProbeHistory = struct {
+    original: *const lzma_decoder.CircularBuffer,
+    len: usize,
+    output_limit: usize,
+    allow_partial: bool,
+
+    pub fn lastOr(self: ProbeHistory, default: u8) u8 {
+        return self.original.lastOr(default);
+    }
+    pub fn lastN(self: ProbeHistory, distance: usize) !u8 {
+        return self.original.lastN(distance);
+    }
+    pub fn appendLiteral(self: *ProbeHistory, allocator: std.mem.Allocator, byte: u8, writer: *std.Io.Writer) !void {
+        _ = allocator;
+        if (self.len >= self.output_limit) return error.OutputLimitExceeded;
+        try writer.writeByte(byte);
+        self.len += 1;
+    }
+    pub fn appendLz(self: *ProbeHistory, allocator: std.mem.Allocator, length: usize, distance: usize, writer: *std.Io.Writer) !void {
+        _ = allocator;
+        if (distance == 0 or distance > self.original.dictionary_size or distance > self.len) return error.CorruptInput;
+        const remaining = self.output_limit -| self.len;
+        if (!self.allow_partial and length > remaining) return error.OutputLimitExceeded;
+        const take = @min(length, remaining);
+        for (0..take) |_| try writer.writeByte(0);
+        self.len += take;
     }
 };
