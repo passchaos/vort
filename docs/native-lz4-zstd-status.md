@@ -91,6 +91,33 @@ snapshot/diagnostics; subsequent calls after parser/allocation failure have
 zero progress until reset. Incomplete `finish()` retains the existing ability
 to supply more input/output.
 
+## Dictionary requests and continuation
+
+Both native incremental decoders expose `requiredDictionaryId()`,
+`provideDictionary(dictionary)` and `provideDictionarySet(set)`. A complete
+validated frame header with a nonzero unresolved ID reports `NeedDictionary`
+and preserves accepted input, prior-member output, cumulative limits and
+working memory. Waiting `step` and `finish` calls repeat `NeedDictionary`
+without accepting new bytes. A single dictionary with a different ID reports
+`DictionaryMismatch`; a supplied set without that ID reports `NeedDictionary`.
+Both preserve the request. Zstd also validates supplied full dictionary
+metadata before installing the override.
+
+Provided bytes are borrowed for the current frame, through successful
+completion, terminal failure, reset or deinit. They override the configured
+dictionary/set only for that frame and do not replace the original catalog.
+Frame completion and terminal failure clear the override and borrowed history
+views. LZ4 dictionary IDs are application-assigned values, so matching an ID
+does not authenticate dictionary content. Standard Zstd metadata must agree
+with its declared ID and content view.
+
+On the first `NeedDictionary`, advance caller input/output by
+`snapshot().last_step_progress`, obtain the required ID and provide the
+matching dictionary. Continue with the unconsumed caller-input suffix; the
+decoder reuses its retained header. Dictionary errors carry the
+`retry_with_dictionary` diagnostic hint; unrelated parser, checksum, budget
+and allocation errors remain sticky.
+
 ## Current validation commands
 
 Relevant smoke commands for this status slice are:

@@ -23164,3 +23164,18 @@ reuse, so production keeps the simpler independently owned plans.
   [the XZ baseline](performance/xz-progressive-functional-baseline.md).
   Further cross-codec dictionary/resource API parity and real-file performance
   evidence remain before any broad industry-best claim.
+
+- Native Zstd/LZ4 dictionary requests now pause on the validated header and
+  expose required ID, single-dictionary and set provision. Temporary overrides
+  apply only to one frame and clear on completion or terminal failure, while
+  cumulative progress and resource limits remain intact. LZMA-Alone and Brotli
+  now enforce persistent work budgets and exact failed-call progress with fatal
+  sticky errors. LZMA small ZIP lookahead uses a read-only symbol/row preflight;
+  Brotli preserves recoverable physical-header growth and operation caps across
+  frames. The current source contract gate passes 53 tests in Debug/ReleaseFast,
+  and ZIP/TAR/CPIO consumers pass 70. Independent native/LZMA/Brotli probes pass
+  271/162/268 cases with source/binary/runtime provenance; final build checks
+  pass 131 steps including wasm32-wasi. Details and exact allocation boundaries
+  are in [the dictionary/memory baseline](performance/dictionary-memory-contracts-functional-baseline.md).
+  Bzip2/Snappy working budgets, error contracts and decoded-storage reductions
+  remain next priorities before broader ratio/speed/memory comparisons.

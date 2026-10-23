@@ -33,6 +33,7 @@ var decoder = vort.LzmaIncrementalDecoder.initWithOptions(allocator, .{
     .max_output_len = 256 * 1024 * 1024,
     .max_dictionary_size = 64 * 1024 * 1024,
     .max_compressed_buffer_len = 1024 * 1024,
+    .max_working_memory = 96 * 1024 * 1024,
     .expected_output_len = expected_size,
 });
 defer decoder.deinit();
@@ -54,6 +55,29 @@ while (true) {
     if (result.status == .done) break;
 }
 ```
+
+The incremental decoder uses a persistent live-allocation budget for probability
+tables, dictionary and compressed storage. Fixed 273-byte symbol staging,
+caller buffers and allocator bookkeeping are excluded. Budget rejection is
+`WorkingMemoryLimitExceeded`; backing allocation failure remains `OutOfMemory`.
+`workingMemoryBytes()` and `peakWorkingMemoryBytes()` expose current and peak
+requested allocation bytes. `reset()` retains capacity and restarts logical
+counters; `resetWithOptions()` validates and releases old owned storage before
+reconfiguring. Its existing void signature records invalid settings for the
+next `step`; `Options.validate()` provides an immediate check.
+
+Failed calls expose `last_step_progress` and input/output detection offsets.
+Only bytes delivered into caller output count as published output. Parser and
+allocation failures are sticky; subsequent calls have zero new progress until
+reset. Moving an active value transfers its single ownership without retaining
+allocator callbacks to a former stack address.
+
+Small `end_marker_input_guard` settings used by ZIP perform a read-only symbol
+preflight. It copies fixed range/model state and only the current literal row;
+incomplete input leaves the live probability and dictionary state unchanged.
+A complete positive symbol commits only with output space. An end marker can
+commit without output, preserving short streams and their caller-owned suffix.
+Known-size completion keeps its existing coded-tail consumption behavior.
 
 Available APIs:
 
