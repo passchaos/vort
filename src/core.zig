@@ -55,8 +55,14 @@ pub const StepResult = struct {
     };
 };
 
+/// How incremental frame decoders retain encoded data before publishing it.
+/// Block streaming is the normal bounded-memory mode; callers may opt into
+/// complete-frame validation when they require that publication contract.
+pub const CompressedInputPolicy = enum { block_stream, prevalidated_frame };
+
 pub const StreamingDiagnostics = struct {
     phase_name: []const u8,
+    input_read: ?usize = null,
     header_received: ?usize = null,
     frame_input_read: ?usize = null,
     output_written: usize = 0,
@@ -65,6 +71,9 @@ pub const StreamingDiagnostics = struct {
     last_error_name: []const u8 = "",
     last_error_phase_name: []const u8 = "",
     recoverability_hint_name: []const u8 = "none",
+    error_input_offset: ?usize = null,
+    error_output_offset: ?usize = null,
+    last_step_progress: ?Progress = null,
 };
 
 /// Caller-visible format metadata emitted by parsers before payload materialization.

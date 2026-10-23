@@ -3254,10 +3254,24 @@ fn checkTruncatedLibZstdGeneratedIncrementalApis(allocator: std.mem.Allocator, p
 
     const output = try allocator.alloc(u8, payload.len);
     defer allocator.free(output);
-    const result = try decoder.step(truncated, output[0..0]);
-    try expect(result.status == .need_input);
-    try expect(result.progress.input_read == truncated.len);
-    try expect(result.progress.output_written == 0);
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (true) {
+        const result = try decoder.step(
+            truncated[input_offset..@min(truncated.len, input_offset + 17)],
+            output[output_offset..@min(output.len, output_offset + 191)],
+        );
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+        try expect(result.status != .done);
+        try expect(decoder.decodedBufferedBytes() == 0 and decoder.decodedBufferCapacity() == 0);
+        if (result.status == .need_input and input_offset == truncated.len) break;
+        try expect(result.progress.input_read != 0 or result.progress.output_written != 0);
+        if (result.status == .need_output) try expect(output_offset < output.len);
+    }
+    // Streaming validates EOF after draining the accepted blocks. Bytes from
+    // preceding complete blocks can already have reached the caller.
+    try expectEqualSlices(payload[0..output_offset], output[0..output_offset]);
     try expectError(error.TruncatedFrame, decoder.finish());
 }
 
@@ -3311,26 +3325,25 @@ fn checkCorruptChecksumLibZstdGeneratedIncrementalApis(allocator: std.mem.Alloca
 
     const output = try allocator.alloc(u8, payload.len);
     defer allocator.free(output);
-    const initial = decoder.step(frame, output[0..0]) catch |err| {
-        if (err != error.ChecksumMismatch) return err;
-        return;
-    };
-    try expect(initial.status == .need_output);
-    try expect(initial.progress.input_read == frame.len);
+    var input_offset: usize = 0;
     var written: usize = 0;
-    var result: vort.StepResult = initial;
-    while (result.status == .need_output) {
+    while (true) {
         const end = @min(output.len, written + 4096);
-        result = decoder.step("", output[written..end]) catch |err| {
+        const result = decoder.step(frame[input_offset..], output[written..end]) catch |err| {
             if (err != error.ChecksumMismatch) return err;
+            try expect(decoder.snapshot().input_received == frame.len);
+            try expect(decoder.snapshot().output_written == payload.len);
+            try expectEqualSlices(payload, output);
             return;
         };
+        input_offset += result.progress.input_read;
         written += result.progress.output_written;
+        try expect(result.status != .done);
+        try expect(decoder.decodedBufferedBytes() == 0 and decoder.decodedBufferCapacity() == 0);
+        try expect(result.progress.input_read != 0 or result.progress.output_written != 0);
+        if (result.status == .need_input) try expect(input_offset < frame.len);
+        if (result.status == .need_output) try expect(written < output.len);
     }
-    try expect(result.status == .done);
-    try expect(written == payload.len);
-    try expectEqualSlices(payload, output);
-    try expectError(error.ChecksumMismatch, decoder.finish());
 }
 
 fn checkCorruptChecksumLibZstdGeneratedChunkedApis(allocator: std.mem.Allocator, payload: []const u8, frame: []const u8) !void {

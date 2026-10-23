@@ -200,9 +200,11 @@ fn checkDictionaryIdValidation(allocator: std.mem.Allocator) !void {
         .max_decoded_buffer_len = payload.len,
     });
     defer bad_checksum_decoder.deinit();
-    try expectError(error.ChecksumMismatch, bad_checksum_decoder.step(wrong_checksum, checksum_priority_output[0..0]));
+    try expectError(error.ChecksumMismatch, bad_checksum_decoder.step(wrong_checksum, &checksum_priority_output));
+    try expect(bad_checksum_decoder.snapshot().output_written == payload.len);
+    try expectEqualSlices(payload, &checksum_priority_output);
     try expectEqualSlices("ChecksumMismatch", bad_checksum_decoder.diagnostics().last_error_name);
-    try expectEqualSlices("frame", bad_checksum_decoder.diagnostics().last_error_phase_name);
+    try expectEqualSlices("direct_output", bad_checksum_decoder.diagnostics().last_error_phase_name);
 
     const content_size_mismatch = [_]u8{
         0x28, 0xb5, 0x2f, 0xfd,
@@ -239,9 +241,9 @@ fn checkDictionaryIdValidation(allocator: std.mem.Allocator) !void {
         .max_decoded_buffer_len = size_priority_output.len,
     });
     defer size_mismatch_decoder.deinit();
-    try expectError(error.SizeMismatch, size_mismatch_decoder.step(&content_size_mismatch, size_priority_output[0..0]));
+    try expectError(error.SizeMismatch, size_mismatch_decoder.step(&content_size_mismatch, &size_priority_output));
     try expectEqualSlices("SizeMismatch", size_mismatch_decoder.diagnostics().last_error_name);
-    try expectEqualSlices("frame", size_mismatch_decoder.diagnostics().last_error_phase_name);
+    try expectEqualSlices("direct_output", size_mismatch_decoder.diagnostics().last_error_phase_name);
 
     const zero_rle_size_mismatch = [_]u8{
         0x28, 0xb5, 0x2f, 0xfd,
@@ -278,7 +280,7 @@ fn checkDictionaryIdValidation(allocator: std.mem.Allocator) !void {
     defer corrupt_decoder.deinit();
     try expectError(error.SizeMismatch, corrupt_decoder.step(&zero_rle_size_mismatch, zero_rle_priority_output[0..0]));
     try expectEqualSlices("SizeMismatch", corrupt_decoder.diagnostics().last_error_name);
-    try expectEqualSlices("frame", corrupt_decoder.diagnostics().last_error_phase_name);
+    try expectEqualSlices("direct_output", corrupt_decoder.diagnostics().last_error_phase_name);
 
     const compressed_malformed_hex =
         "28b52ffd2234129a250100606162636465666768696a6b6c10180210aeb5070b83c3c2c360e030701878383c1cec92";
@@ -325,7 +327,7 @@ fn checkDictionaryIdValidation(allocator: std.mem.Allocator) !void {
     defer compressed_malformed_decoder.deinit();
     try expectError(error.CorruptFrame, compressed_malformed_decoder.step(&compressed_malformed, compressed_priority_output[0..0]));
     try expectEqualSlices("CorruptFrame", compressed_malformed_decoder.diagnostics().last_error_name);
-    try expectEqualSlices("frame", compressed_malformed_decoder.diagnostics().last_error_phase_name);
+    try expectEqualSlices("direct_output", compressed_malformed_decoder.diagnostics().last_error_phase_name);
     var missing_set_compressed_decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, compressed_missing_set, .{
         .expected_output_len = compressed_priority_output.len,
         .max_decoded_buffer_len = compressed_priority_output.len,
@@ -341,7 +343,7 @@ fn checkDictionaryIdValidation(allocator: std.mem.Allocator) !void {
     defer set_compressed_decoder.deinit();
     try expectError(error.CorruptFrame, set_compressed_decoder.step(&compressed_malformed, compressed_priority_output[0..0]));
     try expectEqualSlices("CorruptFrame", set_compressed_decoder.diagnostics().last_error_name);
-    try expectEqualSlices("frame", set_compressed_decoder.diagnostics().last_error_phase_name);
+    try expectEqualSlices("direct_output", set_compressed_decoder.diagnostics().last_error_phase_name);
 }
 
 fn checkDerivedDictionaryIdApis(allocator: std.mem.Allocator) !void {
@@ -1597,9 +1599,25 @@ fn checkNoSizeDictionarySetDirectOutput(allocator: std.mem.Allocator) !void {
     const initial = try decoder.step(stream.items, output[0..0]);
     try expect(initial.status == .need_output);
     try expectEqualSlices("direct_output", decoder.diagnostics().phase_name);
-    try expect(decoder.snapshot().decoded_len.? == first_payload.len);
-    const done = try decoder.step("", &output);
-    try expect(done.status == .done);
+    try expect(decoder.snapshot().decoded_len == null);
+    try expect(decoder.isBlockStreaming());
+    try expect(initial.progress.input_read < first.frame.len);
+    var input_offset = initial.progress.input_read;
+    var output_offset: usize = 0;
+    while (true) {
+        const result = try decoder.step(stream.items[input_offset..], output[output_offset..@min(output.len, output_offset + 3)]);
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+        try expect(decoder.decodedBufferedBytes() == 0 and decoder.decodedBufferCapacity() == 0);
+        try expect(decoder.compressedBufferCapacity() <= std.compress.zstd.block_size_max);
+        if (result.status == .done) break;
+        try expect(result.progress.input_read != 0 or result.progress.output_written != 0);
+        if (result.status == .need_input) try expect(input_offset < stream.items.len);
+        if (result.status == .need_output) try expect(output_offset < output.len);
+    }
+    try expect(input_offset == stream.items.len);
+    try expect(output_offset == expected.len);
+    try expect(decoder.streamedSequenceBlockCount() >= 2);
     try expectEqualSlices(expected, &output);
     try decoder.finish();
 }

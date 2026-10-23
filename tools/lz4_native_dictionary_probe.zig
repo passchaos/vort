@@ -23,7 +23,7 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkReusableDictionaryApis(init.gpa);
     checked += 1;
-    try checkNoSizeDictionarySetDirectOutput(init.gpa);
+    try checkNoSizeDictionarySetIncrementalOutput(init.gpa);
     checked += 1;
     try checkDictionaryDirectFallback(init.gpa);
     checked += 1;
@@ -453,7 +453,7 @@ fn checkReusableDictionaryApis(allocator: std.mem.Allocator) !void {
     try expectEqualSlices("prefix:" ++ payload, appended.items);
 }
 
-fn checkNoSizeDictionarySetDirectOutput(allocator: std.mem.Allocator) !void {
+fn checkNoSizeDictionarySetIncrementalOutput(allocator: std.mem.Allocator) !void {
     const first_dict = vort.Lz4NativeDictionary.init(0x5151, "abcdefghijklmnop");
     const second_dict = vort.Lz4NativeDictionary.init(0x5152, "QRSTUVWXYZabcdef");
     const dictionary_set = vort.Lz4NativeDictionarySet.init(&.{ first_dict, second_dict });
@@ -485,14 +485,8 @@ fn checkNoSizeDictionarySetDirectOutput(allocator: std.mem.Allocator) !void {
     });
     defer decoder.deinit();
     var output: [expected.len]u8 = undefined;
-    const initial = try decoder.step(stream.items, output[0..0]);
-    try expect(initial.status == .need_output);
-    try expectEqualSlices("direct_output", decoder.diagnostics().phase_name);
-    try expect(decoder.snapshot().decoded_len.? == first_payload.len);
-    const done = try decoder.step("", &output);
-    try expect(done.status == .done);
+    try drainIncremental(&decoder, stream.items, &output, 7, 5);
     try expectEqualSlices(expected, &output);
-    try decoder.finish();
 }
 
 fn checkDictionaryDirectFallback(allocator: std.mem.Allocator) !void {
@@ -504,7 +498,17 @@ fn checkDictionaryDirectFallback(allocator: std.mem.Allocator) !void {
     }, dict);
     defer allocator.free(encoded);
 
+    var streaming = vort.Lz4NativeIncrementalFrameDecoder.initWithDictionaryAndOptions(allocator, dict, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer streaming.deinit();
+    var streamed_output: [payload.len]u8 = undefined;
+    try drainIncremental(&streaming, encoded, &streamed_output, 3, 2);
+    try expectEqualSlices(payload, &streamed_output);
+
     var decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithDictionaryAndOptions(allocator, dict, .{
+        .input_policy = .prevalidated_frame,
         .expected_output_len = payload.len,
         .max_decoded_buffer_len = payload.len,
     });
@@ -512,6 +516,7 @@ fn checkDictionaryDirectFallback(allocator: std.mem.Allocator) !void {
     var output: [payload.len]u8 = undefined;
     const initial = try decoder.step(encoded, output[0..0]);
     try expect(initial.status == .need_output);
+    try expect(initial.progress.input_read == encoded.len and initial.progress.output_written == 0);
     try expectEqualSlices("direct_output", decoder.diagnostics().phase_name);
     const partial = try decoder.step("", output[0..5]);
     try expect(partial.status == .need_output);
@@ -523,6 +528,9 @@ fn checkDictionaryDirectFallback(allocator: std.mem.Allocator) !void {
     const done = try decoder.step("", output[5..]);
     try expect(done.status == .done);
     try expectEqualSlices(payload, &output);
+    try expect(decoder.snapshot().input_received == encoded.len);
+    try expect(decoder.snapshot().output_written == payload.len);
+    try decoder.finish();
 }
 
 fn checkDictionarySetDirectFallback(allocator: std.mem.Allocator) !void {
@@ -536,7 +544,17 @@ fn checkDictionarySetDirectFallback(allocator: std.mem.Allocator) !void {
     }, dict);
     defer allocator.free(encoded);
 
+    var streaming = vort.Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, dictionary_set, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer streaming.deinit();
+    var streamed_output: [payload.len]u8 = undefined;
+    try drainIncremental(&streaming, encoded, &streamed_output, 3, 2);
+    try expectEqualSlices(payload, &streamed_output);
+
     var decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, dictionary_set, .{
+        .input_policy = .prevalidated_frame,
         .expected_output_len = payload.len,
         .max_decoded_buffer_len = payload.len,
     });
@@ -544,6 +562,7 @@ fn checkDictionarySetDirectFallback(allocator: std.mem.Allocator) !void {
     var output: [payload.len]u8 = undefined;
     const initial = try decoder.step(encoded, output[0..0]);
     try expect(initial.status == .need_output);
+    try expect(initial.progress.input_read == encoded.len and initial.progress.output_written == 0);
     try expectEqualSlices("direct_output", decoder.diagnostics().phase_name);
     const partial = try decoder.step("", output[0..5]);
     try expect(partial.status == .need_output);
@@ -555,6 +574,9 @@ fn checkDictionarySetDirectFallback(allocator: std.mem.Allocator) !void {
     const done = try decoder.step("", output[5..]);
     try expect(done.status == .done);
     try expectEqualSlices(payload, &output);
+    try expect(decoder.snapshot().input_received == encoded.len);
+    try expect(decoder.snapshot().output_written == payload.len);
+    try decoder.finish();
 }
 
 fn expect(ok: bool) !void {
@@ -571,4 +593,26 @@ fn expectError(expected: anyerror, result: anytype) !void {
     } else |err| {
         if (err != expected) return err;
     }
+}
+
+fn drainIncremental(decoder: *vort.Lz4NativeIncrementalFrameDecoder, input: []const u8, output: []u8, input_chunk_len: usize, output_chunk_len: usize) !void {
+    var read: usize = 0;
+    var written: usize = 0;
+    while (true) {
+        const input_end = @min(input.len, read + input_chunk_len);
+        const output_end = @min(output.len, written + output_chunk_len);
+        const result = try decoder.step(input[read..input_end], output[written..output_end]);
+        try expect(result.progress.input_read <= input_end - read);
+        try expect(result.progress.output_written <= output_end - written);
+        read += result.progress.input_read;
+        written += result.progress.output_written;
+        try expect(decoder.snapshot().input_received == read);
+        try expect(decoder.snapshot().output_written == written);
+        try expect(decoder.decodedBufferedBytes() == 0);
+        try expect(decoder.decodedBufferCapacity() == 0);
+        if (result.status == .done and read == input.len) break;
+        try expect(result.progress.input_read != 0 or result.progress.output_written != 0);
+    }
+    try expect(read == input.len and written == output.len);
+    try decoder.finish();
 }
