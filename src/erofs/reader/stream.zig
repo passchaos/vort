@@ -69,7 +69,7 @@ pub const Reader = struct {
                 const encoded = segment.content.encoded;
                 var bounded = self.context;
                 bounded.limits.max_decoded_extent_size = @min(bounded.limits.max_decoded_extent_size, segment.max_decoded);
-                const bytes = try bounded.decode(encoded.algorithm, encoded.input, encoded.start, encoded.encoded_size, encoded.decoded_size);
+                const bytes = if (encoded.partial) try bounded.decodePartial(encoded.algorithm, encoded.input, encoded.start, encoded.encoded_size, encoded.decoded_size) else try bounded.decode(encoded.algorithm, encoded.input, encoded.start, encoded.encoded_size, encoded.decoded_size);
                 self.cached = bytes;
                 if (bytes.len != encoded.decoded_size) return error.SizeMismatch;
             }
@@ -77,6 +77,7 @@ pub const Reader = struct {
         const segment = self.segment.?;
         var size = @min(output.len, segment.size - self.segment_read);
         switch (segment.content) {
+            .fragment => return error.InvalidErofs,
             .zero => @memset(output[0..size], 0),
             .encoded => |encoded| {
                 const start = try context_module.add(encoded.within, self.segment_read);

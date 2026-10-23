@@ -44,12 +44,18 @@ const Frame = struct {
 
     fn crop(self: *Frame, whole: spans.Whole, end: usize) Error!?Event {
         const segment = try spans.crop(whole, self.start, end, self.destination, self.max_decoded) orelse return null;
+        if (segment.content == .fragment) {
+            if (self.context.reader.superblock.feature_incompat & format.feature_incompat_fragments == 0 or self.context.reader.superblock.packed_nid == 0 or self.inode.nid == self.context.reader.superblock.packed_nid) return error.InvalidErofs;
+            const packed_inode = try self.context.reader.inode(self.context.reader.superblock.packed_nid);
+            if (try packed_inode.fileType() != .regular or packed_inode.fragment_offset != null or packed_inode.compressed_advise & 0x20 != 0) return error.InvalidErofs;
+            if (packed_inode.layout == .chunk_based) return error.UnsupportedErofsLayout;
+            return .{ .child = .{ .inode = packed_inode, .start = std.math.cast(usize, segment.content.fragment) orelse return error.IntegerOverflow, .size = segment.size, .destination = segment.start, .max_decoded = @min(segment.max_decoded, self.context.limits.max_packed_extent_size) } };
+        }
         return .{ .segment = segment };
     }
 
     fn tail(self: *Frame) Error!?Event {
         if (self.end <= self.prefix_end) return null;
-        const start = @max(self.start, self.prefix_end);
         if (self.inode.compressed_inline_size != 0) {
             const metadata = try self.context.reader.metadataInput(self.inode);
             _ = try metadata.end(self.inode.compressed_inline_start, self.inode.compressed_inline_size);
@@ -66,12 +72,7 @@ const Frame = struct {
             return self.crop(.{ .start = self.prefix_end, .end = self.inode.file_size, .content = content }, self.end);
         }
         const fragment = self.inode.fragment_offset orelse return null;
-        if (self.context.reader.superblock.feature_incompat & format.feature_incompat_fragments == 0 or self.context.reader.superblock.packed_nid == 0 or self.inode.nid == self.context.reader.superblock.packed_nid) return error.InvalidErofs;
-        const offset = std.math.cast(usize, fragment) orelse return error.IntegerOverflow;
-        const packed_inode = try self.context.reader.inode(self.context.reader.superblock.packed_nid);
-        if (try packed_inode.fileType() != .regular or packed_inode.fragment_offset != null) return error.InvalidErofs;
-        if (packed_inode.layout == .chunk_based) return error.UnsupportedErofsLayout;
-        return .{ .child = .{ .inode = packed_inode, .start = try context_module.add(offset, start - self.prefix_end), .size = self.end - start, .destination = try context_module.add(self.destination, start - self.start), .max_decoded = @min(self.max_decoded, self.context.limits.max_packed_extent_size) } };
+        return self.crop(.{ .start = self.prefix_end, .end = self.inode.file_size, .content = .{ .fragment = fragment } }, self.end);
     }
 
     fn next(self: *Frame) Error!?Event {

@@ -9,6 +9,7 @@ pub const Index = struct {
     logical_offset: usize,
     physical_block: u32,
     compressed_blocks: ?u32 = null,
+    partial: bool = false,
 };
 
 pub const View = struct {
@@ -33,6 +34,7 @@ pub fn readFullInput(metadata: input_module.Input, view: View, cluster_index: us
     const kind: u2 = @truncate(format.readU16(&record, 0) & 3);
     return .{
         .kind = kind,
+        .partial = kind != 2 and format.readU16(&record, 0) & 0x8000 != 0,
         .logical_offset = format.readU16(&record, 2),
         .physical_block = format.readU32(&record, 4),
         .compressed_blocks = if (kind == 2)

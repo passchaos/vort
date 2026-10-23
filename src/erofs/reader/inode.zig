@@ -179,7 +179,8 @@ pub const Reader = struct {
                 self.superblock.feature_incompat & format.feature_incompat_48bit != 0 and
                 advise & 1 != 0)
             {
-                if (advise & 0x28 != 0) return error.UnsupportedErofsFeature;
+                if (advise & 0x08 != 0) return error.UnsupportedErofsFeature;
+                if (advise & 0x20 != 0 and (self.superblock.feature_incompat & format.feature_incompat_fragments == 0 or self.superblock.packed_nid == 0 or nid == self.superblock.packed_nid)) return error.InvalidErofs;
                 const record_size: u8 = @as(u8, 4) << @intCast((advise >> 1) & 3);
                 const record_start = try alignForward(
                     try add(header_start, 8),

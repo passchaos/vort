@@ -18,8 +18,9 @@ pub const Encoded = struct {
     decoded_size: usize,
     algorithm: format.Compression,
     within: usize = 0,
+    partial: bool = false,
 };
-pub const Content = union(enum) { zero, raw: Raw, encoded: Encoded };
+pub const Content = union(enum) { zero, raw: Raw, encoded: Encoded, fragment: u64 };
 pub const Whole = struct { start: usize, end: usize, content: Content };
 pub const Segment = struct { start: usize, size: usize, content: Content, max_decoded: usize };
 
@@ -37,7 +38,11 @@ pub fn crop(whole: Whole, range_start: usize, range_end: usize, destination: usi
                 if (whole.end - whole.start > rotation.block_size or raw.physical_size < rotation.block_size) return error.InvalidErofs;
             } else if (try context.add(raw.skip, end - start) > raw.physical_size) return error.InvalidErofs;
         },
-        .encoded => |*encoded| encoded.within = start - whole.start,
+        .encoded => |*encoded| {
+            encoded.within = start - whole.start;
+            if (encoded.partial) encoded.decoded_size = @min(encoded.decoded_size, end - whole.start);
+        },
+        .fragment => |*offset| offset.* = try context.offset(offset.*, start - whole.start),
     }
     return .{ .start = try context.add(destination, start - range_start), .size = end - start, .content = content, .max_decoded = max_decoded };
 }

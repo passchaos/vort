@@ -46,12 +46,16 @@ pub const Walker = struct {
         self.finished = following == null;
         const block_size = self.context.reader.superblock.block_size;
         var content: spans.Content = undefined;
-        if (prior.format_code == 0) {
+        if (prior.fragment_offset) |offset| {
+            content = .{ .fragment = offset };
+        } else if (prior.encoded_len == 0) {
+            content = .zero;
+        } else if (prior.format_code == 0) {
             if (end - prior.logical_start > prior.encoded_len) return error.InvalidErofs;
             content = .{ .raw = .{ .input = self.context.reader.primary, .start = prior.physical_start, .physical_size = prior.encoded_len, .rotation = if (self.inode.compressed_advise & 0x10 != 0 and prior.physical_start % block_size == 0 and prior.encoded_len % block_size == 0) .{ .block_size = block_size, .start = prior.logical_start % block_size } else null } };
         } else {
             const algorithm = std.enums.fromInt(format.Compression, @as(u8, prior.format_code - 1)) orelse return error.UnsupportedErofsCompression;
-            content = .{ .encoded = .{ .input = self.context.reader.primary, .start = prior.physical_start, .encoded_size = prior.encoded_len, .decoded_size = end - prior.logical_start, .algorithm = algorithm } };
+            content = .{ .encoded = .{ .input = self.context.reader.primary, .start = prior.physical_start, .encoded_size = prior.encoded_len, .decoded_size = end - prior.logical_start, .algorithm = algorithm, .partial = prior.partial } };
         }
         return .{ .start = prior.logical_start, .end = end, .content = content };
     }

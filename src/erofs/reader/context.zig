@@ -28,15 +28,24 @@ pub const Context = struct {
     }
 
     pub fn decode(self: Context, algorithm: format.Compression, input: input_module.Input, start: u64, encoded_size: usize, decoded_size: usize) Error![]u8 {
+        return self.decodeMode(algorithm, input, start, encoded_size, decoded_size, false);
+    }
+
+    pub fn decodePartial(self: Context, algorithm: format.Compression, input: input_module.Input, start: u64, encoded_size: usize, decoded_size: usize) Error![]u8 {
+        return self.decodeMode(algorithm, input, start, encoded_size, decoded_size, true);
+    }
+
+    fn decodeMode(self: Context, algorithm: format.Compression, input: input_module.Input, start: u64, encoded_size: usize, decoded_size: usize, partial: bool) Error![]u8 {
         if (decoded_size > self.limits.max_decoded_extent_size) return error.OutputLimitExceeded;
         if (encoded_size > self.limits.max_encoded_extent_size) return error.OutputLimitExceeded;
         if (input == .slice) {
             const end = try input.endAt(start, encoded_size);
-            return codec.decodeExtentAlloc(self.allocator, algorithm, input.slice[@intCast(start)..@intCast(end)], decoded_size, self.reader.superblock.feature_incompat & 1 != 0);
+            const payload = input.slice[@intCast(start)..@intCast(end)];
+            return if (partial) codec.decodePrefixExtentAlloc(self.allocator, algorithm, payload, decoded_size, self.reader.superblock.feature_incompat & 1 != 0) else codec.decodeExtentAlloc(self.allocator, algorithm, payload, decoded_size, self.reader.superblock.feature_incompat & 1 != 0);
         }
         const encoded_bytes = try self.encoded(input, start, encoded_size);
         defer self.allocator.free(encoded_bytes);
-        return codec.decodeExtentAlloc(self.allocator, algorithm, encoded_bytes, decoded_size, self.reader.superblock.feature_incompat & 1 != 0);
+        return if (partial) codec.decodePrefixExtentAlloc(self.allocator, algorithm, encoded_bytes, decoded_size, self.reader.superblock.feature_incompat & 1 != 0) else codec.decodeExtentAlloc(self.allocator, algorithm, encoded_bytes, decoded_size, self.reader.superblock.feature_incompat & 1 != 0);
     }
 };
 

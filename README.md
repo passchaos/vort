@@ -260,7 +260,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   compressed inline tail packing with caller-bounded packed-extent scratch,
   plus local/external chunk-based files with borrowed device tables, holes,
   4-byte maps and 8-byte indexes, 48-bit superblock/flat/chunk/device addresses,
-  4/8/16/32-byte compressed extent records, and owning bounded metabox metadata
+  4/8/16/32-byte compressed extent records with partial-reference decoding,
+  sparse holes and final packed fragments, legacy full-index partial references,
+  and owning bounded metabox metadata
   caches with high-bit NIDs, LZ4/MicroLZMA/raw-Deflate/Zstandard extraction
   with explicit bounds, and
   deterministic stored/LZ4/MicroLZMA/raw-Deflate/Zstandard writing for
@@ -1412,6 +1414,9 @@ defer zstd_incremental_encoder.deinit();
 // losing bit-reservoir or history state. Fixed/dynamic Huffman symbols use
 // bounded prefix lookups, and matches copy in resumable spans rather than one
 // byte at a time.
+// stop_at_output_limit opts into a bounded prefix: step returns need_output at
+// max_output_len without requiring EOB, even inside a stored chunk or match.
+// The default keeps the ordinary output-limit and end-of-stream checks.
 // Dynamic blocks currently progress through HLIT/HDIST/HCLEN and the split
 // code-length alphabet/repeats into byte-progressive payload literals and matches.
 // ZlibIncrementalDecoder layers split CMF/FLG and streaming Adler/footer

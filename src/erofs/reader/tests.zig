@@ -8,4 +8,6 @@ test {
     _ = @import("tests/directory_stream.zig");
     _ = @import("tests/slice_stream.zig");
     _ = @import("tests/prefix_table.zig");
+    _ = @import("tests/partial.zig");
+    _ = @import("tests/partial_errors.zig");
 }

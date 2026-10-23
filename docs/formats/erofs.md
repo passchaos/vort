@@ -203,6 +203,29 @@ from cluster bits and optionally carry one 64-bit physical base, while larger
 records carry explicit 64-bit physical and logical starts. Raw and all four
 EROFS compression formats share the same bounded decode path.
 
+Modern extent records support `PARTIAL_REF` (encoded-length bit 27), and
+legacy full-index heads support their bit-15 partial-reference flag. LZ4,
+MicroLZMA, raw Deflate and Zstandard decode only the needed prefix of a marked
+extent; range cropping includes the skipped prefix needed for match history.
+Unmarked extents retain complete decoding and validation. Input extent bounds
+and encoded-size caps still apply to the complete encoded region; decoded-size
+caps apply to the prefix actually decoded. Decoder state and prefix storage use
+the supplied working allocator and are released at extent boundaries or error.
+
+A zero encoded-length mask represents a hole and emits zero bytes without
+reading its physical address. With the fragment-pcluster advise flag, the final
+record instead carries a packed offset: the complete 32-bit length word is the
+low offset, and records of 8 bytes or more provide its high 32 bits in
+`pstart_lo`. This record shares the ordinary fragment child reader, including
+full/compact/modern packed layouts, range offsets and packed-extent limits.
+Self references, non-regular packed inodes and unsupported chunk containers are
+rejected. Record ordering and remaining metadata are validated before reporting
+`done`, including when the requested range ends before the final fragment.
+
+Partial references allow decoding to stop without reaching compression EOF.
+Required header, literal, match and source bytes must still be valid; unused
+compressed suffixes and full-stream footers are outside that prefix read.
+
 Metabox images expose an ordinary hidden compressed inode whose decoded file is
 a second metadata address space. `loadMetaboxAllocLimited` first validates and
 decodes that inode under caller output/scratch limits, then returns an owning
@@ -536,8 +559,8 @@ defer encoded_chunks.deinit(allocator);
 ```
 
 Plain, metabox and packed-inode long xattr prefix tables are supported.
-Compressed 48-bit `PARTIAL_REF` and
-fragment-extent combinations remain explicitly unsupported. The writer does
+Partial references, holes and final fragments in 48-bit extent records are
+supported by both reading interfaces. The writer does
 not yet expose MZ=id directory-data placement. Chunk output requires stored
 mode; fragment and compressed-inline output require a non-stored compression
 mode because visible files use the compressed inode layout even when a prefix

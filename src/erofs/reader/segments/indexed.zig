@@ -4,7 +4,7 @@ const inode_module = @import("../types.zig");
 const spans = @import("types.zig");
 
 pub const Error = spans.Error;
-const Head = struct { start: usize, block: u32, kind: u2, blocks: ?u32 };
+const Head = struct { start: usize, block: u32, kind: u2, blocks: ?u32, partial: bool };
 
 pub const Walker = struct {
     context: context_module.Context,
@@ -32,7 +32,7 @@ pub const Walker = struct {
             if (record.logical_offset >= self.cluster_size) return error.InvalidErofs;
             const base = std.math.mul(usize, index, self.cluster_size) catch return error.IntegerOverflow;
             const logical = try context_module.add(base, record.logical_offset);
-            return .{ .start = logical, .block = record.physical_block, .kind = record.kind, .blocks = try self.context.reader.compressedBlockCount(self.inode, index, self.count, logical, record.kind) };
+            return .{ .start = logical, .block = record.physical_block, .kind = record.kind, .partial = record.partial, .blocks = try self.context.reader.compressedBlockCount(self.inode, index, self.count, logical, record.kind) };
         }
         return null;
     }
@@ -58,7 +58,7 @@ pub const Walker = struct {
         const physical_size = std.math.mul(usize, blocks, block_size) catch return error.IntegerOverflow;
         const content: spans.Content = switch (prior.kind) {
             0 => .{ .raw = .{ .input = self.context.reader.primary, .start = start, .physical_size = physical_size, .rotation = if (self.inode.compressed_advise & 0x10 != 0) .{ .block_size = block_size, .start = prior.start % block_size } else null } },
-            1, 3 => .{ .encoded = .{ .input = self.context.reader.primary, .start = start, .encoded_size = physical_size, .decoded_size = end - prior.start, .algorithm = self.inode.compressed_algorithms[if (prior.kind == 3) 1 else 0] orelse return error.InvalidErofs } },
+            1, 3 => .{ .encoded = .{ .input = self.context.reader.primary, .start = start, .encoded_size = physical_size, .decoded_size = end - prior.start, .partial = prior.partial, .algorithm = self.inode.compressed_algorithms[if (prior.kind == 3) 1 else 0] orelse return error.InvalidErofs } },
             else => return error.UnsupportedErofsFeature,
         };
         return .{ .start = prior.start, .end = end, .content = content };
