@@ -67,7 +67,9 @@ zig build run-lzfse-stream-diff -Doptimize=ReleaseFast -- \
 Exact LZFSE corpus/source/probe hashes and measurements are retained in
 [the streaming JSON](data/lzfse-stream-x86-20261024.json). Native probe evidence
 is in [the dashboard JSON](data/native-bounded-stream-x86-20261024.json).
-Zstd/LZ4's existing per-frame decoded limit and logical-stream exact-size pledge
-remain distinct; shared cumulative work/output quotas for those codecs are
-future API work. XZ decoded-block staging and broader real-file throughput,
-allocation and RSS comparisons remain open.
+Zstd/LZ4's per-frame decoded limit and logical-stream exact-size pledge remain
+distinct from their cumulative output and live requested-allocation quotas.
+The added quota and dictionary-recovery evidence is recorded in
+[the stream-contract baseline](stream-contracts-functional-baseline.md).
+XZ decoded-block staging and broader real-file throughput, allocation and RSS
+comparisons remain open.

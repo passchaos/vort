@@ -1,0 +1,337 @@
+{
+  "capabilities": [
+    {
+      "capability": "lib-generated",
+      "cases": 377,
+      "ok": true,
+      "ok_probe_count": 2,
+      "present": true,
+      "probe_count": 2
+    },
+    {
+      "capability": "native-generated",
+      "cases": 546,
+      "ok": true,
+      "ok_probe_count": 2,
+      "present": true,
+      "probe_count": 2
+    },
+    {
+      "capability": "incremental",
+      "cases": 395,
+      "ok": true,
+      "ok_probe_count": 4,
+      "present": true,
+      "probe_count": 4
+    },
+    {
+      "capability": "chunked",
+      "cases": 391,
+      "ok": true,
+      "ok_probe_count": 4,
+      "present": true,
+      "probe_count": 4
+    },
+    {
+      "capability": "compressed-block-cursor",
+      "cases": 5,
+      "ok": true,
+      "ok_probe_count": 1,
+      "present": true,
+      "probe_count": 1
+    },
+    {
+      "capability": "reusable-chunked",
+      "cases": 388,
+      "ok": true,
+      "ok_probe_count": 2,
+      "present": true,
+      "probe_count": 2
+    },
+    {
+      "capability": "fse-repeat",
+      "cases": 8,
+      "ok": true,
+      "ok_probe_count": 2,
+      "present": true,
+      "probe_count": 2
+    },
+    {
+      "capability": "dictionary",
+      "cases": 340,
+      "ok": true,
+      "ok_probe_count": 3,
+      "present": true,
+      "probe_count": 3
+    },
+    {
+      "capability": "dictionary-training",
+      "cases": 2,
+      "ok": true,
+      "ok_probe_count": 2,
+      "present": true,
+      "probe_count": 2
+    },
+    {
+      "capability": "dictionary-set",
+      "cases": 312,
+      "ok": true,
+      "ok_probe_count": 3,
+      "present": true,
+      "probe_count": 3
+    },
+    {
+      "capability": "skippable",
+      "cases": 546,
+      "ok": true,
+      "ok_probe_count": 2,
+      "present": true,
+      "probe_count": 2
+    },
+    {
+      "capability": "malformed",
+      "cases": 544,
+      "ok": true,
+      "ok_probe_count": 3,
+      "present": true,
+      "probe_count": 3
+    },
+    {
+      "capability": "checksum",
+      "cases": 553,
+      "ok": true,
+      "ok_probe_count": 4,
+      "present": true,
+      "probe_count": 4
+    },
+    {
+      "capability": "bounded-limits",
+      "cases": 550,
+      "ok": true,
+      "ok_probe_count": 4,
+      "present": true,
+      "probe_count": 4
+    },
+    {
+      "capability": "huffman",
+      "cases": 242,
+      "ok": true,
+      "ok_probe_count": 1,
+      "present": true,
+      "probe_count": 1
+    },
+    {
+      "capability": "sequence-tables",
+      "cases": 249,
+      "ok": true,
+      "ok_probe_count": 2,
+      "present": true,
+      "probe_count": 2
+    },
+    {
+      "capability": "block",
+      "cases": 304,
+      "ok": true,
+      "ok_probe_count": 1,
+      "present": true,
+      "probe_count": 1
+    }
+  ],
+  "capability_count": 17,
+  "coverage": [
+    {
+      "cases": 304,
+      "codec": "lz4",
+      "ok": true,
+      "ok_probe_count": 1,
+      "present": true,
+      "probe_count": 1,
+      "surface": "frame"
+    },
+    {
+      "cases": 11,
+      "codec": "lz4",
+      "ok": true,
+      "ok_probe_count": 1,
+      "present": true,
+      "probe_count": 1,
+      "surface": "dictionary"
+    },
+    {
+      "cases": 242,
+      "codec": "zstd",
+      "ok": true,
+      "ok_probe_count": 1,
+      "present": true,
+      "probe_count": 1,
+      "surface": "frame"
+    },
+    {
+      "cases": 25,
+      "codec": "zstd",
+      "ok": true,
+      "ok_probe_count": 1,
+      "present": true,
+      "probe_count": 1,
+      "surface": "dictionary"
+    }
+  ],
+  "coverage_count": 4,
+  "ok": true,
+  "probe_count": 4,
+  "probes": [
+    {
+      "cases": 304,
+      "executable": "./.zig-cache/o/18318e2b2ef2ca367bfed187e6511711/lz4-native-probe",
+      "label": "lz4-native-probe",
+      "marker": "lz4_native_probe",
+      "ok": true,
+      "output": "lz4_native_probe_reference library=liblz4 version=1.9.3 frame_cases=253\nlz4_native_probe_ok cases=304\nlz4_native_probe_coverage capability=block cases=304\nlz4_native_probe_coverage capability=bounded-limits cases=304\nlz4_native_probe_coverage capability=checksum cases=304\nlz4_native_probe_coverage capability=chunked cases=253\nlz4_native_probe_coverage capability=compressed-block-cursor cases=5\nlz4_native_probe_coverage capability=reusable-chunked cases=253\nlz4_native_probe_coverage capability=dictionary cases=304\nlz4_native_probe_coverage capability=dictionary-set cases=304\nlz4_native_probe_coverage capability=hc-incremental cases=13\nlz4_native_probe_coverage capability=incremental cases=253\nlz4_native_probe_coverage capability=lib-generated cases=253\nlz4_native_probe_coverage capability=malformed cases=304\nlz4_native_probe_coverage capability=native-generated cases=304\nlz4_native_probe_coverage capability=skippable cases=304\n",
+      "reported_capabilities": [
+        "block",
+        "bounded-limits",
+        "checksum",
+        "chunked",
+        "compressed-block-cursor",
+        "dictionary",
+        "dictionary-set",
+        "hc-incremental",
+        "incremental",
+        "lib-generated",
+        "malformed",
+        "native-generated",
+        "reusable-chunked",
+        "skippable"
+      ],
+      "reported_capability_cases": {
+        "block": 304,
+        "bounded-limits": 304,
+        "checksum": 304,
+        "chunked": 253,
+        "compressed-block-cursor": 5,
+        "dictionary": 304,
+        "dictionary-set": 304,
+        "hc-incremental": 13,
+        "incremental": 253,
+        "lib-generated": 253,
+        "malformed": 304,
+        "native-generated": 304,
+        "reusable-chunked": 253,
+        "skippable": 304
+      },
+      "reported_capability_count": 14,
+      "returncode": 0,
+      "timed_out": false,
+      "timeout_seconds": 120.0
+    },
+    {
+      "cases": 11,
+      "executable": "./.zig-cache/o/499bf24c4a66b7cdece1866e6970c68f/lz4-native-dictionary-probe",
+      "label": "lz4-native-dictionary-probe",
+      "marker": "lz4_native_dictionary_probe",
+      "ok": true,
+      "output": "lz4_native_dictionary_probe_ok cases=11\nlz4_native_dictionary_probe_coverage capability=bounded-limits cases=1\nlz4_native_dictionary_probe_coverage capability=checksum cases=3\nlz4_native_dictionary_probe_coverage capability=chunked cases=1\nlz4_native_dictionary_probe_coverage capability=dictionary cases=11\nlz4_native_dictionary_probe_coverage capability=dictionary-training cases=1\nlz4_native_dictionary_probe_coverage capability=dictionary-set cases=4\nlz4_native_dictionary_probe_coverage capability=incremental cases=3\n",
+      "reported_capabilities": [
+        "bounded-limits",
+        "checksum",
+        "chunked",
+        "dictionary",
+        "dictionary-set",
+        "dictionary-training",
+        "incremental"
+      ],
+      "reported_capability_cases": {
+        "bounded-limits": 1,
+        "checksum": 3,
+        "chunked": 1,
+        "dictionary": 11,
+        "dictionary-set": 4,
+        "dictionary-training": 1,
+        "incremental": 3
+      },
+      "reported_capability_count": 7,
+      "returncode": 0,
+      "timed_out": false,
+      "timeout_seconds": 120.0
+    },
+    {
+      "cases": 242,
+      "executable": "./.zig-cache/o/61b365ec8e2fae0ebca3ecfaa215f06a/zstd-native-frame-probe",
+      "label": "zstd-native-frame-probe",
+      "marker": "zstd_native_frame_probe",
+      "ok": true,
+      "output": "zstd_native_frame_probe_ok cases=242\nzstd_native_frame_probe_coverage capability=bounded-limits cases=242\nzstd_native_frame_probe_coverage capability=checksum cases=242\nzstd_native_frame_probe_coverage capability=chunked cases=135\nzstd_native_frame_probe_coverage capability=reusable-chunked cases=135\nzstd_native_frame_probe_coverage capability=fse-repeat cases=5\nzstd_native_frame_probe_coverage capability=huffman cases=242\nzstd_native_frame_probe_coverage capability=incremental cases=135\nzstd_native_frame_probe_coverage capability=lib-generated cases=124\nzstd_native_frame_probe_coverage capability=malformed cases=238\nzstd_native_frame_probe_coverage capability=native-generated cases=242\nzstd_native_frame_probe_coverage capability=sequence-tables cases=242\nzstd_native_frame_probe_coverage capability=skippable cases=242\n",
+      "reported_capabilities": [
+        "bounded-limits",
+        "checksum",
+        "chunked",
+        "fse-repeat",
+        "huffman",
+        "incremental",
+        "lib-generated",
+        "malformed",
+        "native-generated",
+        "reusable-chunked",
+        "sequence-tables",
+        "skippable"
+      ],
+      "reported_capability_cases": {
+        "bounded-limits": 242,
+        "checksum": 242,
+        "chunked": 135,
+        "fse-repeat": 5,
+        "huffman": 242,
+        "incremental": 135,
+        "lib-generated": 124,
+        "malformed": 238,
+        "native-generated": 242,
+        "reusable-chunked": 135,
+        "sequence-tables": 242,
+        "skippable": 242
+      },
+      "reported_capability_count": 12,
+      "returncode": 0,
+      "timed_out": false,
+      "timeout_seconds": 120.0
+    },
+    {
+      "cases": 25,
+      "executable": "./.zig-cache/o/f1582a9de91e098b1786e7694a6c8083/zstd-native-dictionary-probe",
+      "label": "zstd-native-dictionary-probe",
+      "marker": "zstd_native_dictionary_probe",
+      "ok": true,
+      "output": "zstd_native_dictionary_probe_ok cases=25\nzstd_native_dictionary_probe_coverage capability=bounded-limits cases=3\nzstd_native_dictionary_probe_coverage capability=checksum cases=4\nzstd_native_dictionary_probe_coverage capability=chunked cases=2\nzstd_native_dictionary_probe_coverage capability=dictionary cases=25\nzstd_native_dictionary_probe_coverage capability=dictionary-training cases=1\nzstd_native_dictionary_probe_coverage capability=dictionary-set cases=4\nzstd_native_dictionary_probe_coverage capability=fse-repeat cases=3\nzstd_native_dictionary_probe_coverage capability=incremental cases=4\nzstd_native_dictionary_probe_coverage capability=malformed cases=2\nzstd_native_dictionary_probe_coverage capability=sequence-tables cases=7\n",
+      "reported_capabilities": [
+        "bounded-limits",
+        "checksum",
+        "chunked",
+        "dictionary",
+        "dictionary-set",
+        "dictionary-training",
+        "fse-repeat",
+        "incremental",
+        "malformed",
+        "sequence-tables"
+      ],
+      "reported_capability_cases": {
+        "bounded-limits": 3,
+        "checksum": 4,
+        "chunked": 2,
+        "dictionary": 25,
+        "dictionary-set": 4,
+        "dictionary-training": 1,
+        "fse-repeat": 3,
+        "incremental": 4,
+        "malformed": 2,
+        "sequence-tables": 7
+      },
+      "reported_capability_count": 10,
+      "returncode": 0,
+      "timed_out": false,
+      "timeout_seconds": 120.0
+    }
+  ],
+  "schema": "vort.native_codec_probes",
+  "schema_version": 1,
+  "total_cases": 582
+}

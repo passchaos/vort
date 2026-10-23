@@ -1137,6 +1137,8 @@ try lz4_incremental.finish();
 var lz4_bounded_incremental = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
     .max_compressed_buffer_len = 1 << 20,
     .max_decoded_buffer_len = 1 << 20,
+    .max_output_len = 8 << 20,
+    .max_working_memory = 2 << 20,
     .expected_output_len = "payload payload".len,
 });
 defer lz4_bounded_incremental.deinit();
@@ -1328,6 +1330,8 @@ try zstd_incremental.finish();
 var zstd_bounded_incremental = vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
     .max_compressed_buffer_len = 1 << 20,
     .max_decoded_buffer_len = 1 << 20,
+    .max_output_len = 8 << 20,
+    .max_working_memory = 2 << 20,
     .expected_output_len = "payload payload".len,
 });
 defer zstd_bounded_incremental.deinit();
@@ -1478,6 +1482,11 @@ defer zstd_incremental_encoder.deinit();
 // the same step.
 // initWithDictionary validates split DICTID and seeds the raw 32 KiB history
 // from the caller-owned preset dictionary.
+// After NeedDictionary, requiredDictionaryId() exposes the complete DICTID.
+// provideDictionary(bytes) validates it and resumes the parsed stream in place;
+// a DictionaryMismatch leaves the requested ID available for another attempt.
+// On a step error, snapshot().last_step_progress records accepted input and
+// published output, so retain the corresponding unconsumed input suffix.
 // GzipIncrementalDecoder supports split FEXTRA/FNAME/FCOMMENT/FHCRC plus
 // streaming CRC-32/ISIZE and batches raw input up to the exact member footer.
 // Set allow_concatenated to continue through RFC 1952 members while enforcing
@@ -2595,7 +2604,7 @@ selected descriptor without a content size.
 | --- | --- | --- | --- | --- |
 | LZ4/Zstd incremental | `Options.input_policy` / `core.CompressedInputPolicy` | `.block_stream`; opt-in `.prevalidated_frame` | You need bounded incremental input or the existing complete-frame preflight/direct path. | Default retention follows blocks and history; explicit preflight preserves its established fallback and checksum timing. |
 | LZ4/Zstd incremental | `Options.max_compressed_buffer_len` | unlimited cap by default | You need an encoded-input retention limit. | Zstd compressed blocks and checksummed LZ4 raw/compressed blocks must fit; default raw/skippable and unchecked LZ4 token input stream directly. |
-| LZ4/Zstd incremental | `Options.max_decoded_buffer_len` / `expected_output_len` | unlimited per-frame output cap / optional logical-stream exact count | A container provides output bounds or a precise concatenated-stream length. | The per-frame cap includes emitted bytes; the exact count applies across members and is checked at `finish()`. These are not shared cumulative work/allocation quotas. |
+| LZ4/Zstd incremental | `Options.max_decoded_buffer_len` / `max_output_len` / `max_working_memory` / `expected_output_len` | unlimited per-frame, cumulative-output and live-allocation caps / optional exact count | A container provides resource bounds or a precise concatenated-stream length. | Per-frame and cumulative caps include emitted bytes. Working memory counts decoder-owned requested heap bytes, including retained capacities and temporary scratch. The exact count applies across members and is checked at `finish()`. |
 | LZ4 native | `Lz4NativeFrameOptions.block_mode` | `.independent` or `.linked` | Consecutive frame blocks share recent history and ratio matters. | `.linked` can improve ratio across block boundaries; `.independent` is simpler for random block handling. |
 | LZ4 native | `Lz4NativeFrameOptions.block_size_id` | `.max4mb`; `.max64kb` / `.max256kb` / `.max1mb` / `.max4mb` | You need a latency/working-set knob for frame block size. | Smaller blocks can reduce latency and direct-output burst size; larger blocks usually reduce framing overhead. |
 | LZ4 native | `Lz4NativeFrameOptions.chain_depth` | `vort.lz4NativeMaxChainDepth` (`16` currently); `0...vort.lz4NativeMaxChainDepth` | You want to trade encode CPU for deeper hash-chain match search. | `0` disables match search and is fastest/least compact; the default enables the deeper parser used by the native bench ratio rows. |
@@ -2669,10 +2678,23 @@ call, and use only `result.progress.output_written` newly produced output
 bytes. With `stop_after_first_frame`, `trailingInput()` reports accepted suffix
 bytes; the outer dispatcher must also retain the suffix still owned by the
 caller. `max_decoded_buffer_len` is a per-data-frame output limit that includes
-already-emitted bytes, while `expected_output_len` checks the exact decoded
-count across the logical stream. Call `finish()` after draining the final input
-and output to validate EOF and exact-size state. LZ4/Zstd do not yet share a
-cumulative work/allocation quota API.
+already-emitted bytes. `max_output_len` caps cumulative published output across
+members, while `expected_output_len` checks the exact decoded count across the
+logical stream. Call `finish()` after draining the final input and output to
+validate EOF and exact-size state. `nextStream()` resumes a stopped data-frame
+boundary while preserving accepted suffixes, cumulative counters and limits.
+Until then, `step()` keeps returning `.done` without consuming new input.
+
+`max_working_memory` caps decoder-owned live requested heap bytes, including
+retained capacities and temporary decode scratch. Caller buffers, borrowed
+dictionaries, fixed decoder state, stack tables and allocator bookkeeping are
+outside this accounting. `workingMemoryBytes()` and `peakWorkingMemoryBytes()`
+expose current and peak allocation counts. `reset()` retains capacity and
+starts fresh cumulative counters; `resetWithOptions()` validates the new
+configuration before releasing owned buffers. Budget rejection reports
+`WorkingMemoryLimitExceeded`, while a backing allocator failure reports
+`OutOfMemory`. Snapshot and diagnostics retain failed-call progress and byte
+offsets; parser/allocation failures require reset before replaying input.
 
 Explicit `.prevalidated_frame` preserves the existing complete-frame structural
 preflight/direct paths and bounded cursor fallback when a frame or compressed

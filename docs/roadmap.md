@@ -23127,3 +23127,22 @@ reuse, so production keeps the simpler independently owned plans.
   Existing Zstd/LZ4 per-frame limits remain unchanged; unified cumulative
   quotas, dictionary recovery contracts and XZ block staging are subsequent
   functional priorities.
+
+- Native Zstd/LZ4 incremental decoders now expose independent cumulative
+  `max_output_len` and persistent `max_working_memory` budgets for owned
+  capacities and temporary allocations. Their stopped-frame `nextStream`
+  contract preserves accepted suffixes, counters and the cumulative pledge;
+  errors expose actual failed-call progress, and reset/reconfiguration retain
+  or release storage explicitly. zlib now exposes the required DICTID and
+  validates a supplied dictionary before resuming the parsed member in place;
+  a temporary override is copied during the call and is not cached for reuse.
+  ReleaseFast codec suites pass 848 tests, the contract gate passes 57 in Debug
+  and post-rebase ReleaseFast, native library probes pass 582 cases, and
+  system-zlib dictionary recovery passes 343 cases. Final build checks pass all
+  126 steps, including wasm32-wasi,
+  and the CLI help smoke succeeds. Full source/runtime evidence and exact
+  failed-call deltas are recorded in
+  [the contract baseline](performance/stream-contracts-functional-baseline.md).
+  XZ progressive block decoding remains the next functional priority; broader
+  real-file throughput, ratio, allocation and RSS comparisons still prevent
+  a broad industry-best claim.
