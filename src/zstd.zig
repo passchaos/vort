@@ -41,6 +41,7 @@ const optimal_four_match = @import("zstd/match/optimal_four.zig");
 const incremental_tests = @import("zstd/incremental/tests.zig");
 const incremental_decoder_tests = @import("zstd/incremental/decoder_tests.zig");
 const incremental_limits_tests = @import("zstd/incremental/limits_tests.zig");
+const dictionary_resume_tests = @import("zstd/incremental/dictionary_resume_tests.zig");
 const working_allocator = @import("io/working_allocator.zig");
 const decode_policy_tests = if (builtin.is_test) @import("zstd/sequence/decode_policy_test.zig") else struct {};
 const huffman = @import("huffman.zig");
@@ -581,6 +582,7 @@ test {
     _ = incremental_tests;
     _ = incremental_decoder_tests;
     _ = incremental_limits_tests;
+    _ = dictionary_resume_tests;
     _ = incremental_history;
     _ = incremental_history_index;
     _ = incremental_history_match;
@@ -4288,6 +4290,8 @@ pub const NativeIncrementalFrameDecoder = struct {
     budget: working_allocator.WorkingAllocator,
     dictionary: ?NativeDictionary = null,
     dictionary_set: ?NativeDictionarySet = null,
+    required_dictionary_id: ?u32 = null,
+    frame_dictionary: ?NativeDictionary = null,
     options: Options = .{},
     phase: InternalPhase = .frame,
     frame_scratch: std.ArrayList(u8) = .empty,
@@ -4421,6 +4425,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         error_input_offset: ?usize,
         error_output_offset: ?usize,
         last_step_progress: core.Progress,
+        required_dictionary_id: ?u32,
     };
 
     pub fn init(allocator: std.mem.Allocator) NativeIncrementalFrameDecoder {
@@ -4464,6 +4469,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     pub fn reset(self: *NativeIncrementalFrameDecoder) void {
+        self.clearDictionaryRequest();
         self.phase = .frame;
         self.frame_scratch.clearRetainingCapacity();
         self.decoded_scratch.clearRetainingCapacity();
@@ -4508,6 +4514,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     pub fn nextStream(self: *NativeIncrementalFrameDecoder) Error!void {
         if (self.failure != null or !self.options.stop_after_first_frame or self.phase != .done)
             return error.InvalidStreamState;
+        self.clearDictionaryRequest();
         self.phase = .frame;
         self.decoded_scratch.clearRetainingCapacity();
         self.decoded_offset = 0;
@@ -4519,6 +4526,57 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.last_error_phase = null;
         self.error_input_offset = null;
         self.error_output_offset = null;
+    }
+
+    pub fn requiredDictionaryId(self: *const NativeIncrementalFrameDecoder) ?u32 {
+        return self.required_dictionary_id;
+    }
+
+    /// Resume the current frame with borrowed content and optional standard
+    /// entropy metadata. They must remain alive until the frame completes,
+    /// terminates with a fatal error, or this decoder is reset/deinitialized.
+    /// The override is discarded at that boundary; it never replaces
+    /// configured dictionaries for later frames.
+    pub fn provideDictionary(self: *NativeIncrementalFrameDecoder, dictionary: NativeDictionary) Error!void {
+        const required = self.required_dictionary_id orelse return error.InvalidStreamState;
+        if (self.failure != null or self.phase != .frame) return error.InvalidStreamState;
+        self.last_step_progress = .{};
+        if (dictionary.id != required) {
+            self.recordError(.frame, error.DictionaryMismatch);
+            return error.DictionaryMismatch;
+        }
+        _ = dictionary.standardView() catch |err| {
+            self.recordError(.frame, err);
+            return err;
+        };
+        self.frame_dictionary = dictionary;
+        self.required_dictionary_id = null;
+        self.last_error_name = "";
+        self.last_error_phase = null;
+        self.error_input_offset = null;
+        self.error_output_offset = null;
+    }
+
+    /// Select one matching dictionary; the set itself need not stay alive.
+    /// The selected dictionary's bytes follow `provideDictionary`'s lifetime.
+    pub fn provideDictionarySet(self: *NativeIncrementalFrameDecoder, dictionary_set: NativeDictionarySet) Error!void {
+        const required = self.required_dictionary_id orelse return error.InvalidStreamState;
+        if (self.failure != null or self.phase != .frame) return error.InvalidStreamState;
+        const dictionary = dictionary_set.find(required) orelse {
+            self.last_step_progress = .{};
+            self.recordError(.frame, error.NeedDictionary);
+            return error.NeedDictionary;
+        };
+        try self.provideDictionary(dictionary);
+    }
+
+    fn clearDictionaryRequest(self: *NativeIncrementalFrameDecoder) void {
+        self.required_dictionary_id = null;
+        self.frame_dictionary = null;
+        // Entropy tables and retained match history are owned copies. This is
+        // the remaining borrowed view into a provided dictionary, so terminal
+        // errors can release the borrow without resetting progress counters.
+        self.direct_dictionary_history = &.{};
     }
 
     pub fn workingMemoryBytes(self: *const NativeIncrementalFrameDecoder) usize {
@@ -4564,6 +4622,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             .error_input_offset = self.error_input_offset,
             .error_output_offset = self.error_output_offset,
             .last_step_progress = self.last_step_progress,
+            .required_dictionary_id = self.required_dictionary_id,
         };
     }
 
@@ -4629,7 +4688,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             .error_input_offset = snap.error_input_offset,
             .error_output_offset = snap.error_output_offset,
             .last_step_progress = snap.last_step_progress,
-            .recoverability_hint_name = if (self.failure) |err| switch (err) {
+            .recoverability_hint_name = if (self.required_dictionary_id != null) "retry_with_dictionary" else if (self.failure) |err| switch (err) {
                 error.WorkingMemoryLimitExceeded => "raise_working_memory_limit",
                 error.OutputLimitExceeded => "raise_output_limit",
                 error.OutOfMemory => "allocation_failure",
@@ -4640,13 +4699,20 @@ pub const NativeIncrementalFrameDecoder = struct {
 
     pub fn finish(self: *NativeIncrementalFrameDecoder) Error!void {
         if (self.failure) |err| return err;
+        if (self.required_dictionary_id != null) {
+            self.recordError(.frame, error.NeedDictionary);
+            return error.NeedDictionary;
+        }
         self.finishInternal() catch |err| {
             if (self.last_error_phase == null) self.recordError(self.phase, err);
             self.error_input_offset = self.input_received;
             self.error_output_offset = self.output_written;
             const short_pledge = err == error.SizeMismatch and self.options.expected_output_len != null and
                 self.output_written < self.options.expected_output_len.?;
-            if (err != error.OutputTooSmall and err != error.TruncatedFrame and !short_pledge) self.failure = err;
+            if (err != error.OutputTooSmall and err != error.TruncatedFrame and !short_pledge) {
+                self.clearDictionaryRequest();
+                self.failure = err;
+            }
             return err;
         };
     }
@@ -4688,6 +4754,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             self.resetDirectOutput();
             self.discardFrameScratchPrefix(frame_len);
             self.phase = .frame;
+            self.clearDictionaryRequest();
         }
         if (self.frame_scratch.items.len != 0) {
             self.recordError(.frame, error.TruncatedFrame);
@@ -4709,6 +4776,10 @@ pub const NativeIncrementalFrameDecoder = struct {
     pub fn step(self: *NativeIncrementalFrameDecoder, input: []const u8, output: []u8) Error!core.StepResult {
         self.last_step_progress = .{};
         if (self.failure) |err| return err;
+        if (self.required_dictionary_id != null) {
+            self.recordError(.frame, error.NeedDictionary);
+            return error.NeedDictionary;
+        }
         self.last_error_name = "";
         self.last_error_phase = null;
         self.error_input_offset = null;
@@ -4725,7 +4796,10 @@ pub const NativeIncrementalFrameDecoder = struct {
             self.last_error_name = @errorName(err);
             self.error_input_offset = self.input_received;
             self.error_output_offset = self.output_written;
-            self.failure = err;
+            if (err != error.NeedDictionary or self.required_dictionary_id == null) {
+                self.clearDictionaryRequest();
+                self.failure = err;
+            }
             return err;
         };
         self.last_step_progress = result.progress;
@@ -4753,6 +4827,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             self.resetBlockStream();
             self.resetSkippableStream();
         }
+        if (input.len > std.math.maxInt(usize) - self.input_received) return error.IntegerOverflow;
 
         var input_read: usize = 0;
         var output_written_step: usize = 0;
@@ -4775,6 +4850,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                         self.phase = .skippable_stream;
                         continue;
                     }
+                    try self.checkFrameDictionaryIfHeaderAvailable();
                     if (self.options.input_policy == .block_stream) {
                         const block_stream_started = self.beginBlockStreamIfSupported() catch |err| {
                             self.recordError(.frame, err);
@@ -5451,6 +5527,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     fn stopAfterDataFrame(self: *NativeIncrementalFrameDecoder) Error!bool {
+        self.clearDictionaryRequest();
         self.data_frame_count = std.math.add(usize, self.data_frame_count, 1) catch {
             self.recordError(.frame, error.IntegerOverflow);
             return error.IntegerOverflow;
@@ -5824,24 +5901,24 @@ pub const NativeIncrementalFrameDecoder = struct {
             try self.appendFramePrefix(input, input_read, 8);
             return;
         }
-        if (self.options.input_policy == .block_stream) {
-            // Reuse the authoritative header parser while accepting only its
-            // prefix. Zstandard headers are at most eighteen bytes, so this
-            // bounded loop cannot absorb frame payload or an opaque suffix.
-            while (true) {
-                _ = inspectNativeFrameHeader(self.frame_scratch.items) catch |err| switch (err) {
-                    error.TruncatedFrame => {
-                        const previous_len = self.frame_scratch.items.len;
-                        try self.appendFramePrefix(input, input_read, previous_len + 1);
-                        if (self.frame_scratch.items.len == previous_len) return;
-                        continue;
-                    },
-                    else => return err,
-                };
-                return;
-            }
+        // Parse only the header before resolving dictionary policy in either
+        // input mode. A missing dictionary can be supplied without accepting
+        // frame payload or re-reading previously accepted header bytes.
+        while (true) {
+            _ = inspectNativeFrameHeader(self.frame_scratch.items) catch |err| switch (err) {
+                error.TruncatedFrame => {
+                    const previous_len = self.frame_scratch.items.len;
+                    try self.appendFramePrefix(input, input_read, previous_len + 1);
+                    if (self.frame_scratch.items.len == previous_len) return;
+                    continue;
+                },
+                else => return err,
+            };
+            try self.checkFrameDictionaryIfHeaderAvailable();
+            break;
         }
-        try self.appendInputWithinCompressedLimit(input, input_read);
+        if (self.options.input_policy == .prevalidated_frame)
+            try self.appendInputWithinCompressedLimit(input, input_read);
     }
 
     fn appendFramePrefix(self: *NativeIncrementalFrameDecoder, input: []const u8, input_read: *usize, target_len: usize) Error!void {
@@ -5901,7 +5978,9 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.decoded_offset = 0;
         const remaining_output = self.options.max_output_len -| self.output_written;
         const frame_limit = @min(self.options.max_decoded_buffer_len, remaining_output);
-        if (self.dictionary_set) |dictionary_set| {
+        if (self.frame_dictionary) |dictionary| {
+            _ = try decodeRawOrRleFrameAppendLimitedWithDictionary(self.budget.allocator(), &self.decoded_scratch, frame, frame_limit, dictionary);
+        } else if (self.dictionary_set) |dictionary_set| {
             _ = try decodeRawOrRleFrameAppendLimitedWithDictionarySet(self.budget.allocator(), &self.decoded_scratch, frame, frame_limit, dictionary_set);
         } else if (self.dictionary) |dictionary| {
             _ = try decodeRawOrRleFrameAppendLimitedWithDictionary(self.budget.allocator(), &self.decoded_scratch, frame, frame_limit, dictionary);
@@ -5924,14 +6003,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     fn beginDirectOutputIfSupported(self: *NativeIncrementalFrameDecoder, frame_end: usize) Error!bool {
         const frame = self.frame_scratch.items[0..frame_end];
         const header = try inspectNativeFrameHeader(frame);
-        const dictionary_history = self.resolveDirectDictionaryHistory(header) catch |err| switch (err) {
-            // Preserve the existing diagnostics path for missing or mismatched
-            // dictionaries: the scratch decoder records `NeedDictionary` in the
-            // frame phase. Direct output is an optimization, not a different
-            // dictionary policy.
-            error.NeedDictionary => return false,
-            else => return err,
-        };
+        const dictionary_history = try self.resolveDirectDictionaryHistory(header);
         const dictionary = self.resolveDirectDictionary(header);
         const initial_sequence_state = initialSequenceFrameState(dictionary) catch return false;
         const frame_expected_len: ?usize = if (header.content_size) |size| blk: {
@@ -6072,21 +6144,32 @@ pub const NativeIncrementalFrameDecoder = struct {
         return true;
     }
 
-    fn resolveDirectDictionaryHistory(self: *const NativeIncrementalFrameDecoder, header: NativeFrameHeader) Error![]const u8 {
-        if (header.dictionary_id == 0)
-            return if (self.dictionary) |dictionary| dictionary.content else &.{};
-        if (self.dictionary_set) |dictionary_set| {
-            const dictionary = dictionary_set.find(header.dictionary_id) orelse return error.NeedDictionary;
-            return dictionary.content;
+    fn resolveDirectDictionaryHistory(self: *NativeIncrementalFrameDecoder, header: NativeFrameHeader) Error![]const u8 {
+        if (self.resolveDirectDictionary(header)) |dictionary| return dictionary.content;
+        if (header.dictionary_id != 0) {
+            self.required_dictionary_id = header.dictionary_id;
+            return error.NeedDictionary;
         }
-        return try validateNativeDictionary(header, self.dictionary);
+        return &.{};
     }
 
     fn resolveDirectDictionary(self: *const NativeIncrementalFrameDecoder, header: NativeFrameHeader) ?NativeDictionary {
+        if (self.frame_dictionary) |dictionary| {
+            if (dictionary.id == header.dictionary_id) return dictionary;
+        }
         if (header.dictionary_id == 0) return self.dictionary;
         if (self.dictionary_set) |dictionary_set| return dictionary_set.find(header.dictionary_id);
         if (self.dictionary) |dictionary| if (dictionary.id == header.dictionary_id) return dictionary;
         return null;
+    }
+
+    fn checkFrameDictionaryIfHeaderAvailable(self: *NativeIncrementalFrameDecoder) Error!void {
+        if (self.frame_scratch.items.len < 4 or std.mem.readInt(u32, self.frame_scratch.items[0..4], .little) != frame_magic_u32) return;
+        const header = inspectNativeFrameHeader(self.frame_scratch.items) catch |err| switch (err) {
+            error.TruncatedFrame => return,
+            else => return err,
+        };
+        _ = try self.resolveDirectDictionaryHistory(header);
     }
 
     fn advanceDirectOutputBlock(self: *NativeIncrementalFrameDecoder) Error!void {
