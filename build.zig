@@ -338,6 +338,12 @@ pub fn build(b: *std.Build) void {
     const run_lzms_tests = b.addRunArtifact(lzms_tests);
     const lzms_test_step = b.step("test-lzms", "Run focused Windows LZMS codec tests");
     lzms_test_step.dependOn(&run_lzms_tests.step);
+    const lzx_tests = b.addTest(.{ .name = "vort-lzx-tests", .root_module = b.createModule(.{ .root_source_file = b.path("src/lzx.zig"), .target = target, .optimize = optimize }), .filters = &.{"LZX"} });
+    const lzx_test_step = b.step("test-lzx", "Run focused LZX codec tests");
+    lzx_test_step.dependOn(&b.addRunArtifact(lzx_tests).step);
+    const cab_tests = b.addTest(.{ .name = "vort-cab-tests", .root_module = tests_mod, .filters = &.{ "CAB", "LZX", "Quantum" } });
+    const cab_test_step = b.step("test-cab", "Run CAB, LZX and Quantum codec/container tests");
+    cab_test_step.dependOn(&b.addRunArtifact(cab_tests).step);
     const microlzma_tests = b.addTest(.{
         .name = "vort-microlzma-tests",
         .root_module = tests_mod,
@@ -354,6 +360,8 @@ pub fn build(b: *std.Build) void {
     const run_wof_tests = b.addRunArtifact(wof_tests);
     const wof_test_step = b.step("test-wof", "Run focused WOF backing stream tests");
     wof_test_step.dependOn(&run_wof_tests.step);
+    const wof_codec_tests = b.addTest(.{ .name = "vort-wof-codec-tests", .root_module = b.createModule(.{ .root_source_file = b.path("src/wof.zig"), .target = target, .optimize = optimize }), .filters = &.{"WOF"} });
+    wof_test_step.dependOn(&b.addRunArtifact(wof_codec_tests).step);
     const lzfse_tests = b.addTest(.{
         .name = "vort-lzfse-tests",
         .root_module = tests_mod,
@@ -1555,6 +1563,15 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| lzms_match_diff.addArgs(args);
     const lzms_match_step = b.step("run-lzms-match-diff", "Validate greedy LZ/delta encoding and literal-envelope sizes with wimlib");
     lzms_match_step.dependOn(&lzms_match_diff.step);
+    const lzx_match_probe = b.addExecutable(.{
+        .name = "vort-lzx-match-probe",
+        .root_module = b.createModule(.{ .root_source_file = b.path("tools/lzx/match_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "vort", .module = vort_mod }} }),
+    });
+    const lzx_match_diff = b.addSystemCommand(&.{ "python3", "tools/lzx/match_diff.py", "--probe" });
+    lzx_match_diff.addArtifactArg(lzx_match_probe);
+    if (b.args) |args| lzx_match_diff.addArgs(args);
+    const lzx_match_step = b.step("run-lzx-match-diff", "Validate LZX matched CAB/WIM/WOF output with libarchive, libmspack and wimlib");
+    lzx_match_step.dependOn(&lzx_match_diff.step);
 
     const microlzma_diff = b.addSystemCommand(&.{ "python3", "tools/microlzma/diff.py", "--cli" });
     microlzma_diff.addArtifactArg(cli_exe);
