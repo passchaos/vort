@@ -103,14 +103,21 @@ test "EROFS reads borrowed external chunk devices" {
     );
 }
 
-test "EROFS external chunk reader rejects malformed device tables" {
+test "EROFS external chunk reader accepts explicit-only device slots" {
     const allocator = std.testing.allocator;
     const image = try fixtureAlloc(allocator, @embedFile("testdata/chunk-external.erofs.b64"));
     defer allocator.free(image);
     const slot_start: usize = @as(usize, format.readU16(image, format.super_offset + 88)) * 128;
     std.mem.writeInt(u32, image[slot_start + 68 ..][0..4], 0, .little);
     refreshFixtureChecksum(image);
-    try std.testing.expectError(error.InvalidErofs, Archive.init(image));
+    const blob = try fixtureAlloc(allocator, @embedFile("testdata/chunk-external.blob.b64"));
+    defer allocator.free(blob);
+    const archive = try Archive.initWithDevices(image, &.{blob});
+    const expected = ("CHUNK-DATA-0123456789\n" ** 500)[0..9000];
+    const decoded = try archive.extractByPathAllocLimited(allocator, "large", 9000, 4096);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+    try std.testing.expectEqual(@as(u64, 0), (try archive.deviceInfo(0)).unified_start);
 }
 
 test "EROFS external chunk reader releases every allocation failure" {

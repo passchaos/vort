@@ -56,8 +56,8 @@ pub const Walker = struct {
         const start = std.math.mul(u64, prior.block, block_size) catch return error.IntegerOverflow;
         const physical_size = std.math.mul(usize, prior.blocks, block_size) catch return error.IntegerOverflow;
         const content: spans.Content = switch (prior.kind) {
-            0 => .{ .raw = .{ .input = self.context.reader.primary, .start = start, .physical_size = physical_size, .rotation = if (self.inode.compressed_advise & 0x10 != 0) .{ .block_size = block_size, .start = prior.start % block_size } else null } },
-            1, 3 => .{ .encoded = .{ .input = self.context.reader.primary, .start = start, .encoded_size = physical_size, .decoded_size = end - prior.start, .partial = prior.partial, .algorithm = self.inode.compressed_algorithms[if (prior.kind == 3) 1 else 0] orelse return error.InvalidErofs } },
+            0 => .{ .raw = .{ .start = start, .physical_size = physical_size, .rotation = if (self.inode.compressed_advise & 0x10 != 0) .{ .block_size = block_size, .start = prior.start % block_size } else null } },
+            1, 3 => .{ .encoded = .{ .start = start, .encoded_size = physical_size, .decoded_size = end - prior.start, .partial = prior.partial, .algorithm = self.inode.compressed_algorithms[if (prior.kind == 3) 1 else 0] orelse return error.InvalidErofs } },
             else => return error.UnsupportedErofsFeature,
         };
         return .{ .start = prior.start, .end = end, .content = content };

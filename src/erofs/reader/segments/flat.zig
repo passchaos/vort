@@ -17,7 +17,7 @@ pub const Walker = struct {
             self.phase = 1;
             if (full != 0) {
                 const null_block: u64 = if (self.context.reader.superblock.feature_incompat & format.feature_incompat_48bit != 0) (@as(u64, 1) << 48) - 1 else std.math.maxInt(u32);
-                const content: spans.Content = if (self.inode.data_block == null_block) .zero else .{ .raw = .{ .input = self.context.reader.primary, .start = std.math.mul(u64, self.inode.data_block, block_size) catch return error.IntegerOverflow, .physical_size = full } };
+                const content: spans.Content = if (self.inode.data_block == null_block) .zero else .{ .raw = .{ .start = std.math.mul(u64, self.inode.data_block, block_size) catch return error.IntegerOverflow, .physical_size = full } };
                 return .{ .start = 0, .end = full, .content = content };
             }
         }

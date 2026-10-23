@@ -43,7 +43,7 @@ const Frame = struct {
     }
 
     fn crop(self: *Frame, whole: spans.Whole, end: usize) Error!?Event {
-        const segment = try spans.crop(whole, self.start, end, self.destination, self.max_decoded) orelse return null;
+        const segment = try spans.crop(self.context, whole, self.start, end, self.destination, self.max_decoded) orelse return null;
         if (segment.content == .fragment) {
             if (self.context.reader.superblock.feature_incompat & format.feature_incompat_fragments == 0 or self.context.reader.superblock.packed_nid == 0 or self.inode.nid == self.context.reader.superblock.packed_nid) return error.InvalidErofs;
             const packed_inode = try self.context.reader.inode(self.context.reader.superblock.packed_nid);

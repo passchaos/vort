@@ -10,4 +10,7 @@ test {
     _ = @import("tests/prefix_table.zig");
     _ = @import("tests/partial.zig");
     _ = @import("tests/partial_errors.zig");
+    _ = @import("tests/device_regions.zig");
+    _ = @import("tests/device_layouts.zig");
+    _ = @import("tests/device_errors.zig");
 }

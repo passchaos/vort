@@ -88,6 +88,12 @@ pub fn compactIndexEnd(view: View, cluster_count: usize) Error!usize {
     return std.math.add(usize, pack.start, pack.size) catch return error.IntegerOverflow;
 }
 
+/// Byte position of the shared physical-block base for a compact index pack.
+pub fn compactPhysicalBaseOffset(view: View, cluster_index: usize, cluster_count: usize) Error!usize {
+    const pack = try packFor(view, cluster_index, cluster_count);
+    return std.math.add(usize, pack.start, pack.size - 4) catch return error.IntegerOverflow;
+}
+
 pub fn readCompactInput(metadata: input_module.Input, view: View, cluster_index: usize, cluster_count: usize) Error!Index {
     const pack = try packFor(view, cluster_index, cluster_count);
     var buffer: [32]u8 = undefined;

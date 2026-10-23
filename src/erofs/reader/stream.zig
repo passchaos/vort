@@ -69,7 +69,8 @@ pub const Reader = struct {
                 const encoded = segment.content.encoded;
                 var bounded = self.context;
                 bounded.limits.max_decoded_extent_size = @min(bounded.limits.max_decoded_extent_size, segment.max_decoded);
-                const bytes = if (encoded.partial) try bounded.decodePartial(encoded.algorithm, encoded.input, encoded.start, encoded.encoded_size, encoded.decoded_size) else try bounded.decode(encoded.algorithm, encoded.input, encoded.start, encoded.encoded_size, encoded.decoded_size);
+                const input = encoded.input orelse return error.InvalidErofs;
+                const bytes = if (encoded.partial) try bounded.decodePartial(encoded.algorithm, input, encoded.start, encoded.encoded_size, encoded.decoded_size) else try bounded.decode(encoded.algorithm, input, encoded.start, encoded.encoded_size, encoded.decoded_size);
                 self.cached = bytes;
                 if (bytes.len != encoded.decoded_size) return error.SizeMismatch;
             }
@@ -94,7 +95,8 @@ pub const Reader = struct {
                 }
                 var scratch: [64 * 1024]u8 = undefined;
                 size = @min(size, scratch.len);
-                try raw.input.readAt(try context_module.offset(raw.start, within), scratch[0..size]);
+                const input = raw.input orelse return error.InvalidErofs;
+                try input.readAt(try context_module.offset(raw.start, within), scratch[0..size]);
                 @memcpy(output[0..size], scratch[0..size]);
             },
         }

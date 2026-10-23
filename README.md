@@ -260,6 +260,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   compressed inline tail packing with caller-bounded packed-extent scratch,
   plus local/external chunk-based files with borrowed device tables, holes,
   4-byte maps and 8-byte indexes, 48-bit superblock/flat/chunk/device addresses,
+  shared byte-range external-device mapping for flat and compressed extents,
+  packed data and metabox loading, including unaligned addresses and explicit-
+  only device slots,
   4/8/16/32-byte compressed extent records with partial-reference decoding,
   sparse holes and final packed fragments, legacy full-index partial references,
   and owning bounded metabox metadata
