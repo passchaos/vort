@@ -58,3 +58,13 @@ direct reads from the last NONHEAD cluster.
 
 When `--range-oracle` is omitted, the differential reports zero NONHEAD oracle
 cases; Zig's index and range regressions still run with `zig build test-erofs`.
+
+`compact_width_diff.py` also uses this positional oracle to check six
+four-/two-byte pack layouts with 4/8/16 KiB logical clusters across 30
+whole/boundary reads. Its two unsupported 8/16 KiB two-byte layouts contain
+valid initial four-byte packs and independently encoded zero-producing LZ4
+blocks. The reference accepts an initial prefix, then rejects a query into
+the two-byte pack with `-EOPNOTSUPP`. Vort slice/Source range APIs report
+`UnsupportedErofsFeature`, and whole-file CLI extraction preserves existing
+output and removes temporary files. The differential retains four-byte wide
+layouts and unused COMPACTED_2B flags as positive controls.

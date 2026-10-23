@@ -20,6 +20,7 @@ from configuration_diff import verify_configurations
 from nonhead_diff import verify_nonhead_chains
 from writer_matrix import writer_modes, combined_metabox_modes, payloads as writer_payloads, xattrs as writer_xattrs
 from compact_writer_diff import verify_cli as verify_compact_cli
+from compact_width_diff import verify_compact_widths
 
 
 def run(*args: object, check: bool = True) -> subprocess.CompletedProcess[bytes]:
@@ -248,6 +249,8 @@ def main() -> None:
     nonhead_error_cases = 0
     compact_cli_cases = 0
     compact_cli_errors = 0
+    compact_width_reader = 0
+    compact_width_errors = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -674,6 +677,7 @@ def main() -> None:
         configuration_reader_cases, configuration_error_cases = verify_configurations(args.cli, fsck, temp, run)
         nonhead_reader_cases, nonhead_error_cases = verify_nonhead_chains(args.cli, args.range_reader, args.range_oracle, temp, run)
         compact_cli_cases, compact_cli_errors = verify_compact_cli(args.cli, fsck, temp, run)
+        compact_width_reader, compact_width_errors = verify_compact_widths(args.cli, args.range_reader, args.range_oracle, temp, run)
 
     print(
         f"fixture_cases={fixture_cases} tools={mkfs is not None} "
@@ -725,6 +729,8 @@ def main() -> None:
         f"nonhead_errors={nonhead_error_cases} "
         f"compact_cli={compact_cli_cases} "
         f"compact_cli_errors={compact_cli_errors} "
+        f"compact_width_reader={compact_width_reader} "
+        f"compact_width_errors={compact_width_errors} "
         f"malformed={malformed}"
     )
 
