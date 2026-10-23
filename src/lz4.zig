@@ -11,8 +11,10 @@ const incremental_encoder = @import("lz4/incremental/frame_encoder.zig");
 const incremental_block_decoder = @import("lz4/incremental/block_decoder.zig");
 const incremental_tests = @import("lz4/incremental/tests.zig");
 const incremental_decoder_tests = @import("lz4/incremental/decoder_tests.zig");
+const incremental_limits_tests = @import("lz4/incremental/limits_tests.zig");
+const working = @import("io/working_allocator.zig");
 
-pub const Error = core.Error || std.mem.Allocator.Error;
+pub const Error = core.Error || std.mem.Allocator.Error || error{WorkingMemoryLimitExceeded};
 pub const DestSizeResult = dest_size.Result;
 const HcPreparedPrefix = hc_dest_size.PreparedPrefix;
 
@@ -474,6 +476,7 @@ pub const HcIncrementalFrameEncoder = incremental_encoder.Encoder(IncrementalHcE
 test {
     _ = incremental_tests;
     _ = incremental_decoder_tests;
+    _ = incremental_limits_tests;
 }
 
 pub const NativeDictionary = struct {
@@ -1477,6 +1480,7 @@ pub const decodedNativeFrameSizeLimitedWithDictionarySet = decodedFrameSizeLimit
 /// Whole-frame prevalidation is available through `Options.input_policy`.
 pub const NativeIncrementalFrameDecoder = struct {
     allocator: std.mem.Allocator,
+    budget: working.WorkingAllocator,
     dictionary: ?NativeDictionary = null,
     dictionary_set: ?NativeDictionarySet = null,
     options: Options = .{},
@@ -1539,12 +1543,22 @@ pub const NativeIncrementalFrameDecoder = struct {
     skippable_stream_captured: usize = 0,
     last_error_name: []const u8 = "",
     last_error_phase: ?Phase = null,
+    failure: ?Error = null,
+    error_input_offset: ?usize = null,
+    error_output_offset: ?usize = null,
+    last_step_progress: core.Progress = .{},
 
     pub const Phase = enum { frame, output, direct_output, done };
     const InternalPhase = enum { frame, output, direct_output, block_stream, skippable_stream, done };
     const BlockStreamStage = enum { block_header, raw_payload, raw_checksum, raw_output, compressed_payload, compressed_input, compressed_decode, compressed_checksum, compressed_output, content_checksum, finished };
 
     pub const Options = struct {
+        /// Maximum cumulative output across members of this logical stream.
+        max_output_len: usize = std.math.maxInt(usize),
+        /// Maximum live requested allocation bytes, including retained capacity
+        /// and temporary preflight scratch. Backing allocator bookkeeping is
+        /// outside this accounting.
+        max_working_memory: usize = std.math.maxInt(usize),
         /// Start bounded block/token decoding after the header by default.
         /// `.prevalidated_frame` retains a complete frame for structural
         /// prevalidation when it fits the compressed cap, with a block-stream
@@ -1572,6 +1586,11 @@ pub const NativeIncrementalFrameDecoder = struct {
         stop_after_first_frame: bool = false,
         skippable_output: []u8 = &.{},
         skippable_events: []SkippableEvent = &.{},
+
+        pub fn validate(self: Options) Error!void {
+            if (self.expected_output_len) |expected|
+                if (expected > self.max_output_len) return error.InvalidBlockPlan;
+        }
     };
     pub const SkippableEvent = struct { id: u4, payload_len: usize };
 
@@ -1589,38 +1608,53 @@ pub const NativeIncrementalFrameDecoder = struct {
         trailing_input_bytes: usize,
         last_error_name: []const u8,
         last_error_phase: ?Phase,
+        working_bytes: usize,
+        peak_working_bytes: usize,
+        error_input_offset: ?usize,
+        error_output_offset: ?usize,
+        last_step_progress: core.Progress,
     };
 
     pub fn init(allocator: std.mem.Allocator) NativeIncrementalFrameDecoder {
-        return .{ .allocator = allocator };
+        return initWithOptions(allocator, .{});
     }
 
     pub fn initWithOptions(allocator: std.mem.Allocator, options: Options) NativeIncrementalFrameDecoder {
-        return .{ .allocator = allocator, .options = options, .skippable_output = options.skippable_output, .skippable_events = options.skippable_events };
+        return .{ .allocator = allocator, .budget = working.WorkingAllocator.init(allocator, options.max_working_memory), .options = options, .skippable_output = options.skippable_output, .skippable_events = options.skippable_events };
     }
 
     pub fn initWithDictionary(allocator: std.mem.Allocator, dictionary: NativeDictionary) NativeIncrementalFrameDecoder {
-        return .{ .allocator = allocator, .dictionary = dictionary };
+        return initWithDictionaryAndOptions(allocator, dictionary, .{});
     }
 
     pub fn initWithDictionaryAndOptions(allocator: std.mem.Allocator, dictionary: NativeDictionary, options: Options) NativeIncrementalFrameDecoder {
-        return .{ .allocator = allocator, .dictionary = dictionary, .options = options, .skippable_output = options.skippable_output, .skippable_events = options.skippable_events };
+        var decoder = initWithOptions(allocator, options);
+        decoder.dictionary = dictionary;
+        return decoder;
     }
 
     pub fn initWithDictionarySet(allocator: std.mem.Allocator, dictionary_set: NativeDictionarySet) NativeIncrementalFrameDecoder {
-        return .{ .allocator = allocator, .dictionary_set = dictionary_set };
+        return initWithDictionarySetAndOptions(allocator, dictionary_set, .{});
     }
 
     pub fn initWithDictionarySetAndOptions(allocator: std.mem.Allocator, dictionary_set: NativeDictionarySet, options: Options) NativeIncrementalFrameDecoder {
-        return .{ .allocator = allocator, .dictionary_set = dictionary_set, .options = options, .skippable_output = options.skippable_output, .skippable_events = options.skippable_events };
+        var decoder = initWithOptions(allocator, options);
+        decoder.dictionary_set = dictionary_set;
+        return decoder;
     }
 
     pub fn deinit(self: *NativeIncrementalFrameDecoder) void {
-        self.direct_history.deinit(self.allocator);
-        self.direct_block_decoded_lens.deinit(self.allocator);
-        self.decoded_scratch.deinit(self.allocator);
-        self.frame_scratch.deinit(self.allocator);
+        self.deinitBuffers();
         self.* = undefined;
+    }
+
+    fn deinitBuffers(self: *NativeIncrementalFrameDecoder) void {
+        const allocator = self.budget.allocator();
+        self.direct_history.deinit(allocator);
+        self.direct_block_decoded_lens.deinit(allocator);
+        self.decoded_scratch.deinit(allocator);
+        self.frame_scratch.deinit(allocator);
+        std.debug.assert(self.budget.live == 0);
     }
 
     pub fn reset(self: *NativeIncrementalFrameDecoder) void {
@@ -1634,11 +1668,54 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.output_written = 0;
         self.last_error_name = "";
         self.last_error_phase = null;
+        self.failure = null;
+        self.error_input_offset = null;
+        self.error_output_offset = null;
+        self.last_step_progress = .{};
+        self.budget.peak = self.budget.live;
+        self.budget.hit_limit = false;
+        self.budget.last_failure_was_limit = false;
         self.skippable_written = 0;
         self.skippable_total = 0;
         self.skippable_event_count = 0;
         self.streamed_compressed_block_count = 0;
         self.resetSkippableStream();
+    }
+
+    /// Validate new settings before releasing all retained capacity. Borrowed
+    /// dictionaries remain configured; cumulative stream statistics restart.
+    pub fn resetWithOptions(self: *NativeIncrementalFrameDecoder, options: Options) Error!void {
+        try options.validate();
+        const allocator = self.allocator;
+        const dictionary = self.dictionary;
+        const dictionary_set = self.dictionary_set;
+        self.deinitBuffers();
+        self.* = initWithOptions(allocator, options);
+        self.dictionary = dictionary;
+        self.dictionary_set = dictionary_set;
+    }
+
+    /// Resume after a stopped data frame, preserving accepted trailing input,
+    /// cumulative output/pledge, allocation budget, and metadata statistics.
+    pub fn nextStream(self: *NativeIncrementalFrameDecoder) Error!void {
+        if (!self.options.stop_after_first_frame or self.phase != .done or self.failure != null)
+            return error.InvalidStreamState;
+        self.phase = .frame;
+        self.decoded_scratch.clearRetainingCapacity();
+        self.decoded_offset = 0;
+        self.resetDirectOutput();
+        self.resetBlockStream();
+        self.resetSkippableStream();
+        self.last_step_progress = .{};
+        self.clearError();
+    }
+
+    pub fn workingMemoryBytes(self: *const NativeIncrementalFrameDecoder) usize {
+        return self.budget.live;
+    }
+
+    pub fn peakWorkingMemoryBytes(self: *const NativeIncrementalFrameDecoder) usize {
+        return self.budget.peak;
     }
 
     pub fn snapshot(self: *const NativeIncrementalFrameDecoder) Snapshot {
@@ -1670,6 +1747,11 @@ pub const NativeIncrementalFrameDecoder = struct {
             .trailing_input_bytes = self.trailingInput().len,
             .last_error_name = self.last_error_name,
             .last_error_phase = self.last_error_phase,
+            .working_bytes = self.budget.live,
+            .peak_working_bytes = self.budget.peak,
+            .error_input_offset = self.error_input_offset,
+            .error_output_offset = self.error_output_offset,
+            .last_step_progress = self.last_step_progress,
         };
     }
 
@@ -1679,10 +1761,19 @@ pub const NativeIncrementalFrameDecoder = struct {
             .phase_name = phaseName(snap.phase),
             .frame_input_read = snap.input_received,
             .output_written = snap.output_written,
-            .expected_output_len = snap.decoded_len,
+            .expected_output_len = self.options.expected_output_len orelse snap.decoded_len,
             .payload_remaining = snap.decoded_remaining,
             .last_error_name = snap.last_error_name,
             .last_error_phase_name = if (snap.last_error_phase) |phase| phaseName(phase) else "",
+            .error_input_offset = snap.error_input_offset,
+            .error_output_offset = snap.error_output_offset,
+            .last_step_progress = snap.last_step_progress,
+            .recoverability_hint_name = if (self.failure) |err| switch (err) {
+                error.WorkingMemoryLimitExceeded => "raise_working_memory_limit",
+                error.OutputLimitExceeded => "raise_output_limit",
+                error.OutOfMemory => "allocation_failure",
+                else => "reset_decoder",
+            } else "none",
         };
     }
 
@@ -1734,7 +1825,33 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     pub fn finish(self: *NativeIncrementalFrameDecoder) Error!void {
-        if (self.phase == .done) return;
+        if (self.failure) |err| return err;
+        self.clearError();
+        self.finishInternal() catch |original| {
+            const err = self.mapAllocationError(original);
+            self.completeError(err);
+            // Pending input/output can still be supplied through step(). A
+            // stopped member with a short logical pledge can use nextStream().
+            const recoverable = err == error.OutputTooSmall or err == error.TruncatedFrame or
+                (err == error.SizeMismatch and self.options.stop_after_first_frame and
+                    self.phase == .done and self.options.expected_output_len != null and
+                    self.output_written < self.options.expected_output_len.?);
+            if (!recoverable) self.failure = err;
+            return err;
+        };
+    }
+
+    fn finishInternal(self: *NativeIncrementalFrameDecoder) Error!void {
+        try self.options.validate();
+        if (self.phase == .done) {
+            if (self.options.expected_output_len) |expected| {
+                if (self.output_written != expected) {
+                    self.recordError(.output, error.SizeMismatch);
+                    return error.SizeMismatch;
+                }
+            }
+            return;
+        }
         if (self.phase == .skippable_stream) {
             self.recordError(.skippable_stream, error.TruncatedFrame);
             return error.TruncatedFrame;
@@ -1784,7 +1901,29 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     pub fn step(self: *NativeIncrementalFrameDecoder, input: []const u8, output: []u8) Error!core.StepResult {
+        self.last_step_progress = .{};
+        if (self.failure) |err| return err;
+        self.clearError();
+        self.budget.last_failure_was_limit = false;
+        const before = core.Progress{ .input_read = self.input_received, .output_written = self.output_written };
+        const result = self.stepInternal(input, output) catch |original| {
+            const err = self.mapAllocationError(original);
+            self.last_step_progress = .{
+                .input_read = self.input_received - before.input_read,
+                .output_written = self.output_written - before.output_written,
+            };
+            self.completeError(err);
+            self.failure = err;
+            return err;
+        };
+        self.last_step_progress = result.progress;
+        return result;
+    }
+
+    fn stepInternal(self: *NativeIncrementalFrameDecoder, input: []const u8, output: []u8) Error!core.StepResult {
+        try self.options.validate();
         if (self.phase == .done) {
+            if (self.options.stop_after_first_frame) return .{ .status = .done };
             if (input.len == 0) return .{ .status = .done };
             if (self.options.expected_output_len != null) {
                 self.recordError(.frame, error.SizeMismatch);
@@ -1993,22 +2132,24 @@ pub const NativeIncrementalFrameDecoder = struct {
                         };
                         if (written != self.direct_block_decoded_len) return error.SizeMismatch;
                         if (self.direct_content_checksum) self.direct_content_hasher.update(output[output_written_step..][0..written]);
-                        if (!self.direct_block_independent) try self.rememberDirectOutput(output[output_written_step..][0..written]);
+                        const produced = output[output_written_step..][0..written];
                         self.direct_payload_read = self.direct_payload_len;
                         self.direct_decoded_read += written;
                         output_written_step += written;
                         self.output_written += written;
+                        if (!self.direct_block_independent) try self.rememberDirectOutput(produced);
                         continue;
                     }
                     const n = @min(self.direct_payload_len - self.direct_payload_read, output.len - output_written_step);
                     const source_offset = self.direct_payload_offset + self.direct_payload_read;
                     @memcpy(output[output_written_step..][0..n], self.frame_scratch.items[source_offset..][0..n]);
                     if (self.direct_content_checksum) self.direct_content_hasher.update(output[output_written_step..][0..n]);
-                    if (!self.direct_block_independent) try self.rememberDirectOutput(output[output_written_step..][0..n]);
+                    const produced = output[output_written_step..][0..n];
                     self.direct_payload_read += n;
                     self.direct_decoded_read += n;
                     output_written_step += n;
                     self.output_written += n;
+                    if (!self.direct_block_independent) try self.rememberDirectOutput(produced);
                 },
                 .block_stream => {
                     switch (self.block_stream_stage) {
@@ -2075,7 +2216,6 @@ pub const NativeIncrementalFrameDecoder = struct {
                             const source = source_available[0..n];
                             @memcpy(output[output_written_step..][0..n], source);
                             if (self.block_stream_content_checksum) self.block_stream_content_hasher.update(source);
-                            if (!self.block_stream_block_independent) try self.rememberBlockStreamCursorOutput(source);
                             if (buffered.len != 0) {
                                 self.consumeBlockStreamInput(n);
                             } else {
@@ -2086,6 +2226,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                             self.block_stream_frame_decoded_len += n;
                             self.output_written += n;
                             output_written_step += n;
+                            if (!self.block_stream_block_independent) try self.rememberBlockStreamCursorOutput(source);
                         },
                         .compressed_payload => {
                             if (self.blockStreamInput().len < self.block_stream_block_len and input_read < input.len)
@@ -2118,10 +2259,23 @@ pub const NativeIncrementalFrameDecoder = struct {
                             const buffered = self.blockStreamInput();
                             const source = if (buffered.len != 0) buffered else input[input_read..];
                             const output_start = output_written_step;
+                            const before_remaining = cursor.compressed_remaining;
+                            const before_decoded = cursor.decoded_len;
                             const result = cursor.step(source, .{
                                 .bytes = self.direct_history.items,
                                 .start = self.block_stream_cursor_history_start,
                             }, output[output_start..]) catch |err| {
+                                const read = before_remaining - cursor.compressed_remaining;
+                                const written = cursor.decoded_len - before_decoded;
+                                if (buffered.len != 0) {
+                                    self.consumeBlockStreamInput(read);
+                                } else {
+                                    input_read += read;
+                                    self.input_received += read;
+                                }
+                                self.block_stream_frame_decoded_len += written;
+                                self.output_written += written;
+                                output_written_step += written;
                                 self.recordError(.block_stream, err);
                                 return err;
                             };
@@ -2132,11 +2286,11 @@ pub const NativeIncrementalFrameDecoder = struct {
                                 self.input_received += result.input_read;
                             }
                             const produced = output[output_start..][0..result.output_written];
-                            try self.rememberBlockStreamCursorOutput(produced);
                             if (self.block_stream_content_checksum) self.block_stream_content_hasher.update(produced);
                             self.block_stream_frame_decoded_len += produced.len;
                             self.output_written += produced.len;
                             output_written_step += produced.len;
+                            try self.rememberBlockStreamCursorOutput(produced);
                             switch (result.status) {
                                 .need_input => {
                                     if (input_read < input.len) continue;
@@ -2173,7 +2327,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                                 self.direct_history.items
                             else
                                 &.{};
-                            const remaining_limit = self.options.max_decoded_buffer_len - self.block_stream_frame_decoded_len;
+                            const remaining_limit = @min(self.options.max_decoded_buffer_len - self.block_stream_frame_decoded_len, try self.remainingOutputLimit());
                             const decoded_len = decodedBlockSizeWithPrefixLimited(block, history, remaining_limit) catch |err| {
                                 self.recordError(.block_stream, err);
                                 return err;
@@ -2239,11 +2393,11 @@ pub const NativeIncrementalFrameDecoder = struct {
                             const source = self.blockStreamInput()[offset..][0..n];
                             @memcpy(output[output_written_step..][0..n], source);
                             if (self.block_stream_content_checksum) self.block_stream_content_hasher.update(source);
-                            if (!self.block_stream_block_independent) try self.rememberBlockStreamCursorOutput(source);
                             self.block_stream_raw_remaining -= n;
                             self.block_stream_frame_decoded_len += n;
                             self.output_written += n;
                             output_written_step += n;
+                            if (!self.block_stream_block_independent) try self.rememberBlockStreamCursorOutput(source);
                         },
                         .compressed_output => {
                             const cursor = if (self.block_stream_compressed_cursor) |*cursor| cursor else {
@@ -2252,19 +2406,24 @@ pub const NativeIncrementalFrameDecoder = struct {
                             };
                             const output_start = output_written_step;
                             const block = self.blockStreamInput()[0..self.block_stream_block_len];
+                            const before_decoded = cursor.decoded_len;
                             const result = cursor.step(block, .{
                                 .bytes = self.direct_history.items,
                                 .start = self.block_stream_cursor_history_start,
                             }, output[output_start..]) catch |err| {
+                                const written = cursor.decoded_len - before_decoded;
+                                self.block_stream_frame_decoded_len += written;
+                                self.output_written += written;
+                                output_written_step += written;
                                 self.recordError(.block_stream, err);
                                 return err;
                             };
                             const produced = output[output_start..][0..result.output_written];
-                            try self.rememberBlockStreamCursorOutput(produced);
                             if (self.block_stream_content_checksum) self.block_stream_content_hasher.update(produced);
                             self.block_stream_frame_decoded_len += produced.len;
                             self.output_written += produced.len;
                             output_written_step += produced.len;
+                            try self.rememberBlockStreamCursorOutput(produced);
                             if (!result.done) {
                                 if (result.output_written != 0) continue;
                                 return .{
@@ -2432,6 +2591,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         const frame_expected_len: ?usize = if (header.expected_content_size) |size| try checkedU64ToUsize(size) else null;
         if (frame_expected_len) |expected| {
             if (expected > self.options.max_decoded_buffer_len) return error.OutputLimitExceeded;
+            try self.ensureTotalOutputFits(expected);
             if (self.options.expected_output_len) |stream_expected| {
                 if (self.output_written > stream_expected or expected > stream_expected - self.output_written)
                     return error.SizeMismatch;
@@ -2449,7 +2609,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.direct_dictionary_history = dictionary_history;
         self.direct_history.clearRetainingCapacity();
         if (!header.block_independent)
-            try self.direct_history.ensureTotalCapacityPrecise(self.allocator, max_block_history_len);
+            try self.direct_history.ensureTotalCapacityPrecise(self.budget.allocator(), max_block_history_len);
         try self.rememberDirectOutput(dictionary_history);
         self.block_stream_input_offset = header.payload_offset;
         return true;
@@ -2472,7 +2632,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             self.block_stream_compressed_decoded_len,
         ) catch return error.IntegerOverflow;
         const history_capacity = @min(max_block_history_len, combined_history_len);
-        try self.direct_history.ensureTotalCapacityPrecise(self.allocator, history_capacity);
+        try self.direct_history.ensureTotalCapacityPrecise(self.budget.allocator(), history_capacity);
         self.block_stream_compressed_cursor = incremental_block_decoder.Cursor.init(
             self.block_stream_compressed_decoded_len,
             self.direct_history.items.len,
@@ -2489,8 +2649,8 @@ pub const NativeIncrementalFrameDecoder = struct {
             self.block_stream_cursor_history_start = 0;
             try self.rememberDirectOutput(self.direct_dictionary_history);
         }
-        try self.direct_history.ensureTotalCapacityPrecise(self.allocator, max_block_history_len);
-        var max_decoded_len = self.options.max_decoded_buffer_len - self.block_stream_frame_decoded_len;
+        try self.direct_history.ensureTotalCapacityPrecise(self.budget.allocator(), max_block_history_len);
+        var max_decoded_len = @min(self.options.max_decoded_buffer_len - self.block_stream_frame_decoded_len, try self.remainingOutputLimit());
         var decoded_limit_error: incremental_block_decoder.Error = error.OutputLimitExceeded;
         if (self.block_stream_frame_expected_len) |expected| {
             if (self.block_stream_frame_decoded_len > expected) return error.SizeMismatch;
@@ -2524,7 +2684,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         const history = &self.direct_history;
         if (history.items.len < max_block_history_len) {
             const n = @min(bytes.len, max_block_history_len - history.items.len);
-            try history.ensureTotalCapacityPrecise(self.allocator, history.items.len + n);
+            try history.ensureTotalCapacityPrecise(self.budget.allocator(), history.items.len + n);
             history.appendSliceAssumeCapacity(bytes[0..n]);
             if (n == bytes.len) return;
             const remaining = bytes[n..];
@@ -2593,6 +2753,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     fn ensureBlockStreamOutputFits(self: *NativeIncrementalFrameDecoder, additional: usize) Error!void {
+        try self.ensureTotalOutputFits(additional);
         const next_frame_len = std.math.add(usize, self.block_stream_frame_decoded_len, additional) catch {
             self.recordError(.block_stream, error.IntegerOverflow);
             return error.IntegerOverflow;
@@ -2634,8 +2795,6 @@ pub const NativeIncrementalFrameDecoder = struct {
 
     fn finishFirstDataFrame(self: *NativeIncrementalFrameDecoder) Error!bool {
         if (!self.options.stop_after_first_frame) return false;
-        if (self.options.expected_output_len) |expected|
-            if (self.output_written != expected) return error.SizeMismatch;
         self.phase = .done;
         return true;
     }
@@ -2707,7 +2866,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         if (bytes.len == 0) return;
         if (bytes.len >= max_block_history_len) {
             self.direct_history.clearRetainingCapacity();
-            try self.direct_history.ensureTotalCapacityPrecise(self.allocator, max_block_history_len);
+            try self.direct_history.ensureTotalCapacityPrecise(self.budget.allocator(), max_block_history_len);
             self.direct_history.appendSliceAssumeCapacity(bytes[bytes.len - max_block_history_len ..]);
             return;
         }
@@ -2719,7 +2878,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             std.mem.copyForwards(u8, self.direct_history.items[0..keep_len], self.direct_history.items[drop..]);
             self.direct_history.shrinkRetainingCapacity(keep_len);
         }
-        try self.direct_history.ensureTotalCapacityPrecise(self.allocator, self.direct_history.items.len + bytes.len);
+        try self.direct_history.ensureTotalCapacityPrecise(self.budget.allocator(), self.direct_history.items.len + bytes.len);
         self.direct_history.appendSliceAssumeCapacity(bytes);
     }
 
@@ -2733,6 +2892,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     fn ensureDecodedScratchFitsExpected(self: *NativeIncrementalFrameDecoder) Error!void {
+        try self.ensureTotalOutputFits(self.decoded_scratch.items.len - self.decoded_offset);
         const expected = self.options.expected_output_len orelse return;
         if (self.output_written > expected) {
             self.recordError(.output, error.SizeMismatch);
@@ -2747,6 +2907,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     fn ensureDirectOutputFitsExpected(self: *NativeIncrementalFrameDecoder) Error!void {
+        try self.ensureTotalOutputFits(self.direct_decoded_len - self.direct_decoded_read);
         const expected = self.options.expected_output_len orelse return;
         if (self.output_written > expected) {
             self.recordError(.direct_output, error.SizeMismatch);
@@ -2827,7 +2988,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             self.options.max_compressed_buffer_len;
         const doubled = std.math.mul(usize, @max(self.frame_scratch.capacity, 8), 2) catch capacity_limit;
         const target = @min(capacity_limit, @max(needed, doubled));
-        try self.frame_scratch.ensureTotalCapacityPrecise(self.allocator, target);
+        try self.frame_scratch.ensureTotalCapacityPrecise(self.budget.allocator(), target);
     }
 
     fn completeFrameAvailable(self: *NativeIncrementalFrameDecoder) Error!?usize {
@@ -2862,12 +3023,13 @@ pub const NativeIncrementalFrameDecoder = struct {
     fn decodeCompleteFrame(self: *NativeIncrementalFrameDecoder, frame: []const u8) Error!void {
         self.decoded_scratch.clearRetainingCapacity();
         self.decoded_offset = 0;
+        const output_limit = @min(self.options.max_decoded_buffer_len, try self.remainingOutputLimit());
         if (self.dictionary_set) |dictionary_set| {
-            _ = try decodeFrameAppendLimitedWithDictionarySet(self.allocator, &self.decoded_scratch, frame, self.options.max_decoded_buffer_len, dictionary_set);
+            _ = try decodeFrameAppendLimitedWithDictionarySet(self.budget.allocator(), &self.decoded_scratch, frame, output_limit, dictionary_set);
         } else if (self.dictionary) |dictionary| {
-            _ = try decodeFrameAppendLimitedWithDictionary(self.allocator, &self.decoded_scratch, frame, self.options.max_decoded_buffer_len, dictionary);
+            _ = try decodeFrameAppendLimitedWithDictionary(self.budget.allocator(), &self.decoded_scratch, frame, output_limit, dictionary);
         } else {
-            _ = try decodeFrameAppendLimited(self.allocator, &self.decoded_scratch, frame, self.options.max_decoded_buffer_len);
+            _ = try decodeFrameAppendLimited(self.budget.allocator(), &self.decoded_scratch, frame, output_limit);
         }
     }
 
@@ -2899,18 +3061,20 @@ pub const NativeIncrementalFrameDecoder = struct {
                 self.recordError(.frame, error.OutputLimitExceeded);
                 return error.OutputLimitExceeded;
             }
+            try self.ensureTotalOutputFits(len);
             break :blk len;
         } else null;
-        const direct_limit = if (frame_expected_len) |len|
-            len
-        else if (self.options.expected_output_len) |expected| blk: {
+        const safety_limit = @min(self.options.max_decoded_buffer_len, try self.remainingOutputLimit());
+        const remaining_expected: ?usize = if (self.options.expected_output_len) |expected| blk: {
             if (self.output_written > expected) {
                 self.recordError(.frame, error.SizeMismatch);
                 return error.SizeMismatch;
             }
             break :blk expected - self.output_written;
-        } else self.options.max_decoded_buffer_len;
-        const direct_limit_from_expected = frame_expected_len == null and self.options.expected_output_len != null;
+        } else null;
+        const direct_limit = frame_expected_len orelse @min(safety_limit, remaining_expected orelse safety_limit);
+        const direct_limit_from_expected = frame_expected_len == null and
+            remaining_expected != null and remaining_expected.? <= safety_limit;
 
         var offset = header.payload_offset;
         var first_payload_offset: usize = 0;
@@ -2922,7 +3086,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         var block_count: usize = 0;
         var any_block_compressed = false;
         var decoded_lens: std.ArrayList(usize) = .empty;
-        defer decoded_lens.deinit(self.allocator);
+        defer decoded_lens.deinit(self.budget.allocator());
         var content_hasher = std.hash.XxHash32.init(0);
         while (true) {
             if (frame.len - offset < 4) return error.TruncatedFrame;
@@ -2984,7 +3148,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                 },
                 else => return err,
             };
-            try decoded_lens.append(self.allocator, decoded_block_len);
+            try decoded_lens.append(self.budget.allocator(), decoded_block_len);
             if (block_count == 0) {
                 first_payload_offset = offset;
                 first_payload_len = block_len;
@@ -3031,7 +3195,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.direct_block_uses_dictionary_prefix = first_block_compressed and dictionary_history.len != 0;
         self.direct_block_decoded_len = first_block_decoded_len;
         self.direct_block_decoded_lens.clearRetainingCapacity();
-        try self.direct_block_decoded_lens.appendSlice(self.allocator, decoded_lens.items);
+        try self.direct_block_decoded_lens.appendSlice(self.budget.allocator(), decoded_lens.items);
         self.direct_block_index = 0;
         self.direct_frame_output_start = self.output_written;
         self.direct_dictionary_history = dictionary_history;
@@ -3096,9 +3260,41 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.frame_scratch.shrinkRetainingCapacity(remaining_len);
     }
 
+    fn clearError(self: *NativeIncrementalFrameDecoder) void {
+        self.last_error_name = "";
+        self.last_error_phase = null;
+        self.error_input_offset = null;
+        self.error_output_offset = null;
+    }
+
+    fn remainingOutputLimit(self: *const NativeIncrementalFrameDecoder) Error!usize {
+        if (self.output_written > self.options.max_output_len) return error.OutputLimitExceeded;
+        return self.options.max_output_len - self.output_written;
+    }
+
+    fn ensureTotalOutputFits(self: *const NativeIncrementalFrameDecoder, additional: usize) Error!void {
+        if (additional > try self.remainingOutputLimit()) return error.OutputLimitExceeded;
+    }
+
+    fn mapAllocationError(self: *const NativeIncrementalFrameDecoder, err: Error) Error {
+        return if (err == error.OutOfMemory and self.budget.last_failure_was_limit)
+            error.WorkingMemoryLimitExceeded
+        else
+            err;
+    }
+
+    fn completeError(self: *NativeIncrementalFrameDecoder, err: Error) void {
+        self.last_error_name = @errorName(err);
+        if (self.last_error_phase == null) self.last_error_phase = publicPhase(self.phase);
+        self.error_input_offset = self.input_received;
+        self.error_output_offset = self.output_written;
+    }
+
     fn recordError(self: *NativeIncrementalFrameDecoder, phase: InternalPhase, err: Error) void {
         self.last_error_name = @errorName(err);
         self.last_error_phase = publicPhase(phase);
+        self.error_input_offset = self.input_received;
+        self.error_output_offset = self.output_written;
     }
 
     fn phaseName(phase: Phase) []const u8 {

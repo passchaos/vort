@@ -16,6 +16,8 @@ pub const Error = error{
     BadZlibHeader,
     BadGzipHeader,
     NeedDictionary,
+    DictionaryMismatch,
+    InvalidStreamState,
     InvalidHuffmanCode,
     UnsupportedDeflateFeature,
     UnsupportedZstdFeature,
