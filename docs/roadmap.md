@@ -22838,3 +22838,21 @@ reuse, so production keeps the simpler independently owned plans.
   wasm compilation and the CLI help page pass.
   The final Debug repository suite passes 3506/3506 tests (3499 root tests
   plus seven separate Brotli object/classifier cases).
+
+- Corrected EROFS's second compression algorithm nibble: zero identifies LZ4
+  independently of HEAD1's codec, instead of inheriting the first algorithm.
+  Both full/compact indexes, inline compressed tails and legacy PARTIAL_REF
+  HEAD2 records preserve the exact IDs. Four native regressions exercise all
+  16 ordered codec pairs across five layouts, tiny output schedules, ranges,
+  invalid IDs, late Source failure and exhaustive OOM. Further tests place
+  secondary LZ4 inline tails in full/compact metabox metadata and read ordinary
+  cross-codec extents from external devices. Twelve fixed compressed blocks
+  come from liblz4 1.9.3, zlib 1.2.11, libzstd 1.4.8 and XZ Utils 5.8.4.
+  Debug passes 191 EROFS cases; ReleaseFast passes those plus 12 independent I/O
+  cases (203 total). Original erofs-utils 1.9.4-g5fcb2f76 independently reads all
+  84 synthetic dual-algorithm layout/device images assembled from those blocks.
+  The complete 536-mode writer matrix and all existing reader cases also pass
+  (`dual_algorithm_reader=84`).
+  Broad check (125 steps), wasm compilation and the CLI help page pass.
+  The final Debug repository suite passes 3510/3510 tests (3503 root tests
+  plus seven separate Brotli object/classifier cases).

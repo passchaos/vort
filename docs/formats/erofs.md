@@ -847,3 +847,14 @@ holes, ranges, planning/streaming Source failures, dual-Sink finish order,
 working limits and exhaustive allocation failures. Final Debug repository
 validation passes 3506/3506 tests; broad check (125 steps), wasm compilation
 and CLI help also pass.
+
+Dual-algorithm reading passes 191 EROFS cases in Debug and ReleaseFast plus
+12 independent I/O tests in ReleaseFast (203 total). Twelve independent blocks
+from liblz4 1.9.3, zlib 1.2.11, libzstd 1.4.8 and XZ Utils 5.8.4 supply all
+16 ordered codec pairs across full/compact, inline and partial-reference
+layouts. Original fsck.erofs 1.9.4-g5fcb2f76 validates all 84 layout/device
+images (`dual_algorithm_reader=84`), alongside the complete 536-mode writer
+matrix. Native tests additionally cover full/compact metabox inline metadata,
+ranges, tiny outputs, late Source errors, invalid IDs and exhaustive OOM.
+Final Debug repository validation passes 3510/3510 tests. Broad check (125
+steps), wasm compilation and CLI help also pass.
