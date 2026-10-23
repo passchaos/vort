@@ -120,3 +120,40 @@ test "EROFS sparse extent holes do not read their unused physical addresses" {
     try std.testing.expectEqual(@as(u64, 7), result.length);
     try std.testing.expectEqual(@as(usize, 0), source.peakWorkingBytes());
 }
+
+test "EROFS legacy partial references honor one-block sizes across noncontiguous addresses" {
+    const allocator = std.testing.allocator;
+    for (partial.algorithms, 0..) |_, index| {
+        const base = try partial.build(allocator, index, 0, .partial, 4096);
+        defer allocator.free(base);
+        const original = try archive_module.Archive.init(base);
+        const value = try original.inode(96);
+        const image = try allocator.alloc(u8, 1025 * 4096);
+        defer allocator.free(image);
+        @memset(image, 0);
+        @memcpy(image[0..base.len], base);
+        image[1024 * 4096] = 'B';
+        if (value.inode_size == 32) std.mem.writeInt(u32, image[value.location + 8 ..][0..4], 4097, .little) else std.mem.writeInt(u64, image[value.location + 8 ..][0..8], 4097, .little);
+        std.mem.writeInt(u16, image[value.compressed_index_start + 8 ..][0..2], 0, .little);
+        std.mem.writeInt(u16, image[value.compressed_index_start + 10 ..][0..2], 0, .little);
+        std.mem.writeInt(u32, image[value.compressed_index_start + 12 ..][0..4], 1024, .little);
+        std.mem.writeInt(u32, image[1060..1064], 1025, .little);
+        partial.refresh(image);
+        const full = try partial.fullPrefixAlloc(allocator, index);
+        defer allocator.free(full);
+        const expected = try std.mem.concat(allocator, u8, &.{ full, "B" });
+        defer allocator.free(expected);
+        const slice = try archive_module.Archive.init(image);
+        const inode = try slice.inode(96);
+        var input = helpers.Input{ .bytes = image };
+        var source = try source_archive.SourceArchive.init(allocator, input.source(), .{ .max_working_memory = 128 * 1024, .max_encoded_extent_size = 4096 });
+        defer source.deinit();
+        var output = helpers.Counting{ .expected = expected };
+        _ = try source.readToSink(inode, output.sink(), .{ .max_output_len = 4097 });
+        try std.testing.expect(output.finished and output.length == expected.len);
+        try std.testing.expect(source.peakWorkingBytes() < 128 * 1024);
+        const decoded = try slice.readFlatAllocLimited(allocator, inode, 4097);
+        defer allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, expected, decoded);
+    }
+}
