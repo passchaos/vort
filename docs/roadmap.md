@@ -22729,3 +22729,35 @@ reuse, so production keeps the simpler independently owned plans.
   Broad check, wasm compilation and the CLI help page pass.
   The final Debug repository suite passes 3471/3471 tests (3464 root tests
   plus seven separate Brotli object/classifier cases).
+
+- Added explicit bounded prefix decoding for all four EROFS codecs. MicroLZMA
+  exposes opt-in partial output while retaining default range-finish checks;
+  the raw Deflate state can stop at its output limit inside a stored chunk or
+  match and preserve continuation. LZ4 full/partial logic lives in a dedicated
+  module and validates complete literal spans against encoded bounds.
+  Modern extent bit-27 and legacy full-index bit-15 partial references share
+  the streaming core. Range cropping decodes only the prefix needed for
+  history; unmarked extents retain full validation. Zero-length masks emit
+  holes without physical reads, while final fragment records interpret their
+  length and physical-low words as packed offsets across all four record sizes.
+  Fragment metadata, range offsets, recursion/type guards and work limits use
+  the existing child reader. The obsolete separate extent allocation/decode
+  path was removed. Legacy physical sizes now use the single-block default or
+  explicit big-pcluster count instead of estimating from address differences.
+  Tests cover every codec, 4/8/16/32-byte and legacy layouts, literal/match/EOF
+  boundaries, sparse/noncontiguous addresses, tiny buffers, mixed ranges,
+  decoded-prefix/encoded/work caps, sticky Source errors, late metadata failure
+  and exhaustive allocation failures. A one-byte range from a much larger
+  compressed extent succeeds under a one-byte decoded cap; noncontiguous
+  legacy inputs spanning 4 MiB work under 128 KiB heap and a 4 KiB encoded cap.
+  Debug passes 167 EROFS cases; ReleaseFast passes those plus 12 independent I/O
+  cases (179 total). All 37 raw Deflate incremental regressions and the pinned
+  MicroLZMA strict-decoder fixture also pass.
+  erofs-utils 1.9.4-g5fcb2f76 passes the complete 432-mode matrix plus 88 fresh
+  partial/legacy/hole/fragment layouts (`partial_extent_reader=88`), including
+  noncontiguous references under 128 KiB work limits. Four actual-file overflow
+  cases preserve existing output and clean temporary files
+  (`partial_extent_errors=4`).
+  Broad check (125 steps), wasm compilation and the CLI help page pass.
+  The final Debug repository suite passes 3486/3486 tests (3479 root tests
+  plus seven separate Brotli object/classifier cases).

@@ -211,8 +211,10 @@ Unmarked extents retain complete decoding and validation. Input extent bounds
 and encoded-size caps still apply to the complete encoded region; decoded-size
 caps apply to the prefix actually decoded. Decoder state and prefix storage use
 the supplied working allocator and are released at extent boundaries or error.
+Legacy physical lengths follow the format's single-block default or explicit
+big-pcluster counts, including shared references with noncontiguous addresses.
 
-A zero encoded-length mask represents a hole and emits zero bytes without
+A zero encoded-length mask represents a hole and emits zeros without
 reading its physical address. With the fragment-pcluster advise flag, the final
 record instead carries a packed offset: the complete 32-bit length word is the
 low offset, and records of 8 bytes or more provide its high 32 bits in
@@ -223,8 +225,9 @@ rejected. Record ordering and remaining metadata are validated before reporting
 `done`, including when the requested range ends before the final fragment.
 
 Partial references allow decoding to stop without reaching compression EOF.
-Required header, literal, match and source bytes must still be valid; unused
-compressed suffixes and full-stream footers are outside that prefix read.
+Required header, literal spans, match and source bytes must still be valid.
+Decoding can stop before unused compressed suffixes or stream footers; any
+validation reached while producing the prefix remains active.
 
 Metabox images expose an ordinary hidden compressed inode whose decoded file is
 a second metadata address space. `loadMetaboxAllocLimited` first validates and
@@ -727,3 +730,17 @@ Truncation, invalid records, late modern-extent metadata errors, independent
 Source/output/work limits, metabox priority/failed loading, and exhaustive
 allocation failures are covered. Final Debug repository validation passes
 3471/3471 tests; broad check (125 steps), wasm compilation and CLI help pass.
+
+Partial references, sparse holes and fragment extents pass 167 EROFS cases in
+Debug and ReleaseFast, with 12 additional I/O cases passing in ReleaseFast
+(179 total). The complete 432-mode matrix retains its existing coverage and
+adds 88 legacy/4/8/16/32-byte partial, hole, fragment and noncontiguous-address
+cases (`partial_extent_reader=88`). Four actual-file overflow cases preserve
+existing output and clean temporary files (`partial_extent_errors=4`).
+One-byte range extraction succeeds under a one-byte decoded limit, while four
+noncontiguous legacy images spanning 4 MiB fit 128 KiB working heaps and a
+4 KiB encoded extent cap. Native tests cover exact errors, late metadata
+validation, sticky failures, tiny output schedules and exhaustive OOM.
+The final Debug repository suite passes 3486/3486 tests; broad check (125
+steps), wasm compilation, CLI help and dedicated default DEFLATE/MicroLZMA
+decoder regression checks also pass.
