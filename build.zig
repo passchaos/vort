@@ -1725,6 +1725,15 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const erofs_diff = b.addSystemCommand(&.{ "python3", "tools/erofs/diff.py", "--cli" });
+    const erofs_metadata_zone_probe = b.addExecutable(.{
+        .name = "vort-erofs-metadata-zone-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/erofs/metadata_zone_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
     const erofs_directory_probe = b.addExecutable(.{
         .name = "vort-erofs-directory-probe",
         .root_module = b.createModule(.{
@@ -1739,6 +1748,8 @@ pub fn build(b: *std.Build) void {
     erofs_diff.addArtifactArg(erofs_writer_probe);
     erofs_diff.addArg("--directory-writer");
     erofs_diff.addArtifactArg(erofs_directory_probe);
+    erofs_diff.addArg("--metadata-zone-writer");
+    erofs_diff.addArtifactArg(erofs_metadata_zone_probe);
     if (b.args) |args| erofs_diff.addArgs(args);
     const erofs_diff_step = b.step("run-erofs-diff", "Validate EROFS reading and writing against optional erofs-utils");
     erofs_diff_step.dependOn(&erofs_diff.step);

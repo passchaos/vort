@@ -14,6 +14,7 @@ from directory_diff import verify_directory_streams
 from prefix_diff import verify_packed_prefixes
 from partial_diff import verify_partial_extents
 from device_diff import verify_device_readers
+from metadata_zone_diff import verify_metadata_zones
 
 
 def run(*args: object, check: bool = True) -> subprocess.CompletedProcess[bytes]:
@@ -169,11 +170,18 @@ def main() -> None:
     parser.add_argument("--cli", required=True, type=Path)
     parser.add_argument("--writer", required=True, type=Path)
     parser.add_argument("--directory-writer", type=Path)
+    parser.add_argument("--metadata-zone-writer", type=Path)
     parser.add_argument("--mkfs", type=Path)
     parser.add_argument("--fsck", type=Path)
+    parser.add_argument("--dump", type=Path)
     args = parser.parse_args()
     mkfs = args.mkfs or (Path(found) if (found := shutil.which("mkfs.erofs")) else None)
     fsck = args.fsck or (Path(found) if (found := shutil.which("fsck.erofs")) else None)
+    dump = args.dump or (Path(found) if (found := shutil.which("dump.erofs")) else None)
+    if dump is None and fsck is not None:
+        sibling = fsck.parent.parent / "dump" / "dump.erofs"
+        if sibling.is_file():
+            dump = sibling
     if (mkfs is None) != (fsck is None):
         raise AssertionError("both EROFS oracle tools are required")
 
@@ -219,6 +227,7 @@ def main() -> None:
     partial_extent_reader_cases = 0
     partial_extent_error_cases = 0
     device_reader_cases = 0
+    metadata_zone_writer_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -700,6 +709,7 @@ def main() -> None:
         packed_prefix_reader_cases += verify_packed_prefixes(args.cli, mkfs, fsck, temp, run)
         partial_extent_reader_cases, partial_extent_error_cases = verify_partial_extents(args.cli, fsck, temp, run)
         device_reader_cases = verify_device_readers(args.cli, args.writer, fsck, temp, run)
+        metadata_zone_writer_cases = verify_metadata_zones(args.cli, args.metadata_zone_writer, fsck, dump, temp, run)
 
     print(
         f"fixture_cases={fixture_cases} tools={mkfs is not None} "
@@ -740,6 +750,7 @@ def main() -> None:
         f"partial_extent_reader={partial_extent_reader_cases} "
         f"partial_extent_errors={partial_extent_error_cases} "
         f"device_reader={device_reader_cases} "
+        f"metadata_zone_writer={metadata_zone_writer_cases} "
         f"malformed={malformed}"
     )
 
