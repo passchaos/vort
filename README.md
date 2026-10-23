@@ -121,10 +121,13 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   fallback, reparse/ioctl metadata
   parsing, pinned fixtures, fuzzing, and bidirectional wimlib differentials;
 - pure Zig Apple LZFSE stream and raw LZVN support with `bvx-`, `bvxn`, `bvx1`,
-  and `bvx2` decoding, compressed frequency-table and four-way literal FSE
-  reconstruction, bounded/caller-owned APIs, deterministic LZVN-or-stored block
-  writing, strict stream termination, and bidirectional Apple reference
-  interoperability; LZFSE FSE block writing remains unimplemented;
+  and `bvx2` decoding and matched V1/V2 FSE writing, four interleaved literal
+  states and L/M/D records, count-driven blocks with borrowed history,
+  deterministic auto/FSE/LZVN/stored selection, explicit output and working
+  memory limits, caller-owned output and encoding summaries, strict stream
+  termination, and bidirectional Apple reference interoperability; see the
+  [LZFSE API and format contracts](docs/formats/lzfse.md) and
+  [functional compatibility and size baseline](docs/performance/lzfse-fse-functional-baseline.md);
 - pure Zig Apple `decmpfs` transparent-file decoding for inline types 1/3/7/9/11
   and resource-fork types 4/8/12, with strict 16-byte xattr headers, zlib
   resource descriptors, Apple LZVN/LZFSE offset tables, stored-block markers,

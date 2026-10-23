@@ -23061,3 +23061,38 @@ reuse, so production keeps the simpler independently owned plans.
   strategy-size evidence, not upstream throughput/HQ leadership. LZFSE FSE
   writing, deeper parsing, calibrated quality levels, progressive Quantum
   decode and uniform real-corpus ratio/speed/memory evidence remain open.
+
+- LZFSE writing now finds bounded 4-byte matches and emits real V1/V2
+  compressed blocks with four literal FSE lanes and L/M/D value FSE. Portable
+  integer normalization preserves support and state totals; contiguous-state
+  inverse tables handle the full-frequency zero-bit case. The reverse writer
+  keeps final states in the header, stores negative high-bit padding counts,
+  prepends the LMD look-behind bytes and orders extras before transitions.
+  The writer covers L315/M2359/D262139, dummy literal records and repeated
+  distances, with real-distance Plans left immutable during serialization.
+  Count-driven planning cuts at 40000 padded literals or 10000 records and
+  reports the exact consumed prefix, allowing complete 64 KiB/96 KiB/120 KiB
+  FSE spans instead of a fixed 32 KiB ceiling. Source history can cross stored,
+  LZVN and FSE blocks without an input-sized matcher chain. Default auto
+  compares complete FSE/LZVN/stored representations over the same prefix; a
+  losing count-cut candidate retains the original requested legacy block.
+  Explicit LZVN preserves earlier bytes, false use_lzvn with no strategy stays
+  stored, and explicit strategies override the compatibility switch. Public
+  Summary, working/output limits, direct Plan encoding and transactional
+  caller-buffer/append helpers share the library core; encodeInto retains its
+  existing allocator/input/options/output order. CLI exposes strategies, FSE
+  version and resource controls, uses atomic replacement and supports same-path
+  input/output. DMG writers automatically use the same default encoder.
+  Debug codec tests pass 61/61, ReleaseFast LZFSE/DMG tests pass 190/190 and
+  AArch64 compile-only succeeds; all 125 build-check steps pass, including
+  wasm32-wasi compilation. The 264-case native/Apple matrix produces
+  80 V1 and 141 V2 blocks, includes 65 payload-preserving V2-to-V1 conversions
+  and 51 allocation-failure injections, and exercises exact limits, 120000-
+  byte FSE blocks, maximal values, zero literal payload and cross-block history.
+  Existing CLI differential and 53 strategy/limit/atomic cases pass. A wrapper
+  around the unmodified Apple decoder records valid-empty success despite
+  the official CLI's ambiguous zero-output API handling. Generated JSON bytes
+  improve from 111509 LZVN to 47221 V2 FSE for 465016 input bytes; no upstream
+  ratio/throughput leadership is claimed. Decoder streaming, quality levels,
+  dictionary workflows and unified real-corpus performance evidence remain
+  priorities after this functional slice.
