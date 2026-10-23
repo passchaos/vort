@@ -1,12 +1,19 @@
 const std = @import("std");
 const vort = @import("vort");
+const verification = @import("writer_verify.zig");
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
     defer args.deinit();
     _ = args.next();
     const output_path = args.next() orelse return error.MissingOutputPath;
-    const mode_name = args.next() orelse "lz4";
+    const raw_mode = args.next() orelse "lz4";
+    const index_format: vort.ErofsWriterIndexFormat = if (std.mem.startsWith(u8, raw_mode, "compact4-")) .compact_4byte else if (std.mem.startsWith(u8, raw_mode, "compact-")) .compact else .full;
+    const mode_name = switch (index_format) {
+        .compact_4byte => raw_mode["compact4-".len..],
+        .compact => raw_mode["compact-".len..],
+        .full => raw_mode,
+    };
     const source_suffix = "-source";
     const sink_suffix = "-sink";
     const encoder_suffix = "-encoder";
@@ -100,6 +107,7 @@ pub fn main(init: std.process.Init) !void {
         .{ .path = "empty", .kind = .directory, .xattrs = &directory_xattrs },
     };
     var sources: [entries.len]vort.SliceByteSource = undefined;
+    const expected_entries = entries;
     if (source_mode) {
         for (&entries, 0..) |*entry, index| {
             if (entry.kind != .file) continue;
@@ -111,6 +119,7 @@ pub fn main(init: std.process.Init) !void {
     }
     const options = vort.ErofsWriterOptions{
         .compression = compression,
+        .compressed_index_format = index_format,
         .compression_extent_size = if (grouped) 64 * 1024 else 4096,
         .max_pcluster_size = if (bounded_suffix) |suffix|
             if (std.mem.eql(u8, suffix, "-bounded12")) 12288 else if (std.mem.eql(u8, suffix, "-bounded8")) 8192 else 4096
@@ -172,6 +181,8 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(encoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
     }
+    if (index_format != .full and compression != .stored)
+        try verification.verify(init, output_path, &expected_entries, &root_xattrs, index_format);
 }
 
 fn parseCompression(name: []const u8) ?vort.ErofsWriterCompression {

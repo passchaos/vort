@@ -18,6 +18,8 @@ from metadata_zone_diff import verify_metadata_zones
 from dual_algorithm_diff import verify_dual_algorithms
 from configuration_diff import verify_configurations
 from nonhead_diff import verify_nonhead_chains
+from writer_matrix import writer_modes, combined_metabox_modes, payloads as writer_payloads, xattrs as writer_xattrs
+from compact_writer_diff import verify_cli as verify_compact_cli
 
 
 def run(*args: object, check: bool = True) -> subprocess.CompletedProcess[bytes]:
@@ -244,6 +246,8 @@ def main() -> None:
     configuration_error_cases = 0
     nonhead_reader_cases = 0
     nonhead_error_cases = 0
+    compact_cli_cases = 0
+    compact_cli_errors = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -262,96 +266,9 @@ def main() -> None:
         payloads, source_xattrs = write_tree(source)
         primary = fixture
 
-        writer_large = b"EROFS writer probe multi-block payload 0123456789\n" * 4096
-        state = 0x1234_5678
-        writer_random = bytearray()
-        for _ in range(8193):
-            state ^= (state << 13) & 0xFFFF_FFFF
-            state ^= state >> 17
-            state ^= (state << 5) & 0xFFFF_FFFF
-            state &= 0xFFFF_FFFF
-            writer_random.append(state & 0xFF)
-        expected_writer = {
-            "etc/config": b"writer probe configuration\n",
-            "large.bin": writer_large,
-            "random.bin": bytes(writer_random),
-            "mixed.bin": bytes(writer_random[:8192]) * 2,
-            "small": b"inline payload",
-            "link": b"etc/config",
-        }
-        expected_writer_xattrs = {
-            "/": {
-                b"user.vort.root": b"root-xattr",
-                b"user.vort.shared": b"shared-xattr",
-            },
-            "etc/config": {
-                b"user.vort.config": b"config-xattr",
-                b"user.vort.shared": b"shared-xattr",
-            },
-            "small": {
-                b"user.vort.small": b"small-xattr",
-                b"user.vort.shared": b"shared-xattr",
-            },
-            "empty": {
-                b"user.vort.directory": b"directory-xattr",
-                b"user.vort.shared": b"shared-xattr",
-            },
-        }
-        grouped_modes = tuple(
-            f"{codec}-clusters{suffix}"
-            for codec in ("lz4", "lzma", "deflate", "zstd")
-            for suffix in ("", "-fragments", "-ztailpacking", "-48bit", "-metabox", "-dirs", "-extended", "-dirs-extended-metabox")
-        )
-        bounded_modes = tuple(
-            f"{codec}-bounded{suffix}"
-            for codec in ("lz4", "lzma", "deflate", "zstd")
-            for suffix in ("", "-fragments", "-ztailpacking", "-48bit", "-metabox", "-dirs", "-extended", "-dirs-extended-metabox", "8", "12")
-        )
-        combined_metabox_modes = ("chunk-local-metabox", "chunk-external-metabox") + tuple(
-            f"{codec}{group}{tail}-metabox"
-            for codec in ("lz4", "lzma", "deflate", "zstd")
-            for group in ("", "-clusters", "-bounded")
-            for tail in ("-fragments", "-ztailpacking")
-        )
+        expected_writer = writer_payloads()
+        expected_writer_xattrs = writer_xattrs
         file_source_writer_cases += verify_file_sources(args.cli, fsck, temp, expected_writer["mixed.bin"], run)
-        writer_modes = (
-            "stored",
-            "lz4",
-            "deflate",
-            "zstd",
-            "lz4-fragments",
-            "deflate-fragments",
-            "zstd-fragments",
-            "lz4-ztailpacking",
-            "deflate-ztailpacking",
-            "zstd-ztailpacking",
-            "chunk-local",
-            "chunk-external",
-            "stored-48bit",
-            "lz4-48bit",
-            "deflate-48bit",
-            "zstd-48bit",
-            "chunk-local-48bit",
-            "chunk-external-48bit",
-            "stored-metabox",
-            "lz4-metabox",
-            "deflate-metabox",
-            "zstd-metabox",
-            "lz4-dirs",
-            "deflate-dirs",
-            "zstd-dirs",
-            "stored-extended",
-            "lz4-extended",
-            "deflate-extended",
-            "zstd-extended",
-            "lzma",
-            "lzma-fragments",
-            "lzma-ztailpacking",
-            "lzma-48bit",
-            "lzma-metabox",
-            "lzma-dirs",
-            "lzma-extended",
-        ) + grouped_modes + bounded_modes + combined_metabox_modes
         for mode in writer_modes + tuple(f"{name}-source" for name in writer_modes) + tuple(f"{name}-sink" for name in writer_modes) + tuple(f"{name}-encoder" for name in writer_modes):
             source_mode = mode.endswith("-source")
             sink_mode = mode.endswith("-sink")
@@ -756,6 +673,7 @@ def main() -> None:
         dual_algorithm_reader_cases = verify_dual_algorithms(args.cli, fsck, temp, run)
         configuration_reader_cases, configuration_error_cases = verify_configurations(args.cli, fsck, temp, run)
         nonhead_reader_cases, nonhead_error_cases = verify_nonhead_chains(args.cli, args.range_reader, args.range_oracle, temp, run)
+        compact_cli_cases, compact_cli_errors = verify_compact_cli(args.cli, fsck, temp, run)
 
     print(
         f"fixture_cases={fixture_cases} tools={mkfs is not None} "
@@ -805,6 +723,8 @@ def main() -> None:
         f"configuration_errors={configuration_error_cases} "
         f"nonhead_reader={nonhead_reader_cases} "
         f"nonhead_errors={nonhead_error_cases} "
+        f"compact_cli={compact_cli_cases} "
+        f"compact_cli_errors={compact_cli_errors} "
         f"malformed={malformed}"
     )
 

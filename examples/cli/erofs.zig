@@ -18,6 +18,7 @@ pub fn create(
     const entry_name = args.next() orelse return error.MissingCorpusPath;
     const input_path = args.next() orelse return error.MissingCorpusPath;
     var compression: vort.ErofsWriterCompression = .lz4;
+    var index_format: vort.ErofsWriterIndexFormat = .full;
     var extent_size: usize = 4096;
     var max_pcluster_size: ?usize = null;
     var working_limit: usize = 64 * 1024 * 1024;
@@ -26,6 +27,11 @@ pub fn create(
     while (args.next()) |argument| {
         const chunk_option = "--output-chunk-size=";
         const working_option = "--working-memory-limit=";
+        const index_option = "--compressed-index-format=";
+        if (std.mem.startsWith(u8, argument, index_option)) {
+            index_format = parseIndexFormat(argument[index_option.len..]) orelse return error.InvalidBlockPlan;
+            continue;
+        }
         if (std.mem.startsWith(u8, argument, chunk_option)) {
             output_chunk_size = try std.fmt.parseInt(usize, argument[chunk_option.len..], 10);
             if (output_chunk_size == 0) return error.OutputTooSmall;
@@ -56,7 +62,7 @@ pub fn create(
     try encoder.init(init.gpa, &.{.{
         .path = entry_name,
         .source = input,
-    }}, .{ .compression = compression, .compression_extent_size = extent_size, .max_pcluster_size = max_pcluster_size, .inode_version = .automatic }, .{ .max_working_memory = working_limit });
+    }}, .{ .compression = compression, .compressed_index_format = index_format, .compression_extent_size = extent_size, .max_pcluster_size = max_pcluster_size, .inode_version = .automatic }, .{ .max_working_memory = working_limit });
     defer encoder.deinit();
     const buffer = try init.gpa.alloc(u8, output_chunk_size);
     defer init.gpa.free(buffer);
@@ -76,6 +82,13 @@ pub fn create(
         "entry={s} input_bytes={d} erofs_bytes={d} compression={s} extent_size={d} max_pcluster_size={?d} peak_working_bytes={d} path={s}\n",
         .{ entry_name, input.len, result.image_size, @tagName(compression), extent_size, max_pcluster_size, result.peak_working_bytes, output_path },
     );
+}
+
+fn parseIndexFormat(name: []const u8) ?vort.ErofsWriterIndexFormat {
+    if (std.mem.eql(u8, name, "full")) return .full;
+    if (std.mem.eql(u8, name, "compact-4byte")) return .compact_4byte;
+    if (std.mem.eql(u8, name, "compact")) return .compact;
+    return null;
 }
 
 fn parseCompression(name: []const u8) ?vort.ErofsWriterCompression {

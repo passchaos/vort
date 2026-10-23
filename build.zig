@@ -1764,6 +1764,11 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| erofs_diff.addArgs(args);
     const erofs_diff_step = b.step("run-erofs-diff", "Validate EROFS reading and writing against optional erofs-utils");
     erofs_diff_step.dependOn(&erofs_diff.step);
+    const erofs_compact_diff = b.addSystemCommand(&.{ "python3", "tools/erofs/compact_writer_diff.py", "--writer" });
+    erofs_compact_diff.addArtifactArg(erofs_writer_probe);
+    if (b.args) |args| erofs_compact_diff.addArgs(args);
+    const erofs_compact_diff_step = b.step("run-erofs-compact-diff", "Validate compact EROFS writer formats through public APIs and optional erofs-utils");
+    erofs_compact_diff_step.dependOn(&erofs_compact_diff.step);
 
     const wim_writer_probe = b.addExecutable(.{
         .name = "vort-wim-writer-probe",
