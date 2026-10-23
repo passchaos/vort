@@ -4,10 +4,13 @@ const snappy = @import("snappy.zig");
 const incremental_decoder = @import("snappy_framing/incremental_decoder.zig");
 const incremental_encoder = @import("snappy_framing/incremental_encoder.zig");
 const incremental_tests = @import("snappy_framing/incremental_tests.zig");
+const contracts_tests = @import("snappy_framing/incremental/contracts_tests.zig");
+const resources_tests = @import("snappy_framing/incremental/resources_tests.zig");
 
 pub const Error = core.Error || snappy.Error || std.mem.Allocator.Error || error{
     InvalidXerialSnappyStream,
     InvalidHadoopSnappyStream,
+    WorkingMemoryLimitExceeded,
 };
 
 pub const xerial_magic = [_]u8{ 0x82, 'S', 'N', 'A', 'P', 'P', 'Y', 0 };
@@ -16,6 +19,12 @@ pub const xerial_header = xerial_magic ++ [_]u8{ 0, 0, 0, 1, 0, 0, 0, 1 };
 const IncrementalCodec = struct {
     pub const Error = snappy_framing.Error;
     pub const xerial_header = snappy_framing.xerial_header;
+    pub const BlockPlan = snappy.BlockPlan;
+    pub const BlockCursor = snappy.BlockCursor;
+
+    pub fn planBlock(input: []const u8) snappy_framing.Error!BlockPlan {
+        return snappy.planBlock(input);
+    }
 
     pub fn invalidStreamError(comptime format: incremental_decoder.Format) snappy_framing.Error {
         return if (format == .xerial)
@@ -26,14 +35,6 @@ const IncrementalCodec = struct {
 
     pub fn initBlockEncoder(allocator: std.mem.Allocator) snappy_framing.Error!snappy.Encoder {
         return snappy.Encoder.init(allocator);
-    }
-
-    pub fn decodedBlockSize(input: []const u8) snappy_framing.Error!usize {
-        return snappy.decodedBlockSize(input);
-    }
-
-    pub fn decodeBlockIntoExactSize(input: []const u8, output: []u8, expected_output_len: usize) snappy_framing.Error!usize {
-        return snappy.decodeBlockIntoExactSize(input, output, expected_output_len);
     }
 
     pub fn encodeBlock(encoder: *snappy.Encoder, input: []const u8, output: *std.ArrayList(u8)) snappy_framing.Error!void {
@@ -49,6 +50,8 @@ pub const HadoopIncrementalEncoder = incremental_encoder.Encoder(snappy.Encoder,
 
 test {
     _ = incremental_tests;
+    _ = contracts_tests;
+    _ = resources_tests;
 }
 
 pub const XerialOptions = struct {
