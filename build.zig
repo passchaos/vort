@@ -338,6 +338,9 @@ pub fn build(b: *std.Build) void {
     const run_lzms_tests = b.addRunArtifact(lzms_tests);
     const lzms_test_step = b.step("test-lzms", "Run focused Windows LZMS codec tests");
     lzms_test_step.dependOn(&run_lzms_tests.step);
+    const quantum_tests = b.addTest(.{ .name = "vort-quantum-tests", .root_module = b.createModule(.{ .root_source_file = b.path("src/quantum.zig"), .target = target, .optimize = optimize }), .filters = &.{"Quantum"} });
+    const quantum_test_step = b.step("test-quantum", "Run focused Quantum codec, match and resource tests");
+    quantum_test_step.dependOn(&b.addRunArtifact(quantum_tests).step);
     const lzx_tests = b.addTest(.{ .name = "vort-lzx-tests", .root_module = b.createModule(.{ .root_source_file = b.path("src/lzx.zig"), .target = target, .optimize = optimize }), .filters = &.{"LZX"} });
     const lzx_test_step = b.step("test-lzx", "Run focused LZX codec tests");
     lzx_test_step.dependOn(&b.addRunArtifact(lzx_tests).step);
@@ -1572,6 +1575,15 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| lzx_match_diff.addArgs(args);
     const lzx_match_step = b.step("run-lzx-match-diff", "Validate LZX matched CAB/WIM/WOF output with libarchive, libmspack and wimlib");
     lzx_match_step.dependOn(&lzx_match_diff.step);
+    const quantum_match_probe = b.addExecutable(.{
+        .name = "vort-quantum-match-probe",
+        .root_module = b.createModule(.{ .root_source_file = b.path("tools/quantum/match_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "vort", .module = vort_mod }} }),
+    });
+    const quantum_match_diff = b.addSystemCommand(&.{ "python3", "tools/quantum/match_diff.py", "--probe" });
+    quantum_match_diff.addArtifactArg(quantum_match_probe);
+    if (b.args) |args| quantum_match_diff.addArgs(args);
+    const quantum_match_step = b.step("run-quantum-match-diff", "Validate Quantum matching and split CAB output with libmspack");
+    quantum_match_step.dependOn(&quantum_match_diff.step);
 
     const microlzma_diff = b.addSystemCommand(&.{ "python3", "tools/microlzma/diff.py", "--cli" });
     microlzma_diff.addArtifactArg(cli_exe);
