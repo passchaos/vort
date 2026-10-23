@@ -5,7 +5,7 @@ objective is to surpass `zlib`, `zlib-ng`, `zlib-rs`, and `zstd` in both
 functionality and performance while preserving explicit ownership, deterministic
 behavior, robust validation, and library-first APIs.
 
-The repository is currently in bootstrap form. The first implemented pieces are:
+The library is under active development. Its current capabilities include:
 
 - zlib-compatible Adler-32;
 - gzip/zip-compatible IEEE CRC-32;
@@ -598,6 +598,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   checksum handling, and explicit output limits;
 - a native `VORT` store frame with skippable frames, concatenated streams, checksum-validated in-memory/serialized frame indexes, frame-index CRC composition, range CRC summaries, caller-owned and batch range decode APIs, and bounded streaming APIs;
 - LZ77 greedy/lazy/optimal parser prototypes, dictionary metadata/training, match-coverage, patch-codec, native dictionary-patch frame, self-contained dictionary streams, native LDM reference frame, and dictionary-/LDM-aware native best-frame prototypes, long-distance match scanner, LDM-aware block planner, CLI smoke surfaces, fuzz corpus harnesses, and benchmark/report entrypoints.
+
+Broad format coverage does not yet establish industry-best functionality or
+performance. The [current industry gap audit](docs/performance/industry-gap-audit.md)
+records the remaining API/encoder capabilities, dated competitor evidence and
+next functionality-first priorities.
 
 Hosted CI runs on `main` pushes and pull requests through
 `.github/workflows/ci.yml`, which installs Zig 0.16, checks formatting, runs

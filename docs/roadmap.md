@@ -9,7 +9,16 @@ compression formats. A zlib/zstd-compatible C ABI and further development of
 the experimental native VORT format are not active deliverables; existing
 native-format code remains available but does not drive roadmap priority.
 
-### Current completion audit (2026-09-11)
+### Current completion audit (2026-10-24)
+
+The long-term objective remains incomplete. The current
+[mainstream codec and industry gap audit](performance/industry-gap-audit.md)
+separates implemented format/API behavior, remaining encoder capabilities,
+dated competitor measurements and the next functionality-first increments.
+It supersedes the earlier gap inventory below where later work has closed a
+gap, including COVER-class training and bounded progressive codec decoding.
+
+### Earlier detailed completion audit (started 2026-09-11)
 
 The long-term objective is **not complete**. Current evidence still leaves these
 major gaps before Vort can claim broad industry-best parity:
