@@ -69,6 +69,7 @@ test {
     _ = @import("erofs/chunk_tests.zig");
     _ = @import("erofs/metabox_tests.zig");
     _ = @import("erofs/writer/tests/metabox.zig");
+    _ = @import("erofs/writer/tests/metadata_zone.zig");
     _ = @import("erofs/writer/tests/xattrs.zig");
     _ = @import("erofs/writer/tests/directories.zig");
     _ = @import("erofs/writer/tests/clusters.zig");

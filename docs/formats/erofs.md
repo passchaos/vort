@@ -360,6 +360,23 @@ and external-chunk output even while current in-memory image sizes keep actual
 high halves zero; this provides interoperable forward-compatible wire without
 claiming to allocate multi-terabyte buffers.
 
+`directory_metadata_zone = true` reserves ordinary directory blocks in the
+primary metadata zone before regular-file payloads, matching the placement
+selected by erofs-utils `--MZ=id`. Inline directory tails stay adjacent to their
+inode in its primary or metabox storage. This option works with stored and all
+four codecs, ordinary/grouped/physically bounded file compression,
+48-bit/extended inodes and local/external stored chunks. It also works with
+file-tail packing when `metabox` is disabled. It is
+independent of `metabox`; enabling both keeps visible inode/inline metadata in
+the MZi inode while directory blocks remain in the primary metadata zone.
+`compress_directories` and `directory_metadata_zone` select different directory
+layouts and cannot both be enabled. The encoder reserves the directory zone
+before reading file Sources, preserves those addresses through grouped file
+planning, and emits the directory reservation during its metadata phase.
+Directory buffers and the metadata output reservation count toward the working
+heap budget; allocation failure releases both. No complete file Source is
+loaded to arrange directory placement.
+
 `metabox = true` emits the standard MZi layout. Visible inode slots, inline
 directories and tails, xattr ibodies, and compression indexes are planned in a
 separate block-padded metadata stream; directory entries and the superblock use
@@ -584,8 +601,8 @@ defer encoded_chunks.deinit(allocator);
 
 Plain, metabox and packed-inode long xattr prefix tables are supported.
 Partial references, holes and final fragments in 48-bit extent records are
-supported by both reading interfaces. The writer does
-not yet expose MZ=id directory-data placement. Chunk output requires stored
+supported by both reading interfaces. The writer supports MZ=id directory-data
+placement through `directory_metadata_zone`. Chunk output requires stored
 mode; fragment and compressed-inline output require a non-stored compression
 mode because visible files use the compressed inode layout even when a prefix
 or inline cluster falls back to `PLAIN`.

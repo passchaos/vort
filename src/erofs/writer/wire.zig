@@ -42,6 +42,15 @@ pub fn writeNodeMetadata(primary: []u8, filesystem: *tree.Tree, index: usize, op
     else
         primary;
     const layout = std.enums.fromInt(format.Layout, node.layout) orelse return error.InvalidErofs;
+    if (node.directory_in_metadata_zone) {
+        const size = if (layout == .flat_inline) node.contentSize() / block_size * block_size else node.contentSize();
+        if (size != 0) {
+            const start = try checkedMul(node.start_block, block_size);
+            const end = try checkedAdd(start, size);
+            if (end > primary.len) return error.InvalidErofs;
+            try node.readContent(0, primary[start..end]);
+        }
+    }
     try writeFlatInlineData(metadata, node, layout);
     try writeInode(metadata, node, index, options.compression, options.xattr_prefixes, shared_xattr_plan, options.epoch, options.fixed_nsec);
 }

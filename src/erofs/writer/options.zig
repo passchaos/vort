@@ -29,6 +29,10 @@ pub const Options = struct {
     force_48bit: bool = false,
     /// Store visible inode metadata in a standard MZi metabox inode.
     metabox: bool = false,
+    /// Place ordinary directory data blocks in the primary metadata zone,
+    /// before regular-file payloads (MZ=id). Inode/inline metabox ownership
+    /// still follows metabox. Mutually exclusive with compress_directories.
+    directory_metadata_zone: bool = false,
     /// Deduplicate repeated name/value pairs into the shared-xattr region.
     shared_xattrs: bool = false,
     /// Store nontrivial directory streams as whole fragments in the packed inode.

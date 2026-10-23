@@ -282,7 +282,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   groups with actual-sized big pclusters, optional physical byte caps, aligned
   prefix planning, and stored fallback, plus standard MZi stored/LZ4/MicroLZMA/raw-
   Deflate/Zstandard metabox writing with a hidden low-NID metadata inode and
-  high-bit visible NIDs, regular-file callback/file sources with bounded
+  high-bit visible NIDs, optional MZ=id directory blocks in the primary
+  metadata zone before regular-file payloads, regular-file callback/file sources with bounded
   positional reads, random-access file/buffer output sinks with explicit
   working allocation limits and chunk deduplication using source locations,
   byte-identical source/sink/memory output, owning Source archives with bounded

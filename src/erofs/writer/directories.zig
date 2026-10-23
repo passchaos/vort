@@ -18,6 +18,24 @@ pub fn allocateDirectoryBuffers(filesystem: *tree.Tree) Error!void {
     }
 }
 
+/// Reserve directory blocks in primary metadata storage. Inline tails stay
+/// adjacent to their inode in its primary/metabox metadata address space.
+pub fn placeMetadataData(filesystem: *tree.Tree, start: usize) Error!usize {
+    var cursor = start;
+    for (filesystem.nodes) |*node| {
+        if (node.kind != .directory) continue;
+        const layout = std.enums.fromInt(format.Layout, node.layout) orelse return error.InvalidErofs;
+        if (layout != .flat_plain and layout != .flat_inline) return error.InvalidErofs;
+        const size = if (layout == .flat_inline) node.contentSize() / block_size * block_size else node.contentSize();
+        node.directory_in_metadata_zone = true;
+        if (size == 0) continue;
+        cursor = try alignForward(cursor, block_size);
+        node.start_block = std.math.cast(u32, cursor / block_size) orelse return error.InvalidErofs;
+        cursor = try checkedAdd(cursor, try alignForward(size, block_size));
+    }
+    return cursor;
+}
+
 fn directorySize(nodes: []const tree.Node, directory_index: usize) Error!usize {
     var total: usize = 0;
     var used: usize = 0;

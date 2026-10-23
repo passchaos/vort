@@ -99,7 +99,7 @@ pub const Encoder = struct {
         const plan = &self.plan.?;
         const node = &plan.filesystem.nodes[self.node_index];
         if (self.pass == .metabox) try wire.populateMetaboxMetadata(&plan.filesystem, plan.options, if (plan.xattrs) |*attrs| attrs else null);
-        if (plan.grouped) {
+        if (plan.grouped and !node.directory_in_metadata_zone) {
             if (self.cursor / block_size > std.math.maxInt(u32)) return error.InvalidErofs;
             node.start_block = @intCast(self.cursor / block_size);
         }
@@ -126,7 +126,7 @@ pub const Encoder = struct {
                 }
             }
         }
-        if (plan.grouped and written == 0) node.start_block = no_block;
+        if (plan.grouped and written == 0 and !node.directory_in_metadata_zone) node.start_block = no_block;
         self.node.?.deinit();
         self.node = null;
         try wire.writeNodeMetadata(self.metadata, &plan.filesystem, self.node_index, plan.options, if (plan.xattrs) |*attrs| attrs else null);

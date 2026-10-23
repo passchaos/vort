@@ -24,6 +24,7 @@ pub const Cursor = struct {
     pub fn init(allocator: std.mem.Allocator, node: *tree.Node, encoder: ?*codec.Encoder, settings: options.Options, capacity: usize) Error!Cursor {
         const layout = std.enums.fromInt(format.Layout, node.layout) orelse return error.InvalidErofs;
         var cursor = Cursor{ .node = node, .capacity = capacity };
+        if (node.directory_in_metadata_zone) return cursor;
         if (layout == .compressed_full) {
             cursor.compressed = try cluster_cursor.Cursor.init(allocator, node, encoder orelse return error.InvalidErofs, settings.compression_extent_size, settings.max_pcluster_size);
         } else if (layout != .chunk_based) {

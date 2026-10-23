@@ -49,6 +49,7 @@ pub const Node = struct {
     hidden: bool = false,
     hidden_role: HiddenRole = .none,
     in_metabox: bool = false,
+    directory_in_metadata_zone: bool = false,
     parent: usize = 0,
     nid: u64 = 0,
     location: usize = 0,

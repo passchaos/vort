@@ -7,6 +7,7 @@ const writer_metabox = @import("metabox.zig");
 const writer_inode = @import("inode.zig");
 const writer_clusters = @import("clusters.zig");
 const writer_wire = @import("wire.zig");
+const writer_directories = @import("directories.zig");
 const xattr = @import("../xattr.zig");
 const options_module = @import("options.zig");
 const math = @import("math.zig");
@@ -107,6 +108,8 @@ pub fn planMetadata(
 
     if (shared_xattr_plan) |plan|
         cursor = try plan.place(cursor, block_size);
+    if (options.directory_metadata_zone)
+        cursor = try writer_directories.placeMetadataData(filesystem, cursor);
 
     const root_nid = filesystem.nodes[0].nid;
     if (filesystem.nodes[0].path.len != 0 or
@@ -244,6 +247,7 @@ pub fn assignDataBlocks(filesystem: *tree.Tree, first_data_block: usize, skip_me
 }
 
 pub fn assignNodeDataBlocks(node: *tree.Node, next_block: *usize) Error!void {
+    if (node.directory_in_metadata_zone) return;
     const content_len = node.contentSize();
     const physical_content_len = try writer_clusters.prefixLength(node);
     const blocks = switch (std.enums.fromInt(format.Layout, node.layout) orelse
