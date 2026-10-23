@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("../core.zig");
+const working = @import("../io/working_allocator.zig");
 
 pub const Error = core.Error || error{
     InvalidLzmaHeader,
@@ -18,7 +19,30 @@ pub const Header = struct {
 pub const DecodeOptions = struct {
     max_output_len: usize = std.math.maxInt(usize),
     max_dictionary_size: usize = std.math.maxInt(usize),
+    /// Live requested allocations during decoding, including owned result
+    /// storage for allocating APIs. Caller buffers and fixed state are excluded.
+    max_working_memory: usize = std.math.maxInt(usize),
+
+    pub fn validate(self: DecodeOptions) Error!void {
+        _ = self;
+    }
 };
+
+const OneShotCodec = struct {
+    pub const Options = DecodeOptions;
+    pub const MicroOptions = MicroDecodeOptions;
+    pub const Error = core.Error || error{ InvalidLzmaHeader, InvalidLzmaStream, UnsupportedLzmaFeature };
+    pub fn parseHeader(input: []const u8) @This().Error!Header {
+        return @import("decoder.zig").parseHeader(input);
+    }
+    pub fn parseProperties(value: u8) @This().Error!std.compress.lzma.Decode.Properties {
+        const parsed = try @import("decoder.zig").parseProperties(value);
+        return .{ .lc = parsed.lc, .lp = parsed.lp, .pb = parsed.pb };
+    }
+};
+
+pub const DecodeWorkspace = @import("one_shot/workspace.zig").Workspace(OneShotCodec);
+pub const DecodeWorkspaceOptions = DecodeOptions;
 
 pub const MicroDecodeOptions = struct {
     dictionary_size: u32 = 8 * 1024 * 1024,
@@ -45,15 +69,15 @@ pub fn parseHeader(input: []const u8) Error!Header {
 }
 
 pub fn decodeInto(allocator: std.mem.Allocator, input: []const u8, output: []u8) !usize {
-    const decoded = decodeAllocWithOptions(allocator, input, .{
-        .max_output_len = output.len,
-    }) catch |err| switch (err) {
-        error.OutputLimitExceeded => return error.OutputTooSmall,
-        else => |decode_error| return decode_error,
-    };
-    defer allocator.free(decoded);
-    @memcpy(output[0..decoded.len], decoded);
-    return decoded.len;
+    var workspace = DecodeWorkspace.init(allocator);
+    defer workspace.deinit();
+    return workspace.decodeInto(input, output);
+}
+
+pub fn decodeIntoWithOptions(allocator: std.mem.Allocator, input: []const u8, output: []u8, options: DecodeOptions) !usize {
+    var workspace = try DecodeWorkspace.initWithOptions(allocator, options);
+    defer workspace.deinit();
+    return workspace.decodeInto(input, output);
 }
 
 pub fn decodeAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
@@ -73,14 +97,15 @@ pub fn decodeAllocWithOptions(
     if (header.dictionary_size > options.max_dictionary_size) return error.OutputLimitExceeded;
     if (header.uncompressed_size) |size|
         if (size > options.max_output_len) return error.OutputLimitExceeded;
+    var budget = working.WorkingAllocator.init(allocator, options.max_working_memory);
     return decodeRawAlloc(
-        allocator,
+        budget.allocator(),
         input[alone_header_len..],
         header,
         options.max_output_len,
         header.uncompressed_size == null,
         header.uncompressed_size == null,
-    );
+    ) catch |err| return if (err == error.OutOfMemory and budget.last_failure_was_limit) error.WorkingMemoryLimitExceeded else err;
 }
 
 pub fn decodedSize(allocator: std.mem.Allocator, input: []const u8) !usize {
@@ -88,9 +113,15 @@ pub fn decodedSize(allocator: std.mem.Allocator, input: []const u8) !usize {
 }
 
 pub fn decodedSizeLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) !usize {
-    const decoded = try decodeAllocLimited(allocator, input, max_output_len);
-    defer allocator.free(decoded);
-    return decoded.len;
+    var workspace = DecodeWorkspace.init(allocator);
+    defer workspace.deinit();
+    return workspace.decodedSizeLimited(input, max_output_len);
+}
+
+pub fn decodedSizeWithOptions(allocator: std.mem.Allocator, input: []const u8, options: DecodeOptions) !usize {
+    var workspace = try DecodeWorkspace.initWithOptions(allocator, options);
+    defer workspace.deinit();
+    return workspace.decodedSize(input);
 }
 
 pub fn decodeMicroInto(
@@ -99,12 +130,9 @@ pub fn decodeMicroInto(
     output: []u8,
     dictionary_size: u32,
 ) !void {
-    const decoded = try decodeMicroAllocWithOptions(allocator, input, output.len, .{
-        .dictionary_size = dictionary_size,
-        .max_output_len = output.len,
-    });
-    defer allocator.free(decoded);
-    @memcpy(output, decoded);
+    var workspace = DecodeWorkspace.init(allocator);
+    defer workspace.deinit();
+    try workspace.decodeMicroInto(input, output, dictionary_size);
 }
 
 pub fn decodeMicroAllocExactSize(
@@ -195,17 +223,9 @@ pub fn decodeZipPayloadInto(
     max_dictionary_size: usize,
     end_marker: bool,
 ) !usize {
-    if (output.len < expected_size) return error.OutputTooSmall;
-    const decoded = try decodeZipPayloadAllocLimited(
-        allocator,
-        payload,
-        expected_size,
-        max_dictionary_size,
-        end_marker,
-    );
-    defer allocator.free(decoded);
-    @memcpy(output[0..decoded.len], decoded);
-    return decoded.len;
+    var workspace = DecodeWorkspace.init(allocator);
+    defer workspace.deinit();
+    return workspace.decodeZipPayloadInto(payload, expected_size, output, max_dictionary_size, end_marker);
 }
 
 pub fn decodeZipPayloadAllocLimited(

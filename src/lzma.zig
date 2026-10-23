@@ -10,9 +10,11 @@ const resource_tests = @import("lzma/incremental/resource_tests.zig");
 const writer = @import("lzma/writer.zig");
 const micro_writer = @import("lzma/micro_writer.zig");
 
-pub const Error = decoder.Error || writer.Error || micro_writer.Error || incremental_decoder.Decoder.Error || incremental_encoder.Encoder.Error;
+pub const Error = decoder.Error || decoder.DecodeWorkspace.Error || writer.Error || micro_writer.Error || incremental_decoder.Decoder.Error || incremental_encoder.Encoder.Error;
 pub const Header = decoder.Header;
 pub const DecodeOptions = decoder.DecodeOptions;
+pub const DecodeWorkspace = decoder.DecodeWorkspace;
+pub const DecodeWorkspaceOptions = decoder.DecodeWorkspaceOptions;
 pub const MicroDecodeOptions = decoder.MicroDecodeOptions;
 pub const MicroEncodeOptions = micro_writer.Options;
 pub const MicroDestSizeResult = micro_writer.DestSizeResult;
@@ -25,11 +27,13 @@ pub const IncrementalDecoder = incremental_decoder.Decoder;
 pub const IncrementalEncoder = incremental_encoder.Encoder;
 pub const parseHeader = decoder.parseHeader;
 pub const decodeInto = decoder.decodeInto;
+pub const decodeIntoWithOptions = decoder.decodeIntoWithOptions;
 pub const decodeAlloc = decoder.decodeAlloc;
 pub const decodeAllocLimited = decoder.decodeAllocLimited;
 pub const decodeAllocWithOptions = decoder.decodeAllocWithOptions;
 pub const decodedSize = decoder.decodedSize;
 pub const decodedSizeLimited = decoder.decodedSizeLimited;
+pub const decodedSizeWithOptions = decoder.decodedSizeWithOptions;
 pub const decodeMicroInto = decoder.decodeMicroInto;
 pub const decodeMicroAllocExactSize = decoder.decodeMicroAllocExactSize;
 pub const decodeMicroAllocLimited = decoder.decodeMicroAllocLimited;
@@ -50,6 +54,8 @@ pub const encodeAppend = writer.encodeAppend;
 pub const encodeInto = writer.encodeInto;
 
 test {
+    _ = @import("lzma/one_shot/contracts_tests.zig");
+    _ = @import("lzma/one_shot/resources_tests.zig");
     _ = contracts_tests;
     _ = resource_tests;
     _ = decoder;
