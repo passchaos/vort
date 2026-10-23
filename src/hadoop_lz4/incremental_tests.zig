@@ -1,5 +1,7 @@
 const std = @import("std");
 const hadoop_lz4 = @import("../hadoop_lz4.zig");
+const lz4 = @import("../lz4.zig");
+const core = @import("../core.zig");
 
 fn encodeIncremental(
     allocator: std.mem.Allocator,
@@ -251,4 +253,238 @@ test "Hadoop LZ4 incremental limits malformed and allocation failures" {
         }
     };
     try std.testing.checkAllAllocationFailures(allocator, DecoderTest.run, .{ encoded, payload });
+}
+
+fn appendLength(out: *std.ArrayList(u8), value: usize) !void {
+    var remaining = value;
+    while (remaining >= 255) : (remaining -= 255) try out.append(std.testing.allocator, 255);
+    try out.append(std.testing.allocator, @intCast(remaining));
+}
+
+fn historyBlock() ![]u8 {
+    const allocator = std.testing.allocator;
+    var raw: std.ArrayList(u8) = .empty;
+    errdefer raw.deinit(allocator);
+    try raw.append(allocator, 0xff);
+    try appendLength(&raw, 65535 - 15);
+    for (0..65535) |index| try raw.append(allocator, @intCast(index % 251));
+    try raw.appendSlice(allocator, &.{ 0xff, 0xff }); // Match distance 65535.
+    try appendLength(&raw, 4096 - 19);
+    try raw.appendSlice(allocator, "\x50tail!");
+    return raw.toOwnedSlice(allocator);
+}
+
+fn envelope(raw: []const u8, expected: usize) ![]u8 {
+    const allocator = std.testing.allocator;
+    const frame = try allocator.alloc(u8, 8 + raw.len);
+    std.mem.writeInt(u32, frame[0..4], @intCast(expected), .big);
+    std.mem.writeInt(u32, frame[4..8], @intCast(raw.len), .big);
+    @memcpy(frame[8..], raw);
+    return frame;
+}
+
+fn assertDecode(decoder: *hadoop_lz4.IncrementalDecoder, frame: []const u8, expected: []const u8, input_step: usize, output_step: usize) !void {
+    var scratch: [4096]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    var finished = decoder.input_finished;
+    var calls: usize = 0;
+    while (true) : (calls += 1) {
+        try std.testing.expect(calls < (frame.len + expected.len + 1) * 4 + 64);
+        if (input_offset == frame.len and !finished) {
+            try decoder.finish();
+            finished = true;
+        }
+        @memset(&scratch, 0xa5);
+        const output = scratch[0..if (calls % 5 == 0) 0 else output_step];
+        const input = frame[input_offset..][0..@min(input_step, frame.len - input_offset)];
+        const before = decoder.snapshot();
+        const step = try decoder.step(input, output);
+        const after = decoder.snapshot();
+        try std.testing.expectEqual(after.input_read - before.input_read, step.progress.input_read);
+        try std.testing.expectEqual(after.output_written - before.output_written, step.progress.output_written);
+        try std.testing.expectEqualDeep(step.progress, after.last_step_progress);
+        try std.testing.expectEqualSlices(u8, expected[output_offset..][0..step.progress.output_written], output[0..step.progress.output_written]);
+        for (output[step.progress.output_written..]) |byte| try std.testing.expectEqual(@as(u8, 0xa5), byte);
+        try std.testing.expectEqual(@as(usize, 0), after.retained_decoded_capacity);
+        try std.testing.expect(after.retained_history_capacity <= 64 * 1024);
+        try std.testing.expectEqual(after.retained_compressed_capacity + after.retained_history_capacity, after.working_bytes);
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+        if (step.status == .done) break;
+    }
+    try std.testing.expectEqual(frame.len, input_offset);
+    try std.testing.expectEqual(expected.len, output_offset);
+}
+
+fn expectSticky(decoder: *hadoop_lz4.IncrementalDecoder, err: anyerror) !void {
+    const before = decoder.snapshot();
+    var output: [7]u8 = @splat(0xa5);
+    try std.testing.expectError(err, decoder.step("unaccepted", &output));
+    try std.testing.expectEqual(before.input_read, decoder.snapshot().input_read);
+    try std.testing.expectEqual(before.output_written, decoder.snapshot().output_written);
+    try std.testing.expectEqualDeep(core.Progress{}, decoder.snapshot().last_step_progress);
+    try std.testing.expectEqual(@as([7]u8, @splat(0xa5)), output);
+}
+
+test "Hadoop LZ4 incremental large raw history wraps with tiny output and active moves" {
+    const allocator = std.testing.allocator;
+    const raw = try historyBlock();
+    defer allocator.free(raw);
+    const expected = try lz4.decodeBlockAlloc(allocator, raw, null);
+    defer allocator.free(expected);
+    try std.testing.expectEqual(@as(usize, 65535 + 4096 + 5), expected.len);
+    try std.testing.expectEqualSlices(u8, expected[0..4096], expected[65535..][0..4096]);
+    const frame = try envelope(raw, expected.len);
+    defer allocator.free(frame);
+    var original = hadoop_lz4.IncrementalDecoder.init(allocator);
+    const blocked = try original.step(frame, &.{});
+    try std.testing.expectEqual(frame.len, blocked.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), original.snapshot().retained_history_capacity);
+    try std.testing.expectEqual(expected.len, original.snapshot().hadoop_block_decoded);
+    try original.finish();
+    var prefix: [3]u8 = undefined;
+    _ = try original.step("", &prefix);
+    try std.testing.expectEqualSlices(u8, expected[0..3], &prefix);
+    var decoder = original;
+    original = undefined;
+    defer decoder.deinit();
+    try assertDecode(&decoder, "", expected[3..], 1, 7);
+    try std.testing.expectEqual(@as(usize, 64 * 1024), decoder.snapshot().retained_history_capacity);
+    const retained = decoder.workingMemoryBytes();
+    decoder.reset();
+    try std.testing.expectEqual(retained, decoder.workingMemoryBytes());
+    try std.testing.expectEqual(retained, decoder.peakWorkingMemoryBytes());
+    try assertDecode(&decoder, frame, expected, 17, 13);
+    decoder.resetWithOptions(.{ .expected_output_len = 2, .max_output_len = 1 });
+    try std.testing.expectEqual(retained, decoder.workingMemoryBytes());
+    try expectSticky(&decoder, error.InvalidBlockPlan);
+    decoder.resetWithOptions(.{});
+    try std.testing.expectEqual(@as(usize, 0), decoder.workingMemoryBytes());
+    try assertDecode(&decoder, frame, expected, frame.len, 4096);
+}
+
+test "Hadoop LZ4 incremental body prevalidation and recoverable EOF preserve framing rules" {
+    const allocator = std.testing.allocator;
+    const bad = try envelope(&.{ 0x30, 'A', 'B', 'C', 0, 0 }, 7);
+    defer allocator.free(bad);
+    var decoder = hadoop_lz4.IncrementalDecoder.init(allocator);
+    defer decoder.deinit();
+    var guard: [17]u8 = @splat(0xa5);
+    try std.testing.expectError(error.InvalidMatch, decoder.step(bad, &guard));
+    try std.testing.expectEqual(bad.len, decoder.snapshot().last_step_progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), decoder.snapshot().output_written);
+    try std.testing.expectEqual(@as(usize, 0), decoder.snapshot().retained_history_capacity);
+    try std.testing.expectEqual(@as([17]u8, @splat(0xa5)), guard);
+    try expectSticky(&decoder, error.InvalidMatch);
+    const frame = try envelope("\x30ABC", 3);
+    defer allocator.free(frame);
+    decoder.reset();
+    _ = try decoder.step(frame[0 .. frame.len - 1], &.{});
+    try std.testing.expectError(error.TruncatedFrame, decoder.finish());
+    try std.testing.expect(!decoder.input_finished);
+    try assertDecode(&decoder, frame[frame.len - 1 ..], "ABC", 1, 1);
+    var two: [24]u8 = undefined;
+    @memcpy(two[0..12], frame);
+    @memcpy(two[12..], frame);
+    decoder.resetWithOptions(.{ .max_output_len = 5 });
+    try std.testing.expectError(error.OutputLimitExceeded, decoder.step(&two, &guard));
+    try std.testing.expectEqualDeep(core.Progress{ .input_read = frame.len + 4, .output_written = 3 }, decoder.snapshot().last_step_progress);
+    try std.testing.expectEqualSlices(u8, "ABC", guard[0..3]);
+    decoder.resetWithOptions(.{ .expected_output_len = 2 });
+    try std.testing.expectError(error.SizeMismatch, decoder.step(frame, &.{}));
+    try std.testing.expectEqual(@as(usize, 4), decoder.snapshot().last_step_progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), decoder.workingMemoryBytes());
+}
+
+test "Hadoop LZ4 incremental exact working budgets and backing denial precede new publication" {
+    const allocator = std.testing.allocator;
+    const raw = try historyBlock();
+    defer allocator.free(raw);
+    const expected = try lz4.decodeBlockAlloc(allocator, raw, null);
+    defer allocator.free(expected);
+    const frame = try envelope(raw, expected.len);
+    defer allocator.free(frame);
+    const output = try allocator.alloc(u8, expected.len);
+    defer allocator.free(output);
+    const peak = raw.len + 64 * 1024;
+    inline for (.{ false, true }) |below| {
+        var decoder = hadoop_lz4.IncrementalDecoder.initWithOptions(allocator, .{ .max_working_memory = peak - @intFromBool(below) });
+        defer decoder.deinit();
+        _ = try decoder.step(frame, &.{});
+        try std.testing.expectEqual(raw.len, decoder.workingMemoryBytes());
+        @memset(output, 0xa5);
+        if (below) {
+            try std.testing.expectError(error.WorkingMemoryLimitExceeded, decoder.step("", output));
+            try std.testing.expectEqualDeep(core.Progress{}, decoder.snapshot().last_step_progress);
+            for (output) |byte| try std.testing.expectEqual(@as(u8, 0xa5), byte);
+            try expectSticky(&decoder, error.WorkingMemoryLimitExceeded);
+        } else {
+            _ = try decoder.step("", output);
+            try decoder.finish();
+            try std.testing.expectEqualSlices(u8, expected, output);
+            try std.testing.expectEqual(peak, decoder.peakWorkingMemoryBytes());
+        }
+    }
+    const first = "\x30ABC";
+    const combined = try allocator.alloc(u8, 12 + 4 + raw.len);
+    defer allocator.free(combined);
+    std.mem.writeInt(u32, combined[0..4], @intCast(3 + expected.len), .big);
+    std.mem.writeInt(u32, combined[4..8], first.len, .big);
+    @memcpy(combined[8..12], first);
+    std.mem.writeInt(u32, combined[12..16], @intCast(raw.len), .big);
+    @memcpy(combined[16..], raw);
+    var failing = std.testing.FailingAllocator.init(allocator, .{ .fail_index = 2, .resize_fail_index = 0 });
+    {
+        var decoder = hadoop_lz4.IncrementalDecoder.init(failing.allocator());
+        defer decoder.deinit();
+        var prefix: [17]u8 = @splat(0xa5);
+        try std.testing.expectError(error.OutOfMemory, decoder.step(combined, &prefix));
+        try std.testing.expectEqualDeep(core.Progress{ .input_read = 16, .output_written = 3 }, decoder.snapshot().last_step_progress);
+        try std.testing.expectEqual(@as(?usize, 16), decoder.snapshot().error_input_offset);
+        try std.testing.expectEqual(@as(?usize, 3), decoder.snapshot().error_output_offset);
+        try std.testing.expectEqualSlices(u8, "ABC", prefix[0..3]);
+        for (prefix[3..]) |byte| try std.testing.expectEqual(@as(u8, 0xa5), byte);
+        try expectSticky(&decoder, error.OutOfMemory);
+        failing.fail_index = std.math.maxInt(usize);
+        failing.resize_fail_index = std.math.maxInt(usize);
+        decoder.reset();
+        try assertDecode(&decoder, frame, expected, frame.len, 4096);
+    }
+    try std.testing.expectEqual(failing.allocated_bytes, failing.freed_bytes);
+}
+
+test "Hadoop LZ4 incremental all compressed and history allocation failures remain movable and free" {
+    const allocator = std.testing.allocator;
+    const raw = try historyBlock();
+    defer allocator.free(raw);
+    const expected = try lz4.decodeBlockAlloc(allocator, raw, null);
+    defer allocator.free(expected);
+    const frame = try envelope(raw, expected.len);
+    defer allocator.free(frame);
+    const Graph = struct {
+        fn run(active: std.mem.Allocator, input: []const u8, plain: []const u8) !void {
+            var owner: ?hadoop_lz4.IncrementalDecoder = hadoop_lz4.IncrementalDecoder.init(active);
+            defer if (owner) |*decoder| decoder.deinit();
+            const decoder = &owner.?;
+            assertDecode(decoder, input, plain, input.len, 4096) catch |err| {
+                try expectSticky(decoder, err);
+                return err;
+            };
+            decoder.reset();
+            try assertDecode(decoder, input, plain, input.len, 4096);
+            decoder.resetWithOptions(.{});
+            var prefix: [3]u8 = undefined;
+            _ = decoder.step(input, &prefix) catch |err| {
+                try expectSticky(decoder, err);
+                return err;
+            };
+            try std.testing.expectEqualSlices(u8, plain[0..3], &prefix);
+            var moved = owner.?;
+            owner = null;
+            defer moved.deinit();
+            try assertDecode(&moved, "", plain[3..], 1, 4096);
+        }
+    };
+    try std.testing.checkAllAllocationFailures(allocator, Graph.run, .{ frame, expected });
 }
