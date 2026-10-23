@@ -141,7 +141,156 @@ try stream.appendSlice(allocator, block.bytes);
 try stream.appendSlice(allocator, "bvx$");
 ```
 
-**Resource limits**
+**Incremental decoding**
+
+`lzfse.IncrementalDecoder`, also exported as `vort.LzfseIncrementalDecoder`,
+decodes stored, LZVN, V1 FSE and V2 FSE blocks through
+`step(input, output) !core.StepResult`. Each result reports the input bytes
+accepted and output bytes written during that call, with `need_input`,
+`need_output` or `done`. Input and output slices are borrowed only for the
+current call. The decoder neither retains a caller input slice nor requires a
+complete decoded stream or block buffer.
+
+The allocator supplied at initialization must remain valid until `deinit()`.
+The decoder owns any history and compressed-tail storage allocated while
+stepping; the caller owns the decoder value and both I/O buffers.
+
+Stored and LZVN payloads consume input directly. LZVN keeps only a small opcode
+header and unfinished literal/match state, including copies across arbitrary
+output boundaries. For reverse FSE payloads, the frequency tables and declared
+symbol counts bound the maximum bit reach. The decoder consumes unused payload
+prefixes without retaining them and stores only the required literal and LMD
+suffixes. Their combined theoretical maximum is 117,502 bytes, covered by the
+default 128 KiB compressed-buffer limit. A stream or padded compressed payload
+larger than 0.5 MiB can therefore be processed with a much smaller retained
+suffix; the buffer limit does not cap the total compressed stream size.
+
+Four-lane literal and L/M/D cursors decode lazily into caller output. They do
+not materialize a 40,000-byte literal array or a complete decoded block. A
+history ring grows only as needed, up to `max_history_len`, and preserves the
+decoded suffix across stored/LZVN/FSE block boundaries within one stream.
+Headers, unused payload prefixes and terminators may advance with zero output
+space; data output stops when the caller buffer is full.
+
+The following example decodes one strict standalone stream. It resubmits the
+unconsumed input suffix on every call and continues draining when all source
+bytes have already been accepted:
+
+```zig
+var decoder = vort.LzfseIncrementalDecoder.initWithOptions(allocator, .{
+    .max_output_len = 64 * 1024 * 1024,
+    .max_working_memory = 1024 * 1024,
+});
+defer decoder.deinit();
+
+var decoded: std.ArrayList(u8) = .empty;
+defer decoded.deinit(allocator);
+var output_buffer: [4096]u8 = undefined;
+var input_offset: usize = 0;
+var eof_signaled = false;
+
+while (true) {
+    if (input_offset == compressed.len and !eof_signaled) {
+        decoder.finish();
+        eof_signaled = true;
+    }
+    const result = decoder.step(compressed[input_offset..], &output_buffer) catch |err| {
+        const partial = decoder.snapshot().last_step_progress;
+        input_offset += partial.input_read;
+        try decoded.appendSlice(allocator, output_buffer[0..partial.output_written]);
+        return err;
+    };
+    input_offset += result.progress.input_read;
+    try decoded.appendSlice(allocator, output_buffer[0..result.progress.output_written]);
+    if (result.status == .done) break;
+}
+std.debug.assert(input_offset == compressed.len);
+```
+
+Here `compressed` is the caller's encoded byte slice. The `decoded` list is
+example-owned output collection, outside the decoder's memory budget; a file
+or network consumer can publish each returned output slice instead. A reader
+feeding separate source buffers must preserve the unconsumed suffix before
+reading more. `need_output` can leave input unconsumed, and exhausting input
+does not mean all output has drained. `finish()` signals source EOF; offer only
+empty input afterward while continuing `step` until `done` or an error. A
+missing header, payload or mandatory `bvx$` terminator fails as `TruncatedFrame`.
+
+| Incremental API | State and ownership |
+|---|---|
+| `init(allocator)` / `initWithOptions(allocator, options)` | Return caller-owned value state without allocating. Options are validated when stepping. |
+| `step(input, output)` | Borrow slices for this call and return actual per-call progress and status. |
+| `finish()` | Mark input EOF; returns `void` and leaves output draining to subsequent empty-input steps. |
+| `snapshot()` / `diagnostics()` | Report cumulative and current-stream progress, phase, retained storage, failure offsets and the last call's partial progress. |
+| `reset()` | Clear stream/error state and reset operation counters and quotas while preserving allocated capacity. Retained buffers continue to count toward the working budget. |
+| `resetWithOptions(options)` | Validate options, release old buffers and restart the operation; returns `!void`. Invalid options leave the previous state intact. |
+| `nextStream()` | With `stop_after_end_marker=true`, require `done`, clear history/current-stream state and preserve cumulative quota, counters and peak memory. Options remain the same. |
+| `deinit()` | Release decoder-owned history and retained compressed buffers. |
+
+**Incremental limits, stream boundaries and errors**
+
+These are `IncrementalDecoder.Options`, separate from the encoding options:
+
+| Option | Default and scope |
+|---|---|
+| `max_output_len` | Unlimited. Cumulative decoded-byte budget for the operation, including streams entered through `nextStream()`. Each block's declared output is checked at its header before payload output. |
+| `max_history_len` | 262,139; allowed range 0–262,139. Maximum retained history bytes, grown on demand. |
+| `max_compressed_buffer_len` | 128 KiB. Maximum combined retained reverse-FSE suffix bytes, not complete payload or stream length. |
+| `max_working_memory` | Unlimited. Maximum live requested dynamic allocation bytes, including buffers retained between calls. |
+| `expected_output_len` | `null`. Optional exact decoded length for each stream; cannot exceed `max_output_len`. Checked against block declarations and at its terminator, with the same expectation after `nextStream()`. |
+| `stop_after_end_marker` | `false`. Strict single-stream termination and trailing-data rejection; `true` stops at `bvx$` and leaves the following input unconsumed. |
+
+The dynamic working budget includes owned history and FSE suffix capacity,
+including retained allocations across calls. It excludes caller source and
+output buffers, caller-owned state/header/FSE table storage, allocator
+bookkeeping and underlying allocator remap transients. Raw/LZVN decoding does
+not allocate a complete compressed payload, but may allocate history for later
+matches. Snapshot `working_bytes` and `peak_working_bytes` expose this accounting.
+
+The default decoder rejects bytes following the terminator. To decode ordered
+concatenated streams or return a suffix to an outer parser, enable
+`stop_after_end_marker`. Advance the input position by `result.progress.input_read`
+before deciding what follows the completed stream. After publishing that call's
+output, use `nextStream()` only when another LZFSE stream is expected, then
+resubmit the unconsumed suffix. Do not skip the rest of the offered slice or
+automatically reinterpret arbitrary trailing bytes as another stream. A reset
+starts a new operation and clears the cumulative output quota; `nextStream()`
+preserves it and clears cross-stream history. It also clears the EOF latch for
+the next stream. Different per-stream size expectations require a new operation
+or external validation rather than changing options during `nextStream()`.
+
+For a caller slice containing ordered complete LZFSE streams, set
+`.stop_after_end_marker = true` in the example's options and replace its
+`done` branch with the following. The input offset remains cumulative, so the
+next call receives the unconsumed suffix rather than replaying or discarding it:
+
+```zig
+if (result.status == .done) {
+    if (input_offset == compressed.len) break;
+    try decoder.nextStream();
+    eof_signaled = false;
+}
+```
+
+Errors are sticky. A failing call may already have accepted input and emitted
+a decoded prefix. Capture `snapshot()` or `diagnostics()` immediately: its
+`last_step_progress`, `error_input_offset` and `error_output_offset` include that
+call's actual accepted and emitted bytes. The offsets describe cumulative
+progress at failure. Subsequent `step` calls return the same error with zero
+new progress; use `reset()` or `resetWithOptions()` to restart from the beginning
+of the source. A returned prefix has not established that the complete stream
+is valid.
+
+`OutputLimitExceeded` identifies the cumulative output budget;
+`HistoryLimitExceeded` means a globally valid match needs more retained history;
+`CompressedBufferLimitExceeded` means the required FSE suffix exceeds its cap;
+and `WorkingMemoryLimitExceeded` identifies dynamic-budget exhaustion. Backing
+allocator failure remains `OutOfMemory`. Format corruption, missing input,
+decoded-size mismatch and extra data retain the codec's precise format errors,
+including `InvalidLzfseStream`, `InvalidLzvnStream`, `TruncatedFrame`,
+`SizeMismatch` and `TrailingData`.
+
+**Encoding resource limits**
 
 | Option | Default and scope |
 |---|---|
@@ -175,6 +324,7 @@ zig build run -- encode-lzfse-file input.bin output-lzvn.lzfse 65536 lzvn
 zig build run -- inspect-lzfse-file output.lzfse 536870912
 zig build run -- decode-lzfse-file output.lzfse restored.bin 536870912
 zig build test-lzfse
+zig build test-lzfse-stream
 zig build run-lzfse-diff
 ```
 
@@ -196,6 +346,7 @@ local Apple checkout can be used as follows; adjust the path to its build:
 LZFSE_REFERENCE=/tmp/vort-lzfse-ref.XSy743/lzfse
 zig build run-lzfse-diff -- --lzfse "$LZFSE_REFERENCE/build/bin/lzfse" --report /tmp/vort-lzfse-cli.json
 zig build run-lzfse-fse-diff -- --lzfse "$LZFSE_REFERENCE/build/bin/lzfse" --reference-dir "$LZFSE_REFERENCE" --report /tmp/vort-lzfse-fse.json
+zig build run-lzfse-stream-diff -- --lzfse "$LZFSE_REFERENCE/build/bin/lzfse" --report /tmp/vort-lzfse-stream.json
 ```
 
 Apple's command-line decoder treats a zero-byte return as failure, which is
@@ -204,6 +355,17 @@ status wrapper linked to the unchanged reference library and verifies decoder
 success, EOS and full input consumption for Vort's 12-byte empty stream.
 Nonempty streams use the official Apple CLI. The reference checkout supplies
 its headers and built `liblzfse.a` for that status wrapper.
+
+The dedicated streaming campaign reports 223 cases and uses Apple as its
+whole-stream compatibility oracle. It covers stored/LZVN/V1/V2 and mixed blocks, cross-block history,
+single-byte and varied input/output splits, zero-output backpressure, large
+payloads with bounded reverse tails, resource limits, malformed/truncated input,
+sticky error progress and reset/next-stream behavior. Targeted LZVN cursor
+regressions cover every defined and reserved opcode byte, extended lengths,
+overlap and ring wrap, EOS acceptance and exact payload consumption. See the
+[bounded streaming functional baseline](../performance/bounded-streaming-functional-baseline.md)
+for retained reproduction evidence. These checks establish functional and
+compatibility behavior; they do not measure or claim throughput leadership.
 
 The [functional baseline](../performance/lzfse-fse-functional-baseline.md)
 records reproducible compatibility and internal FSE-versus-LZVN encoded-size

@@ -23096,3 +23096,34 @@ reuse, so production keeps the simpler independently owned plans.
   ratio/throughput leadership is claimed. Decoder streaming, quality levels,
   dictionary workflows and unified real-corpus performance evidence remain
   priorities after this functional slice.
+
+- Incremental LZ4/Zstd now use the shared compressed-input block_stream policy
+  by default immediately after frame-header parsing; each read is bounded to
+  the current stage rather than retaining a whole frame. Explicit
+  prevalidated_frame preserves prior preflight/direct paths and their checksum
+  timing. Unchecksummed LZ4 raw/token input streams directly; checksummed raw
+  and compressed blocks verify their encoded payload before output. Zstd
+  retains standard block payload plus dictionary/window history without decoded
+  block scratch. Native consumer probes now resubmit unaccepted input and
+  check cumulative snapshots, retaining default coverage instead of forcing
+  the older policy. The four native probes pass 582 cases (304/11 LZ4 frame/
+  dictionary and 242/25 Zstd frame/dictionary); Zstd ReleaseFast passes 743
+  tests and LZ4 focused tests pass 47.
+  LZFSE now exposes a true IncrementalDecoder with header/opcode progress,
+  lazy literal/LMD output, caller-bounded history, exact cumulative output and
+  live-working budgets, stopped-stream continuation, reset and sticky errors.
+  Raw/LZVN input is byte-progressive. Reverse FSE payload prefixes are discarded
+  while only table/count-derived suffixes are retained, bounded by 117502
+  bytes even when a payload declares large unused padding. Cursor state needs
+  no decoded block or 40000-byte literal array. Snapshots and diagnostics
+  retain actual failed-call input/output progress and error offsets. The
+  223-case native/Apple campaign spans 65 corpora, zero/small output, mixed
+  blocks, large prefix data, exact limits, ring wrap, OOM/reset and concatenation
+  quotas. A 401056-byte V2 stream retains 2219 bytes and skips 398670; a
+  302240-byte LZVN stream retains no compressed bytes while decoding 300001.
+  These are functional progress/memory observations, not throughput leadership.
+  Focused LZFSE-stream/LZ4 validation passes 93/93, and all 125 final build-check
+  steps succeed, including wasm32-wasi; AArch64 LZFSE compile-only also succeeds.
+  Existing Zstd/LZ4 per-frame limits remain unchanged; unified cumulative
+  quotas, dictionary recovery contracts and XZ block staging are subsequent
+  functional priorities.

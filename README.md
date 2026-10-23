@@ -27,15 +27,14 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   caller-owned encode/decode-into/append, incremental fast/HC frame encode with
   optional pledged content size, resumable flush, linked history, preset
   dictionary, and dictionary-set resolution, plus reusable
-  scratch encoder/decoder APIs; oversized incremental data frames release raw
-  blocks directly, and compressed blocks use a resumable token cursor under
-  arbitrary caller backpressure with no
-  decoded-block scratch, including linked-block and preset-dictionary history;
-  compressed-block checksums are validated before starting caller output;
-  complete prevalidated frames switch to the same cursor instead of
-  materializing the frame when a compressed block exceeds caller output;
-  compressed blocks without block checksums also consume split input directly
-  when the configured compressed-buffer cap is smaller than their payload;
+  scratch encoder/decoder APIs; incremental decode defaults to bounded block
+  streaming immediately after the frame header, using raw input directly and a
+  resumable token cursor for unchecked compressed payloads under caller
+  backpressure without decoded-block scratch, including linked-block and
+  preset-dictionary history. Raw and compressed blocks carrying block checksums
+  retain one encoded block until validation before starting its caller output;
+  explicit complete-frame preflight remains available with the existing
+  direct-to-cursor fallback;
   incremental skippable frames retain only their
   8-byte header while discarding or capturing arbitrary-size metadata directly
   from caller input,
@@ -72,14 +71,14 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   native selection, configurable native block size, optional content
   checksum/content-size header fields, skippable frame append/encode-into writer,
   decoded-size preflight, bounded allocation, explicit Dictionary_ID/preset
-  history decode APIs, direct-output incremental decode for raw/RLE/compressed
-  native frames (including dictionary, dictionary-set, no-content-size,
-  bounded-history multi-block paths, per-block compressed-input retention when
-  a frame exceeds the configured buffer limit, and resumable zero-scratch
-  output for raw/RLE/Huffman literals and sequence execution across arbitrary
-  caller output boundaries (including complete frames prevalidated by the direct
-  path), plus header-only incremental discard/capture of arbitrarily large
-  skippable-frame payloads), zero-allocation native stream/block iterators, and
+  history decode APIs, default block-stream incremental decode for
+  raw/RLE/compressed native frames (including dictionary, dictionary-set,
+  no-content-size, all accepted windows and sequence-table modes,
+  block-bounded compressed-input retention, and resumable output for
+  raw/RLE/Huffman literals and sequence execution across caller output
+  boundaries without decoded-block scratch), explicit complete-frame
+  preflight/direct paths, plus header-only incremental discard/capture of
+  arbitrarily large skippable-frame payloads, zero-allocation native stream/block iterators, and
   dependency-free standard full-dictionary generation from caller-selected
   history content using portable baseline entropy tables, plus first-stage
   corpus training of a complete literal Huffman alphabet and OF/ML/LL sequence
@@ -125,7 +124,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   states and L/M/D records, count-driven blocks with borrowed history,
   deterministic auto/FSE/LZVN/stored selection, explicit output and working
   memory limits, caller-owned output and encoding summaries, strict stream
-  termination, and bidirectional Apple reference interoperability; see the
+  termination, an incremental decoder with caller output and optional stopping
+  at the end marker while leaving the input suffix to the caller, and
+  bidirectional Apple reference interoperability; see the
   [LZFSE API and format contracts](docs/formats/lzfse.md) and
   [functional compatibility and size baseline](docs/performance/lzfse-fse-functional-baseline.md);
 - pure Zig Apple `decmpfs` transparent-file decoding for inline types 1/3/7/9/11
@@ -1117,8 +1118,19 @@ _ = try lz4_decoder.decodeChunksAppendExactSize(
 var lz4_incremental = vort.Lz4NativeIncrementalFrameDecoder.init(allocator);
 defer lz4_incremental.deinit();
 var lz4_incremental_out: ["payload payload".len]u8 = undefined;
-_ = try lz4_incremental.step(lz4_frame[0..4], lz4_incremental_out[0..0]);
-_ = try lz4_incremental.step(lz4_frame[4..], &lz4_incremental_out);
+const lz4_prefix = try lz4_incremental.step(lz4_frame[0..4], lz4_incremental_out[0..0]);
+var lz4_input_read = lz4_prefix.progress.input_read;
+var lz4_output_written = lz4_prefix.progress.output_written;
+while (true) {
+    const result = try lz4_incremental.step(
+        lz4_frame[lz4_input_read..],
+        lz4_incremental_out[lz4_output_written..],
+    );
+    lz4_input_read += result.progress.input_read;
+    lz4_output_written += result.progress.output_written;
+    if (result.status == .done) break;
+}
+try lz4_incremental.finish();
 // The same incremental decoder can continue through concatenated native
 // streams and LZ4 skippable metadata frames; feed more bytes after `.done` to
 // decode the next stream member without resetting cumulative diagnostics.
@@ -1130,10 +1142,12 @@ var lz4_bounded_incremental = vort.Lz4NativeIncrementalFrameDecoder.initWithOpti
 defer lz4_bounded_incremental.deinit();
 // Skippable frames retain only their 8-byte header; their metadata payload can
 // exceed max_compressed_buffer_len and is discarded or copied into caller-owned
-// skippable_output incrementally. Oversized data frames switch to block-bounded
-// input. Compressed LZ4 blocks without block checksums can stream under a
-// header-sized cap; checksummed blocks require the cap to hold one encoded
-// block so checksum failure is reported before caller output is exposed.
+// skippable_output incrementally. Default input_policy = .block_stream starts
+// bounded input after the header, even with unbounded buffer options. Raw and
+// token payloads without block checksums consume caller input directly;
+// checksummed raw/compressed blocks require the cap to hold one encoded block
+// and validate that block before output. Frame content checksums may fail after
+// earlier output has been emitted. Always retain the suffix after input_read.
 // After feeding/draining the final frame, call finish() to validate exact-size EOF.
 const lz4_dict = vort.Lz4NativeDictionary.init(0x1234, "previous lz4 history");
 const lz4_dict_options: vort.Lz4NativeFrameOptions = .{ .content_checksum = false };
@@ -1296,8 +1310,19 @@ _ = zstd_plain;
 var zstd_incremental = vort.ZstdNativeIncrementalFrameDecoder.init(allocator);
 defer zstd_incremental.deinit();
 var zstd_incremental_out: ["payload payload".len]u8 = undefined;
-_ = try zstd_incremental.step(zstd_result.frame[0..4], zstd_incremental_out[0..0]);
-_ = try zstd_incremental.step(zstd_result.frame[4..], &zstd_incremental_out);
+const zstd_prefix = try zstd_incremental.step(zstd_result.frame[0..4], zstd_incremental_out[0..0]);
+var zstd_input_read = zstd_prefix.progress.input_read;
+var zstd_output_written = zstd_prefix.progress.output_written;
+while (true) {
+    const result = try zstd_incremental.step(
+        zstd_result.frame[zstd_input_read..],
+        zstd_incremental_out[zstd_output_written..],
+    );
+    zstd_input_read += result.progress.input_read;
+    zstd_output_written += result.progress.output_written;
+    if (result.status == .done) break;
+}
+try zstd_incremental.finish();
 // Zstd native incremental decode likewise walks concatenated frames and
 // skippable metadata frames through the same caller-owned StepResult API.
 var zstd_bounded_incremental = vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
@@ -1306,14 +1331,17 @@ var zstd_bounded_incremental = vort.ZstdNativeIncrementalFrameDecoder.initWithOp
     .expected_output_len = "payload payload".len,
 });
 defer zstd_bounded_incremental.deinit();
-// If a data frame exceeds max_compressed_buffer_len, Vort releases input one
-// block at a time. isBlockStreaming() exposes that path and
-// compressedBufferedBytes()/compressedBufferCapacity() report logical and
-// allocated encoded-input storage; both stay within a finite configured cap.
+// Default input_policy = .block_stream starts after the frame header and
+// releases encoded input as each block progresses. Raw bytes stream directly,
+// RLE keeps one byte, and compressed input retains one block. isBlockStreaming()
+// exposes that path. compressedBufferedBytes()/compressedBufferCapacity()
+// report logical and allocated encoded-input storage; both stay within a finite configured cap.
 // Sequence-bearing blocks retain their FSE/Huffman cursors and pending
 // literal/match progress across calls without allocating decoded-block scratch,
-// including when a prevalidated direct frame meets a tiny output slice;
-// streamedSequenceBlockCount() reports path coverage.
+// including when an explicit .prevalidated_frame direct path meets a tiny
+// output slice. This option preserves existing preflight/fallback behavior;
+// frame checksum validation may occur after output. Retain unaccepted input
+// using progress.input_read; streamedSequenceBlockCount() reports cursor use.
 // Skippable frames retain only their 8-byte header; metadata payloads are
 // discarded or copied into caller-owned skippable_output storage incrementally.
 // After feeding/draining the final frame, call finish() to validate exact-size EOF.
@@ -2565,6 +2593,9 @@ selected descriptor without a content size.
 
 | Codec | Option / symbol | Default / range | Use when | Tradeoff |
 | --- | --- | --- | --- | --- |
+| LZ4/Zstd incremental | `Options.input_policy` / `core.CompressedInputPolicy` | `.block_stream`; opt-in `.prevalidated_frame` | You need bounded incremental input or the existing complete-frame preflight/direct path. | Default retention follows blocks and history; explicit preflight preserves its established fallback and checksum timing. |
+| LZ4/Zstd incremental | `Options.max_compressed_buffer_len` | unlimited cap by default | You need an encoded-input retention limit. | Zstd compressed blocks and checksummed LZ4 raw/compressed blocks must fit; default raw/skippable and unchecked LZ4 token input stream directly. |
+| LZ4/Zstd incremental | `Options.max_decoded_buffer_len` / `expected_output_len` | unlimited per-frame output cap / optional logical-stream exact count | A container provides output bounds or a precise concatenated-stream length. | The per-frame cap includes emitted bytes; the exact count applies across members and is checked at `finish()`. These are not shared cumulative work/allocation quotas. |
 | LZ4 native | `Lz4NativeFrameOptions.block_mode` | `.independent` or `.linked` | Consecutive frame blocks share recent history and ratio matters. | `.linked` can improve ratio across block boundaries; `.independent` is simpler for random block handling. |
 | LZ4 native | `Lz4NativeFrameOptions.block_size_id` | `.max4mb`; `.max64kb` / `.max256kb` / `.max1mb` / `.max4mb` | You need a latency/working-set knob for frame block size. | Smaller blocks can reduce latency and direct-output burst size; larger blocks usually reduce framing overhead. |
 | LZ4 native | `Lz4NativeFrameOptions.chain_depth` | `vort.lz4NativeMaxChainDepth` (`16` currently); `0...vort.lz4NativeMaxChainDepth` | You want to trade encode CPU for deeper hash-chain match search. | `0` disables match search and is fastest/least compact; the default enables the deeper parser used by the native bench ratio rows. |
@@ -2574,7 +2605,7 @@ selected descriptor without a content size.
 | LZ4 native | `Lz4NativeDictionarySet` / `Lz4NativeDictionarySet.initFromMetadata` / `lz4NativeDictionarySetFromMetadataAlloc` | caller-owned slice of dictionaries or validated metadata+bytes catalog | Concatenated streams can carry different `Dictionary_ID` values, or a container provides versioned metadata records beside dictionary bytes. | Lets decoders resolve each frame without caller-side splitting; metadata construction validates bytes and duplicate IDs before decode; the alloc helper owns only the small catalog array. |
 | Zstd native | `ZstdNativeFrameOptions.selection` | `.auto`; `.auto` / `.raw_or_rle` / `.literal_only` | You need deterministic native-subset frame selection. | `.auto` chooses the smaller implemented native mode; explicit modes are useful for tests and predictable behavior. |
 | Zstd native | `ZstdNativeFrameOptions.block_size_max` | `std.compress.zstd.block_size_max`; `1...std.compress.zstd.block_size_max` | You need a latency/seekability/ratio knob. | Smaller blocks reduce per-block latency and direct-output bursts; larger blocks usually improve ratio and reduce headers. |
-| Zstd native | `window_log` / `max_match_history_len` on `ZstdFrameOptions` and `ZstdNativeFrameOptions` | `null`; explicit window `10...41`; optional history `1 KiB...64 MiB` | You need a standards-compatible advertised window and an explicit encode-memory/ratio budget. | Null window is byte-identical to the prior writer and retains 8 MiB. Explicit windows default to `zstdNativeExplicitWindowMatchLenDefault` (16 MiB); logs 24+ use a separate 1/256-sampled long-distance index, and callers may raise history through `zstdNativeExplicitWindowMatchLenMax` (64 MiB). History may not exceed the advertised window, and a history override without `window_log` is rejected. |
+| Zstd native | `window_log` / `max_match_history_len` on `ZstdFrameOptions` and `ZstdNativeFrameOptions` | `null`; explicit window `10...41`; optional history `1 KiB...64 MiB` | You need a standards-compatible advertised window and an explicit encode-memory/ratio budget. | Null window is byte-identical to the prior writer and retains 8 MiB. Explicit windows default to `zstdNativeExplicitWindowMatchLenDefault` (16 MiB); logs 24+ use a separate 1/256-sampled long-distance index, and callers may raise history through `zstdNativeExplicitWindowMatchLenMax` (64 MiB). Effective history is capped by the advertised window, and a history override without `window_log` is rejected. |
 | Zstd native | `ZstdNativeFrameOptions.match_search_budget` | `vort.zstdNativeMaxMatchSearchBudget` (`512` currently); `0...vort.zstdNativeMaxMatchSearchBudget` | You want to bound the bootstrap mixed-match planner. | `0` disables generic duplicate/repeated mixed planning while dictionary-only matches can still be used; the default searches more branches for ratio. |
 | Zstd native | `vort.zstdNativeMaxDirectHuffmanSymbol` | `128` currently | You need to know when the bootstrap writer can use direct Huffman literal weights. | Byte values above this use FSE-compressed Huffman weights when the literal-only plan wins; incompressible shapes can still fall back to raw/RLE or another native plan. |
 | Zstd native | `content_checksum` / `include_content_size` | both on by default | You want self-describing frames and content verification. | Disabling them saves bytes when a container already carries size/checksum metadata. |
@@ -2621,14 +2652,36 @@ decoder-owned scratch capacity while still appending into their own output
 buffers. Native one-shot, chunked, concatenated, and reusable decoders also provide
 `decode*Into*ExactSize` forms, including dictionary/dictionary-set variants, for
 caller-owned slices when a container-advertised byte count must match exactly.
-Incremental native decoders expose the shared `StepResult`
-contract: feed compressed bytes, provide caller-owned output slices, then call
-`finish()` when an exact EOF/size check matters. Direct-output paths are fastest
-when the caller supplies a large enough output slice; if a slice is too small
-for an atomic compressed block, the decoders intentionally fall back to bounded
-scratch and continue draining without losing correctness. Dictionary-set
-chunked APIs additionally accept caller-owned compressed join scratch so split
-input can be decoded without hidden global state. Public dictionary probes also
+Incremental native decoders default to
+`Options.input_policy = .block_stream` using the shared
+`core.CompressedInputPolicy` enum. A valid header starts bounded block/token
+execution immediately, so encoded and decoded scratch follow block/history
+state instead of the entire frame. Zstd preserves its accepted Huffman/FSE
+sequence modes, repeated offsets, dictionary forms, dictionary sets, and frame
+windows; raw input streams directly, RLE retains one byte, and compressed input
+retains one block. LZ4 unchecked raw/token payloads consume caller input
+directly, while both raw and compressed blocks carrying block checksums wait
+for validation before output. Skippable payloads also stream directly.
+
+In default mode, each `step` accepts only the input needed by its current state.
+Advance the input by `result.progress.input_read`, retain the unaccepted suffix for the next
+call, and use only `result.progress.output_written` newly produced output
+bytes. With `stop_after_first_frame`, `trailingInput()` reports accepted suffix
+bytes; the outer dispatcher must also retain the suffix still owned by the
+caller. `max_decoded_buffer_len` is a per-data-frame output limit that includes
+already-emitted bytes, while `expected_output_len` checks the exact decoded
+count across the logical stream. Call `finish()` after draining the final input
+and output to validate EOF and exact-size state. LZ4/Zstd do not yet share a
+cumulative work/allocation quota API.
+
+Explicit `.prevalidated_frame` preserves the existing complete-frame structural
+preflight/direct paths and bounded cursor fallback when a frame or compressed
+block cannot use that path. Their existing content-checksum timing is retained:
+frame checksum errors may arrive after earlier decoded bytes have been emitted,
+including on existing Zstd direct paths.
+
+Dictionary-set chunked APIs additionally accept caller-owned compressed join
+scratch so split input can be decoded without hidden global state. Public dictionary probes also
 pin error precedence for hostile frames that carry a missing or mismatched
 `Dictionary_ID` plus another defect: LZ4 covers content checksum, block
 checksum, and content-size conflicts across one-shot and incremental paths;
