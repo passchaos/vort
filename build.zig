@@ -243,6 +243,13 @@ pub fn build(b: *std.Build) void {
     const run_zstd_tests = b.addRunArtifact(zstd_tests);
     const zstd_test_step = b.step("test-zstd", "Run focused Zstandard codec tests");
     zstd_test_step.dependOn(&run_zstd_tests.step);
+    const zstd_controls_tests = b.addTest(.{
+        .name = "vort-zstd-encode-controls-tests",
+        .root_module = zstd_tests_mod,
+        .filters = &.{ "Zstd encode controls", "controlled " },
+    });
+    const zstd_controls_test_step = b.step("test-zstd-encode-controls", "Run signed Zstd level, strategy, profile and matcher contracts");
+    zstd_controls_test_step.dependOn(&b.addRunArtifact(zstd_controls_tests).step);
     const zstd_far_window_tests = b.addTest(.{
         .name = "vort-zstd-far-window-tests",
         .root_module = zstd_tests_mod,
@@ -499,6 +506,13 @@ pub fn build(b: *std.Build) void {
     const run_zfs_compression_tests = b.addRunArtifact(zfs_compression_tests);
     const zfs_compression_test_step = b.step("test-zfs-compression", "Run focused ZFS block compression tests");
     zfs_compression_test_step.dependOn(&run_zfs_compression_tests.step);
+    const zstd_control_consumer_tests = b.addTest(.{
+        .name = "vort-zstd-control-consumer-tests",
+        .root_module = tests_mod,
+        .filters = &.{ "CHD signed Zstd levels", "ZFS signed Zstd levels" },
+    });
+    const zstd_control_consumer_step = b.step("test-zstd-control-consumers", "Run signed Zstd level and OpenZFS FAST metadata integration tests");
+    zstd_control_consumer_step.dependOn(&b.addRunArtifact(zstd_control_consumer_tests).step);
     const qcow2_tests = b.addTest(.{
         .name = "vort-qcow2-tests",
         .root_module = tests_mod,
@@ -1607,6 +1621,23 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| native_dictionary_resume_diff.addArgs(args);
     const native_dictionary_resume_step = b.step("run-native-dictionary-resume-diff", "Validate native dictionary requests against libzstd and liblz4");
     native_dictionary_resume_step.dependOn(&native_dictionary_resume_diff.step);
+
+    const zstd_controls_probe = b.addExecutable(.{
+        .name = "vort-zstd-controls-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/controls_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "codec", .module = zstd_tests_mod }},
+        }),
+    });
+    const zstd_controls_diff = b.addSystemCommand(&.{ "python3", "tools/zstd/controls_diff.py", "--probe" });
+    zstd_controls_diff.addArtifactArg(zstd_controls_probe);
+    zstd_controls_diff.addArgs(&.{ "--build-mode", @tagName(optimize), "--zstd-helper-object" });
+    zstd_controls_diff.addArtifactArg(zstd_huffman_x2_obj);
+    if (b.args) |args| zstd_controls_diff.addArgs(args);
+    const zstd_controls_diff_step = b.step("run-zstd-controls-diff", "Validate signed levels and explicit Zstd match strategies against independent references");
+    zstd_controls_diff_step.dependOn(&zstd_controls_diff.step);
 
     const lzma_contract_probe = b.addExecutable(.{ .name = "vort-lzma-contract-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/lzma/contract_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "lzma", .module = lzma_contracts_mod }} }) });
     const lzma_contract_diff = b.addSystemCommand(&.{ "python3", "tools/lzma/contract_diff.py", "--probe" });
@@ -6221,6 +6252,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zlib_diff_exe.step);
     check_step.dependOn(&zlib_dictionary_resume_probe.step);
     check_step.dependOn(&zstd_dictionary_resume_probe.step);
+    check_step.dependOn(&zstd_controls_probe.step);
     check_step.dependOn(&lz4_dictionary_resume_probe.step);
     check_step.dependOn(&lzma_contract_probe.step);
     check_step.dependOn(&lzma_one_shot_probe.step);
