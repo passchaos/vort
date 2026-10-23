@@ -224,11 +224,8 @@ pub const Reader = struct {
                 header[6] & 0x0f,
             ) orelse return error.UnsupportedErofsCompression;
             const algorithm2_raw = header[6] >> 4;
-            const algorithm2 = if (algorithm2_raw == 0)
-                algorithm1
-            else
-                std.enums.fromInt(format.Compression, algorithm2_raw) orelse
-                    return error.UnsupportedErofsCompression;
+            const algorithm2 = std.enums.fromInt(format.Compression, algorithm2_raw) orelse
+                return error.UnsupportedErofsCompression;
             with_compression.compressed_algorithms = .{ algorithm1, algorithm2 };
             with_compression.compressed_cluster_bits = self.superblock.block_bits +
                 (cluster_byte & 0x0f);

@@ -224,6 +224,15 @@ from cluster bits and optionally carry one 64-bit physical base, while larger
 records carry explicit 64-bit physical and logical starts. Raw and all four
 EROFS compression formats share the same bounded decode path.
 
+Full/compact compression headers retain both algorithm nibbles as independent
+wire IDs. `HEAD1` selects the low nibble and `HEAD2` selects the high nibble;
+ID zero means LZ4 in either slot, including when the first algorithm is
+MicroLZMA, Deflate or Zstandard. The high nibble is never interpreted as an
+inheritance marker. Inline compressed tails and legacy partial-reference heads
+use the same selection, with metadata/metabox and external-device addresses
+remaining independent of the codec choice. Unknown IDs report
+`UnsupportedErofsCompression`.
+
 Modern extent records support `PARTIAL_REF` (encoded-length bit 27), and
 legacy full-index heads support their bit-15 partial-reference flag. LZ4,
 MicroLZMA, raw Deflate and Zstandard decode only the needed prefix of a marked

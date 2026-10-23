@@ -13,4 +13,5 @@ test {
     _ = @import("tests/device_regions.zig");
     _ = @import("tests/device_layouts.zig");
     _ = @import("tests/device_errors.zig");
+    _ = @import("tests/dual_algorithms.zig");
 }

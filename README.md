@@ -256,7 +256,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   symlinks, bounded inline/shared xattrs with standard and plain/metabox/packed
   long-prefix name indexes and configurable packed-extent limits, legacy full
   and modern compact compression indexes, big
-  pclusters, whole/partial packed fragments, interlaced packed inodes, and
+  pclusters with independent HEAD1/HEAD2 algorithm IDs (including secondary LZ4),
+  whole/partial packed fragments, interlaced packed inodes, and
   compressed inline tail packing with caller-bounded packed-extent scratch,
   plus local/external chunk-based files with borrowed device tables, holes,
   4-byte maps and 8-byte indexes, 48-bit superblock/flat/chunk/device addresses,
