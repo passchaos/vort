@@ -174,6 +174,8 @@ def main() -> None:
     parser.add_argument("--mkfs", type=Path)
     parser.add_argument("--fsck", type=Path)
     parser.add_argument("--dump", type=Path)
+    parser.add_argument("--metabox-oracle-fsck", "--metabox-inline-fsck", dest="metabox_oracle_fsck", type=Path,
+                        help="separate erofs-utils oracle with metabox-inline-oracle.patch applied")
     args = parser.parse_args()
     mkfs = args.mkfs or (Path(found) if (found := shutil.which("mkfs.erofs")) else None)
     fsck = args.fsck or (Path(found) if (found := shutil.which("fsck.erofs")) else None)
@@ -228,6 +230,9 @@ def main() -> None:
     partial_extent_error_cases = 0
     device_reader_cases = 0
     metadata_zone_writer_cases = 0
+    metabox_inline_oracle_cases = 0
+    metabox_combined_oracle_cases = 0
+    original_fsck_writer_cases = 0
     malformed = 0
     with tempfile.TemporaryDirectory(prefix="vort-erofs-") as temp_text:
         temp = Path(temp_text)
@@ -291,6 +296,12 @@ def main() -> None:
             for codec in ("lz4", "lzma", "deflate", "zstd")
             for suffix in ("", "-fragments", "-ztailpacking", "-48bit", "-metabox", "-dirs", "-extended", "-dirs-extended-metabox", "8", "12")
         )
+        combined_metabox_modes = ("chunk-local-metabox", "chunk-external-metabox") + tuple(
+            f"{codec}{group}{tail}-metabox"
+            for codec in ("lz4", "lzma", "deflate", "zstd")
+            for group in ("", "-clusters", "-bounded")
+            for tail in ("-fragments", "-ztailpacking")
+        )
         file_source_writer_cases += verify_file_sources(args.cli, fsck, temp, expected_writer["mixed.bin"], run)
         writer_modes = (
             "stored",
@@ -329,7 +340,7 @@ def main() -> None:
             "lzma-metabox",
             "lzma-dirs",
             "lzma-extended",
-        ) + grouped_modes + bounded_modes
+        ) + grouped_modes + bounded_modes + combined_metabox_modes
         for mode in writer_modes + tuple(f"{name}-source" for name in writer_modes) + tuple(f"{name}-sink" for name in writer_modes) + tuple(f"{name}-encoder" for name in writer_modes):
             source_mode = mode.endswith("-source")
             sink_mode = mode.endswith("-sink")
@@ -424,8 +435,18 @@ def main() -> None:
             writer_cases += 1
             if fsck is not None:
                 extracted = temp / f"writer-{mode}-fsck"
+                metabox_inline = layout_mode.endswith("-ztailpacking-metabox")
+                metabox_combined = layout_mode in combined_metabox_modes
+                oracle = fsck
+                if metabox_combined:
+                    if args.metabox_oracle_fsck is None:
+                        raise AssertionError("--metabox-oracle-fsck is required for metabox combination cases; see tools/erofs/metabox-inline-oracle.md")
+                    oracle = args.metabox_oracle_fsck
+                    metabox_combined_oracle_cases += 1
+                    if metabox_inline:
+                        metabox_inline_oracle_cases += 1
                 fsck_command: list[object] = [
-                    fsck,
+                    oracle,
                     f"--extract={extracted}",
                     "--no-preserve",
                     "--xattrs",
@@ -451,9 +472,20 @@ def main() -> None:
                     raise AssertionError(f"fsck.erofs symlink mismatch for {mode}")
                 if not (extracted / "empty").is_dir():
                     raise AssertionError(f"fsck.erofs empty directory missing for {mode}")
-                if not layout_mode.endswith("-metabox"):
+                if not layout_mode.endswith("-metabox") or layout_mode in combined_metabox_modes:
                     verify_extracted_xattrs(extracted, expected_writer_xattrs, f"writer-{mode}")
                     xattr_writer_cases += 1
+                if not metabox_inline:
+                    if metabox_combined:
+                        original_extract = temp / f"writer-{mode}-original-fsck"
+                        original_command = [fsck, f"--extract={original_extract}", "--no-preserve", "--xattrs"]
+                        if is_external_chunk:
+                            original_command.append(f"--device={device}")
+                        run(*original_command, image)
+                        for name in ("etc/config", "large.bin", "random.bin", "mixed.bin", "small"):
+                            if (original_extract / name).read_bytes() != expected_writer[name]:
+                                raise AssertionError(f"original fsck.erofs writer mismatch for {mode}/{name}")
+                    original_fsck_writer_cases += 1
                 external_writer += 1
 
         if mkfs is not None:
@@ -751,6 +783,9 @@ def main() -> None:
         f"partial_extent_errors={partial_extent_error_cases} "
         f"device_reader={device_reader_cases} "
         f"metadata_zone_writer={metadata_zone_writer_cases} "
+        f"metabox_inline_oracle={metabox_inline_oracle_cases} "
+        f"metabox_combined_oracle={metabox_combined_oracle_cases} "
+        f"original_fsck_writer={original_fsck_writer_cases} "
         f"malformed={malformed}"
     )
 
