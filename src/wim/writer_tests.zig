@@ -227,6 +227,9 @@ test "WIM writer emits deterministic mixed LZMS chunks" {
     const resource_start: usize = @intCast(entry.resource.offset_in_wim);
     const first_end: usize = format.readU32(encoded, resource_start);
     try std.testing.expect(first_end < 32 * 1024);
+    const literal = try @import("../lzms/encoder.zig").encodeLiteralAlloc(allocator, payload[0 .. 32 * 1024]);
+    defer allocator.free(literal);
+    try std.testing.expect(first_end * 8 < literal.len);
     try std.testing.expectEqual(
         @as(u64, 4 + first_end + 32 * 1024),
         entry.resource.size_in_wim,

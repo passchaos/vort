@@ -2,11 +2,24 @@ const std = @import("std");
 const decoder = @import("lzms/decoder.zig");
 const encoder = @import("lzms/encoder.zig");
 const tables = @import("lzms/tables.zig");
+const item_encoder = @import("lzms/item_encoder.zig");
 
 pub const Error = decoder.Error || encoder.Error;
 pub const Decoder = decoder.Decoder;
+/// Low-level item serializer over already x86-transformed content.
+pub const PlanEncoder = item_encoder.Encoder;
+pub const EncodeItem = item_encoder.Item;
 pub const maxBufferSize = tables.max_buffer_size;
 pub const encodeAlloc = encoder.encodeAlloc;
+pub const EncodeOptions = encoder.Options;
+pub const EncodeStrategy = encoder.Strategy;
+pub const Encoded = encoder.Encoded;
+pub const EncodeSummary = encoder.Summary;
+pub const encodeWithOptionsAlloc = encoder.encodeWithOptionsAlloc;
+pub const encodeWithSummaryAlloc = encoder.encodeWithSummaryAlloc;
+pub const encodeWithOptionsAppend = encoder.encodeWithOptionsAppend;
+pub const encodeWithOptionsInto = encoder.encodeWithOptionsInto;
+pub const encodeLiteralAlloc = encoder.encodeLiteralAlloc;
 pub const encodeAppend = encoder.encodeAppend;
 pub const encodeInto = encoder.encodeInto;
 pub const decodeInto = decoder.decodeInto;
@@ -17,6 +30,8 @@ test {
     _ = decoder;
     _ = encoder;
     _ = tables;
+    _ = @import("lzms/item_encoder_tests.zig");
+    _ = @import("lzms/greedy_encoder_tests.zig");
 }
 
 test "LZMS rejects malformed raw blocks and output limits" {
