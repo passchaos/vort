@@ -3,6 +3,7 @@ const std = @import("std");
 const format = @import("../format.zig");
 const compression_index = @import("../compression_index.zig");
 const types = @import("types.zig");
+const index_validation = @import("index_validator.zig");
 pub const Error = types.Error || input_module.Error || error{ ErofsMissingMetabox, UnsupportedErofsCompression };
 pub const Inode = types.Inode;
 const CompressionIndex = compression_index.Index;
@@ -296,11 +297,13 @@ pub const Reader = struct {
         const cluster_count = if (inode_value.file_size == 0) 0 else (std.math.add(usize, inode_value.file_size, cluster_size - 1) catch
             return error.IntegerOverflow) / cluster_size;
         var tail: ?TailHead = null;
+        var validator = index_validation.Validator{ .cluster_size = cluster_size };
         for (0..cluster_count) |cluster_index| {
             const index = if (inode_value.layout == .compressed_full)
                 try self.readFullIndex(inode_value, cluster_index)
             else
                 try self.readCompactIndex(inode_value, cluster_index, cluster_count);
+            try validator.accept(cluster_index, index);
             if (index.kind == 2) continue;
             const logical_base = std.math.mul(usize, cluster_index, cluster_size) catch
                 return error.IntegerOverflow;

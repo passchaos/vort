@@ -2,6 +2,7 @@ const std = @import("std");
 const context_module = @import("../context.zig");
 const inode_module = @import("../types.zig");
 const spans = @import("types.zig");
+const validation = @import("../index_validator.zig");
 
 pub const Error = spans.Error;
 const Head = struct { start: usize, block: u32, kind: u2, blocks: u32, partial: bool };
@@ -15,12 +16,13 @@ pub const Walker = struct {
     previous: ?Head = null,
     started: bool = false,
     finished: bool = false,
+    validator: validation.Validator,
 
     pub fn init(context: context_module.Context, inode: inode_module.Inode) Error!Walker {
         _ = inode.compressed_algorithms[0] orelse return error.InvalidErofs;
         if (inode.compressed_cluster_bits >= @bitSizeOf(usize)) return error.UnsupportedErofsFeature;
         const cluster_size: usize = @as(usize, 1) << @intCast(inode.compressed_cluster_bits);
-        return .{ .context = context, .inode = inode, .cluster_size = cluster_size, .count = (try context_module.add(inode.file_size, cluster_size - 1)) / cluster_size };
+        return .{ .context = context, .inode = inode, .cluster_size = cluster_size, .count = (try context_module.add(inode.file_size, cluster_size - 1)) / cluster_size, .validator = .{ .cluster_size = cluster_size } };
     }
 
     fn nextHead(self: *Walker) Error!?Head {
@@ -28,8 +30,8 @@ pub const Walker = struct {
             const index = self.index;
             self.index += 1;
             const record = if (self.inode.layout == .compressed_full) try self.context.reader.readFullIndex(self.inode, index) else try self.context.reader.readCompactIndex(self.inode, index, self.count);
+            try self.validator.accept(index, record);
             if (record.kind == 2) continue;
-            if (record.logical_offset >= self.cluster_size) return error.InvalidErofs;
             const base = std.math.mul(usize, index, self.cluster_size) catch return error.IntegerOverflow;
             const logical = try context_module.add(base, record.logical_offset);
             return .{ .start = logical, .block = record.physical_block, .kind = record.kind, .partial = record.partial, .blocks = (try self.context.reader.compressedBlockCount(self.inode, index, self.count, logical, record.kind)) orelse 1 };

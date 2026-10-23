@@ -10,6 +10,9 @@ pub const Index = struct {
     physical_block: u32,
     compressed_blocks: ?u32 = null,
     partial: bool = false,
+    /// Normalized backward lcluster distance for NONHEAD records. Compact
+    /// pack-final entries derive it from the previous item, not their own lo.
+    lookback: ?usize = null,
 };
 
 pub const View = struct {
@@ -32,15 +35,17 @@ pub fn readFullInput(metadata: input_module.Input, view: View, cluster_index: us
     var record: [8]u8 = undefined;
     try metadata.read(index_offset, &record);
     const kind: u2 = @truncate(format.readU16(&record, 0) & 3);
+    const delta = format.readU16(&record, 4);
     return .{
         .kind = kind,
         .partial = kind != 2 and format.readU16(&record, 0) & 0x8000 != 0,
         .logical_offset = format.readU16(&record, 2),
         .physical_block = format.readU32(&record, 4),
         .compressed_blocks = if (kind == 2)
-            try blockCount(format.readU16(&record, 4), view)
+            try blockCount(delta, view)
         else
             null,
+        .lookback = if (kind == 2) if (delta & 0x800 != 0) 1 else delta else null,
     };
 }
 
@@ -112,6 +117,20 @@ pub fn readCompactInput(metadata: input_module.Input, view: View, cluster_index:
     );
     const logical_mask = (@as(u32, 1) << @intCast(logical_bits)) - 1;
     const kind: u2 = @truncate((value >> @intCast(logical_bits)) & 3);
+    const lo = value & logical_mask;
+    var lookback: ?usize = null;
+    if (kind == 2) {
+        if (lo & 0x800 != 0) {
+            lookback = 1;
+        } else if (item_index + 1 != value_count) {
+            lookback = lo;
+        } else {
+            const prior = readPackedBits(data[0 .. pack_size - 4], encoded_bits * (item_index - 1), encoded_bits);
+            const prior_kind = (prior >> @intCast(logical_bits)) & 3;
+            const prior_lo = prior & logical_mask;
+            lookback = if (prior_kind != 2) 1 else if (prior_lo & 0x800 != 0) 2 else prior_lo + 1;
+        }
+    }
     var physical = format.readU32(data, pack_size - 4);
     if (kind != 2) {
         var scan_index: isize = @intCast(item_index);
@@ -151,9 +170,10 @@ pub fn readCompactInput(metadata: input_module.Input, view: View, cluster_index:
         .logical_offset = value & logical_mask,
         .physical_block = physical,
         .compressed_blocks = if (kind == 2)
-            try blockCount(@intCast(value & logical_mask), view)
+            try blockCount(@intCast(lo), view)
         else
             null,
+        .lookback = lookback,
     };
 }
 

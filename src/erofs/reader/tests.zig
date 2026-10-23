@@ -15,4 +15,6 @@ test {
     _ = @import("tests/device_errors.zig");
     _ = @import("tests/dual_algorithms.zig");
     _ = @import("tests/configuration.zig");
+    _ = @import("tests/index_encoding.zig");
+    _ = @import("tests/index_chains.zig");
 }
