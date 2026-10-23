@@ -233,6 +233,35 @@ use the same selection, with metadata/metabox and external-device addresses
 remaining independent of the codec choice. Unknown IDs report
 `UnsupportedErofsCompression`.
 
+Archive initialization validates the compression algorithm bitmap and its
+records in primary metadata. Records occur in algorithm-ID order after the
+complete superblock, start at a four-byte boundary and carry a u16 payload
+length. LZ4/MicroLZMA payloads require at least 14 bytes; Deflate/Zstandard
+require at least six. Unknown bitmap bits and unsupported codec formats return
+`UnsupportedErofsCompression`; invalid lengths or field ranges return
+`InvalidErofs`, and truncated payloads return `TruncatedFrame`. Reserved bytes
+and extensions are accepted; all extension bytes are scanned through a fixed
+256-byte buffer, so Source failures and image bounds remain observable without
+record-sized allocation. Header-only `parseErofsSuperblock` remains a header
+parser; opening an Archive performs the separate configuration validation.
+
+Only an algorithm actually used by a compressed extent must be declared;
+unused HEAD1/HEAD2 slots and metadata-only inode inspection do not trigger that
+check. An undeclared selected algorithm returns `InvalidErofs` before decoder
+allocation or compressed payload reads. Source, slice, packed, metabox,
+inline-tail and partial-reference paths use the same retained configuration.
+Old images without the configuration feature interpret the superblock field
+as the legacy LZ4 distance and retain the single-physical-block default.
+
+The declared LZ4 distance and maximum pcluster block count constrain its
+decoding; a zero block count selects one block. MicroLZMA uses the declared
+4 KiB...8 MiB dictionary, Deflate limits match distances to the declared
+8...15-bit window, and Zstandard rejects a frame window above its declared
+1 KiB...1 MiB cap. Decoder state and returned output retain their existing
+allocator policies. Configuration parsing itself allocates no memory and
+therefore works under a zero archive working budget. Caller extent/output
+limits continue to apply independently.
+
 Modern extent records support `PARTIAL_REF` (encoded-length bit 27), and
 legacy full-index heads support their bit-15 partial-reference flag. LZ4,
 MicroLZMA, raw Deflate and Zstandard decode only the needed prefix of a marked

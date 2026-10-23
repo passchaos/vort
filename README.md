@@ -1424,6 +1424,8 @@ defer zstd_incremental_encoder.deinit();
 // stop_at_output_limit opts into a bounded prefix: step returns need_output at
 // max_output_len without requiring EOB, even inside a stored chunk or match.
 // The default keeps the ordinary output-limit and end-of-stream checks.
+// max_distance optionally tightens copy distances within the caller's 32 KiB
+// history ring for an enclosing format; it defaults to the full format window.
 // Dynamic blocks currently progress through HLIT/HDIST/HCLEN and the split
 // code-length alphabet/repeats into byte-progressive payload literals and matches.
 // ZlibIncrementalDecoder layers split CMF/FLG and streaming Adler/footer

@@ -4,8 +4,9 @@ const devices_module = @import("devices.zig");
 const input_module = @import("input.zig");
 const codec = @import("../codec.zig");
 const format = @import("../format.zig");
+const configuration_module = @import("configuration.zig");
 
-pub const Error = metadata.Error || devices_module.Error || codec.Error || std.mem.Allocator.Error;
+pub const Error = configuration_module.Error || metadata.Error || devices_module.Error || codec.Error || std.mem.Allocator.Error;
 pub const Limits = struct {
     max_encoded_extent_size: usize = 8 * 1024 * 1024,
     max_decoded_extent_size: usize = 8 * 1024 * 1024,
@@ -14,6 +15,7 @@ pub const Limits = struct {
 
 pub const Context = struct {
     allocator: std.mem.Allocator,
+    configuration: configuration_module.Configuration = .{},
     reader: metadata.Reader,
     devices: devices_module.Access,
     limits: Limits,
@@ -36,16 +38,17 @@ pub const Context = struct {
     }
 
     fn decodeMode(self: Context, algorithm: format.Compression, input: input_module.Input, start: u64, encoded_size: usize, decoded_size: usize, partial: bool) Error![]u8 {
+        try self.configuration.require(algorithm, encoded_size, self.reader.superblock.block_size);
         if (decoded_size > self.limits.max_decoded_extent_size) return error.OutputLimitExceeded;
         if (encoded_size > self.limits.max_encoded_extent_size) return error.OutputLimitExceeded;
         if (input == .slice) {
             const end = try input.endAt(start, encoded_size);
             const payload = input.slice[@intCast(start)..@intCast(end)];
-            return if (partial) codec.decodePrefixExtentAlloc(self.allocator, algorithm, payload, decoded_size, self.reader.superblock.feature_incompat & 1 != 0) else codec.decodeExtentAlloc(self.allocator, algorithm, payload, decoded_size, self.reader.superblock.feature_incompat & 1 != 0);
+            return codec.decodeExtentWithOptionsAlloc(self.allocator, algorithm, payload, decoded_size, self.reader.superblock.feature_incompat & 1 != 0, partial, self.configuration.options);
         }
         const encoded_bytes = try self.encoded(input, start, encoded_size);
         defer self.allocator.free(encoded_bytes);
-        return if (partial) codec.decodePrefixExtentAlloc(self.allocator, algorithm, encoded_bytes, decoded_size, self.reader.superblock.feature_incompat & 1 != 0) else codec.decodeExtentAlloc(self.allocator, algorithm, encoded_bytes, decoded_size, self.reader.superblock.feature_incompat & 1 != 0);
+        return codec.decodeExtentWithOptionsAlloc(self.allocator, algorithm, encoded_bytes, decoded_size, self.reader.superblock.feature_incompat & 1 != 0, partial, self.configuration.options);
     }
 };
 

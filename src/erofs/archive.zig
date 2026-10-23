@@ -15,8 +15,9 @@ const reader_context = @import("reader/context.zig");
 const devices_reader = @import("reader/devices.zig");
 const byte_sink = @import("../io/sink.zig");
 const prefix_table = @import("reader/prefix_table.zig");
+const configuration = @import("reader/configuration.zig");
 
-pub const Error = prefix_table.Error || stream.Error || directory_stream.Error || byte_sink.Error || metadata_reader.Error || core.Error || format.Error || codec.Error || chunk.Error || extent_reader.Error || xattr.Error ||
+pub const Error = configuration.Error || prefix_table.Error || stream.Error || directory_stream.Error || byte_sink.Error || metadata_reader.Error || core.Error || format.Error || codec.Error || chunk.Error || extent_reader.Error || xattr.Error ||
     std.mem.Allocator.Error || error{
     InvalidErofs,
     ErofsEntryNotFound,
@@ -64,6 +65,7 @@ pub const Archive = struct {
     devices: []const []const u8 = &.{},
     metabox_bytes: ?[]const u8 = null,
     superblock: format.Superblock,
+    compression_configuration: configuration.Configuration = .{},
 
     pub fn init(bytes: []const u8) Error!Archive {
         return initWithDevices(bytes, &.{});
@@ -74,6 +76,7 @@ pub const Archive = struct {
         devices: []const []const u8,
     ) Error!Archive {
         const superblock = try format.parseSuperblock(bytes);
+        const config = try configuration.read(.{ .slice = bytes }, superblock);
         if (prefix_table.isPrimary(superblock))
             try xattr.validatePrefixTable(
                 bytes,
@@ -84,6 +87,7 @@ pub const Archive = struct {
             .bytes = bytes,
             .devices = devices,
             .superblock = superblock,
+            .compression_configuration = config,
         };
         try chunk.validateDevices(bytes, devices, superblock);
         return result;
@@ -188,6 +192,7 @@ pub const Archive = struct {
     fn context(self: Archive, allocator: std.mem.Allocator, limits: ReadLimits) reader_context.Context {
         return .{
             .allocator = allocator,
+            .configuration = self.compression_configuration,
             .reader = self.inodeReader(),
             .devices = .{ .slices = .{ .primary = .{ .slice = self.bytes }, .devices = self.devices, .superblock = self.superblock } },
             .limits = .{ .max_encoded_extent_size = std.math.maxInt(usize), .max_decoded_extent_size = std.math.maxInt(usize), .max_packed_extent_size = limits.max_packed_extent_len },

@@ -6,6 +6,7 @@ const zstd = @import("../zstd.zig");
 const format = @import("format.zig");
 const lz4_codec = @import("codec/lz4.zig");
 const prefix_codec = @import("codec/prefix.zig");
+pub const DecodeOptions = @import("codec/options.zig").DecodeOptions;
 
 pub const Error = core.Error || deflate.Error || lzma.Error || zstd.Error ||
     std.mem.Allocator.Error || error{
@@ -24,12 +25,19 @@ pub fn decodeExtentAlloc(
     expected_size: usize,
     zero_padding: bool,
 ) Error![]u8 {
+    return decodeExtentWithOptionsAlloc(allocator, algorithm, input, expected_size, zero_padding, false, .{});
+}
+
+pub fn decodeExtentWithOptionsAlloc(allocator: std.mem.Allocator, algorithm: format.Compression, input: []const u8, expected_size: usize, zero_padding: bool, partial: bool, options: DecodeOptions) Error![]u8 {
+    if (expected_size == 0 and partial) return allocator.alloc(u8, 0);
     const payload = try payloadInput(input, algorithm, zero_padding);
+    if (partial or (algorithm == .deflate and options.deflate_max_distance != 32768))
+        return prefix_codec.decodeWithOptionsAlloc(allocator, algorithm, payload, expected_size, partial, options);
     return switch (algorithm) {
         .lz4 => blk: {
             const output = try allocator.alloc(u8, expected_size);
             errdefer allocator.free(output);
-            _ = try decodeLz4Into(payload, output, false);
+            _ = try lz4_codec.decodeWithDistance(payload, output, false, false, options.lz4_max_distance);
             break :blk output;
         },
         .deflate => blk: {
@@ -43,6 +51,8 @@ pub fn decodeExtentAlloc(
             break :blk result.bytes;
         },
         .zstandard => blk: {
+            const header = try zstd.inspectNativeFrameHeader(payload);
+            if (header.window_size > options.zstandard_max_window_size) return error.InvalidErofs;
             var iterator = try zstd.NativeFrameBlockIterator.init(payload);
             while (try iterator.next()) |_| {}
             const output = try zstd.decodeFrameAllocExactSize(
@@ -56,7 +66,7 @@ pub fn decodeExtentAlloc(
             allocator,
             payload,
             expected_size,
-            8 * 1024 * 1024,
+            options.lzma_dictionary_size,
             expected_size,
         ),
     };
@@ -67,8 +77,7 @@ pub fn decodeLz4Into(input: []const u8, output: []u8, zero_padding: bool) Error!
 }
 
 pub fn decodePrefixExtentAlloc(allocator: std.mem.Allocator, algorithm: format.Compression, input: []const u8, size: usize, zero_padding: bool) Error![]u8 {
-    if (size == 0) return allocator.alloc(u8, 0);
-    return prefix_codec.decodeAlloc(allocator, algorithm, try payloadInput(input, algorithm, zero_padding), size);
+    return decodeExtentWithOptionsAlloc(allocator, algorithm, input, size, zero_padding, true, .{});
 }
 
 fn payloadInput(input: []const u8, algorithm: format.Compression, zero_padding: bool) Error![]const u8 {

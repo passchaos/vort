@@ -8,6 +8,10 @@ pub fn decode(
     zero_padding: bool,
     partial: bool,
 ) Error!usize {
+    return decodeWithDistance(input, output, zero_padding, partial, 65535);
+}
+
+pub fn decodeWithDistance(input: []const u8, output: []u8, zero_padding: bool, partial: bool, max_distance: usize) Error!usize {
     var input_offset: usize = 0;
     if (zero_padding)
         while (input_offset < input.len and input[input_offset] == 0) : (input_offset += 1) {};
@@ -37,7 +41,7 @@ pub fn decode(
             .little,
         );
         input_offset += 2;
-        if (distance == 0 or distance > output_offset) return error.InvalidMatch;
+        if (distance == 0 or distance > output_offset or distance > max_distance) return error.InvalidMatch;
         var match_len: usize = (token & 0x0f) + 4;
         if (token & 0x0f == 15)
             match_len = std.math.add(

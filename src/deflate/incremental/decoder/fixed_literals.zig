@@ -69,6 +69,8 @@ pub fn DecoderWithFormat(comptime format: Format) type {
             /// Return need_output at max_output_len, retaining a valid prefix
             /// even when its final stored chunk or match continues beyond it.
             stop_at_output_limit: bool = false,
+            /// Optional surrounding-format distance cap within the history ring.
+            max_distance: usize = format.window_len,
         };
         pub const Phase = enum { block_header, stored_lengths, stored_payload, dynamic_counts, dynamic_code_lengths, dynamic_lengths, dynamic_repeat, symbols, length_extra, distance_symbol, distance_extra, match_copy, done };
 
@@ -441,6 +443,7 @@ pub fn DecoderWithFormat(comptime format: Format) type {
         fn beginMatch(self: *Self) Error!void {
             if (self.history.len == 0) return self.fail(.match_copy, error.OutputTooSmall);
             if (self.match_distance == 0 or self.match_distance > self.history_len) return self.fail(.match_copy, error.InvalidMatch);
+            if (self.match_distance > self.options.max_distance) return self.fail(.match_copy, error.InvalidMatch);
             if (!self.options.stop_at_output_limit and (self.total_output > self.options.max_output_len or self.match_len > self.options.max_output_len - self.total_output)) return self.fail(.match_copy, error.OutputLimitExceeded);
             if (self.options.expected_output_len) |expected| {
                 if (self.total_output > expected or self.match_len > expected - self.total_output) return self.fail(.match_copy, error.SizeMismatch);

@@ -14,6 +14,7 @@ pub const inode_slot_size: usize = 32;
 pub const name_max: usize = 255;
 pub const feature_compat_plain_xattr_prefixes: u32 = 0x0000_0010;
 pub const feature_compat_shared_xattrs_in_metabox: u32 = 0x0000_0008;
+pub const feature_incompat_compression_config: u32 = 0x0000_0002;
 pub const feature_incompat_chunked_file: u32 = 0x0000_0004;
 pub const feature_incompat_device_table: u32 = 0x0000_0008;
 pub const feature_incompat_ztailpacking: u32 = 0x0000_0010;

@@ -15,9 +15,10 @@ const types = @import("reader/types.zig");
 const xattr = @import("xattr.zig");
 const source_xattrs = @import("reader/xattrs.zig");
 const prefix_table = @import("reader/prefix_table.zig");
+const configuration = @import("reader/configuration.zig");
 const format = @import("format.zig");
 
-pub const Error = prefix_table.Error || directory_stream.Error || stream.Error || sink_module.Error || source_xattrs.Error || directory.Error || error{
+pub const Error = configuration.Error || prefix_table.Error || directory_stream.Error || stream.Error || sink_module.Error || source_xattrs.Error || directory.Error || error{
     ErofsNotDirectory,
     ErofsEntryNotFound,
     ErofsNotRegularFile,
@@ -42,6 +43,7 @@ pub const SourceArchive = struct {
     source: source_module.Source,
     devices: []const source_module.Source,
     superblock: format.Superblock,
+    compression_configuration: configuration.Configuration = .{},
     limits: Limits,
     working: working_module.WorkingAllocator,
     metabox_bytes: ?[]u8 = null,
@@ -57,8 +59,10 @@ pub const SourceArchive = struct {
         const header = try superblock.read(.{ .source = source });
         var primary = source;
         primary.len = try header.imageSize64();
+        const config = try configuration.read(.{ .source = primary }, header);
         var owner = SourceArchive{ .source = primary, .devices = devices, .superblock = header, .limits = limits, .working = working_module.WorkingAllocator.init(allocator, limits.max_working_memory) };
         errdefer owner.deinit();
+        owner.compression_configuration = config;
         try owner.deviceReader().validate();
         if (prefix_table.isPrimary(header))
             try xattr.validatePrefixTableInput(.{ .source = primary }, header.xattr_prefix_start, header.xattr_prefix_count);
@@ -95,7 +99,7 @@ pub const SourceArchive = struct {
     }
 
     fn context(self: *SourceArchive, limits: ReadLimits) context_module.Context {
-        return .{ .allocator = self.working.allocator(), .reader = self.reader(), .devices = .{ .sources = self.deviceReader() }, .limits = .{ .max_encoded_extent_size = self.limits.max_encoded_extent_size, .max_decoded_extent_size = self.limits.max_decoded_extent_size, .max_packed_extent_size = limits.max_packed_extent_len } };
+        return .{ .allocator = self.working.allocator(), .configuration = self.compression_configuration, .reader = self.reader(), .devices = .{ .sources = self.deviceReader() }, .limits = .{ .max_encoded_extent_size = self.limits.max_encoded_extent_size, .max_decoded_extent_size = self.limits.max_decoded_extent_size, .max_packed_extent_size = limits.max_packed_extent_len } };
     }
 
     pub fn inode(self: *const SourceArchive, nid: u64) Error!types.Inode {
