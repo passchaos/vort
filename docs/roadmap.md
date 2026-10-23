@@ -22702,3 +22702,7 @@ reuse, so production keeps the simpler independently owned plans.
   passing. The full 432-mode erofs-utils 1.9.4-g5fcb2f76 matrix passes, including
   three real large directory list/lookup cases (`directory_stream=3`) under
   32 KiB/128 KiB/1 MiB working limits.
+  Broad check and the CLI help page pass; post-rebase ReleaseFast verification
+  passes all 156 focused cases.
+  The final Debug repository suite passes 3463/3463 tests (3456 root tests
+  plus seven separate Brotli object/classifier cases).

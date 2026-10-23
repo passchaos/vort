@@ -668,3 +668,5 @@ heap budgets, and a slice iterator succeeds with a 16 KiB allocator. Three
 real stored/compressed/metabox directory images pass CLI listing, last-entry
 lookup and erofs-utils validation (`directory_stream=3`), alongside the 432
 ordinary modes, six Source file and 18 output-slice cases.
+Final Debug repository validation passes 3463/3463 tests. Broad check, wasm,
+CLI help and all 156 post-rebase focused cases also pass.
