@@ -302,8 +302,10 @@ pub fn PrefixAlphabetFor(comptime capacity: usize) type {
 pub const PrefixAlphabet = PrefixAlphabetFor(max_prefix_symbols);
 
 test "prefix alphabet capacity controls scratch footprint" {
-    try std.testing.expectEqual(@as(usize, 520), @sizeOf(PrefixAlphabetFor(256)));
-    try std.testing.expectEqual(@as(usize, 1416), @sizeOf(PrefixAlphabet));
+    // Both symbol arrays end on the native length field's alignment. The
+    // length is a physical scratch index, so its size follows the target.
+    try std.testing.expectEqual(@sizeOf([256]u16) + @sizeOf(usize), @sizeOf(PrefixAlphabetFor(256)));
+    try std.testing.expectEqual(@sizeOf([max_prefix_symbols]u16) + @sizeOf(usize), @sizeOf(PrefixAlphabet));
 }
 
 /// O(1) frequency collection used by the planner hot path. Converting to the
