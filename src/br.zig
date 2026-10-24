@@ -268,6 +268,7 @@ pub const HqResolvedOptions = hq_options.Resolved;
 pub const HqDistanceParameters = encoder_distance.Parameters;
 pub const HqDistanceFormat = encoder_distance.Format;
 pub const HqParseMode = hq_options.ParseMode;
+pub const HqCopyLengthPolicy = hq_options.CopyLengthPolicy;
 pub const EncodeMemoryProfile = total_budget.EncodeMemoryProfile;
 pub const PlannedEncodeOptions = struct {
     /// Optional cap for all live encoder-owned requested heap during this
@@ -2176,6 +2177,11 @@ test {
     _ = @import("tests/br_whole_block_transactions.zig");
     _ = @import("br/encoder/hq_parser/whole_options_tests.zig");
     _ = @import("br/encoder/hq_codec/whole_block_tests.zig");
+    _ = @import("br/encoder/hq_codec/complete_length_tests.zig");
+    _ = @import("tests/br_complete_lengths_contracts.zig");
+    _ = @import("tests/br_complete_lengths_resources.zig");
+    _ = @import("tests/br_complete_lengths_transactions.zig");
+    _ = @import("br/encoder/hq_parser/length_options_tests.zig");
     _ = @import("br/encoder/hq_tree_oracle_tests.zig");
     _ = @import("br/encoder/hq_dictionary.zig");
     _ = @import("br/encoder/hq_codec/exact.zig");
@@ -8580,6 +8586,46 @@ fn writeHqPlannedStreamMetaBlock(allocator: std.mem.Allocator, out: *std.ArrayLi
 }
 
 fn encodeHqWholeStreamAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, options: PlannedStreamChunksOptions) Error![]u8 {
+    const raw = options.hq orelse return error.InvalidBlockPlan;
+    if (raw.copy_lengths == .complete)
+        return encodeHqCompleteLengthStreamAlloc(allocator, chunks, options);
+    return encodeHqParseModeStreamAlloc(allocator, chunks, options);
+}
+
+fn encodeHqCompleteLengthStreamAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, options: PlannedStreamChunksOptions) Error![]u8 {
+    try validatePlannedStreamChunksOptions(options);
+    var effective = options;
+    effective.hq.?.block_len = try plannedStreamBlockLen(options);
+    const raw = effective.hq orelse return error.InvalidBlockPlan;
+    const resolved = try raw.resolveForFormat(effective.quality orelse return error.InvalidBlockPlan, effective.mode, if (effective.large_window) .large_window else .standard);
+    var sampled_profile: hq_options.HqProfile = .{};
+    var complete_profile: hq_options.HqProfile = .{};
+    defer if (raw.profile) |profile| {
+        profile.mergeWork(sampled_profile);
+        profile.mergeWork(complete_profile);
+        profile.recordEffective(resolved);
+    };
+    var sampled_options = effective;
+    sampled_options.hq.?.copy_lengths = .sampled;
+    sampled_options.hq.?.profile = if (raw.profile != null) &sampled_profile else null;
+    const sampled = try encodeHqParseModeStreamAlloc(allocator, chunks, sampled_options);
+    errdefer allocator.free(sampled);
+    var complete_options = effective;
+    complete_options.hq.?.profile = if (raw.profile != null) &complete_profile else null;
+    // All frames use the same allocator and per-plan search limit. Complete
+    // must succeed even when the sampled counterpart already supplies a wire.
+    const complete = try encodeHqParseModeStreamAlloc(allocator, chunks, complete_options);
+    if (sampled.len <= complete.len) {
+        allocator.free(complete);
+        if (raw.profile) |profile| profile.mergeEmitted(sampled_profile.emitted());
+        return sampled;
+    }
+    allocator.free(sampled);
+    if (raw.profile) |profile| profile.mergeEmitted(complete_profile.emitted());
+    return complete;
+}
+
+fn encodeHqParseModeStreamAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, options: PlannedStreamChunksOptions) Error![]u8 {
     const raw = options.hq orelse return error.InvalidBlockPlan;
     if (raw.parse_mode == .bounded)
         return encodeHqWholeStreamSelectedAlloc(allocator, chunks, options);

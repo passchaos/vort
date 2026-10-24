@@ -29,6 +29,7 @@ pub const Error = error{
     InvalidDictionaryTraining,
     RangeOutOfBounds,
     OutputLimitExceeded,
+    SearchLimitExceeded,
     TrailingData,
     DuplicateDictionaryId,
     InvalidDictionaryMetadata,

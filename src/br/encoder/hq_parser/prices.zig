@@ -33,6 +33,13 @@ pub const EncodingCosts = struct {
         return self.items[0..self.len];
     }
 };
+pub const Encodings = struct {
+    items: [2]types.ExactEncoding = undefined,
+    len: usize = 0,
+    pub fn slice(self: *const Encodings) []const types.ExactEncoding {
+        return self.items[0..self.len];
+    }
+};
 
 pub const Statistics = struct {
     literal_counts: [64][256]u32 = @splat(@splat(0)),
@@ -125,27 +132,47 @@ pub const Model = struct {
     /// A null semantic code is a terminal insert-only command: no distance bits
     /// are read after its inserts exhaust the meta-block.
     pub fn commandCosts(self: *const Model, insert_len: usize, copy_len: usize, semantic_code: ?usize) Error!EncodingCosts {
+        const encodings = try self.commandEncodings(insert_len, copy_len, semantic_code);
+        var result: EncodingCosts = .{};
+        for (encodings.slice()) |encoding| {
+            result.items[result.len] = .{ .encoding = encoding, .copy_len = copy_len, .cost = try self.encodingPrice(encoding, semantic_code != null) };
+            result.len += 1;
+        }
+        return result;
+    }
+    /// Enumerate exact legal representations without accessing price tables.
+    /// The parser can admit each symbol evaluation before computing its cost.
+    pub fn commandEncodings(self: *const Model, insert_len: usize, copy_len: usize, semantic_code: ?usize) Error!Encodings {
         const insert_code = length.codeForValue(insert_len, true) orelse return error.InvalidBlockPlan;
         const copy_code = length.codeForValue(copy_len, false) orelse return error.InvalidBlockPlan;
-        var result: EncodingCosts = .{};
+        var result: Encodings = .{};
         const pair = command_pairs[insert_code][copy_code];
         for (pair.symbols[0..pair.len]) |symbol| {
             const entry = command_lut.entries[symbol];
             if (semantic_code != null and entry.distance_code == 0 and semantic_code.? != 0) continue;
             var encoding: types.ExactEncoding = .{ .command_symbol = symbol, .distance_code = semantic_code orelse 0, .distance_parameters = self.distance_parameters, .format = self.format };
-            var cost: u64 = self.command_prices[symbol] + (@as(u32, entry.insert_extra_bits) + entry.copy_extra_bits) * scale;
             if (semantic_code) |code| {
                 if (entry.distance_code == -1) {
                     const encoded = if (code < 16) distance.Encoding{ .symbol = @intCast(code) } else distance.encodeWithFormat(code - 15, self.distance_parameters, self.format) orelse continue;
                     if (encoded.symbol >= self.distance_parameters.activeAlphabetSize(self.format)) continue;
                     encoding.distance_encoding = encoded;
-                    cost += self.distance_prices[encoded.symbol] + @as(u32, encoded.extra_bits) * scale;
                 }
             }
-            result.items[result.len] = .{ .encoding = encoding, .copy_len = copy_len, .cost = cost };
+            result.items[result.len] = encoding;
             result.len += 1;
         }
         return result;
+    }
+    pub fn encodingPrice(self: *const Model, encoding: types.ExactEncoding, has_copy: bool) Error!u64 {
+        if (encoding.command_symbol >= command_alphabet_size or encoding.format != self.format or !std.meta.eql(encoding.distance_parameters, self.distance_parameters)) return error.InvalidBlockPlan;
+        const entry = command_lut.entries[encoding.command_symbol];
+        var cost: u64 = self.command_prices[encoding.command_symbol] + (@as(u32, entry.insert_extra_bits) + entry.copy_extra_bits) * scale;
+        if (has_copy and entry.distance_code == -1) {
+            const encoded = encoding.distance_encoding orelse return error.InvalidBlockPlan;
+            if (encoded.symbol >= self.distance_parameters.activeAlphabetSize(self.format)) return error.InvalidBlockPlan;
+            cost += self.distance_prices[encoded.symbol] + @as(u32, encoded.extra_bits) * scale;
+        }
+        return cost;
     }
     pub fn terminal(self: *const Model, insert_len: usize) Error!EncodingCost {
         var best: ?EncodingCost = null;

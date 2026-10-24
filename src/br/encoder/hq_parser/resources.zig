@@ -16,7 +16,7 @@ pub fn multiply(a: usize, b: usize) !usize {
 }
 pub fn validate(source: types.Source, parameters: state.Parameters, model: *const prices.Model) !void {
     const resolved = parameters.resolved;
-    try (options.HqOptions{ .search_depth = resolved.search_depth, .nice_len = resolved.nice_len, .beam_width = resolved.beam_width, .iterations = resolved.iterations, .max_working_memory = resolved.max_working_memory, .block_len = resolved.block_len, .distance_parameters = resolved.distance_parameters, .parse_mode = resolved.parse_mode }).validate(resolved.quality);
+    try (options.HqOptions{ .search_depth = resolved.search_depth, .nice_len = resolved.nice_len, .beam_width = resolved.beam_width, .iterations = resolved.iterations, .max_working_memory = resolved.max_working_memory, .block_len = resolved.block_len, .distance_parameters = resolved.distance_parameters, .parse_mode = resolved.parse_mode, .copy_lengths = resolved.copy_lengths, .max_price_evaluations = resolved.max_price_evaluations }).validate(resolved.quality);
     if (resolved.beam_width == 0 or resolved.iterations == 0 or source.input.len > resolved.block_len or source.format != resolved.format)
         return error.InvalidBlockPlan;
     try source.validate();

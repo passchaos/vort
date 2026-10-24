@@ -11,8 +11,11 @@ const rep = @import("rep.zig");
 const resources = @import("resources.zig");
 const extension = @import("extension.zig");
 const command_storage = @import("command_storage.zig");
+const PriceBudget = @import("price_budget.zig").PriceBudget;
 
 pub fn run(allocator: std.mem.Allocator, budget: *state.Budget, source: types.Source, parameters: state.Parameters, model: *const prices.Model, provider: ?*const dictionary.Provider) !state.Plan {
+    var price_budget: PriceBudget = .{ .limit = parameters.resolved.max_price_evaluations };
+    defer if (parameters.profile) |profile| profile.recordMaxPlanPrice(price_budget.admitted);
     var builder = command_storage.Builder.init(allocator);
     defer builder.deinit();
     var result = try resources.allocatePlan(allocator, source, parameters, provider != null);
@@ -33,7 +36,10 @@ pub fn run(allocator: std.mem.Allocator, budget: *state.Budget, source: types.So
     const node_count = try resources.multiply(try resources.add(window, 1), width);
     const nodes = try allocator.alloc(state.Node, node_count);
     defer allocator.free(nodes);
-    if (parameters.profile) |profile| profile.recordParseMode(parameters.resolved.parse_mode, window);
+    if (parameters.profile) |profile| {
+        profile.recordParseMode(parameters.resolved.parse_mode, window);
+        profile.recordCopyLengthPolicy(parameters.resolved.copy_lengths, window);
+    }
     const spill = try allocator.create(state.Spill);
     defer allocator.destroy(spill);
     const memos = try allocator.alloc(state.MatchMemo, width * 16);
@@ -57,7 +63,7 @@ pub fn run(allocator: std.mem.Allocator, budget: *state.Budget, source: types.So
         @memset(nodes[0 .. (goal + 1) * width], .{});
         spill.* = .{};
         nodes[0] = .{ .cost = 0, .recent = recent, .pending_insert = pending };
-        var edge_context: EdgeContext = .{ .nodes = nodes, .width = width, .base = base, .goal = goal, .source = source, .parameters = parameters, .model = model, .literal_prefix = literal_prefix, .spill = spill };
+        var edge_context: EdgeContext = .{ .nodes = nodes, .width = width, .base = base, .goal = goal, .source = source, .parameters = parameters, .model = model, .literal_prefix = literal_prefix, .spill = spill, .price_budget = &price_budget };
         for (0..goal) |position| {
             const global = base + position;
             try matcher.advanceTo(global);
@@ -198,6 +204,7 @@ const EdgeContext = struct {
     model: *const prices.Model,
     literal_prefix: []const u64,
     spill: *state.Spill,
+    price_budget: *PriceBudget,
 };
 fn appendNode(result: *state.Plan, builder: *command_storage.Builder, nodes: []const state.Node, width: usize, base: usize, node: state.Node) !void {
     const previous = nodes[@as(usize, node.previous_position) * width + node.previous_slot];
@@ -222,6 +229,12 @@ fn ordinaryEdges(context: *EdgeContext, position: usize, slot: usize, node: stat
 fn lengthEdges(context: *EdgeContext, position: usize, slot: usize, node: state.Node, maximum: usize, kind: command_plan.Source, address: usize, choices: *const rep.Choices) !void {
     if (maximum < 2) return;
     for (choices.slice()) |choice| {
+        if (context.parameters.resolved.copy_lengths == .complete) {
+            var copy_len: usize = 2;
+            while (copy_len <= maximum) : (copy_len += 1)
+                try emitEdge(context, position, slot, node, copy_len, copy_len, kind, address, choice);
+            continue;
+        }
         try emitEdge(context, position, slot, node, maximum, maximum, kind, address, choice);
         const exhaustive: usize = if (context.parameters.resolved.quality == 10) 32 else 64;
         var copy_len: usize = 2;
@@ -240,14 +253,17 @@ fn lengthEdges(context: *EdgeContext, position: usize, slot: usize, node: state.
 fn emitEdge(context: *EdgeContext, position: usize, slot: usize, node: state.Node, copy_len: usize, output_len: usize, kind: command_plan.Source, address: usize, distance_choice: rep.Choice) !void {
     const target = std.math.add(usize, position, output_len) catch return error.IntegerOverflow;
     if (output_len == 0 or target > context.source.input.len - context.base) return error.InvalidBlockPlan;
-    const costs = try context.model.commandCosts(node.pending_insert, copy_len, distance_choice.code);
-    for (costs.slice()) |cost| {
+    const encodings = try context.model.commandEncodings(node.pending_insert, copy_len, distance_choice.code);
+    for (encodings.slice()) |encoding| {
+        try context.price_budget.admit();
         if (context.parameters.profile) |profile| {
             profile.add("transitions", 1);
             profile.add("price_evaluations", 1);
+            profile.recordCopyLengthConsidered(copy_len);
         }
+        const price = try context.model.encodingPrice(encoding, true);
         const candidate: state.Node = .{
-            .cost = try plus(node.cost, cost.cost),
+            .cost = try plus(node.cost, price),
             .recent = distance_choice.cache,
             .previous_position = @intCast(position),
             .previous_slot = @intCast(slot),
@@ -256,7 +272,7 @@ fn emitEdge(context: *EdgeContext, position: usize, slot: usize, node: state.Nod
             .physical_distance = distance_choice.distance,
             .dictionary_address = address,
             .source = kind,
-            .encoding = cost.encoding,
+            .encoding = encoding,
         };
         if (target <= context.goal) {
             state.insert(context.nodes[target * context.width ..][0..context.width], candidate);

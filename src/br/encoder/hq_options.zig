@@ -1,9 +1,10 @@
 const std = @import("std");
 const distance = @import("distance.zig");
 
-pub const Error = error{InvalidBlockPlan};
+pub const Error = error{ InvalidBlockPlan, SearchLimitExceeded };
 pub const max_block_len: usize = 1 << 24;
 pub const ParseMode = enum { bounded, whole_block };
+pub const CopyLengthPolicy = enum { sampled, complete };
 
 /// Concrete settings consumed by one HQ operation. Native beam width and
 /// extra iterations are explicit Vort controls, not upstream preset parity.
@@ -18,6 +19,8 @@ pub const Resolved = struct {
     distance_parameters: distance.Parameters,
     format: distance.Format = .standard,
     parse_mode: ParseMode = .bounded,
+    copy_lengths: CopyLengthPolicy = .sampled,
+    max_price_evaluations: ?u64 = null,
 };
 
 /// Caller-owned work and published-output instrumentation. Work survives a
@@ -37,6 +40,13 @@ pub const HqProfile = struct {
     passes: u64 = 0,
     bounded_passes: u64 = 0,
     whole_block_passes: u64 = 0,
+    sampled_length_passes: u64 = 0,
+    complete_length_passes: u64 = 0,
+    /// Largest copy length whose command edge was actually price-evaluated.
+    max_copy_length_considered: usize = 0,
+    /// Maximum admitted command-edge price evaluations in any single plan.
+    /// The cumulative price_evaluations field may span several guard/refine plans.
+    max_plan_price_evaluations: u64 = 0,
     /// Largest input-position span actually visited by one parser pass.
     max_parse_positions: usize = 0,
     refinement_passes: u64 = 0,
@@ -83,6 +93,22 @@ pub const HqProfile = struct {
         }
         self.max_parse_positions = @max(self.max_parse_positions, positions);
     }
+    /// Count one actual nonempty plan in its selected length policy. The total
+    /// passes counter remains separate and is not incremented here.
+    pub fn recordCopyLengthPolicy(self: *HqProfile, policy: CopyLengthPolicy, positions: usize) void {
+        if (positions == 0) return;
+        switch (policy) {
+            .sampled => self.sampled_length_passes +|= 1,
+            .complete => self.complete_length_passes +|= 1,
+        }
+    }
+    /// Call after the price budget allows evaluation, not during enumeration.
+    pub fn recordCopyLengthConsidered(self: *HqProfile, length: usize) void {
+        self.max_copy_length_considered = @max(self.max_copy_length_considered, length);
+    }
+    pub fn recordMaxPlanPrice(self: *HqProfile, admitted: u64) void {
+        self.max_plan_price_evaluations = @max(self.max_plan_price_evaluations, admitted);
+    }
     pub fn recordEffective(self: *HqProfile, resolved: Resolved) void {
         self.effective = resolved;
     }
@@ -100,10 +126,12 @@ pub const HqProfile = struct {
         self.emitted_max_distance = @max(self.emitted_max_distance, other.emitted_max_distance);
     }
     pub fn mergeWork(self: *HqProfile, other: HqProfile) void {
-        inline for (.{ "tree_nodes", "byte_comparisons", "match_probes", "history_seed_positions", "short_hash_probes", "stitch_positions", "normalizations", "indexed_positions", "states", "transitions", "price_evaluations", "passes", "bounded_passes", "whole_block_passes", "refinement_passes", "static_probes", "compound_probes", "static_candidates", "compound_candidates" }) |field|
+        inline for (.{ "tree_nodes", "byte_comparisons", "match_probes", "history_seed_positions", "short_hash_probes", "stitch_positions", "normalizations", "indexed_positions", "states", "transitions", "price_evaluations", "passes", "bounded_passes", "whole_block_passes", "sampled_length_passes", "complete_length_passes", "refinement_passes", "static_probes", "compound_probes", "static_candidates", "compound_candidates" }) |field|
             @field(self, field) +|= @field(other, field);
         self.recordPeak(other.peak_working_memory);
         self.max_parse_positions = @max(self.max_parse_positions, other.max_parse_positions);
+        self.max_copy_length_considered = @max(self.max_copy_length_considered, other.max_copy_length_considered);
+        self.max_plan_price_evaluations = @max(self.max_plan_price_evaluations, other.max_plan_price_evaluations);
         if (other.effective) |effective| self.effective = effective;
     }
     pub fn merge(self: *HqProfile, other: HqProfile) void {
@@ -126,6 +154,13 @@ pub const HqOptions = struct {
     distance_parameters: ?distance.Parameters = null,
     profile: ?*HqProfile = null,
     parse_mode: ParseMode = .bounded,
+    copy_lengths: CopyLengthPolicy = .sampled,
+    /// Per actual single parser plan, counts admitted exact copy-command edge
+    /// price evaluations. Literal/tree/IO work and terminal auxiliary prices
+    /// are excluded. This is not a whole-operation
+    /// limit: separate refinement/guard plans can each consume this budget.
+    /// Zero is valid and must fail before the first candidate price is computed.
+    max_price_evaluations: ?u64 = null,
 
     pub fn validate(self: HqOptions, quality: u8) Error!void {
         if ((quality != 10 and quality != 11) or self.search_depth == 0 or self.search_depth > 65536 or
@@ -148,10 +183,13 @@ pub const HqOptions = struct {
             .distance_parameters = self.distance_parameters orelse if (mode == .font) distance.Parameters.init(1, 6) else distance.Parameters.init(0, 0),
             .format = format,
             .parse_mode = self.parse_mode,
+            .copy_lengths = self.copy_lengths,
+            .max_price_evaluations = self.max_price_evaluations,
         };
     }
 };
 
 test {
     _ = @import("hq_parser/whole_options_tests.zig");
+    _ = @import("hq_parser/length_options_tests.zig");
 }

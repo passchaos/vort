@@ -16,6 +16,14 @@ pub fn candidate(comptime Codec: type, source: types.Source, resolved: options.R
 }
 
 fn candidateInternal(comptime Codec: type, a: std.mem.Allocator, source: types.Source, resolved: options.Resolved, profile: ?*options.HqProfile, previous: [2]u8, state: anytype, context: Codec.Context) Codec.Error!Codec.Artifact {
+    if (resolved.copy_lengths == .complete)
+        return completeLengthCandidate(Codec, a, source, resolved, profile, previous, state, context);
+    return candidateLengthPolicy(Codec, a, source, resolved, profile, previous, state, context);
+}
+
+/// Run the original parse-mode pipeline once for the admitted length policy.
+/// Guard recursion only changes one policy axis and never re-enters this guard.
+fn candidateLengthPolicy(comptime Codec: type, a: std.mem.Allocator, source: types.Source, resolved: options.Resolved, profile: ?*options.HqProfile, previous: [2]u8, state: anytype, context: Codec.Context) Codec.Error!Codec.Artifact {
     if (resolved.parse_mode == .whole_block)
         return wholeBlockCandidate(Codec, a, source, resolved, profile, previous, state, context);
     const working_model = try a.create(Model);
@@ -38,13 +46,29 @@ fn candidateInternal(comptime Codec: type, a: std.mem.Allocator, source: types.S
     return best orelse error.InvalidBlockPlan;
 }
 
+fn completeLengthCandidate(comptime Codec: type, a: std.mem.Allocator, source: types.Source, resolved: options.Resolved, profile: ?*options.HqProfile, previous: [2]u8, state: anytype, context: Codec.Context) Codec.Error!Codec.Artifact {
+    var sampled = resolved;
+    sampled.copy_lengths = .sampled;
+    var baseline = try candidateLengthPolicy(Codec, a, source, sampled, profile, previous, state, context);
+    errdefer baseline.deinit(a);
+    // Keep the original sampled refinement trajectory, including parse mode.
+    // Its valid output cannot excuse failure of a requested complete parse.
+    var complete = try candidateLengthPolicy(Codec, a, source, resolved, profile, previous, state, context);
+    if (complete.bit_count < baseline.bit_count) {
+        baseline.deinit(a);
+        return complete;
+    }
+    complete.deinit(a);
+    return baseline;
+}
+
 /// Preserve the complete bounded refinement sequence as a wire candidate.
 /// Paired passes alone would change its later entering model after a whole
 /// pass wins, so they cannot provide the original bounded-output guarantee.
 fn wholeBlockCandidate(comptime Codec: type, a: std.mem.Allocator, source: types.Source, resolved: options.Resolved, profile: ?*options.HqProfile, previous: [2]u8, state: anytype, context: Codec.Context) Codec.Error!Codec.Artifact {
     var bounded = resolved;
     bounded.parse_mode = .bounded;
-    var best = try candidateInternal(Codec, a, source, bounded, profile, previous, state, context);
+    var best = try candidateLengthPolicy(Codec, a, source, bounded, profile, previous, state, context);
     errdefer best.deinit(a);
     const working_model = try a.create(Model);
     defer a.destroy(working_model);

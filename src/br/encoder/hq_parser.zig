@@ -37,6 +37,10 @@ pub fn requiredWorkingMemory(source: Source, parameters: Parameters, model: *con
 /// spill comparisons. Whole-block mode evaluates every input position in one
 /// finite beam and prices the terminal command only at the meta-block end.
 /// Finite beams do not promise globally optimal cache-state segmentation.
+/// Complete copy lengths enumerate every ordinary/compound prefix; sampled is
+/// the unchanged default. max_price_evaluations bounds admitted exact copy-
+/// command symbol edges per plan, excluding literal/matching/I/O and auxiliary
+/// terminal/continuation prices. Exhaustion is a hard SearchLimitExceeded.
 pub fn planAlloc(allocator: std.mem.Allocator, source: Source, parameters: Parameters, model: *const Model, provider: ?*const dictionary.Provider) !Plan {
     const required = try requiredWorkingMemory(source, parameters, model, provider);
     if (parameters.profile) |profile| profile.recordEffective(parameters.resolved);
