@@ -30,6 +30,7 @@ pub const Encoder = struct {
         check: writer.Check = .crc64,
         block_size: usize = 1024 * 1024,
         dictionary_size: usize = 4096,
+        chunk_size: usize = 65536,
         parser: writer.Parser = .greedy,
         properties: writer.Properties = .{},
         match_options: ?writer.MatchOptions = null,
@@ -41,7 +42,7 @@ pub const Encoder = struct {
 
         pub fn fromPreset(level: u32, extreme: bool) Error!Options {
             const preset = try writer.EncodeOptions.fromPreset(level, extreme);
-            return .{ .dictionary_size = preset.dictionary_size, .parser = preset.parser, .properties = preset.properties, .match_options = preset.match_options };
+            return .{ .dictionary_size = preset.dictionary_size, .chunk_size = preset.chunk_size, .parser = preset.parser, .properties = preset.properties, .match_options = preset.match_options };
         }
         pub fn validate(self: Options) Error!void {
             try validateOptions(self);
@@ -54,6 +55,7 @@ pub const Encoder = struct {
                 .check = self.check,
                 .block_size = self.block_size,
                 .dictionary_size = self.dictionary_size,
+                .chunk_size = self.chunk_size,
                 .parser = self.parser,
                 .properties = self.properties,
                 .match_options = self.match_options,
@@ -190,6 +192,9 @@ pub const Encoder = struct {
         }
         if ((self.flush_requested or self.finishing) and input.len != 0)
             return error.TrailingData;
+        if (self.finishing) if (self.expected_input_len) |expected| {
+            if (self.current_input != expected) return error.SizeMismatch;
+        };
         self.options.recordEffectiveSettings();
 
         var input_read: usize = 0;
@@ -198,13 +203,13 @@ pub const Encoder = struct {
             if (self.pending_offset != self.pending.items.len) {
                 const remaining = self.pending.items[self.pending_offset..];
                 const take = @min(output.len - output_written, remaining.len);
+                const next_current_output = std.math.add(usize, self.current_output, take) catch return error.IntegerOverflow;
+                const next_total_output = std.math.add(usize, self.total_output, take) catch return error.IntegerOverflow;
                 @memcpy(output[output_written..][0..take], remaining[0..take]);
                 self.pending_offset += take;
                 output_written += take;
-                self.current_output = std.math.add(usize, self.current_output, take) catch
-                    return error.IntegerOverflow;
-                self.total_output = std.math.add(usize, self.total_output, take) catch
-                    return error.IntegerOverflow;
+                self.current_output = next_current_output;
+                self.total_output = next_total_output;
                 if (self.pending_offset != self.pending.items.len)
                     return result(input_read, output_written, .need_output);
                 self.pending.clearRetainingCapacity();
@@ -220,19 +225,26 @@ pub const Encoder = struct {
                 continue;
             }
 
+            // A complete block can remain buffered after a recoverable output
+            // limit/allocation error. Retry it even when no new input is offered.
+            if (self.plain.items.len == self.options.block_size) {
+                try self.emitBlock();
+                continue;
+            }
+
             if (input_read < input.len) {
                 const room = self.options.block_size - self.plain.items.len;
                 const take = @min(room, input.len - input_read);
                 const next_input = std.math.add(usize, self.current_input, take) catch
                     return error.IntegerOverflow;
+                const next_total_input = std.math.add(usize, self.total_input, take) catch return error.IntegerOverflow;
                 if (next_input > self.options.max_input_len) return error.OutputLimitExceeded;
                 if (self.expected_input_len) |expected|
                     if (next_input > expected) return error.SizeMismatch;
                 try self.plain.appendSlice(self.allocator, input[input_read..][0..take]);
                 input_read += take;
                 self.current_input = next_input;
-                self.total_input = std.math.add(usize, self.total_input, take) catch
-                    return error.IntegerOverflow;
+                self.total_input = next_total_input;
                 if (self.plain.items.len == self.options.block_size) {
                     try self.emitBlock();
                     continue;
@@ -266,9 +278,9 @@ pub const Encoder = struct {
                     self.footer_written = true;
                     continue;
                 }
+                const next_stream_count = std.math.add(usize, self.stream_count, 1) catch return error.IntegerOverflow;
                 self.done = true;
-                self.stream_count = std.math.add(usize, self.stream_count, 1) catch
-                    return error.IntegerOverflow;
+                self.stream_count = next_stream_count;
                 return result(input_read, output_written, .done);
             }
 

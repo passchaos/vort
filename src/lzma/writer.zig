@@ -181,8 +181,9 @@ pub fn appendStreamHeader(
     input_len: ?usize,
 ) !void {
     try validateOptions(options);
+    const dictionary_size = try advertisedDictionarySize(options);
     try output.append(allocator, try encoder.propertyByte(options.properties));
-    try appendU32(allocator, output, advertisedDictionarySize(options));
+    try appendU32(allocator, output, dictionary_size);
     try appendU64(allocator, output, switch (options.size_mode) {
         .known => std.math.cast(u64, input_len orelse return error.InvalidBlockPlan) orelse
             return error.IntegerOverflow,
@@ -199,15 +200,15 @@ fn effectiveMatchOptions(mode: Mode, dictionary_size: u32, requested: ?MatchOpti
 /// dictionary shapes. New configurations advertise the next shape while
 /// retaining the requested actual window. Existing narrow/null configurations
 /// retain their exact historical headers, including noncanonical sizes.
-fn advertisedDictionarySize(options: EncodeOptions) u32 {
+fn advertisedDictionarySize(options: EncodeOptions) Error!u32 {
     const requested = options.dictionary_size;
     if (requested <= std.math.maxInt(u16) and options.match_options == null and
         options.mode != .fast and options.mode != .normal) return requested;
     var power: u32 = 4096;
     while (power < requested) {
-        const middle = power + power / 2;
+        const middle = std.math.add(u32, power, power / 2) catch return error.IntegerOverflow;
         if (middle >= requested) return middle;
-        power *= 2;
+        power = std.math.mul(u32, power, 2) catch return error.IntegerOverflow;
     }
     return power;
 }

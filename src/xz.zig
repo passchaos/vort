@@ -39,6 +39,9 @@ pub const RawLzma2EncodeOptions = lzma2_writer.EncodeOptions;
 pub const Parser = writer.Parser;
 pub const Filter = writer.Filter;
 pub const max_encode_dictionary_size = lzma2_writer.max_dictionary_size;
+pub const max_encode_chunk_size = lzma2_writer.max_compressed_plain_len;
+pub const max_compressed_payload_size = lzma2_writer.max_compressed_payload_len;
+pub const max_stored_chunk_size = lzma2_writer.max_stored_chunk_len;
 pub const encodeRawLzma2Append = lzma2_writer.appendCompressedPayload;
 pub const encodeRawLzma2AppendWithOptions = lzma2_writer.appendCompressedPayloadWithAdvancedOptions;
 pub const encodeRawLzma2StoredAppend = lzma2_writer.appendStoredPayload;
@@ -66,6 +69,9 @@ pub const decodedSizeConcatenatedLimited = container.decodedSizeConcatenatedLimi
 
 test {
     _ = @import("xz/encode_controls_tests.zig");
+    _ = @import("xz/large_chunk_contract_tests.zig");
+    _ = @import("xz/encoder/large_chunk_tests.zig");
+    _ = @import("xz/large_chunk_stream_tests.zig");
     _ = @import("xz/one_shot/contracts_tests.zig");
     _ = @import("xz/one_shot/resources_tests.zig");
     _ = container;

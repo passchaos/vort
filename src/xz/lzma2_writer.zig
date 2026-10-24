@@ -4,6 +4,9 @@ const lzma_encoder = @import("../lzma/encoder.zig");
 const chunk_encoder = @import("encoder/chunk.zig");
 
 pub const max_uncompressed_chunk: usize = 65_536;
+pub const max_stored_chunk_len = chunk_encoder.max_stored_chunk_len;
+pub const max_compressed_payload_len = chunk_encoder.max_compressed_payload_len;
+pub const max_compressed_plain_len = chunk_encoder.max_compressed_plain_len;
 pub const lzma_property: u8 = 0x5d;
 pub const dictionary_property: u8 = 0;
 pub const dictionary_size: usize = 4096;
@@ -20,14 +23,19 @@ pub fn dictionaryProperty(requested_size: usize) core.Error!u8 {
     if (requested_size < dictionary_size or requested_size > max_dictionary_size)
         return error.InvalidBlockPlan;
     var property: u8 = 0;
-    while (property <= 28) : (property += 1)
-        if (requested_size <= dictionarySize(property)) return property;
+    while (property <= 37) : (property += 1)
+        if (requested_size <= try dictionarySizeChecked(property)) return property;
     unreachable;
 }
 
+fn dictionarySizeChecked(property: u8) core.Error!usize {
+    if (property > 37) return error.InvalidBlockPlan;
+    const shift: u6 = @intCast(property / 2 + 11);
+    const size: u64 = @as(u64, 2 | (property & 1)) << shift;
+    return std.math.cast(usize, size) orelse error.IntegerOverflow;
+}
 fn dictionarySize(property: u8) usize {
-    std.debug.assert(property <= 28);
-    return @as(usize, 2 | (property & 1)) << @intCast(property / 2 + 11);
+    return dictionarySizeChecked(property) catch unreachable;
 }
 
 pub fn storedPayloadSize(input_len: usize) core.Error!usize {
@@ -75,12 +83,7 @@ pub fn appendStoredPayload(
 }
 
 fn inputOverlapsOutputAllocation(input: []const u8, out: *const std.ArrayList(u8)) core.Error!bool {
-    if (input.len == 0 or out.capacity == 0) return false;
-    const input_start = @intFromPtr(input.ptr);
-    const output_start = @intFromPtr(out.items.ptr);
-    const input_end = std.math.add(usize, input_start, input.len) catch return error.IntegerOverflow;
-    const output_end = std.math.add(usize, output_start, out.capacity) catch return error.IntegerOverflow;
-    return input_start < output_end and output_start < input_end;
+    return chunk_encoder.inputOverlapsOutputAllocation(input, out);
 }
 
 /// Append a raw LZMA2 payload whose chunks retain the configured preceding
@@ -143,7 +146,7 @@ pub fn appendCompressedPayloadWithAdvancedOptions(
     var state = try chunk_encoder.State.init(options);
     var offset: usize = 0;
     while (offset < input.len) {
-        const chunk_len = @min(max_uncompressed_chunk, input.len - offset);
+        const chunk_len = @min(options.chunk_size, input.len - offset);
         const dictionary_start = offset - @min(offset, options.dictionary_size);
         const plan: ?lzma_encoder.WideStreamPlan = if (wide_planner) |*planner| switch (options.parser) {
             .greedy => try planner.planChunk(input, offset, offset + chunk_len),
@@ -200,7 +203,9 @@ test "LZMA2 dictionary properties round requested sizes upward" {
         .{ .requested = 8 * 1024 * 1024, .property = 22, .advertised = 8 * 1024 * 1024 },
         .{ .requested = 16 * 1024 * 1024, .property = 24, .advertised = 16 * 1024 * 1024 },
         .{ .requested = 32 * 1024 * 1024, .property = 26, .advertised = 32 * 1024 * 1024 },
-        .{ .requested = max_dictionary_size, .property = 28, .advertised = 64 * 1024 * 1024 },
+        .{ .requested = 64 * 1024 * 1024, .property = 28, .advertised = 64 * 1024 * 1024 },
+        .{ .requested = 1024 * 1024 * 1024, .property = 36, .advertised = 1024 * 1024 * 1024 },
+        .{ .requested = max_dictionary_size, .property = 37, .advertised = max_dictionary_size },
     };
     for (cases) |case| {
         try std.testing.expectEqual(case.property, try dictionaryProperty(case.requested));

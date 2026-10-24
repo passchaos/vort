@@ -4,6 +4,7 @@ const lz77 = @import("../lz77.zig");
 const encoder = @import("encoder.zig");
 const range_encoder = @import("range_encoder.zig");
 const wide_match = @import("wide_match.zig");
+const settings = @import("encode_options.zig");
 
 pub const Error = core.Error || encoder.Error || std.mem.Allocator.Error;
 pub const min_destination_size: usize = 6;
@@ -41,6 +42,8 @@ pub fn encodeAlignedAlloc(
     options: encoder.EncodeOptions,
 ) Error!EncodedPrefix {
     if (alignment == 0) return error.InvalidLzmaOptions;
+    if (options.dictionary_size < 4096 or options.dictionary_size > settings.max_dictionary_size)
+        return error.InvalidLzmaOptions;
     if (capacity < min_destination_size) return error.OutputTooSmall;
     var output: std.ArrayList(u8) = .empty;
     errdefer output.deinit(allocator);

@@ -134,7 +134,7 @@ pub fn encodeAlignedDestSizeInto(
 pub fn validateOptions(options: Options) Error!u8 {
     const property = try encoder.propertyByte(options.properties);
     if (options.dictionary_size < 4096 or
-        options.dictionary_size > encoder.max_dictionary_size)
+        options.dictionary_size > settings.max_dictionary_size)
         return error.InvalidLzmaOptions;
     try encoder.validateOptions(.{ .properties = options.properties, .dictionary_size = options.dictionary_size, .mode = options.mode, .end_marker = false, .match_options = options.match_options });
     return property;

@@ -16,6 +16,10 @@ pub fn prefix(allocator: std.mem.Allocator, model: anytype, range: *range_encode
     var shadow_range = range.*;
     shadow_range.output = &produced;
     shadow_range.allocator = allocator;
+    if (range.byte_limit) |limit| {
+        shadow_range.byte_limit = std.math.sub(usize, limit, range.output.items.len) catch
+            return error.CompressedPayloadLimitExceeded;
+    }
     var delta: @TypeOf(stats.*) = .{ .input_bytes = plan.consumed, .output_bytes = 0, .literals = 0, .matches = 0, .matched_bytes = 0, .repeat_matches = 0, .new_distance_matches = 0 };
     for (plan.tokens) |token| switch (token) {
         .literal => delta.literals += 1,
@@ -27,11 +31,14 @@ pub fn prefix(allocator: std.mem.Allocator, model: anytype, range: *range_encode
     const profile = if (options.match_options) |match| match.profile else null;
     const consumed = try shadow_model.encodeTokensWithDictionaryProfiled(&shadow_range, input[0..plan.consumed], history, plan.tokens, stream_start, &delta, profile);
     if (consumed != plan.consumed or !std.meta.eql(types.State.fromModel(&shadow_model), plan.final_state)) return error.InvalidBlockPlan;
+    if (shadow_range.byte_limit) |limit| {
+        if (try shadow_range.finishedSize() > limit) return error.CompressedPayloadLimitExceeded;
+    }
     delta.output_bytes = produced.items.len;
     var updated_stats = stats.*;
     inline for (.{ "input_bytes", "output_bytes", "literals", "matches", "matched_bytes", "repeat_matches", "new_distance_matches" }) |field|
         @field(updated_stats, field) = std.math.add(usize, @field(stats, field), @field(delta, field)) catch return error.IntegerOverflow;
-    try range.output.ensureUnusedCapacity(range.allocator, produced.items.len);
+    try range.ensureOutputCapacity(produced.items.len);
     range.output.appendSliceAssumeCapacity(produced.items);
     model.* = shadow_model;
     range.low = shadow_range.low;

@@ -3,7 +3,11 @@
 const std = @import("std");
 
 pub const Error = error{InvalidLzmaOptions};
-pub const max_dictionary_size: usize = 64 * 1024 * 1024;
+/// Maximum custom encoder dictionary, matching liblzma's 1.5 GiB limit.
+/// Presets retain their independently specified dictionary sizes below.
+pub const max_dictionary_size: usize = 1610612736;
+/// The LZMA2 plain-size field permits at most 2 MiB per compressed chunk.
+pub const max_lzma2_chunk_plain: usize = 2 * 1024 * 1024;
 pub const max_match_len: u16 = 273;
 
 pub const Properties = struct {

@@ -15,7 +15,7 @@ const lazy_text_section = switch (builtin.object_format) {
     else => ".text",
 };
 
-pub const Error = lz77.Error || error{ InvalidLzmaOptions, WorkingMemoryLimitExceeded };
+pub const Error = lz77.Error || error{ InvalidLzmaOptions, WorkingMemoryLimitExceeded, CompressedPayloadLimitExceeded };
 pub const Properties = settings.Properties;
 pub const Mode = settings.Mode;
 pub const MatchOptions = settings.MatchOptions;
@@ -77,7 +77,7 @@ pub const EncodeStats = struct {
     new_distance_matches: usize,
 };
 
-pub const max_dictionary_size: usize = wide_match.max_window_len;
+pub const max_dictionary_size: usize = settings.max_dictionary_size;
 pub const WideStreamPlanner = wide_match.StreamPlanner;
 pub const WideStreamPlan = wide_match.StreamPlan;
 
@@ -425,6 +425,7 @@ pub fn encodeChunkAppendWithDictionaryStats(
         options,
         null,
         null,
+        null,
     );
 }
 
@@ -447,6 +448,7 @@ pub fn encodeChunkAppendWithWidePlan(
         stream_start,
         options,
         wide_plan,
+        null,
         null,
     )).output_bytes;
 }
@@ -473,6 +475,37 @@ pub fn encodeChunkAppendWithModel(
         options,
         wide_plan,
         model,
+        null,
+    )).output_bytes;
+}
+
+/// Bound a candidate compressed payload, including its range-coder flush.
+/// Only CompressedPayloadLimitExceeded means that a stored chunk may be used;
+/// allocation and matcher budget errors propagate. Caller output and model
+/// are committed together only after the candidate is completely encoded.
+pub fn encodeChunkAppendWithModelLimit(
+    allocator: std.mem.Allocator,
+    output: *std.ArrayList(u8),
+    input: []const u8,
+    dictionary: []const u8,
+    stream_start: usize,
+    options: EncodeOptions,
+    wide_plan: ?WideStreamPlan,
+    model: *Model,
+    max_payload_size: usize,
+) !usize {
+    if (model.dictionary_size != options.dictionary_size or
+        !std.meta.eql(model.properties, options.properties)) return error.InvalidLzmaOptions;
+    return (try encodeChunkAppendWithDictionaryStatsAndPlan(
+        allocator,
+        output,
+        input,
+        dictionary,
+        stream_start,
+        options,
+        wide_plan,
+        model,
+        max_payload_size,
     )).output_bytes;
 }
 
@@ -485,6 +518,7 @@ fn encodeChunkAppendWithDictionaryStatsAndPlan(
     options: EncodeOptions,
     prepared_wide_plan: ?WideStreamPlan,
     external_model: ?*Model,
+    max_payload_size: ?usize,
 ) !EncodeStats {
     try validateOptions(options);
     if (dictionary.len > stream_start) return error.InvalidLzmaOptions;
@@ -493,6 +527,7 @@ fn encodeChunkAppendWithDictionaryStatsAndPlan(
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(allocator);
     var range = range_encoder.Encoder.init(allocator, &encoded);
+    range.byte_limit = max_payload_size;
     var local_model = if (external_model) |model| model.* else Model{
         .properties = options.properties,
         .dictionary_size = options.dictionary_size,

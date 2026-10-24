@@ -33,22 +33,54 @@ pub const Encoder = struct {
     pub const Options = struct {
         mode: Mode = .compressed,
         dictionary_size: usize = writer.dictionary_size,
+        /// Compressed input group size. Stored mode retains 64KiB packets.
+        chunk_size: usize = writer.max_uncompressed_chunk,
         parser: writer.Parser = .greedy,
         properties: writer.Properties = .{},
         match_options: ?writer.MatchOptions = null,
         max_input_len: usize = std.math.maxInt(usize),
-        max_pending_output_len: usize = writer.max_uncompressed_chunk + 16,
+        /// Null derives a complete group's bound; the default 64KiB group keeps
+        /// the historical 65552-byte limit. An explicit cap is never raised.
+        max_pending_output_len: ?usize = null,
 
         pub fn fromPreset(level: u32, extreme: bool) Error!Options {
             const preset = try writer.EncodeOptions.fromPreset(level, extreme);
-            return .{ .dictionary_size = preset.dictionary_size, .parser = preset.parser, .properties = preset.properties, .match_options = preset.match_options };
+            return .{ .dictionary_size = preset.dictionary_size, .chunk_size = preset.chunk_size, .parser = preset.parser, .properties = preset.properties, .match_options = preset.match_options };
         }
         pub fn validate(self: Options) Error!void {
             try validateOptions(self);
         }
         pub fn chunkOptions(self: Options) chunk_encoder.Options {
-            return .{ .dictionary_size = self.dictionary_size, .parser = self.parser, .properties = self.properties, .match_options = self.match_options };
+            return .{ .dictionary_size = self.dictionary_size, .chunk_size = self.chunk_size, .parser = self.parser, .properties = self.properties, .match_options = self.match_options };
         }
+        pub fn inputGroupSize(self: Options) usize {
+            return if (self.mode == .compressed) self.chunk_size else writer.max_uncompressed_chunk;
+        }
+        pub fn effectiveMaxPendingOutputLen(self: Options) Error!usize {
+            if (self.max_pending_output_len) |explicit| return explicit;
+            const stored_size = (try writer.storedPayloadSize(self.inputGroupSize())) - 1;
+            return std.math.add(usize, stored_size, 13) catch error.IntegerOverflow;
+        }
+    };
+
+    pub const Snapshot = struct {
+        input_read: usize,
+        output_written: usize,
+        encoded_input: usize,
+        buffered_input: usize,
+        buffered_history: usize,
+        pending_output: usize,
+        retained_input_capacity: usize,
+        retained_history_capacity: usize,
+        retained_candidate_capacity: usize,
+        retained_output_capacity: usize,
+        configured_chunk_size: usize,
+        input_group_size: usize,
+        model_valid: bool,
+        properties_initialized: bool,
+        finishing: bool,
+        terminator_written: bool,
+        done: bool,
     };
 
     pub fn init(allocator: std.mem.Allocator, options: Options) Error!Encoder {
@@ -101,6 +133,31 @@ pub const Encoder = struct {
         if (!self.done) self.finishing = true;
     }
 
+    /// Accepted input and delivered output are distinct from committed groups.
+    /// On an emission error the buffered input is retained: restoring a limit
+    /// and retrying with empty input continues without accepting it twice.
+    pub fn snapshot(self: *const Encoder) Snapshot {
+        return .{
+            .input_read = self.total_input,
+            .output_written = self.total_output,
+            .encoded_input = self.encoded_input,
+            .buffered_input = self.input.items.len,
+            .buffered_history = self.history.items.len,
+            .pending_output = self.pending.items.len - self.pending_offset,
+            .retained_input_capacity = self.input.capacity,
+            .retained_history_capacity = self.history.capacity,
+            .retained_candidate_capacity = self.candidate.capacity,
+            .retained_output_capacity = self.pending.capacity,
+            .configured_chunk_size = self.options.chunk_size,
+            .input_group_size = self.options.inputGroupSize(),
+            .model_valid = self.chunk_state.model_valid,
+            .properties_initialized = self.chunk_state.properties_initialized,
+            .finishing = self.finishing,
+            .terminator_written = self.terminator_written,
+            .done = self.done,
+        };
+    }
+
     pub fn step(self: *Encoder, input: []const u8, output: []u8) Error!core.StepResult {
         if (self.done) {
             if (input.len != 0) return error.TrailingData;
@@ -108,6 +165,9 @@ pub const Encoder = struct {
             return .{ .status = .done };
         }
         if (self.finishing and input.len != 0) return error.TrailingData;
+        if (self.finishing) if (self.expected_input_len) |expected| {
+            if (self.total_input != expected) return error.SizeMismatch;
+        };
         self.options.chunkOptions().recordEffectiveSettings();
 
         var input_read: usize = 0;
@@ -116,11 +176,12 @@ pub const Encoder = struct {
             if (self.pending_offset != self.pending.items.len) {
                 const remaining = self.pending.items[self.pending_offset..];
                 const take = @min(remaining.len, output.len - output_written);
+                const next_output = std.math.add(usize, self.total_output, take) catch
+                    return error.IntegerOverflow;
                 @memcpy(output[output_written..][0..take], remaining[0..take]);
                 self.pending_offset += take;
                 output_written += take;
-                self.total_output = std.math.add(usize, self.total_output, take) catch
-                    return error.IntegerOverflow;
+                self.total_output = next_output;
                 if (self.pending_offset != self.pending.items.len)
                     return result(input_read, output_written, .need_output);
                 self.pending.clearRetainingCapacity();
@@ -130,7 +191,7 @@ pub const Encoder = struct {
             }
 
             if (input_read < input.len) {
-                const room = writer.max_uncompressed_chunk - self.input.items.len;
+                const room = self.options.inputGroupSize() - self.input.items.len;
                 const take = @min(room, input.len - input_read);
                 const next_total = std.math.add(usize, self.total_input, take) catch
                     return error.IntegerOverflow;
@@ -142,7 +203,7 @@ pub const Encoder = struct {
                 self.total_input = next_total;
             }
 
-            if (self.input.items.len == writer.max_uncompressed_chunk or
+            if (self.input.items.len == self.options.inputGroupSize() or
                 (self.finishing and self.input.items.len != 0))
             {
                 try self.emitChunk();
@@ -154,8 +215,9 @@ pub const Encoder = struct {
                 if (self.expected_input_len) |expected|
                     if (self.total_input != expected) return error.SizeMismatch;
                 if (!self.terminator_written) {
+                    const end_len = std.math.add(usize, self.pending.items.len, 1) catch return error.IntegerOverflow;
+                    if (end_len - self.pending_offset > try self.options.effectiveMaxPendingOutputLen()) return error.OutputLimitExceeded;
                     try self.pending.append(self.allocator, 0);
-                    try self.checkPendingLimit();
                     self.terminator_written = true;
                     continue;
                 }
@@ -169,26 +231,27 @@ pub const Encoder = struct {
     fn emitChunk(self: *Encoder) Error!void {
         std.debug.assert(self.input.items.len != 0);
         const next_encoded_input = std.math.add(usize, self.encoded_input, self.input.items.len) catch return error.IntegerOverflow;
-        const history_len = @min(self.options.dictionary_size, self.history.items.len + self.input.items.len);
+        const history_len = @min(self.options.dictionary_size, std.math.add(usize, self.history.items.len, self.input.items.len) catch return error.IntegerOverflow);
         try self.history.ensureTotalCapacity(self.allocator, history_len);
+        const original_pending_len = self.pending.items.len;
+        errdefer self.pending.shrinkRetainingCapacity(original_pending_len);
+        var trial_state = self.chunk_state;
         switch (self.options.mode) {
-            .compressed => _ = try self.chunk_state.append(self.allocator, &self.pending, &self.candidate, self.input.items, self.history.items, self.encoded_input, self.options.chunkOptions(), null),
-            .stored => _ = try self.chunk_state.appendUncompressed(self.allocator, &self.pending, self.input.items, self.encoded_input == 0),
+            .compressed => _ = try trial_state.append(self.allocator, &self.pending, &self.candidate, self.input.items, self.history.items, self.encoded_input, self.options.chunkOptions(), null),
+            .stored => _ = try trial_state.appendUncompressed(self.allocator, &self.pending, self.input.items, self.encoded_input == 0),
         }
-        try self.retainHistory(self.input.items);
-        self.encoded_input = next_encoded_input;
         try self.checkPendingLimit();
+        self.retainHistory(self.input.items);
+        self.chunk_state = trial_state;
+        self.encoded_input = next_encoded_input;
         self.input.clearRetainingCapacity();
     }
 
-    fn retainHistory(self: *Encoder, chunk: []const u8) Error!void {
+    fn retainHistory(self: *Encoder, chunk: []const u8) void {
         const dictionary_size = self.options.dictionary_size;
         if (chunk.len >= dictionary_size) {
             self.history.clearRetainingCapacity();
-            try self.history.appendSlice(
-                self.allocator,
-                chunk[chunk.len - dictionary_size ..],
-            );
+            self.history.appendSliceAssumeCapacity(chunk[chunk.len - dictionary_size ..]);
             return;
         }
         const keep = @min(self.history.items.len, dictionary_size - chunk.len);
@@ -199,11 +262,11 @@ pub const Encoder = struct {
                 self.history.items[self.history.items.len - keep ..],
             );
         self.history.items.len = keep;
-        try self.history.appendSlice(self.allocator, chunk);
+        self.history.appendSliceAssumeCapacity(chunk);
     }
 
     fn checkPendingLimit(self: *const Encoder) Error!void {
-        if (self.pending.items.len - self.pending_offset > self.options.max_pending_output_len)
+        if (self.pending.items.len - self.pending_offset > try self.options.effectiveMaxPendingOutputLen())
             return error.OutputLimitExceeded;
     }
 };
@@ -211,7 +274,8 @@ pub const Encoder = struct {
 fn validateOptions(options: Encoder.Options) Encoder.Error!void {
     try options.chunkOptions().validate();
     _ = try writer.dictionaryProperty(options.dictionary_size);
-    if (options.max_pending_output_len < writer.max_uncompressed_chunk + 3)
+    const minimum = @min(options.inputGroupSize(), writer.max_uncompressed_chunk) + 3;
+    if (try options.effectiveMaxPendingOutputLen() < minimum)
         return error.InvalidBlockPlan;
 }
 
@@ -224,6 +288,10 @@ fn result(
         .progress = .{ .input_read = input_read, .output_written = output_written },
         .status = status,
     };
+}
+
+test {
+    _ = @import("large_chunk_stream_tests.zig");
 }
 
 test "raw LZMA2 incremental encoder is fragmentation independent" {

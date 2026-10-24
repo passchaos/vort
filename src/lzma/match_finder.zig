@@ -36,6 +36,22 @@ const ChainNode = struct { position: usize = empty, previous: usize = empty };
 const TreeNode = struct { position: usize = empty, left: usize = empty, right: usize = empty };
 const Operation = enum { find, skip, seed };
 
+/// Predict requested matcher heap bytes without allocating or reading samples.
+/// The actual source length clips the requested dictionary ring, so a large
+/// dictionary setting alone never causes a large node allocation.
+pub fn requiredWorkingMemory(source: Source, options: MatchOptions) !usize {
+    try options.validate();
+    if (source.window_len == 0 or source.window_len > max_window_len or source.dictionary.len > source.window_len)
+        return error.InvalidLzmaOptions;
+    const total = try source.checkedTotalLen();
+    if (total < 2) return 0;
+    const cycle_size = @min(total, try add(source.window_len, 1));
+    const tables: usize = options.finder.hashBytes() - 1;
+    const head_bytes = try multiply(try multiply(hash_size, tables), @sizeOf(usize));
+    const node_bytes = try multiply(cycle_size, if (options.finder.isBinaryTree()) @sizeOf(TreeNode) else @sizeOf(ChainNode));
+    return add(head_bytes, node_bytes);
+}
+
 /// Monotonic HC3/HC4 or BT2/BT3/BT4 over a borrowed virtual source. Hash heads
 /// and links contain absolute usize positions; ring nodes validate their exact
 /// generation before following a link. Heap use is bounded by the window,
@@ -53,20 +69,14 @@ pub const Matcher = struct {
     cycle_size: usize = 0,
 
     pub fn init(allocator: std.mem.Allocator, source: Source, options: MatchOptions) !Matcher {
-        try options.validate();
-        if (source.window_len == 0 or source.window_len > max_window_len or source.dictionary.len > source.window_len)
-            return error.InvalidLzmaOptions;
-        const total = std.math.add(usize, source.dictionary.len, source.input.len) catch return error.InvalidBlockPlan;
+        const required = try requiredWorkingMemory(source, options);
+        if (required > options.max_working_memory) return error.WorkingMemoryLimitExceeded;
+        const total = try source.checkedTotalLen();
         var result: Matcher = .{ .source = source, .options = options };
         errdefer result.deinit(allocator);
         const width = options.finder.hashBytes();
         if (total >= 2) {
-            result.cycle_size = @min(total, source.window_len + 1);
-            const tables: usize = width - 1;
-            const head_bytes = try multiply(try multiply(hash_size, tables), @sizeOf(usize));
-            const node_bytes = try multiply(result.cycle_size, if (options.finder.isBinaryTree()) @sizeOf(TreeNode) else @sizeOf(ChainNode));
-            const required = try add(head_bytes, node_bytes);
-            if (required > options.max_working_memory) return error.WorkingMemoryLimitExceeded;
+            result.cycle_size = @min(total, try add(source.window_len, 1));
             result.head2 = try allocator.alloc(usize, hash_size);
             @memset(result.head2, empty);
             if (width >= 3) {

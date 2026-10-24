@@ -263,7 +263,7 @@ test "XZ encode controls Into append overlap and invalid options preserve caller
     try appended.appendSlice(allocator, "prefix:");
     for ([_]xz.EncodeOptions{
         .{ .dictionary_size = 4095 },
-        .{ .dictionary_size = 64 * 1024 * 1024 + 1 },
+        .{ .dictionary_size = xz.max_encode_dictionary_size + 1 },
         .{ .properties = .{ .lc = 4, .lp = 1, .pb = 2 } },
         .{ .parser = .fast, .match_options = .{ .nice_len = 1 } },
         .{ .parser = .normal, .match_options = .{ .nice_len = 274 } },

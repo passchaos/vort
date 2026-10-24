@@ -24,6 +24,7 @@ pub const EncodeOptions = struct {
     check: Check = .crc64,
     block_size: usize = 1024 * 1024,
     dictionary_size: usize = lzma2_writer.dictionary_size,
+    chunk_size: usize = lzma2_writer.max_stored_chunk_len,
     filters: []const Filter = &.{},
     parser: Parser = .greedy,
     properties: Properties = .{},
@@ -40,7 +41,7 @@ pub const EncodeOptions = struct {
         if (self.match_options) |options| options.recordEffectiveSettings();
     }
     pub fn lzma2Options(self: EncodeOptions) lzma2_writer.EncodeOptions {
-        return .{ .dictionary_size = self.dictionary_size, .parser = self.parser, .properties = self.properties, .match_options = self.match_options };
+        return .{ .dictionary_size = self.dictionary_size, .chunk_size = self.chunk_size, .parser = self.parser, .properties = self.properties, .match_options = self.match_options };
     }
 };
 
@@ -571,4 +572,5 @@ test "XZ writer round trips ARM64 and RISC-V branch filters" {
 
 test {
     _ = @import("encoder/preset_tests.zig");
+    _ = @import("encoder/large_chunk_tests.zig");
 }

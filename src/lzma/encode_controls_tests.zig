@@ -245,7 +245,7 @@ test "LZMA encode controls append Into overlap and invalid settings are transact
     try appended.appendSlice(allocator, "prefix:");
     for ([_]lzma.EncodeOptions{
         .{ .dictionary_size = 4095 },
-        .{ .dictionary_size = 64 * 1024 * 1024 + 1 },
+        .{ .dictionary_size = @intCast(lzma.max_encode_dictionary_size + 1) },
         .{ .properties = .{ .lc = 4, .lp = 1, .pb = 2 } },
         .{ .mode = .fast, .match_options = .{ .nice_len = 1 } },
         .{ .mode = .normal, .match_options = .{ .nice_len = 274 } },

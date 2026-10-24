@@ -132,7 +132,7 @@ test "LZMA wrapper presets invalid scalar settings are rejected before allocatio
     defer out.deinit(allocator);
     try out.appendSlice(allocator, "prefix");
     const invalid = [_]writer.EncodeOptions{
-        .{ .dictionary_size = 4095 },                            .{ .dictionary_size = 64 * 1024 * 1024 + 1 },
+        .{ .dictionary_size = 4095 },                            .{ .dictionary_size = @intCast(@import("encode_options.zig").max_dictionary_size + 1) },
         .{ .mode = .fast, .match_options = .{ .nice_len = 1 } }, .{ .mode = .normal, .match_options = .{ .nice_len = 274 } },
     };
     var buffer: [128]u8 = @splat(0xa5);

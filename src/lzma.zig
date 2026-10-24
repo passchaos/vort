@@ -68,6 +68,9 @@ pub const encodeZipPayloadAppend = writer.encodeZipPayloadAppend;
 test {
     _ = @import("lzma/encode_controls_tests.zig");
     _ = @import("lzma/wrapper_presets_tests.zig");
+    _ = @import("lzma/large_dictionary_wrapper_tests.zig");
+    _ = @import("lzma/large_dictionary_contract_tests.zig");
+    _ = @import("lzma/large_dictionary_core_tests.zig");
     _ = @import("lzma/parse_oracle_tests.zig");
     _ = @import("lzma/fast_parse_tests.zig");
     _ = @import("lzma/encode_options.zig");

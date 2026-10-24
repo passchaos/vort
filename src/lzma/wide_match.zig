@@ -1,8 +1,9 @@
 const std = @import("std");
 const core = @import("../core.zig");
 const lz77 = @import("../lz77.zig");
+const settings = @import("encode_options.zig");
 
-pub const max_window_len: usize = 64 * 1024 * 1024;
+pub const max_window_len: usize = settings.max_dictionary_size;
 pub const max_match_len: usize = 273;
 const min_match_len: usize = 3;
 const hash_table_size: usize = 1 << 16;
@@ -34,6 +35,7 @@ pub const Options = struct {
     max_chain: usize = 64,
     nice_len: usize = 64,
     lazy: bool = false,
+    max_working_memory: usize = std.math.maxInt(usize),
 };
 
 pub const StreamPlan = struct {
@@ -47,6 +49,8 @@ pub const StreamPlan = struct {
 pub const StreamPlanner = struct {
     allocator: std.mem.Allocator,
     window_len: usize,
+    input_len: usize,
+    max_working_memory: usize = std.math.maxInt(usize),
     head: std.ArrayList(i64) = .empty,
     previous: std.ArrayList(i64) = .empty,
     tokens: std.ArrayList(Token) = .empty,
@@ -58,24 +62,62 @@ pub const StreamPlanner = struct {
         window_len: usize,
         input_len: usize,
     ) !StreamPlanner {
-        if (window_len <= std.math.maxInt(u16) or window_len > max_window_len)
-            return error.InvalidBlockPlan;
+        return initWithLimit(allocator, window_len, input_len, std.math.maxInt(usize));
+    }
+
+    /// Bound requested heap use before allocation. The ring follows the actual
+    /// block length rather than allocating the full requested dictionary.
+    pub fn initWithLimit(
+        allocator: std.mem.Allocator,
+        window_len: usize,
+        input_len: usize,
+        max_working_memory: usize,
+    ) !StreamPlanner {
+        if (try requiredWorkingMemory(window_len, input_len) > max_working_memory)
+            return error.WorkingMemoryLimitExceeded;
         var self = StreamPlanner{
             .allocator = allocator,
             .window_len = window_len,
+            .input_len = input_len,
+            .max_working_memory = max_working_memory,
         };
         errdefer self.deinit();
+        try self.head.ensureTotalCapacityPrecise(allocator, hash_table_size);
         try self.head.resize(allocator, hash_table_size);
         @memset(self.head.items, -1);
-        var previous_len: usize = 1;
-        const active_window = @max(1, @min(window_len, input_len));
-        while (previous_len < active_window)
-            previous_len = std.math.mul(usize, previous_len, 2) catch
-                return error.IntegerOverflow;
+        const previous_len = try streamRingLength(window_len, input_len);
+        try self.previous.ensureTotalCapacityPrecise(allocator, previous_len);
         try self.previous.resize(allocator, previous_len);
         @memset(self.previous.items, -1);
-        try self.tokens.ensureTotalCapacity(allocator, @min(input_len, 65_536));
+        try self.tokens.ensureTotalCapacityPrecise(allocator, @min(input_len, 65_536));
         return self;
+    }
+
+    /// Initial requested heap bytes. A later larger chunk may grow the token
+    /// buffer; reserveTokens checks the simultaneous old/new allocation peak.
+    pub fn requiredWorkingMemory(window_len: usize, input_len: usize) !usize {
+        if (window_len <= std.math.maxInt(u16) or window_len > max_window_len or
+            std.math.cast(i64, input_len) == null) return error.InvalidBlockPlan;
+        const ring_len = try streamRingLength(window_len, input_len);
+        const index_bytes = try memoryMultiply(try memoryAdd(hash_table_size, ring_len), @sizeOf(i64));
+        return memoryAdd(index_bytes, try memoryMultiply(@min(input_len, 65_536), @sizeOf(Token)));
+    }
+
+    pub fn workingBytes(self: *const StreamPlanner) usize {
+        return (self.head.capacity + self.previous.capacity) * @sizeOf(i64) + self.tokens.capacity * @sizeOf(Token);
+    }
+
+    fn reserveTokens(self: *StreamPlanner, chunk_len: usize) !void {
+        if (chunk_len <= self.tokens.capacity) return;
+        const peak = try memoryAdd(self.workingBytes(), try memoryMultiply(chunk_len, @sizeOf(Token)));
+        if (peak > self.max_working_memory) return error.WorkingMemoryLimitExceeded;
+        try self.tokens.ensureTotalCapacityPrecise(self.allocator, chunk_len);
+    }
+
+    fn validateChunk(self: *const StreamPlanner, input: []const u8, start: usize, end: usize) !void {
+        if (input.len > self.input_len or start != self.next_position or
+            end < start or end > input.len or end - start > settings.max_lzma2_chunk_plain)
+            return error.InvalidBlockPlan;
     }
 
     pub fn deinit(self: *StreamPlanner) void {
@@ -91,9 +133,8 @@ pub const StreamPlanner = struct {
         start: usize,
         end: usize,
     ) !StreamPlan {
-        if (start != self.next_position or end < start or end > input.len or
-            end - start > 65_536) return error.InvalidBlockPlan;
-        try self.tokens.ensureTotalCapacity(self.allocator, end - start);
+        try self.validateChunk(input, start, end);
+        try self.reserveTokens(end - start);
         self.tokens.clearRetainingCapacity();
         var stats: lz77.PlanStats = .{};
         var position = start;
@@ -130,9 +171,8 @@ pub const StreamPlanner = struct {
         start: usize,
         end: usize,
     ) !StreamPlan {
-        if (start != self.next_position or end < start or end > input.len or
-            end - start > 65_536) return error.InvalidBlockPlan;
-        try self.tokens.ensureTotalCapacity(self.allocator, end - start);
+        try self.validateChunk(input, start, end);
+        try self.reserveTokens(end - start);
         self.tokens.clearRetainingCapacity();
         var stats: lz77.PlanStats = .{};
         var position = start;
@@ -181,24 +221,20 @@ const Candidate = struct {
 
 /// Greedy dictionary planner for LZMA distances wider than the repository's
 /// shared u16 LZ77 token. The complete `dictionary ++ input` index is bounded
-/// by the caller-selected window plus one 64 KiB LZMA2 chunk.
+/// by the caller-selected window and the signed 32-bit legacy position index.
 pub fn planAlloc(
     allocator: std.mem.Allocator,
     input: []const u8,
     dictionary: []const u8,
     options: Options,
 ) !Plan {
-    if (options.window_len <= std.math.maxInt(u16) or
-        options.window_len > max_window_len or
-        dictionary.len > options.window_len or
-        dictionary.len > std.math.maxInt(i32) or
-        input.len > std.math.maxInt(i32) - dictionary.len)
-        return error.InvalidBlockPlan;
+    if (try requiredPlanWorkingMemory(input.len, dictionary.len, options) > options.max_working_memory)
+        return error.WorkingMemoryLimitExceeded;
 
     const head = try allocator.alloc(i32, hash_table_size);
     defer allocator.free(head);
     @memset(head, -1);
-    const total_len = dictionary.len + input.len;
+    const total_len = std.math.add(usize, dictionary.len, input.len) catch return error.InvalidBlockPlan;
     const previous = try allocator.alloc(i32, total_len);
     defer allocator.free(previous);
     @memset(previous, -1);
@@ -209,7 +245,7 @@ pub fn planAlloc(
 
     var tokens: std.ArrayList(Token) = .empty;
     errdefer tokens.deinit(allocator);
-    try tokens.ensureTotalCapacity(allocator, input.len);
+    try tokens.ensureTotalCapacityPrecise(allocator, input.len);
     var stats: lz77.PlanStats = .{};
     var input_position: usize = 0;
     while (input_position < input.len) {
@@ -256,6 +292,34 @@ pub fn planAlloc(
         .tokens = try tokens.toOwnedSlice(allocator),
         .stats = stats,
     };
+}
+
+/// Conservative peak includes the final owned-slice copy when an allocator
+/// cannot shrink the token buffer in place. No sample bytes are read.
+pub fn requiredPlanWorkingMemory(input_len: usize, dictionary_len: usize, options: Options) !usize {
+    if (options.window_len <= std.math.maxInt(u16) or
+        options.window_len > max_window_len or dictionary_len > options.window_len or
+        dictionary_len > std.math.maxInt(i32) or
+        input_len > std.math.maxInt(i32) - dictionary_len) return error.InvalidBlockPlan;
+    const total = std.math.add(usize, dictionary_len, input_len) catch return error.InvalidBlockPlan;
+    const index_bytes = try memoryMultiply(try memoryAdd(hash_table_size, total), @sizeOf(i32));
+    const token_bytes = try memoryMultiply(input_len, @sizeOf(Token));
+    return memoryAdd(index_bytes, try memoryMultiply(token_bytes, 2));
+}
+
+fn streamRingLength(window_len: usize, input_len: usize) !usize {
+    const active_window = @max(1, @min(window_len, input_len));
+    var ring_len: usize = 1;
+    while (ring_len < active_window) ring_len = try memoryMultiply(ring_len, 2);
+    return ring_len;
+}
+
+fn memoryAdd(a: usize, b: usize) !usize {
+    return std.math.add(usize, a, b) catch error.WorkingMemoryLimitExceeded;
+}
+
+fn memoryMultiply(a: usize, b: usize) !usize {
+    return std.math.mul(usize, a, b) catch error.WorkingMemoryLimitExceeded;
 }
 
 fn findBest(
