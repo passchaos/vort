@@ -37,8 +37,18 @@ pub fn after(cache: Cache, physical_distance: usize, code: usize, is_static: boo
 /// prices and future cache effects. Code zero never pushes, even when encoded
 /// explicitly through the distance tree; static references never push either.
 pub fn choices(cache: Cache, physical_distance: usize, parameters: distance.Parameters, is_static: bool) types.Error!Choices {
+    return choicesWithFormat(cache, physical_distance, parameters, .standard, is_static);
+}
+pub fn usableDistance(physical_distance: usize, format: distance.Format) bool {
+    return physical_distance != 0 and (format == .standard or physical_distance <= distance.safe_max_distance);
+}
+pub fn choicesWithFormat(cache: Cache, physical_distance: usize, parameters: distance.Parameters, format: distance.Format, is_static: bool) types.Error!Choices {
     if (physical_distance == 0) return error.InvalidBlockPlan;
     var result: Choices = .{};
+    // LargeWindow's safe physical-reference bound also applies to cached
+    // selectors. Preserve legitimate short codes above this parameter shape's
+    // regular-code maximum, but never clamp an oversized dictionary address.
+    if (!usableDistance(physical_distance, format)) return result;
     for (0..16) |code| {
         const decoded = resolve(code, cache) catch continue;
         if (decoded != physical_distance) continue;
@@ -50,7 +60,7 @@ pub fn choices(cache: Cache, physical_distance: usize, parameters: distance.Para
         };
         result.len += 1;
     }
-    if (distance.encodeWithParameters(physical_distance, parameters)) |encoding| {
+    if (distance.encodeWithFormat(physical_distance, parameters, format)) |encoding| {
         const code = std.math.add(usize, physical_distance, 15) catch return error.IntegerOverflow;
         result.items[result.len] = .{ .distance = physical_distance, .code = code, .encoding = encoding, .cache = after(cache, physical_distance, code, is_static) };
         result.len += 1;

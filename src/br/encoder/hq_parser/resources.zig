@@ -16,13 +16,11 @@ pub fn multiply(a: usize, b: usize) !usize {
 pub fn validate(source: types.Source, parameters: state.Parameters, model: *const prices.Model) !void {
     const resolved = parameters.resolved;
     try (options.HqOptions{ .search_depth = resolved.search_depth, .nice_len = resolved.nice_len, .beam_width = resolved.beam_width, .iterations = resolved.iterations, .max_working_memory = resolved.max_working_memory, .block_len = resolved.block_len, .distance_parameters = resolved.distance_parameters }).validate(resolved.quality);
-    if (resolved.beam_width == 0 or resolved.iterations == 0 or source.input.len > resolved.block_len or source.window_len == 0 or
-        source.window_len > (@as(usize, 1) << 24) - 16 or source.history.len > source.frame_offset)
+    if (resolved.beam_width == 0 or resolved.iterations == 0 or source.input.len > resolved.block_len or source.format != resolved.format)
         return error.InvalidBlockPlan;
-    _ = try source.checkedTotalLen();
-    _ = try source.absolutePosition(source.input.len);
+    try source.validate();
     for (parameters.initial_recent_distances orelse source.recent) |value| if (value == 0) return error.InvalidBlockPlan;
-    try model.validate(resolved.distance_parameters, source.input.len);
+    try model.validateWithFormat(resolved.distance_parameters, source.input.len, resolved.format);
 }
 pub fn commandCapacity(source: types.Source, has_dictionary: bool) usize {
     if (source.input.len == 0) return 0;
@@ -38,7 +36,7 @@ pub fn ownBytes(source: types.Source, parameters: state.Parameters, has_dictiona
 }
 pub fn allocatePlan(allocator: std.mem.Allocator, source: types.Source, parameters: state.Parameters, has_dictionary: bool) !state.Plan {
     const storage = try allocator.alloc(command_plan.Command, commandCapacity(source, has_dictionary));
-    return .{ .commands = storage[0..0], .command_storage = storage, .distance_parameters = parameters.resolved.distance_parameters, .final_recent_distances = parameters.initial_recent_distances orelse source.recent, .final_previous = parameters.previous, .statistics = .{ .distance_parameters = parameters.resolved.distance_parameters } };
+    return .{ .commands = storage[0..0], .command_storage = storage, .distance_parameters = parameters.resolved.distance_parameters, .format = parameters.resolved.format, .final_recent_distances = parameters.initial_recent_distances orelse source.recent, .final_previous = parameters.previous, .statistics = .{ .distance_parameters = parameters.resolved.distance_parameters, .format = parameters.resolved.format } };
 }
 pub fn append(plan: *state.Plan, command: command_plan.Command) !void {
     if (plan.commands.len == plan.command_storage.len) return error.InvalidBlockPlan;
@@ -46,7 +44,8 @@ pub fn append(plan: *state.Plan, command: command_plan.Command) !void {
     plan.commands = plan.command_storage[0 .. plan.commands.len + 1];
 }
 pub fn finish(plan: *state.Plan, source: types.Source, parameters: state.Parameters, model: *const prices.Model, provider: ?*const dictionary.Provider) !void {
-    plan.statistics = .{ .distance_parameters = model.distance_parameters };
+    if (plan.format != model.format) return error.InvalidBlockPlan;
+    plan.statistics = .{ .distance_parameters = model.distance_parameters, .format = model.format };
     plan.estimated_cost = 0;
     var position: usize = 0;
     var recent = parameters.initial_recent_distances orelse source.recent;
@@ -73,6 +72,7 @@ pub fn finish(plan: *state.Plan, source: types.Source, parameters: state.Paramet
             const output_len = command.outputLen();
             if (output_len == 0 or output_len > source.input.len - position) return error.InvalidBlockPlan;
             const physical_distance = if (command.isLz77()) command.distance else try (provider orelse return error.InvalidBlockPlan).wireDistance(.{ .source = command.source, .copy_len = command.copy_len, .output_len = output_len, .address = command.dictionary_address }, source, position);
+            if (!rep.usableDistance(physical_distance, model.format)) return error.InvalidBlockPlan;
             if (try rep.resolve(encoding.distance_code, recent) != physical_distance) return error.InvalidBlockPlan;
             if (command.isLz77() and matchLength(source, position, physical_distance, output_len, null) != output_len) return error.InvalidBlockPlan;
             recent = types.recentAfter(command.source, encoding.distance_code, physical_distance, recent);

@@ -105,7 +105,7 @@ pub fn run(allocator: std.mem.Allocator, budget: *state.Budget, source: types.So
                 for (dictionary_candidates.items) |candidate| {
                     if (candidate.output_len == 0 or candidate.output_len > source.input.len - global) return error.InvalidBlockPlan;
                     const backward = try provider.?.wireDistance(candidate, source, global);
-                    const choices = try rep.choices(node.recent, backward, parameters.resolved.distance_parameters, candidate.source == .static);
+                    const choices = try rep.choicesWithFormat(node.recent, backward, parameters.resolved.distance_parameters, parameters.resolved.format, candidate.source == .static);
                     if (candidate.source == .static) {
                         // An atomic transform may cross this artificial window.
                         // Its exact command and predecessor live in spill.
@@ -208,7 +208,7 @@ fn appendNode(result: *state.Plan, nodes: []const state.Node, width: usize, base
 }
 fn ordinaryEdges(context: *EdgeContext, position: usize, slot: usize, node: state.Node, maximum: usize, backward: usize) !void {
     if (maximum < 2) return;
-    const choices = try rep.choices(node.recent, backward, context.parameters.resolved.distance_parameters, false);
+    const choices = try rep.choicesWithFormat(node.recent, backward, context.parameters.resolved.distance_parameters, context.parameters.resolved.format, false);
     try lengthEdges(context, position, slot, node, maximum, .lz77, 0, &choices);
 }
 fn lengthEdges(context: *EdgeContext, position: usize, slot: usize, node: state.Node, maximum: usize, kind: command_plan.Source, address: usize, choices: *const rep.Choices) !void {

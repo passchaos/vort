@@ -22,6 +22,9 @@ pub const Parameters = struct {
     pub fn init(raw: options.HqOptions, quality: u8, mode: anytype) !Parameters {
         return .{ .resolved = try raw.resolve(quality, mode), .profile = raw.profile };
     }
+    pub fn initWithFormat(raw: options.HqOptions, quality: u8, mode: anytype, format: @import("../distance.zig").Format) !Parameters {
+        return .{ .resolved = try raw.resolveForFormat(quality, mode, format), .profile = raw.profile };
+    }
 };
 
 pub const Node = struct {
@@ -48,6 +51,7 @@ pub const Plan = struct {
     commands: []command_plan.Command,
     command_storage: []command_plan.Command,
     distance_parameters: @import("../distance.zig").Parameters,
+    format: @import("../distance.zig").Format = .standard,
     final_recent_distances: [4]usize,
     final_previous: [2]u8,
     pending_insert: usize = 0,

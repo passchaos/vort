@@ -6,7 +6,7 @@ const length = @import("../../length.zig");
 const literal_context = @import("../literal_context.zig");
 pub const scale: u32 = 256;
 pub const command_alphabet_size = 704;
-pub const maximum_distance_alphabet_size = 520;
+pub const maximum_distance_alphabet_size = 544;
 pub const maximum_symbol_price: u32 = 64 * scale;
 pub const Error = error{ InvalidBlockPlan, IntegerOverflow };
 
@@ -39,6 +39,7 @@ pub const Statistics = struct {
     command_counts: [command_alphabet_size]u32 = @splat(0),
     distance_counts: [maximum_distance_alphabet_size]u32 = @splat(0),
     distance_parameters: distance.Parameters = distance.Parameters.init(0, 0),
+    format: distance.Format = .standard,
     literal_count: usize = 0,
     command_count: usize = 0,
     copy_count: usize = 0,
@@ -49,7 +50,7 @@ pub const Statistics = struct {
         self.literal_count = std.math.add(usize, self.literal_count, 1) catch return error.IntegerOverflow;
     }
     pub fn addCommand(self: *Statistics, encoding: types.ExactEncoding, has_copy: bool, output_len: usize) Error!void {
-        if (encoding.command_symbol >= command_alphabet_size or !std.meta.eql(self.distance_parameters, encoding.distance_parameters)) return error.InvalidBlockPlan;
+        if (encoding.command_symbol >= command_alphabet_size or self.format != encoding.format or !std.meta.eql(self.distance_parameters, encoding.distance_parameters)) return error.InvalidBlockPlan;
         self.command_counts[encoding.command_symbol] = std.math.add(u32, self.command_counts[encoding.command_symbol], 1) catch return error.IntegerOverflow;
         self.command_count = std.math.add(usize, self.command_count, 1) catch return error.IntegerOverflow;
         if (!has_copy) return;
@@ -57,7 +58,7 @@ pub const Statistics = struct {
         self.copy_bytes = std.math.add(usize, self.copy_bytes, output_len) catch return error.IntegerOverflow;
         if (command_lut.entries[encoding.command_symbol].distance_code == -1) {
             const encoded = encoding.distance_encoding orelse return error.InvalidBlockPlan;
-            if (encoded.symbol >= self.distance_parameters.alphabetSize()) return error.InvalidBlockPlan;
+            if (encoded.symbol >= self.distance_parameters.activeAlphabetSize(self.format)) return error.InvalidBlockPlan;
             self.distance_counts[encoded.symbol] = std.math.add(u32, self.distance_counts[encoded.symbol], 1) catch return error.IntegerOverflow;
         }
     }
@@ -75,23 +76,33 @@ pub const Model = struct {
     command_frequencies: [command_alphabet_size]u32 = @splat(1),
     distance_frequencies: [maximum_distance_alphabet_size]u32 = @splat(1),
     distance_parameters: distance.Parameters = distance.Parameters.init(0, 0),
+    format: distance.Format = .standard,
     literal_mode: u2 = literal_context.mode_lsb6,
     literal_position_prices: ?[]const u32 = null,
 
     pub fn init(parameters: distance.Parameters, mode: u2) Model {
-        var result: Model = .{ .distance_parameters = parameters, .literal_mode = mode };
+        return initWithFormat(parameters, mode, .standard);
+    }
+    pub fn initForFormat(parameters: distance.Parameters, mode: u2, format: distance.Format) Model {
+        return initWithFormat(parameters, mode, format);
+    }
+    pub fn initWithFormat(parameters: distance.Parameters, mode: u2, format: distance.Format) Model {
+        var result: Model = .{ .distance_parameters = parameters, .literal_mode = mode, .format = format };
         result.distance_prices = @splat(maximum_symbol_price);
         result.distance_frequencies = @splat(0);
-        const alphabet = parameters.alphabetSize();
+        const alphabet = parameters.activeAlphabetSize(format);
         @memset(result.distance_prices[0..alphabet], probabilityPrice(1, alphabet));
         @memset(result.distance_frequencies[0..alphabet], 1);
         return result;
     }
     pub fn validate(self: *const Model, parameters: distance.Parameters, input_len: usize) Error!void {
-        if (!std.meta.eql(self.distance_parameters, parameters)) return error.InvalidBlockPlan;
+        return self.validateWithFormat(parameters, input_len, self.format);
+    }
+    pub fn validateWithFormat(self: *const Model, parameters: distance.Parameters, input_len: usize, format: distance.Format) Error!void {
+        if (self.format != format or !std.meta.eql(self.distance_parameters, parameters)) return error.InvalidBlockPlan;
         for (self.literal_prices) |literal_table| for (literal_table) |price| if (price > maximum_symbol_price) return error.InvalidBlockPlan;
         for (self.command_prices) |price| if (price > maximum_symbol_price) return error.InvalidBlockPlan;
-        for (self.distance_prices[0..parameters.alphabetSize()]) |price| if (price > maximum_symbol_price) return error.InvalidBlockPlan;
+        for (self.distance_prices[0..parameters.activeAlphabetSize(format)]) |price| if (price > maximum_symbol_price) return error.InvalidBlockPlan;
         if (self.literal_position_prices) |prices| {
             if (prices.len != input_len) return error.InvalidBlockPlan;
             for (prices) |price| if (price > maximum_symbol_price) return error.InvalidBlockPlan;
@@ -121,12 +132,12 @@ pub const Model = struct {
         for (pair.symbols[0..pair.len]) |symbol| {
             const entry = command_lut.entries[symbol];
             if (semantic_code != null and entry.distance_code == 0 and semantic_code.? != 0) continue;
-            var encoding: types.ExactEncoding = .{ .command_symbol = symbol, .distance_code = semantic_code orelse 0, .distance_parameters = self.distance_parameters };
+            var encoding: types.ExactEncoding = .{ .command_symbol = symbol, .distance_code = semantic_code orelse 0, .distance_parameters = self.distance_parameters, .format = self.format };
             var cost: u64 = self.command_prices[symbol] + (@as(u32, entry.insert_extra_bits) + entry.copy_extra_bits) * scale;
             if (semantic_code) |code| {
                 if (entry.distance_code == -1) {
-                    const encoded = if (code < 16) distance.Encoding{ .symbol = @intCast(code) } else distance.encodeWithParameters(code - 15, self.distance_parameters) orelse continue;
-                    if (encoded.symbol >= self.distance_parameters.alphabetSize()) continue;
+                    const encoded = if (code < 16) distance.Encoding{ .symbol = @intCast(code) } else distance.encodeWithFormat(code - 15, self.distance_parameters, self.format) orelse continue;
+                    if (encoded.symbol >= self.distance_parameters.activeAlphabetSize(self.format)) continue;
                     encoding.distance_encoding = encoded;
                     cost += self.distance_prices[encoded.symbol] + @as(u32, encoded.extra_bits) * scale;
                 }
@@ -148,18 +159,18 @@ pub const Model = struct {
         return best orelse error.InvalidBlockPlan;
     }
     pub fn refined(self: *const Model, statistics: *const Statistics) Error!Model {
-        if (!std.meta.eql(self.distance_parameters, statistics.distance_parameters)) return error.InvalidBlockPlan;
+        if (self.format != statistics.format or !std.meta.eql(self.distance_parameters, statistics.distance_parameters)) return error.InvalidBlockPlan;
         var result = self.*;
         for (&result.literal_prices, &result.literal_frequencies, &statistics.literal_counts) |*prices, *frequencies, *samples|
             refine(prices, frequencies, samples);
         refine(&result.command_prices, &result.command_frequencies, &statistics.command_counts);
-        const alphabet = self.distance_parameters.alphabetSize();
+        const alphabet = self.distance_parameters.activeAlphabetSize(self.format);
         refine(result.distance_prices[0..alphabet], result.distance_frequencies[0..alphabet], statistics.distance_counts[0..alphabet]);
         result.literal_position_prices = null;
         return result;
     }
     pub fn withLiteralPrior(self: *const Model, source: types.Source, previous: [2]u8) Error!Model {
-        var statistics: Statistics = .{ .distance_parameters = self.distance_parameters };
+        var statistics: Statistics = .{ .distance_parameters = self.distance_parameters, .format = self.format };
         for (source.input, 0..) |byte, position| try statistics.addLiteral(self.context(source, position, previous), byte);
         return self.refined(&statistics);
     }
