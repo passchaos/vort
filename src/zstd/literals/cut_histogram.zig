@@ -1,0 +1,131 @@
+//! Exact literal statistics for block[0..prefix_len] ++ block[tail_start..].
+//! The immutable block stays borrowed for the lifetime of this value. Updating
+//! cuts visits only bytes entering or leaving each stream's physical ranges.
+const std = @import("std");
+
+pub const Error = error{ CorruptFrame, IntegerOverflow };
+pub const max_block_len: usize = 128 * 1024;
+
+const Range = struct {
+    start: u32 = 0,
+    end: u32 = 0,
+};
+const Ranges = [2]Range;
+const Operation = enum { add, remove };
+const Plan = struct {
+    ranges: [4]Ranges = @splat(@splat(.{})),
+    regenerated_len: usize,
+    stream_count: usize,
+};
+
+pub const CutHistogram = struct {
+    block: []const u8,
+    regenerated_len: usize = 0,
+    stream_count: usize = 1,
+    stream_frequencies: [4][256]u32 = @splat(@splat(0)),
+    ranges: [4]Ranges = @splat(@splat(.{})),
+    /// Actual source bytes visited by additions and removals, including the
+    /// first update. Identical cuts add zero work. These counters never wrap.
+    scanned_bytes: u64 = 0,
+    update_count: u64 = 0,
+
+    const Self = @This();
+
+    pub fn init(block: []const u8) Error!Self {
+        if (block.len > max_block_len) return error.CorruptFrame;
+        return .{ .block = block };
+    }
+
+    /// Cuts remove the half-open interval [prefix_len, tail_start). Validation
+    /// and counter admission finish before any frequency or range changes.
+    pub fn update(self: *Self, prefix_len: usize, tail_start: usize) Error!void {
+        if (prefix_len > tail_start or tail_start > self.block.len) return error.CorruptFrame;
+        const next = plan(self.block.len, prefix_len, tail_start);
+        var work: u64 = 0;
+        for (self.ranges, next.ranges) |old, new| {
+            for (old) |range| work += differenceLen(range, new);
+            for (new) |range| work += differenceLen(range, old);
+        }
+        const scanned_bytes = std.math.add(u64, self.scanned_bytes, work) catch return error.IntegerOverflow;
+        const update_count = std.math.add(u64, self.update_count, 1) catch return error.IntegerOverflow;
+
+        for (&self.stream_frequencies, self.ranges, next.ranges) |*frequencies, old, new| {
+            for (old) |range| self.applyDifference(frequencies, range, new, .remove);
+            for (new) |range| self.applyDifference(frequencies, range, old, .add);
+        }
+        self.ranges = next.ranges;
+        self.regenerated_len = next.regenerated_len;
+        self.stream_count = next.stream_count;
+        self.scanned_bytes = scanned_bytes;
+        self.update_count = update_count;
+    }
+
+    pub fn totalFrequencies(self: *const Self, out: *[256]u32) void {
+        for (out, 0..) |*frequency, symbol| {
+            frequency.* = self.stream_frequencies[0][symbol] + self.stream_frequencies[1][symbol] +
+                self.stream_frequencies[2][symbol] + self.stream_frequencies[3][symbol];
+        }
+    }
+
+    fn applyDifference(self: *const Self, frequencies: *[256]u32, source: Range, covered: Ranges, comptime operation: Operation) void {
+        var cursor = source.start;
+        for (covered) |range| {
+            if (range.end <= cursor) continue;
+            if (range.start >= source.end) break;
+            const gap_end = @min(source.end, range.start);
+            if (cursor < gap_end) self.apply(frequencies, .{ .start = cursor, .end = gap_end }, operation);
+            cursor = @max(cursor, @min(source.end, range.end));
+        }
+        if (cursor < source.end) self.apply(frequencies, .{ .start = cursor, .end = source.end }, operation);
+    }
+
+    fn apply(self: *const Self, frequencies: *[256]u32, range: Range, comptime operation: Operation) void {
+        for (self.block[range.start..range.end]) |symbol| {
+            switch (operation) {
+                .add => frequencies[symbol] += 1,
+                .remove => {
+                    std.debug.assert(frequencies[symbol] != 0);
+                    frequencies[symbol] -= 1;
+                },
+            }
+        }
+    }
+};
+
+fn plan(block_len: usize, prefix_len: usize, tail_start: usize) Plan {
+    const regenerated_len = prefix_len + (block_len - tail_start);
+    var next: Plan = .{ .regenerated_len = regenerated_len, .stream_count = if (regenerated_len <= 1023) 1 else 4 };
+    const segment_len = if (next.stream_count == 1) regenerated_len else (regenerated_len + 3) / 4;
+    for (next.ranges[0..next.stream_count], 0..) |*ranges, stream| {
+        const begin = stream * segment_len;
+        const end = @min(regenerated_len, begin + segment_len);
+        if (begin < prefix_len) {
+            ranges[0] = .{ .start = @intCast(begin), .end = @intCast(@min(end, prefix_len)) };
+        }
+        if (end > prefix_len) {
+            const suffix_begin = @max(begin, prefix_len);
+            // Empty range slots sort before real ranges: a suffix-only stream
+            // has ranges[0] = [0,0), followed by its borrowed tail interval.
+            ranges[1] = .{ .start = @intCast(tail_start + suffix_begin - prefix_len), .end = @intCast(tail_start + end - prefix_len) };
+        }
+    }
+    return next;
+}
+
+fn differenceLen(source: Range, covered: Ranges) u64 {
+    var cursor = source.start;
+    var bytes: u64 = 0;
+    for (covered) |range| {
+        if (range.end <= cursor) continue;
+        if (range.start >= source.end) break;
+        const gap_end = @min(source.end, range.start);
+        if (cursor < gap_end) bytes += gap_end - cursor;
+        cursor = @max(cursor, @min(source.end, range.end));
+    }
+    if (cursor < source.end) bytes += source.end - cursor;
+    return bytes;
+}
+
+test {
+    _ = @import("cut_histogram_tests.zig");
+}

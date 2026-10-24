@@ -31,6 +31,7 @@ const huffman_x2_test = if (builtin.is_test) @import("zstd/literals/huffman_x2.z
 const huffman_weight_fse = @import("zstd/literals/weight_fse.zig");
 const huffman_tree_cache = @import("zstd/literals/tree_cache.zig");
 const literal_copy = @import("zstd/literals/copy.zig");
+const single_literal_cost = @import("zstd/literals/single_cost_cache.zig");
 const seekable = @import("zstd/seekable.zig");
 const dictionary_format = @import("zstd/dictionary_format.zig");
 const fast_cover_standard = @import("zstd/dictionary/fast_cover.zig");
@@ -23233,8 +23234,17 @@ fn emitMultiDuplicateMatchCompressedBlock(allocator: std.mem.Allocator, out: *st
 }
 
 fn emitMultiDuplicateMatchCompressedBlockWithFirst(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*DuplicateMatchIndex, first_match: *?DuplicateMatch) Error!bool {
+    return emitMultiDuplicateMatchCompressedBlockWithFirstImpl(true, allocator, out, block, last, duplicate_index, first_match);
+}
+
+fn emitMultiDuplicateMatchCompressedBlockWithFirstImpl(comptime cache_costs: bool, allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*DuplicateMatchIndex, first_match: *?DuplicateMatch) Error!bool {
     first_match.* = null;
     if (rleByte(block) != null or block.len < 32) return false;
+    var cost_cache: ?SingleLiteralCostCache = if (cache_costs and duplicate_index == null and
+        block.len > duplicate_exact_hash_input_max and block.len <= std.compress.zstd.block_size_max)
+        try SingleLiteralCostCache.init(block)
+    else
+        null;
     var matches: [max_bootstrap_sequence_count]DuplicateMatch = undefined;
     var literal_lens: [max_bootstrap_sequence_count]usize = undefined;
     var count: usize = 0;
@@ -23242,6 +23252,8 @@ fn emitMultiDuplicateMatchCompressedBlockWithFirst(allocator: std.mem.Allocator,
     while (count < matches.len and literal_start < block.len) {
         const match = if (duplicate_index) |index|
             try findBestDuplicateMatchIndexed(block, literal_start, index) orelse break
+        else if (cost_cache) |*cache|
+            try findBestDuplicateMatchHashedImpl(true, block, literal_start, cache) orelse break
         else
             try findBestDuplicateMatchIn(block, literal_start) orelse break;
         const literal_len = match.second_start - literal_start;
@@ -30354,6 +30366,10 @@ test "zstd duplicate match SIMD extension reports every boundary" {
 }
 
 fn findBestDuplicateMatchHashed(block: []const u8, start_min: usize) Error!?DuplicateMatch {
+    return findBestDuplicateMatchHashedImpl(false, block, start_min, {});
+}
+
+fn findBestDuplicateMatchHashedImpl(comptime cache_costs: bool, block: []const u8, start_min: usize, cost_cache: anytype) Error!?DuplicateMatch {
     if (block.len > std.math.maxInt(u32)) return null;
 
     var paired_predecessors: [duplicate_hash_table_len]u32 = undefined;
@@ -30379,7 +30395,10 @@ fn findBestDuplicateMatchHashed(block: []const u8, start_min: usize) Error!?Dupl
 
         const candidate: DuplicateMatch = .{ .first_start = candidate_start, .second_start = index, .len = len };
         if (duplicateMatchCannotBeat(candidate, best)) continue;
-        const candidate_payload_len = singleMatchPayloadLenFrom(block, candidate, start_min) catch continue;
+        const candidate_payload_len = (if (cache_costs)
+            cost_cache.payloadLen(index - start_min, index - candidate_start, len, index + len)
+        else
+            singleMatchPayloadLenFrom(block, candidate, start_min)) catch continue;
         if (candidate_payload_len < best_payload_len or (candidate_payload_len == best_payload_len and len > (best orelse candidate).len)) {
             var scored = candidate;
             scored.payload_len = candidate_payload_len;
@@ -31008,6 +31027,65 @@ fn singleMatchPayloadLenFrom(block: []const u8, match: DuplicateMatch, literal_s
     const literal_len = match.second_start - literal_start;
     const offset = match.second_start - match.first_start;
     return try singleBestSequencePayloadLen(block, literal_len, offset, match.len, match.second_start + match.len);
+}
+
+const SingleLiteralCostCodec = struct {
+    pub const Error = zstd.Error;
+    pub const literalHeaderLen = literalsHeaderLen;
+    pub const huffmanHeaderLen = huffmanLiteralsHeaderLen;
+    pub const treeLen = smallHuffmanTreeSerializedLen;
+
+    pub fn planFromFrequencies(frequencies: *const [256]u32) ?SmallHuffmanLiteralPlan {
+        var plan: SmallHuffmanLiteralPlan = .{ .frequencies = frequencies.* };
+        for (frequencies, 0..) |frequency, symbol| {
+            if (frequency == 0) continue;
+            plan.symbols[plan.len] = @intCast(symbol);
+            plan.len += 1;
+        }
+        finalizeSmallHuffmanLiteralPlan(&plan) orelse return null;
+        return plan;
+    }
+
+    pub fn rlePayloadLen(prefix_len: usize, offset: usize, match_len: usize, literals_len: usize) zstd.Error!usize {
+        return rleSequencePayloadLenForValuesWithLiteralsLen(&.{prefix_len}, &.{offset}, &.{match_len}, literals_len);
+    }
+    pub fn predefinedPayloadLen(prefix_len: usize, offset: usize, match_len: usize, literals_len: usize) zstd.Error!usize {
+        return predefinedSequencePayloadLenWithLiteralsLen(&.{prefix_len}, &.{offset}, &.{match_len}, literals_len);
+    }
+};
+
+const SingleLiteralCostCache = single_literal_cost.Cache(SingleLiteralCostCodec);
+
+const SingleLiteralCostTestCodec = struct {
+    pub const CostCodec = SingleLiteralCostCodec;
+    pub const referenceCost = singleBestSequencePayloadLen;
+    pub const referenceFinder = findBestDuplicateMatchHashed;
+    pub fn cachedFinder(block: []const u8, start: usize, cache: anytype) Error!?DuplicateMatch {
+        return findBestDuplicateMatchHashedImpl(true, block, start, cache);
+    }
+    pub fn multi(comptime cached: bool, allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8) Error!bool {
+        var first: ?DuplicateMatch = null;
+        return emitMultiDuplicateMatchCompressedBlockWithFirstImpl(cached, allocator, out, block, true, null, &first);
+    }
+};
+
+test "zstd single literal cost cache matches every reference cut and stream boundary" {
+    try @import("zstd/literals/single_cost_cache_tests.zig").costs(SingleLiteralCostTestCodec);
+}
+test "zstd single literal cost cache preserves errors empty and retry transitions" {
+    try @import("zstd/literals/single_cost_cache_tests.zig").errors(SingleLiteralCostTestCodec);
+}
+test "zstd single literal cost cache retains the legacy byte zero prefix" {
+    try @import("zstd/literals/single_cost_cache_tests.zig").legacyPrefix(SingleLiteralCostTestCodec);
+}
+test "zstd single literal cost cache records exact delta work without stream byte scans" {
+    try @import("zstd/literals/single_cost_cache_tests.zig").deltaWork(SingleLiteralCostTestCodec);
+}
+test "zstd single literal cost cache verifies every candidate and complete finder winner" {
+    try @import("zstd/literals/single_cost_cache_tests.zig").finders(SingleLiteralCostTestCodec);
+}
+test "zstd single literal cost cache preserves multi wire and allocator requests" {
+    try @import("zstd/literals/single_cost_cache_tests.zig").wireAndAllocations(SingleLiteralCostTestCodec);
 }
 
 fn singleMatchPayloadLenFromIndex(block: []const u8, match: DuplicateMatch, literal_start: usize, index: *const DuplicateMatchIndex) Error!usize {
