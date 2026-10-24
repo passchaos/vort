@@ -45,6 +45,7 @@ const controlled_source = @import("zstd/match/controlled_source.zig");
 const controlled_encoder = @import("zstd/encode/controlled_frame.zig");
 const hq_parser = @import("zstd/match/hq_parser.zig");
 const hq_codec = @import("zstd/encode/hq_codec.zig");
+const hq_safeguard = @import("zstd/encode/hq_safeguard.zig");
 const double_fast_sequence_plan = @import("zstd/match/double_fast/sequence_plan.zig");
 const large_sequence_record_values = @import("zstd/sequence/large/record_values.zig");
 const large_state_handoff_test = if (builtin.is_test) @import("zstd/sequence/large/state_handoff_test.zig") else struct {};
@@ -105,6 +106,8 @@ pub const min_compression_level: c_int = encode_controls.min_level;
 pub const max_compression_level: c_int = 22;
 pub const Strategy = encode_controls.Strategy;
 pub const HqOptions = encode_controls.HqOptions;
+pub const HqParseMode = encode_controls.HqParseMode;
+pub const HqMatchLengthPolicy = encode_controls.HqMatchLengthPolicy;
 pub const CanonicalCompressionParameters = @import("zstd/encode/canonical_presets.zig").Parameters;
 pub const CanonicalCompressionOptions = @import("zstd/encode/canonical_presets.zig").Options;
 pub const resolveCanonicalCompressionParameters = @import("zstd/encode/canonical_presets.zig").resolveCanonicalCompressionParameters;
@@ -949,6 +952,12 @@ test {
     _ = double_fast_sequence_plan;
     _ = optimal_four_match;
     _ = incremental_encoder;
+    _ = @import("tests/zstd_hq_search_contracts.zig");
+    _ = @import("tests/zstd_hq_search_resources.zig");
+    _ = @import("tests/zstd_hq_search_transactions.zig");
+    _ = @import("zstd/encode/hq_safeguard_tests.zig");
+    _ = @import("zstd/encode/hq_search_codec_tests.zig");
+    _ = @import("zstd/incremental/hq_search_tests.zig");
     _ = incremental_tests;
     _ = incremental_decoder_tests;
     _ = @import("zstd/incremental/decoder_counter_tests.zig");
@@ -8903,7 +8912,7 @@ pub const NativeFrameEncoder = struct {
     ) Error!NativeFrameEncodeScratchResult {
         const inner = try self.beginMemory(options);
         defer self.endMemory();
-        if (self.memoryActive()) return self.encodeScratchTransactional(input, inner, null);
+        if (self.memoryActive() or hq_safeguard.needsTransactionalPublication(inner)) return self.encodeScratchTransactional(input, inner, null);
         self.output_scratch.clearRetainingCapacity();
         const mode = self.encodeAppendUnbudgeted(&self.output_scratch, input, inner, null) catch |err| {
             self.output_scratch.clearRetainingCapacity();
@@ -8923,7 +8932,7 @@ pub const NativeFrameEncoder = struct {
     ) Error!NativeFrameEncodeScratchResult {
         const inner = try self.beginMemory(optionsWithNativeDictionary(options, dictionary));
         defer self.endMemory();
-        if (self.memoryActive()) return self.encodeScratchTransactional(input, inner, dictionary);
+        if (self.memoryActive() or hq_safeguard.needsTransactionalPublication(inner)) return self.encodeScratchTransactional(input, inner, dictionary);
         self.output_scratch.clearRetainingCapacity();
         const mode = self.encodeAppendUnbudgeted(&self.output_scratch, input, inner, dictionary) catch |err| {
             self.output_scratch.clearRetainingCapacity();
@@ -17136,6 +17145,7 @@ pub const NativeSeekableStreamEncoder = struct {
     }
 
     pub fn encodeAlloc(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions) Error![]u8 {
+        if (hq_safeguard.needsTransactionalPublication(options.frame_options)) return self.encodeSearchAlloc(input, options, null);
         const emission = encode_controls.EmissionTransaction.init(options.frame_options.control_profile);
         errdefer emission.rollback();
         const inner = try self.beginMemory(options);
@@ -17150,6 +17160,7 @@ pub const NativeSeekableStreamEncoder = struct {
     }
 
     pub fn encodeWithDictionaryAlloc(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions, dictionary: NativeDictionary) Error![]u8 {
+        if (hq_safeguard.needsTransactionalPublication(options.frame_options)) return self.encodeSearchAlloc(input, options, dictionary);
         const emission = encode_controls.EmissionTransaction.init(options.frame_options.control_profile);
         errdefer emission.rollback();
         const inner = try self.beginMemory(options);
@@ -17213,6 +17224,76 @@ pub const NativeSeekableStreamEncoder = struct {
         return self.encodeIntoSliceWithDictionary(input, options, dictionary, output);
     }
 
+    const SearchStaged = @import("zstd/encode/hq_seekable.zig").Staged(NativeSeekTableFrameSize);
+
+    fn stageSearch(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions, dictionary: ?NativeDictionary) Error!SearchStaged {
+        var staged: SearchStaged = .{};
+        errdefer staged.deinit(self.allocator);
+        const frame_count = try nativeSeekableFrameCount(input.len, options.frame_size);
+        try staged.entries.resize(self.allocator, frame_count);
+        try self.encodeAppendToEntries(&staged.wire, input, options, dictionary, staged.entries.items);
+        return staged;
+    }
+
+    fn encodeSearchAlloc(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions, dictionary: ?NativeDictionary) Error![]u8 {
+        const emission = encode_controls.EmissionTransaction.init(options.frame_options.control_profile);
+        errdefer emission.rollback();
+        const inner = try self.beginMemory(options);
+        defer self.endMemory();
+        var staged = self.stageSearch(input, inner, dictionary) catch |err| return self.mapMemoryError(err);
+        defer staged.deinit(self.allocator);
+        staged.reserveEntries(self.allocator, &self.entries) catch |err| return self.mapMemoryError(err);
+        const wire = staged.wire.toOwnedSlice(self.allocator) catch |err| return self.mapMemoryError(err);
+        errdefer self.allocator.free(wire);
+        try self.memory.?.releaseOwned(self.memory.?.base, wire.len);
+        staged.commitEntries(&self.entries);
+        return wire;
+    }
+
+    fn encodeSearchScratch(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions, dictionary: ?NativeDictionary) Error![]const u8 {
+        const emission = encode_controls.EmissionTransaction.init(options.frame_options.control_profile);
+        errdefer emission.rollback();
+        const inner = try self.beginMemory(options);
+        defer self.endMemory();
+        var staged = self.stageSearch(input, inner, dictionary) catch |err| return self.mapMemoryError(err);
+        defer staged.deinit(self.allocator);
+        staged.reserveEntries(self.allocator, &self.entries) catch |err| return self.mapMemoryError(err);
+        self.output_scratch.ensureTotalCapacity(self.allocator, staged.wire.items.len) catch |err| return self.mapMemoryError(err);
+        self.output_scratch.clearRetainingCapacity();
+        self.output_scratch.appendSliceAssumeCapacity(staged.wire.items);
+        staged.commitEntries(&self.entries);
+        return self.output_scratch.items;
+    }
+
+    fn encodeSearchAppend(self: *NativeSeekableStreamEncoder, out: *std.ArrayList(u8), input: []const u8, options: NativeSeekableOptions, dictionary: ?NativeDictionary) Error!void {
+        const emission = encode_controls.EmissionTransaction.init(options.frame_options.control_profile);
+        errdefer emission.rollback();
+        const inner = try self.beginMemory(options);
+        defer self.endMemory();
+        var staged = self.stageSearch(input, inner, dictionary) catch |err| return self.mapMemoryError(err);
+        defer staged.deinit(self.allocator);
+        staged.reserveEntries(self.allocator, &self.entries) catch |err| return self.mapMemoryError(err);
+        if (self.memory.?.lease) |lease| {
+            const view: total_budget.Entry = .{ .caller = self.memory.?.base, .lease = lease };
+            @import("zstd/encode/frame_publication.zig").appendFrame(&view, out, staged.wire.items) catch |err| return self.mapMemoryError(err);
+        } else try out.appendSlice(self.allocator, staged.wire.items);
+        staged.commitEntries(&self.entries);
+    }
+
+    fn encodeSearchInto(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions, dictionary: ?NativeDictionary, output: []u8) Error!usize {
+        const emission = encode_controls.EmissionTransaction.init(options.frame_options.control_profile);
+        errdefer emission.rollback();
+        const inner = try self.beginMemory(options);
+        defer self.endMemory();
+        var staged = self.stageSearch(input, inner, dictionary) catch |err| return self.mapMemoryError(err);
+        defer staged.deinit(self.allocator);
+        if (output.len < staged.wire.items.len) return error.OutputTooSmall;
+        staged.reserveEntries(self.allocator, &self.entries) catch |err| return self.mapMemoryError(err);
+        @memcpy(output[0..staged.wire.items.len], staged.wire.items);
+        staged.commitEntries(&self.entries);
+        return staged.wire.items.len;
+    }
+
     fn prepareEntries(self: *NativeSeekableStreamEncoder, input_len: usize, frame_size: usize) Error![]NativeSeekTableFrameSize {
         const frame_count = try nativeSeekableFrameCount(input_len, frame_size);
         try self.entries.resize(self.allocator, frame_count);
@@ -17220,6 +17301,7 @@ pub const NativeSeekableStreamEncoder = struct {
     }
 
     fn encodeScratchInternal(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions, dictionary: ?NativeDictionary) Error![]const u8 {
+        if (hq_safeguard.needsTransactionalPublication(options.frame_options)) return self.encodeSearchScratch(input, options, dictionary);
         const inner = try self.beginMemory(options);
         defer self.endMemory();
         if (self.memory.?.snapshot().available) {
@@ -17242,6 +17324,7 @@ pub const NativeSeekableStreamEncoder = struct {
     }
 
     fn encodeAppendInternal(self: *NativeSeekableStreamEncoder, out: *std.ArrayList(u8), input: []const u8, options: NativeSeekableOptions, dictionary: ?NativeDictionary) Error!void {
+        if (hq_safeguard.needsTransactionalPublication(options.frame_options)) return self.encodeSearchAppend(out, input, options, dictionary);
         const inner = try self.beginMemory(options);
         defer self.endMemory();
         if (!self.memory.?.snapshot().available) return self.encodeAppendUnbudgeted(out, input, inner, dictionary);
@@ -17258,6 +17341,12 @@ pub const NativeSeekableStreamEncoder = struct {
         const emission = encode_controls.EmissionTransaction.init(options.frame_options.control_profile);
         errdefer emission.rollback();
         const entries = try self.prepareEntries(input.len, options.frame_size);
+        try self.encodeAppendToEntries(out, input, options, dictionary, entries);
+    }
+
+    fn encodeAppendToEntries(self: *NativeSeekableStreamEncoder, out: *std.ArrayList(u8), input: []const u8, options: NativeSeekableOptions, dictionary: ?NativeDictionary, entries: []NativeSeekTableFrameSize) Error!void {
+        const emission = encode_controls.EmissionTransaction.init(options.frame_options.control_profile);
+        errdefer emission.rollback();
         const original_len = out.items.len;
         errdefer out.shrinkRetainingCapacity(original_len);
         for (entries, 0..) |*entry_value, frame_index| {
@@ -17275,6 +17364,7 @@ pub const NativeSeekableStreamEncoder = struct {
     }
 
     fn encodeIntoSliceInternal(self: *NativeSeekableStreamEncoder, input: []const u8, options: NativeSeekableOptions, dictionary: ?NativeDictionary, output: []u8) Error!usize {
+        if (hq_safeguard.needsTransactionalPublication(options.frame_options)) return self.encodeSearchInto(input, options, dictionary, output);
         const inner = try self.beginMemory(options);
         defer self.endMemory();
         if (self.memory.?.snapshot().available) {

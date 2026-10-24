@@ -4,11 +4,45 @@ const std = @import("std");
 const controls = @import("controls.zig");
 const source_mod = @import("../match/controlled_source.zig");
 const parser = @import("../match/hq_parser.zig");
+const safeguard = @import("hq_safeguard.zig");
 pub const EntropyModel = parser.EntropyModel;
 
 pub fn Encoder(comptime Codec: type) type {
     return struct {
         pub fn writeBlock(allocator: std.mem.Allocator, output: *std.ArrayList(u8), source: source_mod.Source, last: bool, options: Codec.Options, state: *Codec.State, dictionary: ?Codec.Dictionary, scratch: *Codec.SequenceScratch, block_scratch: *Codec.BlockScratch) Codec.Error!void {
+            if (!safeguard.expanded(options)) return writeBlockSingle(false, allocator, output, source, last, options, state, dictionary, scratch, block_scratch);
+            const emission = controls.EmissionTransaction.init(options.control_profile);
+            errdefer emission.rollback();
+            const start = output.items.len;
+            errdefer output.items.len = start;
+            defer if (options.control_profile) |profile| profile.recordEffectiveHq(options.hq);
+            var requested_wire: std.ArrayList(u8) = .empty;
+            defer requested_wire.deinit(allocator);
+            var baseline_wire: std.ArrayList(u8) = .empty;
+            defer baseline_wire.deinit(allocator);
+            var requested_state = state.*;
+            var baseline_state = state.*;
+            try writeBlockSingle(false, allocator, &requested_wire, source, last, options, &requested_state, dictionary, scratch, block_scratch);
+            const requested_emitted = if (options.control_profile) |profile| profile.emitted() else controls.Profile.Emitted{};
+            if (options.control_profile) |profile| profile.restoreEmitted(emission.previous);
+            try writeBlockSingle(true, allocator, &baseline_wire, source, last, safeguard.baselineOptions(options), &baseline_state, dictionary, scratch, block_scratch);
+            const baseline_emitted = if (options.control_profile) |profile| profile.emitted() else controls.Profile.Emitted{};
+            const choose_baseline = baseline_wire.items.len <= requested_wire.items.len;
+            const selected = if (choose_baseline) &baseline_wire else &requested_wire;
+            const discarded = if (choose_baseline) &requested_wire else &baseline_wire;
+            discarded.deinit(allocator);
+            discarded.* = .empty;
+            try output.appendSlice(allocator, selected.items);
+            state.* = if (choose_baseline) baseline_state else requested_state;
+            if (options.control_profile) |profile| {
+                profile.restoreEmitted(if (choose_baseline) baseline_emitted else requested_emitted);
+                if (choose_baseline) profile.add("baseline_selected_blocks", 1);
+            }
+        }
+
+        /// Frame guards call this once per block in each independent pass.
+        /// Default and cap-only requests retain this original single-plan path.
+        pub fn writeBlockSingle(comptime is_baseline: bool, allocator: std.mem.Allocator, output: *std.ArrayList(u8), source: source_mod.Source, last: bool, options: Codec.Options, state: *Codec.State, dictionary: ?Codec.Dictionary, scratch: *Codec.SequenceScratch, block_scratch: *Codec.BlockScratch) Codec.Error!void {
             const emission = controls.EmissionTransaction.init(options.control_profile);
             errdefer emission.rollback();
             const start = output.items.len;
@@ -19,6 +53,7 @@ pub fn Encoder(comptime Codec: type) type {
             consumed_model.initialized = true;
             next_state.hq_entropy = consumed_model;
             const hq_options = (try controls.effectiveHq(options)).?;
+            if (is_baseline) if (options.control_profile) |profile| profile.add("baseline_searches", 1);
             const plan = try parser.planAlloc(allocator, source, .{ .strategy = options.strategy, .hq_options = hq_options, .initial_repeated_offsets = state.sequence_state.repeated_offsets, .entropy = &model, .profile = options.control_profile });
             defer plan.deinit(allocator);
             try validate(source, plan.records, plan.final_repeated_offsets, state.sequence_state.repeated_offsets);

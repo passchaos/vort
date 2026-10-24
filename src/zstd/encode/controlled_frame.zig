@@ -5,12 +5,18 @@ const source_mod = @import("../match/controlled_source.zig");
 const fast = @import("../match/controlled_fast.zig");
 const search = @import("../match/controlled_search.zig");
 const hq_codec = @import("hq_codec.zig");
+const safeguard = @import("hq_safeguard.zig");
 
 /// Opt-in control flow shares the existing format/entropy authority through a
 /// narrow codec bridge. Legacy positive/default candidate arbitration is separate.
 pub fn Encoder(comptime Codec: type) type {
     return struct {
         pub fn append(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: Codec.Options, dictionary: ?Codec.Dictionary, records: *std.ArrayList(source_mod.Record), scratch: *Codec.SequenceScratch, block_scratch: *Codec.BlockScratch) Codec.Error!void {
+            if (safeguard.expanded(options)) return safeguard.appendFrame(Codec, appendSingle, allocator, out, input, options, dictionary, records, scratch, block_scratch);
+            return appendSingle(false, allocator, out, input, options, dictionary, records, scratch, block_scratch);
+        }
+
+        fn appendSingle(comptime is_baseline: bool, allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: Codec.Options, dictionary: ?Codec.Dictionary, records: *std.ArrayList(source_mod.Record), scratch: *Codec.SequenceScratch, block_scratch: *Codec.BlockScratch) Codec.Error!void {
             const emission = controls.EmissionTransaction.init(options.control_profile);
             errdefer emission.rollback();
             const original_len = out.items.len;
@@ -20,12 +26,12 @@ pub fn Encoder(comptime Codec: type) type {
             const block_size = try Codec.blockSize(options);
             var state: Codec.State = .{};
             if (input.len == 0) {
-                try writeBlock(allocator, out, input, true, options, &state, dictionary, &.{}, 0, records, scratch, block_scratch);
+                try writeBlockImpl(false, is_baseline, allocator, out, input, true, options, &state, dictionary, &.{}, 0, records, scratch, block_scratch);
             } else {
                 var offset: usize = 0;
                 while (offset != input.len) {
                     const end = offset + @min(block_size, input.len - offset);
-                    try writeBlock(allocator, out, input[offset..end], end == input.len, options, &state, dictionary, input[0..offset], offset, records, scratch, block_scratch);
+                    try writeBlockImpl(false, is_baseline, allocator, out, input[offset..end], end == input.len, options, &state, dictionary, input[0..offset], offset, records, scratch, block_scratch);
                     offset = end;
                 }
             }
@@ -33,6 +39,10 @@ pub fn Encoder(comptime Codec: type) type {
         }
 
         pub fn writeBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, options: Codec.Options, state: *Codec.State, dictionary: ?Codec.Dictionary, history: []const u8, frame_offset: Count, records: *std.ArrayList(source_mod.Record), scratch: *Codec.SequenceScratch, block_scratch: *Codec.BlockScratch) Codec.Error!void {
+            return writeBlockImpl(true, false, allocator, out, block, last, options, state, dictionary, history, frame_offset, records, scratch, block_scratch);
+        }
+
+        fn writeBlockImpl(comptime guard_block: bool, comptime is_baseline: bool, allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, options: Codec.Options, state: *Codec.State, dictionary: ?Codec.Dictionary, history: []const u8, frame_offset: Count, records: *std.ArrayList(source_mod.Record), scratch: *Codec.SequenceScratch, block_scratch: *Codec.BlockScratch) Codec.Error!void {
             // Dictionary initialization belongs to the block transaction too.
             const original_state = state.*;
             errdefer state.* = original_state;
@@ -65,7 +75,10 @@ pub fn Encoder(comptime Codec: type) type {
             switch (selected) {
                 .fast, .double_fast => try fast.planReuse(records, allocator, source, parameters),
                 .greedy, .lazy, .optimal => try search.planReuse(records, allocator, source, parameters),
-                .lazy2, .btlazy2, .btopt, .btultra, .btultra2 => return hq_codec.Encoder(Codec).writeBlock(allocator, out, source, last, options, state, dictionary, scratch, block_scratch),
+                .lazy2, .btlazy2, .btopt, .btultra, .btultra2 => return if (guard_block)
+                    hq_codec.Encoder(Codec).writeBlock(allocator, out, source, last, options, state, dictionary, scratch, block_scratch)
+                else
+                    hq_codec.Encoder(Codec).writeBlockSingle(is_baseline, allocator, out, source, last, options, state, dictionary, scratch, block_scratch),
                 .auto => return error.InvalidBlockPlan,
             }
             Codec.clearBlockScratch(block_scratch);
