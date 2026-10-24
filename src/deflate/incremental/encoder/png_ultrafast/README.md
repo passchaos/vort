@@ -44,3 +44,16 @@ this core. 544 source cases cover every literal, zero run/word/tail boundaries,
 large runs and all eight EOB bit alignments. Python system zlib validates all
 expected/actual streams and explicit flush prefixes. Near tests retain 30 actual
 reference vectors alongside partition/limit/flush checks.
+
+The optimized path consumes complete words directly, batches up to 4096 accepted
+source bytes, and scans 64-byte zero spans without adding owned input storage.
+It packs literals four at a time and emits reservoir words into valid pending
+capacity; stores may overlap unused queue bytes, while only complete bytes are
+published. Adler is updated before those accepted source bytes can be affected
+by caller output writes. Already-proven all-zero batches use the equivalent
+recurrence `b += n*a (mod 65521)`; mixed batches use the existing checksum kernel.
+No context fields, heap allocation, pending capacity or input carry limits grow.
+The frozen scalar state machine and independent fdeflate framing tests compare
+all output bytes, including identical explicit flush schedules. The full real
+benchmark under `tools/png_ultrafast_performance` uses an immutable 90,083,998-byte
+15-image corpus, both adaptive and Up, and one unchanged imx consumer/harness.

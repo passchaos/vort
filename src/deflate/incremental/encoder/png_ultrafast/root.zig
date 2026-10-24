@@ -2,6 +2,9 @@ const std = @import("std");
 const core = @import("../../../../core.zig");
 const syntax = @import("../../../../png_ultrafast.zig").incremental_syntax;
 const Adler32 = @import("../../../../checksum.zig").Adler32;
+const literals = @import("literals.zig");
+const zero_scan = @import("zero_scan.zig");
+const checksum = @import("checksum.zig");
 
 test {
     _ = @import("tests.zig");
@@ -124,18 +127,24 @@ pub const Encoder = struct {
                 },
                 .input => {
                     if (self.closing_run != 0) {
-                        self.runToken();
+                        self.runBatch();
                         continue;
                     }
                     if (self.word_ready) {
                         if (self.literal_offset < self.literal_end) {
-                            self.symbol(self.carry[self.literal_offset]);
-                            self.literal_offset += 1;
+                            const word = std.mem.readInt(u64, &self.carry, .little);
+                            literals.prefix(self, word >> @intCast(self.literal_offset * 8), @intCast(self.literal_end - self.literal_offset));
+                            self.literal_offset = self.literal_end;
                             continue;
                         }
                         self.zero_run = self.suffix_run;
                         self.carry_len = 0;
                         self.word_ready = false;
+                    }
+                    if (self.carry_len == 0 and input.len - accepted >= 8) {
+                        const n = self.consumeBatch(input[accepted..]);
+                        accepted += n;
+                        continue;
                     }
                     if (accepted != input.len) {
                         const n = @min(8 - self.carry_len, input.len - accepted);
@@ -157,7 +166,7 @@ pub const Encoder = struct {
                 },
                 .closing => {
                     if (self.closing_run != 0) {
-                        self.runToken();
+                        self.runBatch();
                         continue;
                     }
                     if (self.tail_offset < self.carry_len) {
@@ -218,23 +227,81 @@ pub const Encoder = struct {
         self.literal_end = 8 - self.suffix_run;
         self.word_ready = true;
     }
-    fn runToken(self: *Encoder) void {
+
+    /// Consume complete stream words without copying each one into carry.
+    /// Adler updates once for the accepted contiguous batch, before any caller
+    /// output write can alias that accepted source. Pending storage remains 128B.
+    fn consumeBatch(self: *Encoder, input: []const u8) usize {
+        var offset: usize = 0;
+        var all_zero = true;
+        while (input.len - offset >= 8 and offset < 4096 and self.pending.len - self.pending_len >= 24) {
+            const word = std.mem.readInt(u64, input[offset..][0..8], .little);
+            if (word == 0) {
+                const zeros: usize = if (input.len - offset >= 64 and offset <= 4096 - 64 and
+                    zero_scan.followingWordsAreZero(input[offset..][0..64])) 64 else 8;
+                self.zero_run += zeros;
+                offset += zeros;
+                continue;
+            }
+            all_zero = false;
+            // Large held runs drain in bounded token batches; preserve the
+            // current word in the existing carry until those tokens finish.
+            if (self.zero_run > 512) {
+                self.carry = input[offset..][0..8].*;
+                self.carry_len = 8;
+                self.prepareWord();
+                offset += 8;
+                break;
+            }
+            const prefix: usize = if (self.zero_run != 0) @ctz(word) / 8 else 0;
+            const suffix: usize = @clz(word) / 8;
+            self.closing_run = self.zero_run + prefix;
+            self.run_literal_written = false;
+            while (self.closing_run != 0) self.runTokenBulk();
+            literals.prefix(self, word >> @intCast(prefix * 8), @intCast(8 - prefix - suffix));
+            self.zero_run = suffix;
+            offset += 8;
+        }
+        checksum.accepted(&self.adler, input[0..offset], all_zero);
+        self.total_input += offset;
+        return offset;
+    }
+
+    fn runBatch(self: *Encoder) void {
+        while (self.closing_run != 0 and self.pending.len - self.pending_len >= 16) self.runTokenBulk();
+    }
+
+    fn runTokenBulk(self: *Encoder) void {
         if (!self.run_literal_written) {
-            self.symbol(0);
+            self.writeBitsBulk(syntax.codes[0], syntax.lengths[0]);
             self.closing_run -= 1;
             self.run_literal_written = true;
         } else if (self.closing_run >= 258) {
-            self.writeBits(syntax.codes[285], @as(u6, syntax.lengths[285]) + 1);
+            self.writeBitsBulk(syntax.codes[285], @as(u6, syntax.lengths[285]) + 1);
             self.closing_run -= 258;
         } else if (self.closing_run > 4) {
             const length = syntax.length(self.closing_run);
-            self.symbol(length.symbol);
-            self.writeBits(length.extra, @as(u6, length.extra_bits) + 1);
+            self.writeBitsBulk(syntax.codes[length.symbol], syntax.lengths[length.symbol]);
+            self.writeBitsBulk(length.extra, @as(u6, length.extra_bits) + 1);
             self.closing_run = 0;
         } else {
-            self.symbol(0);
+            self.writeBitsBulk(syntax.codes[0], syntax.lengths[0]);
             self.closing_run -= 1;
         }
+    }
+
+    /// Store a reservoir word into valid queue capacity, advancing only its
+    /// complete bytes. Subsequent stores may overlap unused queue bytes; those
+    /// bytes are never published. This removes per-byte branches and scratch.
+    pub fn writeBitsBulk(self: *Encoder, value: u64, count: u6) void {
+        std.debug.assert(count <= 48 and self.pending.len - self.pending_len >= 8);
+        const joined = self.bits | (value << self.bit_count);
+        const total: u7 = @as(u7, self.bit_count) + count;
+        const bytes: usize = total / 8;
+        std.mem.writeInt(u64, self.pending[self.pending_len..][0..8], joined, .little);
+        self.pending_len += bytes;
+        self.bits = joined >> @intCast(bytes * 8);
+        self.bit_count = @intCast(total % 8);
     }
     fn dynamicHeader(self: *Encoder) void {
         self.writeBits(syntax.header[2] & 0xfe, 8);
