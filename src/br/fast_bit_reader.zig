@@ -1,27 +1,29 @@
 const std = @import("std");
 const bitstream = @import("../bitstream.zig");
 const core = @import("../core.zig");
+const bit_count = @import("../io/bit_count.zig");
+const BitCount = bit_count.BitCount;
 
 /// Brotli payload reader modeled after upstream's hot-loop bit window. Header
 /// parsing stays on the compact scalar reader; a complete compressed payload
 /// can temporarily use this reservoir and synchronize its logical cursor back.
 pub const Reader = struct {
     input: []const u8,
-    bit_len: usize,
+    bit_len: BitCount,
     next_byte: usize,
     bit_buffer: u64 = 0,
     bit_count: usize = 0,
 
     pub fn initFrom(source: bitstream.BitReader) Reader {
-        const consumed_bits = source.bitPosition();
+        const consumed_bits = bit_count.positionAssumeBounded(source.byte_index, source.bit_index);
         var reader = Reader{
             .input = source.input,
             .bit_len = source.bit_len,
             .next_byte = source.byte_index,
         };
         if (source.bit_index != 0 and source.byte_index < source.input.len) {
-            reader.bit_buffer = source.input[source.byte_index] >> source.bit_index;
-            reader.bit_count = @min(8 - @as(usize, source.bit_index), source.bit_len -| consumed_bits);
+            reader.bit_count = bit_count.bounded(source.bit_len -| consumed_bits, 8 - @as(usize, source.bit_index));
+            reader.bit_buffer = lowByteBits(source.input[source.byte_index] >> source.bit_index, reader.bit_count);
             reader.next_byte += 1;
         }
         return reader;
@@ -29,17 +31,12 @@ pub const Reader = struct {
 
     pub fn syncTo(self: Reader, target: *bitstream.BitReader) void {
         const position = self.bitPosition();
-        target.byte_index = position / 8;
+        target.byte_index = bit_count.floorBytes(position) catch unreachable;
         target.bit_index = @intCast(position % 8);
     }
 
-    pub fn bitPosition(self: Reader) usize {
-        // next_byte points just past the last staged source byte. Clipping its
-        // bit position handles a final partial byte, so subtracting the live
-        // reservoir count reconstructs the exact consumed position.
-        const staged_end = @min(self.next_byte * 8, self.bit_len);
-        std.debug.assert(self.bit_count <= staged_end);
-        return staged_end - self.bit_count;
+    pub fn bitPosition(self: Reader) BitCount {
+        return consumedBitPosition(self.next_byte, self.bit_len, self.bit_count);
     }
 
     pub fn readBits(self: *Reader, comptime T: type, count: u6) core.Error!T {
@@ -87,7 +84,7 @@ pub const Reader = struct {
 
     pub fn hasBits(self: Reader, count: u6) bool {
         const position = self.bitPosition();
-        return @as(usize, count) <= self.bit_len - position;
+        return @as(BitCount, count) <= self.bit_len - position;
     }
 
     pub fn hasStagedBits(self: Reader, count: u6) bool {
@@ -116,7 +113,7 @@ pub const Reader = struct {
 
         // Logical bits are bounded by input.len, so a complete valid word
         // also proves its physical load is inside the caller buffer.
-        const valid_unstaged_bits = self.bit_len -| (self.next_byte * 8);
+        const valid_unstaged_bits = self.bit_len -| bit_count.fromBytesAssumeBounded(self.next_byte);
         if (requested_bits <= 8 and self.bit_count <= 8 and valid_unstaged_bits >= 64) {
             const word = std.mem.readInt(u64, self.input[self.next_byte..][0..8], .little);
             self.bit_buffer |= word << @intCast(self.bit_count);
@@ -134,14 +131,55 @@ pub const Reader = struct {
             self.next_byte += 4;
         }
         while (self.bit_count < requested_bits and self.next_byte < self.input.len and self.bit_count <= 56) {
-            const valid_bits = self.bit_len - @min(self.next_byte * 8, self.bit_len);
+            const valid_bits = bit_count.bounded(self.bit_len -| bit_count.fromBytesAssumeBounded(self.next_byte), 8);
             if (valid_bits == 0) break;
-            self.bit_buffer |= @as(u64, self.input[self.next_byte]) << @intCast(self.bit_count);
-            self.bit_count += @min(valid_bits, 8);
+            self.bit_buffer |= @as(u64, lowByteBits(self.input[self.next_byte], valid_bits)) << @intCast(self.bit_count);
+            self.bit_count += valid_bits;
             self.next_byte += 1;
         }
     }
 };
+
+inline fn lowByteBits(byte: u8, valid_bits: usize) u8 {
+    // Mask padding when it enters the reservoir, so fixed-width Huffman peeks
+    // need no logical-tail branch. The wider mask also handles all eight bits.
+    std.debug.assert(valid_bits <= 8);
+    const mask = (@as(u16, 1) << @intCast(valid_bits)) - 1;
+    return byte & @as(u8, @intCast(mask));
+}
+
+fn consumedBitPosition(next_byte: usize, bit_len: BitCount, staged_bits: usize) BitCount {
+    // next_byte points just past the last staged source byte. Clipping its
+    // wide bit address handles a final partial byte before subtracting the
+    // local reservoir count to reconstruct the exact consumed position.
+    const staged_end = @min(bit_count.fromBytesAssumeBounded(next_byte), bit_len);
+    std.debug.assert(staged_bits <= 64 and staged_bits <= staged_end);
+    return staged_end - @as(BitCount, staged_bits);
+}
+
+test "Brotli fast bit reader absolute cursors cross narrow bit boundaries" {
+    // Exercise cursor geometry independently of physical input: no fabricated
+    // large slice or load is needed to reach addresses above the 32-bit limit.
+    const vectors = [_]struct {
+        next_byte: usize,
+        bit_len: BitCount,
+        staged_bits: usize,
+        position: BitCount,
+        byte_index: usize,
+        bit_index: u3,
+    }{
+        .{ .next_byte = (1 << 29) - 1, .bit_len = 4294967296, .staged_bits = 5, .position = 4294967283, .byte_index = 536870910, .bit_index = 3 },
+        .{ .next_byte = 1 << 29, .bit_len = 4294967296, .staged_bits = 0, .position = 4294967296, .byte_index = 536870912, .bit_index = 0 },
+        .{ .next_byte = (1 << 29) + 1, .bit_len = 4294967301, .staged_bits = 2, .position = 4294967299, .byte_index = 536870912, .bit_index = 3 },
+        .{ .next_byte = std.math.maxInt(u32), .bit_len = 34359738357, .staged_bits = 61, .position = 34359738296, .byte_index = 4294967287, .bit_index = 0 },
+    };
+    for (vectors) |vector| {
+        const position = consumedBitPosition(vector.next_byte, vector.bit_len, vector.staged_bits);
+        try std.testing.expectEqual(vector.position, position);
+        try std.testing.expectEqual(vector.byte_index, try bit_count.floorBytes(position));
+        try std.testing.expectEqual(vector.bit_index, @as(u3, @intCast(position % 8)));
+    }
+}
 
 test "Brotli fast bit reader matches scalar mixed reads and cursors" {
     var input: [257]u8 = undefined;
@@ -264,6 +302,60 @@ test "Brotli fast bit reader full-word refills honor every logical tail" {
                     try std.testing.expectEqual(scalar.byte_index, synced.byte_index);
                     try std.testing.expectEqual(scalar.bit_index, synced.bit_index);
                 }
+            }
+        }
+    }
+}
+
+test "Brotli fast bit reader padded peeks match independent logical bit oracle" {
+    const Oracle = struct {
+        fn peek(input: []const u8, logical_bits: usize, start: usize, width: usize) u32 {
+            var value: u32 = 0;
+            for (0..width) |offset| {
+                const position = start + offset;
+                if (position >= logical_bits) break;
+                const bit = (input[position / 8] >> @as(u3, @intCast(position % 8))) & 1;
+                value |= @as(u32, bit) << @as(u5, @intCast(offset));
+            }
+            return value;
+        }
+    };
+
+    var input: [23]u8 = undefined;
+    for (&input, 0..) |*byte, index| byte.* = @as(u8, @truncate(index * 73 + 0xa5)) | 0x80;
+    // Physical high bits and bytes remain nonzero past every logical endpoint.
+    // Every starting position exercises its own initial partial byte, while
+    // wider probes also refill across the final partial byte and full words.
+    for (0..input.len * 8 + 1) |logical_bits| {
+        for (0..logical_bits + 1) |start| {
+            var source = bitstream.BitReader.initBitLength(&input, logical_bits);
+            source.byte_index = start / 8;
+            source.bit_index = @intCast(start % 8);
+            const initial = Reader.initFrom(source);
+
+            var nine = initial;
+            var ten = initial;
+            try std.testing.expectEqual(@as(u9, @intCast(Oracle.peek(&input, logical_bits, start, 9))), nine.peekBits9Padded());
+            try std.testing.expectEqual(@as(u10, @intCast(Oracle.peek(&input, logical_bits, start, 10))), ten.peekBits10Padded());
+            try std.testing.expectEqual(@as(BitCount, start), nine.bitPosition());
+            try std.testing.expectEqual(@as(BitCount, start), ten.bitPosition());
+
+            for (0..33) |width| {
+                const count: u6 = @intCast(width);
+                const expected = Oracle.peek(&input, logical_bits, start, width);
+                var generic = initial;
+                try std.testing.expectEqual(expected, generic.peekBitsPadded(u32, count));
+                try std.testing.expectEqual(@as(BitCount, start), generic.bitPosition());
+                if (width <= logical_bits - start) {
+                    try std.testing.expectEqual(expected, try generic.readBits(u32, count));
+                    try std.testing.expectEqual(@as(BitCount, start + width), generic.bitPosition());
+                } else {
+                    try std.testing.expectError(error.TruncatedFrame, generic.readBits(u32, count));
+                    try std.testing.expectEqual(@as(BitCount, start), generic.bitPosition());
+                }
+                var synced = source;
+                generic.syncTo(&synced);
+                try std.testing.expectEqual(generic.bitPosition(), synced.bitPosition());
             }
         }
     }

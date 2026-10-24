@@ -4,6 +4,9 @@ const builtin = @import("builtin");
 const core = @import("core.zig");
 pub const Counter = core.StreamCount;
 const stream_count = core.stream_count;
+const bit_count_math = @import("io/bit_count.zig");
+pub const BitCount = bit_count_math.BitCount;
+const stored_bit_bound = @import("br/encoder/stored_bit_bound.zig");
 const lz77 = @import("lz77.zig");
 const bitstream = @import("bitstream.zig");
 const huffman = @import("huffman.zig");
@@ -1337,7 +1340,7 @@ const IncrementalLiteralCodec = struct {
         if (lengths.insert_len != decoded_len) return error.UnsupportedBrotliFeature;
         return .{
             .header = .{ .decoded_len = decoded_len, .literal_tree = header.literal_trees[0], .final = final },
-            .bits_read = reader.bitPosition(),
+            .bits_read = try bit_count_math.toLocal(reader.bitPosition()),
         };
     }
 
@@ -1404,7 +1407,7 @@ const IncrementalCopyCodec = struct {
         const compressed = try readMinimalCompressedHeaderWithOptions(&reader, large_window);
         return .{
             .header = .{ .decoded_len = decoded_len, .compressed = compressed, .final = final, .large_window = large_window },
-            .bits_read = reader.bitPosition(),
+            .bits_read = try bit_count_math.toLocal(reader.bitPosition()),
         };
     }
 
@@ -1557,7 +1560,7 @@ const IncrementalRleCodec = struct {
                 .decoded_len = decoded_len,
                 .repeated_byte = @intCast(literal),
             },
-            .bits_read = reader.bitPosition(),
+            .bits_read = try bit_count_math.toLocal(reader.bitPosition()),
         };
     }
 };
@@ -1884,8 +1887,11 @@ const IncrementalPlannedEncoderCodec = struct {
         return writeLegacyFinalPlannedBlock(allocator, out, state, block);
     }
 
-    fn startBitPosition(len: usize, bit_index: u3) usize {
-        return if (bit_index == 0) len * 8 else (len - 1) * 8 + bit_index;
+    fn startBitPosition(len: usize, bit_index: u3) BitCount {
+        return if (bit_index == 0)
+            bit_count_math.fromBytesAssumeBounded(len)
+        else
+            bit_count_math.positionAssumeBounded(len - 1, bit_index);
     }
 
     fn appendHistory(history: *std.ArrayList(u8), allocator: std.mem.Allocator, block: []const u8, limit: usize) br.Error!void {
@@ -2218,6 +2224,8 @@ test {
     _ = @import("tests/br_stored_memory_contracts.zig");
     _ = @import("tests/br_stored_memory_resources.zig");
     _ = @import("tests/br_stored_memory_transactions.zig");
+    _ = @import("tests/wide_bit_contracts.zig");
+    _ = @import("tests/wide_bit_resources.zig");
     _ = stored_memory_owner;
     _ = stored_memory_reuse;
     _ = @import("br/encoder/hq_parser/length_options_tests.zig");
@@ -2242,6 +2250,7 @@ test {
     _ = stream_block_split;
     _ = compound_wire;
     _ = header_profile;
+    _ = stored_bit_bound;
     _ = code_length_decoder_mod;
     _ = serialized_dictionary;
     _ = serialized_dictionary_builder;
@@ -3613,19 +3622,14 @@ pub fn encodedStoredStreamBound(input_len: usize) Error!usize {
 }
 
 pub fn encodedStoredStreamBoundWithOptions(input_len: usize, options: StoredStreamOptions) Error!usize {
-    var bit_count = try encoder_window_format.prefixBitLen(options.window_bits, options.large_window);
+    var bit_count: BitCount = try encoder_window_format.prefixBitLen(options.window_bits, options.large_window);
     if (options.metadata.len != 0) {
         bit_count = try addStoredMetadataMetaBlockBitsLen(bit_count, options.metadata.len);
     }
 
-    var remaining = input_len;
-    while (remaining != 0) {
-        const block_len = @min(remaining, max_uncompressed_meta_block_len);
-        bit_count = try addStoredUncompressedMetaBlockBitsLen(bit_count, block_len);
-        remaining -= block_len;
-    }
+    bit_count = try stored_bit_bound.blocks(bit_count, input_len, max_uncompressed_meta_block_len);
 
-    bit_count = std.math.add(usize, bit_count, 2) catch return error.IntegerOverflow; // ISLAST + ISLASTEMPTY.
+    bit_count = std.math.add(BitCount, bit_count, 2) catch return error.IntegerOverflow; // ISLAST + ISLASTEMPTY.
     return bytesForBits(bit_count);
 }
 
@@ -3634,22 +3638,63 @@ pub fn encodedStoredStreamChunksBound(chunks: []const []const u8) Error!usize {
 }
 
 pub fn encodedStoredStreamChunksBoundWithOptions(chunks: []const []const u8, options: StoredStreamOptions) Error!usize {
-    var bit_count = try encoder_window_format.prefixBitLen(options.window_bits, options.large_window);
+    var bit_count: BitCount = try encoder_window_format.prefixBitLen(options.window_bits, options.large_window);
     if (options.metadata.len != 0) {
         bit_count = try addStoredMetadataMetaBlockBitsLen(bit_count, options.metadata.len);
     }
 
     for (chunks) |chunk| {
-        var offset: usize = 0;
-        while (offset < chunk.len) {
-            const block_len = @min(chunk.len - offset, max_uncompressed_meta_block_len);
-            bit_count = try addStoredUncompressedMetaBlockBitsLen(bit_count, block_len);
-            offset += block_len;
-        }
+        bit_count = try stored_bit_bound.blocks(bit_count, chunk.len, max_uncompressed_meta_block_len);
     }
 
-    bit_count = std.math.add(usize, bit_count, 2) catch return error.IntegerOverflow; // ISLAST + ISLASTEMPTY.
+    bit_count = std.math.add(BitCount, bit_count, 2) catch return error.IntegerOverflow; // ISLAST + ISLASTEMPTY.
     return bytesForBits(bit_count);
+}
+
+test "Brotli wide bit addressing writer positions and public encoding bounds cross 512 MiB" {
+    const boundary: usize = 1 << 29;
+    const bit_boundary: BitCount = @as(BitCount, 1) << 32;
+    try std.testing.expectEqual(bit_boundary, IncrementalPlannedEncoderCodec.startBitPosition(boundary, 0));
+    try std.testing.expectEqual(bit_boundary + 5, IncrementalPlannedEncoderCodec.startBitPosition(boundary + 1, 5));
+    try std.testing.expectEqual(@as(usize, 5), try bit_count_math.toLocal(
+        IncrementalPlannedEncoderCodec.startBitPosition(boundary + 1, 5) - bit_boundary,
+    ));
+    const lengths = [_]usize{ boundary - 1, boundary, boundary + 1 };
+    const overheads = [_]usize{ 129, 129, 132 };
+    for (lengths, overheads) |len, overhead| {
+        try std.testing.expectEqual(len + overhead, try encodedStoredStreamBound(len));
+        try std.testing.expectEqual(len + overhead + 2, try encodedStoredStreamBoundWithOptions(len, .{
+            .large_window = true,
+            .window_bits = 25,
+        }));
+        try std.testing.expectEqual(len + overhead + 5, try encodedStoredStreamBoundWithOptions(len, .{ .metadata = "xyz" }));
+        // Explicit 32 KiB planned blocks each contribute three header bytes.
+        const planned = try encodedPlannedChunkedStreamBoundForInputLen(len, .{ .block_len = 32768, .adaptive_blocks = false });
+        const block_count = len / 32768 + @intFromBool(len % 32768 != 0);
+        try std.testing.expectEqual(len + block_count * 3 + 1, planned);
+        inline for (.{ .fast, .balanced, .ratio }) |level| {
+            const options = PlannedEncodeOptions{ .level = level };
+            const chunks_options = try plannedStreamChunksOptionsFromEncodeOptions(options);
+            try std.testing.expectEqual(
+                try encodedPlannedChunkedStreamBoundForInputLen(len, chunks_options),
+                try encodedPlannedStreamBoundWithOptions(len, options),
+            );
+        }
+    }
+    // Repeated borrows make a real chunk-list geometry above the boundary
+    // without inventing an invalid giant physical slice or decoding payload.
+    const block = try std.testing.allocator.alloc(u8, 1048576);
+    defer std.testing.allocator.free(block);
+    @memset(block, 0xa5);
+    const chunks: [513][]const u8 = @splat(block);
+    const input_len = block.len * chunks.len;
+    try std.testing.expectEqual(input_len + chunks.len * 3 + 2, try encodedStoredStreamChunksBound(&chunks));
+    try std.testing.expectEqual(input_len + (input_len / 32768) * 3 + 1, try encodedPlannedStreamChunksBoundWithOptions(&chunks, .{
+        .block_len = 32768,
+        .adaptive_blocks = false,
+    }));
+    try std.testing.expectError(error.IntegerOverflow, encodedStoredStreamBound(std.math.maxInt(usize)));
+    try std.testing.expectError(error.InvalidBlockPlan, encodedStoredStreamBoundWithOptions(std.math.maxInt(usize), .{ .window_bits = 9 }));
 }
 
 pub const StreamSummary = struct {
@@ -3829,9 +3874,8 @@ const BitWriter = struct {
         self.bit_index = 0;
     }
 
-    fn bitPosition(self: *const BitWriter) usize {
-        if (self.bit_index == 0) return self.out.items.len * 8;
-        return (self.out.items.len - 1) * 8 + self.bit_index;
+    fn bitPosition(self: *const BitWriter) BitCount {
+        return IncrementalPlannedEncoderCodec.startBitPosition(self.out.items.len, self.bit_index);
     }
 
     fn writeAlignedBytes(self: *BitWriter, allocator: std.mem.Allocator, bytes: []const u8) Error!void {
@@ -5496,16 +5540,11 @@ fn encodedPlannedChunkedStreamBoundForInputLen(input_len: usize, options: Planne
         stream_block_split.conservative_bound_block_len
     else
         configured_block_len;
-    var bit_count: usize = try encoder_window_format.prefixBitLen(options.window_bits, options.large_window);
+    var bit_count: BitCount = try encoder_window_format.prefixBitLen(options.window_bits, options.large_window);
     if (options.metadata.len != 0)
         bit_count = try addStoredMetadataMetaBlockBitsLen(bit_count, options.metadata.len);
-    var remaining = input_len;
-    while (remaining != 0) {
-        const current_len = @min(remaining, block_len);
-        bit_count = try addStoredUncompressedMetaBlockBitsLen(bit_count, current_len);
-        remaining -= current_len;
-    }
-    bit_count = std.math.add(usize, bit_count, 2) catch return error.IntegerOverflow;
+    bit_count = try stored_bit_bound.blocks(bit_count, input_len, block_len);
+    bit_count = std.math.add(BitCount, bit_count, 2) catch return error.IntegerOverflow;
     return bytesForBits(bit_count);
 }
 
@@ -5520,18 +5559,13 @@ pub fn encodedPlannedStreamChunksBoundWithOptions(chunks: []const []const u8, op
         stream_block_split.conservative_bound_block_len
     else
         configured_block_len;
-    var bit_count = try encoder_window_format.prefixBitLen(options.window_bits, options.large_window);
+    var bit_count: BitCount = try encoder_window_format.prefixBitLen(options.window_bits, options.large_window);
     if (options.metadata.len != 0)
         bit_count = try addStoredMetadataMetaBlockBitsLen(bit_count, options.metadata.len);
     for (chunks) |chunk| {
-        var offset: usize = 0;
-        while (offset < chunk.len) {
-            const current_len = @min(chunk.len - offset, block_len);
-            bit_count = try addStoredUncompressedMetaBlockBitsLen(bit_count, current_len);
-            offset += current_len;
-        }
+        bit_count = try stored_bit_bound.blocks(bit_count, chunk.len, block_len);
     }
-    bit_count = std.math.add(usize, bit_count, 2) catch return error.IntegerOverflow;
+    bit_count = std.math.add(BitCount, bit_count, 2) catch return error.IntegerOverflow;
     return bytesForBits(bit_count);
 }
 
@@ -6825,7 +6859,7 @@ fn encodeQ0OnePassMetaBlockCandidate(
     return .{
         .meta_block = .{
             .bit_index = writer.bit_index,
-            .bit_count = writer.bitPosition() - start_bit_position,
+            .bit_count = try bit_count_math.toLocal(writer.bitPosition() - start_bit_position),
             .wire_state = .{
                 .last_distances = payload_writer.last_distances,
                 .output_pos = next_output_pos,
@@ -7048,7 +7082,7 @@ fn encodeQ1TwoPassMetaBlockCandidate(
     if (builtin.is_test) test_q1_two_pass_writer_hits += 1;
     return .{
         .bit_index = writer.bit_index,
-        .bit_count = writer.bitPosition() - start_bit_position,
+        .bit_count = try bit_count_math.toLocal(writer.bitPosition() - start_bit_position),
         .wire_state = .{
             .last_distances = payload_writer.last_distances,
             .output_pos = next_output_pos,
@@ -7373,7 +7407,7 @@ fn encodeQ23MetaBlockCandidate(
     };
     return .{
         .bit_index = writer.bit_index,
-        .bit_count = writer.bitPosition() - start_bit_position,
+        .bit_count = try bit_count_math.toLocal(writer.bitPosition() - start_bit_position),
         .wire_state = .{
             .last_distances = last_distances,
             .output_pos = next_output_pos,
@@ -7412,7 +7446,7 @@ fn encodePlannedMetaBlockCandidate(
         options,
     );
     candidate.bit_index = writer.bit_index;
-    candidate.bit_count = writer.bitPosition() - start_bit_index;
+    candidate.bit_count = try bit_count_math.toLocal(writer.bitPosition() - start_bit_index);
     return candidate;
 }
 
@@ -8361,10 +8395,10 @@ fn writeAdaptivePlannedStreamBlock(
     const single_wire_state = state.wire_state;
     const single_context_previous = state.context_previous;
     const single_q0_entropy_state = state.q0_entropy_state;
-    const single_bits = IncrementalPlannedEncoderCodec.startBitPosition(
+    const single_bits = try bit_count_math.toLocal(IncrementalPlannedEncoderCodec.startBitPosition(
         state.adaptive_single_wire.items.len,
         single_bit_index,
-    ) - start_bit_index;
+    ) - start_bit_index);
 
     try prepareAdaptiveBranch(
         allocator,
@@ -8394,10 +8428,10 @@ fn writeAdaptivePlannedStreamBlock(
     const split_wire_state = state.wire_state;
     const split_context_previous = state.context_previous;
     const split_q0_entropy_state = state.q0_entropy_state;
-    const split_bits = IncrementalPlannedEncoderCodec.startBitPosition(
+    const split_bits = try bit_count_math.toLocal(IncrementalPlannedEncoderCodec.startBitPosition(
         state.adaptive_split_wire.items.len,
         split_bit_index,
-    ) - start_bit_index;
+    ) - start_bit_index);
     const grid_plans = split_plan.gridPlans();
     var grid_bits: ?usize = null;
     var grid_bit_index: u3 = undefined;
@@ -8440,10 +8474,10 @@ fn writeAdaptivePlannedStreamBlock(
                 block[segment_start..],
                 true,
             );
-            const candidate_bits = IncrementalPlannedEncoderCodec.startBitPosition(
+            const candidate_bits = try bit_count_math.toLocal(IncrementalPlannedEncoderCodec.startBitPosition(
                 state.adaptive_grid_candidate_wire.items.len,
                 state.bit_index,
-            ) - start_bit_index;
+            ) - start_bit_index);
             if (grid_bits == null or candidate_bits < grid_bits.?) {
                 grid_bits = candidate_bits;
                 state.adaptive_grid_wire.clearRetainingCapacity();
@@ -8546,7 +8580,7 @@ fn writePlannedStreamMetaBlock(
     const start_byte = if (start_len == 0) 0 else out.items[start_len - 1];
     const start_bits = IncrementalPlannedEncoderCodec.startBitPosition(start_len, start_bit_index);
     const stored_end_bits = try addStoredUncompressedMetaBlockBitsLen(start_bits, block.len);
-    const stored_bit_count = stored_end_bits - start_bits;
+    const stored_bit_count = try bit_count_math.toLocal(stored_end_bits - start_bits);
     const start_wire_state = state.wire_state;
     const start_q0_entropy_state = state.q0_entropy_state;
     errdefer state.q0_entropy_state = start_q0_entropy_state;
@@ -12160,7 +12194,7 @@ fn encodeHqCommandsCandidate(allocator: std.mem.Allocator, source: hq_types.Sour
         .final_wire_state = &final_state,
     });
     result.bit_index = writer.bit_index;
-    result.bit_count = writer.bitPosition() - context.start_bit_index;
+    result.bit_count = try bit_count_math.toLocal(writer.bitPosition() - context.start_bit_index);
     result.last_distances = final_state.last_distances;
     result.emitted.emitted_metablocks = 1;
     result.emitted.emitted_commands = @intCast(commands.len);
@@ -12226,7 +12260,7 @@ fn encodeHqStoredCandidate(allocator: std.mem.Allocator, source: hq_types.Source
         try writer.writeBits(allocator, 1, 1);
     }
     result.bit_index = writer.bit_index;
-    result.bit_count = writer.bitPosition() - context.start_bit_index;
+    result.bit_count = try bit_count_math.toLocal(writer.bitPosition() - context.start_bit_index);
     result.emitted.emitted_metablocks = 1;
     return result;
 }
@@ -12474,22 +12508,8 @@ fn writeUncompressedMetaBlock(allocator: std.mem.Allocator, writer: *BitWriter, 
     try writer.writeAlignedBytes(allocator, block);
 }
 
-fn addStoredUncompressedMetaBlockBitsLen(bit_count: usize, block_len: usize) Error!usize {
-    if (block_len == 0 or block_len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
-    const len_minus_one = block_len - 1;
-    const mnibbles: usize = if (len_minus_one <= 0xffff)
-        4
-    else if (len_minus_one <= 0xfffff)
-        5
-    else
-        6;
-    var bits = bit_count;
-    bits = std.math.add(usize, bits, 1 + 2) catch return error.IntegerOverflow; // ISLAST + MNIBBLES.
-    bits = std.math.add(usize, bits, mnibbles * 4) catch return error.IntegerOverflow;
-    bits = std.math.add(usize, bits, 1) catch return error.IntegerOverflow; // ISUNCOMPRESSED.
-    bits = alignBitCountToByte(bits);
-    const payload_bits = std.math.mul(usize, block_len, 8) catch return error.IntegerOverflow;
-    return std.math.add(usize, bits, payload_bits) catch return error.IntegerOverflow;
+fn addStoredUncompressedMetaBlockBitsLen(bit_count: BitCount, block_len: usize) Error!BitCount {
+    return stored_bit_bound.uncompressed(bit_count, block_len);
 }
 
 fn writeMetadataMetaBlock(allocator: std.mem.Allocator, writer: *BitWriter, metadata: []const u8) Error!void {
@@ -12509,21 +12529,8 @@ fn writeMetadataMetaBlock(allocator: std.mem.Allocator, writer: *BitWriter, meta
     try writer.writeAlignedBytes(allocator, metadata);
 }
 
-fn addStoredMetadataMetaBlockBitsLen(bit_count: usize, metadata_len: usize) Error!usize {
-    if (metadata_len > 0x1_0000) return error.InvalidBlockPlan;
-    var bits = bit_count;
-    bits = std.math.add(usize, bits, 1 + 2 + 1) catch return error.IntegerOverflow; // ISLAST + MNIBBLES + reserved.
-    if (metadata_len == 0) {
-        bits = std.math.add(usize, bits, 2) catch return error.IntegerOverflow;
-    } else {
-        const len_minus_one = metadata_len - 1;
-        const mskipbytes: usize = if (len_minus_one <= 0xff) 1 else 2;
-        bits = std.math.add(usize, bits, 2) catch return error.IntegerOverflow; // MSKIPBYTES.
-        bits = std.math.add(usize, bits, mskipbytes * 8) catch return error.IntegerOverflow;
-    }
-    bits = alignBitCountToByte(bits);
-    const payload_bits = std.math.mul(usize, metadata_len, 8) catch return error.IntegerOverflow;
-    return std.math.add(usize, bits, payload_bits) catch return error.IntegerOverflow;
+fn addStoredMetadataMetaBlockBitsLen(bit_count: BitCount, metadata_len: usize) Error!BitCount {
+    return stored_bit_bound.metadata(bit_count, metadata_len);
 }
 
 pub fn decodeStreamAlloc(allocator: std.mem.Allocator, stream: []const u8) Error![]u8 {
@@ -14470,7 +14477,7 @@ pub fn profileCompressedHeaders(io: std.Io, allocator: std.mem.Allocator, stream
     for (0..iterations) |_| {
         for (starts) |start| {
             var reader = bitstream.BitReader.init(stream);
-            reader.byte_index = start / 8;
+            reader.byte_index = try bit_count_math.floorBytes(start);
             reader.bit_index = @intCast(start % 8);
             var header: MinimalCompressedHeader = undefined;
             var literal_profile: PrefixCodeProfile = .{};
@@ -14499,7 +14506,7 @@ pub fn profileCompressedHeaders(io: std.Io, allocator: std.mem.Allocator, stream
             finishCompressedHeader(&header, shape, tree_counts);
 
             total.compressed_meta_block_count += 1;
-            total.input_bits +%= reader.bitPosition() - start;
+            total.input_bits = std.math.add(BitCount, total.input_bits, reader.bitPosition() - start) catch return error.IntegerOverflow;
             total.literal_block_types +%= shape.literal_block_types;
             total.command_block_types +%= shape.command_block_types;
             total.distance_block_types +%= shape.distance_block_types;
@@ -14530,11 +14537,13 @@ pub fn benchmarkCompressedHeaders(io: std.Io, allocator: std.mem.Allocator, stre
     for (0..iterations) |_| {
         for (starts) |start| {
             var reader = bitstream.BitReader.init(stream);
-            reader.byte_index = start / 8;
+            reader.byte_index = try bit_count_math.floorBytes(start);
             reader.bit_index = @intCast(start % 8);
             var header: MinimalCompressedHeader = undefined;
             try readMinimalCompressedHeaderInto(&reader, &header);
-            checksum +%= reader.bitPosition() + header.literal_tree_count + header.command_block.block_type_count + header.distance_tree_count;
+            // Diagnostic fingerprints deliberately wrap at the native width;
+            // absolute parser positions remain wide until this boundary.
+            checksum +%= @as(usize, @truncate(reader.bitPosition())) +% header.literal_tree_count +% header.command_block.block_type_count +% header.distance_tree_count;
             checksum +%= header.literal_trees[0].table.len + header.insert_copy_trees[0].table.len + header.distance_trees[0].table.len;
             std.mem.doNotOptimizeAway(&header);
         }
@@ -14647,7 +14656,7 @@ pub fn benchmarkClusteredDecodeStages(
         fast_reader.syncTo(&reader);
         if (written != expected.len) return error.SizeMismatch;
         try ensureZeroPaddingAndEnd(reader);
-        checksum +%= written + reader.bitPosition() + output[0] + output[output.len - 1];
+        checksum +%= written +% @as(usize, @truncate(reader.bitPosition())) +% output[0] +% output[output.len - 1];
     }
     const total_ns = elapsedNs(total_start, io);
     if (!std.mem.eql(u8, output, expected)) return error.SizeMismatch;
@@ -14702,8 +14711,8 @@ fn readCompressedHeaderDistanceTreesProfiled(io: std.Io, reader: *bitstream.BitR
     header.active_packed_distance_tree_index = std.math.maxInt(u16);
 }
 
-fn collectCompressedHeaderStarts(allocator: std.mem.Allocator, stream: []const u8) Error![]usize {
-    var starts: std.ArrayList(usize) = .empty;
+fn collectCompressedHeaderStarts(allocator: std.mem.Allocator, stream: []const u8) Error![]BitCount {
+    var starts: std.ArrayList(BitCount) = .empty;
     errdefer starts.deinit(allocator);
 
     var output: std.ArrayList(u8) = .empty;
@@ -21760,12 +21769,8 @@ fn storedWindowBitsLen(window_bits: u5) Error!usize {
     return encoder_window_format.prefixBitLen(window_bits, false);
 }
 
-fn alignBitCountToByte(bit_count: usize) usize {
-    return (bit_count + 7) & ~@as(usize, 7);
-}
-
-fn bytesForBits(bit_count: usize) usize {
-    return (bit_count + 7) / 8;
+fn bytesForBits(bit_count: BitCount) Error!usize {
+    return bit_count_math.ceilBytes(bit_count);
 }
 
 fn consumeZeroPaddingToByte(reader: *bitstream.BitReader) Error!void {

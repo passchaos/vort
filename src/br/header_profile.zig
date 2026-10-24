@@ -1,11 +1,12 @@
 const std = @import("std");
+const BitCount = @import("../io/bit_count.zig").BitCount;
 
 /// Timing and shape counters for Brotli's compressed-header parser. This is a
 /// diagnostic surface for repository benchmark tooling; normal decode does not
 /// collect these counters or read the clock.
 pub const Profile = struct {
     compressed_meta_block_count: usize = 0,
-    input_bits: usize = 0,
+    input_bits: BitCount = 0,
     block_switch_ns: u64 = 0,
     context_map_ns: u64 = 0,
     literal_tree_ns: u64 = 0,
@@ -36,7 +37,10 @@ pub const Profile = struct {
     }
 
     pub fn checksum(self: Profile) usize {
-        return self.input_bits +% self.literal_block_types +% self.command_block_types +% self.distance_block_types +%
+        // Benchmark checksums retain their machine-word wrapping behavior;
+        // the absolute input counter keeps every bit above that word width.
+        const input_checksum: usize = @truncate(self.input_bits);
+        return input_checksum +% self.literal_block_types +% self.command_block_types +% self.distance_block_types +%
             self.literal_context_trees +% self.command_trees +% self.distance_context_trees +% self.tree_symbols +% self.tree_entries;
     }
 };
@@ -111,4 +115,24 @@ test "Brotli header profile totals stages and prefix counters" {
     try std.testing.expectEqual(@as(usize, 7), profile.code_length_symbols);
     try std.testing.expectEqual(@as(usize, 2), profile.repeat_symbols);
     try std.testing.expectEqual(@as(usize, 7), profile.families[@intFromEnum(Family.literal)].code_length_symbols);
+}
+
+test "Brotli header profile preserves wide input totals and wraps checksum" {
+    const boundary: BitCount = @as(BitCount, 1) << 32;
+    var profile: Profile = .{
+        .input_bits = boundary - 7,
+        .literal_block_types = 3,
+        .tree_symbols = 5,
+        .tree_entries = std.math.maxInt(usize),
+    };
+    profile.input_bits += 24;
+    const total = boundary + 17;
+    try std.testing.expectEqual(total, profile.input_bits);
+    const low_bits: usize = @truncate(total);
+    try std.testing.expectEqual(low_bits +% 7, profile.checksum());
+    try std.testing.expectEqual(total, profile.input_bits);
+    try std.testing.expectEqual(@as(usize, 0), (Profile{
+        .input_bits = std.math.maxInt(BitCount),
+        .literal_block_types = 1,
+    }).checksum());
 }
