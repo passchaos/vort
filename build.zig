@@ -26,6 +26,16 @@ pub fn build(b: *std.Build) void {
         .optimize = .ReleaseFast,
         .imports = &.{.{ .name = "vail_archive_crypto", .module = vail_crypto_releasefast }},
     });
+    const br_encode_bench_mod = b.createModule(.{
+        .root_source_file = b.path("src/br.zig"),
+        .target = target,
+        .optimize = .ReleaseFast,
+    });
+    const zstd_encode_bench_mod = b.createModule(.{
+        .root_source_file = b.path("src/zstd.zig"),
+        .target = target,
+        .optimize = .ReleaseFast,
+    });
     const br_record_optimal_obj = b.addObject(.{
         .name = "vort-br-record-optimal",
         .root_module = b.createModule(.{
@@ -253,6 +263,8 @@ pub fn build(b: *std.Build) void {
     vort_mod.addObject(zstd_huffman_x2_obj);
     vort_mod_releasefast.addObject(br_record_optimal_releasefast_obj);
     vort_mod_releasefast.addObject(zstd_huffman_x2_releasefast_obj);
+    br_encode_bench_mod.addObject(br_record_optimal_releasefast_obj);
+    zstd_encode_bench_mod.addObject(zstd_huffman_x2_releasefast_obj);
     const benchmark_provenance_mod = b.createModule(.{
         .root_source_file = b.path("tools/benchmark_provenance.zig"),
         .target = target,
@@ -3204,7 +3216,7 @@ pub fn build(b: *std.Build) void {
             .optimize = .ReleaseFast,
             .link_libc = true,
             .imports = &.{
-                .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "vort_br", .module = br_encode_bench_mod },
                 .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
             },
         }),
@@ -5855,7 +5867,7 @@ pub fn build(b: *std.Build) void {
             .optimize = .ReleaseFast,
             .link_libc = true,
             .imports = &.{
-                .{ .name = "vort", .module = vort_mod_releasefast },
+                .{ .name = "vort_zstd", .module = zstd_encode_bench_mod },
                 .{ .name = "benchmark_provenance", .module = benchmark_provenance_mod },
             },
         }),

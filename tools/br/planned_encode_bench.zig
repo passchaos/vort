@@ -1,5 +1,5 @@
 const std = @import("std");
-const vort = @import("vort");
+const br = @import("vort_br");
 const libbrotli = @import("libbrotli_runtime.zig");
 const benchmark_provenance = @import("benchmark_provenance");
 const q8_records_fixture = @import("q8_records_fixture.zig");
@@ -33,7 +33,7 @@ const Options = struct {
     case_filter: ?[]const u8 = null,
     quality_override: ?c_int = null,
     planned_quality: ?u4 = null,
-    planned_mode: vort.BrotliPlannedMode = .generic,
+    planned_mode: br.PlannedMode = .generic,
     extended_dictionary_probes: u16 = 0,
     adaptive_command_split: bool = false,
     adaptive_literal_split: bool = false,
@@ -134,7 +134,7 @@ pub fn main(init: std.process.Init) !void {
             if (!std.mem.eql(u8, filter, case.name)) continue;
         selected_cases += 1;
         const quality = options.quality_override orelse case.quality orelse 3;
-        const vort_encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, case.payload, .{
+        const vort_encoded = try br.encodePlannedStreamWithOptionsAlloc(init.gpa, case.payload, .{
             .level = .fast,
             .quality = options.planned_quality,
             .mode = options.planned_mode,
@@ -143,10 +143,10 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(vort_encoded);
         const reference_encoded = try reference.encodeAlloc(init.gpa, case.payload, quality);
         defer init.gpa.free(reference_encoded);
-        const lazy_encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, case.payload, .{ .level = .balanced });
+        const lazy_encoded = try br.encodePlannedStreamWithOptionsAlloc(init.gpa, case.payload, .{ .level = .balanced });
         defer init.gpa.free(lazy_encoded);
         const extended_dictionary_probes: u16 = if (case.payload.len <= 4096) options.extended_dictionary_probes else 0;
-        const ratio_encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, case.payload, .{
+        const ratio_encoded = try br.encodePlannedStreamWithOptionsAlloc(init.gpa, case.payload, .{
             .level = .ratio,
             .extended_dictionary_probes = extended_dictionary_probes,
             .adaptive_command_split = options.adaptive_command_split,
@@ -157,7 +157,7 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(ratio_encoded);
         // Record semantic dictionary use in addition to the encoded size so the
         // benchmark gate catches regressions that silently fall back to literals.
-        const ratio_summary = try vort.brSummarizeStreamAlloc(init.gpa, ratio_encoded);
+        const ratio_summary = try br.summarizeStreamAlloc(init.gpa, ratio_encoded);
         const decoded = try init.gpa.alloc(u8, case.payload.len);
         defer init.gpa.free(decoded);
         for ([_][]const u8{ vort_encoded, lazy_encoded, ratio_encoded }) |encoded| {
@@ -196,9 +196,9 @@ pub fn main(init: std.process.Init) !void {
                     .vort_api = if (options.planned_quality == null) "reusable_legacy_fast" else "one_shot_quality_preset",
                     .planned_quality = options.planned_quality,
                     .vort_mode = @tagName(options.planned_mode),
-                    .vort_command_state_max_input_kib = options.command_state_max_input_kib orelse vort.brotliCommandStateDefaultMaxInputKiB,
+                    .vort_command_state_max_input_kib = options.command_state_max_input_kib orelse br.command_state_default_max_input_kib,
                     .vort_command_state_override_requested = options.command_state_max_input_kib,
-                    .vort_default_window_bits = vort.brotliDefaultWindowBits,
+                    .vort_default_window_bits = br.default_window_bits,
                     .reference_quality = quality,
                     .reference_quality_override_requested = options.quality_override,
                     .reference_case_quality = case.quality,
@@ -264,13 +264,13 @@ pub fn main(init: std.process.Init) !void {
     }
 }
 
-fn measurePlanned(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, iterations: usize, level: vort.BrotliPlannedCompressionLevel, extended_dictionary_probes: u16, adaptive_command_split: bool, adaptive_literal_split: bool, adaptive_distance_split: ?bool, distance_parameter_search: ?bool) !Sample {
+fn measurePlanned(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, iterations: usize, level: br.PlannedCompressionLevel, extended_dictionary_probes: u16, adaptive_command_split: bool, adaptive_literal_split: bool, adaptive_distance_split: ?bool, distance_parameter_search: ?bool) !Sample {
     var best = Sample{ .ns = std.math.maxInt(u64), .mix = 0 };
     for (0..5) |_| {
         var mix: usize = 0;
         const start = std.Io.Clock.awake.now(io);
         for (0..iterations) |_| {
-            const encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(allocator, payload, .{
+            const encoded = try br.encodePlannedStreamWithOptionsAlloc(allocator, payload, .{
                 .level = level,
                 .extended_dictionary_probes = extended_dictionary_probes,
                 .adaptive_command_split = adaptive_command_split,
@@ -312,17 +312,17 @@ fn measureVort(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, op
         return measureVortLegacy(io, allocator, payload, options.iterations);
 
     var mix: usize = 0;
-    const encode_options: vort.BrotliPlannedEncodeOptions = .{
+    const encode_options: br.PlannedEncodeOptions = .{
         .level = .fast,
         .quality = options.planned_quality,
         .mode = options.planned_mode,
         .command_state_max_input_kib = options.command_state_max_input_kib orelse std.math.maxInt(u8),
     };
-    const warmup = try vort.brEncodePlannedStreamWithOptionsAlloc(allocator, payload, encode_options);
+    const warmup = try br.encodePlannedStreamWithOptionsAlloc(allocator, payload, encode_options);
     allocator.free(warmup);
     const start = std.Io.Clock.awake.now(io);
     for (0..options.iterations) |_| {
-        const encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(allocator, payload, encode_options);
+        const encoded = try br.encodePlannedStreamWithOptionsAlloc(allocator, payload, encode_options);
         mix +%= encoded.len;
         allocator.free(encoded);
     }
@@ -331,7 +331,7 @@ fn measureVort(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, op
 
 fn measureVortLegacy(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, iterations: usize) !Sample {
     var mix: usize = 0;
-    var encoder = vort.BrotliPlannedStreamEncoder.init(allocator);
+    var encoder = br.PlannedStreamEncoder.init(allocator);
     defer encoder.deinit();
     const warmup = try encoder.encodeAlloc(allocator, payload);
     allocator.free(warmup);
@@ -478,7 +478,7 @@ fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) 
     {
         return error.InvalidBlockPlan;
     }
-    if (options.extended_dictionary_probes > vort.brotliMaxExtendedDictionaryProbes) return error.InvalidBlockPlan;
+    if (options.extended_dictionary_probes > br.max_extended_dictionary_probes) return error.InvalidBlockPlan;
     return options;
 }
 
@@ -488,7 +488,7 @@ fn parsePlannedQuality(value: []const u8) !u4 {
     return @intCast(quality);
 }
 
-fn parsePlannedMode(value: []const u8) !vort.BrotliPlannedMode {
+fn parsePlannedMode(value: []const u8) !br.PlannedMode {
     if (std.mem.eql(u8, value, "generic")) return .generic;
     if (std.mem.eql(u8, value, "text")) return .text;
     if (std.mem.eql(u8, value, "font")) return .font;

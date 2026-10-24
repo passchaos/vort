@@ -2,7 +2,7 @@
 //! the benchmark's timed encode calls; the CSV keeps its independent minima.
 const std = @import("std");
 const builtin = @import("builtin");
-const vort = @import("vort");
+const zstd = @import("vort_zstd");
 
 pub const schema = "vort.codec_encode_samples";
 pub const version: u8 = 1;
@@ -27,18 +27,18 @@ pub const ResolvedOptions = struct {
     window_log: ?u6,
     max_match_history_len: ?usize,
     max_total_working_memory: ?usize,
-    selection: vort.ZstdNativeFrameSelection,
+    selection: zstd.NativeFrameSelection,
     block_size_max: usize,
     dictionary_id: u32,
     match_search_budget: usize,
     rep_beam_search: bool,
-    strategy: vort.zstd.Strategy,
+    strategy: zstd.Strategy,
     fast_acceleration: ?u32,
-    hq: ?vort.zstd.HqOptions,
+    hq: ?zstd.HqOptions,
     control_profile_enabled: bool,
     memory_profile_enabled: bool,
 
-    pub fn capture(options: vort.ZstdNativeFrameOptions) !ResolvedOptions {
+    pub fn capture(options: zstd.NativeFrameOptions) !ResolvedOptions {
         return .{
             .content_checksum = options.content_checksum,
             .include_content_size = options.include_content_size,
@@ -70,9 +70,9 @@ pub const Settings = struct {
     /// level_policy can arbitrate multiple block plans. Its public resolver
     /// describes the primary preset, not every internal candidate it may try.
     api: []const u8,
-    requested_strategy: ?vort.zstd.Strategy,
+    requested_strategy: ?zstd.Strategy,
     requested_fast_acceleration: ?u32,
-    requested_native_selection: ?vort.ZstdNativeFrameSelection,
+    requested_native_selection: ?zstd.NativeFrameSelection,
     resolved_primary: ResolvedOptions,
     internal_candidate_settings: []const u8,
     wire_header: WireHeader,

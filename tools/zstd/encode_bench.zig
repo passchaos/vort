@@ -1,5 +1,5 @@
 const std = @import("std");
-const vort = @import("vort");
+const zstd = @import("vort_zstd");
 const libzstd = @import("libzstd_runtime.zig");
 const benchmark_provenance = @import("benchmark_provenance");
 const encode_samples = @import("encode_samples.zig");
@@ -23,8 +23,8 @@ const Options = struct {
     samples_json_path: ?[]const u8 = null,
     only_case: ?[]const u8 = null,
     only_level: ?c_int = null,
-    native_selection: ?vort.ZstdNativeFrameSelection = null,
-    strategy: ?vort.zstd.Strategy = null,
+    native_selection: ?zstd.NativeFrameSelection = null,
+    strategy: ?zstd.Strategy = null,
     fast_acceleration: ?u32 = null,
     show_help: bool = false,
     reference_library_path: ?[]const u8 = null,
@@ -63,7 +63,7 @@ pub fn main(init: std.process.Init) !void {
             \\
         );
         try stdout.interface.writeAll("  Strategies: ");
-        inline for (std.meta.fields(vort.zstd.Strategy), 0..) |field, index| {
+        inline for (std.meta.fields(zstd.Strategy), 0..) |field, index| {
             if (index != 0) try stdout.interface.writeByte('|');
             try stdout.interface.writeAll(field.name);
         }
@@ -176,9 +176,9 @@ pub fn main(init: std.process.Init) !void {
         const reference_rate = mibPerSecond(total_bytes, samples.reference.ns);
         const input_sha256 = benchmark_provenance.sha256Hex(case.payload);
         if (raw_rounds) |rounds| {
-            const resolved_primary = native_options orelse try vort.zstd.resolveFrameOptionsForLevel(level, .{});
-            const header = try vort.zstd.inspectNativeFrameHeader(vort_encoded);
-            const reference_header = try vort.zstd.inspectNativeFrameHeader(reference_encoded);
+            const resolved_primary = native_options orelse try zstd.resolveFrameOptionsForLevel(level, .{});
+            const header = try zstd.inspectNativeFrameHeader(vort_encoded);
+            const reference_header = try zstd.inspectNativeFrameHeader(reference_encoded);
             try sample_report.append(init.gpa, .{
                 .case = case.name,
                 .input_bytes = case.payload.len,
@@ -238,11 +238,11 @@ fn verifyBothDecoders(allocator: std.mem.Allocator, runtime: libzstd.Runtime, pa
     defer allocator.free(output);
     try runtime.decode(vort_encoded, output);
     if (!std.mem.eql(u8, payload, output)) return error.SizeMismatch;
-    const written = try vort.zstdDecodeFrameInto(reference_encoded, output);
+    const written = try zstd.decodeFrameInto(reference_encoded, output);
     if (written != payload.len or !std.mem.eql(u8, payload, output)) return error.SizeMismatch;
 }
 
-fn measureInterleaved(io: std.Io, allocator: std.mem.Allocator, runtime: libzstd.Runtime, payload: []const u8, level: c_int, native_options: ?vort.ZstdNativeFrameOptions, iterations: usize, rounds: usize, raw_rounds: ?[]encode_samples.Round) !struct { vort: Sample, reference: Sample } {
+fn measureInterleaved(io: std.Io, allocator: std.mem.Allocator, runtime: libzstd.Runtime, payload: []const u8, level: c_int, native_options: ?zstd.NativeFrameOptions, iterations: usize, rounds: usize, raw_rounds: ?[]encode_samples.Round) !struct { vort: Sample, reference: Sample } {
     var best_vort = Sample{ .ns = std.math.maxInt(u64), .mix = 0 };
     var best_reference = best_vort;
     for (0..rounds) |round| {
@@ -265,7 +265,7 @@ fn measureInterleaved(io: std.Io, allocator: std.mem.Allocator, runtime: libzstd
     return .{ .vort = best_vort, .reference = best_reference };
 }
 
-fn measureVort(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, level: c_int, native_options: ?vort.ZstdNativeFrameOptions, iterations: usize) !Sample {
+fn measureVort(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, level: c_int, native_options: ?zstd.NativeFrameOptions, iterations: usize) !Sample {
     var mix: usize = 0;
     const start = std.Io.Clock.awake.now(io);
     for (0..iterations) |_| {
@@ -276,13 +276,13 @@ fn measureVort(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, le
     return .{ .ns = elapsed(start, io), .mix = mix };
 }
 
-fn encodeVort(allocator: std.mem.Allocator, payload: []const u8, level: c_int, native_options: ?vort.ZstdNativeFrameOptions) ![]u8 {
-    if (native_options) |options| return (try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, payload, options)).frame;
-    return vort.zstdEncodeFrameWithLevelAlloc(allocator, payload, level);
+fn encodeVort(allocator: std.mem.Allocator, payload: []const u8, level: c_int, native_options: ?zstd.NativeFrameOptions) ![]u8 {
+    if (native_options) |options| return (try zstd.encodeNativeFrameWithOptionsAlloc(allocator, payload, options)).frame;
+    return zstd.encodeFrameWithLevelAlloc(allocator, payload, level);
 }
 
-fn resolvedNativeOptions(options: Options, level: c_int) !?vort.ZstdNativeFrameOptions {
-    var resolved = try vort.zstd.resolveFrameOptionsForLevel(level, .{
+fn resolvedNativeOptions(options: Options, level: c_int) !?zstd.NativeFrameOptions {
+    var resolved = try zstd.resolveFrameOptionsForLevel(level, .{
         .strategy = options.strategy orelse .auto,
         .fast_acceleration = options.fast_acceleration,
     });
@@ -348,7 +348,7 @@ fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) 
             options.only_level = try std.fmt.parseInt(c_int, value, 10);
         } else if (try optionValue("--strategy", arg, args)) |value| {
             if (options.strategy != null) return error.DuplicateZstdOption;
-            options.strategy = if (std.mem.eql(u8, value, "double-fast")) .double_fast else std.meta.stringToEnum(vort.zstd.Strategy, value) orelse return error.InvalidZstdStrategy;
+            options.strategy = if (std.mem.eql(u8, value, "double-fast")) .double_fast else std.meta.stringToEnum(zstd.Strategy, value) orelse return error.InvalidZstdStrategy;
         } else if (try optionValue("--fast-acceleration", arg, args)) |value| {
             if (options.fast_acceleration != null) return error.DuplicateZstdOption;
             options.fast_acceleration = try std.fmt.parseInt(u32, value, 10);
