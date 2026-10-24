@@ -101,7 +101,14 @@ extends explicit encoding through window 30, with safe distance groups, exact
 wire symbols and caller budgets. Independent tests cover real far-history
 copies, 25-bit distance extras, opt-in reference decoding and WebAssembly.
 
-Remaining priorities include global Brotli quality planning, lower-peak
+The [whole-block search milestone](performance/brotli-whole-block-functional-baseline.md)
+adds an explicit complete-meta-block position search while preserving the
+bounded default and complete baseline wire. Growable command storage eliminates
+input-sized worst-case command allocation; its locked far-history fixture keeps
+identical bytes while reducing total requested-heap peak by 51.55%. The finite
+beam and length alternatives remain native heuristics.
+
+Remaining priorities include broader global Brotli quality planning, lower-peak
 whole-stream comparison, standard dictionary finalization
 performance, and current-source real-corpus speed/ratio/memory leadership
 evidence across platforms.

@@ -106,6 +106,11 @@ the more expensive long copy and preserves complete command, selector and
 terminal costs. The one-bit gap is a retained quality limitation, not an
 encoded-byte or throughput measurement.
 
+The subsequent [whole-block option](brotli-whole-block-search.md) removes that
+artificial position boundary and reaches 32792 bits on the same witness.
+Bounded remains the default. Finite beam and copy-length alternatives still
+limit global optimality, and whole mode can require a larger workspace.
+
 ## Profiles and evidence
 
 Work counters describe actual attempted tree, dictionary, transition, price and

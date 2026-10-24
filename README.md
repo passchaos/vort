@@ -2188,6 +2188,13 @@ memory or process RSS. See the [HQ contract](docs/formats/brotli-hq-command-pars
 for block precedence, exact encodings, ownership and the remaining native search
 limitations. Quality numbers do not establish reference ratio or speed parity.
 
+`hq.parse_mode = .whole_block` opts into one position-state search across the
+complete meta-block. The default `.bounded` keeps the established 4096-position
+policy. Whole-block encoding still retains the complete bounded wire as a
+candidate and obeys the caller's workspace and total-heap limits. See the
+[whole-block search contract](docs/formats/brotli-whole-block-search.md) for
+actual pass statistics, memory costs and remaining finite-search limitations.
+
 HQ q10/q11 can also explicitly set `large_window = true` for window bits
 10...30. This writes the Large Window extension even at smaller windows;
 decoding requires opt-in. Ordinary defaults remain standard Brotli. The
