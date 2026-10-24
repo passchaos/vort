@@ -25,12 +25,12 @@ pub fn Encoder(comptime Codec: type) type {
         total_output: Counter = 0,
         stream_input: Counter = 0,
         stream_output: Counter = 0,
-        stream_count: usize = 0,
+        stream_count: Counter = 0,
 
         const Self = @This();
         /// Byte counts span complete streams, independently of address space.
         /// Keep the established public type on targets with 64-bit `usize`.
-        pub const Counter = if (@bitSizeOf(usize) < 64) u64 else usize;
+        pub const Counter = core.StreamCount;
         pub const Error = Codec.Error || memory.Error;
         pub const Options = struct {
             stream: Codec.StreamOptions = .{},
@@ -48,8 +48,8 @@ pub fn Encoder(comptime Codec: type) type {
             stream_output: Counter,
             buffered_input: usize,
             pending_output: usize,
-            stream_count: usize,
-            stream_index: usize,
+            stream_count: Counter,
+            stream_index: Counter,
             metadata_pending: bool,
             metadata_bytes: usize,
             flush_requested: bool,
@@ -272,7 +272,7 @@ pub fn Encoder(comptime Codec: type) type {
                     continue;
                 }
                 if (self.finishing) {
-                    self.stream_count = std.math.add(usize, self.stream_count, 1) catch return error.IntegerOverflow;
+                    self.stream_count = try core.stream_count.addLocal(self.stream_count, 1);
                     self.done = true;
                     return result(input_read, output_written, .done);
                 }

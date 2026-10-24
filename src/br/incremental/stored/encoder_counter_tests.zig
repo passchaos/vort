@@ -117,12 +117,12 @@ test "Brotli HQ generic counters check stream completion overflow" {
     encoder.prefix_written = true;
     encoder.final_written = true;
     encoder.finishing = true;
-    encoder.stream_count = std.math.maxInt(usize);
+    encoder.stream_count = std.math.maxInt(Counter);
     const before = encoder.snapshot();
     try std.testing.expectError(error.IntegerOverflow, encoder.step(&.{}, &.{}));
     try std.testing.expectEqual(before, encoder.snapshot());
     encoder.stream_count -= 1;
     try std.testing.expectEqual(.done, (try encoder.step(&.{}, &.{})).status);
-    try std.testing.expectEqual(std.math.maxInt(usize), encoder.snapshot().stream_count);
-    try std.testing.expectEqual(std.math.maxInt(usize) - 1, encoder.snapshot().stream_index);
+    try std.testing.expectEqual(std.math.maxInt(Counter), encoder.snapshot().stream_count);
+    try std.testing.expectEqual(std.math.maxInt(Counter) - 1, encoder.snapshot().stream_index);
 }

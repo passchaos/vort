@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("../../core.zig");
+const counts = core.stream_count;
 const working = @import("../../io/working_allocator.zig");
 
 /// Allocator-owning facade for the true symbol-progressive Brotli decoder.
@@ -21,33 +22,34 @@ pub fn Decoder(comptime Codec: type) type {
         history_capped: bool = false,
         phase: Phase = .input,
         last_status: core.StepResult.Status = .need_input,
-        frame_input_read: usize = 0,
-        frame_output_written: usize = 0,
-        total_compressed: usize = 0,
-        total_output: usize = 0,
-        frame_count: usize = 0,
+        frame_input_read: Counter = 0,
+        frame_output_written: Counter = 0,
+        total_compressed: Counter = 0,
+        total_output: Counter = 0,
+        frame_count: Counter = 0,
         input_finished: bool = false,
         last_error_name: []const u8 = "",
         last_error_phase: Phase = .input,
         fatal_error: ?Error = null,
-        error_input_offset: ?usize = null,
-        error_output_offset: ?usize = null,
+        error_input_offset: ?Counter = null,
+        error_output_offset: ?Counter = null,
         last_step_progress: core.Progress = .{},
 
         const Self = @This();
         pub const Error = Codec.Error;
+        pub const Counter = core.StreamCount;
         pub const Options = struct {
-            max_compressed_len: usize = std.math.maxInt(usize),
-            expected_compressed_len: ?usize = null,
-            max_output_len: usize = std.math.maxInt(usize),
+            max_compressed_len: Counter = std.math.maxInt(Counter),
+            expected_compressed_len: ?Counter = null,
+            max_output_len: Counter = std.math.maxInt(Counter),
             /// Cap on total decoded output across nextFrame calls. Only reset
             /// or resetWithOptions begins a new operation.
-            max_total_output_len: usize = std.math.maxInt(usize),
+            max_total_output_len: Counter = std.math.maxInt(Counter),
             /// Live requested heap bytes, including retained capacities and
             /// old/new buffers simultaneously alive during replacement. Inline
             /// state and caller-owned dictionaries and scratch are excluded.
             max_working_memory: usize = std.math.maxInt(usize),
-            expected_output_len: ?usize = null,
+            expected_output_len: ?Counter = null,
             /// Maximum owned history. The default covers every RFC 7932
             /// window; Large Window streams may opt into a larger bound.
             max_history_len: usize = (@as(usize, 1) << 24) - 16,
@@ -64,27 +66,27 @@ pub fn Decoder(comptime Codec: type) type {
         pub const Phase = enum { input, output, done };
         pub const Snapshot = struct {
             phase: Phase,
-            compressed_bytes: usize,
-            expected_compressed_len: ?usize,
-            output_written: usize,
-            expected_output_len: ?usize,
+            compressed_bytes: Counter,
+            expected_compressed_len: ?Counter,
+            output_written: Counter,
+            expected_output_len: ?Counter,
             payload_remaining: usize,
             retained_input_bytes: usize,
             compressed_header_capacity: usize,
             owned_compressed_header_capacity: usize,
             history_bytes: usize,
             history_capacity: usize,
-            total_compressed: usize,
-            total_output: usize,
-            frame_count: usize,
-            frame_index: usize,
+            total_compressed: Counter,
+            total_output: Counter,
+            frame_count: Counter,
+            frame_index: Counter,
             last_error_name: []const u8,
             last_error_phase: Phase,
             trailing_input_bytes: usize,
             working_bytes: usize,
             peak_working_bytes: usize,
-            error_input_offset: ?usize,
-            error_output_offset: ?usize,
+            error_input_offset: ?Counter,
+            error_output_offset: ?Counter,
             last_step_progress: core.Progress,
         };
 
@@ -96,7 +98,7 @@ pub fn Decoder(comptime Codec: type) type {
             return .{ .allocator = allocator, .options = options, .budget = working.WorkingAllocator.init(allocator, options.max_working_memory) };
         }
 
-        pub fn initExactCompressedSize(allocator: std.mem.Allocator, options: Options, expected_compressed_len: usize) Self {
+        pub fn initExactCompressedSize(allocator: std.mem.Allocator, options: Options, expected_compressed_len: Counter) Self {
             var exact = options;
             exact.expected_compressed_len = expected_compressed_len;
             return initWithOptions(allocator, exact);
@@ -177,7 +179,7 @@ pub fn Decoder(comptime Codec: type) type {
             self.resetFrame(next);
         }
 
-        pub fn nextFrameExactCompressedSize(self: *Self, options: Options, expected_compressed_len: usize) Error!void {
+        pub fn nextFrameExactCompressedSize(self: *Self, options: Options, expected_compressed_len: Counter) Error!void {
             var exact = options;
             exact.expected_compressed_len = expected_compressed_len;
             return self.nextFrame(exact);
@@ -191,7 +193,9 @@ pub fn Decoder(comptime Codec: type) type {
                 .expected_compressed_len = self.options.expected_compressed_len,
                 .output_written = self.frame_output_written,
                 .expected_output_len = self.options.expected_output_len,
-                .payload_remaining = if (inner) |snap| snap.payload_remaining else self.options.expected_output_len orelse 0,
+                // Until a meta-block is parsed no local payload length is known.
+                // A whole-frame expected length may exceed addressable memory.
+                .payload_remaining = if (inner) |snap| snap.payload_remaining else 0,
                 .retained_input_bytes = if (inner) |snap| snap.retained_input_bytes else 0,
                 .compressed_header_capacity = if (inner) |snap|
                     snap.compressed_header_capacity
@@ -200,8 +204,8 @@ pub fn Decoder(comptime Codec: type) type {
                 .owned_compressed_header_capacity = self.compressed_header.capacity,
                 .history_bytes = if (inner) |snap| snap.history_bytes else 0,
                 .history_capacity = self.history.capacity,
-                .total_compressed = self.total_compressed + if (self.phase == .done) 0 else self.frame_input_read,
-                .total_output = self.total_output + if (self.phase == .done) 0 else self.frame_output_written,
+                .total_compressed = counts.add(self.total_compressed, if (self.phase == .done) 0 else self.frame_input_read) catch unreachable,
+                .total_output = counts.add(self.total_output, if (self.phase == .done) 0 else self.frame_output_written) catch unreachable,
                 .frame_count = self.frame_count,
                 .frame_index = if (self.phase == .done and self.frame_count != 0) self.frame_count - 1 else self.frame_count,
                 .last_error_name = self.last_error_name,
@@ -244,8 +248,8 @@ pub fn Decoder(comptime Codec: type) type {
                 else
                     original;
                 self.last_step_progress = .{
-                    .input_read = self.frame_input_read - before_input,
-                    .output_written = self.frame_output_written - before_output,
+                    .input_read = localDelta(self.frame_input_read, before_input, input.len),
+                    .output_written = localDelta(self.frame_output_written, before_output, output.len),
                 };
                 self.publishFailure(err);
                 return err;
@@ -267,19 +271,20 @@ pub fn Decoder(comptime Codec: type) type {
             if (!self.decode_options_validated) {
                 Codec.validateDecodeOptions(self.options.decode) catch |err|
                     return self.fail(.input, err);
-                self.decode_options_validated = true;
             }
             if (self.input_finished and input.len != 0) return self.fail(self.phase, error.TrailingData);
             if (self.options.expected_compressed_len) |expected| {
-                if (self.frame_input_read > expected or input.len > expected - self.frame_input_read)
+                if (self.frame_input_read > expected or counts.fromLocal(input.len) > expected - self.frame_input_read)
                     return self.fail(.input, error.SizeMismatch);
             }
-            const offered_end = std.math.add(usize, self.frame_input_read, input.len) catch
+            const offered_end = counts.addLocal(self.frame_input_read, input.len) catch
                 return self.fail(.input, error.IntegerOverflow);
-            _ = std.math.add(usize, self.total_compressed, offered_end) catch
+            _ = counts.add(self.total_compressed, offered_end) catch
                 return self.fail(.input, error.IntegerOverflow);
             if (offered_end > self.options.max_compressed_len)
                 return self.fail(.input, error.OutputLimitExceeded);
+            self.checkFrameRoom() catch |err| return self.fail(.input, err);
+            self.decode_options_validated = true;
             var input_read: usize = 0;
             var output_written: usize = 0;
             while (true) {
@@ -359,6 +364,7 @@ pub fn Decoder(comptime Codec: type) type {
 
         fn finishImpl(self: *Self) Error!void {
             if (self.phase == .done) return;
+            self.checkFrameRoom() catch |err| return self.fail(self.phase, err);
             if (self.options.expected_compressed_len) |expected| {
                 if (self.frame_input_read != expected) return self.fail(.input, error.SizeMismatch);
             }
@@ -367,15 +373,20 @@ pub fn Decoder(comptime Codec: type) type {
             const ready = self.prepareProgressive() catch |err| return self.fail(.input, err);
             if (!ready) return self.fail(.input, error.TruncatedFrame);
             while (self.window_prefix_offset < self.window_prefix_len) {
-                const inner = self.progressive.?.step(
+                var input_read: usize = 0;
+                var output_written: usize = 0;
+                const inner = self.stepProgressive(
                     self.window_prefix[self.window_prefix_offset..self.window_prefix_len],
                     &.{},
+                    &input_read,
+                    &output_written,
+                    true,
                 ) catch |err| return self.fail(.input, self.mapHistoryError(err));
                 self.window_prefix_offset += @intCast(inner.progress.input_read);
                 if (inner.status == .need_output) return;
                 if (inner.status == .done) {
+                    self.commitFrame() catch |err| return self.fail(self.phase, err);
                     self.phase = .done;
-                    self.commitFrame();
                     return;
                 }
                 if (inner.progress.input_read == 0 and inner.progress.output_written == 0)
@@ -383,8 +394,8 @@ pub fn Decoder(comptime Codec: type) type {
             }
             self.progressive.?.finish() catch |err| return self.fail(self.phase, self.mapHistoryError(err));
             if (self.progressive.?.snapshot().phase == .done) {
+                self.commitFrame() catch |err| return self.fail(self.phase, err);
                 self.phase = .done;
-                self.commitFrame();
             }
         }
 
@@ -473,19 +484,43 @@ pub fn Decoder(comptime Codec: type) type {
         }
 
         fn stepProgressive(self: *Self, input: []const u8, output: []u8, input_read: *usize, output_written: *usize, prefix: bool) Error!core.StepResult {
+            const frame_output = try counts.addLocal(self.frame_output_written, output_written.*);
+            const operation_output = try counts.add(self.total_output, frame_output);
+            const remaining = @min(std.math.maxInt(Counter) - frame_output, std.math.maxInt(Counter) - operation_output);
+            const bounded_output = output[0..counts.bounded(remaining, output.len)];
             const before = self.progressive.?.snapshot();
-            return self.progressive.?.step(input, output) catch |err| {
+            const stepped = self.progressive.?.step(input, bounded_output) catch |err| {
                 const after = self.progressive.?.snapshot();
-                const consumed = after.input_read - before.input_read;
-                if (prefix) {
-                    // These prefix bytes already belong to the outer cursor.
-                    self.window_prefix_offset += @intCast(consumed);
-                } else {
-                    input_read.* += consumed;
-                }
-                output_written.* += after.output_written - before.output_written;
+                self.recordInnerProgress(.{
+                    .input_read = localDelta(after.input_read, before.input_read, input.len),
+                    .output_written = localDelta(after.output_written, before.output_written, bounded_output.len),
+                }, input_read, output_written, prefix);
                 return self.mapHistoryError(err);
             };
+            if (remaining == 0 and stepped.status == .need_output) {
+                // Empty output still lets the inner parser consume final bits
+                // or metadata. Only an actual payload request exhausts credit.
+                self.recordInnerProgress(stepped.progress, input_read, output_written, prefix);
+                return error.IntegerOverflow;
+            }
+            return stepped;
+        }
+
+        fn recordInnerProgress(self: *Self, progress: core.Progress, input_read: *usize, output_written: *usize, prefix: bool) void {
+            if (prefix) {
+                // These prefix bytes already belong to the outer cursor.
+                self.window_prefix_offset += @intCast(progress.input_read);
+            } else {
+                input_read.* += progress.input_read;
+            }
+            output_written.* += progress.output_written;
+        }
+
+        fn localDelta(after: Counter, before: Counter, limit: usize) usize {
+            std.debug.assert(after >= before);
+            const delta = after - before;
+            std.debug.assert(delta <= counts.fromLocal(limit));
+            return @intCast(delta);
         }
 
         fn mapHistoryError(self: *const Self, err: Error) Error {
@@ -496,8 +531,7 @@ pub fn Decoder(comptime Codec: type) type {
         }
 
         fn completeStep(self: *Self, input_read: usize, output_written: usize, initial_status: core.StepResult.Status) Error!core.StepResult {
-            self.frame_input_read += input_read;
-            self.frame_output_written += output_written;
+            try self.recordStepProgress(input_read, output_written);
             var status = initial_status;
             if (self.options.expected_compressed_len) |expected| {
                 if (self.frame_input_read == expected) self.input_finished = true;
@@ -508,26 +542,44 @@ pub fn Decoder(comptime Codec: type) type {
                 self.progressive.?.finish() catch |err| return self.fail(.input, self.mapHistoryError(err));
                 status = .done;
             }
+            if (status == .done) try self.commitFrame();
             self.last_status = status;
             self.phase = switch (status) {
                 .need_input => .input,
                 .need_output => .output,
                 .done => .done,
             };
-            if (status == .done) self.commitFrame();
             return result(input_read, output_written, status);
         }
 
         fn failWithProgress(self: *Self, phase: Phase, err: Error, input_read: usize, output_written: usize) Error {
-            self.frame_input_read += input_read;
-            self.frame_output_written += output_written;
+            self.recordStepProgress(input_read, output_written) catch |counter_err|
+                return self.fail(phase, counter_err);
             return self.fail(phase, err);
         }
 
-        fn commitFrame(self: *Self) void {
-            self.total_compressed += self.frame_input_read;
-            self.total_output += self.frame_output_written;
-            self.frame_count += 1;
+        fn recordStepProgress(self: *Self, input_read: usize, output_written: usize) Error!void {
+            const frame_input = try counts.addLocal(self.frame_input_read, input_read);
+            const frame_output = try counts.addLocal(self.frame_output_written, output_written);
+            _ = try counts.add(self.total_compressed, frame_input);
+            _ = try counts.add(self.total_output, frame_output);
+            self.frame_input_read = frame_input;
+            self.frame_output_written = frame_output;
+        }
+
+        fn checkFrameRoom(self: *const Self) Error!void {
+            _ = try counts.add(self.total_compressed, self.frame_input_read);
+            _ = try counts.add(self.total_output, self.frame_output_written);
+            _ = try counts.add(self.frame_count, 1);
+        }
+
+        fn commitFrame(self: *Self) Error!void {
+            const compressed = try counts.add(self.total_compressed, self.frame_input_read);
+            const output = try counts.add(self.total_output, self.frame_output_written);
+            const frame_count = try counts.add(self.frame_count, 1);
+            self.total_compressed = compressed;
+            self.total_output = output;
+            self.frame_count = frame_count;
         }
 
         fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
@@ -547,4 +599,8 @@ pub fn Decoder(comptime Codec: type) type {
             return err;
         }
     };
+}
+
+test {
+    _ = @import("owned_counter_tests.zig");
 }

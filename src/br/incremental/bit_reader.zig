@@ -8,6 +8,8 @@ pub const Reader = struct {
     input_read: *usize,
     staged_bits: *u128,
     staged_bit_count: *u8,
+    /// Wrapping consumed-bit phase, used only for byte alignment. Absolute
+    /// stream positions are tracked separately in byte counters.
     stream_bits: *usize,
 
     pub const Checkpoint = struct {
@@ -77,7 +79,7 @@ pub const Reader = struct {
         const value: T = @intCast(self.staged_bits.* & mask);
         self.staged_bits.* >>= @intCast(count);
         self.staged_bit_count.* -= count;
-        self.stream_bits.* += count;
+        self.stream_bits.* +%= count;
         return value;
     }
 };

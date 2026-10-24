@@ -2,6 +2,8 @@ const std = @import("std");
 const allocator_dispatch = @import("br/allocator_dispatch.zig");
 const builtin = @import("builtin");
 const core = @import("core.zig");
+pub const Counter = core.StreamCount;
+const stream_count = core.stream_count;
 const lz77 = @import("lz77.zig");
 const bitstream = @import("bitstream.zig");
 const huffman = @import("huffman.zig");
@@ -1268,7 +1270,7 @@ const IncrementalOwnedCodec = struct {
         _ = try decodeSharedDictionary(options);
     }
 
-    pub fn historyPlanFromPrefix(prefix: []const u8, output_bound: usize, max_history_len: usize, options: br.DecodeOptions) br.Error!?HistoryPlan {
+    pub fn historyPlanFromPrefix(prefix: []const u8, output_bound: Counter, max_history_len: usize, options: br.DecodeOptions) br.Error!?HistoryPlan {
         options.shared_dictionary.validate() catch |err| switch (err) {
             error.IntegerOverflow => return error.IntegerOverflow,
             else => return error.CorruptFrame,
@@ -1279,7 +1281,7 @@ const IncrementalOwnedCodec = struct {
             else => return err,
         };
         const advertised = (@as(usize, 1) << window.bits) - 16;
-        const required = @min(output_bound, advertised);
+        const required = stream_count.bounded(output_bound, advertised);
         if (required == 0) return .{ .allocation_len = 0, .capped = false };
         if (max_history_len == 0) return error.OutputLimitExceeded;
         return .{
@@ -1348,7 +1350,7 @@ const IncrementalCopyCodec = struct {
     pub const DecodeOptions = br.DecodeOptions;
     pub const max_stream_header_bytes: usize = default_incremental_compressed_header_bytes;
     pub const Header = struct {
-        decoded_len: usize,
+        decoded_len: Counter,
         compressed: LargeWindowCompressedHeader,
         final: bool,
         large_window: bool = false,
@@ -1394,7 +1396,7 @@ const IncrementalCopyCodec = struct {
         block.remaining = state.remaining;
     }
 
-    pub fn parseMetaBlockHeader(prefix: []const u8, bit_len: usize, decoded_len: usize, final: bool, large_window: bool) IncrementalCopyCodec.Error!ParsedHeader {
+    pub fn parseMetaBlockHeader(prefix: []const u8, bit_len: usize, decoded_len: Counter, final: bool, large_window: bool) IncrementalCopyCodec.Error!ParsedHeader {
         var reader = bitstream.BitReader.initBitLength(prefix, bit_len);
         const compressed = try readMinimalCompressedHeaderWithOptions(&reader, large_window);
         return .{
@@ -1487,8 +1489,8 @@ const IncrementalCopyCodec = struct {
         return minimalStaticDictionaryWordAtAddress(address, copy_len, scratch);
     }
 
-    pub fn maxBackwardDistance(window_bits: u5, output_len: usize) usize {
-        return maxBackwardDistanceForWindow(window_bits, output_len);
+    pub fn maxBackwardDistance(window_bits: u5, output_len: Counter) usize {
+        return stream_count.bounded(output_len, (@as(usize, 1) << window_bits) - 16);
     }
 };
 
@@ -2148,6 +2150,11 @@ test {
     _ = incremental_rle_tests;
     _ = incremental_stored_tests;
     _ = incremental_stored_encoder;
+    _ = incremental_copy;
+    _ = incremental_owned_copy;
+    _ = incremental_literal;
+    _ = incremental_rle;
+    _ = incremental_stored;
     _ = incremental_planned_encoder_tests;
     _ = fast_bit_reader;
     _ = paired_literal_lookup;
@@ -2190,6 +2197,9 @@ test {
     _ = @import("tests/br_general_large_window_contracts.zig");
     _ = @import("tests/br_general_large_window_resources.zig");
     _ = @import("tests/br_general_large_window_transactions.zig");
+    _ = @import("tests/br_stream_counter_contracts.zig");
+    _ = @import("tests/br_stream_counter_resources.zig");
+    _ = @import("tests/br_stream_counter_transactions.zig");
     _ = @import("br/encoder/hq_parser/length_options_tests.zig");
     _ = @import("br/encoder/hq_tree_oracle_tests.zig");
     _ = @import("br/encoder/hq_dictionary.zig");
@@ -6435,7 +6445,7 @@ const CommandPlanEncodeOptions = struct {
     optimize_literal_tree_wire: bool = false,
     optimize_same_last_distance: bool = true,
     compound_dictionary_size: usize = 0,
-    initial_output_pos: usize = 0,
+    initial_output_pos: Counter = 0,
     /// `{ second_previous, previous }` immediately before `input[0]`.
     initial_previous: [2]u8 = .{ 0, 0 },
     starting_last_distances: [4]usize = initial_last_distances,
@@ -6456,13 +6466,26 @@ fn literalContextHistory(
 }
 const PlannedWireState = struct {
     last_distances: [4]usize = initial_last_distances,
-    output_pos: usize = 0,
+    /// Cumulative plaintext position; only distance geometry narrows it to the
+    /// actual history window. Metadata and encoded-output counts are separate.
+    output_pos: Counter = 0,
 };
+
+test "Brotli encode counters preserve wide fragment command and history contexts" {
+    try @import("br/encoder/stream_counter_checks.zig").compareWideContexts(IncrementalPlannedEncoderCodec);
+}
+
+test "Brotli encode counters reject plaintext overflow before stream publication" {
+    const checks = @import("br/encoder/stream_counter_checks.zig");
+    for ([_]?u4{ null, 0, 1, 2, 4, 11 }) |quality|
+        try checks.refuseOverflowBeforePublication(IncrementalPlannedEncoderCodec, .{ .quality = quality });
+    try checks.refuseOverflowBeforePublication(IncrementalStaticDictionaryEncoderCodec, .{});
+}
 const PlannedWireContext = struct {
     large_window: bool = false,
     window_bits: u5 = default_window_bits,
     compound_dictionary_size: usize = 0,
-    initial_output_pos: usize = 0,
+    initial_output_pos: Counter = 0,
     starting_last_distances: [4]usize = initial_last_distances,
 };
 
@@ -6711,6 +6734,7 @@ fn encodeQ0OnePassMetaBlockCandidate(
     entropy_state: *const fast_fragment_one_pass.State,
     large_window: bool,
 ) Error!Q0OnePassCandidate {
+    const next_output_pos = try stream_count.addLocal(initial_wire_state.output_pos, input.len);
     bytes.clearRetainingCapacity();
     if (start_bit_index != 0) try bytes.append(allocator, start_byte);
     var writer = BitWriter{ .out = bytes, .bit_index = start_bit_index };
@@ -6799,11 +6823,7 @@ fn encodeQ0OnePassMetaBlockCandidate(
             .bit_count = writer.bitPosition() - start_bit_position,
             .wire_state = .{
                 .last_distances = payload_writer.last_distances,
-                .output_pos = std.math.add(
-                    usize,
-                    initial_wire_state.output_pos,
-                    input.len,
-                ) catch return error.IntegerOverflow,
+                .output_pos = next_output_pos,
             },
         },
         .next_entropy_state = next_entropy_state,
@@ -6905,6 +6925,7 @@ fn encodeQ1TwoPassMetaBlockCandidate(
     initial_wire_state: PlannedWireState,
     large_window: bool,
 ) Error!PlannedMetaBlockCandidate {
+    const next_output_pos = try stream_count.addLocal(initial_wire_state.output_pos, input.len);
     bytes.clearRetainingCapacity();
     if (start_bit_index != 0) try bytes.append(allocator, start_byte);
     var writer = BitWriter{ .out = bytes, .bit_index = start_bit_index };
@@ -7025,11 +7046,7 @@ fn encodeQ1TwoPassMetaBlockCandidate(
         .bit_count = writer.bitPosition() - start_bit_position,
         .wire_state = .{
             .last_distances = payload_writer.last_distances,
-            .output_pos = std.math.add(
-                usize,
-                initial_wire_state.output_pos,
-                input.len,
-            ) catch return error.IntegerOverflow,
+            .output_pos = next_output_pos,
         },
     };
 }
@@ -7217,6 +7234,7 @@ fn encodeQ23MetaBlockCandidate(
     compound_dictionary_size: usize,
     initial_wire_state: PlannedWireState,
 ) Error!PlannedMetaBlockCandidate {
+    const next_output_pos = try stream_count.addLocal(initial_wire_state.output_pos, input.len);
     bytes.clearRetainingCapacity();
     if (start_bit_index != 0) try bytes.append(allocator, start_byte);
     var writer = BitWriter{ .out = bytes, .bit_index = start_bit_index };
@@ -7353,11 +7371,7 @@ fn encodeQ23MetaBlockCandidate(
         .bit_count = writer.bitPosition() - start_bit_position,
         .wire_state = .{
             .last_distances = last_distances,
-            .output_pos = std.math.add(
-                usize,
-                initial_wire_state.output_pos,
-                input.len,
-            ) catch return error.IntegerOverflow,
+            .output_pos = next_output_pos,
         },
     };
 }
@@ -8521,6 +8535,7 @@ fn writePlannedStreamMetaBlock(
     if (state.hq != null) return writeHqPlannedStreamMetaBlock(allocator, out, state, block, false);
     if (block.len == 0 or block.len > planned_chunk_max_input_len)
         return error.InvalidBlockPlan;
+    const next_output_pos = try stream_count.addLocal(state.wire_state.output_pos, block.len);
     const start_len = out.items.len;
     const start_bit_index = state.bit_index;
     const start_byte = if (start_len == 0) 0 else out.items[start_len - 1];
@@ -8589,16 +8604,14 @@ fn writePlannedStreamMetaBlock(
             try writeUncompressedMetaBlock(allocator, &writer, block);
             state.bit_index = writer.bit_index;
             state.wire_state = start_wire_state;
-            state.wire_state.output_pos = std.math.add(usize, start_wire_state.output_pos, block.len) catch
-                return error.IntegerOverflow;
+            state.wire_state.output_pos = next_output_pos;
         }
     } else {
         var writer = BitWriter{ .out = out, .bit_index = start_bit_index };
         try writeUncompressedMetaBlock(allocator, &writer, block);
         state.bit_index = writer.bit_index;
         state.wire_state = start_wire_state;
-        state.wire_state.output_pos = std.math.add(usize, start_wire_state.output_pos, block.len) catch
-            return error.IntegerOverflow;
+        state.wire_state.output_pos = next_output_pos;
     }
     if (update_history and retain_match_history) {
         const max_backward_distance = try encoder_window_format.retainedHistory(state.window_bits, state.large_window);
@@ -8908,7 +8921,7 @@ const LazyWireOptions = struct {
     window_bits: u5 = default_window_bits,
     metadata: []const u8 = "",
     compound_dictionary_size: usize = 0,
-    initial_output_pos: usize = 0,
+    initial_output_pos: Counter = 0,
     starting_last_distances: [4]usize = initial_last_distances,
 };
 
@@ -10921,6 +10934,7 @@ fn recentDistanceStats(commands: []const command_plan.Command) RecentDistanceSta
 }
 
 fn encodeCommandPlanWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error![]u8 {
+    _ = try stream_count.addLocal(options.initial_output_pos, input.len);
     var out = try std.ArrayList(u8).initCapacity(allocator, commandPlanInitialCapacity(input.len));
     errdefer out.deinit(allocator);
     try encodeCommandPlanWithOptionsAppend(allocator, &out, input, commands, io, stats, options);
@@ -10946,6 +10960,7 @@ fn initPlannedLiteralEncoder(lengths: *const [256]u4, alphabet: *const command_p
 }
 
 fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error!void {
+    _ = try stream_count.addLocal(options.initial_output_pos, input.len);
     if (options.large_window)
         return encodeCommandPlanWithLargeWindowWrite(allocator, writer, input, commands, io, stats, options);
     if (options.distance_parameters.alphabetSize() > planned_distance_alphabet_size)
@@ -12064,8 +12079,7 @@ inline fn encodeCommandPlanWithOptionsWriteInternal(
     }
     if (options.final_wire_state) |state| {
         state.last_distances = last_distances;
-        state.output_pos = std.math.add(usize, options.initial_output_pos, input.len) catch
-            return error.IntegerOverflow;
+        state.output_pos = try stream_count.addLocal(options.initial_output_pos, input.len);
     }
     if (options.final_meta_block and writer.bit_index != 0) writer.alignToByte();
 }
@@ -12216,14 +12230,13 @@ fn commandWireDistance(
     command: command_plan.Command,
     window_bits: u5,
     compound_dictionary_size: usize,
-    initial_output_pos: usize,
+    initial_output_pos: Counter,
 ) Error!usize {
     if (!command.has_copy) return error.InvalidBlockPlan;
     const relative_copy_pos = std.math.add(usize, command.insert_start, command.insert_len) catch
         return error.IntegerOverflow;
-    const absolute_copy_pos = std.math.add(usize, initial_output_pos, relative_copy_pos) catch
-        return error.IntegerOverflow;
-    const max_history = maxBackwardDistanceForWindow(window_bits, absolute_copy_pos);
+    const absolute_copy_pos = try stream_count.addLocal(initial_output_pos, relative_copy_pos);
+    const max_history = stream_count.bounded(absolute_copy_pos, (@as(usize, 1) << window_bits) - 16);
     const logical_value = switch (command.source) {
         .lz77 => command.distance,
         .compound => blk: {
@@ -14095,7 +14108,7 @@ pub const StreamDecoder = struct {
             .phase_name = if (snap.done) "done" else "payload",
             .frame_input_read = if (snap.done) self.stream_len else null,
             .output_written = snap.output_written,
-            .expected_output_len = snap.expected_output_len,
+            .expected_output_len = stream_count.fromOptionalLocal(snap.expected_output_len),
             .payload_remaining = snap.payload_remaining,
             .last_error_name = snap.last_error_name,
             .last_error_phase_name = if (snap.last_error_name.len == 0) "" else "payload",
