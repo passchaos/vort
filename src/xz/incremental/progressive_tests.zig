@@ -54,8 +54,8 @@ pub fn pump(decoder: *xz.IncrementalDecoder, encoded: []const u8, expected: []co
             try account(&trace, decoder, before, after.last_step_progress, offered.len, output, expected);
             try std.testing.expectEqual(@as(?usize, after.input_read), after.error_input_offset);
             try std.testing.expectEqual(@as(?usize, after.output_written), after.error_output_offset);
-            try std.testing.expectEqual(after.error_input_offset, decoder.diagnostics().error_input_offset);
-            try std.testing.expectEqual(after.error_output_offset, decoder.diagnostics().error_output_offset);
+            try std.testing.expectEqual(core.stream_count.fromOptionalLocal(after.error_input_offset), decoder.diagnostics().error_input_offset);
+            try std.testing.expectEqual(core.stream_count.fromOptionalLocal(after.error_output_offset), decoder.diagnostics().error_output_offset);
             trace.failure = err;
             return trace;
         };

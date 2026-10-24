@@ -6,6 +6,8 @@ pub const adler32_nmax = adler.nmax;
 pub const adler32_modulus = adler.modulus;
 pub const Adler32 = adler.Adler32;
 pub const Adler32Backend = adler.Backend;
+/// XXH64 with a full 64-bit cumulative length on 32-bit targets.
+pub const XxHash64Stream = @import("checksum/xxh64_stream.zig").XxHash64;
 
 pub fn bestAdler32Backend() Adler32Backend {
     return adler.bestBackend();

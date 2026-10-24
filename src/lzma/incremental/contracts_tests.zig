@@ -48,8 +48,8 @@ pub fn account(trace: *Trace, decoder: *const lzma.IncrementalDecoder, before: l
     try std.testing.expectEqual(after.output_written - before.output_written, progress.output_written);
     try std.testing.expectEqualDeep(progress, after.last_step_progress);
     try std.testing.expectEqualDeep(progress, decoder.diagnostics().last_step_progress.?);
-    try std.testing.expectEqual(after.error_input_offset, decoder.diagnostics().error_input_offset);
-    try std.testing.expectEqual(after.error_output_offset, decoder.diagnostics().error_output_offset);
+    try std.testing.expectEqual(core.stream_count.fromOptionalLocal(after.error_input_offset), decoder.diagnostics().error_input_offset);
+    try std.testing.expectEqual(core.stream_count.fromOptionalLocal(after.error_output_offset), decoder.diagnostics().error_output_offset);
     try std.testing.expect(progress.output_written <= expected.len - trace.output_written);
     try std.testing.expectEqualSlices(u8, expected[trace.output_written..][0..progress.output_written], output[0..progress.output_written]);
     for (output[progress.output_written..]) |byte| try std.testing.expectEqual(@as(u8, 0xa5), byte);

@@ -369,8 +369,8 @@ test "LZ4 incremental limits cursor errors capture partial input and output" {
             try std.testing.expectEqual(malformed.len, decoder.snapshot().last_step_progress.input_read);
             try std.testing.expectEqual(@as(usize, 0), decoder.snapshot().last_step_progress.output_written);
         }
-        try std.testing.expectEqual(@as(?usize, decoder.snapshot().input_received), decoder.diagnostics().error_input_offset);
-        try std.testing.expectEqual(@as(?usize, decoder.snapshot().output_written), decoder.diagnostics().error_output_offset);
+        try std.testing.expectEqual(@as(?core.StreamCount, decoder.snapshot().input_received), decoder.diagnostics().error_input_offset);
+        try std.testing.expectEqual(@as(?core.StreamCount, decoder.snapshot().output_written), decoder.diagnostics().error_output_offset);
         var limited = Decoder.initWithOptions(allocator, .{ .input_policy = policy, .max_output_len = 2 });
         defer limited.deinit();
         try std.testing.expectError(error.OutputLimitExceeded, limited.step(limited_frame, &output));
@@ -508,12 +508,12 @@ test "LZ4 incremental limits diagnostics distinguish logical pledge from frame s
         const pending = try decoder.step(frame, &.{});
         try std.testing.expectEqual(core.StepResult.Status.need_output, pending.status);
         try std.testing.expectEqual(@as(?usize, payload.len), decoder.snapshot().decoded_len);
-        try std.testing.expectEqual(@as(?usize, payload.len * 2), decoder.diagnostics().expected_output_len);
+        try std.testing.expectEqual(@as(?core.StreamCount, payload.len * 2), decoder.diagnostics().expected_output_len);
         var output: [payload.len]u8 = undefined;
         const first = try decoder.step(frame[pending.progress.input_read..], &output);
         try std.testing.expectEqual(core.StepResult.Status.done, first.status);
         try decoder.nextStream();
-        try std.testing.expectEqual(@as(?usize, payload.len * 2), decoder.diagnostics().expected_output_len);
+        try std.testing.expectEqual(@as(?core.StreamCount, payload.len * 2), decoder.diagnostics().expected_output_len);
         try std.testing.expectEqual(core.StepResult.Status.done, (try decoder.step(frame, &output)).status);
         try decoder.finish();
     }

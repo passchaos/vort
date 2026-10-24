@@ -3033,6 +3033,8 @@ pub const FrameInfo = core.FrameInfo;
 pub const Progress = core.Progress;
 pub const StepResult = core.StepResult;
 pub const StreamingDiagnostics = core.StreamingDiagnostics;
+pub const StreamCount = core.StreamCount;
+pub const XxHash64Stream = checksum.XxHash64Stream;
 
 pub const frameModeName = store.frameModeName;
 pub const StoreFrameInspection = store.FrameInspection;

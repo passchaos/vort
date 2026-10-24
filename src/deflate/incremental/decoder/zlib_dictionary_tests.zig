@@ -41,8 +41,8 @@ fn expectFailureProgress(decoder: *const deflate.ZlibIncrementalDecoder, input: 
     try std.testing.expectEqualDeep(snapshot.last_step_progress, diagnostic.last_step_progress.?);
     try std.testing.expectEqual(@as(?usize, snapshot.total_input), snapshot.last_error_input_offset);
     try std.testing.expectEqual(@as(?usize, snapshot.total_output), snapshot.last_error_output_offset);
-    try std.testing.expectEqual(snapshot.last_error_input_offset, diagnostic.error_input_offset);
-    try std.testing.expectEqual(snapshot.last_error_output_offset, diagnostic.error_output_offset);
+    try std.testing.expectEqual(core.stream_count.fromOptionalLocal(snapshot.last_error_input_offset), diagnostic.error_input_offset);
+    try std.testing.expectEqual(core.stream_count.fromOptionalLocal(snapshot.last_error_output_offset), diagnostic.error_output_offset);
 }
 
 test "zlib incremental dictionary request waits for complete DICTID and resumes in place" {
@@ -93,7 +93,7 @@ test "zlib incremental dictionary whole input request exposes a safe unconsumed 
     try decoder.provideDictionary(dictionary_bytes);
     try std.testing.expectEqual(@as(?u32, null), decoder.requiredDictionaryId());
     try std.testing.expectEqualStrings("", decoder.snapshot().last_error_name);
-    try std.testing.expectEqual(@as(?usize, null), decoder.diagnostics().error_output_offset);
+    try std.testing.expectEqual(@as(?core.StreamCount, null), decoder.diagnostics().error_output_offset);
     try std.testing.expectEqualStrings("none", decoder.diagnostics().recoverability_hint_name);
     try drain(&decoder, encoded[consumed..], &output);
     try std.testing.expectEqualSlices(u8, payload_bytes, &output);

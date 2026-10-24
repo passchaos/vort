@@ -938,7 +938,7 @@ pub const IncrementalDecoder = struct {
             .header_received = snap.header_received,
             .frame_input_read = snap.frame_input_read,
             .output_written = snap.output_written,
-            .expected_output_len = snap.expected_output_len,
+            .expected_output_len = core.stream_count.fromOptionalLocal(snap.expected_output_len),
             .payload_remaining = snap.payload_remaining,
             .last_error_name = snap.last_error_name,
             .last_error_phase_name = if (snap.last_error_phase) |phase| phaseName(phase) else "",
@@ -4055,7 +4055,7 @@ test "bounded decoder reset and snapshot expose output progress" {
     try std.testing.expectEqual(first.len - 5, decoder.snapshot().payload_remaining);
     var diagnostics = decoder.diagnostics();
     try std.testing.expectEqualStrings("payload", diagnostics.phase_name);
-    try std.testing.expectEqual(@as(?usize, first.len), diagnostics.expected_output_len);
+    try std.testing.expectEqual(@as(?core.StreamCount, first.len), diagnostics.expected_output_len);
     try std.testing.expectEqual(@as(?usize, first.len - 5), diagnostics.payload_remaining);
     try std.testing.expectEqualStrings("none", diagnostics.recoverability_hint_name);
     step_result = try decoder.step(out[5..first.len]);
@@ -4063,7 +4063,7 @@ test "bounded decoder reset and snapshot expose output progress" {
     try std.testing.expect(decoder.snapshot().done);
     diagnostics = decoder.diagnostics();
     try std.testing.expectEqualStrings("done", diagnostics.phase_name);
-    try std.testing.expectEqual(@as(?usize, first_len), diagnostics.frame_input_read);
+    try std.testing.expectEqual(@as(?core.StreamCount, first_len), diagnostics.frame_input_read);
     try std.testing.expectEqualSlices(u8, first, out[0..first.len]);
 
     try decoder.reset(second_encoded[0..second_len]);
@@ -4297,7 +4297,7 @@ test "incremental decoder snapshot reports cumulative progress" {
     try std.testing.expectEqual(@as(?usize, input.len), snap.payload_remaining);
     diagnostics = decoder.diagnostics();
     try std.testing.expectEqualStrings("payload", diagnostics.phase_name);
-    try std.testing.expectEqual(@as(?usize, input.len), diagnostics.expected_output_len);
+    try std.testing.expectEqual(@as(?core.StreamCount, input.len), diagnostics.expected_output_len);
 
     step_result = try decoder.step(encoded[header_len .. header_len + 4], out[0..4]);
     try std.testing.expectEqual(StepResult.Status.need_output, step_result.status);

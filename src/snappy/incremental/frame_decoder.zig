@@ -195,13 +195,13 @@ pub fn Decoder(comptime Codec: type) type {
                 .frame_input_read = self.input_read,
                 .header_received = self.header_len,
                 .output_written = snap.output_written,
-                .expected_output_len = self.options.expected_output_len,
+                .expected_output_len = core.stream_count.fromOptionalLocal(self.options.expected_output_len),
                 .payload_remaining = snap.payload_remaining,
                 .last_error_name = self.last_error_name,
                 .last_error_phase_name = if (self.last_error_name.len == 0) "" else @tagName(self.last_error_phase),
                 .last_step_progress = self.last_step_progress,
-                .error_input_offset = self.error_input_offset,
-                .error_output_offset = self.error_output_offset,
+                .error_input_offset = core.stream_count.fromOptionalLocal(self.error_input_offset),
+                .error_output_offset = core.stream_count.fromOptionalLocal(self.error_output_offset),
                 .recoverability_hint_name = if (std.mem.eql(u8, self.last_error_name, "TruncatedFrame")) "truncated_input" else if (std.mem.eql(u8, self.last_error_name, "WorkingMemoryLimitExceeded")) "raise_working_memory_limit" else if (std.mem.eql(u8, self.last_error_name, "OutOfMemory")) "allocation_failure" else if (self.last_error_name.len == 0) "none" else "payload_corrupt",
             };
         }

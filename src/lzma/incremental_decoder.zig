@@ -181,12 +181,12 @@ pub const Decoder = struct {
             .frame_input_read = snap.input_read,
             .header_received = snap.header_received,
             .output_written = snap.output_written,
-            .expected_output_len = self.options.expected_output_len,
+            .expected_output_len = core.stream_count.fromOptionalLocal(self.options.expected_output_len),
             .payload_remaining = snap.pending_output,
             .last_error_name = snap.last_error_name,
             .last_error_phase_name = if (snap.last_error_name.len == 0) "" else @tagName(snap.last_error_phase),
-            .error_input_offset = snap.error_input_offset,
-            .error_output_offset = snap.error_output_offset,
+            .error_input_offset = core.stream_count.fromOptionalLocal(snap.error_input_offset),
+            .error_output_offset = core.stream_count.fromOptionalLocal(snap.error_output_offset),
             .last_step_progress = snap.last_step_progress,
             .recoverability_hint_name = if (std.mem.eql(u8, snap.last_error_name, @errorName(error.TruncatedFrame)))
                 "truncated_input"

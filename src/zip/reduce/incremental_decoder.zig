@@ -169,7 +169,7 @@ pub const Decoder = struct {
             .header_received = 256 - self.snapshot().header_contexts_remaining,
             .frame_input_read = self.total_input,
             .output_written = self.total_output,
-            .expected_output_len = self.options.expected_output_len,
+            .expected_output_len = core.stream_count.fromOptionalLocal(self.options.expected_output_len),
             .payload_remaining = self.match_remaining,
             .last_error_name = self.last_error_name,
             .last_error_phase_name = if (self.last_error_name.len == 0) "" else @tagName(self.last_error_phase),

@@ -1,5 +1,6 @@
 const std = @import("std");
 const deflate = @import("../../../deflate.zig");
+const core = @import("../../../core.zig");
 
 fn feed(encoder: anytype, input: []const u8, wire: *std.ArrayList(u8), scratch: []u8) !void {
     var offset: usize = 0;
@@ -143,7 +144,7 @@ test "incremental raw decoder resumes after an external sync scan" {
         error.InvalidDeflateBlockType,
         decoder.step(corrupt, &output),
     );
-    const error_input = decoder.diagnostics().frame_input_read.?;
+    const error_input = try core.stream_count.toLocal(decoder.diagnostics().frame_input_read.?);
     var scanner: deflate.RawDeflateSyncScanner = .{};
     const scan = scanner.scan(corrupt[error_input..]);
     const point = scan.point orelse return error.TestUnexpectedResult;

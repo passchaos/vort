@@ -56,8 +56,8 @@ fn record(trace: *Trace, decoder: anytype, before: @TypeOf(decoder.snapshot()), 
     try std.testing.expect(after.peak_working_bytes <= decoder.options.max_working_memory);
     try std.testing.expectEqual(after.working_bytes, decoder.workingMemoryBytes());
     try std.testing.expectEqual(after.peak_working_bytes, decoder.peakWorkingMemoryBytes());
-    try std.testing.expectEqual(after.error_input_offset, decoder.diagnostics().error_input_offset);
-    try std.testing.expectEqual(after.error_output_offset, decoder.diagnostics().error_output_offset);
+    try std.testing.expectEqual(core.stream_count.fromOptionalLocal(after.error_input_offset), decoder.diagnostics().error_input_offset);
+    try std.testing.expectEqual(core.stream_count.fromOptionalLocal(after.error_output_offset), decoder.diagnostics().error_output_offset);
 }
 
 pub fn expectComplete(trace: Trace, input: usize, output: usize) !void {
@@ -258,7 +258,7 @@ test "Snappy framing contracts later chunk errors include earlier output in the 
         try std.testing.expectEqualStrings("ABC", output[0..3]);
         try std.testing.expectEqual(@as(usize, 3), decoder.snapshot().last_step_progress.output_written);
         try std.testing.expectEqual(encoded.items.len, decoder.snapshot().last_step_progress.input_read);
-        try std.testing.expectEqual(@as(?usize, 3), decoder.diagnostics().error_output_offset);
+        try std.testing.expectEqual(@as(?core.StreamCount, 3), decoder.diagnostics().error_output_offset);
         try sticky(&decoder, error.InvalidMatch);
     }
 }

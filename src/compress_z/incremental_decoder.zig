@@ -125,7 +125,7 @@ pub const Decoder = struct {
             .header_received = snap.header_received,
             .frame_input_read = snap.input_read,
             .output_written = snap.output_written,
-            .expected_output_len = self.options.expected_output_len,
+            .expected_output_len = core.stream_count.fromOptionalLocal(self.options.expected_output_len),
             .payload_remaining = snap.pending_output,
             .last_error_name = snap.last_error_name,
             .last_error_phase_name = if (snap.last_error_name.len == 0)

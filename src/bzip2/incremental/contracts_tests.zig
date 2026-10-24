@@ -83,8 +83,8 @@ const Driver = struct {
             try std.testing.expectEqual(@as(?usize, snap.output_written), snap.error_output_offset);
             const diagnostic = decoder.diagnostics();
             try std.testing.expectEqualDeep(progress, diagnostic.last_step_progress.?);
-            try std.testing.expectEqual(snap.error_input_offset, diagnostic.error_input_offset);
-            try std.testing.expectEqual(snap.error_output_offset, diagnostic.error_output_offset);
+            try std.testing.expectEqual(core.stream_count.fromOptionalLocal(snap.error_input_offset), diagnostic.error_input_offset);
+            try std.testing.expectEqual(core.stream_count.fromOptionalLocal(snap.error_output_offset), diagnostic.error_output_offset);
             try std.testing.expectEqual(@as(u8, 0xa5), guarded[0]);
             try std.testing.expectEqual(@as(u8, 0xa5), guarded[output_len + 1]);
             return err;

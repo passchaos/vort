@@ -129,7 +129,7 @@ pub fn Decoder(comptime Codec: type) type {
                 .header_received = self.header_received,
                 .frame_input_read = self.total_input,
                 .output_written = self.total_output,
-                .expected_output_len = self.options.expected_output_len,
+                .expected_output_len = core.stream_count.fromOptionalLocal(self.options.expected_output_len),
                 .last_error_name = self.last_error_name,
                 .last_error_phase_name = if (self.last_error_name.len == 0) "" else @tagName(self.last_error_phase),
                 .recoverability_hint_name = if (std.mem.eql(u8, self.last_error_name, @errorName(error.TruncatedFrame))) "truncated_input" else if (std.mem.eql(u8, self.last_error_name, @errorName(error.BadGzipHeader))) "corrupt_header" else if (self.last_error_name.len == 0) "none" else "payload_corrupt",

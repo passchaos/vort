@@ -1,5 +1,8 @@
 const std = @import("std");
 
+pub const stream_count = @import("io/stream_count.zig");
+pub const StreamCount = stream_count.Counter;
+
 /// Errors shared by early Vort parsers and streaming primitives.
 pub const Error = error{
     OutputTooSmall,
@@ -65,19 +68,43 @@ pub const CompressedInputPolicy = enum { block_stream, prevalidated_frame };
 
 pub const StreamingDiagnostics = struct {
     phase_name: []const u8,
-    input_read: ?usize = null,
+    input_read: ?StreamCount = null,
     header_received: ?usize = null,
-    frame_input_read: ?usize = null,
-    output_written: usize = 0,
-    expected_output_len: ?usize = null,
+    frame_input_read: ?StreamCount = null,
+    output_written: StreamCount = 0,
+    expected_output_len: ?StreamCount = null,
     payload_remaining: ?usize = null,
     last_error_name: []const u8 = "",
     last_error_phase_name: []const u8 = "",
     recoverability_hint_name: []const u8 = "none",
-    error_input_offset: ?usize = null,
-    error_output_offset: ?usize = null,
+    error_input_offset: ?StreamCount = null,
+    error_output_offset: ?StreamCount = null,
     last_step_progress: ?Progress = null,
 };
+
+test "streaming diagnostics keep cumulative counts wide and caller progress local" {
+    const boundary: StreamCount = @as(StreamCount, 1) << 32;
+    const expected: ?usize = 19;
+    const value: StreamingDiagnostics = .{
+        .phase_name = "payload",
+        .input_read = boundary + 3,
+        .frame_input_read = boundary + 1,
+        .output_written = boundary + 7,
+        .expected_output_len = stream_count.fromOptionalLocal(expected),
+        .error_input_offset = boundary + 2,
+        .error_output_offset = boundary + 6,
+        .header_received = 8,
+        .payload_remaining = 5,
+        .last_step_progress = .{ .input_read = 3, .output_written = 7 },
+    };
+    try std.testing.expectEqual(@as(?StreamCount, boundary + 3), value.input_read);
+    try std.testing.expectEqual(@as(StreamCount, boundary + 7), value.output_written);
+    try std.testing.expectEqual(@as(?StreamCount, 19), value.expected_output_len);
+    try std.testing.expectEqual(@as(?StreamCount, boundary + 6), value.error_output_offset);
+    try std.testing.expect(@TypeOf(value.header_received) == ?usize);
+    try std.testing.expect(@TypeOf(value.payload_remaining) == ?usize);
+    try std.testing.expect(@TypeOf(value.last_step_progress.?.input_read) == usize);
+}
 
 /// Caller-visible format metadata emitted by parsers before payload materialization.
 pub const FrameInfo = struct {
