@@ -483,11 +483,7 @@ pub fn main(init: std.process.Init) !void {
     } else if (std.mem.eql(u8, command, "encode-br-hex")) {
         try brotli_cli.encodeHex(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-br-stored-hex")) {
-        const payload = args.next() orelse "";
-        const options = try parseBrotliStoredOptions(args.next(), args.next());
-        const encoded = try vort.brEncodeStoredStreamWithOptionsAlloc(init.gpa, payload, options);
-        defer init.gpa.free(encoded);
-        try printHex(stdout, encoded);
+        try brotli_cli.encodeStoredHex(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-br-hex")) {
         const hex = args.next() orelse return error.MissingCorpusPath;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -500,15 +496,7 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(decoded);
         try printDecoded(stdout, "br", compressed.len, decoded);
     } else if (std.mem.eql(u8, command, "encode-br-stored-file")) {
-        const input_path = args.next() orelse return error.MissingCorpusPath;
-        const output_path = args.next() orelse return error.MissingCorpusPath;
-        const options = try parseBrotliStoredOptions(args.next(), args.next());
-        const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
-        defer init.gpa.free(payload);
-        const encoded = try vort.brEncodeStoredStreamWithOptionsAlloc(init.gpa, payload, options);
-        defer init.gpa.free(encoded);
-        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
-        try stdout.print("br_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ encoded.len, payload.len, output_path });
+        try brotli_cli.encodeStoredFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-br-file-to")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -1603,6 +1591,8 @@ pub fn main(init: std.process.Init) !void {
         try zstd_controls_cli.encodeFileHex(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-zstd-native-file")) {
         try zstd_controls_cli.encodeFile(init, &args, stdout);
+    } else if (std.mem.eql(u8, command, "encode-zstd-native-stream-file")) {
+        try zstd_controls_cli.encodeStreamFile(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-zstd-native-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -2799,7 +2789,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  encode-br-stream-file <in> <out> [quality] [generic|text|font] [window_bits] [br_options]
         \\  encode-br-hex [text] [quality] [generic|text|font] [window_bits] [br_options]
         \\    br_options: --quality=0..11 --mode=generic|text|font --window-bits=10..24
-        \\    --large-window explicitly selects the Brotli Large Window extension (HQ quality 10/11 only)
+        \\    --large-window explicitly selects the Brotli Large Window extension (independent of HQ)
         \\                              With --large-window, --window-bits accepts 10..30; default remains 16
         \\    --hq (quality 10/11 only); HQ parameters also explicitly select HQ:
         \\    --hq-depth=1..65536 --hq-nice-len=2..16777216 --hq-beam-width=0..32
@@ -2811,14 +2801,15 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Complete lengths can require more work; finite beam search is not globally optimal
         \\    --hq-npostfix=0..3 --hq-ndirect-high=0..15 --profile (requires HQ)
         \\    --max-total-memory=bytes --memory-profile (all planned qualities)
+        \\    --metadata=TEXT emits caller metadata for planned or stored streams
         \\                              Total budget covers encoder-owned requested heap; 0 is a strict cap
         \\                              Zero beam/iterations selects the public quality defaults
         \\                              HQ controls describe Vort native effort, not upstream speed parity
-        \\  encode-br-stored-hex [text] [window_bits] [metadata]
+        \\  encode-br-stored-hex [text] [window_bits] [metadata] [--large-window] [--window-bits=N] [--metadata=TEXT]
         \\                              Encode text as dependency-free Brotli stored-stream hex
         \\  decode-br-hex [hex] [max_output]
         \\                              Decode dependency-free Brotli stored-stream hex
-        \\  encode-br-stored-file <in> <out> [window_bits] [metadata]
+        \\  encode-br-stored-file <in> <out> [window_bits] [metadata] [--large-window] [--window-bits=N] [--metadata=TEXT]
         \\                              Encode file bytes as dependency-free Brotli stored stream
         \\  decode-br-file-to <in> <out> [max_output]
         \\                              Decode dependency-free Brotli stored stream file
@@ -3000,6 +2991,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  encode-zstd-native-file-hex [path] [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
         \\                              Encode file bytes as dependency-free native-subset Zstandard hex
         \\  encode-zstd-native-file <in> <out> [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
+        \\  encode-zstd-native-stream-file <in> <out> [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
         \\    zstd_options: --level=N | --level N (-131072..22)
         \\                  --strategy=auto|fast|double_fast|greedy|lazy|optimal|lazy2|btlazy2|btopt|btultra|btultra2
         \\                  --fast-acceleration=N (1..131072; fast or double_fast)
@@ -3008,6 +3000,9 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                  HQ flags require an HQ strategy and a positive level; nice_len >= min_match
         \\                  Native controls specify local effort, not reference compressor speed parity
         \\                  --profile shows optional encoder work counters
+        \\                  --window-log=10..41 --max-match-history-len=1024..{d} (requires explicit window)
+        \\                  --max-total-memory=bytes --memory-profile
+        \\                  Window_Log selects frame metadata; history bytes separately cap reachable matches
         \\    Negative level -N selects fast acceleration N. New controls default to level 1.
         \\  train-zstd-fastcover-dictionary <out> <history_bytes> <dict_id> <sample_files...> [fastcover_options]
         \\  optimize-zstd-fastcover-dictionary <out> <history_bytes> <dict_id> <sample_files...> [fastcover_options] [optimize_options]
@@ -3213,7 +3208,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\
         \\This CLI is a smoke surface for the library-first Vort APIs.
         \\
-    , .{});
+    , .{vort.zstd.native_explicit_window_match_len_max});
 }
 
 fn hexToOwnedBytes(allocator: std.mem.Allocator, hex: []const u8) ![]u8 {
@@ -4008,13 +4003,6 @@ fn parseIterations(text: ?[]const u8, default: usize) !usize {
 fn parseOptionalLimit(text: ?[]const u8) !?usize {
     const value = text orelse return null;
     return try std.fmt.parseInt(usize, value, 10);
-}
-
-fn parseBrotliStoredOptions(window_bits_text: ?[]const u8, metadata: ?[]const u8) !vort.BrotliStoredStreamOptions {
-    const value = window_bits_text orelse return .{ .metadata = metadata orelse "" };
-    const window_bits = try std.fmt.parseInt(u5, value, 10);
-    if (window_bits < 10 or window_bits > 24) return error.InvalidBlockPlan;
-    return .{ .window_bits = window_bits, .metadata = metadata orelse "" };
 }
 
 fn parseOptionalMemberIndex(text: ?[]const u8) !usize {

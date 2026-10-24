@@ -139,7 +139,7 @@ test "Brotli CLI Large Window explicitly maps both public options without select
     try std.testing.expectEqualDeep(vort.br.PlannedEncodeOptions{}, defaults);
 }
 
-test "Brotli CLI Large Window public bounds require HQ and enforce each format range" {
+test "Brotli CLI Large Window public bounds enforce each format range" {
     inline for (.{ "16", "25", "30" }) |width| {
         const controls = try parse(&.{ "--large-window", "--quality=10", "--hq", "--window-bits=" ++ width });
         const one = try controls.resolve(vort.br.PlannedEncodeOptions, null);
@@ -148,8 +148,6 @@ test "Brotli CLI Large Window public bounds require HQ and enforce each format r
         _ = try vort.br.encodedPlannedStreamChunksBoundWithOptions(&.{}, stream);
     }
     inline for (.{
-        &.{"--large-window"},
-        &.{ "--large-window", "--quality=10" },
         &.{ "--quality=11", "--hq", "--window-bits=25" },
         &.{ "--large-window", "--quality=11", "--hq", "--window-bits=31" },
         &.{ "--large-window", "--quality=11", "--hq", "--window-bits=9" },
@@ -251,4 +249,60 @@ test "Brotli CLI complete length controls keep public validation and distinct pr
     try std.testing.expectError(error.MissingBrotliOptionValue, parse(&.{"--hq-max-price-evaluations"}));
     try std.testing.expectError(error.InvalidCharacter, parse(&.{"--hq-max-price-evaluations="}));
     try std.testing.expectError(error.Overflow, parse(&.{"--hq-max-price-evaluations=-1"}));
+}
+
+test "Brotli CLI stored controls keep old positionals and format flags separate" {
+    var legacy_args = Args{ .values = &.{ "16", "legacy metadata" } };
+    const legacy = try cli.parseStored(&legacy_args);
+    try std.testing.expectEqual(@as(?u5, 16), legacy.window_bits);
+    try std.testing.expectEqualStrings("legacy metadata", legacy.metadata.?);
+    try std.testing.expect(!legacy.hqSelected() and !legacy.large_window);
+    var named_args = Args{ .values = &.{ "--large-window", "--window-bits=30", "--metadata=new metadata" } };
+    const named = try cli.parseStored(&named_args);
+    try std.testing.expect(named.large_window and !named.hqSelected());
+    try std.testing.expectEqual(@as(?u5, 30), named.window_bits);
+    try std.testing.expectEqualStrings("new metadata", named.metadata.?);
+    inline for (.{ "--quality=0", "--hq", "--max-total-memory=0", "--memory-profile" }) |flag| {
+        var args = Args{ .values = &.{flag} };
+        try std.testing.expectError(error.UnsupportedBrotliStoredOption, cli.parseStored(&args));
+    }
+    var duplicate = Args{ .values = &.{ "16", "old", "--metadata=new" } };
+    try std.testing.expectError(error.DuplicateBrotliOption, cli.parseStored(&duplicate));
+}
+
+test "Brotli CLI metadata maps without implicitly choosing quality or HQ" {
+    const parsed = try parse(&.{"--metadata=caller metadata"});
+    const options = try parsed.resolve(vort.br.PlannedEncodeOptions, null);
+    try std.testing.expect(options.hq == null and options.quality == null);
+    try std.testing.expectEqualStrings("caller metadata", options.metadata);
+    try std.testing.expectError(error.DuplicateBrotliOption, parse(&.{ "--metadata=one", "--metadata=two" }));
+}
+
+test "Brotli CLI Large Window general quality and stored controls remain independent of HQ" {
+    inline for (.{ "0", "1", "5", "9", "10", "11" }) |quality| {
+        const requested = try parse(&.{ "--large-window", "--quality=" ++ quality, "--window-bits=30", "--metadata=window metadata" });
+        const one = try requested.resolve(vort.br.PlannedEncodeOptions, null);
+        const stream = try requested.resolve(vort.br.PlannedStreamChunksOptions, null);
+        try std.testing.expect(one.hq == null and stream.hq == null);
+        _ = try vort.br.encodedPlannedStreamBoundWithOptions(0, one);
+        _ = try vort.br.encodedPlannedStreamChunksBoundWithOptions(&.{}, stream);
+    }
+    const legacy = try (try parse(&.{ "--large-window", "--window-bits=25" })).resolve(vort.br.PlannedEncodeOptions, null);
+    try std.testing.expect(legacy.hq == null and legacy.quality == null);
+    _ = try vort.br.encodedPlannedStreamBoundWithOptions(0, legacy);
+    var args = Args{ .values = &.{ "30", "legacy stored metadata", "--large-window" } };
+    const stored = try (try cli.parseStored(&args)).storedOptions();
+    try std.testing.expect(stored.large_window);
+    try std.testing.expectEqual(@as(u5, 30), stored.window_bits);
+    try std.testing.expectEqualStrings("legacy stored metadata", stored.metadata);
+}
+
+test "Brotli CLI stored hex permits format flags with omitted text" {
+    var args = Args{ .values = &.{ "--window-bits=30", "--metadata=empty content metadata" } };
+    const control = try cli.parseStoredWithFirst(&args, "--large-window");
+    try std.testing.expect(control.large_window);
+    try std.testing.expectEqual(@as(?u5, 30), control.window_bits);
+    try std.testing.expectEqualStrings("empty content metadata", control.metadata.?);
+    try std.testing.expect(cli.isStoredControlArgument("--large-window"));
+    try std.testing.expect(!cli.isStoredControlArgument("--literal-user-text"));
 }

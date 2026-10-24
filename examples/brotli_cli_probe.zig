@@ -7,6 +7,6 @@ pub fn main(init: std.process.Init) !void {
     defer args.deinit();
     _ = args.next();
     const command = args.next() orelse return error.MissingCommand;
-    if (std.mem.eql(u8, command, "encode-br-file")) try cli.encodeFile(init, &args, &writer.interface, false) else if (std.mem.eql(u8, command, "encode-br-stream-file")) try cli.encodeFile(init, &args, &writer.interface, true) else if (std.mem.eql(u8, command, "encode-br-hex")) try cli.encodeHex(init, &args, &writer.interface) else return error.UnknownCommand;
+    if (std.mem.eql(u8, command, "encode-br-file")) try cli.encodeFile(init, &args, &writer.interface, false) else if (std.mem.eql(u8, command, "encode-br-stream-file")) try cli.encodeFile(init, &args, &writer.interface, true) else if (std.mem.eql(u8, command, "encode-br-hex")) try cli.encodeHex(init, &args, &writer.interface) else if (std.mem.eql(u8, command, "encode-br-stored-file")) try cli.encodeStoredFile(init, &args, &writer.interface) else if (std.mem.eql(u8, command, "encode-br-stored-hex")) try cli.encodeStoredHex(init, &args, &writer.interface) else return error.UnknownCommand;
     try writer.interface.flush();
 }
