@@ -231,7 +231,9 @@ test "raw deflate incremental stored probe preserves repeated binary history" {
     var first: [32 * 1024]u8 = undefined;
     var random = std.Random.DefaultPrng.init(0x6a09_e667_f3bc_c909);
     random.random().bytes(&first);
-    const payload = first ++ first;
+    var payload: [2 * first.len]u8 = undefined;
+    @memcpy(payload[0..first.len], &first);
+    @memcpy(payload[first.len..], &first);
     var encoder = deflate.RawDeflateIncrementalBestEncoder.initWithOptions(std.testing.allocator, .{
         .block_len = first.len,
         .compression = deflate.optionsForLevel(.default),
