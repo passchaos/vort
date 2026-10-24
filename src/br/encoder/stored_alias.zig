@@ -35,6 +35,18 @@ pub fn protect(allocator: std.mem.Allocator, allocation: []const u8, input: anyt
     return .{ .data = data, .metadata_snapshot = metadata_snapshot };
 }
 
+/// Exact additional heap required to protect these borrows. A zero result
+/// preserves the allocation-free bounded writer, including a zero heap cap.
+pub fn required(allocation: []const u8, input: anytype, metadata: []const u8) Error!usize {
+    const data = if (@TypeOf(input) == []const u8)
+        alias.requiredInputBytes(allocation, input, .{})
+    else
+        alias.requiredChunksBytes(allocation, input, .{});
+    const data_bytes = data catch |err| return map(err);
+    const metadata_bytes = alias.requiredInputBytes(allocation, metadata, .{}) catch |err| return map(err);
+    return std.math.add(usize, data_bytes, metadata_bytes) catch error.IntegerOverflow;
+}
+
 fn map(err: anyerror) Error {
     return switch (err) {
         error.OutOfMemory => error.OutOfMemory,

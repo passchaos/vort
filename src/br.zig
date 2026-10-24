@@ -41,6 +41,9 @@ const hq_types = @import("br/encoder/hq_types.zig");
 const hq_codec = @import("br/encoder/hq_codec.zig");
 const new_hq_parser = @import("br/encoder/hq_parser.zig");
 const total_budget = @import("br/encoder/total_budget.zig");
+const stored_memory = @import("br/encoder/stored_memory.zig");
+const stored_memory_owner = @import("br/encoder/stored_memory_owner.zig");
+const stored_memory_reuse = @import("br/encoder/stored_memory_reuse.zig");
 const encoder_window_format = @import("br/encoder/window_format.zig");
 const quality_schedule = @import("br/encoder/quality_schedule.zig");
 const stream_block_split = @import("br/encoder/stream_block_split.zig");
@@ -1574,6 +1577,18 @@ const IncrementalStoredEncoderCodec = struct {
     pub const default_block_len = 64 * 1024;
     pub const State = struct { bit_index: u3 = 0 };
 
+    pub fn validateStreamOptions(options: StreamOptions) br.Error!void {
+        try encoder_window_format.validate(options.window_bits, options.large_window);
+        if (options.metadata.len > 0x1_0000) return error.InvalidBlockPlan;
+    }
+    pub fn extractMemoryConfig(options: StreamOptions) @import("br/incremental/stored/allocator_adapter.zig").Config {
+        return .{ .limit = options.max_total_working_memory, .profile = options.memory_profile };
+    }
+    pub fn requiredTotalRetainedBytes(_: *const State) br.Error!usize {
+        return 0;
+    }
+    pub fn rebindStateAllocator(_: *State, _: std.mem.Allocator) void {}
+
     pub fn readyOutputLen(state: *const State, pending_len: usize, final_written: bool) usize {
         // A non-byte-aligned tail is still mutable: the next meta-block header
         // must continue in that byte. Publishing it early would both corrupt
@@ -2200,6 +2215,11 @@ test {
     _ = @import("tests/br_stream_counter_contracts.zig");
     _ = @import("tests/br_stream_counter_resources.zig");
     _ = @import("tests/br_stream_counter_transactions.zig");
+    _ = @import("tests/br_stored_memory_contracts.zig");
+    _ = @import("tests/br_stored_memory_resources.zig");
+    _ = @import("tests/br_stored_memory_transactions.zig");
+    _ = stored_memory_owner;
+    _ = stored_memory_reuse;
     _ = @import("br/encoder/hq_parser/length_options_tests.zig");
     _ = @import("br/encoder/hq_tree_oracle_tests.zig");
     _ = @import("br/encoder/hq_dictionary.zig");
@@ -3489,6 +3509,13 @@ fn plannedWindowLen(level: PlannedCompressionLevel, window_bits: u5, large_windo
 }
 
 pub const StoredStreamOptions = struct {
+    /// Total encoder-owned requested heap. Borrowed input/metadata and caller
+    /// output are excluded; retained capacities and alias snapshots are counted.
+    max_total_working_memory: ?usize = null,
+    /// Call-scoped for complete-input/reusable APIs. Incremental options retain
+    /// this profile for the encoder/configuration lifetime; reset with the same
+    /// options does not end it.
+    memory_profile: ?*EncodeMemoryProfile = null,
     /// Explicit non-RFC Large Window identity at every width 10...30.
     large_window: bool = false,
     window_bits: u5 = default_window_bits,
@@ -4381,11 +4408,7 @@ pub fn encodeStoredStreamAlloc(allocator: std.mem.Allocator, input: []const u8) 
 }
 
 pub fn encodeStoredStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: StoredStreamOptions) Error![]u8 {
-    const output = try allocator.alloc(u8, try encodedStoredStreamBoundWithOptions(input.len, options));
-    errdefer allocator.free(output);
-    const written = try encodeStoredStreamWithOptionsInto(input, output, options);
-    if (written != output.len) return error.SizeMismatch;
-    return output;
+    return stored_memory.owned(allocator, input, options, storedInputBound, encodeStoredInputBounded);
 }
 
 pub fn encodeStoredStreamChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8) Error![]u8 {
@@ -4393,11 +4416,7 @@ pub fn encodeStoredStreamChunksAlloc(allocator: std.mem.Allocator, chunks: []con
 }
 
 pub fn encodeStoredStreamChunksWithOptionsAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, options: StoredStreamOptions) Error![]u8 {
-    const output = try allocator.alloc(u8, try encodedStoredStreamChunksBoundWithOptions(chunks, options));
-    errdefer allocator.free(output);
-    const written = try encodeStoredStreamChunksWithOptionsInto(chunks, output, options);
-    if (written != output.len) return error.SizeMismatch;
-    return output;
+    return stored_memory.owned(allocator, chunks, options, encodedStoredStreamChunksBoundWithOptions, encodeStoredChunksBounded);
 }
 
 pub fn encodeStoredStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) Error!void {
@@ -4405,14 +4424,7 @@ pub fn encodeStoredStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayLis
 }
 
 pub fn encodeStoredStreamWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: StoredStreamOptions) Error!void {
-    var protected = try @import("br/encoder/stored_alias.zig").protect(allocator, out.items.ptr[0..out.capacity], input, options.metadata);
-    defer protected.deinit();
-    const active_input = protected.input();
-    var active_options = options;
-    active_options.metadata = protected.metadata();
-
-    var writer = BitWriter{ .out = out };
-    try encodeStoredStreamWithOptionsWrite(allocator, &writer, active_input, active_options);
+    return stored_memory.append(allocator, out, input, options, storedInputBound, encodeStoredInputBounded);
 }
 
 pub fn encodeStoredStreamChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8) Error!void {
@@ -4420,14 +4432,7 @@ pub fn encodeStoredStreamChunksAppend(allocator: std.mem.Allocator, out: *std.Ar
 }
 
 pub fn encodeStoredStreamChunksWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, options: StoredStreamOptions) Error!void {
-    var protected = try @import("br/encoder/stored_alias.zig").protect(allocator, out.items.ptr[0..out.capacity], chunks, options.metadata);
-    defer protected.deinit();
-    const active_input = protected.input();
-    var active_options = options;
-    active_options.metadata = protected.metadata();
-
-    var writer = BitWriter{ .out = out };
-    try encodeStoredStreamChunksWithOptionsWrite(allocator, &writer, active_input, active_options);
+    return stored_memory.append(allocator, out, chunks, options, encodedStoredStreamChunksBoundWithOptions, encodeStoredChunksBounded);
 }
 
 /// Encode a single-byte run as one compressed Brotli meta-block. This is a
@@ -12307,24 +12312,23 @@ pub fn encodeStoredStreamInto(input: []const u8, output: []u8) Error!usize {
 }
 
 pub fn encodeStoredStreamWithOptionsInto(input: []const u8, output: []u8, options: StoredStreamOptions) Error!usize {
+    return stored_memory.into(allocator_dispatch.singleton, input, output, options, storedInputBound, encodeStoredInputBounded);
+}
+
+fn storedInputBound(input: []const u8, options: StoredStreamOptions) Error!usize {
+    return encodedStoredStreamBoundWithOptions(input.len, options);
+}
+
+fn encodeStoredInputBounded(allocator: std.mem.Allocator, input: []const u8, output: []u8, options: StoredStreamOptions) Error!usize {
     const needed = try encodedStoredStreamBoundWithOptions(input.len, options);
     if (output.len < needed) return error.OutOfMemory;
-    var protected = try @import("br/encoder/stored_alias.zig").protect(allocator_dispatch.singleton, output[0..needed], input, options.metadata);
-    defer protected.deinit();
-    const active_input = protected.input();
-    var active_options = options;
-    active_options.metadata = protected.metadata();
-
-    if (!active_options.large_window and active_options.window_bits == default_window_bits and active_options.metadata.len == 0 and active_input.len <= direct_stored_stream_max_input_len)
-        return encodeDefaultStoredStreamInto(active_input, output[0..needed]);
-    var out: std.ArrayList(u8) = .{
-        .items = output[0..0],
-        .capacity = output.len,
-    };
+    if (!options.large_window and options.window_bits == default_window_bits and options.metadata.len == 0 and input.len <= direct_stored_stream_max_input_len)
+        return encodeDefaultStoredStreamInto(input, output[0..needed]);
+    var out: std.ArrayList(u8) = .{ .items = output[0..0], .capacity = needed };
     var writer = BitWriter{ .out = &out, .bounded = true };
-    try encodeStoredStreamWithOptionsWrite(allocator_dispatch.singleton, &writer, active_input, active_options);
+    try encodeStoredStreamWithOptionsWrite(allocator, &writer, input, options);
     if (out.items.len != needed) return error.SizeMismatch;
-    return out.items.len;
+    return needed;
 }
 
 /// Emit the common WBITS=16, metadata-free stored stream directly. The exact
@@ -12352,24 +12356,19 @@ pub fn encodeStoredStreamChunksInto(chunks: []const []const u8, output: []u8) Er
 }
 
 pub fn encodeStoredStreamChunksWithOptionsInto(chunks: []const []const u8, output: []u8, options: StoredStreamOptions) Error!usize {
+    return stored_memory.into(allocator_dispatch.singleton, chunks, output, options, encodedStoredStreamChunksBoundWithOptions, encodeStoredChunksBounded);
+}
+
+fn encodeStoredChunksBounded(allocator: std.mem.Allocator, chunks: []const []const u8, output: []u8, options: StoredStreamOptions) Error!usize {
     const needed = try encodedStoredStreamChunksBoundWithOptions(chunks, options);
     if (output.len < needed) return error.OutOfMemory;
-    var protected = try @import("br/encoder/stored_alias.zig").protect(allocator_dispatch.singleton, output[0..needed], chunks, options.metadata);
-    defer protected.deinit();
-    const active_input = protected.input();
-    var active_options = options;
-    active_options.metadata = protected.metadata();
-
-    if (!active_options.large_window and active_options.window_bits == default_window_bits and active_options.metadata.len == 0 and storedChunksInputLenAtMost(active_input, direct_stored_stream_max_input_len))
-        return encodeDefaultStoredStreamChunksInto(active_input, output[0..needed]);
-    var out: std.ArrayList(u8) = .{
-        .items = output[0..0],
-        .capacity = output.len,
-    };
+    if (!options.large_window and options.window_bits == default_window_bits and options.metadata.len == 0 and storedChunksInputLenAtMost(chunks, direct_stored_stream_max_input_len))
+        return encodeDefaultStoredStreamChunksInto(chunks, output[0..needed]);
+    var out: std.ArrayList(u8) = .{ .items = output[0..0], .capacity = needed };
     var writer = BitWriter{ .out = &out, .bounded = true };
-    try encodeStoredStreamChunksWithOptionsWrite(allocator_dispatch.singleton, &writer, active_input, active_options);
+    try encodeStoredStreamChunksWithOptionsWrite(allocator, &writer, chunks, options);
     if (out.items.len != needed) return error.SizeMismatch;
-    return out.items.len;
+    return needed;
 }
 
 fn storedChunksInputLenAtMost(chunks: []const []const u8, limit: usize) bool {
@@ -13799,14 +13798,26 @@ fn recordSummaryCommand(stats: ?*StreamSummaryMetaBlockStats, lengths: InsertCop
 pub const StoredStreamEncoder = struct {
     allocator: std.mem.Allocator,
     scratch: std.ArrayList(u8) = .empty,
+    memory: stored_memory_owner.Owner = .{},
 
     pub fn init(allocator: std.mem.Allocator) StoredStreamEncoder {
         return .{ .allocator = allocator };
     }
 
     pub fn deinit(self: *StoredStreamEncoder) void {
-        self.scratch.deinit(self.allocator);
+        self.scratch.deinit(self.memory.current(self.allocator));
+        self.memory.deinit();
         self.* = undefined;
+    }
+
+    /// This operation's shared requested-heap ledger, including retained bytes.
+    pub fn memorySnapshot(self: *const StoredStreamEncoder) total_budget.Snapshot {
+        return if (self.memory.lease) |lease| lease.snapshot() else .{};
+    }
+
+    /// Object-owned requested capacity excludes an inherited external control.
+    pub fn retainedCapacity(self: *const StoredStreamEncoder) usize {
+        return std.math.add(usize, self.scratch.capacity, self.memory.ownedControlBytes()) catch std.math.maxInt(usize);
     }
 
     pub fn encodeAlloc(self: *StoredStreamEncoder, input: []const u8) Error![]u8 {
@@ -13814,7 +13825,7 @@ pub const StoredStreamEncoder = struct {
     }
 
     pub fn encodeWithOptionsAlloc(self: *StoredStreamEncoder, input: []const u8, options: StoredStreamOptions) Error![]u8 {
-        return encodeStoredStreamWithOptionsAlloc(self.allocator, input, options);
+        return stored_memory_reuse.owned(self, input, options, storedInputBound, encodeStoredInputBounded);
     }
 
     pub fn encodeChunksAlloc(self: *StoredStreamEncoder, chunks: []const []const u8) Error![]u8 {
@@ -13822,7 +13833,7 @@ pub const StoredStreamEncoder = struct {
     }
 
     pub fn encodeChunksWithOptionsAlloc(self: *StoredStreamEncoder, chunks: []const []const u8, options: StoredStreamOptions) Error![]u8 {
-        return encodeStoredStreamChunksWithOptionsAlloc(self.allocator, chunks, options);
+        return stored_memory_reuse.owned(self, chunks, options, encodedStoredStreamChunksBoundWithOptions, encodeStoredChunksBounded);
     }
 
     pub fn encodeScratch(self: *StoredStreamEncoder, input: []const u8) Error![]const u8 {
@@ -13830,18 +13841,7 @@ pub const StoredStreamEncoder = struct {
     }
 
     pub fn encodeScratchWithOptions(self: *StoredStreamEncoder, input: []const u8, options: StoredStreamOptions) Error![]const u8 {
-        var protected = try @import("br/encoder/stored_alias.zig").protect(self.allocator, self.scratch.items.ptr[0..self.scratch.capacity], input, options.metadata);
-        defer protected.deinit();
-        const active_input = protected.input();
-        var active_options = options;
-        active_options.metadata = protected.metadata();
-
-        const needed = try encodedStoredStreamBoundWithOptions(active_input.len, active_options);
-        try self.scratch.ensureTotalCapacity(self.allocator, needed);
-        self.scratch.clearRetainingCapacity();
-        const written = try encodeStoredStreamWithOptionsInto(active_input, self.scratch.allocatedSlice()[0..needed], active_options);
-        self.scratch.items.len = written;
-        return self.scratch.items;
+        return stored_memory_reuse.scratch(self, input, options, storedInputBound, encodeStoredInputBounded);
     }
 
     pub fn encodeChunksScratch(self: *StoredStreamEncoder, chunks: []const []const u8) Error![]const u8 {
@@ -13849,18 +13849,7 @@ pub const StoredStreamEncoder = struct {
     }
 
     pub fn encodeChunksScratchWithOptions(self: *StoredStreamEncoder, chunks: []const []const u8, options: StoredStreamOptions) Error![]const u8 {
-        var protected = try @import("br/encoder/stored_alias.zig").protect(self.allocator, self.scratch.items.ptr[0..self.scratch.capacity], chunks, options.metadata);
-        defer protected.deinit();
-        const active_input = protected.input();
-        var active_options = options;
-        active_options.metadata = protected.metadata();
-
-        const needed = try encodedStoredStreamChunksBoundWithOptions(active_input, active_options);
-        try self.scratch.ensureTotalCapacity(self.allocator, needed);
-        self.scratch.clearRetainingCapacity();
-        const written = try encodeStoredStreamChunksWithOptionsInto(active_input, self.scratch.allocatedSlice()[0..needed], active_options);
-        self.scratch.items.len = written;
-        return self.scratch.items;
+        return stored_memory_reuse.scratch(self, chunks, options, encodedStoredStreamChunksBoundWithOptions, encodeStoredChunksBounded);
     }
 
     pub fn encodeAppend(self: *StoredStreamEncoder, out: *std.ArrayList(u8), input: []const u8) Error!void {
@@ -13868,7 +13857,7 @@ pub const StoredStreamEncoder = struct {
     }
 
     pub fn encodeWithOptionsAppend(self: *StoredStreamEncoder, out: *std.ArrayList(u8), input: []const u8, options: StoredStreamOptions) Error!void {
-        try encodeStoredStreamWithOptionsAppend(self.allocator, out, input, options);
+        return stored_memory_reuse.append(self, out, input, options, storedInputBound, encodeStoredInputBounded);
     }
 
     pub fn encodeChunksAppend(self: *StoredStreamEncoder, out: *std.ArrayList(u8), chunks: []const []const u8) Error!void {
@@ -13876,7 +13865,7 @@ pub const StoredStreamEncoder = struct {
     }
 
     pub fn encodeChunksWithOptionsAppend(self: *StoredStreamEncoder, out: *std.ArrayList(u8), chunks: []const []const u8, options: StoredStreamOptions) Error!void {
-        try encodeStoredStreamChunksWithOptionsAppend(self.allocator, out, chunks, options);
+        return stored_memory_reuse.append(self, out, chunks, options, encodedStoredStreamChunksBoundWithOptions, encodeStoredChunksBounded);
     }
 
     pub fn encodeIntoSlice(self: *StoredStreamEncoder, input: []const u8, output: []u8) Error!usize {
@@ -13884,13 +13873,7 @@ pub const StoredStreamEncoder = struct {
     }
 
     pub fn encodeWithOptionsIntoSlice(self: *StoredStreamEncoder, input: []const u8, options: StoredStreamOptions, output: []u8) Error!usize {
-        const needed = try encodedStoredStreamBoundWithOptions(input.len, options);
-        if (output.len < needed) return error.OutOfMemory;
-        var protected = try @import("br/encoder/stored_alias.zig").protect(self.allocator, output[0..needed], input, options.metadata);
-        defer protected.deinit();
-        var active_options = options;
-        active_options.metadata = protected.metadata();
-        return encodeStoredStreamWithOptionsInto(protected.input(), output, active_options);
+        return stored_memory_reuse.into(self, input, output, options, storedInputBound, encodeStoredInputBounded);
     }
 
     pub fn encodeChunksIntoSlice(self: *StoredStreamEncoder, chunks: []const []const u8, output: []u8) Error!usize {
@@ -13898,13 +13881,7 @@ pub const StoredStreamEncoder = struct {
     }
 
     pub fn encodeChunksWithOptionsIntoSlice(self: *StoredStreamEncoder, chunks: []const []const u8, options: StoredStreamOptions, output: []u8) Error!usize {
-        const needed = try encodedStoredStreamChunksBoundWithOptions(chunks, options);
-        if (output.len < needed) return error.OutOfMemory;
-        var protected = try @import("br/encoder/stored_alias.zig").protect(self.allocator, output[0..needed], chunks, options.metadata);
-        defer protected.deinit();
-        var active_options = options;
-        active_options.metadata = protected.metadata();
-        return encodeStoredStreamChunksWithOptionsInto(protected.input(), output, active_options);
+        return stored_memory_reuse.into(self, chunks, output, options, encodedStoredStreamChunksBoundWithOptions, encodeStoredChunksBounded);
     }
 };
 
