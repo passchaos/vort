@@ -194,57 +194,104 @@ def main():
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--long", action="store_true")
     parser.add_argument("--reuse-reference-report", type=Path)
+    parser.add_argument("--resume-dir", type=Path, help="reuse completed original public operations without running them again")
     args = parser.parse_args()
     args.output_dir = args.output_dir.resolve(); args.output_dir.mkdir(parents=True, exist_ok=True)
     args.br_probe = args.br_probe.resolve(); args.zstd_probe = args.zstd_probe.resolve()
     references = [Reference(path) for path in args.reference]
     old = json.loads(args.reuse_reference_report.read_text()) if args.reuse_reference_report else None
+    resumed = {}
+    resume_references = {}
+    if args.resume_dir:
+        for line in (args.resume_dir / "events.jsonl").read_text().splitlines():
+            event = json.loads(line)
+            resumed[event["name"]] = event
+        checkpoint = args.resume_dir / "reference-checkpoints.json"
+        if checkpoint.exists(): resume_references = json.loads(checkpoint.read_text())
+        for filename in ("zstd-encoded.bin", "br-copy-tail.bin", "br-copy-tail-plain.bin", "br-copy-tail-normal-history-proof.bin"):
+            original = args.resume_dir / filename
+            if original.exists(): (args.output_dir / filename).write_bytes(original.read_bytes())
+    def run(name, probe, config, sinks=()):
+        if name in resumed:
+            require(not sinks, "cannot resume a streaming wire without its saved reference receipt")
+            event = resumed[name]
+            print(json.dumps({"case": name, "status": "reused original completed public operation", "probe_sha256": event["probe_sha256"]}), flush=True)
+            copied = {**event, "reused_from": str(args.resume_dir), "executed_in_this_phase": False}
+            with (args.output_dir / "events.jsonl").open("a") as log: log.write(json.dumps(copied) + "\n")
+            return copied
+        return invoke(args, name, probe, config, sinks)
+    references_checkpoint = {}
+    def reuse_reference(name):
+        if old: return old["reference_rows"][name]
+        if name in resume_references: return resume_references[name]["receipts"]
+        return None
+    def save_references(name, receipts, scope="current reference execution"):
+        references_checkpoint[name] = {"receipts": receipts, "scope": scope}
+        (args.output_dir / "reference-checkpoints.json").write_text(json.dumps(references_checkpoint, indent=2) + "\n")
+        return receipts
     prefix = (1 << 32) if args.long else 262144
     block = (1 << 24) if args.long else 65536
     fixture_path = args.output_dir / "zstd-rle.bin"
     if old:
         require(old["long"] == args.long, "reference reuse scale")
         fixture = Path(old["rle_fixture_path"]).read_bytes(); checksum = old["rle_checksum"]
+    elif args.resume_dir:
+        fixture = (args.resume_dir / "zstd-rle.bin").read_bytes()
+        checksum = int.from_bytes(fixture[-4:], "little")
     else: fixture, checksum = references[0].fixture(prefix + 1)
     fixture_path.write_bytes(fixture)
     rows, reference_rows = [], {}
-    rows.append(invoke(args, "zstd-rle", args.zstd_probe, {"operation": "decode_rle", "count": prefix + 1, "fixture_path": str(fixture_path)}))
-    reference_rows["zstd-rle"] = old["reference_rows"]["zstd-rle"] if old else verify_references(references, 0, 0, prefix + 1, [fixture])
-    require(all(row["xxh64"] == checksum for row in reference_rows["zstd-rle"]), "independent XXH64 and content checksum")
+    rows.append(run("zstd-rle", args.zstd_probe, {"operation": "decode_rle", "count": prefix + 1, "fixture_path": str(fixture_path)}))
+    reused = reuse_reference("zstd-rle")
+    reference_rows["zstd-rle"] = save_references("zstd-rle", reused if reused is not None else verify_references(references, 0, 0, prefix + 1, [fixture]), "reuse supplied reference receipts" if reused is not None else "necessary receipt supplement for original phase with missing raw receipts" if args.resume_dir else "current reference execution")
+    require(all((row["xxh64"] & 0xffffffff) == (checksum & 0xffffffff) for row in reference_rows["zstd-rle"]), "independent XXH64 and content checksum")
+    checksum = reference_rows["zstd-rle"][0]["xxh64"]
     count = prefix + 1
-    rows.append(invoke(args, "zstd-skip", args.zstd_probe, {"operation": "decode_skip", "count": count}))
-    reference_rows["zstd-skip"] = old["reference_rows"]["zstd-skip"] if old else verify_references(references, 0, 2, 0, generated("skip", count, (1 << 32) - 1))
+    rows.append(run("zstd-skip", args.zstd_probe, {"operation": "decode_skip", "count": count}))
+    reused = reuse_reference("zstd-skip")
+    reference_rows["zstd-skip"] = save_references("zstd-skip", reused if reused is not None else verify_references(references, 0, 2, 0, generated("skip", count, (1 << 32) - 1)), "reused saved reference receipts" if reused is not None else "current reference execution")
     wire_path = args.output_dir / "zstd-encoded.bin"
-    rows.append(invoke(args, "zstd-encode", args.zstd_probe, {"operation": "encode", "count": prefix + 17, "output_path": str(wire_path)}))
+    rows.append(run("zstd-encode", args.zstd_probe, {"operation": "encode", "count": prefix + 17, "output_path": str(wire_path)}))
     wire = wire_path.read_bytes()
+    reused = reuse_reference("zstd-encode")
     if old:
         require(sha(wire) == old["zstd_encoder_wire_sha256"], "cross-target encoder wire equality")
         reference_rows["zstd-encode"] = old["reference_rows"]["zstd-encode"]
+    elif reused is not None: reference_rows["zstd-encode"] = reused
     else: reference_rows["zstd-encode"] = verify_references(references, 0, 1, prefix + 17, [wire], prefix=prefix)
+    save_references("zstd-encode", reference_rows["zstd-encode"])
     require(all(row["xxh64"] == rows[-1]["report"]["content_xxh64"] for row in reference_rows["zstd-encode"]),
             "actual encoder streaming XXH64 disagrees with independent C")
-    rows.append(invoke(args, "br-metadata", args.br_probe, {"operation": "metadata", "count": prefix + 1, "block_len": block}))
-    reference_rows["br-metadata"] = old["reference_rows"]["br-metadata"] if old else verify_references(references, 1, 2, 0, generated("metadata", prefix + 1, block))
+    rows.append(run("br-metadata", args.br_probe, {"operation": "metadata", "count": prefix + 1, "block_len": block}))
+    reused = reuse_reference("br-metadata")
+    reference_rows["br-metadata"] = save_references("br-metadata", reused if reused is not None else verify_references(references, 1, 2, 0, generated("metadata", prefix + 1, block)), "reused saved reference receipts" if reused is not None else "current reference execution")
     tail_wire_path, tail_plain_path = args.output_dir / "br-copy-tail.bin", args.output_dir / "br-copy-tail-plain.bin"
     proof_path = args.output_dir / "br-copy-tail-normal-history-proof.bin"
-    rows.append(invoke(args, "br-stored-copy", args.br_probe, {"operation": "stored_copy", "count": prefix, "block_len": block, "tail_wire_path": str(tail_wire_path), "tail_plain_path": str(tail_plain_path), "tail_proof_path": str(proof_path)}))
+    rows.append(run("br-stored-copy", args.br_probe, {"operation": "stored_copy", "count": prefix, "block_len": block, "tail_wire_path": str(tail_wire_path), "tail_plain_path": str(tail_plain_path), "tail_proof_path": str(proof_path)}))
     tail_wire, tail_plain = tail_wire_path.read_bytes(), tail_plain_path.read_bytes()
     proof_receipts = verify_references(references, 1, 2, len(tail_plain) * 2, [proof_path.read_bytes()], prefix=0, tail=tail_plain * 2)
     require(all(row["output_written"] == 4096 for row in proof_receipts), "independent normal-history distance tail fixture")
+    reused = reuse_reference("br-stored-copy")
     if old:
         require(sha(tail_wire) == old["br_copy_tail_sha256"], "cross-target copy-tail wire equality")
         reference_rows["br-stored-copy"] = old["reference_rows"]["br-stored-copy"]
+    elif reused is not None: reference_rows["br-stored-copy"] = reused
     else: reference_rows["br-stored-copy"] = verify_references(references, 1, 2, prefix + len(tail_plain), generated("stored", prefix, block, tail_wire), prefix=prefix, tail=tail_plain)
-    rows.append(invoke(args, "br-stored-subset", args.br_probe, {"operation": "stored", "count": prefix + 1, "block_len": block}))
-    reference_rows["br-stored-subset"] = old["reference_rows"]["br-stored-subset"] if old else verify_references(references, 1, 2, prefix + 1, generated("stored", prefix + 1, block))
-    sinks = [] if old else [ref.state(1, 2, prefix + 1) for ref in references]
+    save_references("br-stored-copy", reference_rows["br-stored-copy"])
+    rows.append(run("br-stored-subset", args.br_probe, {"operation": "stored", "count": prefix + 1, "block_len": block}))
+    reused = reuse_reference("br-stored-subset")
+    reference_rows["br-stored-subset"] = save_references("br-stored-subset", reused if reused is not None else verify_references(references, 1, 2, prefix + 1, generated("stored", prefix + 1, block)), "reused saved reference receipts" if reused is not None else "current reference execution")
+    reused = reuse_reference("br-encode")
+    sinks = [] if reused is not None else [ref.state(1, 2, prefix + 1) for ref in references]
     try:
-        encoded = invoke(args, "br-encode", args.br_probe, {"operation": "encode", "count": prefix + 1, "wire_stdout": True}, sinks)
+        encoded = run("br-encode", args.br_probe, {"operation": "encode", "count": prefix + 1, "wire_stdout": True}, sinks)
         rows.append(encoded)
         if old:
             require(encoded["wire_sha256"] == old["br_encoder_wire_sha256"], "cross-target actual large stored-encoder wire digest")
             reference_rows["br-encode"] = old["reference_rows"]["br-encode"]
+        elif reused is not None: reference_rows["br-encode"] = reused
         else: reference_rows["br-encode"] = [sink.finish() for sink in sinks]
+        save_references("br-encode", reference_rows["br-encode"])
     finally:
         for sink in sinks: sink.close()
     report = {"schema": "vort-stream-counters-real-v1", "status": "ok", "utc": datetime.now(timezone.utc).isoformat(), "long": args.long,
