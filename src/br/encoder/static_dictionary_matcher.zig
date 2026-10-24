@@ -2,6 +2,14 @@ const std = @import("std");
 const builtin = @import("builtin");
 const static_dictionary = @import("../static_dictionary.zig");
 
+/// Complete, caller-owned HQ candidate tuples, including spelling aliases.
+/// The legacy compact and supplemental longest-match indexes remain separate.
+pub const CandidateIndex = @import("static_dictionary_candidates.zig").Index;
+
+test {
+    _ = @import("dictionary_visitor_tests.zig");
+}
+
 const index_build_text_section = switch (builtin.object_format) {
     .elf => ".vort_br_dictionary_index",
     .macho => "__TEXT,__vort_br_dict",

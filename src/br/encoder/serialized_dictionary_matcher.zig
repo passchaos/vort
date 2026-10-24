@@ -223,6 +223,63 @@ pub const Matcher = struct {
         return best;
     }
 
+    /// Enumerate all positive transformed tuples, including spelling/address
+    /// aliases and outputs shorter than the four-byte indexing anchor.
+    /// `visitor.visit(Match) !bool` may stop or return an error. Scratch and
+    /// result storage belong to the caller; candidate byte slices never escape.
+    pub fn visitMatches(self: *const Matcher, context: usize, input: []const u8, transformed_scratch: []u8, visitor: anytype) !void {
+        return self.visitMatchesAtLeast(context, input, transformed_scratch, 1, visitor);
+    }
+
+    pub fn visitMatchesAtLeast(self: *const Matcher, context: usize, input: []const u8, transformed_scratch: []u8, minimum_output_len: usize, visitor: anytype) !void {
+        const dictionary = self.dictionary orelse return;
+        const minimum = @max(1, minimum_output_len);
+        if (input.len < minimum) return;
+        const preferred: usize = try dictionary.dictionaryForContext(context);
+        if (self.indexed and input.len >= 4) {
+            const bucket = hashAnchor(input[0..4], self.bucket_bits);
+            for (self.entries[self.heads[bucket]..self.heads[bucket + 1]]) |entry| {
+                if (entry.output_len < minimum or entry.output_len > input.len) continue;
+                const transformed = try dictionary.materializeCandidate(entry.dictionary_id, entry.word_len, entry.word_index, entry.transform_index, transformed_scratch);
+                if (!std.mem.eql(u8, transformed, input[0..transformed.len])) continue;
+                if (!try visitor.visit(try self.visitorMatch(preferred, entry.dictionary_id, entry.word_len, entry.word_index, entry.transform_index, transformed.len))) return;
+            }
+        }
+        // The ordinary index intentionally stores only four-byte anchors.
+        // Complete short-output enumeration stays exact through the descriptor,
+        // and is avoided entirely by callers requesting a minimum of four.
+        if (self.indexed and minimum >= 4) return;
+        for (0..dictionary.dictionary_count) |dictionary_id| {
+            for (serialized_dictionary.min_word_len..serialized_dictionary.max_word_len + 1) |word_len| {
+                const shape = dictionary.candidateShape(dictionary_id, word_len).?;
+                for (0..shape.transform_count) |transform_index| {
+                    for (0..shape.word_count) |word_index| {
+                        const transformed = try dictionary.materializeCandidate(dictionary_id, word_len, word_index, transform_index, transformed_scratch);
+                        if (transformed.len < minimum or transformed.len > input.len or
+                            (self.indexed and transformed.len >= 4) or
+                            !std.mem.eql(u8, transformed, input[0..transformed.len])) continue;
+                        if (!try visitor.visit(try self.visitorMatch(preferred, dictionary_id, word_len, word_index, transform_index, transformed.len))) return;
+                    }
+                }
+            }
+        }
+    }
+
+    fn visitorMatch(self: *const Matcher, preferred: usize, dictionary_id: usize, word_len: usize, word_index: usize, transform_index: usize, output_len: usize) serialized_dictionary.Error!serialized_dictionary.Match {
+        const dictionary = self.dictionary.?;
+        const shape = dictionary.candidateShape(dictionary_id, word_len).?;
+        const prefix = self.capacity_prefix[word_len];
+        const preferred_capacity = prefix[preferred + 1] - prefix[preferred];
+        const base = if (dictionary_id == preferred) 0 else std.math.add(usize, prefix[dictionary_id], if (preferred < dictionary_id) 0 else preferred_capacity) catch return error.IntegerOverflow;
+        const local = std.math.add(usize, std.math.mul(usize, transform_index, shape.word_count) catch return error.IntegerOverflow, word_index) catch return error.IntegerOverflow;
+        return .{
+            .address = std.math.add(usize, base, local) catch return error.IntegerOverflow,
+            .copy_len = @intCast(word_len),
+            .output_len = @intCast(output_len),
+            .dictionary_id = @intCast(dictionary_id),
+        };
+    }
+
     fn sameDescriptor(
         self: *const Matcher,
         dictionary: *const serialized_dictionary.Dictionary,

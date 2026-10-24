@@ -120,6 +120,54 @@ pub const Matcher = struct {
         return best;
     }
 
+    /// Complete HQ address frontier, independent of the lossy four-way table.
+    /// Each matching logical start is visited once, in ascending address order,
+    /// with its longest proven prefix. A parser may use any shorter copy length
+    /// from two through `Match.length`. `visitor.visit(Match) !bool` can stop or
+    /// propagate a caller budget error; querying allocates no heap storage.
+    pub fn visitMatches(self: *const Matcher, input: []const u8, position: usize, max_len: usize, visitor: anytype) !void {
+        return self.visitMatchesAtLeast(input, position, max_len, 2, visitor);
+    }
+
+    pub fn visitMatchesAtLeast(self: *const Matcher, input: []const u8, position: usize, max_len: usize, minimum_length: usize, visitor: anytype) !void {
+        const minimum = @max(2, minimum_length);
+        if (!self.prepared or position > input.len or self.total_size < minimum) return;
+        const available = @min(max_len, input.len - position);
+        if (available < minimum) return;
+        const input_tail = input[position..][0..available];
+        for (0..self.total_size - minimum + 1) |address| {
+            const length = self.matchLengthForVisitor(address, input_tail);
+            if (length >= minimum and !try visitor.visit(Match{ .address = address, .length = length })) return;
+        }
+    }
+
+    fn matchLengthForVisitor(self: *const Matcher, address: usize, input: []const u8) usize {
+        const limit = @min(input.len, self.total_size - address);
+        var chunk_index: usize = 0;
+        var chunk_offset = address;
+        while (chunk_index < self.chunk_count) : (chunk_index += 1) {
+            const chunk = self.chunks[chunk_index];
+            if (chunk_offset < chunk.len) break;
+            chunk_offset -= chunk.len;
+        }
+        var matched: usize = 0;
+        while (matched < limit) {
+            while (chunk_index < self.chunk_count and chunk_offset == self.chunks[chunk_index].len) {
+                chunk_index += 1;
+                chunk_offset = 0;
+            }
+            if (chunk_index == self.chunk_count) break;
+            const chunk = self.chunks[chunk_index];
+            const count = @min(chunk.len - chunk_offset, limit - matched);
+            var offset: usize = 0;
+            while (offset < count and chunk[chunk_offset + offset] == input[matched + offset]) : (offset += 1) {}
+            matched += offset;
+            if (offset != count) break;
+            chunk_offset += count;
+        }
+        return matched;
+    }
+
     fn sameDescriptor(self: *const Matcher, dictionary: shared_dictionary.Dictionary) bool {
         if (!self.prepared or dictionary.compoundChunkCount() != self.chunk_count) return false;
         for (self.chunks[0..self.chunk_count], 0..) |cached, index| {
