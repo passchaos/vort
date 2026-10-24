@@ -1,0 +1,214 @@
+{
+  "bound_proof": "Each valid output-producing literal/length Huffman token requires at least1compressed bit and emits at most258bytes. Stored bytes need8bits each. Therefore raw_byte_len*8*258 is a conservative output upper bound. Arithmetic saturates at maxInt(usize). Including actual footer bytes only loosens the bound.",
+  "changed_old_test_expectations": false,
+  "diagnosed_cause": "Incomplete dynamic gzip has34rawbytes and trailing raw bytes falsely read as ISIZE4209256066; helper allocated that size before validating deflate/footer.",
+  "diagnostic_after": [
+    {
+      "claimed_isize": 0,
+      "error": "TruncatedFrame",
+      "live": 0,
+      "max_request": 0,
+      "raw": "stored",
+      "raw_len": 6,
+      "refused": 0,
+      "wrapper": "zlib"
+    },
+    {
+      "claimed_isize": 0,
+      "error": "TruncatedFrame",
+      "live": 0,
+      "max_request": 0,
+      "raw": "stored",
+      "raw_len": 6,
+      "refused": 0,
+      "wrapper": "gzip"
+    },
+    {
+      "claimed_isize": 0,
+      "error": "TruncatedFrame",
+      "live": 0,
+      "max_request": 0,
+      "raw": "fixed",
+      "raw_len": 3,
+      "refused": 0,
+      "wrapper": "zlib"
+    },
+    {
+      "claimed_isize": 0,
+      "error": "TruncatedFrame",
+      "live": 0,
+      "max_request": 0,
+      "raw": "fixed",
+      "raw_len": 3,
+      "refused": 0,
+      "wrapper": "gzip"
+    },
+    {
+      "claimed_isize": 0,
+      "error": "TruncatedFrame",
+      "live": 0,
+      "max_request": 0,
+      "raw": "dynamic",
+      "raw_len": 34,
+      "refused": 0,
+      "wrapper": "zlib"
+    },
+    {
+      "claimed_isize": 4209256066,
+      "error": "TruncatedFrame",
+      "live": 0,
+      "max_request": 0,
+      "raw": "dynamic",
+      "raw_len": 34,
+      "refused": 0,
+      "wrapper": "gzip"
+    }
+  ],
+  "diagnostic_allocator_per_request_limit": 1048576,
+  "diagnostic_before": [
+    {
+      "claimed_isize": 0,
+      "error": "TruncatedFrame",
+      "live": 0,
+      "max_request": 0,
+      "raw": "stored",
+      "raw_len": 6,
+      "refused": 0,
+      "wrapper": "zlib"
+    },
+    {
+      "claimed_isize": 0,
+      "error": "TruncatedFrame",
+      "live": 0,
+      "max_request": 0,
+      "raw": "stored",
+      "raw_len": 6,
+      "refused": 0,
+      "wrapper": "gzip"
+    },
+    {
+      "claimed_isize": 0,
+      "error": "TruncatedFrame",
+      "live": 0,
+      "max_request": 0,
+      "raw": "fixed",
+      "raw_len": 3,
+      "refused": 0,
+      "wrapper": "zlib"
+    },
+    {
+      "claimed_isize": 0,
+      "error": "TruncatedFrame",
+      "live": 0,
+      "max_request": 0,
+      "raw": "fixed",
+      "raw_len": 3,
+      "refused": 0,
+      "wrapper": "gzip"
+    },
+    {
+      "claimed_isize": 0,
+      "error": "TruncatedFrame",
+      "live": 0,
+      "max_request": 0,
+      "raw": "dynamic",
+      "raw_len": 34,
+      "refused": 0,
+      "wrapper": "zlib"
+    },
+    {
+      "claimed_isize": 4209256066,
+      "error": "OutOfMemory",
+      "live": 0,
+      "max_request": 4209256066,
+      "raw": "dynamic",
+      "raw_len": 34,
+      "refused": 1,
+      "wrapper": "gzip"
+    }
+  ],
+  "end_utc": "2026-10-24T19:08:17.341531+00:00",
+  "full_family_results_pending": true,
+  "git_modified_by_agent": false,
+  "groups": [
+    {
+      "artifact": {
+        "elf_class": 64,
+        "path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/1c0e02074276034fe3a11a45ad1aeb13/vort-deflate-tests",
+        "sha256": "f2406f61f3d2a0a5d70991c770e080645e02e9f78cc215fd2e63dd1673f1b953"
+      },
+      "compiled_input_count": 61,
+      "counts": {
+        "fail": 0,
+        "invalid": 0,
+        "pass": 11,
+        "pending": 0,
+        "skip": 0
+      },
+      "group": "native-debug",
+      "input_changes": {},
+      "report": "/tmp/vort-wide-bit-final-20261025/gzip-hint-repair/native-debug/result.json"
+    },
+    {
+      "artifact": {
+        "elf_class": 64,
+        "path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/41aa5a368dff2b1c1a252aba10dbf6ed/vort-deflate-tests",
+        "sha256": "288573c8bad6e7cde571e5b5dd7d2f8cbf08145a4342df50de347729c8d8c20e"
+      },
+      "compiled_input_count": 61,
+      "counts": {
+        "fail": 0,
+        "invalid": 0,
+        "pass": 11,
+        "pending": 0,
+        "skip": 0
+      },
+      "group": "native-releasefast",
+      "input_changes": {},
+      "report": "/tmp/vort-wide-bit-final-20261025/gzip-hint-repair/native-releasefast/result.json"
+    },
+    {
+      "artifact": {
+        "elf_class": 32,
+        "path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/6a18c0c3cd55f6f1db5a245848fd29f2/vort-deflate-tests",
+        "sha256": "da7ae5a71099b583525ede8aa9a5153accea63ea37ccded48916795afec495e6"
+      },
+      "compiled_input_count": 61,
+      "counts": {
+        "fail": 0,
+        "invalid": 0,
+        "pass": 11,
+        "pending": 0,
+        "skip": 0
+      },
+      "group": "x86-releasefast",
+      "input_changes": {},
+      "report": "/tmp/vort-wide-bit-final-20261025/gzip-hint-repair/x86-releasefast/result.json"
+    }
+  ],
+  "implementation": "Unrepresentable hints return null to the existing bounded raw decoder; valid hints retain footer-sized allocation. OutputTooSmall frees temporary output before successful null fallback. Real allocator OutOfMemory propagates unchanged.",
+  "import_test_count": 4,
+  "longest_match_fixture": {
+    "allocation_hint_retained_assertion": "largest request equals8257; both decoded bytewise equal and real fail_index0 returns OutOfMemory",
+    "copy_count": 32,
+    "copy_distance": 1,
+    "copy_length": 258,
+    "decoded_bytes": 8257,
+    "literal_bytes": 1,
+    "token_count": 33,
+    "wire_formats": [
+      "fixed",
+      "dynamic"
+    ]
+  },
+  "new_named_tests": 6,
+  "owned_source_sha256": {
+    "src/deflate.zig": "128d45a63fbd468c58a7810d70c9de8b81af77bb78489a2da5d3c59c1af3a96f",
+    "src/deflate/gzip/alloc_hint.zig": "d7c20541e2bf0d58a63443493f88fa21fc8e85e8bfb2f4b356b959b58f250e0b",
+    "src/deflate/gzip/alloc_hint_tests.zig": "1888c70e1ad90c9df98907a64044143df126a8767225f87f610cf37587afc7b8"
+  },
+  "preserved_original_named_tests": [
+    "zlib and gzip wrappers reject truncated non-final raw deflate streams"
+  ],
+  "status": "targeted_frozen_passed"
+}

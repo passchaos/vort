@@ -1,0 +1,71 @@
+{
+  "all_original_assertions_preserved": true,
+  "end_utc": "2026-10-24T18:57:29.993094+00:00",
+  "fixture_equivalence_report": "/tmp/vort-wide-bit-final-20261025/fixture-repair/fixture-equivalence.json",
+  "git_modified_by_agent": false,
+  "groups": [
+    {
+      "actual_test_count": 5,
+      "artifact": {
+        "elf_class": 64,
+        "path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/c67da8fc0574a874ddeb2ccc81ebf33f/vort-deflate-tests",
+        "sha256": "035d0defdb78879d1937508f7b4cf9258d721d6a9cf8f7be56c8a806ba8de900"
+      },
+      "compiled_input_count": 59,
+      "compiled_inputs_changed_during_run": {},
+      "counts": {
+        "fail": 0,
+        "invalid": 0,
+        "pass": 5,
+        "pending": 0,
+        "skip": 0
+      },
+      "elapsed_seconds": 26.153312397,
+      "group": "native",
+      "import_test_count": 4,
+      "named_count": 1,
+      "report": "/tmp/vort-wide-bit-final-20261025/fixture-repair/native/result.json",
+      "symbol_bytes": 21067
+    },
+    {
+      "actual_test_count": 5,
+      "artifact": {
+        "elf_class": 32,
+        "path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/136fbd49d38c0378676ee077b64672bc/vort-deflate-tests",
+        "sha256": "5b158daffabf5e809597c6c5370ed8830bfffea7d72e5231831a6a2bca1ce8fd"
+      },
+      "compiled_input_count": 59,
+      "compiled_inputs_changed_during_run": {},
+      "counts": {
+        "fail": 0,
+        "invalid": 0,
+        "pass": 5,
+        "pending": 0,
+        "skip": 0
+      },
+      "elapsed_seconds": 22.519390339,
+      "group": "x86",
+      "import_test_count": 4,
+      "named_count": 1,
+      "report": "/tmp/vort-wide-bit-final-20261025/fixture-repair/x86/result.json",
+      "symbol_bytes": 19841
+    }
+  ],
+  "live_exec_sessions": [],
+  "modified_repository_files": [
+    "src/deflate/incremental/tests/rolling_hash.zig"
+  ],
+  "native_symbol_reduction_fraction": 0.9839049039351887,
+  "new_complete_x86_family_started": false,
+  "new_native_symbol_bytes": 21067,
+  "next_step": "Parent decides and authorizes necessary complete x86 ReleaseFast family recompile with the repaired fixture; do not substitute targeted results for complete family.",
+  "old_native_symbol_bytes": 1308908,
+  "only_constructor_changed": true,
+  "original_sigkill_root_cause_confirmed": false,
+  "previous_sigkill_report": "/tmp/vort-wide-bit-final-20261025/family/deflate-x86/result.json",
+  "sharding_design_not_executed": true,
+  "source_after_sha256": "257007d678baf11dafafad541752463cc34d0188cb930ce27cd9cd2042c9cea5",
+  "source_before_sha256": "d30b9b7f5eeefa75baedeed095ef0a4a8a935e67d2c4374fbbefec8fa0d54ce4",
+  "source_change_purpose": "Avoid scalar expansion of runtime array concatenation; construct the identical 64KiB fixture with two block copies.",
+  "status": "targeted_repair_passed"
+}

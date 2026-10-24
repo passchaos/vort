@@ -33,6 +33,9 @@ candidate位差在检查后转为usize。Stored bound采用精确first/full/tail
 | WebAssembly | 7/7步骤，三实际操作；数字geometry和小reader，未映射512 MiB |
 | CLI/额外兼容 | 30Brotli参考往返/20旧wire；CSO6、DAX4往返；Snappy/LZMS窄测试及完整x86 CLI语义编译通过 |
 | 全局检查／局部适配 | Debug168/168、完整native help通过；WIA native/x86各16/16、ZIP Zstd两架构各79/79 |
+| 完整Brotli家族 | native 1418通过＋1跳过，x86 1419/1419；native原产物为旧测试计数构造epoch，checked narrowing单项两目标各21/21 |
+| 完整Deflate家族 | 最终native/x86 ReleaseFast各528/528，原522项全部保留，新增六项gzip资源回归 |
+| 完整ZOO家族 | native/x86 ReleaseFast各45/45 |
 
 独立5份旧wire、5种reader的八步值/游标与原生布局来自只读归档，未修改
 golden。数字geometry覆盖2^29±1和u32max字节，分别得到4294967288、
@@ -77,6 +80,29 @@ WIA相关范围、partition/raw/损坏输入测试通过后，额外导入的120
 运行被结束，取消记录保留，不计作完整WIA全套通过。完整Br、Deflate和
 ZOO回归独立执行并各自记录，不混用部分或其他产物结果。
 
+最初完整Deflate x86编译在原进程运行后被SIGKILL结束，未生成产物，测试
+执行数为零；原compiler返回-9，wrapper记录247。内核日志不可读取，因此
+未把终止原因冒称为已证OOM。随后发现一个运行时32KiB数组的`first ++ first`
+测试构造在native产物生成1308908B函数；用两次memcpy构造同一64KiB输入后，
+函数为native21067B、x8619841B，seed、块大小和全部断言未改。这是测试
+构造与编译代码量变化，不是codec吞吐测量；十三分组方案未执行。
+
+修复构造后的完整x86实际执行522项，521通过、1失败。失败是缺footer的
+34B动态raw gzip流：最后四字节被当作4209256066B的ISIZE，分配失败先于
+真实TruncatedFrame。该helper在`3e59413a`和`0f437af6`完全相同，是本轮
+验收发现的既有错误。现在ISIZE仅作提示；每个Deflate输出token至多258B且
+至少消耗一位，因此用饱和的`raw_bytes * 8 * 258`过滤不可能的提示，再由
+原bounded raw decoder判断实际流。OutputTooSmall回退前显式释放临时输出，
+真实allocator失败继续返回OutOfMemory。未修改旧错误期待或golden。
+
+六项新回归加原截断测试与导入项在nativeDebug/nativeRF/x86RF各11/11通过。
+[独立gzip证据](data/wide-bit-addressing-20261025/gzip-independent.json)使用
+Python/C libz 1.2.11生成和验证十一份语料；每目标22行Alloc/Limited调用及
+4named/8execution全部通过。错误UINT32MAX提示返回SizeMismatch，最大请求
+4346B；偏小提示的两次分配完全释放，live=0且allocated=freed；缺尾部和
+非最终dynamic正确Truncated，合法1052B gzip产生1MiB输出，真实OOM仍透传。
+最终完整native/x86各528项全部通过，源码/实际TestFn/产物证据分阶段保留。
+
 [证据索引](data/wide-bit-addressing-20261025/index.json)保留每阶段命令、
 日志、源码/编译输入/产物身份和失败修复记录。当前功能范围不放宽物理
 address space、allocation上限或历史距离。全平台兼容、HQ全局quality、
@@ -87,5 +113,5 @@ address space、allocation上限或历史距离。全平台兼容、HQ全局qual
 8/8步骤且96/96测试，CLI门禁9/9步骤且23/23解析及38参考往返。完整native
 CLI help再次实际运行。34个改动Zig文件格式检查通过；复验期间源码前后无
 变化。[post-rebase记录](data/wide-bit-addressing-20261025/post-rebase.json)
-保留该阶段命令、日志与源码投影。完整Deflate32位回归另用其原始进程记录，
-不能用此专项结果替代尚未完成的全家族验证。
+保留该阶段命令、日志与源码投影。上述全家族修复与复验在后续源码epoch
+独立执行，原SIGKILL和521/1的结果保留，未用专项通过结果替代它们。

@@ -1,0 +1,266 @@
+{
+  "fixture_count": 11,
+  "reference_controls": "Python zlib and C libz 1.2.11; success, incorrect length check, and incomplete stream match independently generated expectations",
+  "fixtures_manifest_sha256": "ce688dd95125e5b351789470b15cc203f2a08f3d1f4dbb2ea51c95b372e692a2",
+  "prepared_artifacts_unchanged": true,
+  "source_sha256": {
+    "src/deflate.zig": "128d45a63fbd468c58a7810d70c9de8b81af77bb78489a2da5d3c59c1af3a96f",
+    "src/deflate/gzip/alloc_hint.zig": "d7c20541e2bf0d58a63443493f88fa21fc8e85e8bfb2f4b356b959b58f250e0b",
+    "src/deflate/gzip/alloc_hint_tests.zig": "1888c70e1ad90c9df98907a64044143df126a8767225f87f610cf37587afc7b8"
+  },
+  "same_source_epoch": true,
+  "native": {
+    "command": [
+      "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+      "test",
+      "/tmp/vort-wide-bit-final-20261025/gzip-allocation-independent/probe.zig",
+      "-O",
+      "ReleaseFast",
+      "--test-filter",
+      "Gzip allocation independent",
+      "-femit-bin=/tmp/vort-wide-bit-final-20261025/gzip-allocation-independent/probe-native"
+    ],
+    "exit": 0,
+    "source_sha256": "128d45a63fbd468c58a7810d70c9de8b81af77bb78489a2da5d3c59c1af3a96f",
+    "source_stable": true,
+    "changed_sources": [],
+    "named_passes": 4
+  },
+  "x86": {
+    "command": [
+      "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+      "test",
+      "/tmp/vort-wide-bit-final-20261025/gzip-allocation-independent/probe.zig",
+      "-O",
+      "ReleaseFast",
+      "--test-filter",
+      "Gzip allocation independent",
+      "-femit-bin=/tmp/vort-wide-bit-final-20261025/gzip-allocation-independent/probe-x86",
+      "-target",
+      "x86-linux"
+    ],
+    "exit": 0,
+    "source_sha256": "128d45a63fbd468c58a7810d70c9de8b81af77bb78489a2da5d3c59c1af3a96f",
+    "source_stable": true,
+    "changed_sources": [],
+    "named_passes": 4
+  },
+  "same_allocation_results": true,
+  "fixture_results": [
+    {
+      "case": "empty",
+      "result": "success",
+      "max_request": 0,
+      "live": 0,
+      "peak": 0,
+      "allocated": 0,
+      "freed": 0,
+      "alloc_attempts": 0,
+      "cap_refusals": 0,
+      "forced_refusals": 0,
+      "requests": []
+    },
+    {
+      "case": "small",
+      "result": "success",
+      "max_request": 68,
+      "live": 0,
+      "peak": 68,
+      "allocated": 68,
+      "freed": 68,
+      "alloc_attempts": 1,
+      "cap_refusals": 0,
+      "forced_refusals": 0,
+      "requests": [
+        {
+          "kind": "alloc",
+          "bytes": 68
+        }
+      ]
+    },
+    {
+      "case": "dynamic_small",
+      "result": "success",
+      "max_request": 4346,
+      "live": 0,
+      "peak": 4346,
+      "allocated": 4346,
+      "freed": 4346,
+      "alloc_attempts": 1,
+      "cap_refusals": 0,
+      "forced_refusals": 0,
+      "requests": [
+        {
+          "kind": "alloc",
+          "bytes": 4346
+        }
+      ]
+    },
+    {
+      "case": "high_ratio_1m",
+      "result": "success",
+      "max_request": 1048576,
+      "live": 0,
+      "peak": 1048576,
+      "allocated": 1048576,
+      "freed": 1048576,
+      "alloc_attempts": 1,
+      "cap_refusals": 0,
+      "forced_refusals": 0,
+      "requests": [
+        {
+          "kind": "alloc",
+          "bytes": 1048576
+        }
+      ]
+    },
+    {
+      "case": "random_64k",
+      "result": "success",
+      "max_request": 65536,
+      "live": 0,
+      "peak": 65536,
+      "allocated": 65536,
+      "freed": 65536,
+      "alloc_attempts": 1,
+      "cap_refusals": 0,
+      "forced_refusals": 0,
+      "requests": [
+        {
+          "kind": "alloc",
+          "bytes": 65536
+        }
+      ]
+    },
+    {
+      "case": "isize_uint32_max",
+      "result": "SizeMismatch",
+      "max_request": 4346,
+      "live": 0,
+      "peak": 4346,
+      "allocated": 4346,
+      "freed": 4346,
+      "alloc_attempts": 1,
+      "cap_refusals": 0,
+      "forced_refusals": 0,
+      "requests": [
+        {
+          "kind": "alloc",
+          "bytes": 4346
+        }
+      ]
+    },
+    {
+      "case": "isize_one",
+      "result": "SizeMismatch",
+      "max_request": 4346,
+      "live": 0,
+      "peak": 4346,
+      "allocated": 4347,
+      "freed": 4347,
+      "alloc_attempts": 2,
+      "cap_refusals": 0,
+      "forced_refusals": 0,
+      "requests": [
+        {
+          "kind": "alloc",
+          "bytes": 1
+        },
+        {
+          "kind": "alloc",
+          "bytes": 4346
+        }
+      ]
+    },
+    {
+      "case": "isize_actual_minus_one",
+      "result": "SizeMismatch",
+      "max_request": 4346,
+      "live": 0,
+      "peak": 4346,
+      "allocated": 8691,
+      "freed": 8691,
+      "alloc_attempts": 2,
+      "cap_refusals": 0,
+      "forced_refusals": 0,
+      "requests": [
+        {
+          "kind": "alloc",
+          "bytes": 4345
+        },
+        {
+          "kind": "alloc",
+          "bytes": 4346
+        }
+      ]
+    },
+    {
+      "case": "missing_footer",
+      "result": "TruncatedFrame",
+      "max_request": 4346,
+      "live": 0,
+      "peak": 4346,
+      "allocated": 4346,
+      "freed": 4346,
+      "alloc_attempts": 1,
+      "cap_refusals": 0,
+      "forced_refusals": 0,
+      "requests": [
+        {
+          "kind": "alloc",
+          "bytes": 4346
+        }
+      ]
+    },
+    {
+      "case": "nonfinal_dynamic",
+      "result": "TruncatedFrame",
+      "max_request": 0,
+      "live": 0,
+      "peak": 0,
+      "allocated": 0,
+      "freed": 0,
+      "alloc_attempts": 0,
+      "cap_refusals": 0,
+      "forced_refusals": 0,
+      "requests": []
+    },
+    {
+      "case": "partial_footer",
+      "result": "TruncatedFrame",
+      "max_request": 4346,
+      "live": 0,
+      "peak": 4346,
+      "allocated": 4346,
+      "freed": 4346,
+      "alloc_attempts": 1,
+      "cap_refusals": 0,
+      "forced_refusals": 0,
+      "requests": [
+        {
+          "kind": "alloc",
+          "bytes": 4346
+        }
+      ]
+    }
+  ],
+  "all_live_zero": true,
+  "all_allocated_freed": true,
+  "artifact_sha256": {
+    "probe-native": "d35ca1bf01f11220d1eaef4b720b386f8ebd195ef2ab23acc58d8f324b65c825",
+    "probe-x86": "9fc332c35f8f9ce5ed24e11091e48da46d3138c693add10c77ca9ad86b355477",
+    "native.log": "ad033b4773628f94a37e3833565bec4077b4eaffd538d0d4bece98ed5f5632c4",
+    "x86.log": "ad033b4773628f94a37e3833565bec4077b4eaffd538d0d4bece98ed5f5632c4",
+    "native.json": "36a70c1c456328c6acde1a73ba8256a3fac5031db01aa5d16d848e7ebf23b0f8",
+    "x86.json": "0ed295557caab436e6a0be33868128eba6888012cb992f30da5484ead303f1df",
+    "probe.zig": "e77c3b9de76bc86cdfb043c23e4d545dbf09ebdd7f9cbef228b460cdd1231e54",
+    "tracking_allocator.zig": "3b6a3fa759ca391b92193ccede2f6e2a0619742da8468e148ea14209a2ebafa6",
+    "fixtures.zig": "b13d273e11a3b9bf97a599e0b1b00af82cbc6eec2c74db40b993e07c4b080f66",
+    "generate.py": "b8634f45c3a7cd4d9e66f85c106225191badfd93a8e2cab23c4f620053dd656b"
+  },
+  "binary_file": [
+    "/tmp/vort-wide-bit-final-20261025/gzip-allocation-independent/probe-native: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, with debug_info, not stripped",
+    "/tmp/vort-wide-bit-final-20261025/gzip-allocation-independent/probe-x86:    ELF 32-bit LSB executable, Intel 80386, version 1 (SYSV), statically linked, with debug_info, not stripped"
+  ],
+  "scope": "Functional and allocation validation only; no benchmark or throughput claims."
+}
