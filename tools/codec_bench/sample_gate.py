@@ -288,6 +288,13 @@ def validate(report: dict, manifest: dict, *, csv_rows: list[dict[str, str]] | N
     for reference in references:
         require(reference.get("loaded_identity") is None and reference.get("dependencies_verified") is False,
                 "references: loaded dependency identity is unverified")
+        if codec == "zstd":
+            require(isinstance(reference.get("version"), str) and bool(reference["version"]),
+                    "references: missing Zstd runtime version")
+        elif reference["role"] != "brotli_common":
+            runtime_version = integer(reference.get("version"), "reference.version", positive=True)
+            field = "reference_version" if reference["role"] == "brotli_encoder" else "reference_decoder_version"
+            require(runtime_version == report.get(field), "references: Brotli runtime version differs")
         path = reference.get("canonical_file_path")
         sha = reference.get("file_sha256")
         if require_explicit_references:

@@ -74,7 +74,11 @@ class SampleGateTests(unittest.TestCase):
                            "target_arch": "x86_64", "cpu_model": "fixture CPU",
                            "command": "fixture command", "zig_version": "0.16.0",
                            "executable_sha256": hashlib.sha256(self.executable.read_bytes()).hexdigest()},
-            "references": [dict(reference, role=role) for role in roles],
+            "reference_version": 16777225 if codec == "brotli" else "fixture-reference",
+            "reference_decoder_version": 16777225 if codec == "brotli" else None,
+            "references": [dict(reference, role=role,
+                                version=(None if role == "brotli_common" else 16777225) if codec == "brotli" else "fixture-reference")
+                           for role in roles],
             "rows": [{
                 "case": "frozen", "input_bytes": self.input.stat().st_size,
                 "input_sha256": self.manifest["input_sets"][0]["input_sha256"],
