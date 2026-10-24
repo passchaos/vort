@@ -206,6 +206,10 @@ def run_encoded_once(args, family, source, wire, size):
     cli = args.brotli_cli if family == "brotli" else args.zstd_cli
     cap = 32 * 1024 * 1024
     mode = ["--quality=0"] if family == "brotli" else ["raw_or_rle", "true", "true"]
+    if family == "zstd" and args.zstd_window_log is not None:
+        mode += [f"--window-log={args.zstd_window_log}"]
+        if args.zstd_history is not None:
+            mode += [f"--max-match-history-len={args.zstd_history}"]
     command = [str(cli), "encode-br-stream-file" if family == "brotli" else "encode-zstd-native-stream-file",
                str(source), str(wire), *mode, f"--max-input-len={size}", f"--max-output-len={cap}", "--memory-profile"]
     write_json(receipt, {"started_utc": datetime.now(timezone.utc).isoformat(), "command": command,
@@ -240,6 +244,9 @@ def main():
     parser.add_argument("--zstd-reference", action="append", type=Path, required=True)
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--large", action="store_true")
+    parser.add_argument("--family", choices=("both", "brotli", "zstd"), default="both")
+    parser.add_argument("--zstd-window-log", type=int)
+    parser.add_argument("--zstd-history", type=int)
     parser.add_argument("--source-file", type=Path, help="Reuse the exactly sized existing sparse source without regenerating it")
     parser.add_argument("--prefix-bytes", type=int, default=1024 * 1024)
     args = parser.parse_args()
@@ -248,6 +255,8 @@ def main():
     args.brotli_cli, args.zstd_cli = args.brotli_cli.resolve(), args.zstd_cli.resolve()
     prefix = LARGE_PREFIX if args.large else args.prefix_bytes
     require(0 <= prefix <= LARGE_PREFIX, "prefix outside smoke/approved large range")
+    require(args.zstd_window_log is None or 10 <= args.zstd_window_log <= 41, "Zstd window outside public format range")
+    require(args.zstd_history is None or args.zstd_window_log is not None, "history requires explicit window")
     status = {"phase": "large" if args.large else "smoke", "started_utc": datetime.now(timezone.utc).isoformat(),
               "source_reads_per_encoder": 1, "old_large_matrices_repeated": False, "cpu": subprocess.check_output(["lscpu"], text=True),
               "zig_version": subprocess.check_output(["zig", "version"], text=True).strip(), "status": "running"}
@@ -270,6 +279,8 @@ def main():
     rows, decoded_hash = [], None
     try:
         for family, references in (("brotli", args.brotli_reference), ("zstd", args.zstd_reference)):
+            if args.family != "both" and args.family != family:
+                continue
             wire = args.output_dir / f"{family}.wire"
             wire.write_bytes(b"previous target sentinel")
             encoded = run_encoded_once(args, family, source, wire, prefix + len(TAIL))
