@@ -152,7 +152,9 @@ fn insertEvent(insert_len: usize) !Event {
         .{ .code = @intCast(insert_len + 40) }
     else if (insert_len < 130) blk: {
         const tail = insert_len - 2;
-        const nbits = std.math.log2_int(usize, tail) - 1;
+        // log2_int returns a pointer-width-dependent shift type; symbol
+        // arithmetic needs room for its alphabet offsets on 32-bit targets.
+        const nbits: usize = std.math.log2_int(usize, tail) - 1;
         const prefix = tail >> @intCast(nbits);
         break :blk .{
             .code = @intCast((nbits << 1) + prefix + 42),
@@ -161,7 +163,7 @@ fn insertEvent(insert_len: usize) !Event {
         };
     } else if (insert_len < 2114) blk: {
         const tail = insert_len - 66;
-        const nbits = std.math.log2_int(usize, tail);
+        const nbits: usize = std.math.log2_int(usize, tail);
         break :blk .{
             .code = @intCast(nbits + 50),
             .extra = @intCast(tail - (@as(usize, 1) << @intCast(nbits))),
@@ -185,7 +187,7 @@ fn copyEvent(copy_len: usize) !Event {
         .{ .code = @intCast(copy_len + 14) }
     else if (copy_len < 134) blk: {
         const tail = copy_len - 6;
-        const nbits = std.math.log2_int(usize, tail) - 1;
+        const nbits: usize = std.math.log2_int(usize, tail) - 1;
         const prefix = tail >> @intCast(nbits);
         break :blk .{
             .code = @intCast((nbits << 1) + prefix + 20),
@@ -194,7 +196,7 @@ fn copyEvent(copy_len: usize) !Event {
         };
     } else if (copy_len < 2118) blk: {
         const tail = copy_len - 70;
-        const nbits = std.math.log2_int(usize, tail);
+        const nbits: usize = std.math.log2_int(usize, tail);
         break :blk .{
             .code = @intCast(nbits + 28),
             .extra = @intCast(tail - (@as(usize, 1) << @intCast(nbits))),
@@ -211,7 +213,7 @@ fn emitCopyLast(visitor: anytype, copy_len: usize) !void {
         .{ .code = @intCast(copy_len - 4) }
     else if (copy_len < 72) blk: {
         const tail = copy_len - 8;
-        const nbits = std.math.log2_int(usize, tail) - 1;
+        const nbits: usize = std.math.log2_int(usize, tail) - 1;
         const prefix = tail >> @intCast(nbits);
         break :blk .{
             .code = @intCast((nbits << 1) + prefix + 4),
@@ -227,7 +229,7 @@ fn emitCopyLast(visitor: anytype, copy_len: usize) !void {
         };
     } else if (copy_len < 2120) blk: {
         const tail = copy_len - 72;
-        const nbits = std.math.log2_int(usize, tail);
+        const nbits: usize = std.math.log2_int(usize, tail);
         break :blk .{
             .code = @intCast(nbits + 28),
             .extra = @intCast(tail - (@as(usize, 1) << @intCast(nbits))),
@@ -243,7 +245,7 @@ fn distanceEvent(distance: usize) !Event {
     if (distance == 0 or distance > std.math.maxInt(u32) - 3)
         return error.InvalidBlockPlan;
     const d = distance + 3;
-    const nbits = std.math.log2_int(usize, d) - 1;
+    const nbits: usize = std.math.log2_int(usize, d) - 1;
     const prefix = (d >> @intCast(nbits)) & 1;
     const offset = (2 + prefix) << @intCast(nbits);
     const code = 2 * (nbits - 1) + prefix + 80;
@@ -344,6 +346,16 @@ test "q0 compact mappings reconstruct every fast-fragment length" {
         try std.testing.expectEqual(copy_len, entry.copy_base + event_value.extra);
         try std.testing.expectEqual(entry.copy_extra_bits, event_value.extra_bits);
         try std.testing.expectEqual(@as(i2, -1), entry.distance_code);
+    }
+    for ([_]usize{ 65537, 1 << 20, (1 << 24) - 1, 1 << 24 }) |length| {
+        const insert = try insertEvent(length);
+        const insert_entry = command_lut.entries[commandSymbol(@intCast(insert.code))];
+        try std.testing.expectEqual(length, insert_entry.insert_base + insert.extra);
+        try std.testing.expectEqual(insert_entry.insert_extra_bits, insert.extra_bits);
+        const copy = try copyEvent(length);
+        const copy_entry = command_lut.entries[commandSymbol(@intCast(copy.code))];
+        try std.testing.expectEqual(length, copy_entry.copy_base + copy.extra);
+        try std.testing.expectEqual(copy_entry.copy_extra_bits, copy.extra_bits);
     }
 }
 
