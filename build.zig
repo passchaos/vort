@@ -317,6 +317,18 @@ pub fn build(b: *std.Build) void {
     br_large_far_test.dependOn(&br_large_far_run.step);
     const br_large_far_build = b.step("build-br-large-window-far", "Compile the explicit public Brotli large-history campaign");
     br_large_far_build.dependOn(&br_large_far.step);
+    const br_large_extra_tests = b.addTest(.{
+        .name = "vort-br-large-window-extra-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests/br_large_window_extra.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+        .filters = &.{"Brotli Large Window public RAW dictionary"},
+    });
+    const br_large_extra_test = b.step("test-br-large-window-extra", "Run the explicit public 25-bit distance-extra RAW dictionary regression");
+    br_large_extra_test.dependOn(&b.addRunArtifact(br_large_extra_tests).step);
     const zstd_tests_mod = b.createModule(.{
         .root_source_file = b.path("src/zstd.zig"),
         .target = target,
