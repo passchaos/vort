@@ -102,6 +102,9 @@ Python/C libz 1.2.11生成和验证十一份语料；每目标22行Alloc/Limited
 4346B；偏小提示的两次分配完全释放，live=0且allocated=freed；缺尾部和
 非最终dynamic正确Truncated，合法1052B gzip产生1MiB输出，真实OOM仍透传。
 最终完整native/x86各528项全部通过，源码/实际TestFn/产物证据分阶段保留。
+修复后的完整`zig build check -j2 --summary all`成功，168/168步骤通过，
+记录的1447个Zig源码前后SHA一致；该检查在测量工具合入前完成，工具有
+独立功能与实际编译输入绑定证据。检查耗时不作为竞品性能测量。
 
 [证据索引](data/wide-bit-addressing-20261025/index.json)保留每阶段命令、
 日志、源码/编译输入/产物身份和失败修复记录。当前功能范围不放宽物理

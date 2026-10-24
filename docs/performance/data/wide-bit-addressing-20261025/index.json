@@ -3111,7 +3111,7 @@
   },
   "gzip-hint-repair": {
     "bundle": "gzip-hint-repair.tar.gz",
-    "bundle_sha256": "c57623bfbdf7672185cb5a252dc23a8eb916d0ff84697a70acf4e9f74b5f5658",
+    "bundle_sha256": "d8dd0c1003b3b3bf438589850028e6898df53d62bdf79170974e2299142b8b21",
     "files": [
       {
         "bytes": 8559,
@@ -3139,9 +3139,19 @@
         "sha256": "94321589a58676f41c0036dd1cc7dbd158cfa48229e6349bd29fa1d816ba5b63"
       },
       {
-        "bytes": 0,
+        "bytes": 55172,
         "path": "global-check/check.log",
-        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        "sha256": "9c858c68c22b57d2a8c096190469d2d64c03779582f8bc334f7c7352ae1864c1"
+      },
+      {
+        "bytes": 470,
+        "path": "global-check/result.json",
+        "sha256": "e4048e769b774de587f9d90ac3d814be6c4a3c361d4e9b7cecd3ba3f7106f415"
+      },
+      {
+        "bytes": 151783,
+        "path": "global-check/source-after.json",
+        "sha256": "c6f6d7651c854856f56c8107c20eace39cf470186f23d9a1fbf4b3d835d8378c"
       },
       {
         "bytes": 151783,
