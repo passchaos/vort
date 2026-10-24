@@ -62,8 +62,16 @@ not broad competitor speed or quality parity.
 The independent liblzma 5.8.4 campaign passes 1277 groups with 956 stable
 source/tool hashes; all 140 build-check steps also pass.
 
-Remaining priorities include fuller Brotli/Zstd HQ models, LZMA custom dictionary
-and 2 MiB compressed-chunk coverage, then standard dictionary finalization
+The [large dictionary/chunk milestone](performance/lzma2-large-blocks-functional-baseline.md)
+now covers custom LZMA dictionaries through 1.5 GiB and LZMA2 plaintext groups
+through 2 MiB with bounded 64 KiB finished payloads, complete stored fallback
+and group-level retry. Defaults/presets remain fixed. Final Debug/RF controls
+each pass 67 tests, the complete XZ family passes 143, 26 reference chunk/control
+rows plus six metadata rows and fifty old-wire comparisons pass, and all 140
+build checks succeed. Separate evidence verifies an actual 67,108,865-byte
+match distance and maximum dictionary small-input budget behavior.
+
+Remaining priorities include fuller Brotli/Zstd HQ models, then standard dictionary finalization
 performance and current-source real-corpus speed/ratio/memory leadership
 evidence across platforms.
 

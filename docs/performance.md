@@ -9,6 +9,10 @@ records the implemented standard/extreme preset table, real HC/BT and parse
 modes, bounded state/resource contracts, final 100-test gates and independent
 CLI evidence. It preserves the distinction between these functional milestones
 and competitor encoder throughput, ratio and RSS measurements.
+[Large dictionaries and LZMA2 chunks](performance/lzma2-large-blocks-functional-baseline.md)
+records the subsequent 1.5 GiB/2 MiB functionality, bounded range payloads,
+actual distances beyond 64 MiB, stream retry, versioned interoperability and
+explicit memory-proof scope.
 
 Recent decoder evidence: [Zstd sequence field grouping](performance/zstd-sequence-fields.md)
 records a bounded all-FSE reader optimization, generic-reference safety checks,

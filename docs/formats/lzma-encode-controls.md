@@ -77,9 +77,9 @@ modes remain available; default null `match_options` retains legacy behavior.
 
 ## Ownership, limits and streaming
 
-Custom encoder dictionary requests cover 4 KiB...64 MiB, sufficient for all
-twenty standard/extreme presets. This implementation limit is smaller than
-liblzma's full custom encoder range. An advertised container dictionary can
+Custom encoder dictionary requests cover 4 KiB...1.5 GiB (1610612736 bytes),
+matching liblzma's custom encoder range. The twenty standard/extreme presets
+retain their established sizes, at most 64 MiB. An advertised container dictionary can
 be rounded upward for format compatibility while actual search stays within
 the requested history window. LZMA-Alone preserves exact headers for legacy
 null match options with narrow dictionaries, including noncanonical requests.
@@ -112,9 +112,23 @@ state, so the next compressed chunk emits the appropriate reset metadata.
 
 XZ blocks are independent. The unchanged default block size is 1 MiB; a larger
 dictionary does not establish cross-block history. Configure block size when
-longer within-block history is needed. Vort's current LZMA2 writer uses up to
-64 KiB plaintext per chunk, while the wire format permits up to 2 MiB in a
-compressed chunk. These remain separate compression-quality priorities.
+longer within-block history is needed. `chunk_size` accepts 1...2097152 and
+defaults to 65536 across XZ/raw LZMA2 one-shot and incremental encoders. To
+emit a full 2 MiB compressed chunk in XZ, its outer block must also be at least
+2 MiB. The compression payload remains at most 65536 bytes including range
+completion, and stored fallback is split into packets of at most 65536 bytes.
+
+The compressed plaintext length uses all 21 bits in the standard header.
+Compression is chosen only when its complete packet is smaller than the whole
+stored group. `CompressedPayloadLimitExceeded` means the bounded candidate
+does not fit and selects stored fallback; allocation or working-budget failures
+remain errors. Only complete packet groups commit model/history state.
+
+Raw incremental `max_pending_output_len` is now `?usize`. Null derives a bound
+from the selected input group; the legacy default still evaluates to 65552.
+Explicit values are preserved. Use `effectiveMaxPendingOutputLen()` to read
+the bound. Failed groups retain accepted input for retry while committed state
+and counters remain at the prior group; snapshot records actual progress.
 
 ## CLI
 
@@ -123,6 +137,7 @@ Existing encode commands accept named controls after their positional options:
 ```sh
 vort encode-lzma-file input.bin output.lzma --preset=6 --mode=normal
 vort encode-xz-file input.bin output.xz --preset=9 --extreme --dict-size=8388608
+vort encode-xz-file input.bin output.xz crc64 2097152 --chunk-size=2097152
 vort encode-microlzma-file input.bin output.micro --mode=fast --match-finder=hc4 --nice-len=32 --depth=8
 ```
 
@@ -130,6 +145,7 @@ Named fields override the concrete preset regardless of flag order. The CLI
 also accepts `--lc`, `--lp`, `--pb`, `--match-memory` and explicit `--profile`.
 Extreme requires a preset. Profile requires an existing preset/matcher option
 or fast/normal mode, and preserves that configuration and output bytes.
-The MicroLZMA prefix/aligned-prefix commands use the same controls. Scalar
+The MicroLZMA prefix/aligned-prefix commands use the same controls. Chunk size
+is specific to XZ commands and is rejected for Alone/MicroLZMA. Scalar
 errors are rejected before reading the corpus or opening the destination;
 encoded output is published after successful library completion.

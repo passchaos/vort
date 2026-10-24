@@ -1,0 +1,5212 @@
+{
+  "schema": "vort-lzma2-large-blocks-v1",
+  "status": "ok",
+  "utc": "2026-10-24T03:12:18.425387+00:00",
+  "reference": {
+    "version": "5.8.4",
+    "header_version": 50080042,
+    "runtime_version": 50080042,
+    "helper_sha256": "303b821bbad4d0ca3eb9598d4e491a6a32cc457b93929b038c71b3654342328f",
+    "runtime_library": "/tmp/vort-xz-ref.vVVDxq/build/liblzma.so.5.8.4",
+    "runtime_library_sha256": "03a333e8fd35e4c771c04ce93ab08dc0b8bbfa7615900179c53e1dd92a4d9ec0"
+  },
+  "baseline": {
+    "checkpoint": "a549b7a2",
+    "oracle_revision": "c3521442fcc6406287d9e31d2470746f3d9c1b9a",
+    "manifest_sha256": "d6f68ef4926c6bfe2f33097fa6e3a6b97f2d626643968ca90d0ca973a91a3034",
+    "bridge_report": "docs/performance/data/lzma-xz-encode-controls-functional-x86-20261024.json",
+    "bridge_report_sha256": "f0f1bceecdd77b8065d82c7e9b684bc4b43debaa740facf07a66f5a388b39d5c",
+    "bridge_legacy_equal_rows": 50,
+    "rows": [
+      {
+        "case": "empty",
+        "config": {
+          "format": "alone"
+        },
+        "wire_sha256": "cb581662351034be97276f088c2aa783a1990927d4b689f6cfde2a2e00593da3"
+      },
+      {
+        "case": "empty",
+        "config": {
+          "format": "xz"
+        },
+        "wire_sha256": "0040f94d11d0039505328a90b2ff48968db873e9e7967307631bf40ef5679275"
+      },
+      {
+        "case": "empty",
+        "config": {
+          "format": "raw2"
+        },
+        "wire_sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "case": "empty",
+        "config": {
+          "format": "micro"
+        },
+        "wire_sha256": "592ad511c05a8fe9f6072fca73a4af601b393cd456ad6ba709c35e47394c0e0c"
+      },
+      {
+        "case": "empty",
+        "config": {
+          "format": "zip_payload"
+        },
+        "wire_sha256": "70d870e4eed064fe56798b5f28cf3e128d2feea2fcab9b6c9ac18abff6e6adc0"
+      },
+      {
+        "case": "tiny",
+        "config": {
+          "format": "alone"
+        },
+        "wire_sha256": "1803108b6fa32ca14c088a6b0a57a9db4e409ec6528f73e10996edbcbae4a256"
+      },
+      {
+        "case": "tiny",
+        "config": {
+          "format": "xz"
+        },
+        "wire_sha256": "3a7a3787c6c02b57140513074dd37942cb148965a1b7d34c6c870170ab0fdbdd"
+      },
+      {
+        "case": "tiny",
+        "config": {
+          "format": "raw2"
+        },
+        "wire_sha256": "4f8daf48c4c3398717c2cace9bb2912ef74733676a8b1f4678ef08712cc880ef"
+      },
+      {
+        "case": "tiny",
+        "config": {
+          "format": "micro"
+        },
+        "wire_sha256": "6755b6722b49b96c89a6b1ffeff3fde074c6eb33827d4513b0462ef10e5c02e2"
+      },
+      {
+        "case": "tiny",
+        "config": {
+          "format": "zip_payload"
+        },
+        "wire_sha256": "deaf41f1e599515b2ca40b3998ed6c14790e8d60a4a650a777efabe5af50a806"
+      },
+      {
+        "case": "text",
+        "config": {
+          "format": "alone"
+        },
+        "wire_sha256": "54a1045a932e41833c6f2327bc2a52523e4129831e345ad41f4d2a89459d8dff"
+      },
+      {
+        "case": "text",
+        "config": {
+          "format": "xz"
+        },
+        "wire_sha256": "d919ef7706f0649cbdd9be70f31addd82b92798bcf6723e64954cce1bd851713"
+      },
+      {
+        "case": "text",
+        "config": {
+          "format": "raw2"
+        },
+        "wire_sha256": "48c498fd53ce8d92ba844008293e978fb9661094dc917f7c41a3aeffa99d1e84"
+      },
+      {
+        "case": "text",
+        "config": {
+          "format": "micro"
+        },
+        "wire_sha256": "a01a7e675feb4cd403faffd7a9aab1053c112ac489eb92eb7945f823274a86ac"
+      },
+      {
+        "case": "text",
+        "config": {
+          "format": "zip_payload"
+        },
+        "wire_sha256": "dc27d7c67b67954d7eb10b67981800d2502c6d5805c740d3f83822263d2598f6"
+      },
+      {
+        "case": "json",
+        "config": {
+          "format": "alone"
+        },
+        "wire_sha256": "e049db34794a7f931a6d6ea5a45558e9ce8f2d9687e35ae6d0778cd44946da08"
+      },
+      {
+        "case": "json",
+        "config": {
+          "format": "xz"
+        },
+        "wire_sha256": "7a8a324502d57da67ac9c241aeb415aaf0a3ee0f8cb69215603388b9ef6e3b03"
+      },
+      {
+        "case": "json",
+        "config": {
+          "format": "raw2"
+        },
+        "wire_sha256": "ece1233bf7106b230c320fd0afb8b5529e59fc130d4a16505379112a9818c805"
+      },
+      {
+        "case": "json",
+        "config": {
+          "format": "micro"
+        },
+        "wire_sha256": "ea60fefe4e4625772ec72a0e6bcb526b67579dc0e848365316fc76aaa69eb645"
+      },
+      {
+        "case": "json",
+        "config": {
+          "format": "zip_payload"
+        },
+        "wire_sha256": "355f077035202d686055a1d853c3df9ff49aff1ab5f80a6df4d30a5b17298ad2"
+      },
+      {
+        "case": "source",
+        "config": {
+          "format": "alone"
+        },
+        "wire_sha256": "c57b1f6e3e1025029c59247b8e29ee48797200cd87cd9e3b247063098b2b211d"
+      },
+      {
+        "case": "source",
+        "config": {
+          "format": "xz"
+        },
+        "wire_sha256": "9f4f9423568e1989ecc8a05d3ca14eecd12d468baca5e7f19744c35f7a4fdc97"
+      },
+      {
+        "case": "source",
+        "config": {
+          "format": "raw2"
+        },
+        "wire_sha256": "babcf375b0ca4f93f5c1b8c56677dabf7297c89c98d53d7a0eacd446041dadab"
+      },
+      {
+        "case": "source",
+        "config": {
+          "format": "micro"
+        },
+        "wire_sha256": "b02ffd5435176bf6ac98c159854cfbf7c6839b1af9da769e5bedc344c0b96034"
+      },
+      {
+        "case": "source",
+        "config": {
+          "format": "zip_payload"
+        },
+        "wire_sha256": "136e3cc872e159bd7b09d0d42a70a25bf81096e7c5289ae71f82d56ea733269c"
+      },
+      {
+        "case": "log",
+        "config": {
+          "format": "alone"
+        },
+        "wire_sha256": "d9874525af4bbd7e433ce386a7458aa15eb5b82ddf0eae04948f65990ed0f4b8"
+      },
+      {
+        "case": "log",
+        "config": {
+          "format": "xz"
+        },
+        "wire_sha256": "12c6cc98e713259d957fe83aae081350ad8486098ead87c5fdd3daf23c249656"
+      },
+      {
+        "case": "log",
+        "config": {
+          "format": "raw2"
+        },
+        "wire_sha256": "5c5a751fbb9ddf3e7fa7d596b314860ecfb9cdafea777f44076159523e14e787"
+      },
+      {
+        "case": "log",
+        "config": {
+          "format": "micro"
+        },
+        "wire_sha256": "e035836a16e763558a2b5aabf377d9ef7f6fe6c7f4cf6048eb56f07c7377056c"
+      },
+      {
+        "case": "log",
+        "config": {
+          "format": "zip_payload"
+        },
+        "wire_sha256": "dca602fc7cfe867a1516f8d80bf498c041ee997f8ad21941d22152188911a1b2"
+      },
+      {
+        "case": "binary",
+        "config": {
+          "format": "alone"
+        },
+        "wire_sha256": "162c17f4ce00f90c7b604115fbe914f94b6d3f3bfd7c159ad3ef4b6764af485f"
+      },
+      {
+        "case": "binary",
+        "config": {
+          "format": "xz"
+        },
+        "wire_sha256": "cec4c416bfd79a7f225df52a8008753f023e191db8dcb270ab0d9505885b2300"
+      },
+      {
+        "case": "binary",
+        "config": {
+          "format": "raw2"
+        },
+        "wire_sha256": "c41a58278107e41e965250c8989d782e625290ba290bc4cd33772711b2af211f"
+      },
+      {
+        "case": "binary",
+        "config": {
+          "format": "micro"
+        },
+        "wire_sha256": "00b9e9d43b27e1f58d15942a05edfea6e803aac364255a70e19c50cc6ad3ab5d"
+      },
+      {
+        "case": "binary",
+        "config": {
+          "format": "zip_payload"
+        },
+        "wire_sha256": "c37872a99c0fc7578b5c3222868941a2b2e6dfe58d47c2234d7cc7a8997e087c"
+      },
+      {
+        "case": "small",
+        "config": {
+          "format": "alone"
+        },
+        "wire_sha256": "3430c2a29a730607d45764a6f4d3866cdbf31a9c1529d22793946d4a3fef99df"
+      },
+      {
+        "case": "small",
+        "config": {
+          "format": "xz"
+        },
+        "wire_sha256": "b61f76f83dfb27c45eae1e40c4b1b76972757b83c0f72ab40a7433002007c5e8"
+      },
+      {
+        "case": "small",
+        "config": {
+          "format": "raw2"
+        },
+        "wire_sha256": "c2ec0e0560bd0381a2cdb28bcc23eb011a08f60e49eca0b9ee94bf7f4bf1364f"
+      },
+      {
+        "case": "small",
+        "config": {
+          "format": "micro"
+        },
+        "wire_sha256": "8b967aa3cbfd17da1b06b6e49f2318baa09e2a7d7641542e563c7abc4fb0f4ba"
+      },
+      {
+        "case": "small",
+        "config": {
+          "format": "zip_payload"
+        },
+        "wire_sha256": "e9e39ad71fa54d065a51c3b2f8d2e3f3d283e90925ce3171edd1e29590d3cb2c"
+      },
+      {
+        "case": "repetitive",
+        "config": {
+          "format": "alone"
+        },
+        "wire_sha256": "240695865346faeed8a7d8e949646449bbef8037672f8187ed649ae5d8049b28"
+      },
+      {
+        "case": "repetitive",
+        "config": {
+          "format": "xz"
+        },
+        "wire_sha256": "5407ce1d56e1babd769fd55302bb168d2956071067790413a7491d8c0a3af6d4"
+      },
+      {
+        "case": "repetitive",
+        "config": {
+          "format": "raw2"
+        },
+        "wire_sha256": "9317d042540bee23032cacef1242e60552b495f0e1f30006fa88ddd9afd0c4ee"
+      },
+      {
+        "case": "repetitive",
+        "config": {
+          "format": "micro"
+        },
+        "wire_sha256": "690fe791b3b4f84b1867994d795122473caecaef3f21596093749850858ef054"
+      },
+      {
+        "case": "repetitive",
+        "config": {
+          "format": "zip_payload"
+        },
+        "wire_sha256": "827b955dc2ea12be371094a4784091eff0f568168b35ef3510d5df72b53accdf"
+      },
+      {
+        "case": "random",
+        "config": {
+          "format": "alone"
+        },
+        "wire_sha256": "bafeae087732690c7dbd56f94f187622f2539da187b62b935bc62558abb6b32b"
+      },
+      {
+        "case": "random",
+        "config": {
+          "format": "xz"
+        },
+        "wire_sha256": "86faa6f3332d9d431a8afa57a781cfd0040e613a617b85dd7b1e739b817f5b9e"
+      },
+      {
+        "case": "random",
+        "config": {
+          "format": "raw2"
+        },
+        "wire_sha256": "fde5d2b0986c085700d691a010e15f8c03a0e4b26e0e35a25cb96529a81b2bbe"
+      },
+      {
+        "case": "random",
+        "config": {
+          "format": "micro"
+        },
+        "wire_sha256": "fecfd3bad2cd95eb91eb574c24ebb9d869aa6c001fa2a972c21be8230f53a45b"
+      },
+      {
+        "case": "random",
+        "config": {
+          "format": "zip_payload"
+        },
+        "wire_sha256": "22968417265464111fc6487dfaa8132fef0c564815ea524970a873b34597241a"
+      }
+    ]
+  },
+  "large_dictionary_budget": 67108864,
+  "dictionary_rows": [
+    {
+      "dictionary_size": 4096,
+      "property": 0,
+      "advertised_dictionary_size": 4096,
+      "reference_decoder_memory": 70296
+    },
+    {
+      "dictionary_size": 67108865,
+      "property": 29,
+      "advertised_dictionary_size": 100663296,
+      "reference_decoder_memory": 67175065,
+      "auto_limited": {
+        "status": "MEMLIMIT_ERROR",
+        "memory_limit": 8388608,
+        "memory_needed": 100729312,
+        "input_read": 13,
+        "output_written": 0
+      },
+      "auto_limited_scope": "original-container header acceptance only; decoding stopped at memory limit",
+      "auto_full_decode": {
+        "status": "NOT_RUN",
+        "reason": "explicit budget below original-container decoder estimate"
+      }
+    },
+    {
+      "dictionary_size": 100663297,
+      "property": 30,
+      "advertised_dictionary_size": 134217728,
+      "reference_decoder_memory": 100729497
+    },
+    {
+      "dictionary_size": 1073741825,
+      "property": 37,
+      "advertised_dictionary_size": 1610612736,
+      "reference_decoder_memory": 1073808025
+    },
+    {
+      "dictionary_size": 1610612735,
+      "property": 37,
+      "advertised_dictionary_size": 1610612736,
+      "reference_decoder_memory": 1610678935
+    },
+    {
+      "dictionary_size": 1610612736,
+      "property": 37,
+      "advertised_dictionary_size": 1610612736,
+      "reference_decoder_memory": 1610678936,
+      "auto_limited": {
+        "status": "MEMLIMIT_ERROR",
+        "memory_limit": 8388608,
+        "memory_needed": 1610678752,
+        "input_read": 13,
+        "output_written": 0
+      },
+      "auto_limited_scope": "original-container header acceptance only; decoding stopped at memory limit",
+      "auto_full_decode": {
+        "status": "NOT_RUN",
+        "reason": "explicit budget below original-container decoder estimate"
+      }
+    }
+  ],
+  "invalid_format_reference": {
+    "status": "FORMAT_ERROR",
+    "memory_limit": 67108864,
+    "memory_needed": 32768,
+    "input_read": 4,
+    "output_written": 0
+  },
+  "rows": [
+    {
+      "case": "compressed-2m",
+      "format": "raw2",
+      "operation": "encode",
+      "input_bytes": 2097152,
+      "wire_sha256": "1f1bbb462d258b7168943fadc0ddcf25b7773829ac2376eefaceed4482d029cd",
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 378,
+            "output_bytes": 2097152,
+            "chunks": [
+              {
+                "offset": 0,
+                "control": 255,
+                "compressed": true,
+                "output_bytes": 2097152,
+                "payload_bytes": 371,
+                "dictionary_reset": true,
+                "properties_reset": true,
+                "state_reset": true
+              }
+            ]
+          }
+        ],
+        "output_bytes": 2097152
+      }
+    },
+    {
+      "case": "compressed-2m",
+      "format": "raw2",
+      "operation": "incremental",
+      "input_bytes": 2097152,
+      "wire_sha256": "1f1bbb462d258b7168943fadc0ddcf25b7773829ac2376eefaceed4482d029cd",
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 378,
+            "output_bytes": 2097152,
+            "chunks": [
+              {
+                "offset": 0,
+                "control": 255,
+                "compressed": true,
+                "output_bytes": 2097152,
+                "payload_bytes": 371,
+                "dictionary_reset": true,
+                "properties_reset": true,
+                "state_reset": true
+              }
+            ]
+          }
+        ],
+        "output_bytes": 2097152
+      }
+    },
+    {
+      "case": "compressed-2m",
+      "format": "xz",
+      "operation": "encode",
+      "input_bytes": 2097152,
+      "wire_sha256": "a7d3f9b753b29040ce5a063e6a07a129e6cdfabed452fda56f2d909f88d9322a",
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 378,
+            "output_bytes": 2097152,
+            "chunks": [
+              {
+                "offset": 24,
+                "control": 255,
+                "compressed": true,
+                "output_bytes": 2097152,
+                "payload_bytes": 371,
+                "dictionary_reset": true,
+                "properties_reset": true,
+                "state_reset": true
+              }
+            ],
+            "dictionary_property": 0
+          }
+        ],
+        "output_bytes": 2097152
+      }
+    },
+    {
+      "case": "compressed-2m",
+      "format": "xz",
+      "operation": "incremental",
+      "input_bytes": 2097152,
+      "wire_sha256": "a7d3f9b753b29040ce5a063e6a07a129e6cdfabed452fda56f2d909f88d9322a",
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 378,
+            "output_bytes": 2097152,
+            "chunks": [
+              {
+                "offset": 24,
+                "control": 255,
+                "compressed": true,
+                "output_bytes": 2097152,
+                "payload_bytes": 371,
+                "dictionary_reset": true,
+                "properties_reset": true,
+                "state_reset": true
+              }
+            ],
+            "dictionary_property": 0
+          }
+        ],
+        "output_bytes": 2097152
+      }
+    },
+    {
+      "case": "compressed-2m-dict8m",
+      "format": "raw2",
+      "operation": "encode",
+      "input_bytes": 2097152,
+      "wire_sha256": "738309fe4a8b35517f62de36f257de4c97be9c3752e721bea3912f09b673b69d",
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 382,
+            "output_bytes": 2097152,
+            "chunks": [
+              {
+                "offset": 0,
+                "control": 255,
+                "compressed": true,
+                "output_bytes": 2097152,
+                "payload_bytes": 375,
+                "dictionary_reset": true,
+                "properties_reset": true,
+                "state_reset": true
+              }
+            ]
+          }
+        ],
+        "output_bytes": 2097152
+      }
+    },
+    {
+      "case": "compressed-2m-dict8m",
+      "format": "raw2",
+      "operation": "incremental",
+      "input_bytes": 2097152,
+      "wire_sha256": "738309fe4a8b35517f62de36f257de4c97be9c3752e721bea3912f09b673b69d",
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 382,
+            "output_bytes": 2097152,
+            "chunks": [
+              {
+                "offset": 0,
+                "control": 255,
+                "compressed": true,
+                "output_bytes": 2097152,
+                "payload_bytes": 375,
+                "dictionary_reset": true,
+                "properties_reset": true,
+                "state_reset": true
+              }
+            ]
+          }
+        ],
+        "output_bytes": 2097152
+      }
+    },
+    {
+      "case": "compressed-2m-dict8m",
+      "format": "xz",
+      "operation": "encode",
+      "input_bytes": 2097152,
+      "wire_sha256": "48bfde7c9a7fa0185fcc6c2af3305de5e852fa8ac0727794c4f9adec2c58aad6",
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 382,
+            "output_bytes": 2097152,
+            "chunks": [
+              {
+                "offset": 24,
+                "control": 255,
+                "compressed": true,
+                "output_bytes": 2097152,
+                "payload_bytes": 375,
+                "dictionary_reset": true,
+                "properties_reset": true,
+                "state_reset": true
+              }
+            ],
+            "dictionary_property": 22
+          }
+        ],
+        "output_bytes": 2097152
+      }
+    },
+    {
+      "case": "compressed-2m-dict8m",
+      "format": "xz",
+      "operation": "incremental",
+      "input_bytes": 2097152,
+      "wire_sha256": "48bfde7c9a7fa0185fcc6c2af3305de5e852fa8ac0727794c4f9adec2c58aad6",
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 382,
+            "output_bytes": 2097152,
+            "chunks": [
+              {
+                "offset": 24,
+                "control": 255,
+                "compressed": true,
+                "output_bytes": 2097152,
+                "payload_bytes": 375,
+                "dictionary_reset": true,
+                "properties_reset": true,
+                "state_reset": true
+              }
+            ],
+            "dictionary_property": 22
+          }
+        ],
+        "output_bytes": 2097152
+      }
+    },
+    {
+      "case": "stored-2m",
+      "format": "raw2",
+      "operation": "encode",
+      "input_bytes": 2097152,
+      "wire_sha256": "21ec3b142257ccb8410cff4e39d7776dddf45d03af6957f5a4b762c33f816cc9",
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 2097249,
+            "output_bytes": 2097152,
+            "chunks": [
+              {
+                "offset": 0,
+                "control": 1,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": true,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 65539,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 131078,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 196617,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 262156,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 327695,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 393234,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 458773,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 524312,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 589851,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 655390,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 720929,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 786468,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 852007,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 917546,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 983085,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1048624,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1114163,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1179702,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1245241,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1310780,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1376319,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1441858,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1507397,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1572936,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1638475,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1704014,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1769553,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1835092,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1900631,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1966170,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 2031709,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              }
+            ]
+          }
+        ],
+        "output_bytes": 2097152
+      }
+    },
+    {
+      "case": "stored-2m",
+      "format": "raw2",
+      "operation": "incremental",
+      "input_bytes": 2097152,
+      "wire_sha256": "21ec3b142257ccb8410cff4e39d7776dddf45d03af6957f5a4b762c33f816cc9",
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 2097249,
+            "output_bytes": 2097152,
+            "chunks": [
+              {
+                "offset": 0,
+                "control": 1,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": true,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 65539,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 131078,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 196617,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 262156,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 327695,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 393234,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 458773,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 524312,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 589851,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 655390,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 720929,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 786468,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 852007,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 917546,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 983085,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1048624,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1114163,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1179702,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1245241,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1310780,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1376319,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1441858,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1507397,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1572936,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1638475,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1704014,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1769553,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1835092,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1900631,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1966170,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 2031709,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              }
+            ]
+          }
+        ],
+        "output_bytes": 2097152
+      }
+    },
+    {
+      "case": "stored-2m",
+      "format": "xz",
+      "operation": "encode",
+      "input_bytes": 2097152,
+      "wire_sha256": "6ef8f24b8bfdc621ee40d6737b46d31e1792a14e67d1aac1d63f090aaae5d56c",
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 2097249,
+            "output_bytes": 2097152,
+            "chunks": [
+              {
+                "offset": 24,
+                "control": 1,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": true,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 65563,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 131102,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 196641,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 262180,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 327719,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 393258,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 458797,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 524336,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 589875,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 655414,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 720953,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 786492,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 852031,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 917570,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 983109,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1048648,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1114187,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1179726,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1245265,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1310804,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1376343,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1441882,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1507421,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1572960,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1638499,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1704038,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1769577,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1835116,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1900655,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1966194,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 2031733,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              }
+            ],
+            "dictionary_property": 0
+          }
+        ],
+        "output_bytes": 2097152
+      }
+    },
+    {
+      "case": "stored-2m",
+      "format": "xz",
+      "operation": "incremental",
+      "input_bytes": 2097152,
+      "wire_sha256": "6ef8f24b8bfdc621ee40d6737b46d31e1792a14e67d1aac1d63f090aaae5d56c",
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 2097249,
+            "output_bytes": 2097152,
+            "chunks": [
+              {
+                "offset": 24,
+                "control": 1,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": true,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 65563,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 131102,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 196641,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 262180,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 327719,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 393258,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 458797,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 524336,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 589875,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 655414,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 720953,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 786492,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 852031,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 917570,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 983109,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1048648,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1114187,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1179726,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1245265,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1310804,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1376343,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1441882,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1507421,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1572960,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1638499,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1704038,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1769577,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1835116,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1900655,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1966194,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 2031733,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              }
+            ],
+            "dictionary_property": 0
+          }
+        ],
+        "output_bytes": 2097152
+      }
+    },
+    {
+      "case": "stored-then-reset",
+      "format": "raw2",
+      "operation": "encode",
+      "input_bytes": 2162688,
+      "wire_sha256": "b15450e4e8dad4d81c693a054c3ecc52869a8125bf85d2a9ff3c75884aec622e",
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 2097333,
+            "output_bytes": 2162688,
+            "chunks": [
+              {
+                "offset": 0,
+                "control": 1,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": true,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 65539,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 131078,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 196617,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 262156,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 327695,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 393234,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 458773,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 524312,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 589851,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 655390,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 720929,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 786468,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 852007,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 917546,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 983085,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1048624,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1114163,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1179702,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1245241,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1310780,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1376319,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1441858,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1507397,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1572936,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1638475,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1704014,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1769553,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1835092,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1900631,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1966170,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 2031709,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 2097248,
+                "control": 192,
+                "compressed": true,
+                "output_bytes": 65536,
+                "payload_bytes": 78,
+                "dictionary_reset": false,
+                "properties_reset": true,
+                "state_reset": true
+              }
+            ]
+          }
+        ],
+        "output_bytes": 2162688
+      }
+    },
+    {
+      "case": "stored-then-reset",
+      "format": "raw2",
+      "operation": "incremental",
+      "input_bytes": 2162688,
+      "wire_sha256": "b15450e4e8dad4d81c693a054c3ecc52869a8125bf85d2a9ff3c75884aec622e",
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 2097333,
+            "output_bytes": 2162688,
+            "chunks": [
+              {
+                "offset": 0,
+                "control": 1,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": true,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 65539,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 131078,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 196617,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 262156,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 327695,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 393234,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 458773,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 524312,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 589851,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 655390,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 720929,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 786468,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 852007,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 917546,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 983085,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1048624,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1114163,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1179702,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1245241,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1310780,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1376319,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1441858,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1507397,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1572936,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1638475,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1704014,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1769553,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1835092,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1900631,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1966170,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 2031709,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 2097248,
+                "control": 192,
+                "compressed": true,
+                "output_bytes": 65536,
+                "payload_bytes": 78,
+                "dictionary_reset": false,
+                "properties_reset": true,
+                "state_reset": true
+              }
+            ]
+          }
+        ],
+        "output_bytes": 2162688
+      }
+    },
+    {
+      "case": "stored-then-reset",
+      "format": "xz",
+      "operation": "encode",
+      "input_bytes": 2162688,
+      "wire_sha256": "b1c13e9112a16e235a6ba36bcdb9034098a2995fe78597ee27e144668df46310",
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 2097333,
+            "output_bytes": 2162688,
+            "chunks": [
+              {
+                "offset": 24,
+                "control": 1,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": true,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 65563,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 131102,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 196641,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 262180,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 327719,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 393258,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 458797,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 524336,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 589875,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 655414,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 720953,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 786492,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 852031,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 917570,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 983109,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1048648,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1114187,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1179726,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1245265,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1310804,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1376343,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1441882,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1507421,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1572960,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1638499,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1704038,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1769577,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1835116,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1900655,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1966194,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 2031733,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 2097272,
+                "control": 192,
+                "compressed": true,
+                "output_bytes": 65536,
+                "payload_bytes": 78,
+                "dictionary_reset": false,
+                "properties_reset": true,
+                "state_reset": true
+              }
+            ],
+            "dictionary_property": 0
+          }
+        ],
+        "output_bytes": 2162688
+      }
+    },
+    {
+      "case": "stored-then-reset",
+      "format": "xz",
+      "operation": "incremental",
+      "input_bytes": 2162688,
+      "wire_sha256": "b1c13e9112a16e235a6ba36bcdb9034098a2995fe78597ee27e144668df46310",
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 2097333,
+            "output_bytes": 2162688,
+            "chunks": [
+              {
+                "offset": 24,
+                "control": 1,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": true,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 65563,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 131102,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 196641,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 262180,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 327719,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 393258,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 458797,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 524336,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 589875,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 655414,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 720953,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 786492,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 852031,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 917570,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 983109,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1048648,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1114187,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1179726,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1245265,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1310804,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1376343,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1441882,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1507421,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1572960,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1638499,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1704038,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1769577,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1835116,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1900655,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 1966194,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 2031733,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 65536,
+                "payload_bytes": 65536,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 2097272,
+                "control": 192,
+                "compressed": true,
+                "output_bytes": 65536,
+                "payload_bytes": 78,
+                "dictionary_reset": false,
+                "properties_reset": true,
+                "state_reset": true
+              }
+            ],
+            "dictionary_property": 0
+          }
+        ],
+        "output_bytes": 2162688
+      }
+    },
+    {
+      "case": "chunk-control",
+      "format": "raw2",
+      "chunk_size": 1,
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 265,
+            "output_bytes": 66,
+            "chunks": [
+              {
+                "offset": 0,
+                "control": 1,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": true,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 4,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 8,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 12,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 16,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 20,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 24,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 28,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 32,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 36,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 40,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 44,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 48,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 52,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 56,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 60,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 64,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 68,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 72,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 76,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 80,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 84,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 88,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 92,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 96,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 100,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 104,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 108,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 112,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 116,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 120,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 124,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 128,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 132,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 136,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 140,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 144,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 148,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 152,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 156,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 160,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 164,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 168,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 172,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 176,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 180,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 184,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 188,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 192,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 196,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 200,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 204,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 208,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 212,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 216,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 220,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 224,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 228,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 232,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 236,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 240,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 244,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 248,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 252,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 256,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 260,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              }
+            ]
+          }
+        ],
+        "output_bytes": 66
+      }
+    },
+    {
+      "case": "chunk-control",
+      "format": "xz",
+      "chunk_size": 1,
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 265,
+            "output_bytes": 66,
+            "chunks": [
+              {
+                "offset": 24,
+                "control": 1,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": true,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 28,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 32,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 36,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 40,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 44,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 48,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 52,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 56,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 60,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 64,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 68,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 72,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 76,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 80,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 84,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 88,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 92,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 96,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 100,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 104,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 108,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 112,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 116,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 120,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 124,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 128,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 132,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 136,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 140,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 144,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 148,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 152,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 156,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 160,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 164,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 168,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 172,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 176,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 180,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 184,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 188,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 192,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 196,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 200,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 204,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 208,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 212,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 216,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 220,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 224,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 228,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 232,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 236,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 240,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 244,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 248,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 252,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 256,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 260,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 264,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 268,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 272,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 276,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 280,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              },
+              {
+                "offset": 284,
+                "control": 2,
+                "compressed": false,
+                "output_bytes": 1,
+                "payload_bytes": 1,
+                "dictionary_reset": false,
+                "properties_reset": false,
+                "state_reset": false
+              }
+            ],
+            "dictionary_property": 0
+          }
+        ],
+        "output_bytes": 66
+      }
+    },
+    {
+      "case": "chunk-control",
+      "format": "raw2",
+      "chunk_size": 65536,
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 37,
+            "output_bytes": 66,
+            "chunks": [
+              {
+                "offset": 0,
+                "control": 224,
+                "compressed": true,
+                "output_bytes": 66,
+                "payload_bytes": 30,
+                "dictionary_reset": true,
+                "properties_reset": true,
+                "state_reset": true
+              }
+            ]
+          }
+        ],
+        "output_bytes": 66
+      }
+    },
+    {
+      "case": "chunk-control",
+      "format": "xz",
+      "chunk_size": 65536,
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 37,
+            "output_bytes": 66,
+            "chunks": [
+              {
+                "offset": 24,
+                "control": 224,
+                "compressed": true,
+                "output_bytes": 66,
+                "payload_bytes": 30,
+                "dictionary_reset": true,
+                "properties_reset": true,
+                "state_reset": true
+              }
+            ],
+            "dictionary_property": 0
+          }
+        ],
+        "output_bytes": 66
+      }
+    },
+    {
+      "case": "chunk-control",
+      "format": "raw2",
+      "chunk_size": 65537,
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 37,
+            "output_bytes": 66,
+            "chunks": [
+              {
+                "offset": 0,
+                "control": 224,
+                "compressed": true,
+                "output_bytes": 66,
+                "payload_bytes": 30,
+                "dictionary_reset": true,
+                "properties_reset": true,
+                "state_reset": true
+              }
+            ]
+          }
+        ],
+        "output_bytes": 66
+      }
+    },
+    {
+      "case": "chunk-control",
+      "format": "xz",
+      "chunk_size": 65537,
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 37,
+            "output_bytes": 66,
+            "chunks": [
+              {
+                "offset": 24,
+                "control": 224,
+                "compressed": true,
+                "output_bytes": 66,
+                "payload_bytes": 30,
+                "dictionary_reset": true,
+                "properties_reset": true,
+                "state_reset": true
+              }
+            ],
+            "dictionary_property": 0
+          }
+        ],
+        "output_bytes": 66
+      }
+    },
+    {
+      "case": "chunk-control",
+      "format": "raw2",
+      "chunk_size": 1048576,
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 37,
+            "output_bytes": 66,
+            "chunks": [
+              {
+                "offset": 0,
+                "control": 224,
+                "compressed": true,
+                "output_bytes": 66,
+                "payload_bytes": 30,
+                "dictionary_reset": true,
+                "properties_reset": true,
+                "state_reset": true
+              }
+            ]
+          }
+        ],
+        "output_bytes": 66
+      }
+    },
+    {
+      "case": "chunk-control",
+      "format": "xz",
+      "chunk_size": 1048576,
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 37,
+            "output_bytes": 66,
+            "chunks": [
+              {
+                "offset": 24,
+                "control": 224,
+                "compressed": true,
+                "output_bytes": 66,
+                "payload_bytes": 30,
+                "dictionary_reset": true,
+                "properties_reset": true,
+                "state_reset": true
+              }
+            ],
+            "dictionary_property": 0
+          }
+        ],
+        "output_bytes": 66
+      }
+    },
+    {
+      "case": "chunk-control",
+      "format": "raw2",
+      "chunk_size": 2097152,
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 37,
+            "output_bytes": 66,
+            "chunks": [
+              {
+                "offset": 0,
+                "control": 224,
+                "compressed": true,
+                "output_bytes": 66,
+                "payload_bytes": 30,
+                "dictionary_reset": true,
+                "properties_reset": true,
+                "state_reset": true
+              }
+            ]
+          }
+        ],
+        "output_bytes": 66
+      }
+    },
+    {
+      "case": "chunk-control",
+      "format": "xz",
+      "chunk_size": 2097152,
+      "envelope": {
+        "blocks": [
+          {
+            "bytes": 37,
+            "output_bytes": 66,
+            "chunks": [
+              {
+                "offset": 24,
+                "control": 224,
+                "compressed": true,
+                "output_bytes": 66,
+                "payload_bytes": 30,
+                "dictionary_reset": true,
+                "properties_reset": true,
+                "state_reset": true
+              }
+            ],
+            "dictionary_property": 0
+          }
+        ],
+        "output_bytes": 66
+      }
+    }
+  ],
+  "source_sha256": {
+    "build.zig": "a47b77b5744640f99ab5c26b81679dc17c9d098e917a9d8b377b02e29c054888",
+    "build.zig.zon": "b57f43789b51f00ff488bcbe368536fea617383b77fcde3d217194e49e4f0480",
+    "src/root.zig": "a4089fdc3f42df4b8905a820f6f47612c1dd889d43137a6ed7004358c198e03e",
+    "src/core.zig": "5915c1cca0710212ba3f2d1d2edc1c84c513a391f35ae7ebd9cdbf8825043c5c",
+    "src/lzma.zig": "b47e036cee1e8187970963afda6fbd2f0b49bb02b2a70da895d292523698c08c",
+    "src/xz.zig": "7e323206fe1b248e5124baba0fae88d884ce25f260b9be78525837503d29c3c5",
+    "src/lzma/decoder.zig": "a32b869605fe25ae241e6d219f48a2d10b3cc1277b3e306c6b2e39f1b157d671",
+    "src/lzma/encode_controls_helpers.zig": "f7ff6962baddd079e96bd42638b08595ba12de09049848d5afb8f6829813aec1",
+    "src/lzma/encode_controls_tests.zig": "4a8fd3de4f2ccefe9b5c2212a4cb45029951486de0c375b36116c8d39b9298ef",
+    "src/lzma/encode_options.zig": "aa2947fffc04a32ace3a4689d5dec60d64b19ab542fa0811f3176db3f8bf5d8c",
+    "src/lzma/encoder.zig": "c1ba5993d3f73a1000ff7b6ada8ca5e6d8e8546d4f330fe0b76a09858e1a76dd",
+    "src/lzma/fast_parse_tests.zig": "0b52523626a78cfd74231d4d18fcf044e1697b1c6794d54c0d7e7f7c67ca493f",
+    "src/lzma/history.zig": "04dd4bc80ee581028b4b2b40e1d7fce27c9833df9aef994fe705c1323d087746",
+    "src/lzma/incremental/contracts_tests.zig": "671bbd7b4550d109b48693e2c6912ebb5247fc1d75f97e429da29927d6e750e4",
+    "src/lzma/incremental/options.zig": "9ac6e9e864b9e2b1f66351e2ba41e99e132821ee54037560a919149e6f7d1c4f",
+    "src/lzma/incremental/resource_tests.zig": "2be92cfa6e39a564239c842be02e3dca5eef103c41c8ab951f554df15b5a6a15",
+    "src/lzma/incremental_decoder.zig": "2e8b19a29b8f648e56cf170241770573bb45c04f20f0005680c27c1ad61743b1",
+    "src/lzma/incremental_encoder.zig": "7ad8368b2be237b67eb2b05d14ed62714ef09b71444c16335ff63d377b534e21",
+    "src/lzma/incremental_encoder_tests.zig": "07a7b5dd8e8c77140c918023b494c646441e090abefaead283e76acbdaf6716c",
+    "src/lzma/incremental_tests.zig": "1da7cb99bb2784e7472a2c58e54e0327b90b54e95722e919b0243b11715506b3",
+    "src/lzma/large_dictionary_contract_helpers.zig": "de87299f825f2d5c28b24b849a5a7949d5f7d57f1b6bff3ca7445492bf4e7a37",
+    "src/lzma/large_dictionary_contract_tests.zig": "3b8303d3c4c07572695339d3be69ce06bd3b914ac43d9a85224a273f4426ac06",
+    "src/lzma/large_dictionary_core_tests.zig": "d6e574dd16045ed6ba610125735b542d90622fbc6334b6118d09d8d8b045f651",
+    "src/lzma/large_dictionary_wrapper_tests.zig": "0563bcc57ebafda36ba40878909ab101b1852bb560ecaf8c1b7039d3d32c1f2f",
+    "src/lzma/match_finder/source.zig": "dab97d6b46460a4aa6ab22e8ae6f7a1c409bf91e2e8c4a0dd7fdac6ad2374173",
+    "src/lzma/match_finder/tests.zig": "42f80acdc63ff5ff61abb4b7c82523c23a98da3ac1d9a1531cf92a7722770585",
+    "src/lzma/match_finder.zig": "2c6a4428e50f287bb6d140e13eda343a7f34e9807c34fbe448facda54d7482c0",
+    "src/lzma/micro_aligned_tests.zig": "f080f2f5b680675c099957daff28b0c80f9ec396f8d5a7719121988ec14f991e",
+    "src/lzma/micro_limited_tests.zig": "1978fd37399dca1647998de74038ff9dab3efacaa9adb06a9a44f0903eab0205",
+    "src/lzma/micro_limited_writer.zig": "63ade7be9fe0f84f3ca505d00fc1d0f712dab2f73f088a7c7ec9d1d5f214d7e7",
+    "src/lzma/micro_writer.zig": "23675b064ae95acc40beb65d472aacbfc12ccf84f67e22f6f8fd61e4a86b8d4c",
+    "src/lzma/micro_writer_tests.zig": "48ad0331000e70e54a684a1ac140a229952fdef80472201dd81704af2a784c57",
+    "src/lzma/one_shot/contracts_tests.zig": "6259e6903ba84326fc5bf6b8c711e7ee3d9e6c660fda6b01dee49adf33fcc0e6",
+    "src/lzma/one_shot/history_sink.zig": "b75ac72215ecc8bf5f9d4a0e23a8139285f7af07b9f15f91b4b26ed81e645b91",
+    "src/lzma/one_shot/resources_tests.zig": "77318c1c65a973abe6b41ce99f8f61e0508e7096cced6cc8945f23bf870beec0",
+    "src/lzma/one_shot/test_helpers.zig": "8e97c6e405f9a6714b9fcf9338a50fd79886a596b3398e0a958b6d6e1ce103e4",
+    "src/lzma/one_shot/workspace.zig": "a7782cc2b9ca6c41cd7f87b4660d0c37af40cc59832406ff5387d5ff04110aac",
+    "src/lzma/parse/fast.zig": "546bfeddf16446c0bf953f0946f1a1c0b1428cae20056b2ba4a25e09a1038553",
+    "src/lzma/parse/integration.zig": "b90b3fad376c93e4e7de1b0639e7cd05ecf8d5e61fc222244533ab8cd57c23c0",
+    "src/lzma/parse/normal.zig": "5efe558bcf727688bb0bf26cdfdafd56ab101f4ac7ef6388521d57897c86fd02",
+    "src/lzma/parse/planner.zig": "6adbfd912ae1231acf0d673bbe754a344dca013e42bfadb3483660b97209ad15",
+    "src/lzma/parse/prices.zig": "c4bb32948b153973efa81069324c27c95805b8b6bf3a10e5cf6993288a063fb7",
+    "src/lzma/parse/tests.zig": "d1674dcc04d5693ee5613f65dc9009783700d8188ea0044399f695d417ac3e2f",
+    "src/lzma/parse/types.zig": "d5996ee0aba75f19e694d57283431be2815ca407f57023173ebbcd04bdda8ac5",
+    "src/lzma/parse_oracle_helpers.zig": "16820c3843136e1a62966d6968c3d23944a14fc0a47283231650a2749a6e5a14",
+    "src/lzma/parse_oracle_tests.zig": "d9c0fc2550a84495ac9e271f56fcbdce2c1452f5a68f9dcebeb1d3d7846a800d",
+    "src/lzma/range_encoder.zig": "5a6f6ca227e8533837f9f2e8561e2bcc52432ab9cc1a1038928c940073466aee",
+    "src/lzma/wide_match.zig": "b1a9c5a1b4bcab70a09f2133dc99ac90a444af324e19c140678eebbbf78f4be0",
+    "src/lzma/wrapper_presets_tests.zig": "1cf62c4d864ce292414dc2ac9658f5c0c5509b55893232b513cccc169a272a90",
+    "src/lzma/writer.zig": "bcd6751e918edebf77982a1925e50f9f0e645e0af03d31b62cf80074586be2f3",
+    "src/xz/container.zig": "c9e7e7ac441649b06be3c79bfeb3f9c19a71d3941866d2fea96872297b388c77",
+    "src/xz/encode_controls_tests.zig": "70a6e05927418db23fd5b11cd83ab7628f26a7e287cbce697938c7b427468584",
+    "src/xz/encoder/chunk.zig": "d893edbc10efa1f76aae97da0f0efe8042010136cdcbde5542fa6658916a507e",
+    "src/xz/encoder/large_chunk_tests.zig": "e8b31e732dc1700339f0b0935919c8766965173c43a570547cba547526cb89b3",
+    "src/xz/encoder/preset_tests.zig": "7dc6dd57cb7fbc69fb7e5c608082b2e81871093ad1a7894647cffc3da38b09a7",
+    "src/xz/filters.zig": "93b4ac944d61758062e46f5f8178de7083da1bb136c131c3ee9918b9892f961f",
+    "src/xz/incremental/block_decoder.zig": "6d163697402335217b92781ed98d139e9e1c191f4536accbff5659b5d9bf9634",
+    "src/xz/incremental/checks.zig": "be8367dd740dfb278efcfc810fedca329a2315c7d48a7e7ff6e3ffbe9afe5ca1",
+    "src/xz/incremental/index_decoder.zig": "11c0d198587a9ee7a93e861d177da97ed7dba265f2cc0b4758022c88cd5737f3",
+    "src/xz/incremental/movement_tests.zig": "ef8589665bfaa54fdc9bca9ab2f82421391a1ff58218bfd2a93e33970e5a482a",
+    "src/xz/incremental/options.zig": "c8babfc28e0bce17924a19f86593a88f32551418be009c80d3523953eb65b8fa",
+    "src/xz/incremental/progressive_tests.zig": "04c5c6d6ebc793b0a7b2c3b69344854f2448cafbdeec6f4687948d2ea75c5597",
+    "src/xz/incremental/resource_tests.zig": "ef76a4bfa271861ff8a1af44a32e22136cdb77df87d4b55ead85839cf0a262a4",
+    "src/xz/incremental_decoder.zig": "8fb22b42092e5a53cd819f25c09a340331f248a20e30722f9ed364171de2f07d",
+    "src/xz/incremental_encoder.zig": "4d1830448352686cee8a70fb0d4fc2fb1aeed9ee07e4d7f74b2e1a06214d58ae",
+    "src/xz/incremental_encoder_tests.zig": "924ce7d284cf439d7cdf4c5e9aa5dda91b7638c297c6d7ff53e247a096802e1b",
+    "src/xz/incremental_filters.zig": "67defce0807558e3088fa17e521b628f2380373120a343afe97a2b44d04f7541",
+    "src/xz/incremental_tests.zig": "49550662093d1c1bf309fef90aea4a1a07029ca331677aa8fb271ee90cdd8701",
+    "src/xz/large_chunk_contract_helpers.zig": "dca0a55aa92d427818627f2022893eba22d9cb148f3ccee4501300d0cbb3bff9",
+    "src/xz/large_chunk_contract_tests.zig": "aa76363531b65598fc39e0a3c92994cb2d76bdbc5a372a09c9de377174cc64ee",
+    "src/xz/large_chunk_stream_helpers.zig": "28128c2f2bb5f6b91381176f435ef6089b13a54bf9491e195c1867b0f897ea81",
+    "src/xz/large_chunk_stream_tests.zig": "ea15e7f4da1148a6ca3439730b3c8461b3cc63f62df77a85cb829148a667e545",
+    "src/xz/lzma2/dictionary_capacity.zig": "3c512c25075f7bc4a10d7d25a75d02b5d3a34165ac267419cec00cb7f98cd9df",
+    "src/xz/lzma2/one_shot_tests.zig": "98019744667a29a3061290666d7ccd2713cf203818a3e8fac5f4886a61f9605a",
+    "src/xz/lzma2/options.zig": "5de5b13f2ded107be91568038595d2d092bd333731d45566346ab92624adb2c1",
+    "src/xz/lzma2/tests.zig": "f10a21a9eceb34843a55e017136676c21255ce75461f9b3eb891706111741ec4",
+    "src/xz/lzma2_incremental_decoder.zig": "48804683b9013f442dd69d2abc6248e5611095ebb7ebbb4c06914d2a67544522",
+    "src/xz/lzma2_incremental_encoder.zig": "f431c5360756cafbe7c146393fb8aecd72b1469cb1ca73b590e55d103ad4f3bc",
+    "src/xz/lzma2_writer.zig": "b4ed8db830569cf9f95b4dc13dfe332de064ae96d5843c7bf8841a423fbe25e3",
+    "src/xz/one_shot/contracts_tests.zig": "ea7f59f8066a710e4026fc81089e10b4157571f61d4bc3bb398b0364202b09ac",
+    "src/xz/one_shot/options.zig": "3296adb6711d765a2fd2b090fe2c9fe6e89588d1264ba032f71d2222748dfbfb",
+    "src/xz/one_shot/resources_tests.zig": "bb5dcac50c9f2cc1e248ba916edfb61603802a763a2de8e48892fc8b1f59c1bd",
+    "src/xz/one_shot/test_helpers.zig": "612c56943f4d5fa711fe25a6fb2f0a715739a9ca829ee722337f17d359887b0f",
+    "src/xz/one_shot/workspace.zig": "03d86e09b7dfbea2aedb48557ce8a76b1f82b62253bb1a3ea0f2a29a33d1408e",
+    "src/xz/writer.zig": "56ad582b990125ada092cf215d36e46fc882a758e04a0fc8f482fad3a4501536",
+    "tools/lzma/encode_controls_api.zig": "0264a5a0ecf2e788947776891f709adfd26038f7ee5970d102caf55f662dde16",
+    "tools/lzma/encode_controls_diff.py": "caf3137f638c9e55d43dc9144872df7bdb5cfe47776d60ca63d2874e4a90a59c",
+    "tools/lzma/encode_controls_legacy_probe.zig": "75c9eaf74bfea89d1aaa897c229bec7dd616b5083b03f4e79b1fbb6c284a4412",
+    "tools/lzma/encode_controls_probe.zig": "cbe5251d876ecf9c87875fd5334455a577d48e392717082044cdbe4869dd1123",
+    "tools/lzma/encode_controls_reference.c": "b042ecfc15532a5b82e2d1ac35ee15f50375564fc147f7dfd86465567509418d",
+    "tools/lzma/large_blocks_reference.c": "8261e633928cc9052545894dbb178742a9ee6802cb082a0a395429a7ef2ea7ba",
+    "tools/lzma/large_blocks_diff.py": "f27c142ed5f9ceb3f0f3cc3e5c1f05e99079b007bc0cb9d5170ec1d80737072f"
+  },
+  "source_after_sha256": {
+    "build.zig": "a47b77b5744640f99ab5c26b81679dc17c9d098e917a9d8b377b02e29c054888",
+    "build.zig.zon": "b57f43789b51f00ff488bcbe368536fea617383b77fcde3d217194e49e4f0480",
+    "src/root.zig": "a4089fdc3f42df4b8905a820f6f47612c1dd889d43137a6ed7004358c198e03e",
+    "src/core.zig": "5915c1cca0710212ba3f2d1d2edc1c84c513a391f35ae7ebd9cdbf8825043c5c",
+    "src/lzma.zig": "b47e036cee1e8187970963afda6fbd2f0b49bb02b2a70da895d292523698c08c",
+    "src/xz.zig": "7e323206fe1b248e5124baba0fae88d884ce25f260b9be78525837503d29c3c5",
+    "src/lzma/decoder.zig": "a32b869605fe25ae241e6d219f48a2d10b3cc1277b3e306c6b2e39f1b157d671",
+    "src/lzma/encode_controls_helpers.zig": "f7ff6962baddd079e96bd42638b08595ba12de09049848d5afb8f6829813aec1",
+    "src/lzma/encode_controls_tests.zig": "4a8fd3de4f2ccefe9b5c2212a4cb45029951486de0c375b36116c8d39b9298ef",
+    "src/lzma/encode_options.zig": "aa2947fffc04a32ace3a4689d5dec60d64b19ab542fa0811f3176db3f8bf5d8c",
+    "src/lzma/encoder.zig": "c1ba5993d3f73a1000ff7b6ada8ca5e6d8e8546d4f330fe0b76a09858e1a76dd",
+    "src/lzma/fast_parse_tests.zig": "0b52523626a78cfd74231d4d18fcf044e1697b1c6794d54c0d7e7f7c67ca493f",
+    "src/lzma/history.zig": "04dd4bc80ee581028b4b2b40e1d7fce27c9833df9aef994fe705c1323d087746",
+    "src/lzma/incremental/contracts_tests.zig": "671bbd7b4550d109b48693e2c6912ebb5247fc1d75f97e429da29927d6e750e4",
+    "src/lzma/incremental/options.zig": "9ac6e9e864b9e2b1f66351e2ba41e99e132821ee54037560a919149e6f7d1c4f",
+    "src/lzma/incremental/resource_tests.zig": "2be92cfa6e39a564239c842be02e3dca5eef103c41c8ab951f554df15b5a6a15",
+    "src/lzma/incremental_decoder.zig": "2e8b19a29b8f648e56cf170241770573bb45c04f20f0005680c27c1ad61743b1",
+    "src/lzma/incremental_encoder.zig": "7ad8368b2be237b67eb2b05d14ed62714ef09b71444c16335ff63d377b534e21",
+    "src/lzma/incremental_encoder_tests.zig": "07a7b5dd8e8c77140c918023b494c646441e090abefaead283e76acbdaf6716c",
+    "src/lzma/incremental_tests.zig": "1da7cb99bb2784e7472a2c58e54e0327b90b54e95722e919b0243b11715506b3",
+    "src/lzma/large_dictionary_contract_helpers.zig": "de87299f825f2d5c28b24b849a5a7949d5f7d57f1b6bff3ca7445492bf4e7a37",
+    "src/lzma/large_dictionary_contract_tests.zig": "3b8303d3c4c07572695339d3be69ce06bd3b914ac43d9a85224a273f4426ac06",
+    "src/lzma/large_dictionary_core_tests.zig": "d6e574dd16045ed6ba610125735b542d90622fbc6334b6118d09d8d8b045f651",
+    "src/lzma/large_dictionary_wrapper_tests.zig": "0563bcc57ebafda36ba40878909ab101b1852bb560ecaf8c1b7039d3d32c1f2f",
+    "src/lzma/match_finder/source.zig": "dab97d6b46460a4aa6ab22e8ae6f7a1c409bf91e2e8c4a0dd7fdac6ad2374173",
+    "src/lzma/match_finder/tests.zig": "42f80acdc63ff5ff61abb4b7c82523c23a98da3ac1d9a1531cf92a7722770585",
+    "src/lzma/match_finder.zig": "2c6a4428e50f287bb6d140e13eda343a7f34e9807c34fbe448facda54d7482c0",
+    "src/lzma/micro_aligned_tests.zig": "f080f2f5b680675c099957daff28b0c80f9ec396f8d5a7719121988ec14f991e",
+    "src/lzma/micro_limited_tests.zig": "1978fd37399dca1647998de74038ff9dab3efacaa9adb06a9a44f0903eab0205",
+    "src/lzma/micro_limited_writer.zig": "63ade7be9fe0f84f3ca505d00fc1d0f712dab2f73f088a7c7ec9d1d5f214d7e7",
+    "src/lzma/micro_writer.zig": "23675b064ae95acc40beb65d472aacbfc12ccf84f67e22f6f8fd61e4a86b8d4c",
+    "src/lzma/micro_writer_tests.zig": "48ad0331000e70e54a684a1ac140a229952fdef80472201dd81704af2a784c57",
+    "src/lzma/one_shot/contracts_tests.zig": "6259e6903ba84326fc5bf6b8c711e7ee3d9e6c660fda6b01dee49adf33fcc0e6",
+    "src/lzma/one_shot/history_sink.zig": "b75ac72215ecc8bf5f9d4a0e23a8139285f7af07b9f15f91b4b26ed81e645b91",
+    "src/lzma/one_shot/resources_tests.zig": "77318c1c65a973abe6b41ce99f8f61e0508e7096cced6cc8945f23bf870beec0",
+    "src/lzma/one_shot/test_helpers.zig": "8e97c6e405f9a6714b9fcf9338a50fd79886a596b3398e0a958b6d6e1ce103e4",
+    "src/lzma/one_shot/workspace.zig": "a7782cc2b9ca6c41cd7f87b4660d0c37af40cc59832406ff5387d5ff04110aac",
+    "src/lzma/parse/fast.zig": "546bfeddf16446c0bf953f0946f1a1c0b1428cae20056b2ba4a25e09a1038553",
+    "src/lzma/parse/integration.zig": "b90b3fad376c93e4e7de1b0639e7cd05ecf8d5e61fc222244533ab8cd57c23c0",
+    "src/lzma/parse/normal.zig": "5efe558bcf727688bb0bf26cdfdafd56ab101f4ac7ef6388521d57897c86fd02",
+    "src/lzma/parse/planner.zig": "6adbfd912ae1231acf0d673bbe754a344dca013e42bfadb3483660b97209ad15",
+    "src/lzma/parse/prices.zig": "c4bb32948b153973efa81069324c27c95805b8b6bf3a10e5cf6993288a063fb7",
+    "src/lzma/parse/tests.zig": "d1674dcc04d5693ee5613f65dc9009783700d8188ea0044399f695d417ac3e2f",
+    "src/lzma/parse/types.zig": "d5996ee0aba75f19e694d57283431be2815ca407f57023173ebbcd04bdda8ac5",
+    "src/lzma/parse_oracle_helpers.zig": "16820c3843136e1a62966d6968c3d23944a14fc0a47283231650a2749a6e5a14",
+    "src/lzma/parse_oracle_tests.zig": "d9c0fc2550a84495ac9e271f56fcbdce2c1452f5a68f9dcebeb1d3d7846a800d",
+    "src/lzma/range_encoder.zig": "5a6f6ca227e8533837f9f2e8561e2bcc52432ab9cc1a1038928c940073466aee",
+    "src/lzma/wide_match.zig": "b1a9c5a1b4bcab70a09f2133dc99ac90a444af324e19c140678eebbbf78f4be0",
+    "src/lzma/wrapper_presets_tests.zig": "1cf62c4d864ce292414dc2ac9658f5c0c5509b55893232b513cccc169a272a90",
+    "src/lzma/writer.zig": "bcd6751e918edebf77982a1925e50f9f0e645e0af03d31b62cf80074586be2f3",
+    "src/xz/container.zig": "c9e7e7ac441649b06be3c79bfeb3f9c19a71d3941866d2fea96872297b388c77",
+    "src/xz/encode_controls_tests.zig": "70a6e05927418db23fd5b11cd83ab7628f26a7e287cbce697938c7b427468584",
+    "src/xz/encoder/chunk.zig": "d893edbc10efa1f76aae97da0f0efe8042010136cdcbde5542fa6658916a507e",
+    "src/xz/encoder/large_chunk_tests.zig": "e8b31e732dc1700339f0b0935919c8766965173c43a570547cba547526cb89b3",
+    "src/xz/encoder/preset_tests.zig": "7dc6dd57cb7fbc69fb7e5c608082b2e81871093ad1a7894647cffc3da38b09a7",
+    "src/xz/filters.zig": "93b4ac944d61758062e46f5f8178de7083da1bb136c131c3ee9918b9892f961f",
+    "src/xz/incremental/block_decoder.zig": "6d163697402335217b92781ed98d139e9e1c191f4536accbff5659b5d9bf9634",
+    "src/xz/incremental/checks.zig": "be8367dd740dfb278efcfc810fedca329a2315c7d48a7e7ff6e3ffbe9afe5ca1",
+    "src/xz/incremental/index_decoder.zig": "11c0d198587a9ee7a93e861d177da97ed7dba265f2cc0b4758022c88cd5737f3",
+    "src/xz/incremental/movement_tests.zig": "ef8589665bfaa54fdc9bca9ab2f82421391a1ff58218bfd2a93e33970e5a482a",
+    "src/xz/incremental/options.zig": "c8babfc28e0bce17924a19f86593a88f32551418be009c80d3523953eb65b8fa",
+    "src/xz/incremental/progressive_tests.zig": "04c5c6d6ebc793b0a7b2c3b69344854f2448cafbdeec6f4687948d2ea75c5597",
+    "src/xz/incremental/resource_tests.zig": "ef76a4bfa271861ff8a1af44a32e22136cdb77df87d4b55ead85839cf0a262a4",
+    "src/xz/incremental_decoder.zig": "8fb22b42092e5a53cd819f25c09a340331f248a20e30722f9ed364171de2f07d",
+    "src/xz/incremental_encoder.zig": "4d1830448352686cee8a70fb0d4fc2fb1aeed9ee07e4d7f74b2e1a06214d58ae",
+    "src/xz/incremental_encoder_tests.zig": "924ce7d284cf439d7cdf4c5e9aa5dda91b7638c297c6d7ff53e247a096802e1b",
+    "src/xz/incremental_filters.zig": "67defce0807558e3088fa17e521b628f2380373120a343afe97a2b44d04f7541",
+    "src/xz/incremental_tests.zig": "49550662093d1c1bf309fef90aea4a1a07029ca331677aa8fb271ee90cdd8701",
+    "src/xz/large_chunk_contract_helpers.zig": "dca0a55aa92d427818627f2022893eba22d9cb148f3ccee4501300d0cbb3bff9",
+    "src/xz/large_chunk_contract_tests.zig": "aa76363531b65598fc39e0a3c92994cb2d76bdbc5a372a09c9de377174cc64ee",
+    "src/xz/large_chunk_stream_helpers.zig": "28128c2f2bb5f6b91381176f435ef6089b13a54bf9491e195c1867b0f897ea81",
+    "src/xz/large_chunk_stream_tests.zig": "ea15e7f4da1148a6ca3439730b3c8461b3cc63f62df77a85cb829148a667e545",
+    "src/xz/lzma2/dictionary_capacity.zig": "3c512c25075f7bc4a10d7d25a75d02b5d3a34165ac267419cec00cb7f98cd9df",
+    "src/xz/lzma2/one_shot_tests.zig": "98019744667a29a3061290666d7ccd2713cf203818a3e8fac5f4886a61f9605a",
+    "src/xz/lzma2/options.zig": "5de5b13f2ded107be91568038595d2d092bd333731d45566346ab92624adb2c1",
+    "src/xz/lzma2/tests.zig": "f10a21a9eceb34843a55e017136676c21255ce75461f9b3eb891706111741ec4",
+    "src/xz/lzma2_incremental_decoder.zig": "48804683b9013f442dd69d2abc6248e5611095ebb7ebbb4c06914d2a67544522",
+    "src/xz/lzma2_incremental_encoder.zig": "f431c5360756cafbe7c146393fb8aecd72b1469cb1ca73b590e55d103ad4f3bc",
+    "src/xz/lzma2_writer.zig": "b4ed8db830569cf9f95b4dc13dfe332de064ae96d5843c7bf8841a423fbe25e3",
+    "src/xz/one_shot/contracts_tests.zig": "ea7f59f8066a710e4026fc81089e10b4157571f61d4bc3bb398b0364202b09ac",
+    "src/xz/one_shot/options.zig": "3296adb6711d765a2fd2b090fe2c9fe6e89588d1264ba032f71d2222748dfbfb",
+    "src/xz/one_shot/resources_tests.zig": "bb5dcac50c9f2cc1e248ba916edfb61603802a763a2de8e48892fc8b1f59c1bd",
+    "src/xz/one_shot/test_helpers.zig": "612c56943f4d5fa711fe25a6fb2f0a715739a9ca829ee722337f17d359887b0f",
+    "src/xz/one_shot/workspace.zig": "03d86e09b7dfbea2aedb48557ce8a76b1f82b62253bb1a3ea0f2a29a33d1408e",
+    "src/xz/writer.zig": "56ad582b990125ada092cf215d36e46fc882a758e04a0fc8f482fad3a4501536",
+    "tools/lzma/encode_controls_api.zig": "0264a5a0ecf2e788947776891f709adfd26038f7ee5970d102caf55f662dde16",
+    "tools/lzma/encode_controls_diff.py": "caf3137f638c9e55d43dc9144872df7bdb5cfe47776d60ca63d2874e4a90a59c",
+    "tools/lzma/encode_controls_legacy_probe.zig": "75c9eaf74bfea89d1aaa897c229bec7dd616b5083b03f4e79b1fbb6c284a4412",
+    "tools/lzma/encode_controls_probe.zig": "cbe5251d876ecf9c87875fd5334455a577d48e392717082044cdbe4869dd1123",
+    "tools/lzma/encode_controls_reference.c": "b042ecfc15532a5b82e2d1ac35ee15f50375564fc147f7dfd86465567509418d",
+    "tools/lzma/large_blocks_reference.c": "8261e633928cc9052545894dbb178742a9ee6802cb082a0a395429a7ef2ea7ba",
+    "tools/lzma/large_blocks_diff.py": "f27c142ed5f9ceb3f0f3cc3e5c1f05e99079b007bc0cb9d5170ec1d80737072f"
+  },
+  "probe_sha256": "6aa04ea7f6a3776dbbc44be740c120385c6188b7d1982012eff75e0d19e44847",
+  "integration": {
+    "source_and_tools_revision": "b6b7bd7049da6491cc48c2b15533de4f6f96fdc9",
+    "checked_utc": "2026-10-24T03:36:06.691578+00:00",
+    "original_report_sha256": "1a29136e60934069a0bd133758acb46bd8675764f9505aa77e635efb232bfbad",
+    "source_changes_since_campaign": [
+      {
+        "path": "src/xz/lzma2_writer.zig",
+        "recorded_sha256": "b4ed8db830569cf9f95b4dc13dfe332de064ae96d5843c7bf8841a423fbe25e3",
+        "current_sha256": "d1349a9377c50683f1de139183dd0816ed3a7be3bf4e2c528c95d605cd6c5200"
+      }
+    ],
+    "scope_note": "Any source difference is disclosed; named property expectations may change without changing codec production behavior.",
+    "test_only_delta_verified": {
+      "path": "src/xz/lzma2_writer.zig",
+      "production_prefix_sha256": "56415f91a80b2dfd59e832d5060a9e3ceb2e453c394b9ff28797d0fd3d78f516",
+      "production_bytes_equal_to_verified_compiler_snapshot": true,
+      "change": "Retain explicit 64 MiB property-28 row and add 1 GiB/1.5 GiB property-36/37 test expectations."
+    },
+    "root_test_only_delta": {
+      "path": "src/root.zig",
+      "compiled_snapshot_sha256": "a4089fdc3f42df4b8905a820f6f47612c1dd889d43137a6ed7004358c198e03e",
+      "current_sha256": "e12e36c29fc26bc24f656be9b0183a20a0e1b96f5dc46cdb3feeed4c830baa01",
+      "only_named_test_expectations_changed": true,
+      "targeted_root_named_test_passed": true
+    },
+    "build_graph_delta": {
+      "change": "Add run-lzma2-large-blocks-diff wrapper around the already-validated public probe and reference driver.",
+      "validated_by": "zig build -l, exit0; codec/source behavior unchanged."
+    }
+  },
+  "provenance": {
+    "cpu": "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz",
+    "platform": "Linux-6.8.0-79-generic-x86_64-with-glibc2.35",
+    "zig_version": "0.16.0",
+    "zig_sha256": "2317bbb91798556d9d0f38aabdac23db83f0979b25f767259ae474546724087c",
+    "purpose": "functional and resource validation; no competitor throughput or RSS ranking"
+  }
+}

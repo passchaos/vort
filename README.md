@@ -442,12 +442,17 @@ The library is under active development. Its current capabilities include:
 - shared LZMA1/LZMA2 compression presets 0...9 and extreme configuration,
   real HC3/HC4 and BT2/BT3/BT4 matchers, repeat-aware fast parsing with
   next-position decisions, 4096-position/8-state normal cost search, adjustable
-  nice length/depth, 4 KiB...64 MiB encoder dictionaries and requested
+  nice length/depth, 4 KiB...1.5 GiB encoder dictionaries and requested
   matcher/parser memory limits, exposed through Alone, ZIP-LZMA, MicroLZMA,
   raw LZMA2, XZ and their supported incremental APIs; configuration helpers,
   actual work profiles and CLI flags share library behavior, while legacy
   default wires remain covered by independent regression fixtures. See the
   [compression-control contracts](docs/formats/lzma-encode-controls.md);
+  raw LZMA2/XZ additionally accept 1...2 MiB configured plaintext groups with
+  full 21-bit compressed lengths, bounded 64 KiB completed range payloads and
+  transactional 64 KiB stored fallback packets, while default groups remain
+  64 KiB. Raw incremental output limits can be explicit or derived from group
+  size, and snapshots support retry after a rejected group;
 - pure Zig Unix `compress` (`.Z`) LZW encoding and decoding with 9..16-bit
   variable-width LSB-first codes, block-mode dictionary clears, non-block
   dictionary freeze, caller-owned/bounded APIs, bit-progressive incremental
