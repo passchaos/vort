@@ -3,6 +3,18 @@ const checksum = @import("checksum.zig");
 
 pub const cover = @import("dictionary/cover.zig");
 pub const cover_optimize = @import("dictionary/cover_optimize.zig");
+pub const fast_cover = @import("dictionary/fast_cover.zig");
+pub const fast_cover_optimize = @import("dictionary/fast_cover_optimize.zig");
+pub const FastCoverTrainOptions = fast_cover.TrainOptions;
+pub const FastCoverTrainProfile = fast_cover.Profile;
+pub const PreparedFastCover = fast_cover.Prepared;
+pub const OwnedFastCoverDictionary = fast_cover.OwnedResult;
+pub const FastCoverOptimizeOptions = fast_cover_optimize.OptimizeOptions;
+pub const FastCoverOptimizeProfile = fast_cover_optimize.Profile;
+pub const FastCoverOptimizeScore = fast_cover_optimize.Score;
+pub const FastCoverSplitPoint = fast_cover_optimize.SplitPoint;
+pub const OwnedOptimizedFastCoverDictionary = fast_cover_optimize.OwnedResult;
+pub const splitFastCoverSamples = fast_cover_optimize.splitSamples;
 pub const CoverTrainOptions = cover.TrainOptions;
 pub const CoverOptimizeOptions = cover_optimize.OptimizeOptions;
 pub const CoverOptimizeScore = cover_optimize.Score;
@@ -11,6 +23,10 @@ pub const OwnedOptimizedCoverDictionary = cover_optimize.OwnedResult;
 test {
     _ = cover;
     _ = cover_optimize;
+    _ = fast_cover;
+    _ = fast_cover_optimize;
+    _ = @import("dictionary/fast_cover_tests.zig");
+    _ = @import("dictionary/fast_cover_resource_tests.zig");
 }
 
 const patch_magic = [_]u8{ 'V', 'D', 'C', 'T' };
@@ -238,6 +254,87 @@ pub fn trainCoverAlloc(
     options: CoverTrainOptions,
 ) ![]u8 {
     return cover.trainAlloc(allocator, samples, options);
+}
+
+/// Accelerated, sample-boundary-safe FastCover history selection.
+pub fn trainFastCoverAlloc(
+    allocator: std.mem.Allocator,
+    samples: []const []const u8,
+    options: FastCoverTrainOptions,
+) ![]u8 {
+    return fast_cover.trainAlloc(allocator, samples, options);
+}
+
+/// Return the same history plus actual preparation and selection work.
+pub fn trainFastCoverProfiledAlloc(
+    allocator: std.mem.Allocator,
+    samples: []const []const u8,
+    options: FastCoverTrainOptions,
+) !OwnedFastCoverDictionary {
+    return fast_cover.trainAllocProfiled(allocator, samples, options);
+}
+
+const FastCoverValidationScorer = struct {
+    scorer: CoverValidationScorer,
+
+    pub fn init(
+        allocator: std.mem.Allocator,
+        _: void,
+        _: []const []const u8,
+        _: []const []const u8,
+        _: FastCoverOptimizeOptions,
+    ) !FastCoverValidationScorer {
+        return .{ .scorer = .{ .allocator = allocator } };
+    }
+
+    pub fn score(
+        self: *FastCoverValidationScorer,
+        content: []const u8,
+        samples: []const []const u8,
+        minimum: usize,
+        _: FastCoverTrainOptions,
+    ) !FastCoverOptimizeScore {
+        const value = try self.scorer.score(content, samples, minimum);
+        return .{
+            .estimated_bits = value.estimated_bits,
+            .covered_bytes = value.covered_bytes,
+            .matches = value.matches,
+            .distance_bits = value.distance_bits,
+            .dictionary_bytes = content.len,
+        };
+    }
+
+    pub fn deinit(self: *FastCoverValidationScorer) void {
+        self.scorer.deinit();
+    }
+};
+
+/// Select FastCover parameters with independent scorer state and a charged
+/// dictionary/match cost. Parallel candidates retain deterministic selection.
+pub fn trainOptimizedFastCoverAlloc(
+    allocator: std.mem.Allocator,
+    training_samples: []const []const u8,
+    validation_samples: []const []const u8,
+    options: FastCoverOptimizeOptions,
+) !OwnedOptimizedFastCoverDictionary {
+    return fast_cover_optimize.trainAllocWithScorerFactory(
+        allocator,
+        training_samples,
+        validation_samples,
+        options,
+        {},
+        FastCoverValidationScorer,
+    );
+}
+
+pub fn trainOptimizedFastCoverSplitAlloc(
+    allocator: std.mem.Allocator,
+    samples: []const []const u8,
+    split: FastCoverSplitPoint,
+    options: FastCoverOptimizeOptions,
+) !OwnedOptimizedFastCoverDictionary {
+    const partitions = try splitFastCoverSamples(samples, split);
+    return trainOptimizedFastCoverAlloc(allocator, partitions.training, partitions.validation, options);
 }
 
 /// Select `(d, k, hash_log)` on held-out samples using the shared greedy
