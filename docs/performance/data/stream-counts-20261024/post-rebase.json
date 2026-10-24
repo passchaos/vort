@@ -1,0 +1,74 @@
+{
+  "head": "95424ae60e1b87870462d13375bfeb1d30301f45",
+  "help_exit_code": 0,
+  "source_delta": [],
+  "status": "passed",
+  "steps": [
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "check",
+        "-Doptimize=Debug",
+        "-j8",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "name": "check",
+      "seconds": 390.05290631903335
+    },
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "test-br-stream-counters",
+        "test-zstd-stream-counters",
+        "test-stream-count",
+        "test-xxh64-stream",
+        "test-stream-counters-wasm",
+        "-Doptimize=ReleaseFast",
+        "-j4",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "name": "native-counts-wasm",
+      "seconds": 86.90839795698412
+    },
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "test-br-stream-counters",
+        "test-zstd-stream-counters",
+        "test-stream-count",
+        "test-xxh64-stream",
+        "-Doptimize=ReleaseFast",
+        "-Dtarget=x86-linux-musl",
+        "-j4",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "name": "x86-counts",
+      "seconds": 82.85268353205174
+    },
+    {
+      "command": [
+        "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+        "build",
+        "test-br-general-window-cli",
+        "test-zstd-window-memory-cli",
+        "-Doptimize=Debug",
+        "-j4",
+        "--summary",
+        "all"
+      ],
+      "exit_code": 0,
+      "name": "cli",
+      "seconds": 21.562550466973335
+    }
+  ],
+  "utc": "2026-10-24T16:11:41.850734+00:00"
+}

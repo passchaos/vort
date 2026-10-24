@@ -1,0 +1,909 @@
+{
+  "schema": "vort-br-zstd-real-wide-stream-final-v1",
+  "status": "ok",
+  "scope": "six approved real-byte groups represented by seven operations per target; native RLE completion precedes the exact-zero-skippable fix and is explicitly reused",
+  "targets": [
+    "native64 ReleaseFast",
+    "x86-linux-musl ReleaseFast"
+  ],
+  "rows": [
+    {
+      "phase": "native_complete",
+      "case": "zstd-rle",
+      "pointer_bits": 64,
+      "probe_sha256": "be387b2c5e8b22d8f183d680d10b2c471d6a3b10a9aa8392a4bdc00b16e90d82",
+      "reused_public_operation": true,
+      "allocation_live_after_deinit": 0,
+      "policy_results": [
+        {
+          "policy": "block_stream",
+          "input_bytes": 131094,
+          "output_bytes": 4294967297,
+          "done": true,
+          "snapshot_metadata_bytes": 0,
+          "decoder_peak_working_bytes": 1048592,
+          "caller_steps": 65537
+        },
+        {
+          "policy": "prevalidated_frame",
+          "input_bytes": 131094,
+          "output_bytes": 4294967297,
+          "done": true,
+          "snapshot_metadata_bytes": 0,
+          "decoder_peak_working_bytes": 1310720,
+          "caller_steps": 65539
+        }
+      ]
+    },
+    {
+      "phase": "native_complete",
+      "case": "zstd-skip",
+      "pointer_bits": 64,
+      "probe_sha256": "310b4a197e4bcaff5319c949956fafbacf171a520f46539d5fe62739ab013116",
+      "reused_public_operation": false,
+      "allocation_live_after_deinit": 0,
+      "policy_results": [
+        {
+          "policy": "block_stream",
+          "input_bytes": 4294967313,
+          "output_bytes": 0,
+          "done": true,
+          "snapshot_metadata_bytes": 4294967297,
+          "decoder_peak_working_bytes": 16,
+          "caller_steps": 65539
+        },
+        {
+          "policy": "prevalidated_frame",
+          "input_bytes": 4294967313,
+          "output_bytes": 0,
+          "done": true,
+          "snapshot_metadata_bytes": 4294967297,
+          "decoder_peak_working_bytes": 16,
+          "caller_steps": 65539
+        }
+      ]
+    },
+    {
+      "phase": "native_complete",
+      "case": "zstd-encode",
+      "pointer_bits": 64,
+      "probe_sha256": "310b4a197e4bcaff5319c949956fafbacf171a520f46539d5fe62739ab013116",
+      "reused_public_operation": false,
+      "allocation_live_after_deinit": 0,
+      "encoder_progress": {
+        "input_read": 4294967313,
+        "output_written": 131110,
+        "steps": 65538,
+        "completed": true
+      },
+      "codec_allocation_peak": 196950,
+      "content_xxh64": 9206277331462598459,
+      "total_memory_profile": {
+        "available": true,
+        "peak_requested_bytes": 196950,
+        "live_requested_bytes": 0,
+        "limit": 8388608
+      }
+    },
+    {
+      "phase": "native_complete",
+      "case": "br-metadata",
+      "pointer_bits": 64,
+      "probe_sha256": "8ff7de28b905129e36495d48d1d7e51df30ba3ac4134f0a5be7067c5aba75fe2",
+      "reused_public_operation": false,
+      "allocation_live_after_deinit": 0,
+      "consumer_results": [
+        {
+          "consumer": "copy_caller_history",
+          "input_bytes": 4294968324,
+          "output_bytes": 0,
+          "done": true,
+          "metadata_bytes": 4294967297,
+          "metadata_blocks": 257,
+          "captured_metadata_bytes": 19,
+          "metadata_truncated": true,
+          "first_two_metadata_lengths": [
+            16777216,
+            16777216
+          ],
+          "copy_distance": 0,
+          "history_bytes": 65535
+        },
+        {
+          "consumer": "owned_general",
+          "input_bytes": 4294968324,
+          "output_bytes": 0,
+          "done": true,
+          "metadata_bytes": 4294967297,
+          "metadata_blocks": 257,
+          "captured_metadata_bytes": 19,
+          "metadata_truncated": true,
+          "first_two_metadata_lengths": [
+            16777216,
+            16777216
+          ],
+          "copy_distance": 0,
+          "history_bytes": 0
+        },
+        {
+          "consumer": "stored_subset",
+          "input_bytes": 4294968324,
+          "output_bytes": 0,
+          "done": true,
+          "metadata_bytes": 4294967297,
+          "metadata_blocks": 257,
+          "captured_metadata_bytes": 19,
+          "metadata_truncated": true,
+          "first_two_metadata_lengths": [
+            16777216,
+            16777216
+          ],
+          "copy_distance": null,
+          "history_bytes": 0
+        }
+      ],
+      "codec_allocation_peak": 65520
+    },
+    {
+      "phase": "native_complete",
+      "case": "br-stored-copy",
+      "pointer_bits": 64,
+      "probe_sha256": "8ff7de28b905129e36495d48d1d7e51df30ba3ac4134f0a5be7067c5aba75fe2",
+      "reused_public_operation": false,
+      "allocation_live_after_deinit": 0,
+      "consumer_results": [
+        {
+          "consumer": "copy_caller_history",
+          "input_bytes": 4294968332,
+          "output_bytes": 4294969344,
+          "done": true,
+          "metadata_bytes": 0,
+          "metadata_blocks": 0,
+          "captured_metadata_bytes": 0,
+          "metadata_truncated": false,
+          "first_two_metadata_lengths": [
+            0,
+            0
+          ],
+          "copy_distance": 2048,
+          "history_bytes": 65535
+        },
+        {
+          "consumer": "owned_general",
+          "input_bytes": 4294968332,
+          "output_bytes": 4294969344,
+          "done": true,
+          "metadata_bytes": 0,
+          "metadata_blocks": 0,
+          "captured_metadata_bytes": 0,
+          "metadata_truncated": false,
+          "first_two_metadata_lengths": [
+            0,
+            0
+          ],
+          "copy_distance": 2048,
+          "history_bytes": 65520
+        }
+      ],
+      "codec_allocation_peak": 65520
+    },
+    {
+      "phase": "native_complete",
+      "case": "br-stored-subset",
+      "pointer_bits": 64,
+      "probe_sha256": "8ff7de28b905129e36495d48d1d7e51df30ba3ac4134f0a5be7067c5aba75fe2",
+      "reused_public_operation": false,
+      "allocation_live_after_deinit": 0,
+      "consumer_results": [
+        {
+          "consumer": "copy_caller_history",
+          "input_bytes": 4294968325,
+          "output_bytes": 4294967297,
+          "done": true,
+          "metadata_bytes": 0,
+          "metadata_blocks": 0,
+          "captured_metadata_bytes": 0,
+          "metadata_truncated": false,
+          "first_two_metadata_lengths": [
+            0,
+            0
+          ],
+          "copy_distance": 0,
+          "history_bytes": 65535
+        },
+        {
+          "consumer": "owned_general",
+          "input_bytes": 4294968325,
+          "output_bytes": 4294967297,
+          "done": true,
+          "metadata_bytes": 0,
+          "metadata_blocks": 0,
+          "captured_metadata_bytes": 0,
+          "metadata_truncated": false,
+          "first_two_metadata_lengths": [
+            0,
+            0
+          ],
+          "copy_distance": 0,
+          "history_bytes": 65520
+        },
+        {
+          "consumer": "stored_subset",
+          "input_bytes": 4294968325,
+          "output_bytes": 4294967297,
+          "done": true,
+          "metadata_bytes": 0,
+          "metadata_blocks": 0,
+          "captured_metadata_bytes": 0,
+          "metadata_truncated": false,
+          "first_two_metadata_lengths": [
+            0,
+            0
+          ],
+          "copy_distance": null,
+          "history_bytes": 0
+        }
+      ],
+      "codec_allocation_peak": 65520
+    },
+    {
+      "phase": "native_complete",
+      "case": "br-encode",
+      "pointer_bits": 64,
+      "probe_sha256": "8ff7de28b905129e36495d48d1d7e51df30ba3ac4134f0a5be7067c5aba75fe2",
+      "reused_public_operation": false,
+      "allocation_live_after_deinit": 0,
+      "encoder_progress": {
+        "input_read": 4294967297,
+        "output_written": 4295163909,
+        "steps": 65541,
+        "completed": true
+      },
+      "codec_allocation_peak": 196997,
+      "emitted_wire_sha256": "f4a217a8f5d8ab136c61cfe8f2329d1b9ada351cdbbf4cc6c1b0c30ca0c2ebb4",
+      "emitted_wire_bytes": 4295163909,
+      "internal_public_stored_decoder_verified": true
+    },
+    {
+      "phase": "x86_complete",
+      "case": "zstd-rle",
+      "pointer_bits": 32,
+      "probe_sha256": "21fe4ac39267b28fe23ca3152a18662c5bd46028d4a349b38c51e38aa539411d",
+      "reused_public_operation": false,
+      "allocation_live_after_deinit": 0,
+      "policy_results": [
+        {
+          "policy": "block_stream",
+          "input_bytes": 131094,
+          "output_bytes": 4294967297,
+          "done": true,
+          "snapshot_metadata_bytes": 0,
+          "decoder_peak_working_bytes": 1048592,
+          "caller_steps": 65537
+        },
+        {
+          "policy": "prevalidated_frame",
+          "input_bytes": 131094,
+          "output_bytes": 4294967297,
+          "done": true,
+          "snapshot_metadata_bytes": 0,
+          "decoder_peak_working_bytes": 1310720,
+          "caller_steps": 65539
+        }
+      ]
+    },
+    {
+      "phase": "x86_complete",
+      "case": "zstd-skip",
+      "pointer_bits": 32,
+      "probe_sha256": "21fe4ac39267b28fe23ca3152a18662c5bd46028d4a349b38c51e38aa539411d",
+      "reused_public_operation": false,
+      "allocation_live_after_deinit": 0,
+      "policy_results": [
+        {
+          "policy": "block_stream",
+          "input_bytes": 4294967313,
+          "output_bytes": 0,
+          "done": true,
+          "snapshot_metadata_bytes": 4294967297,
+          "decoder_peak_working_bytes": 16,
+          "caller_steps": 65539
+        },
+        {
+          "policy": "prevalidated_frame",
+          "input_bytes": 4294967313,
+          "output_bytes": 0,
+          "done": true,
+          "snapshot_metadata_bytes": 4294967297,
+          "decoder_peak_working_bytes": 16,
+          "caller_steps": 65539
+        }
+      ]
+    },
+    {
+      "phase": "x86_complete",
+      "case": "zstd-encode",
+      "pointer_bits": 32,
+      "probe_sha256": "21fe4ac39267b28fe23ca3152a18662c5bd46028d4a349b38c51e38aa539411d",
+      "reused_public_operation": false,
+      "allocation_live_after_deinit": 0,
+      "encoder_progress": {
+        "input_read": 4294967313,
+        "output_written": 131110,
+        "steps": 65538,
+        "completed": true
+      },
+      "codec_allocation_peak": 196782,
+      "content_xxh64": 9206277331462598459,
+      "total_memory_profile": {
+        "available": true,
+        "peak_requested_bytes": 196782,
+        "live_requested_bytes": 0,
+        "limit": 8388608
+      }
+    },
+    {
+      "phase": "x86_complete",
+      "case": "br-metadata",
+      "pointer_bits": 32,
+      "probe_sha256": "c225cadf77cb185083c549d713d8bc5b28eb40c7292cfe26a848121bc1ff38b9",
+      "reused_public_operation": false,
+      "allocation_live_after_deinit": 0,
+      "consumer_results": [
+        {
+          "consumer": "copy_caller_history",
+          "input_bytes": 4294968324,
+          "output_bytes": 0,
+          "done": true,
+          "metadata_bytes": 4294967297,
+          "metadata_blocks": 257,
+          "captured_metadata_bytes": 19,
+          "metadata_truncated": true,
+          "first_two_metadata_lengths": [
+            16777216,
+            16777216
+          ],
+          "copy_distance": 0,
+          "history_bytes": 65535
+        },
+        {
+          "consumer": "owned_general",
+          "input_bytes": 4294968324,
+          "output_bytes": 0,
+          "done": true,
+          "metadata_bytes": 4294967297,
+          "metadata_blocks": 257,
+          "captured_metadata_bytes": 19,
+          "metadata_truncated": true,
+          "first_two_metadata_lengths": [
+            16777216,
+            16777216
+          ],
+          "copy_distance": 0,
+          "history_bytes": 0
+        },
+        {
+          "consumer": "stored_subset",
+          "input_bytes": 4294968324,
+          "output_bytes": 0,
+          "done": true,
+          "metadata_bytes": 4294967297,
+          "metadata_blocks": 257,
+          "captured_metadata_bytes": 19,
+          "metadata_truncated": true,
+          "first_two_metadata_lengths": [
+            16777216,
+            16777216
+          ],
+          "copy_distance": null,
+          "history_bytes": 0
+        }
+      ],
+      "codec_allocation_peak": 65520
+    },
+    {
+      "phase": "x86_complete",
+      "case": "br-stored-copy",
+      "pointer_bits": 32,
+      "probe_sha256": "c225cadf77cb185083c549d713d8bc5b28eb40c7292cfe26a848121bc1ff38b9",
+      "reused_public_operation": false,
+      "allocation_live_after_deinit": 0,
+      "consumer_results": [
+        {
+          "consumer": "copy_caller_history",
+          "input_bytes": 4294968332,
+          "output_bytes": 4294969344,
+          "done": true,
+          "metadata_bytes": 0,
+          "metadata_blocks": 0,
+          "captured_metadata_bytes": 0,
+          "metadata_truncated": false,
+          "first_two_metadata_lengths": [
+            0,
+            0
+          ],
+          "copy_distance": 2048,
+          "history_bytes": 65535
+        },
+        {
+          "consumer": "owned_general",
+          "input_bytes": 4294968332,
+          "output_bytes": 4294969344,
+          "done": true,
+          "metadata_bytes": 0,
+          "metadata_blocks": 0,
+          "captured_metadata_bytes": 0,
+          "metadata_truncated": false,
+          "first_two_metadata_lengths": [
+            0,
+            0
+          ],
+          "copy_distance": 2048,
+          "history_bytes": 65520
+        }
+      ],
+      "codec_allocation_peak": 65520
+    },
+    {
+      "phase": "x86_complete",
+      "case": "br-stored-subset",
+      "pointer_bits": 32,
+      "probe_sha256": "c225cadf77cb185083c549d713d8bc5b28eb40c7292cfe26a848121bc1ff38b9",
+      "reused_public_operation": false,
+      "allocation_live_after_deinit": 0,
+      "consumer_results": [
+        {
+          "consumer": "copy_caller_history",
+          "input_bytes": 4294968325,
+          "output_bytes": 4294967297,
+          "done": true,
+          "metadata_bytes": 0,
+          "metadata_blocks": 0,
+          "captured_metadata_bytes": 0,
+          "metadata_truncated": false,
+          "first_two_metadata_lengths": [
+            0,
+            0
+          ],
+          "copy_distance": 0,
+          "history_bytes": 65535
+        },
+        {
+          "consumer": "owned_general",
+          "input_bytes": 4294968325,
+          "output_bytes": 4294967297,
+          "done": true,
+          "metadata_bytes": 0,
+          "metadata_blocks": 0,
+          "captured_metadata_bytes": 0,
+          "metadata_truncated": false,
+          "first_two_metadata_lengths": [
+            0,
+            0
+          ],
+          "copy_distance": 0,
+          "history_bytes": 65520
+        },
+        {
+          "consumer": "stored_subset",
+          "input_bytes": 4294968325,
+          "output_bytes": 4294967297,
+          "done": true,
+          "metadata_bytes": 0,
+          "metadata_blocks": 0,
+          "captured_metadata_bytes": 0,
+          "metadata_truncated": false,
+          "first_two_metadata_lengths": [
+            0,
+            0
+          ],
+          "copy_distance": null,
+          "history_bytes": 0
+        }
+      ],
+      "codec_allocation_peak": 65520
+    },
+    {
+      "phase": "x86_complete",
+      "case": "br-encode",
+      "pointer_bits": 32,
+      "probe_sha256": "c225cadf77cb185083c549d713d8bc5b28eb40c7292cfe26a848121bc1ff38b9",
+      "reused_public_operation": false,
+      "allocation_live_after_deinit": 0,
+      "encoder_progress": {
+        "input_read": 4294967297,
+        "output_written": 4295163909,
+        "steps": 65541,
+        "completed": true
+      },
+      "codec_allocation_peak": 196805,
+      "emitted_wire_sha256": "f4a217a8f5d8ab136c61cfe8f2329d1b9ada351cdbbf4cc6c1b0c30ca0c2ebb4",
+      "emitted_wire_bytes": 4295163909,
+      "internal_public_stored_decoder_verified": true
+    }
+  ],
+  "completed_operation_rows_per_target": 7,
+  "original_failed_phase": {
+    "path": "native/original-phase-summary.json",
+    "failure": "SizeMismatch after first skippable frame under exact-zero-output pledge; production fixed with tiny two-member regression",
+    "original_rle_public_result_reused": true,
+    "original_two_reference_rle_raw_receipts_missing": true,
+    "subsequent_reference_only_receipt_supplement": "native-resume/reference-checkpoints.json"
+  },
+  "reference_receipts": {
+    "zstd-rle": [
+      {
+        "input_read": 131094,
+        "output_written": 4294967297,
+        "calls": 65537,
+        "content_checks": 65537,
+        "xxh64": 12200825696484322693,
+        "done": 1,
+        "failed": 0
+      },
+      {
+        "input_read": 131094,
+        "output_written": 4294967297,
+        "calls": 65537,
+        "content_checks": 65537,
+        "xxh64": 12200825696484322693,
+        "done": 1,
+        "failed": 0
+      }
+    ],
+    "zstd-skip": [
+      {
+        "input_read": 4294967313,
+        "output_written": 0,
+        "calls": 65539,
+        "content_checks": 65539,
+        "xxh64": 17241709254077376921,
+        "done": 1,
+        "failed": 0
+      },
+      {
+        "input_read": 4294967313,
+        "output_written": 0,
+        "calls": 65539,
+        "content_checks": 65539,
+        "xxh64": 17241709254077376921,
+        "done": 1,
+        "failed": 0
+      }
+    ],
+    "zstd-encode": [
+      {
+        "input_read": 131110,
+        "output_written": 4294967313,
+        "calls": 65537,
+        "content_checks": 65537,
+        "xxh64": 9206277331462598459,
+        "done": 1,
+        "failed": 0
+      },
+      {
+        "input_read": 131110,
+        "output_written": 4294967313,
+        "calls": 65537,
+        "content_checks": 65537,
+        "xxh64": 9206277331462598459,
+        "done": 1,
+        "failed": 0
+      }
+    ],
+    "br-metadata": [
+      {
+        "input_read": 4294968324,
+        "output_written": 0,
+        "calls": 65795,
+        "content_checks": 65795,
+        "xxh64": 17241709254077376921,
+        "done": 1,
+        "failed": 0
+      },
+      {
+        "input_read": 4294968324,
+        "output_written": 0,
+        "calls": 65795,
+        "content_checks": 65795,
+        "xxh64": 17241709254077376921,
+        "done": 1,
+        "failed": 0
+      }
+    ],
+    "br-stored-copy": [
+      {
+        "input_read": 4294968332,
+        "output_written": 4294969344,
+        "calls": 131329,
+        "content_checks": 131329,
+        "xxh64": 17614004519654935499,
+        "done": 1,
+        "failed": 0
+      },
+      {
+        "input_read": 4294968332,
+        "output_written": 4294969344,
+        "calls": 131329,
+        "content_checks": 131329,
+        "xxh64": 17614004519654935499,
+        "done": 1,
+        "failed": 0
+      }
+    ],
+    "br-stored-subset": [
+      {
+        "input_read": 4294968325,
+        "output_written": 4294967297,
+        "calls": 131331,
+        "content_checks": 131331,
+        "xxh64": 15525954291494440612,
+        "done": 1,
+        "failed": 0
+      },
+      {
+        "input_read": 4294968325,
+        "output_written": 4294967297,
+        "calls": 131331,
+        "content_checks": 131331,
+        "xxh64": 15525954291494440612,
+        "done": 1,
+        "failed": 0
+      }
+    ],
+    "br-encode": [
+      {
+        "input_read": 4295163909,
+        "output_written": 4294967297,
+        "calls": 65541,
+        "content_checks": 65541,
+        "xxh64": 15525954291494440612,
+        "done": 1,
+        "failed": 0
+      },
+      {
+        "input_read": 4295163909,
+        "output_written": 4294967297,
+        "calls": 65541,
+        "content_checks": 65541,
+        "xxh64": 15525954291494440612,
+        "done": 1,
+        "failed": 0
+      }
+    ]
+  },
+  "reference_layers": [
+    {
+      "helper": "/tmp/vort-stream-reference-modern.so",
+      "helper_sha256": "3e05323137352362dfd22ab775dd7404410c21caab669195bd0ed55d3c6502b3",
+      "zstd_header": 10600,
+      "zstd_runtime": 10600,
+      "br_runtime": "0x1002000",
+      "libraries": [
+        {
+          "path": "/home/passchaos/Work/zstd/lib/obj/conf_5c583a1f84006a106cd7292ce5d65f11/dynamic/libzstd.so.1.6.0",
+          "sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e"
+        },
+        {
+          "path": "/tmp/vort-brotli-shared-build/libbrotlidec.so.1.2.0",
+          "sha256": "c36742c69834733645a22501d5001756f75ff7737a7894b8cdd6db2fda6c1fe2"
+        }
+      ]
+    },
+    {
+      "helper": "/tmp/vort-stream-reference-system.so",
+      "helper_sha256": "23777e2065c5f920f4396302bead82ec4a889c27c7f54a850866635e6afcb7ba",
+      "zstd_header": 10408,
+      "zstd_runtime": 10408,
+      "br_runtime": "0x1000009",
+      "libraries": [
+        {
+          "path": "/usr/lib/x86_64-linux-gnu/libzstd.so.1.4.8",
+          "sha256": "5df4f4df42d76270bb6981fabc7c1fdccd8ad28a23d84d67f73203fb3f537667"
+        },
+        {
+          "path": "/usr/lib/x86_64-linux-gnu/libbrotlidec.so.1.0.9",
+          "sha256": "db9dbda709a46c3ae124433f47c4db71167db8aaba4eafdfd99c8a3a14584463"
+        }
+      ]
+    }
+  ],
+  "x86_reference_reuse": {
+    "path": "native-resume/report.json",
+    "sha256": "cd5c5ff0a7650215f6c5cf75e5186fd479a7d2628634070d4d8224b487b04e60",
+    "large_reference_decodes_repeated_on_x86": false,
+    "tiny_normal_history_tail_reference_fixture_rechecked": true
+  },
+  "actual_byte_geometry": {
+    "zstd_rle_output": 4294967297,
+    "zstd_rle_wire_bytes": 131094,
+    "zstd_skippable_payload_bytes": 4294967297,
+    "zstd_skippable_input_bytes": 4294967313,
+    "zstd_encoder_input_bytes": 4294967313,
+    "zstd_encoder_wire_bytes": 131110,
+    "br_metadata_payload_bytes": 4294967297,
+    "br_metadata_input_bytes": 4294968324,
+    "br_stored_prefix_bytes": 4294967296,
+    "br_compressed_tail_bytes": 2048,
+    "br_normal_copy_distance": 2048,
+    "br_copy_input_bytes": 4294968332,
+    "br_copy_output_bytes": 4294969344,
+    "br_stored_subset_input_bytes": 4294968325,
+    "br_stored_subset_output_bytes": 4294967297,
+    "br_stored_encoder_input_bytes": 4294967297,
+    "br_stored_encoder_wire_bytes": 4295163909
+  },
+  "same_wire_hashes_across_targets": {
+    "rle_fixture_sha256": "a09ff4e252026146b4a0f6236cd0fd144abaee98c9427e1b76a06070c998104f",
+    "zstd_encoder_wire_sha256": "c92e03c872cdf00395c8385a894fe344d7627f4e5f5c406643f9788ae945dc7a",
+    "br_copy_tail_sha256": "50418c1609ef9813daf754cdaeae135b1177fabd5b5304465711ebe774249c12",
+    "br_encoder_wire_sha256": "f4a217a8f5d8ab136c61cfe8f2329d1b9ada351cdbbf4cc6c1b0c30ca0c2ebb4"
+  },
+  "source_pattern": {
+    "size": 65536,
+    "sha256": "81cfcdf14e15be62a7eaae834f3b476b74d8c42237afb57914c5ba6ea8bf2130",
+    "generator": "xorshift32 seed0x51a7c0de; fixed64KiB repeated by absolute phase"
+  },
+  "bounded_memory": {
+    "source_buffer_bytes": 65536,
+    "output_buffer_bytes": 65536,
+    "caller_copy_history_bytes": 65535,
+    "caller_history_non_power_of_two": true,
+    "zstd_decoder_owned_peak_max": 1310720,
+    "zstd_encoder_requested_peak_max": 196950,
+    "br_codec_owned_peak_max": 196997,
+    "all_codec_live_after_deinit_zero": true,
+    "full_plaintext_or_giant_wire_collected": false,
+    "small_zstd_wire_collector_limit": 1048576
+  },
+  "phase_reports": {
+    "native_original": {
+      "path": "native/original-phase-summary.json",
+      "sha256": "cd116ee0ad9b2bdda66fe25c1b3a7eaf27a50ba5435e0da252d073ada6dc8a79"
+    },
+    "native_complete": {
+      "path": "native-resume/report.json",
+      "sha256": "cd5c5ff0a7650215f6c5cf75e5186fd479a7d2628634070d4d8224b487b04e60"
+    },
+    "x86_complete": {
+      "path": "x86/report.json",
+      "sha256": "cb87be4eddb358b1314a173d413a91a56b1070921b9ef4227cf579beeebc24d4"
+    }
+  },
+  "frozen_final_native_and_x86_source_windows_equal": true,
+  "final_phase_source_file_count": 1839,
+  "artifact_proofs": [
+    {
+      "phase": "native",
+      "codec": "br",
+      "path": "native/br-artifact/binding.json",
+      "sha256": "b23cfb32645260db8be94a8fee4d3e980c825bfe98be0d7e65dd34767f571478",
+      "input_records": 1964,
+      "artifact_sha256": "815d5ffbedb7e92f6a20bc6f5982f4c2e7b87dd00f73dd18a15b8b9d9796f713",
+      "exact_cache_digest": "655cddd1cfd75b3ac7a0350898af6ba2",
+      "input_contents_archive_sha256": "8a2108346af381a3dcd578ac233b18f0c112a726e3635c6036a8bd789881528f",
+      "original_content_recovered_from_snapshot": [
+        {
+          "path": "/home/passchaos/project-z/vort-stream-contracts/src/zstd.zig",
+          "recordedsha": "51dd5c0d8a481c0e0377832881731c1bde500bcb5e7351749a1979d309731ff2",
+          "currentsha": "95908c8bdd744ec13847d9770be318f3280164d3fa4c9aa51ef7127dd226f520"
+        },
+        {
+          "path": "/home/passchaos/project-z/vort-stream-contracts/src/br/encoder/command_plan.zig",
+          "recordedsha": "c50a9cabc68ab956111528c1cf8bb8a584ab98787900d562114746ac667feb92",
+          "currentsha": "9b833b8d6616409fd703f557b22a9f6430d7aa5117ea40bccf70b60790a9d7c3"
+        },
+        {
+          "path": "/home/passchaos/project-z/vort-stream-contracts/src/zstd/sequence/bit_reader.zig",
+          "recordedsha": "36f06120334ff3ee470318b551893eb5c5c6e10f091f261280a895f3df4dfef1",
+          "currentsha": "c572a01b639ee4d91dd98663b7d914977d32fabaeb7490531f30263ce32d9a5a"
+        },
+        {
+          "path": "/home/passchaos/project-z/vort-stream-contracts/src/zstd/incremental/decoder_counter_tests.zig",
+          "recordedsha": "45b4c377182a8eeccadf466d9eaab4b8177dfbbdf00c9670636e62f47295a712",
+          "currentsha": "eeb87a32f5fe01672184e0d3f0f4a0bdfc58b6384fdc7125afa4b36acd7237a8"
+        }
+      ]
+    },
+    {
+      "phase": "native",
+      "codec": "zstd",
+      "path": "native/zstd-artifact/binding.json",
+      "sha256": "c55a3e2833e501def3bb43e2b92c7e919e1abed8f9fc18a622585a12adf7b6eb",
+      "input_records": 1963,
+      "artifact_sha256": "be387b2c5e8b22d8f183d680d10b2c471d6a3b10a9aa8392a4bdc00b16e90d82",
+      "exact_cache_digest": "49b62e32c0bac55ae485093b09b715f6",
+      "input_contents_archive_sha256": "d1b4d75fb71cab8d21a3ee6155caf1423600d2c08f4eef3c77e9489d99979b60",
+      "original_content_recovered_from_snapshot": [
+        {
+          "path": "/home/passchaos/project-z/vort-stream-contracts/src/zstd.zig",
+          "recordedsha": "51dd5c0d8a481c0e0377832881731c1bde500bcb5e7351749a1979d309731ff2",
+          "currentsha": "95908c8bdd744ec13847d9770be318f3280164d3fa4c9aa51ef7127dd226f520"
+        },
+        {
+          "path": "/home/passchaos/project-z/vort-stream-contracts/src/br/encoder/command_plan.zig",
+          "recordedsha": "c50a9cabc68ab956111528c1cf8bb8a584ab98787900d562114746ac667feb92",
+          "currentsha": "9b833b8d6616409fd703f557b22a9f6430d7aa5117ea40bccf70b60790a9d7c3"
+        },
+        {
+          "path": "/home/passchaos/project-z/vort-stream-contracts/src/zstd/sequence/bit_reader.zig",
+          "recordedsha": "36f06120334ff3ee470318b551893eb5c5c6e10f091f261280a895f3df4dfef1",
+          "currentsha": "c572a01b639ee4d91dd98663b7d914977d32fabaeb7490531f30263ce32d9a5a"
+        },
+        {
+          "path": "/home/passchaos/project-z/vort-stream-contracts/src/zstd/incremental/decoder_counter_tests.zig",
+          "recordedsha": "45b4c377182a8eeccadf466d9eaab4b8177dfbbdf00c9670636e62f47295a712",
+          "currentsha": "eeb87a32f5fe01672184e0d3f0f4a0bdfc58b6384fdc7125afa4b36acd7237a8"
+        }
+      ]
+    },
+    {
+      "phase": "native-resume",
+      "codec": "br",
+      "path": "native-resume/br-artifact/binding.json",
+      "sha256": "3866bceefb65b367eff2300a117549bd12286953f6624ee3dc9eed94fd7881c5",
+      "input_records": 1965,
+      "artifact_sha256": "8ff7de28b905129e36495d48d1d7e51df30ba3ac4134f0a5be7067c5aba75fe2",
+      "exact_cache_digest": "92c2cc3e43b58dea6dce7cef49d5f03e",
+      "input_contents_archive_sha256": "a00fe02b9b55ec18c72a010a49b01ba7f9ab1317def36635a19b3036cadacfb6",
+      "original_content_recovered_from_snapshot": []
+    },
+    {
+      "phase": "native-resume",
+      "codec": "zstd",
+      "path": "native-resume/zstd-artifact/binding.json",
+      "sha256": "d22f6952288701f060e19504b2560ede0ec6628449250fbd8cd126564a9a332e",
+      "input_records": 1964,
+      "artifact_sha256": "310b4a197e4bcaff5319c949956fafbacf171a520f46539d5fe62739ab013116",
+      "exact_cache_digest": "9cfbc8834144444cbc833911d831c785",
+      "input_contents_archive_sha256": "9f49b3ceb87a0a2a5c0a8c20a85918baef1c023b6826f3068144f07b9207ffc1",
+      "original_content_recovered_from_snapshot": []
+    },
+    {
+      "phase": "x86",
+      "codec": "br",
+      "path": "x86/br-artifact/binding.json",
+      "sha256": "803d1f07dcbc1cc9344a276df5b739baed169bead4686ffe38400f241987902e",
+      "input_records": 1965,
+      "artifact_sha256": "c225cadf77cb185083c549d713d8bc5b28eb40c7292cfe26a848121bc1ff38b9",
+      "exact_cache_digest": "f15b447a86d83ab6ee1d0503c9f5aa56",
+      "input_contents_archive_sha256": "24299f8a01b29e008c7e2bcf4561b12b1d99852a645741562842eed51aa6d499",
+      "original_content_recovered_from_snapshot": []
+    },
+    {
+      "phase": "x86",
+      "codec": "zstd",
+      "path": "x86/zstd-artifact/binding.json",
+      "sha256": "358a170502fad2a97f19eb8ac68dfbcb02372d50c3e5828ae0397fbc42954169",
+      "input_records": 1964,
+      "artifact_sha256": "21fe4ac39267b28fe23ca3152a18662c5bd46028d4a349b38c51e38aa539411d",
+      "exact_cache_digest": "7da2defe40db959bf8e5ef40b7585160",
+      "input_contents_archive_sha256": "5afca94d258b031e1a7316d42597e67c6accc5247a428423d8b26eb789fd26b5",
+      "original_content_recovered_from_snapshot": []
+    }
+  ],
+  "performance_claim": null,
+  "reference_abi_report": {
+    "path": "reference-abi.json",
+    "sha256": "328c775b142855a073f67b45b00a635e8009cc3b57e9cea6cdf007608fec444b"
+  },
+  "tool_sources": {
+    "tools/stream_counters/common.zig": "8da44a1b77edf802abaaa5a71161de80076821a04e5a04eab1d16229cead3bb0",
+    "tools/stream_counters/br_probe.zig": "cb93fe56c6810060ea614d5bc25a8cfef114d31cf0ef0c3dde4ab74953b17b69",
+    "tools/stream_counters/zstd_probe.zig": "869feffb13c5ee0f71244fadd69a79d164668fb443eb9eb18264997dcde858fd",
+    "tools/stream_counters/driver.py": "99448911d1f96f53d1e9b62566da3f3d1b36cab46e4cc0b774b65dbd16290717",
+    "tools/stream_counters/reference.c": "31811d5649b9159e55cc12649887bb92e8e2216552f444a58bd0977dd5cec3cb",
+    "tools/stream_counters/zstd_skip_regression.zig": "9e7549ffdc080d789fd5a2da4873c7eb73545e283c4d9012eb1d62454cea9343"
+  },
+  "formal_attempt_accounting": {
+    "native_original_successful_public_operations": 1,
+    "native_original_failed_public_operations": 1,
+    "native_resume_public_operations_reused_without_execution": 1,
+    "native_resume_new_successful_public_operations": 6,
+    "x86_new_successful_public_operations": 7,
+    "successful_logical_operation_rows": 14,
+    "failed_original_attempts_preserved": 1,
+    "smoke_and_21byte_regression_not_counted_as_large_gate": true
+  },
+  "reference_epoch_note": "The original native RLE reference validation succeeded but lost detailed C receipts when group2 failed; one explicitly approved reference-only supplement re-decoded that tiny RLE wire to persist receipts. No successful original public RLE consumer was repeated, and no large reference decode was repeated on x86."
+}

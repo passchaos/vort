@@ -64,7 +64,9 @@ encoder。每条路径实际处理多GiB，保持64KiBcaller缓冲；释放后�
 编码器请求峰值约197KiB，解码器不超过1.31MiB。原RLE成功consumer没有因
 后续skippable失败重跑；补录原缺失参考receipt单独注明。32位矩阵以自己的
 实际producer/decoder运行证明该目标，外部参考结果只在字节一致时复用。
-最终native和x86矩阵各7项操作全部通过、源码运行阶段前后一致。Zstd编码
+最终native和x86矩阵各7项操作全部通过、源码运行阶段前后一致。
+最终汇总SHA-256为`e81a8e102c80fb7567e23f0d23b804105be23e9520fbfc157c5a6787646e3e71`，
+[quick entry](data/stream-counts-20261024/large-streams.json)与原始阶段在证据包中保存。Zstd编码
 输出131110B，Brotli stored编码累计输出4,295,163,909字节并同时由公共stored
 decoder验证，完整巨wire仅流式hash与参考sink消费，不落成多GiB文件。
 
@@ -98,6 +100,13 @@ ArrayList增长/type几何证明，未为测试数值改变生产算法。五符
 窄集合在native Debug/x86 ReleaseFast均通过，当前家族随后各自重验。
 
 ## 永久档案与后续目标
+
+本轮已无冲突rebase到远端`a435e9b4`的PNG优化提交，Brotli/Zstd/Core/XXH
+生产源码SHA保持不变。rebase后四路并行复验全部通过：全局Debug检查
+160/160步骤，native/实际WebAssembly组23/23步骤且145/145测试，
+x86组16/16步骤且145/145测试，CLI组14/14步骤、34/34解析测试及35/36
+参考往返；完整CLI help再次实际运行通过。本轮94个Zig文件格式检查通过，
+复验期间源码前后无变化。证据在[post-rebase结果](data/stream-counts-20261024/post-rebase.json)。
 
 [证据索引](data/stream-counts-20261024/index.json)记录原始文件与确定性
 tar.gz包的SHA-256。原始命令、日志、源码hash、实际编译输入索引和失败阶段
