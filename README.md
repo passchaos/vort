@@ -53,10 +53,15 @@ The library is under active development. Its current capabilities include:
   sequence-table Repeat_Mode and repcode state, including wide blocks with more
   than 512 sequences, and
   signed compression levels `-131072...22` with actual negative-magnitude
-  acceleration, explicit fast/double-fast/greedy/lazy/bounded-optimal matching
+  acceleration, explicit fast/double-fast/greedy/lazy matching and the legacy
+  bounded-optimal parser, plus lazy2/btlazy2/btopt/btultra/btultra2 HQ strategies
+  with complete-prefix binary-tree search, integer/fractional entropy costs,
+  conditional re-parsing, exact offset emission and search/parser memory budgets
   over dictionary and frame history, a shared public level resolver across
   one-shot/reusable/incremental/seekable APIs, and optional caller-owned work
   profiles with transactional emission and deterministic parallel merge,
+  a versioned canonical parameter query and
+  [HQ functionality contracts](docs/performance/zstd-hq-functional-baseline.md),
   frequency-aware single-/four-stream Huffman literal emission
   (covering the full direct-tree symbol range `0...128`, FSE-compressed
   high-byte weights, non-4-divisible four-stream splits, and treeless repeat

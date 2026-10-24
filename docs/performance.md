@@ -1,5 +1,11 @@
 # Performance evidence
 
+[Zstd HQ functionality](performance/zstd-hq-functional-baseline.md) records the
+new binary-tree and integer/fractional-cost strategy paths, conditional two-pass
+training, exact offset emission, dictionaries and transactional streaming. Its
+78-test and versioned-reference evidence is functional validation; ratio,
+throughput and RSS leadership still require current-source corpus comparisons.
+
 Vort does not yet claim compression performance wins. This document records the
 benchmark protocol and the current bootstrap benchmark surface so future claims
 can be tied to reproducible evidence.

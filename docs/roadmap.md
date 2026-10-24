@@ -71,7 +71,17 @@ rows plus six metadata rows and fifty old-wire comparisons pass, and all 140
 build checks succeed. Separate evidence verifies an actual 67,108,865-byte
 match distance and maximum dictionary small-input budget behavior.
 
-Remaining priorities include fuller Brotli/Zstd HQ models, then standard dictionary finalization
+The [Zstd HQ strategy milestone](performance/zstd-hq-functional-baseline.md)
+now adds lazy2/btlazy2/btopt/btultra/btultra2 with full-prefix BT, real
+integer/fractional costs, conditional two-pass parsing and exact offset-value
+emission. Standard dictionary and selected-block Huffman/FSE tables provide
+prices; complete state/header/final-checksum transactions and input/dictionary
+aliases have independent regressions. Final HQ gates pass 78 tests (68 named),
+Zstd/consumer gates pass 1300, CLI checks pass 898/728/85/168, reference gates
+pass 52 groups plus 56 old wires, and all 142 build checks pass. The versioned
+canonical query remains separate from legacy auto and level-zero behavior.
+
+Remaining priorities include fuller Brotli HQ and optimal-model parity, then standard dictionary finalization
 performance and current-source real-corpus speed/ratio/memory leadership
 evidence across platforms.
 

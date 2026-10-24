@@ -1,5 +1,12 @@
 # zstd comparison gap
 
+Current API/function status is recorded in the
+[industry gap audit](performance/industry-gap-audit.md) and
+[Zstd HQ baseline](performance/zstd-hq-functional-baseline.md). Explicit HQ
+strategies, binary-tree matching, entropy costs and two-pass training are now
+implemented. The comparisons below retain their dated measurement scope and
+do not establish current all-corpus performance parity.
+
 `zig build run-zstd-compare` reports zstd CLI size beside Vort's current raw
 fixed-deflate output, a single-frame native best stream, a blocked native stream
 without the embedded index, and a native embedded-index stream on sample project
