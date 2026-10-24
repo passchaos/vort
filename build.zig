@@ -462,6 +462,26 @@ pub fn build(b: *std.Build) void {
     const encode_controls_test_step = b.step("test-lzma-xz-encode-controls", "Run LZMA/XZ preset, match-finder, parser, streaming and resource contracts");
     encode_controls_test_step.dependOn(&b.addRunArtifact(lzma_encode_controls_tests).step);
     encode_controls_test_step.dependOn(&b.addRunArtifact(xz_encode_controls_tests).step);
+    const large_dictionary_tests = b.addTest(.{
+        .name = "vort-lzma-large-dictionary-tests",
+        .root_module = lzma_contracts_mod,
+        .filters = &.{ "LZMA large dictionary", "LZMA bounded payload" },
+    });
+    const large_chunk_tests = b.addTest(.{
+        .name = "vort-lzma2-large-chunk-tests",
+        .root_module = xz_tests_mod,
+        .filters = &.{ "LZMA2 large chunk", "XZ large chunk" },
+    });
+    const large_block_test_step = b.step("test-lzma2-large-blocks", "Run large LZMA dictionary and LZMA2 chunk framing, streaming and resource contracts");
+    large_block_test_step.dependOn(&b.addRunArtifact(large_dictionary_tests).step);
+    large_block_test_step.dependOn(&b.addRunArtifact(large_chunk_tests).step);
+    const large_distance_tests = b.addTest(.{
+        .name = "vort-lzma-actual-large-distance-tests",
+        .root_module = lzma_contracts_mod,
+        .filters = &.{"Large dictionary actual distance"},
+    });
+    const large_distance_test_step = b.step("test-lzma-large-distance", "Run the explicit ReleaseFast dictionary-distance fixture beyond 64 MiB");
+    large_distance_test_step.dependOn(&b.addRunArtifact(large_distance_tests).step);
     const lzma_one_shot_tests = b.addTest(.{ .name = "vort-lzma-one-shot-tests", .root_module = lzma_contracts_mod, .filters = &.{ "LZMA one shot", "LZMA one-shot" } });
     const xz_one_shot_tests = b.addTest(.{ .name = "vort-xz-one-shot-tests", .root_module = xz_tests_mod, .filters = &.{ "XZ one shot", "XZ one-shot" } });
     const one_shot_contract_step = b.step("test-lzma-xz-one-shot-contracts", "Run bounded atomic LZMA and XZ caller-buffer and size-query contracts");

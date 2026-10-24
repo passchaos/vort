@@ -300,7 +300,7 @@ def campaign(args, prepared, corpus, legacy, reference):
             require(unprofiled == wire, (name, "profile off preserves bytes"))
 
         invalid = [{"preset": 10}, {"extreme": True}, {"dictionary_size": 0}, {"dictionary_size": 4095},
-                   {"dictionary_size": 64 * 1024 * 1024 + 1}, {"nice_len": 1}, {"nice_len": 274},
+                   {"dictionary_size": 1610612736 + 1}, {"nice_len": 1}, {"nice_len": 274},
                    {"lc": 5}, {"lp": 5}, {"pb": 5}, {"lc": 3, "lp": 2}]
         for index, bad in enumerate(invalid):
             config = {"format": format, "mode": "normal", **bad}

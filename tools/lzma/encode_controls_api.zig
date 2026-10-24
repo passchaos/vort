@@ -17,6 +17,7 @@ pub const Controls = struct {
     pb: ?u8 = null,
     check: u8 = 4,
     block_size: ?usize = null,
+    chunk_size: ?usize = null,
     size_mode: ?vort.LzmaSizeMode = null,
 };
 
@@ -28,6 +29,11 @@ fn configure(comptime Options: type, comptime mode_field: []const u8, controls: 
     if (controls.lc) |value| options.properties.lc = std.math.cast(@TypeOf(options.properties.lc), value) orelse return error.InvalidLzmaOptions;
     if (controls.lp) |value| options.properties.lp = std.math.cast(@TypeOf(options.properties.lp), value) orelse return error.InvalidLzmaOptions;
     if (controls.pb) |value| options.properties.pb = std.math.cast(@TypeOf(options.properties.pb), value) orelse return error.InvalidLzmaOptions;
+    if (controls.chunk_size) |value| {
+        if (@hasField(Options, "chunk_size")) {
+            options.chunk_size = value;
+        } else return error.InvalidBlockPlan;
+    }
     const selected_mode = @field(options, mode_field);
     const modern = selected_mode == .fast or selected_mode == .normal;
     const explicit_match = controls.finder != null or controls.nice_len != null or controls.depth != null or controls.max_working_memory != null;
