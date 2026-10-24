@@ -1,6 +1,7 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
 const memory = @import("allocator_adapter.zig");
+const PendingCheckpoint = @import("pending_checkpoint.zig").Checkpoint;
 
 /// Build an incremental encoder for Brotli stored/uncompressed streams. Input
 /// is bounded to one format meta-block, while encoded bytes are drained through
@@ -66,6 +67,7 @@ pub fn Encoder(comptime Codec: type) type {
         /// Internal composition surface for complete-frame operations whose
         /// sibling encoders and retained wires share one total-memory policy.
         pub fn initWithSharedLease(allocator: std.mem.Allocator, options: Options, lease: @import("../../encoder/total_budget.zig").Lease) Error!Self {
+            _ = try resolveBlockLen(options);
             return .{ .allocator = allocator, .options = options, .memory_binding = try memory.Binding.initShared(allocator, lease) };
         }
         pub fn deinit(self: *Self) void {
@@ -102,6 +104,7 @@ pub fn Encoder(comptime Codec: type) type {
         }
         pub fn nextStream(self: *Self, options: Options) Error!void {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
+            _ = try resolveBlockLen(options);
             _ = self.memory_binding.activate(Codec, self.allocator, &self.codec_state, options.stream, self.plain.capacity, self.pending.capacity) catch |err|
                 return @errorCast(self.memory_binding.mapError(err));
             self.resetStream(options);
@@ -126,6 +129,10 @@ pub fn Encoder(comptime Codec: type) type {
                 .done = self.done,
             };
         }
+        pub fn memorySnapshot(self: *const Self) @import("../../encoder/total_budget.zig").Snapshot {
+            return self.memory_binding.snapshot();
+        }
+
         pub fn retainedCapacity(self: *const Self) usize {
             const maximum = std.math.maxInt(usize);
             var retained = std.math.add(usize, self.plain.capacity, self.pending.capacity) catch return maximum;
@@ -167,12 +174,8 @@ pub fn Encoder(comptime Codec: type) type {
         }
 
         fn stepInner(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
-            const block_len = if (@hasDecl(Codec, "resolveBlockLen"))
-                try Codec.resolveBlockLen(self.options.stream, self.options.block_len)
-            else
-                self.options.block_len;
-            if (block_len == 0 or block_len > Codec.max_block_len or
-                self.plain.items.len > block_len) return error.InvalidBlockPlan;
+            const block_len = try resolveBlockLen(self.options);
+            if (self.plain.items.len > block_len) return error.InvalidBlockPlan;
             if (self.done) {
                 if (input.len != 0) return error.TrailingData;
                 return .{ .status = .done };
@@ -208,11 +211,7 @@ pub fn Encoder(comptime Codec: type) type {
                     if (output_written == output.len and output.len != 0) return result(input_read, output_written, .need_output);
                 }
                 if (!self.prefix_written) {
-                    if (@hasDecl(Codec, "writePrefixWithBlockLen")) {
-                        try Codec.writePrefixWithBlockLen(allocator, &self.pending, &self.codec_state, self.options.stream, block_len);
-                    } else {
-                        try Codec.writePrefix(allocator, &self.pending, &self.codec_state, self.options.stream);
-                    }
+                    try self.writePrefix(allocator, block_len);
                     self.prefix_written = true;
                     continue;
                 }
@@ -242,12 +241,7 @@ pub fn Encoder(comptime Codec: type) type {
                 {
                     if (self.finishing) {
                         if (comptime @hasDecl(Codec, "writeFinalBlock")) {
-                            try Codec.writeFinalBlock(
-                                allocator,
-                                &self.pending,
-                                &self.codec_state,
-                                self.plain.items,
-                            );
+                            try self.writeFinalBlock(allocator);
                             self.plain.clearRetainingCapacity();
                             self.final_written = true;
                             continue;
@@ -258,7 +252,7 @@ pub fn Encoder(comptime Codec: type) type {
                 }
                 if (self.flush_requested) {
                     if (self.metadata_requested) {
-                        try Codec.writeMetadata(allocator, &self.pending, &self.codec_state, self.pending_metadata);
+                        try self.writeMetadataBlock(allocator);
                         self.pending_metadata = &.{};
                         self.metadata_requested = false;
                         continue;
@@ -267,7 +261,7 @@ pub fn Encoder(comptime Codec: type) type {
                     return result(input_read, output_written, .need_input);
                 }
                 if (self.finishing and !self.final_written) {
-                    try Codec.writeFinal(allocator, &self.pending, &self.codec_state);
+                    try self.writeFinal(allocator);
                     self.final_written = true;
                     continue;
                 }
@@ -283,7 +277,47 @@ pub fn Encoder(comptime Codec: type) type {
         fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
             return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = status };
         }
+        fn resolveBlockLen(options: Options) Error!usize {
+            if (@hasDecl(Codec, "validateStreamOptions")) try Codec.validateStreamOptions(options.stream);
+            const block_len = if (@hasDecl(Codec, "resolveBlockLen"))
+                try Codec.resolveBlockLen(options.stream, options.block_len)
+            else
+                options.block_len;
+            if (block_len == 0 or block_len > Codec.max_block_len) return error.InvalidBlockPlan;
+            return block_len;
+        }
+
+        fn writePrefix(self: *Self, allocator: std.mem.Allocator, block_len: usize) Error!void {
+            const checkpoint = PendingCheckpoint.init(&self.pending);
+            errdefer checkpoint.restore(&self.pending);
+            if (@hasDecl(Codec, "writePrefixWithBlockLen")) {
+                try Codec.writePrefixWithBlockLen(allocator, &self.pending, &self.codec_state, self.options.stream, block_len);
+            } else {
+                try Codec.writePrefix(allocator, &self.pending, &self.codec_state, self.options.stream);
+            }
+        }
+
+        fn writeMetadataBlock(self: *Self, allocator: std.mem.Allocator) Error!void {
+            const checkpoint = PendingCheckpoint.init(&self.pending);
+            errdefer checkpoint.restore(&self.pending);
+            try Codec.writeMetadata(allocator, &self.pending, &self.codec_state, self.pending_metadata);
+        }
+
+        fn writeFinal(self: *Self, allocator: std.mem.Allocator) Error!void {
+            const checkpoint = PendingCheckpoint.init(&self.pending);
+            errdefer checkpoint.restore(&self.pending);
+            try Codec.writeFinal(allocator, &self.pending, &self.codec_state);
+        }
+
+        fn writeFinalBlock(self: *Self, allocator: std.mem.Allocator) Error!void {
+            const checkpoint = PendingCheckpoint.init(&self.pending);
+            errdefer checkpoint.restore(&self.pending);
+            try Codec.writeFinalBlock(allocator, &self.pending, &self.codec_state, self.plain.items);
+        }
+
         fn writeBlock(self: *Self, allocator: std.mem.Allocator) Error!void {
+            const checkpoint = PendingCheckpoint.init(&self.pending);
+            errdefer checkpoint.restore(&self.pending);
             std.debug.assert(self.plain.items.len != 0);
             try Codec.writeBlock(allocator, &self.pending, &self.codec_state, self.plain.items);
             self.plain.clearRetainingCapacity();
@@ -296,4 +330,5 @@ test {
     _ = @import("encoder_counter_tests.zig");
     _ = @import("encoder_block_options_tests.zig");
     _ = @import("encoder_memory_tests.zig");
+    _ = @import("stored_resource_tests.zig");
 }

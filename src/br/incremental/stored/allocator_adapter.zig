@@ -39,7 +39,9 @@ pub const Binding = struct {
                     return err;
                 };
             }
-            lease.beginOperation();
+            // A shared child cannot erase its parent's classification interval.
+            // Backing allocator requests still distinguish their own refusal.
+            if (!self.shared) lease.beginOperation();
             return lease.allocator();
         }
         const tracked = total.isTracked(base);
@@ -62,6 +64,10 @@ pub const Binding = struct {
     /// to the encoder's public base field. It never creates or changes a lease.
     pub fn current(self: *const Binding, base: std.mem.Allocator) std.mem.Allocator {
         return if (self.lease) |lease| lease.allocator() else base;
+    }
+
+    pub fn snapshot(self: *const Binding) total.Snapshot {
+        return if (self.lease) |lease| lease.snapshot() else .{};
     }
 
     pub fn mapError(self: *const Binding, err: anyerror) anyerror {
