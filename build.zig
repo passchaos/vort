@@ -1699,6 +1699,11 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| lzma_encode_controls_diff.addArgs(args);
     const lzma_encode_controls_diff_step = b.step("run-lzma-xz-encode-controls-diff", "Validate LZMA/XZ presets and encoder controls against liblzma");
     lzma_encode_controls_diff_step.dependOn(&lzma_encode_controls_diff.step);
+    const lzma_large_blocks_diff = b.addSystemCommand(&.{ "python3", "tools/lzma/large_blocks_diff.py", "--probe" });
+    lzma_large_blocks_diff.addArtifactArg(lzma_encode_controls_probe);
+    if (b.args) |args| lzma_large_blocks_diff.addArgs(args);
+    const lzma_large_blocks_diff_step = b.step("run-lzma2-large-blocks-diff", "Validate large LZMA2 chunks and dictionary properties against liblzma");
+    lzma_large_blocks_diff_step.dependOn(&lzma_large_blocks_diff.step);
     const lzma_controls_cli_probe = b.addExecutable(.{
         .name = "vort-lzma-controls-cli-probe",
         .root_module = b.createModule(.{
