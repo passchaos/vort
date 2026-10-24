@@ -1,4 +1,6 @@
 const std = @import("std");
+const core = @import("../../../core.zig");
+const Count = core.StreamCount;
 const history_mod = @import("history.zig");
 const history_index = @import("history_index.zig");
 
@@ -87,15 +89,18 @@ inline fn considerCandidates(
     block: []const u8,
     block_start: usize,
     prefix: *const [8]u8,
-    candidates: []const usize,
+    candidates: []const Count,
     best: *?Match,
 ) void {
     for (candidates) |absolute_candidate| {
         if (absolute_candidate == history_index.invalid_position or
             absolute_candidate < history.absolute_start) continue;
-        const history_start = absolute_candidate - history.absolute_start;
-        if (history_start + 8 > history.bytes.len or
-            !std.mem.eql(u8, history.bytes[history_start..][0..8], prefix)) continue;
+        const candidate_offset = absolute_candidate - history.absolute_start;
+        // Reject logical positions outside the physical retained window before
+        // narrowing them to an index, including future and very old entries.
+        if (candidate_offset > core.stream_count.fromLocal(history.bytes.len - 8)) continue;
+        const history_start: usize = @intCast(candidate_offset);
+        if (!std.mem.eql(u8, history.bytes[history_start..][0..8], prefix)) continue;
 
         var len: usize = 8;
         while (history_start + len < history.bytes.len and
@@ -133,4 +138,24 @@ test "Zstd incremental history matcher skips an empty history" {
     defer rolling.deinit(std.testing.allocator);
     const plan = findPlan(rolling.view(), "a block long enough to scan");
     try std.testing.expectEqual(@as(usize, 0), plan.len);
+}
+
+test "Zstd incremental encoder counters bound wide history candidates before indexing" {
+    var rolling: history_mod.Rolling = .{};
+    defer rolling.deinit(std.testing.allocator);
+    const boundary: Count = @as(Count, 1) << 32;
+    rolling.absolute_start = boundary - 3;
+    rolling.absolute_end = boundary - 3;
+    try rolling.prepareCompletedBlock(std.testing.allocator, "abcdefgh", 16);
+    rolling.appendCompletedBlock("abcdefgh", 16);
+    // Same-hash future entries can differ by more than a local 32-bit index.
+    // The matcher must skip them before casting or reading the byte window.
+    rolling.index.insertBlock("abcdefgh", boundary * 2);
+    rolling.index.insertBlock("abcdefgh", std.math.maxInt(Count) - 8);
+    rolling.index.insertBlock("abcdefgh", boundary - 4);
+    const plan = findPlan(rolling.view(), "abcdefgh");
+    try std.testing.expectEqual(@as(usize, 1), plan.len);
+    try std.testing.expectEqual(@as(usize, 0), plan.matches[0].history_start);
+    try std.testing.expectEqual(@as(usize, 8), plan.matches[0].len);
+    try std.testing.expectEqual(@as(?usize, 8), plan.matches[0].offset(rolling.bytes.items.len));
 }

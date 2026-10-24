@@ -82,7 +82,7 @@ test "zstd default block stream emits compressed blocks before frame completion"
     try std.testing.expectEqual(@as(usize, 1024), first.progress.output_written);
     try std.testing.expectEqualSlices(u8, payload[0..1024], &first_output);
     try std.testing.expect(decoder.isBlockStreaming());
-    try std.testing.expectEqual(@as(?usize, null), decoder.snapshot().decoded_len);
+    try std.testing.expectEqual(@as(?core.StreamCount, null), decoder.snapshot().decoded_len);
     try std.testing.expect(decoder.streamedSequenceBlockCount() > 0);
     const input_capacity = decoder.compressedBufferCapacity();
     try drain(&decoder, encoded.frame[first.progress.input_read..], payload[first.progress.output_written..], encoded.frame.len, 17);
@@ -200,7 +200,7 @@ test "zstd default block stream supports standard dictionary entropy and diction
     defer set_decoder.deinit();
     try drain(&set_decoder, stream, concatenated, stream.len, 3);
     try std.testing.expectEqualSlices(u8, "metadata", &captured);
-    try std.testing.expectEqual(@as(usize, 2), set_decoder.snapshot().data_frame_count);
+    try std.testing.expectEqual(@as(core.StreamCount, 2), set_decoder.snapshot().data_frame_count);
     try std.testing.expectEqual(@as(u4, 5), events[0].id);
 
     var single_capture: [8]u8 = undefined;
@@ -338,7 +338,7 @@ test "zstd default block stream enforces exact and per-frame output limits" {
         // The decoded-buffer cap remains per frame; exact output accounting
         // spans the complete logical concatenated stream.
         try drain(&concatenated, stream, payload ++ payload, 3, 1);
-        try std.testing.expectEqual(@as(usize, 2), concatenated.snapshot().data_frame_count);
+        try std.testing.expectEqual(@as(core.StreamCount, 2), concatenated.snapshot().data_frame_count);
     }
 }
 
@@ -362,7 +362,7 @@ test "zstd explicit prevalidated frame policy retains complete-frame validation"
     decoder.reset();
     @memset(&output, 0xa5);
     try std.testing.expectError(error.ChecksumMismatch, decoder.step(corrupt, &output));
-    try std.testing.expectEqual(@as(usize, 0), decoder.snapshot().output_written);
+    try std.testing.expectEqual(@as(core.StreamCount, 0), decoder.snapshot().output_written);
     for (output) |byte| try std.testing.expectEqual(@as(u8, 0xa5), byte);
 
     // The explicit policy keeps the historical fallback when a caller's

@@ -1,4 +1,5 @@
 const std = @import("std");
+const Count = @import("../../core.zig").StreamCount;
 const controls = @import("controls.zig");
 const source_mod = @import("../match/controlled_source.zig");
 const fast = @import("../match/controlled_fast.zig");
@@ -31,7 +32,7 @@ pub fn Encoder(comptime Codec: type) type {
             try Codec.writeChecksum(allocator, out, input, options);
         }
 
-        pub fn writeBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, options: Codec.Options, state: *Codec.State, dictionary: ?Codec.Dictionary, history: []const u8, frame_offset: usize, records: *std.ArrayList(source_mod.Record), scratch: *Codec.SequenceScratch, block_scratch: *Codec.BlockScratch) Codec.Error!void {
+        pub fn writeBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, options: Codec.Options, state: *Codec.State, dictionary: ?Codec.Dictionary, history: []const u8, frame_offset: Count, records: *std.ArrayList(source_mod.Record), scratch: *Codec.SequenceScratch, block_scratch: *Codec.BlockScratch) Codec.Error!void {
             // Dictionary initialization belongs to the block transaction too.
             const original_state = state.*;
             errdefer state.* = original_state;

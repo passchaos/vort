@@ -1,4 +1,5 @@
 const std = @import("std");
+const Count = @import("../../../core.zig").StreamCount;
 
 /// Adapt the one-shot Zstd block planners to the incremental encoder without
 /// coupling its generic state machine to entropy-coding details. `writeEntropy`
@@ -15,7 +16,7 @@ pub fn Emitter(comptime Codec: type) type {
             state: *Codec.State,
             dictionary: ?Codec.Dictionary,
             frame_history: Codec.HistoryView,
-            frame_offset: usize,
+            frame_offset: Count,
         ) Codec.Error!void {
             switch (options.selection) {
                 .raw_or_rle => try Codec.writeRawOrRle(allocator, out, block, last),

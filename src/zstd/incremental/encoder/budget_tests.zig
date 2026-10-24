@@ -1,5 +1,6 @@
 const std = @import("std");
 const zstd = @import("../../../zstd.zig");
+const Count = @import("../../../core.zig").StreamCount;
 const total = @import("../../encode/total_budget.zig");
 const allocator = std.testing.allocator;
 
@@ -31,7 +32,7 @@ test "Zstd incremental total budget header refusal rolls back before input and r
     try std.testing.expectError(error.WorkingMemoryLimitExceeded, encoder.step("abc", &output));
     try std.testing.expect(!encoder.header_written);
     try std.testing.expectEqual(@as(usize, 0), encoder.pending.items.len);
-    try std.testing.expectEqual(@as(usize, 0), encoder.total_input);
+    try std.testing.expectEqual(@as(Count, 0), encoder.total_input);
     encoder.options.max_total_working_memory = null;
     const frame = try encode(&encoder, "abc");
     defer allocator.free(frame);
@@ -72,7 +73,7 @@ test "Zstd incremental total budget next frame checks retained capacity before r
     const frame = try encode(&encoder, payload);
     defer allocator.free(frame);
     const exact_io = encoder.block.capacity + encoder.pending.capacity + encoder.history.bytes.capacity +
-        @sizeOf(usize) * (encoder.history.index.recent_entries.capacity + encoder.history.index.long_entries.capacity);
+        @sizeOf(Count) * (encoder.history.index.recent_entries.capacity + encoder.history.index.long_entries.capacity);
     try std.testing.expect(exact_io > encoder.history.bytes.capacity);
     const before = encoder.snapshot();
     var next = encoder.options;

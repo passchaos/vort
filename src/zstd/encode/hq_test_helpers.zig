@@ -132,7 +132,7 @@ pub fn driveEncoder(allocator: std.mem.Allocator, encoder: anytype, input: []con
     var result: std.ArrayList(u8) = .empty;
     errdefer result.deinit(allocator);
     const initial = encoder.snapshot();
-    var read = initial.input_read;
+    var read = try @import("../../core.zig").stream_count.toLocal(initial.input_read);
     var finished = initial.finishing;
     var flushed = flush_at == null;
     var drain_flush = false;

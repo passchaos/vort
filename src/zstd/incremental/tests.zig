@@ -1,4 +1,5 @@
 const std = @import("std");
+const core = @import("../../core.zig");
 const zstd = @import("../../zstd.zig");
 
 test "Zstd incremental frame encoder round trips split raw RLE input" {
@@ -377,7 +378,7 @@ test "Zstd incremental encoder continues mixed dictionary frames" {
     try encoder.nextFrameExactSizeWithPresetDictionary(second_options, second.len, dictionary);
     const second_frame = try encodeSplit(&encoder, second);
     defer std.testing.allocator.free(second_frame);
-    try std.testing.expectEqual(@as(usize, 2), encoder.snapshot().frame_count);
+    try std.testing.expectEqual(@as(core.StreamCount, 2), encoder.snapshot().frame_count);
     try std.testing.expectEqual(first.len + second.len, encoder.snapshot().input_read);
 
     var stream: std.ArrayList(u8) = .empty;

@@ -72,8 +72,8 @@ test "Zstd dictionary resume byte headers and whole input keep accepted progress
                 try std.testing.expectEqual(@as(?u32, null), decoder.requiredDictionaryId());
             }
             try std.testing.expectEqual(header.payload_offset, read);
-            try std.testing.expectEqual(@as(?usize, read), decoder.error_input_offset);
-            try std.testing.expectEqual(@as(?usize, 0), decoder.error_output_offset);
+            try std.testing.expectEqual(@as(?core.StreamCount, read), decoder.error_input_offset);
+            try std.testing.expectEqual(@as(?core.StreamCount, 0), decoder.error_output_offset);
             try awaiting(&decoder, dictionary.id);
             try std.testing.expectError(error.DictionaryMismatch, decoder.provideDictionary(zstd.NativeDictionary.init(dictionary.id + 1, dictionary.content)));
             try std.testing.expectEqual(@as(?u32, dictionary.id), decoder.requiredDictionaryId());
@@ -210,7 +210,7 @@ test "Zstd dictionary resume prior members retain cumulative pledge and stopped 
         const progressed = decoder.last_step_progress;
         try std.testing.expectEqual(first_payload.len, progressed.output_written);
         try std.testing.expectEqualSlices(u8, first_payload, output[0..first_payload.len]);
-        try std.testing.expectEqual(@as(usize, 1), decoder.data_frame_count);
+        try std.testing.expectEqual(@as(core.StreamCount, 1), decoder.data_frame_count);
         const live = decoder.workingMemoryBytes();
         const peak = decoder.peakWorkingMemoryBytes();
         try decoder.provideDictionary(dictionary);
@@ -267,7 +267,7 @@ test "Zstd dictionary resume preserves fatal errors and ID zero never requests a
     try std.testing.expectEqual(@as(?u32, null), decoder.requiredDictionaryId());
     try std.testing.expectError(error.InvalidStreamState, decoder.provideDictionary(zstd.NativeDictionary.initRawContent("wxyz")));
     decoder.reset();
-    decoder.input_received = std.math.maxInt(usize);
+    decoder.input_received = std.math.maxInt(core.StreamCount);
     try std.testing.expectError(error.IntegerOverflow, decoder.step("x", &output));
     try std.testing.expectEqualDeep(core.Progress{}, decoder.last_step_progress);
 }

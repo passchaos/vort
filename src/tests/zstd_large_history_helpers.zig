@@ -50,7 +50,7 @@ pub fn header(bytes: []const u8) !Header {
 pub fn drive(collector: std.mem.Allocator, encoder: anytype, input: []const u8, input_quota: usize, output_quota: usize) ![]u8 {
     var bytes: std.ArrayList(u8) = .empty;
     errdefer bytes.deinit(collector);
-    var offset = encoder.snapshot().frame_input;
+    var offset = try @import("../core.zig").stream_count.toLocal(encoder.snapshot().frame_input);
     var finishing = encoder.snapshot().finishing;
     var output: [257]u8 = undefined;
     for (0..input.len * 16 + 4096) |call| {

@@ -1,16 +1,19 @@
 const std = @import("std");
+const core = @import("../../../core.zig");
+const Count = core.StreamCount;
+const count = core.stream_count;
 const history_index = @import("history_index.zig");
 
 pub const View = struct {
     bytes: []const u8,
-    absolute_start: usize,
+    absolute_start: Count,
     index: *const history_index.Index,
 
-    pub fn recentCandidates(self: View, prefix: *const [8]u8) []const usize {
+    pub fn recentCandidates(self: View, prefix: *const [8]u8) []const Count {
         return self.index.recentCandidates(prefix);
     }
 
-    pub fn longCandidates(self: View, prefix: *const [8]u8) []const usize {
+    pub fn longCandidates(self: View, prefix: *const [8]u8) []const Count {
         return self.index.longCandidates(prefix);
     }
 
@@ -36,8 +39,8 @@ pub const View = struct {
 pub const Rolling = struct {
     bytes: std.ArrayList(u8) = .empty,
     index: history_index.Index = .{},
-    absolute_start: usize = 0,
-    absolute_end: usize = 0,
+    absolute_start: Count = 0,
+    absolute_end: Count = 0,
 
     pub fn deinit(self: *Rolling, allocator: std.mem.Allocator) void {
         self.index.deinit(allocator);
@@ -64,18 +67,18 @@ pub const Rolling = struct {
         block: []const u8,
         window_len: usize,
     ) (std.mem.Allocator.Error || error{IntegerOverflow})!void {
+        _ = try count.addLocal(self.absolute_end, block.len);
         if (window_len != 0) try self.index.prepare(
             allocator,
             window_len > std.compress.zstd.default_window_len,
         );
-        _ = std.math.add(usize, self.absolute_end, block.len) catch return error.IntegerOverflow;
         const combined_len = std.math.add(usize, self.bytes.items.len, block.len) catch return error.IntegerOverflow;
         try self.bytes.ensureTotalCapacity(allocator, @min(window_len, combined_len));
     }
 
     pub fn appendCompletedBlock(self: *Rolling, block: []const u8, window_len: usize) void {
         self.index.insertBlock(block, self.absolute_end);
-        self.absolute_end = std.math.add(usize, self.absolute_end, block.len) catch unreachable;
+        self.absolute_end = count.addLocal(self.absolute_end, block.len) catch unreachable;
         if (window_len == 0) {
             self.bytes.clearRetainingCapacity();
             self.absolute_start = self.absolute_end;
@@ -84,7 +87,7 @@ pub const Rolling = struct {
         if (block.len >= window_len) {
             self.bytes.clearRetainingCapacity();
             self.bytes.appendSliceAssumeCapacity(block[block.len - window_len ..]);
-            self.absolute_start = self.absolute_end - self.bytes.items.len;
+            self.absolute_start = self.absolute_end - count.fromLocal(self.bytes.items.len);
             return;
         }
 
@@ -95,7 +98,7 @@ pub const Rolling = struct {
             self.bytes.items.len = retained_len;
         }
         self.bytes.appendSliceAssumeCapacity(block);
-        self.absolute_start = self.absolute_end - self.bytes.items.len;
+        self.absolute_start = self.absolute_end - count.fromLocal(self.bytes.items.len);
     }
 };
 
@@ -110,5 +113,36 @@ test "Zstd incremental rolling history retains only the newest window" {
     try history.prepareCompletedBlock(std.testing.allocator, "0123456789", 8);
     history.appendCompletedBlock("0123456789", 8);
     try std.testing.expectEqualSlices(u8, "23456789", history.view().bytes);
-    try std.testing.expectEqual(@as(usize, 12), history.view().absolute_start);
+    try std.testing.expectEqual(@as(Count, 12), history.view().absolute_start);
+}
+
+test "Zstd incremental encoder counters retain history across 32-bit positions" {
+    var history: Rolling = .{};
+    defer history.deinit(std.testing.allocator);
+    const boundary: Count = @as(Count, 1) << 32;
+    history.absolute_start = boundary - 3;
+    history.absolute_end = boundary - 3;
+    try history.prepareCompletedBlock(std.testing.allocator, "abcdefgh", 16);
+    history.appendCompletedBlock("abcdefgh", 16);
+    try std.testing.expectEqual(boundary + 5, history.absolute_end);
+    try std.testing.expectEqual(boundary - 3, history.absolute_start);
+    try std.testing.expectEqual(boundary - 3, history.view().recentCandidates("abcdefgh")[0]);
+    try history.prepareCompletedBlock(std.testing.allocator, "ijklmnop", 8);
+    history.appendCompletedBlock("ijklmnop", 8);
+    try std.testing.expectEqual(boundary + 5, history.absolute_start);
+    try std.testing.expectEqual(boundary + 13, history.absolute_end);
+    try std.testing.expectEqualSlices(u8, "ijklmnop", history.view().bytes);
+}
+
+test "Zstd incremental encoder counters refuse history overflow before allocation" {
+    var history: Rolling = .{};
+    defer history.deinit(std.testing.allocator);
+    history.absolute_start = std.math.maxInt(Count) - 2;
+    history.absolute_end = history.absolute_start;
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.IntegerOverflow, history.prepareCompletedBlock(failing.allocator(), "abcdefgh", 16));
+    try std.testing.expectEqual(std.math.maxInt(Count) - 2, history.absolute_end);
+    try std.testing.expectEqual(@as(usize, 0), history.bytes.capacity);
+    try std.testing.expectEqual(@as(usize, 0), history.index.recent_entries.capacity);
+    try std.testing.expectEqual(@as(usize, 0), failing.allocated_bytes);
 }

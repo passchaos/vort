@@ -70,14 +70,14 @@ test "Zstd incremental limits output exact below zero and no content size" {
             defer below.deinit();
             try std.testing.expectError(error.OutputLimitExceeded, below.step(frame, &output));
             try std.testing.expect(below.snapshot().output_written < payload.len);
-            try std.testing.expectEqual(@as(?usize, below.snapshot().input_received), below.snapshot().error_input_offset);
-            try std.testing.expectEqual(@as(?usize, below.snapshot().output_written), below.snapshot().error_output_offset);
+            try std.testing.expectEqual(@as(?core.StreamCount, below.snapshot().input_received), below.snapshot().error_input_offset);
+            try std.testing.expectEqual(@as(?core.StreamCount, below.snapshot().output_written), below.snapshot().error_output_offset);
             try expectSticky(&below, error.OutputLimitExceeded, frame, &output);
 
             var zero = zstd.NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{ .input_policy = policy, .max_output_len = 0 });
             defer zero.deinit();
             try std.testing.expectError(error.OutputLimitExceeded, zero.step(frame, &output));
-            try std.testing.expectEqual(@as(usize, 0), zero.snapshot().output_written);
+            try std.testing.expectEqual(@as(core.StreamCount, 0), zero.snapshot().output_written);
             const empty = try rawFrame("", include_size);
             defer std.testing.allocator.free(empty);
             zero.reset();
@@ -103,7 +103,7 @@ test "Zstd incremental limits cumulative concatenation preserves per-frame cap" 
         var output: [2 * payload.len]u8 = undefined;
         try decode(&decoder, stream, &output, stream.len, 2);
         try std.testing.expectEqualSlices(u8, payload ++ payload, &output);
-        try std.testing.expectEqual(@as(usize, 2), decoder.snapshot().data_frame_count);
+        try std.testing.expectEqual(@as(core.StreamCount, 2), decoder.snapshot().data_frame_count);
 
         var capped = zstd.NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
             .input_policy = policy,
@@ -154,7 +154,7 @@ test "Zstd incremental limits stopped members nextStream retains quota pledge an
         const first = try decoder.step(stream, output[0..payload.len]);
         try std.testing.expectEqual(core.StepResult.Status.done, first.status);
         try std.testing.expectEqual(payload.len, first.progress.output_written);
-        try std.testing.expectEqual(@as(?usize, 2 * payload.len), decoder.diagnostics().expected_output_len);
+        try std.testing.expectEqual(@as(?core.StreamCount, 2 * payload.len), decoder.diagnostics().expected_output_len);
         try std.testing.expectError(error.SizeMismatch, decoder.finish());
         const retained = decoder.workingMemoryBytes();
         const peak = decoder.peakWorkingMemoryBytes();
@@ -174,7 +174,7 @@ test "Zstd incremental limits stopped members nextStream retains quota pledge an
         try decoder.finish();
         try std.testing.expectEqualSlices(u8, payload ++ payload, &output);
         try std.testing.expectEqualSlices(u8, "meta", &capture);
-        try std.testing.expectEqual(@as(usize, 3), decoder.snapshot().data_frame_count);
+        try std.testing.expectEqual(@as(core.StreamCount, 3), decoder.snapshot().data_frame_count);
         try std.testing.expectEqual(@as(usize, 1), decoder.snapshot().skippable_event_count);
         try decoder.nextStream();
         try std.testing.expectError(error.OutputLimitExceeded, decoder.step(frame, output[0..payload.len]));
@@ -201,7 +201,7 @@ test "Zstd incremental limits exact quota still accepts checksums metadata and e
         var output: [payload.len]u8 = undefined;
         try decode(&decoder, stream, &output, stream.len, output.len);
         try std.testing.expectEqualSlices(u8, payload, &output);
-        try std.testing.expectEqual(@as(usize, 2), decoder.snapshot().data_frame_count);
+        try std.testing.expectEqual(@as(core.StreamCount, 2), decoder.snapshot().data_frame_count);
         try std.testing.expectEqual(@as(usize, 1), decoder.snapshot().skippable_event_count);
     }
 }
@@ -234,8 +234,8 @@ test "Zstd incremental limits persistent allocation budget exact below reset and
         measured.reset();
         try std.testing.expectEqual(live, measured.workingMemoryBytes());
         try std.testing.expectEqual(live, measured.peakWorkingMemoryBytes());
-        try std.testing.expectEqual(@as(usize, 0), measured.snapshot().input_received);
-        try std.testing.expectEqual(@as(usize, 0), measured.snapshot().output_written);
+        try std.testing.expectEqual(@as(core.StreamCount, 0), measured.snapshot().input_received);
+        try std.testing.expectEqual(@as(core.StreamCount, 0), measured.snapshot().output_written);
         try decode(&measured, frame, &output, frame.len, output.len);
         try std.testing.expectEqual(live, measured.peakWorkingMemoryBytes());
         const before = measured.snapshot();
@@ -259,7 +259,7 @@ test "Zstd incremental limits persistent allocation budget exact below reset and
         try std.testing.expect(below.workingMemoryBytes() <= peak - 1);
         try std.testing.expect(below.peakWorkingMemoryBytes() <= peak - 1);
         try std.testing.expect(below.snapshot().last_step_progress.input_read != 0);
-        const produced = below.snapshot().output_written;
+        const produced = try core.stream_count.toLocal(below.snapshot().output_written);
         try std.testing.expect(produced != 0);
         try std.testing.expectEqual(produced, below.snapshot().last_step_progress.output_written);
         try std.testing.expectEqualSlices(u8, payload[0..produced], output[0..produced]);
@@ -376,7 +376,7 @@ test "Zstd incremental limits backing OutOfMemory differs from budget refusal an
             try std.testing.expectEqual(@as(usize, 0), failing.allocations);
             var output: [payload.len]u8 = @splat(0xa5);
             try std.testing.expectError(error.OutOfMemory, decoder.step(frame, &output));
-            try std.testing.expectEqual(@as(usize, 0), decoder.snapshot().output_written);
+            try std.testing.expectEqual(@as(core.StreamCount, 0), decoder.snapshot().output_written);
             try std.testing.expectEqual(@as(usize, 0), decoder.snapshot().last_step_progress.output_written);
             for (output) |byte| try std.testing.expectEqual(@as(u8, 0xa5), byte);
             try expectSticky(&decoder, error.OutOfMemory, frame, &output);
@@ -432,13 +432,13 @@ test "Zstd incremental limits compressed dictionary allocation failures preserve
                     try std.testing.expectEqual(error.OutOfMemory, err);
                     const failed = decoder.snapshot();
                     try std.testing.expectEqual(core.Progress{
-                        .input_read = failed.input_received - before.input_received,
-                        .output_written = failed.output_written - before.output_written,
+                        .input_read = try core.stream_count.toLocal(failed.input_received - before.input_received),
+                        .output_written = try core.stream_count.toLocal(failed.output_written - before.output_written),
                     }, failed.last_step_progress);
                     const published = written + failed.last_step_progress.output_written;
                     try std.testing.expectEqual(published, failed.output_written);
-                    try std.testing.expectEqual(@as(?usize, failed.input_received), failed.error_input_offset);
-                    try std.testing.expectEqual(@as(?usize, published), failed.error_output_offset);
+                    try std.testing.expectEqual(@as(?core.StreamCount, failed.input_received), failed.error_input_offset);
+                    try std.testing.expectEqual(@as(?core.StreamCount, published), failed.error_output_offset);
                     try std.testing.expectEqualSlices(u8, payload[0..published], output[0..published]);
                     for (output[published..]) |byte| try std.testing.expectEqual(@as(u8, 0xa5), byte);
                     var retry_output: [7]u8 = undefined;
@@ -485,8 +485,8 @@ test "Zstd incremental limits late checksum reports final step progress and is s
     try std.testing.expectError(error.TruncatedFrame, decoder.finish());
     try std.testing.expectError(error.ChecksumMismatch, decoder.step(corrupt[corrupt.len - 4 ..], &.{}));
     try std.testing.expectEqual(core.Progress{ .input_read = 4 }, decoder.snapshot().last_step_progress);
-    try std.testing.expectEqual(@as(?usize, corrupt.len), decoder.snapshot().error_input_offset);
-    try std.testing.expectEqual(@as(?usize, payload.len), decoder.snapshot().error_output_offset);
+    try std.testing.expectEqual(@as(?core.StreamCount, corrupt.len), decoder.snapshot().error_input_offset);
+    try std.testing.expectEqual(@as(?core.StreamCount, payload.len), decoder.snapshot().error_output_offset);
     try std.testing.expectEqual(decoder.snapshot().error_input_offset, decoder.diagnostics().error_input_offset);
     try std.testing.expectEqual(decoder.snapshot().error_output_offset, decoder.diagnostics().error_output_offset);
     try std.testing.expectEqual(@as(?core.Progress, decoder.snapshot().last_step_progress), decoder.diagnostics().last_step_progress);

@@ -1,10 +1,12 @@
 const std = @import("std");
+const Count = @import("../../../core.zig").StreamCount;
+const XxHash64 = @import("../../../checksum/xxh64_stream.zig").XxHash64;
 const controls = @import("../../encode/controls.zig");
 
 /// Publish final block and checksum as one pending-output transaction. Input
 /// acceptance and already delivered bytes stay committed by the outer stream;
 /// only this new final emission, codec/hash state and emitted counts roll back.
-pub fn append(comptime Codec: type, comptime BlockEmitter: type, allocator: std.mem.Allocator, pending: *std.ArrayList(u8), block: []const u8, options: Codec.Options, state: *Codec.State, dictionary: ?Codec.Dictionary, history: Codec.HistoryView, frame_offset: usize, hasher: *std.hash.XxHash64) Codec.Error!void {
+pub fn append(comptime Codec: type, comptime BlockEmitter: type, allocator: std.mem.Allocator, pending: *std.ArrayList(u8), block: []const u8, options: Codec.Options, state: *Codec.State, dictionary: ?Codec.Dictionary, history: Codec.HistoryView, frame_offset: Count, hasher: *XxHash64) Codec.Error!void {
     const original_len = pending.items.len;
     var next_state = state.*;
     var next_hasher = hasher.*;

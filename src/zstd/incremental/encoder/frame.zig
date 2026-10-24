@@ -1,5 +1,8 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
+const Count = core.StreamCount;
+const count = core.stream_count;
+const XxHash64 = @import("../../../checksum/xxh64_stream.zig").XxHash64;
 const history_mod = @import("history.zig");
 const final_transaction = @import("final_transaction.zig");
 const allocator_adapter = @import("allocator_adapter.zig");
@@ -17,36 +20,36 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
         block: std.ArrayList(u8) = .empty,
         pending: std.ArrayList(u8) = .empty,
         pending_offset: usize = 0,
-        hasher: std.hash.XxHash64 = std.hash.XxHash64.init(0),
+        hasher: XxHash64 = XxHash64.init(0),
         header_written: bool = false,
         flush_requested: bool = false,
         finishing: bool = false,
         final_written: bool = false,
         done: bool = false,
-        total_input: usize = 0,
-        total_output: usize = 0,
-        expected_input_len: ?usize = null,
+        total_input: Count = 0,
+        total_output: Count = 0,
+        expected_input_len: ?Count = null,
         dictionary_id: ?u32 = null,
         dictionary: ?Codec.Dictionary = null,
         codec_state: Codec.State = .{},
         history: history_mod.Rolling = .{},
-        stream_input: usize = 0,
-        stream_output: usize = 0,
-        frame_count: usize = 0,
+        stream_input: Count = 0,
+        stream_output: Count = 0,
+        frame_count: Count = 0,
         skippable_only: bool = false,
 
         const Self = @This();
         const allow_zero_dictionary_id = if (@hasDecl(Codec, "allow_zero_dictionary_id")) Codec.allow_zero_dictionary_id else false;
         pub const Error = Codec.Error;
         pub const Snapshot = struct {
-            input_read: usize,
-            output_written: usize,
-            frame_input: usize,
-            frame_output: usize,
+            input_read: Count,
+            output_written: Count,
+            frame_input: Count,
+            frame_output: Count,
             buffered_input: usize,
             pending_output: usize,
-            frame_count: usize,
-            frame_index: usize,
+            frame_count: Count,
+            frame_index: Count,
             finishing: bool,
             done: bool,
         };
@@ -54,7 +57,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
             try Codec.validate(options, null, null);
             return initialState(allocator, options, null, null, null);
         }
-        pub fn initExactSize(allocator: std.mem.Allocator, options: Codec.Options, expected_input_len: usize) Error!Self {
+        pub fn initExactSize(allocator: std.mem.Allocator, options: Codec.Options, expected_input_len: Count) Error!Self {
             try Codec.validate(options, expected_input_len, null);
             return initialState(allocator, options, expected_input_len, null, null);
         }
@@ -67,7 +70,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
             try Codec.validate(options, null, dictionary_id);
             return initialState(allocator, options, null, dictionary_id, null);
         }
-        pub fn initExactSizeWithDictionary(allocator: std.mem.Allocator, options: Codec.Options, expected_input_len: usize, dictionary_id: u32) Error!Self {
+        pub fn initExactSizeWithDictionary(allocator: std.mem.Allocator, options: Codec.Options, expected_input_len: Count, dictionary_id: u32) Error!Self {
             if (dictionary_id == 0) return error.NeedDictionary;
             if (options.selection != .raw_or_rle) return error.InvalidBlockPlan;
             try Codec.validate(options, expected_input_len, dictionary_id);
@@ -80,7 +83,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
             try Codec.validate(options, null, dictionary.id);
             return initialState(allocator, options, null, dictionary.id, dictionary);
         }
-        pub fn initExactSizeWithPresetDictionary(allocator: std.mem.Allocator, options: Codec.Options, expected_input_len: usize, dictionary: Codec.Dictionary) Error!Self {
+        pub fn initExactSizeWithPresetDictionary(allocator: std.mem.Allocator, options: Codec.Options, expected_input_len: Count, dictionary: Codec.Dictionary) Error!Self {
             if (dictionary.id == 0 and !allow_zero_dictionary_id) return error.NeedDictionary;
             try Codec.validate(options, expected_input_len, dictionary.id);
             return initialState(allocator, options, expected_input_len, dictionary.id, dictionary);
@@ -89,7 +92,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
             const dictionary = dictionary_set.find(dictionary_id) orelse return error.NeedDictionary;
             return initWithPresetDictionary(allocator, options, dictionary);
         }
-        pub fn initExactSizeWithDictionarySet(allocator: std.mem.Allocator, options: Codec.Options, expected_input_len: usize, dictionary_set: anytype, dictionary_id: u32) Error!Self {
+        pub fn initExactSizeWithDictionarySet(allocator: std.mem.Allocator, options: Codec.Options, expected_input_len: Count, dictionary_set: anytype, dictionary_id: u32) Error!Self {
             const dictionary = dictionary_set.find(dictionary_id) orelse return error.NeedDictionary;
             return initExactSizeWithPresetDictionary(allocator, options, expected_input_len, dictionary);
         }
@@ -102,7 +105,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
             self.allocation.deinit();
             self.* = undefined;
         }
-        fn initialState(allocator: std.mem.Allocator, options: Codec.Options, expected_input_len: ?usize, dictionary_id: ?u32, dictionary: ?Codec.Dictionary) Error!Self {
+        fn initialState(allocator: std.mem.Allocator, options: Codec.Options, expected_input_len: ?Count, dictionary_id: ?u32, dictionary: ?Codec.Dictionary) Error!Self {
             var state: Self = .{ .allocator = allocator, .allocation = try allocator_adapter.Binding.init(allocator), .options = options, .expected_input_len = expected_input_len, .dictionary_id = dictionary_id, .dictionary = dictionary };
             errdefer state.allocation.deinit();
             try state.bindAllocator(options);
@@ -112,7 +115,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
             var bytes = std.math.add(usize, self.block.capacity, self.pending.capacity) catch return error.IntegerOverflow;
             bytes = std.math.add(usize, bytes, self.history.bytes.capacity) catch return error.IntegerOverflow;
             const entries = std.math.add(usize, self.history.index.recent_entries.capacity, self.history.index.long_entries.capacity) catch return error.IntegerOverflow;
-            const indexed = std.math.mul(usize, entries, @sizeOf(usize)) catch return error.IntegerOverflow;
+            const indexed = std.math.mul(usize, entries, @sizeOf(Count)) catch return error.IntegerOverflow;
             return std.math.add(usize, bytes, indexed) catch error.IntegerOverflow;
         }
         fn bindAllocator(self: *Self, options: Codec.Options) Error!void {
@@ -128,12 +131,12 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
             self.frame_count = 0;
             self.resetFrame(self.options, expected_input_len, self.dictionary_id, self.dictionary);
         }
-        fn resetFrame(self: *Self, options: Codec.Options, expected_input_len: ?usize, dictionary_id: ?u32, dictionary: ?Codec.Dictionary) void {
+        fn resetFrame(self: *Self, options: Codec.Options, expected_input_len: ?Count, dictionary_id: ?u32, dictionary: ?Codec.Dictionary) void {
             self.options = options;
             self.block.clearRetainingCapacity();
             self.pending.clearRetainingCapacity();
             self.pending_offset = 0;
-            self.hasher = std.hash.XxHash64.init(0);
+            self.hasher = XxHash64.init(0);
             self.header_written = false;
             self.flush_requested = false;
             self.finishing = false;
@@ -154,13 +157,13 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
             try self.bindAllocator(options);
             self.resetFrame(options, null, null, null);
         }
-        pub fn nextFrameExactSize(self: *Self, options: Codec.Options, expected_input_len: usize) Error!void {
+        pub fn nextFrameExactSize(self: *Self, options: Codec.Options, expected_input_len: Count) Error!void {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
             try Codec.validate(options, expected_input_len, null);
             try self.bindAllocator(options);
             self.resetFrame(options, expected_input_len, null, null);
         }
-        pub fn nextFrameExactSizeWithPresetDictionary(self: *Self, options: Codec.Options, expected_input_len: usize, dictionary: Codec.Dictionary) Error!void {
+        pub fn nextFrameExactSizeWithPresetDictionary(self: *Self, options: Codec.Options, expected_input_len: Count, dictionary: Codec.Dictionary) Error!void {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
             if (dictionary.id == 0 and !allow_zero_dictionary_id) return error.NeedDictionary;
             try Codec.validate(options, expected_input_len, dictionary.id);
@@ -211,21 +214,31 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
                 return .{ .status = .done };
             }
             if ((self.finishing or self.flush_requested) and input.len != 0) return error.TrailingData;
+            // A call may accept input across several blocks. Refuse an
+            // unrepresentable offered slice before draining a frame header or
+            // pending block; commit counters only as bytes are accepted below.
+            _ = try count.addLocal(self.total_input, input.len);
+            _ = try count.addLocal(self.stream_input, input.len);
             try self.bindAllocator(self.options);
             return self.stepImpl(input, output) catch |err| return @errorCast(self.allocation.mapError(err));
         }
         fn stepImpl(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+            // Final completion must remain representable before any of this
+            // call's pending output is delivered to the caller.
+            if (self.finishing and !self.skippable_only) _ = try count.addLocal(self.frame_count, 1);
             var input_read: usize = 0;
             var output_written: usize = 0;
             while (true) {
                 if (self.pending_offset != self.pending.items.len) {
                     const remaining = self.pending.items[self.pending_offset..];
                     const n = @min(output.len - output_written, remaining.len);
+                    const next_output = try count.addLocal(self.total_output, n);
+                    const next_stream_output = try count.addLocal(self.stream_output, n);
                     @memcpy(output[output_written..][0..n], remaining[0..n]);
                     self.pending_offset += n;
                     output_written += n;
-                    self.total_output += n;
-                    self.stream_output += n;
+                    self.total_output = next_output;
+                    self.stream_output = next_stream_output;
                     if (self.pending_offset != self.pending.items.len) return result(input_read, output_written, .need_output);
                     self.pending.clearRetainingCapacity();
                     self.pending_offset = 0;
@@ -247,8 +260,8 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
                 const n = @min(room, input.len - input_read);
                 if (n != 0) {
                     const bytes = input[input_read..][0..n];
-                    const next_input = std.math.add(usize, self.total_input, n) catch return error.IntegerOverflow;
-                    const next_stream = std.math.add(usize, self.stream_input, n) catch return error.IntegerOverflow;
+                    const next_input = try count.addLocal(self.total_input, n);
+                    const next_stream = try count.addLocal(self.stream_input, n);
                     if (self.expected_input_len) |expected| if (next_input > expected) return error.SizeMismatch;
                     try self.block.appendSlice(self.allocator, bytes);
                     if (self.options.content_checksum) self.hasher.update(bytes);
@@ -277,13 +290,13 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
                     if (self.expected_input_len) |expected| {
                         if (self.total_input != expected) return error.SizeMismatch;
                     }
-                    try final_transaction.append(Codec, BlockEmitter, self.allocator, &self.pending, self.block.items, self.options, &self.codec_state, self.dictionary, self.history.view(), self.total_input - self.block.items.len, &self.hasher);
+                    try final_transaction.append(Codec, BlockEmitter, self.allocator, &self.pending, self.block.items, self.options, &self.codec_state, self.dictionary, self.history.view(), self.total_input - count.fromLocal(self.block.items.len), &self.hasher);
                     self.block.clearRetainingCapacity();
                     self.final_written = true;
                     continue;
                 }
                 if (self.finishing) {
-                    self.frame_count += 1;
+                    self.frame_count = count.addLocal(self.frame_count, 1) catch unreachable;
                     self.done = true;
                     return result(input_read, output_written, .done);
                 }
@@ -303,7 +316,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
                 emission.rollback();
             }
             try self.history.prepareCompletedBlock(self.allocator, self.block.items, Codec.historyLen(self.options));
-            try BlockEmitter.write(self.allocator, &self.pending, self.block.items, false, self.options, &next_state, self.dictionary, self.history.view(), self.total_input - self.block.items.len);
+            try BlockEmitter.write(self.allocator, &self.pending, self.block.items, false, self.options, &next_state, self.dictionary, self.history.view(), self.total_input - count.fromLocal(self.block.items.len));
             self.codec_state = next_state;
             self.history.appendCompletedBlock(self.block.items, Codec.historyLen(self.options));
             self.block.clearRetainingCapacity();
@@ -313,4 +326,5 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
 
 test {
     _ = @import("budget_tests.zig");
+    _ = @import("counter_tests.zig");
 }
