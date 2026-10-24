@@ -5,6 +5,26 @@ const Source = search.Source;
 const Record = search.Record;
 const strategies = [_]controls.Strategy{ .greedy, .lazy, .optimal };
 
+test "controlled search vector mismatch lanes agree with scalar dictionary oracle" {
+    const allocator = std.testing.allocator;
+    var dictionary: [96]u8 = undefined;
+    for (&dictionary, 0..) |*byte, i| byte.* = @intCast(i + 32);
+    for (3..67) |mismatch| {
+        var block = dictionary;
+        block[mismatch] ^= 0x80;
+        const source = Source.init(&dictionary, "", &block, 256);
+        var actual: std.ArrayList(Record) = .empty;
+        defer actual.deinit(allocator);
+        var expected: std.ArrayList(Record) = .empty;
+        defer expected.deinit(allocator);
+        try search.planReuse(&actual, allocator, source, .{ .strategy = .greedy });
+        try scalarGreedy(&expected, source);
+        try std.testing.expectEqualSlices(Record, expected.items, actual.items);
+        try std.testing.expectEqual(mismatch, actual.items[0].match_len);
+        try verifyPlan(source, actual.items);
+    }
+}
+
 test "controlled search scalar greedy oracle covers virtual spans and overlap" {
     const gpa = std.testing.allocator;
     var actual: std.ArrayList(Record) = .empty;

@@ -455,8 +455,8 @@ fn matchAt(source: Source, position: usize, candidate: usize) Match {
         while (offset + 32 <= limit) : (offset += 32) {
             const left: @Vector(32, u8) = span[offset..][0..32].*;
             const right: @Vector(32, u8) = source.block[position + length + offset ..][0..32].*;
-            const different: u32 = ~@as(u32, @bitCast(left == right));
-            if (different != 0) return finishMatch(length + offset + @ctz(different), absolute - candidate);
+            if (std.simd.firstTrue(left != right)) |lane|
+                return finishMatch(length + offset + lane, absolute - candidate);
         }
         while (offset < limit) : (offset += 1)
             if (span[offset] != source.block[position + length + offset]) return finishMatch(length + offset, absolute - candidate);
