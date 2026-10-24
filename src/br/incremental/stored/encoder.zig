@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
+const memory = @import("allocator_adapter.zig");
 
 /// Build an incremental encoder for Brotli stored/uncompressed streams. Input
 /// is bounded to one format meta-block, while encoded bytes are drained through
@@ -8,6 +9,7 @@ pub fn Encoder(comptime Codec: type) type {
     return struct {
         allocator: std.mem.Allocator,
         options: Options,
+        memory_binding: memory.Binding = .{},
         codec_state: Codec.State = .{},
         plain: std.ArrayList(u8) = .empty,
         pending: std.ArrayList(u8) = .empty,
@@ -29,7 +31,7 @@ pub fn Encoder(comptime Codec: type) type {
         /// Byte counts span complete streams, independently of address space.
         /// Keep the established public type on targets with 64-bit `usize`.
         pub const Counter = if (@bitSizeOf(usize) < 64) u64 else usize;
-        pub const Error = Codec.Error;
+        pub const Error = Codec.Error || memory.Error;
         pub const Options = struct {
             stream: Codec.StreamOptions = .{},
             max_input_len: Counter = std.math.maxInt(Counter),
@@ -61,10 +63,17 @@ pub fn Encoder(comptime Codec: type) type {
         pub fn initWithOptions(allocator: std.mem.Allocator, options: Options) Self {
             return .{ .allocator = allocator, .options = options };
         }
+        /// Internal composition surface for complete-frame operations whose
+        /// sibling encoders and retained wires share one total-memory policy.
+        pub fn initWithSharedLease(allocator: std.mem.Allocator, options: Options, lease: @import("../../encoder/total_budget.zig").Lease) Error!Self {
+            return .{ .allocator = allocator, .options = options, .memory_binding = try memory.Binding.initShared(allocator, lease) };
+        }
         pub fn deinit(self: *Self) void {
-            if (@hasDecl(Codec, "deinitState")) Codec.deinitState(&self.codec_state, self.allocator);
-            self.plain.deinit(self.allocator);
-            self.pending.deinit(self.allocator);
+            const allocator = self.memory_binding.current(self.allocator);
+            if (@hasDecl(Codec, "deinitState")) Codec.deinitState(&self.codec_state, allocator);
+            self.plain.deinit(allocator);
+            self.pending.deinit(allocator);
+            self.memory_binding.deinit();
             self.* = undefined;
         }
         pub fn reset(self: *Self) void {
@@ -93,6 +102,8 @@ pub fn Encoder(comptime Codec: type) type {
         }
         pub fn nextStream(self: *Self, options: Options) Error!void {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
+            _ = self.memory_binding.activate(Codec, self.allocator, &self.codec_state, options.stream, self.plain.capacity, self.pending.capacity) catch |err|
+                return @errorCast(self.memory_binding.mapError(err));
             self.resetStream(options);
         }
         pub fn snapshot(self: *const Self) Snapshot {
@@ -141,6 +152,11 @@ pub fn Encoder(comptime Codec: type) type {
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+            return self.stepInner(input, output) catch |err|
+                return @errorCast(self.memory_binding.mapError(err));
+        }
+
+        fn stepInner(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
             const block_len = if (@hasDecl(Codec, "resolveBlockLen"))
                 try Codec.resolveBlockLen(self.options.stream, self.options.block_len)
             else
@@ -159,6 +175,7 @@ pub fn Encoder(comptime Codec: type) type {
             const offered_total = std.math.add(Counter, self.total_input, @as(Counter, input.len)) catch return error.IntegerOverflow;
             if (offered_total > self.options.max_input_len) return error.OutputLimitExceeded;
             _ = std.math.add(Counter, self.stream_input, @as(Counter, input.len)) catch return error.IntegerOverflow;
+            const allocator = try self.memory_binding.activate(Codec, self.allocator, &self.codec_state, self.options.stream, self.plain.capacity, self.pending.capacity);
             var input_read: usize = 0;
             var output_written: usize = 0;
             while (true) {
@@ -182,9 +199,9 @@ pub fn Encoder(comptime Codec: type) type {
                 }
                 if (!self.prefix_written) {
                     if (@hasDecl(Codec, "writePrefixWithBlockLen")) {
-                        try Codec.writePrefixWithBlockLen(self.allocator, &self.pending, &self.codec_state, self.options.stream, block_len);
+                        try Codec.writePrefixWithBlockLen(allocator, &self.pending, &self.codec_state, self.options.stream, block_len);
                     } else {
-                        try Codec.writePrefix(self.allocator, &self.pending, &self.codec_state, self.options.stream);
+                        try Codec.writePrefix(allocator, &self.pending, &self.codec_state, self.options.stream);
                     }
                     self.prefix_written = true;
                     continue;
@@ -194,7 +211,7 @@ pub fn Encoder(comptime Codec: type) type {
                 if (n != 0) {
                     const total = std.math.add(Counter, self.total_input, @as(Counter, n)) catch return error.IntegerOverflow;
                     const cumulative = std.math.add(Counter, self.stream_input, @as(Counter, n)) catch return error.IntegerOverflow;
-                    try self.plain.appendSlice(self.allocator, input[input_read..][0..n]);
+                    try self.plain.appendSlice(allocator, input[input_read..][0..n]);
                     input_read += n;
                     self.total_input = total;
                     self.stream_input = cumulative;
@@ -216,7 +233,7 @@ pub fn Encoder(comptime Codec: type) type {
                     if (self.finishing) {
                         if (comptime @hasDecl(Codec, "writeFinalBlock")) {
                             try Codec.writeFinalBlock(
-                                self.allocator,
+                                allocator,
                                 &self.pending,
                                 &self.codec_state,
                                 self.plain.items,
@@ -226,12 +243,12 @@ pub fn Encoder(comptime Codec: type) type {
                             continue;
                         }
                     }
-                    try self.writeBlock();
+                    try self.writeBlock(allocator);
                     continue;
                 }
                 if (self.flush_requested) {
                     if (self.metadata_requested) {
-                        try Codec.writeMetadata(self.allocator, &self.pending, &self.codec_state, self.pending_metadata);
+                        try Codec.writeMetadata(allocator, &self.pending, &self.codec_state, self.pending_metadata);
                         self.pending_metadata = &.{};
                         self.metadata_requested = false;
                         continue;
@@ -240,7 +257,7 @@ pub fn Encoder(comptime Codec: type) type {
                     return result(input_read, output_written, .need_input);
                 }
                 if (self.finishing and !self.final_written) {
-                    try Codec.writeFinal(self.allocator, &self.pending, &self.codec_state);
+                    try Codec.writeFinal(allocator, &self.pending, &self.codec_state);
                     self.final_written = true;
                     continue;
                 }
@@ -256,9 +273,9 @@ pub fn Encoder(comptime Codec: type) type {
         fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
             return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = status };
         }
-        fn writeBlock(self: *Self) Error!void {
+        fn writeBlock(self: *Self, allocator: std.mem.Allocator) Error!void {
             std.debug.assert(self.plain.items.len != 0);
-            try Codec.writeBlock(self.allocator, &self.pending, &self.codec_state, self.plain.items);
+            try Codec.writeBlock(allocator, &self.pending, &self.codec_state, self.plain.items);
             self.plain.clearRetainingCapacity();
         }
     };
@@ -268,4 +285,5 @@ test {
     _ = @import("encoder_tests.zig");
     _ = @import("encoder_counter_tests.zig");
     _ = @import("encoder_block_options_tests.zig");
+    _ = @import("encoder_memory_tests.zig");
 }
