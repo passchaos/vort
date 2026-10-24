@@ -3,6 +3,7 @@ const distance = @import("distance.zig");
 
 pub const Error = error{InvalidBlockPlan};
 pub const max_block_len: usize = 1 << 24;
+pub const ParseMode = enum { bounded, whole_block };
 
 /// Concrete settings consumed by one HQ operation. Native beam width and
 /// extra iterations are explicit Vort controls, not upstream preset parity.
@@ -16,6 +17,7 @@ pub const Resolved = struct {
     block_len: usize,
     distance_parameters: distance.Parameters,
     format: distance.Format = .standard,
+    parse_mode: ParseMode = .bounded,
 };
 
 /// Caller-owned work and published-output instrumentation. Work survives a
@@ -33,6 +35,10 @@ pub const HqProfile = struct {
     transitions: u64 = 0,
     price_evaluations: u64 = 0,
     passes: u64 = 0,
+    bounded_passes: u64 = 0,
+    whole_block_passes: u64 = 0,
+    /// Largest input-position span actually visited by one parser pass.
+    max_parse_positions: usize = 0,
     refinement_passes: u64 = 0,
     static_probes: u64 = 0,
     compound_probes: u64 = 0,
@@ -67,6 +73,16 @@ pub const HqProfile = struct {
     pub fn recordPeak(self: *HqProfile, bytes: usize) void {
         self.peak_working_memory = @max(self.peak_working_memory, bytes);
     }
+    /// Called by the parser for actual nonempty DP work. The existing total
+    /// passes counter remains the caller's responsibility, avoiding double count.
+    pub fn recordParseMode(self: *HqProfile, mode: ParseMode, positions: usize) void {
+        if (positions == 0) return;
+        switch (mode) {
+            .bounded => self.bounded_passes +|= 1,
+            .whole_block => self.whole_block_passes +|= 1,
+        }
+        self.max_parse_positions = @max(self.max_parse_positions, positions);
+    }
     pub fn recordEffective(self: *HqProfile, resolved: Resolved) void {
         self.effective = resolved;
     }
@@ -84,9 +100,10 @@ pub const HqProfile = struct {
         self.emitted_max_distance = @max(self.emitted_max_distance, other.emitted_max_distance);
     }
     pub fn mergeWork(self: *HqProfile, other: HqProfile) void {
-        inline for (.{ "tree_nodes", "byte_comparisons", "match_probes", "history_seed_positions", "short_hash_probes", "stitch_positions", "normalizations", "indexed_positions", "states", "transitions", "price_evaluations", "passes", "refinement_passes", "static_probes", "compound_probes", "static_candidates", "compound_candidates" }) |field|
+        inline for (.{ "tree_nodes", "byte_comparisons", "match_probes", "history_seed_positions", "short_hash_probes", "stitch_positions", "normalizations", "indexed_positions", "states", "transitions", "price_evaluations", "passes", "bounded_passes", "whole_block_passes", "refinement_passes", "static_probes", "compound_probes", "static_candidates", "compound_candidates" }) |field|
             @field(self, field) +|= @field(other, field);
         self.recordPeak(other.peak_working_memory);
+        self.max_parse_positions = @max(self.max_parse_positions, other.max_parse_positions);
         if (other.effective) |effective| self.effective = effective;
     }
     pub fn merge(self: *HqProfile, other: HqProfile) void {
@@ -108,6 +125,7 @@ pub const HqOptions = struct {
     block_len: usize = 256 * 1024,
     distance_parameters: ?distance.Parameters = null,
     profile: ?*HqProfile = null,
+    parse_mode: ParseMode = .bounded,
 
     pub fn validate(self: HqOptions, quality: u8) Error!void {
         if ((quality != 10 and quality != 11) or self.search_depth == 0 or self.search_depth > 65536 or
@@ -129,6 +147,11 @@ pub const HqOptions = struct {
             .block_len = self.block_len,
             .distance_parameters = self.distance_parameters orelse if (mode == .font) distance.Parameters.init(1, 6) else distance.Parameters.init(0, 0),
             .format = format,
+            .parse_mode = self.parse_mode,
         };
     }
 };
+
+test {
+    _ = @import("hq_parser/whole_options_tests.zig");
+}
