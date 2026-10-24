@@ -1,0 +1,11 @@
+[package]
+name = "vort-png-incremental-ultrafast-reference"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+fdeflate = { path = "/home/passchaos/Work/fdeflate" }
+
+[profile.release]
+codegen-units = 1

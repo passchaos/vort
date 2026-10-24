@@ -248,6 +248,7 @@ const IncrementalZlibBestEncoderCodec = struct {
 };
 
 pub const ZlibIncrementalBestEncoder = incremental_zlib_fixed_encoder.Encoder(IncrementalZlibBestEncoderCodec);
+pub const ZlibIncrementalPngUltraFastEncoder = @import("deflate/incremental/encoder/png_ultrafast/root.zig").Encoder;
 
 const IncrementalGzipFixedEncoderCodec = struct {
     pub const Error = deflate.Error || std.mem.Allocator.Error;

@@ -61,6 +61,15 @@ const literal_lengths = [286]u4{
 const literal_codes = makeCanonicalCodes(literal_lengths);
 const literal_pairs = makeLiteralPairs();
 
+/// Read-only syntax shared by the incremental encoder. One-shot emission and
+/// its numeric tables remain the canonical PNG-trained format definition.
+pub const incremental_syntax = struct {
+    pub const header = zlib_dynamic_header;
+    pub const lengths = literal_lengths;
+    pub const codes = literal_codes;
+    pub const length = lengthCode;
+};
+
 fn makeLiteralPairs() [1 << 16]u64 {
     @setEvalBranchQuota(1_000_000);
     var pairs: [1 << 16]u64 = undefined;
