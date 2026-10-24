@@ -3,6 +3,7 @@ const controls = @import("controls.zig");
 const source_mod = @import("../match/controlled_source.zig");
 const fast = @import("../match/controlled_fast.zig");
 const search = @import("../match/controlled_search.zig");
+const hq_codec = @import("hq_codec.zig");
 
 /// Opt-in control flow shares the existing format/entropy authority through a
 /// narrow codec bridge. Legacy positive/default candidate arbitration is separate.
@@ -31,6 +32,9 @@ pub fn Encoder(comptime Codec: type) type {
         }
 
         pub fn writeBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, options: Codec.Options, state: *Codec.State, dictionary: ?Codec.Dictionary, history: []const u8, frame_offset: usize, records: *std.ArrayList(source_mod.Record), scratch: *Codec.SequenceScratch, block_scratch: *Codec.BlockScratch) Codec.Error!void {
+            // Dictionary initialization belongs to the block transaction too.
+            const original_state = state.*;
+            errdefer state.* = original_state;
             const emission = controls.EmissionTransaction.init(options.control_profile);
             errdefer emission.rollback();
             try options.validate();
@@ -43,6 +47,7 @@ pub fn Encoder(comptime Codec: type) type {
                 p.controls_used = true;
                 p.resolved_strategy = selected;
                 p.fast_acceleration = acceleration;
+                p.recordEffectiveHq(try controls.effectiveHq(options));
             }
             const output_start = out.items.len;
             errdefer out.items.len = output_start;
@@ -59,6 +64,7 @@ pub fn Encoder(comptime Codec: type) type {
             switch (selected) {
                 .fast, .double_fast => try fast.planReuse(records, allocator, source, parameters),
                 .greedy, .lazy, .optimal => try search.planReuse(records, allocator, source, parameters),
+                .lazy2, .btlazy2, .btopt, .btultra, .btultra2 => return hq_codec.Encoder(Codec).writeBlock(allocator, out, source, last, options, state, dictionary, scratch, block_scratch),
                 .auto => return error.InvalidBlockPlan,
             }
             Codec.clearBlockScratch(block_scratch);

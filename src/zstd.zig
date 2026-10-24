@@ -37,6 +37,8 @@ const double_fast_match = @import("zstd/match/double_fast.zig");
 const encode_controls = @import("zstd/encode/controls.zig");
 const controlled_source = @import("zstd/match/controlled_source.zig");
 const controlled_encoder = @import("zstd/encode/controlled_frame.zig");
+const hq_parser = @import("zstd/match/hq_parser.zig");
+const hq_codec = @import("zstd/encode/hq_codec.zig");
 const double_fast_sequence_plan = @import("zstd/match/double_fast/sequence_plan.zig");
 const large_sequence_record_values = @import("zstd/sequence/large/record_values.zig");
 const large_state_handoff_test = if (builtin.is_test) @import("zstd/sequence/large/state_handoff_test.zig") else struct {};
@@ -96,6 +98,10 @@ pub const default_compression_level: c_int = 1;
 pub const min_compression_level: c_int = encode_controls.min_level;
 pub const max_compression_level: c_int = 22;
 pub const Strategy = encode_controls.Strategy;
+pub const HqOptions = encode_controls.HqOptions;
+pub const CanonicalCompressionParameters = @import("zstd/encode/canonical_presets.zig").Parameters;
+pub const CanonicalCompressionOptions = @import("zstd/encode/canonical_presets.zig").Options;
+pub const resolveCanonicalCompressionParameters = @import("zstd/encode/canonical_presets.zig").resolveCanonicalCompressionParameters;
 pub const EncoderControlProfile = encode_controls.Profile;
 var test_disable_indexed_single_lower_bound = false;
 var test_decisive_single_lower_bound_hits: usize = 0;
@@ -489,6 +495,7 @@ pub const FrameOptions = struct {
     fast_acceleration: ?u32 = null,
     /// Optional caller-owned counters, accumulated across operations.
     control_profile: ?*EncoderControlProfile = null,
+    hq: ?HqOptions = null,
 };
 
 pub const NativeFrameSelection = enum {
@@ -527,7 +534,11 @@ pub const NativeFrameOptions = struct {
     /// with an acceleration selects fast; negative levels supply their magnitude.
     fast_acceleration: ?u32 = null,
     control_profile: ?*EncoderControlProfile = null,
+    hq: ?HqOptions = null,
 
+    pub fn effectiveHq(self: NativeFrameOptions) Error!?HqOptions {
+        return encode_controls.effectiveHq(self);
+    }
     pub fn validate(self: NativeFrameOptions) Error!void {
         _ = try nativeBlockSizeMax(self);
         _ = try nativeMatchSearchBudget(self);
@@ -558,6 +569,8 @@ const IncrementalEncoderCodec = struct {
         return nativeEncoderWindowLen(options) catch unreachable;
     }
     pub fn writeHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options, expected_input_len: ?usize, dictionary_id: ?u32) zstd.Error!void {
+        const original_len = out.items.len;
+        errdefer out.items.len = original_len;
         if (expected_input_len) |len| return emitFrameHeader(allocator, out, try checkedUsizeToU64(len), options);
         try out.appendSlice(allocator, &frame_magic);
         const checksum_flag: u8 = if (options.content_checksum) 0x04 else 0;
@@ -662,6 +675,115 @@ const ControlledEncoderCodec = struct {
     pub fn commitSequences(allocator: std.mem.Allocator, out: *std.ArrayList(u8), candidate: []const u8, last: bool, state: *State) zstd.Error!void {
         try appendSequenceCandidateAndCommit(allocator, out, candidate, last, &state.sequence_state);
     }
+    pub fn hqModel(state: *State, dictionary: ?ControlledEncoderCodec.Dictionary) zstd.Error!hq_parser.EntropyModel {
+        if (state.hq_entropy) |model| return model;
+        var model = try hqModelFromCommitted(state, state.previous_huffman_plan);
+        model.initialized = dictionary != null;
+        model.origin = if (dictionary != null) .dictionary else .predefined;
+        if (dictionary) |dict| {
+            const initial = try initialSequenceFrameState(dict);
+            if (initial.previous_huffman_tree) |tree| fillHqHuffman(&model, tree);
+        }
+        return model;
+    }
+    fn fillHqHuffman(model: *hq_parser.EntropyModel, tree: StdZstdHuffmanTree) void {
+        model.literal_prices = @splat(hq_parser.prices.maximum_symbol_price);
+        model.literal_frequencies = @splat(0);
+        for (tree.nodes[0 .. @as(usize, tree.symbol_count_minus_one) + 1]) |node| {
+            if (node.weight == 0) continue;
+            const bits: u32 = @as(u32, tree.max_bit_count) + 1 - node.weight;
+            model.literal_prices[node.symbol] = bits * hq_parser.prices.scale;
+            model.literal_frequencies[node.symbol] = @as(u32, 1) << @intCast(node.weight - 1);
+        }
+    }
+    fn fillHqSequence(prices: []u32, frequencies: []u32, tables: *const SequenceTables, kind: SequenceTableKind) zstd.Error!void {
+        @memset(frequencies, 0);
+        const source = previousSequenceTable(tables, kind);
+        if (source.mode == .rle) {
+            const symbol = source.rle orelse return error.CorruptFrame;
+            for (frequencies, 0..) |*frequency, code| if (sequenceSymbolMatchesCode(symbol, kind, @intCast(code))) {
+                frequency.* = 1;
+                break;
+            };
+        } else {
+            for (source.symbols) |symbol| {
+                var found = false;
+                for (frequencies, 0..) |*frequency, code| if (sequenceSymbolMatchesCode(symbol, kind, @intCast(code))) {
+                    frequency.* += 1;
+                    found = true;
+                    break;
+                };
+                if (!found) return error.CorruptFrame;
+            }
+        }
+        var total: u64 = 0;
+        for (frequencies) |frequency| total += frequency;
+        if (total == 0) return error.CorruptFrame;
+        for (prices, frequencies) |*price, frequency| price.* = hq_parser.prices.probabilityPrice(frequency, total);
+    }
+    pub fn hqModelFromCommitted(state: *State, literal_plan: ?SmallHuffmanLiteralPlan) zstd.Error!hq_parser.EntropyModel {
+        var model: hq_parser.EntropyModel = .{};
+        if (state.hq_entropy) |previous| {
+            model.literal_prices = previous.literal_prices;
+            model.literal_frequencies = previous.literal_frequencies;
+        }
+        if (literal_plan) |plan| {
+            for (&model.literal_prices, &model.literal_frequencies, plan.bit_counts) |*price, *frequency, bits| {
+                price.* = if (bits == 0) hq_parser.prices.maximum_symbol_price else @as(u32, bits) * hq_parser.prices.scale;
+                frequency.* = if (bits == 0) 0 else @as(u32, 1) << @intCast(11 - bits);
+            }
+        }
+        if (state.sequence_state.previous_tables) |*tables| {
+            try fillHqSequence(&model.ll_prices, &model.ll_frequencies, tables, .literal);
+            try fillHqSequence(&model.ml_prices, &model.ml_frequencies, tables, .match);
+            try fillHqSequence(&model.of_prices, &model.of_frequencies, tables, .offset);
+        }
+        model.initialized = true;
+        model.origin = .previous_block;
+        return model;
+    }
+    pub fn writeHqSequences(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, records: []const controlled_source.Record, scratch: *SequenceScratch, state: *State) zstd.Error!bool {
+        if (records.len == 0) return false;
+        if (records.len > max_large_native_sequence_count) return error.InvalidBlockPlan;
+        const count = records.len;
+        try scratch.values.resize(allocator, std.math.mul(usize, count, 5) catch return error.IntegerOverflow);
+        const ll = scratch.values.items[0..count];
+        const distances = scratch.values.items[count .. count * 2];
+        const ml = scratch.values.items[count * 2 .. count * 3];
+        const ends = scratch.values.items[count * 3 .. count * 4];
+        const values = scratch.values.items[count * 4 .. count * 5];
+        for (records, 0..) |record, index| {
+            ll[index] = record.literal_len;
+            distances[index] = record.distance;
+            ml[index] = record.match_len;
+            ends[index] = record.match_end;
+            values[index] = record.offset_value orelse return error.InvalidBlockPlan;
+        }
+        return emitLargeSequenceCompressedBlockWithStatePolicy(true, allocator, out, block, last, ll, distances, ml, ends, ends[count - 1], scratch, if (state.sequence_state.previous_tables) |*tables| tables else null, state.sequence_state.repeated_offsets, values);
+    }
+    pub fn commitHqSequences(allocator: std.mem.Allocator, out: *std.ArrayList(u8), candidate: []const u8, last: bool, state: *State, final_reps: [3]usize) zstd.Error!void {
+        _ = last;
+        if (candidate.len < 3) return error.CorruptFrame;
+        const header = std.mem.readInt(u24, candidate[0..3], .little);
+        if (((header >> 1) & 0x3) != 2 or candidate.len != @as(usize, header >> 3) + 3) return error.CorruptFrame;
+        const payload = candidate[3..];
+        var next = state.*;
+        var parse_state: SequenceFrameState = .{ .previous_tables = next.sequence_state.previous_tables };
+        const literals = try parseLiteralsSection(payload, &parse_state);
+        if (literals.sequence_count == 0) return error.InvalidBlockPlan;
+        var position = literals.sequence_payload_offset;
+        const spec = try resolveSequenceModeSpec(try parseSequenceModeSpec(payload, &position, literals.sequence_count), next.sequence_state.previous_tables);
+        var decoder = try initSequenceDecodeState(&spec, literals.sequence_count, try ReverseBitReader.init(payload[spec.bitstream_offset..]), next.sequence_state.repeated_offsets);
+        while (decoder.remaining != 0) _ = try readModeSequence(&decoder);
+        if (!std.mem.eql(usize, &decoder.repeated_offsets, &final_reps)) return error.InvalidBlockPlan;
+        next.sequence_state.previous_tables = spec.tables();
+        next.sequence_state.repeated_offsets = decoder.repeated_offsets;
+        var model = try hqModelFromCommitted(&next, null);
+        if (literals.huffman_tree) |tree| fillHqHuffman(&model, tree);
+        next.hq_entropy = model;
+        try out.appendSlice(allocator, candidate);
+        state.* = next;
+    }
     pub fn writeChecksum(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: Options) zstd.Error!void {
         try emitContentChecksum(allocator, out, input, options);
     }
@@ -670,6 +792,122 @@ const ControlledFrameEncoder = controlled_encoder.Encoder(ControlledEncoderCodec
 
 const zstd = @This();
 pub const NativeIncrementalFrameEncoder = incremental_encoder.Encoder(IncrementalEncoderCodec, IncrementalBlockEmitter);
+
+test "Zstd HQ exact offset wire retains direct value when a repeat has the same distance" {
+    const allocator = std.testing.allocator;
+    const input = "ABCD" ** 64;
+    var records = [_]controlled_source.Record{.{ .literal_len = 4, .distance = 4, .match_len = input.len - 4, .match_end = input.len, .offset_value = 7 }};
+    var scratch: LargeSequenceScratch = .{};
+    defer scratch.deinit(allocator);
+    var state: LiteralOnlyEncoderState = .{};
+    try ControlledEncoderCodec.ensureState(&state, null);
+    var block: std.ArrayList(u8) = .empty;
+    defer block.deinit(allocator);
+    try std.testing.expect(try ControlledEncoderCodec.writeHqSequences(allocator, &block, input, true, &records, &scratch, &state));
+    var parse_state: SequenceFrameState = .{};
+    const payload = block.items[3..];
+    const literals = try parseLiteralsSection(payload, &parse_state);
+    try std.testing.expectEqual(@as(usize, 1), literals.sequence_count);
+    var position = literals.sequence_payload_offset;
+    const spec = try parseSequenceModeSpec(payload, &position, 1);
+    try std.testing.expectEqual(SymbolMode.rle, spec.of_mode);
+    // offBase 7 has OF code 2. A reselected rep0/rep1 would use code 0 or 1.
+    try std.testing.expectEqual(@as(u8, 2), spec.offset_rle.?.additional_bits);
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(allocator);
+    try ControlledEncoderCodec.writeHeader(allocator, &frame, input.len, .{ .content_checksum = false });
+    try ControlledEncoderCodec.commitHqSequences(allocator, &frame, block.items, true, &state, .{ 4, 1, 4 });
+    const restored = try decodeNativeFrameAlloc(allocator, frame.items);
+    defer allocator.free(restored);
+    try std.testing.expectEqualSlices(u8, input, restored);
+    try std.testing.expectEqualSlices(usize, &.{ 4, 1, 4 }, &state.sequence_state.repeated_offsets);
+}
+
+test "Zstd HQ committed literal prices come from the selected sequence Huffman tree" {
+    const allocator = std.testing.allocator;
+    const input = "abcdefgh" ** 64;
+    const records = [_]controlled_source.Record{.{ .literal_len = 256, .distance = 256, .match_len = 256, .match_end = input.len, .offset_value = 259 }};
+    var scratch: LargeSequenceScratch = .{};
+    defer scratch.deinit(allocator);
+    var state: LiteralOnlyEncoderState = .{ .hq_entropy = .{} };
+    try ControlledEncoderCodec.ensureState(&state, null);
+    var block: std.ArrayList(u8) = .empty;
+    defer block.deinit(allocator);
+    try std.testing.expect(try ControlledEncoderCodec.writeHqSequences(allocator, &block, input, true, &records, &scratch, &state));
+    var parse_state: SequenceFrameState = .{};
+    const literals = try parseLiteralsSection(block.items[3..], &parse_state);
+    try std.testing.expectEqual(LiteralsKind.compressed, literals.kind);
+    const tree = literals.huffman_tree orelse return error.TestUnexpectedResult;
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(allocator);
+    try ControlledEncoderCodec.writeHeader(allocator, &frame, input.len, .{ .content_checksum = false });
+    try ControlledEncoderCodec.commitHqSequences(allocator, &frame, block.items, true, &state, .{ 256, 1, 4 });
+    const model = state.hq_entropy orelse return error.TestUnexpectedResult;
+    for (tree.nodes[0 .. @as(usize, tree.symbol_count_minus_one) + 1]) |node| {
+        if (node.weight == 0) continue;
+        const bits: u32 = @as(u32, tree.max_bit_count) + 1 - node.weight;
+        try std.testing.expectEqual(bits * hq_parser.prices.scale, model.literal_prices[node.symbol]);
+    }
+    try std.testing.expect(model.literal_prices['a'] < 8 * hq_parser.prices.scale);
+    const restored = try decodeNativeFrameAlloc(allocator, frame.items);
+    defer allocator.free(restored);
+    try std.testing.expectEqualSlices(u8, input, restored);
+}
+
+test "Zstd HQ first block failure restores the complete uninitialized coding state" {
+    const allocator = std.testing.allocator;
+    const input = "abcdbcdefghabcdefgh" ** 8;
+    const trained = try standardDictionaryFromContentAlloc(allocator, "abcdbcdefghabcdefgh", 93);
+    defer trained.deinit(allocator);
+    const dictionaries = [_]?NativeDictionary{ null, NativeDictionary.init(93, "abcdbcdefghabcdefgh"), trained.asDictionary() };
+    for (dictionaries) |dictionary| {
+        var state: LiteralOnlyEncoderState = .{};
+        const original = state;
+        var records: std.ArrayList(controlled_source.Record) = .empty;
+        defer records.deinit(allocator);
+        var scratch: LargeSequenceScratch = .{};
+        defer scratch.deinit(allocator);
+        var block_scratch: NativeBlockEncodeScratch = .{};
+        defer block_scratch.deinit(allocator);
+        var output: std.ArrayList(u8) = .empty;
+        defer output.deinit(allocator);
+        try output.appendSlice(allocator, "prefix");
+        var profile: EncoderControlProfile = .{};
+        var options: NativeFrameOptions = .{ .strategy = .btopt, .hq = .{ .max_working_memory = 0 }, .window_log = 10, .control_profile = &profile };
+        try std.testing.expectError(error.WorkingMemoryLimitExceeded, ControlledFrameEncoder.writeBlock(allocator, &output, input, true, options, &state, dictionary, "", 0, &records, &scratch, &block_scratch));
+        try std.testing.expectEqualDeep(original, state);
+        try std.testing.expectEqualStrings("prefix", output.items);
+        try std.testing.expectEqualDeep(EncoderControlProfile.Emitted{}, profile.emitted());
+        options.hq.?.max_working_memory = 8 * 1024 * 1024;
+        var failing = std.testing.FailingAllocator.init(allocator, .{ .fail_index = 0 });
+        try std.testing.expectError(error.OutOfMemory, ControlledFrameEncoder.writeBlock(failing.allocator(), &output, input, true, options, &state, dictionary, "", 0, &records, &scratch, &block_scratch));
+        try std.testing.expectEqualDeep(original, state);
+        try std.testing.expectEqualStrings("prefix", output.items);
+        try std.testing.expectEqualDeep(EncoderControlProfile.Emitted{}, profile.emitted());
+        try ControlledFrameEncoder.writeBlock(allocator, &output, input, true, options, &state, dictionary, "", 0, &records, &scratch, &block_scratch);
+        try std.testing.expect(state.sequence_state_initialized);
+        try std.testing.expect(state.hq_entropy != null and output.items.len > "prefix".len);
+    }
+}
+
+test "Zstd HQ incremental header allocation failure retains no partial magic before retry" {
+    const allocator = std.testing.allocator;
+    const options: NativeFrameOptions = .{ .strategy = .btopt, .window_log = 10, .content_checksum = true };
+    for ([_]?usize{ null, 64 }) |expected_len| {
+        var normal: std.ArrayList(u8) = .empty;
+        defer normal.deinit(allocator);
+        try IncrementalEncoderCodec.writeHeader(allocator, &normal, options, expected_len, null);
+        const storage = try allocator.alloc(u8, 4);
+        var output = std.ArrayList(u8).fromOwnedSlice(storage);
+        output.clearRetainingCapacity();
+        defer output.deinit(allocator);
+        var failing = std.testing.FailingAllocator.init(allocator, .{ .fail_index = 0, .resize_fail_index = 0 });
+        try std.testing.expectError(error.OutOfMemory, IncrementalEncoderCodec.writeHeader(failing.allocator(), &output, options, expected_len, null));
+        try std.testing.expectEqual(@as(usize, 0), output.items.len);
+        try IncrementalEncoderCodec.writeHeader(allocator, &output, options, expected_len, null);
+        try std.testing.expectEqualSlices(u8, normal.items, output.items);
+    }
+}
 
 test {
     _ = double_fast_match;
@@ -688,6 +926,15 @@ test {
     _ = large_fast_plan;
     _ = large_predefined;
     _ = @import("zstd/match/controlled_search_tests.zig");
+    _ = @import("zstd/match/controlled_source_tests.zig");
+    _ = @import("zstd/encode/controls_hq_tests.zig");
+    _ = @import("zstd/encode/hq_contract_tests.zig");
+    _ = @import("zstd/encode/hq_resource_tests.zig");
+    _ = @import("zstd/encode/hq_transaction_tests.zig");
+    _ = @import("zstd/encode/canonical_presets_tests.zig");
+    _ = @import("zstd/match/hq_tree.zig");
+    _ = @import("zstd/match/hq_parser.zig");
+    _ = @import("zstd/match/lazy2.zig");
     _ = @import("zstd/match/controlled_fast_tests.zig");
     _ = @import("zstd/encode/controls_tests.zig");
     _ = @import("zstd/encode/controls_resource_tests.zig");
@@ -7783,6 +8030,9 @@ pub fn resolveFrameOptionsForLevel(level: c_int, options: FrameOptions) Error!Na
     return native_options;
 }
 pub const nativeFrameOptionsForLevel = resolveFrameOptionsForLevel;
+pub fn effectiveHqOptions(options: NativeFrameOptions) Error!?HqOptions {
+    return options.effectiveHq();
+}
 
 fn adaptiveLevelBlockSizes(level: c_int) [2]usize {
     return switch (level) {
@@ -8494,7 +8744,12 @@ pub const NativeFrameEncoder = struct {
         try frame_options.validate();
         if (encode_controls.active(frame_options)) {
             if (dictionary == null and frame_options.dictionary_id != 0) return error.NeedDictionary;
-            try ControlledFrameEncoder.append(self.allocator, out, input, frame_options, dictionary, &self.controlled_records, &self.large_sequence_scratch, &self.block_scratch);
+            const alias = @import("zstd/encode/controlled_alias.zig");
+            const preserved_dictionary = try alias.preserveDictionary(NativeDictionary, self.allocator, dictionary, out);
+            defer preserved_dictionary.deinit(self.allocator);
+            const source = try alias.preserve(self.allocator, input, out);
+            defer source.deinit(self.allocator);
+            try ControlledFrameEncoder.append(self.allocator, out, source.bytes, frame_options, preserved_dictionary.dictionary, &self.controlled_records, &self.large_sequence_scratch, &self.block_scratch);
             return .fast_compressed;
         }
         switch (options.selection) {
@@ -20737,6 +20992,7 @@ noinline fn emitLargeDoubleFastSequenceBlockReuseFast(
             scratch,
             null,
             initial_repeated_offsets,
+            null,
         );
     return try emitLargeSequenceCompressedBlockWithStatePolicy(
         true,
@@ -20752,6 +21008,7 @@ noinline fn emitLargeDoubleFastSequenceBlockReuseFast(
         scratch,
         null,
         initial_repeated_offsets,
+        null,
     );
 }
 
@@ -20991,6 +21248,7 @@ fn emitLargeHashTokenSequenceBlockWithStatePolicy(
         scratch,
         previous_tables,
         initial_offsets,
+        null,
     );
 }
 
@@ -21036,7 +21294,7 @@ fn emitLargeSequenceCompressedBlockWithState(
     previous_tables: ?*const SequenceTables,
     initial_offsets: [3]usize,
 ) Error!bool {
-    return try emitLargeSequenceCompressedBlockWithStatePolicy(false, allocator, out, block, last, literal_lens, offsets, match_lens, literal_ends, tail_start, scratch, previous_tables, initial_offsets);
+    return try emitLargeSequenceCompressedBlockWithStatePolicy(false, allocator, out, block, last, literal_lens, offsets, match_lens, literal_ends, tail_start, scratch, previous_tables, initial_offsets, null);
 }
 
 fn emitLargeSequenceCompressedBlockWithStatePolicy(
@@ -21053,9 +21311,10 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
     scratch: *LargeSequenceScratch,
     previous_tables: ?*const SequenceTables,
     initial_offsets: [3]usize,
+    exact_offset_values: ?[]const usize,
 ) Error!bool {
     const sequence_count = literal_lens.len;
-    if (sequence_count <= max_native_sequence_count or
+    if (sequence_count == 0 or (exact_offset_values == null and sequence_count <= max_native_sequence_count) or
         sequence_count > max_large_native_sequence_count or
         offsets.len != sequence_count or
         match_lens.len != sequence_count or
@@ -21091,7 +21350,7 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
         try scratch.repeat_states.resize(allocator, state_len);
         try scratch.repeat_viable_masks.resize(allocator, repeat_mask_len);
     }
-    try scratch.offset_extras.resize(allocator, sequence_count);
+    try scratch.offset_extras.resize(allocator, @max(sequence_count, 3));
     const literal_states = scratch.states.items[0..sequence_count];
     const offset_states = scratch.states.items[sequence_count .. sequence_count * 2];
     const match_states = scratch.states.items[sequence_count * 2 .. sequence_count * 3];
@@ -21144,6 +21403,7 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
         repeat_viable_masks,
         if (previous_tables) |tables| previousSequenceTable(tables, .offset) else null,
         initial_offsets,
+        exact_offset_values,
     );
     const match_alternatives = try largeSequenceTablePlanAlternatives(
         match_lens,
@@ -21196,7 +21456,15 @@ fn emitLargeSequenceCompressedBlockWithStatePolicy(
     const offset_extras = scratch.offset_extras.items;
     for (0..sequence_count) |sequence_index| {
         const offset_symbol = try largeSequenceTableSymbol(&plan.plan.offset, .offset, sequence_index);
-        offset_extras[sequence_index] = try sequenceOffsetExtraForEncodedOffset(
+        if (exact_offset_values) |values| {
+            const value = std.math.cast(u32, values[sequence_index]) orelse return error.InvalidBlockPlan;
+            const symbol = try hq_parser.prices.offsetSymbol(value);
+            if (!sequenceSymbolMatchesCode(offset_symbol, .offset, symbol.code)) return error.CorruptFrame;
+            const resolved = try hq_parser.rep.resolve(literal_lens[sequence_index], value, repeated_offsets);
+            if (resolved.distance != offsets[sequence_index]) return error.InvalidBlockPlan;
+            repeated_offsets = resolved.repeats;
+            offset_extras[sequence_index] = symbol.extra_value;
+        } else offset_extras[sequence_index] = try sequenceOffsetExtraForEncodedOffset(
             offset_symbol,
             literal_lens[sequence_index],
             offsets[sequence_index],
@@ -24713,12 +24981,20 @@ fn largeOffsetSequenceTablePlanAlternatives(
     repeat_viable_masks: []u64,
     previous: ?RepeatSequenceSource,
     initial_offsets: [3]usize,
+    exact_offset_values: ?[]const usize,
 ) linksection(wide_sequence_emit_text_section) Error!LargeSequenceTablePlanAlternatives {
     if (literal_lens.len != offsets.len) return error.CorruptFrame;
     var alternatives: LargeSequenceTablePlanAlternatives = .{};
     var repeated_offsets = initial_offsets;
     for (offsets, 0..) |offset, i| {
-        const code = try chooseOffsetSequenceCode(literal_lens[i], offset, &repeated_offsets);
+        const code = if (exact_offset_values) |values| exact: {
+            if (values.len != offsets.len) return error.InvalidBlockPlan;
+            const value = std.math.cast(u32, values[i]) orelse return error.InvalidBlockPlan;
+            const resolved = try hq_parser.rep.resolve(literal_lens[i], value, repeated_offsets);
+            if (resolved.distance != offset) return error.InvalidBlockPlan;
+            repeated_offsets = resolved.repeats;
+            break :exact (try hq_parser.prices.offsetSymbol(value)).code;
+        } else try chooseOffsetSequenceCode(literal_lens[i], offset, &repeated_offsets);
         compressed_buffers.codes[i] = code;
         alternatives.value_bit_count += of_bits[code];
     }
@@ -24804,7 +25080,7 @@ noinline fn bestLargeSequenceTablePlanFast(
     const len = literal_lens.len;
     if (len != offsets.len or len != match_lens.len or
         len != literal_codes.len or len != offset_codes.len or len != match_codes.len or
-        len <= max_native_sequence_count or len > max_large_native_sequence_count) return error.CorruptFrame;
+        len == 0 or len > max_large_native_sequence_count) return error.CorruptFrame;
     if (literal_alternatives.len == 0 or offset_alternatives.len == 0 or match_alternatives.len == 0) return null;
 
     const literal_value_bits = literal_alternatives.value_bit_count;
@@ -27287,6 +27563,7 @@ const LiteralOnlyEncoderState = struct {
     previous_huffman_plan: ?SmallHuffmanLiteralPlan = null,
     sequence_state: SequenceEncoderState = .{},
     sequence_state_initialized: bool = false,
+    hq_entropy: ?hq_parser.EntropyModel = null,
 };
 
 const SequenceEncoderState = struct {

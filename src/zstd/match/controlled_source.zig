@@ -6,6 +6,9 @@ pub const Record = struct {
     distance: usize,
     match_len: usize,
     match_end: usize,
+    /// Exact optional wire offBase chosen by the HQ price/state search. Null
+    /// keeps the established distance-to-offset selection for legacy records.
+    offset_value: ?usize = null,
 };
 pub const Parameters = struct {
     strategy: controls.Strategy,
@@ -13,6 +16,17 @@ pub const Parameters = struct {
     search_budget: usize = controls.legacy_search_budget,
     initial_repeated_offsets: [3]usize = .{ 1, 4, 8 },
     profile: ?*controls.Profile = null,
+    hq: ?controls.HqOptions = null,
+
+    pub fn resolvedHq(self: Parameters) controls.Error!controls.HqOptions {
+        if (!controls.isHq(self.strategy) or self.acceleration != 1 or self.search_budget != controls.legacy_search_budget)
+            return error.InvalidBlockPlan;
+        if (self.hq) |hq| {
+            try hq.validate();
+            return hq;
+        }
+        return controls.resolvedHqDefaults(self.strategy, null);
+    }
 };
 pub const Match = struct { length: usize = 0, distance: usize = 0 };
 pub const Origin = enum { dictionary, history, block };
@@ -35,6 +49,25 @@ pub const Source = struct {
     }
     pub fn totalLen(self: Source) usize {
         return self.prefixLen() + self.block.len;
+    }
+    pub fn checkedPrefixLen(self: Source) error{IntegerOverflow}!usize {
+        return std.math.add(usize, self.dictionary.len, self.history.len) catch error.IntegerOverflow;
+    }
+    pub fn checkedTotalLen(self: Source) error{IntegerOverflow}!usize {
+        return std.math.add(usize, try self.checkedPrefixLen(), self.block.len) catch error.IntegerOverflow;
+    }
+    pub fn checkedBlockPosition(self: Source, position: usize) error{ IntegerOverflow, InvalidBlockPlan }!usize {
+        if (position > self.block.len) return error.InvalidBlockPlan;
+        return std.math.add(usize, try self.checkedPrefixLen(), position) catch error.IntegerOverflow;
+    }
+    pub fn initChecked(dictionary: []const u8, history: []const u8, block: []const u8, window_len: usize) error{IntegerOverflow}!Source {
+        const source = init(dictionary, history, block, window_len);
+        _ = try source.checkedTotalLen();
+        return source;
+    }
+    pub fn byteAtChecked(self: Source, position: usize) error{ IntegerOverflow, InvalidBlockPlan }!u8 {
+        if (position >= try self.checkedTotalLen()) return error.InvalidBlockPlan;
+        return self.byteAt(position);
     }
     pub fn byteAt(self: Source, position: usize) u8 {
         if (position < self.dictionary.len) return self.dictionary[position];
@@ -61,3 +94,7 @@ pub const Source = struct {
         return .{ .length = length, .distance = position - candidate };
     }
 };
+
+test {
+    _ = @import("controlled_source_tests.zig");
+}
