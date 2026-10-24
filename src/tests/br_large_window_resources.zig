@@ -3,14 +3,12 @@ const br = @import("../br.zig");
 const h = @import("br_large_window_helpers.zig");
 const a = std.testing.allocator;
 
-test "Brotli large window invalid legacy and width combinations reject before any allocation or output" {
+test "Brotli large window invalid widths reject before allocation and general options retain extension" {
     for ([_]br.PlannedEncodeOptions{
-        .{ .large_window = true },
-        .{ .quality = 9, .large_window = true },
-        .{ .quality = 10, .large_window = true },
         .{ .quality = 10, .hq = .{}, .large_window = true, .window_bits = 9 },
         .{ .quality = 11, .hq = .{}, .large_window = true, .window_bits = 31 },
         .{ .quality = 11, .hq = .{}, .window_bits = 25 },
+        .{ .quality = 9, .window_bits = 25 },
     }) |options| {
         var tracked = h.TrackingAllocator.init(a);
         tracked.fail_alloc_after = 0;
@@ -19,6 +17,23 @@ test "Brotli large window invalid legacy and width combinations reject before an
         var output: [1024]u8 = @splat(0xa5);
         try std.testing.expectError(error.InvalidBlockPlan, br.encodePlannedStreamWithOptionsInto(h.plain, &output, options));
         try h.untouched(&output);
+    }
+    for ([_]br.PlannedEncodeOptions{
+        .{ .large_window = true },
+        .{ .quality = 9, .large_window = true },
+        .{ .quality = 10, .large_window = true },
+    }) |options| {
+        var tracked = h.TrackingAllocator.init(a);
+        tracked.fail_alloc_after = 0;
+        try std.testing.expectError(error.OutOfMemory, br.encodePlannedStreamWithOptionsAlloc(tracked.allocator(), h.plain, options));
+        try std.testing.expectEqual(@as(usize, 0), tracked.live);
+        const bytes = try br.encodePlannedStreamWithOptionsAlloc(a, h.plain, options);
+        defer a.free(bytes);
+        _ = try h.extensionWindow(bytes);
+        try std.testing.expectError(error.CorruptFrame, br.decodeStreamAlloc(a, bytes));
+        const plain = try br.decodeStreamAllocWithOptions(a, bytes, .{ .allow_large_window = true });
+        defer a.free(plain);
+        try std.testing.expectEqualSlices(u8, h.plain, plain);
     }
 }
 
