@@ -178,6 +178,23 @@ pub fn build(b: *std.Build) void {
     zstd_hq_search_wasm_run.addArtifactArg(zstd_hq_search_wasm);
     const zstd_hq_search_wasm_step = b.step("test-zstd-hq-search-wasm", "Execute HQ complete search, admission and retry contracts in WebAssembly");
     zstd_hq_search_wasm_step.dependOn(&zstd_hq_search_wasm_run.step);
+    const br_stored_memory_wasm = b.addExecutable(.{
+        .name = "vort-br-stored-memory-wasm",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests/br_stored_memory_wasm.zig"),
+            .target = wasm_target,
+            .optimize = optimize,
+            .single_threaded = true,
+            .imports = &.{.{ .name = "vort", .module = wasm_mod }},
+        }),
+    });
+    br_stored_memory_wasm.entry = .disabled;
+    br_stored_memory_wasm.rdynamic = true;
+    br_stored_memory_wasm.stack_size = 8 * 1024 * 1024;
+    const br_stored_memory_wasm_run = b.addSystemCommand(&.{ "node", "tools/br/stored_memory_wasm_gate.js" });
+    br_stored_memory_wasm_run.addArtifactArg(br_stored_memory_wasm);
+    const br_stored_memory_wasm_step = b.step("test-br-stored-memory-wasm", "Execute stored Brotli memory and ownership contracts in WebAssembly");
+    br_stored_memory_wasm_step.dependOn(&br_stored_memory_wasm_run.step);
     const br_large_wasm = b.addExecutable(.{
         .name = "vort-br-large-window-wasm",
         .root_module = b.createModule(.{
@@ -350,6 +367,13 @@ pub fn build(b: *std.Build) void {
     });
     const br_total_memory_test_step = b.step("test-br-total-memory", "Run Brotli whole-encoder allocation and transaction contracts");
     br_total_memory_test_step.dependOn(&b.addRunArtifact(br_total_memory_tests).step);
+    const br_stored_memory_tests = b.addTest(.{
+        .name = "vort-br-stored-memory-tests",
+        .root_module = br_tests_mod,
+        .filters = &.{ "Brotli stored memory", "Brotli stored resource", "Brotli total authority" },
+    });
+    const br_stored_memory_step = b.step("test-br-stored-memory", "Run stored Brotli total requested heap, ownership and retry contracts");
+    br_stored_memory_step.dependOn(&b.addRunArtifact(br_stored_memory_tests).step);
     const br_large_window_tests = b.addTest(.{
         .name = "vort-br-large-window-tests",
         .root_module = br_tests_mod,
@@ -1999,6 +2023,26 @@ pub fn build(b: *std.Build) void {
     br_total_memory_cli_gate.addArtifactArg(br_hq_cli_probe);
     if (b.args) |args| br_total_memory_cli_gate.addArgs(args);
     const br_total_memory_cli_step = b.step("test-br-total-memory-cli", "Validate Brotli total-memory controls and atomic CLI output");
+    const br_stored_memory_probe = b.addExecutable(.{
+        .name = "vort-br-stored-memory-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/stored_memory_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const br_stored_memory_diff = b.addSystemCommand(&.{ "python3", "tools/br/stored_memory_diff.py", "--probe" });
+    br_stored_memory_diff.addArtifactArg(br_stored_memory_probe);
+    if (b.args) |args| br_stored_memory_diff.addArgs(args);
+    const br_stored_memory_diff_step = b.step("run-br-stored-memory-diff", "Validate stored Brotli budgets and public ownership against versioned references");
+    br_stored_memory_diff_step.dependOn(&br_stored_memory_diff.step);
+    const br_stored_memory_cli = b.addSystemCommand(&.{ "python3", "tools/br/stored_memory_cli_gate.py", "--cli" });
+    br_stored_memory_cli.addArtifactArg(br_hq_cli_probe);
+    if (b.args) |args| br_stored_memory_cli.addArgs(args);
+    const br_stored_memory_cli_step = b.step("test-br-stored-memory-cli", "Validate stored Brotli memory CLI options and output preservation");
+    br_stored_memory_cli_step.dependOn(&br_stored_memory_cli.step);
+    br_stored_memory_cli_step.dependOn(&b.addRunArtifact(br_hq_cli_tests).step);
     br_total_memory_cli_step.dependOn(&br_total_memory_cli_gate.step);
     br_total_memory_cli_step.dependOn(&b.addRunArtifact(br_hq_cli_tests).step);
     const br_total_memory_diff = b.addSystemCommand(&.{ "python3", "tools/br/total_memory_diff.py", "--probe" });
@@ -6866,6 +6910,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_hq_probe.step);
     check_step.dependOn(&zstd_hq_search_probe.step);
     check_step.dependOn(&zstd_hq_search_wasm.step);
+    check_step.dependOn(&br_stored_memory_wasm.step);
     check_step.dependOn(&zstd_hq_cli_probe.step);
     check_step.dependOn(&br_general_large_probe.step);
     check_step.dependOn(&zstd_large_history_probe.step);
@@ -6875,6 +6920,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&br_stream_counter_probe.step);
     check_step.dependOn(&zstd_stream_counter_probe.step);
     check_step.dependOn(&br_hq_probe.step);
+    check_step.dependOn(&br_stored_memory_probe.step);
     check_step.dependOn(&br_hq_cli_probe.step);
     check_step.dependOn(&br_hq_cli_tests.step);
     check_step.dependOn(&zstd_cli_controls_tests.step);
