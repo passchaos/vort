@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const checksum = @import("checksum.zig");
 const bitstream = @import("bitstream.zig");
 const bit_geometry = @import("io/bit_count.zig");
+const gzip_alloc_hint = @import("deflate/gzip/alloc_hint.zig");
 const BitCount = bit_geometry.BitCount;
 const huffman = @import("huffman.zig");
 const lz77 = @import("lz77.zig");
@@ -439,6 +440,7 @@ pub fn gzipIncrementalBestOptionsForLevel(level: u4, header: GzipHeaderOptions) 
 
 test {
     _ = incremental_tests;
+    _ = @import("deflate/gzip/alloc_hint_tests.zig");
 }
 
 pub const RawDeflateProbeResult = struct {
@@ -17745,14 +17747,19 @@ fn validateGzipStoredPlanBeforeAlloc(input: []const u8, data_offset: usize, plan
 }
 
 fn decodeGzipAllocFooterSize(allocator: std.mem.Allocator, input: []const u8, data_offset: usize, options: GzipDecodeOptions, max_output_len: ?usize) !?[]u8 {
-    if (input.len < data_offset + 8) return null;
+    if (data_offset > input.len or input.len - data_offset < 8) return null;
     if (options.ignore_isize or options.allow_trailing_data) return null;
-    const expected_size: usize = std.mem.readInt(u32, input[input.len - 4 ..][0..4], .little);
+    const claimed_size = std.mem.readInt(u32, input[input.len - 4 ..][0..4], .little);
+    if (!gzip_alloc_hint.allows(input.len - data_offset, claimed_size)) return null;
+    const expected_size: usize = claimed_size;
     try ensureOutputLimit(0, expected_size, max_output_len);
     const out = try allocator.alloc(u8, expected_size);
     errdefer allocator.free(out);
     const written = decodeGzipWithOptions(input, out, options) catch |err| switch (err) {
-        error.OutputTooSmall => return null,
+        error.OutputTooSmall => {
+            allocator.free(out);
+            return null;
+        },
         else => return err,
     };
     if (written != expected_size) return error.SizeMismatch;
