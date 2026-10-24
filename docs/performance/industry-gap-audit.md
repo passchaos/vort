@@ -1,6 +1,6 @@
 # Mainstream codec and industry gap audit
 
-Date: 2026-10-24. The window/resource increment starts at `fa35a843`; the
+Date: 2026-10-25. The window/resource increment starts at `fa35a843`; the
 subsequent [stream-count increment](stream-counts-functional-baseline.md) starts
 at `dacd500a`. Their functional evidence is separate from the dated performance
 rows and competitor provenance below.
@@ -51,6 +51,7 @@ Vort executable is not a speedup over a competing library.
 | --- | --- | --- |
 | [Snappy raw decode, 2026-10-13](snappy-copy2-unroll-x86.md) | Exact-length-60 candidate/reference medians: text 1.0907x, structured 1.1014x, repetitive 1.0176x | Intel i7-10700K, ReleaseFast, libsnappy 1.1.8, fixed generated block rows. This is a local raw decoder lead. |
 | [Brotli decode, 2026-10-08](brotli-head-clean-matrix-x86.md) | 12/13 rows lead; clustered q8 is 0.8632x reference throughput | Intel i7-10700K, ReleaseFast, pinned libbrotli 1.2.0-dev and executable, seven runs. The weakest workload prevents a blanket lead. |
+| [Brotli q8 encode smoke, 2026-10-14](brotli-quality-presets.md#local-q8-smoke-evidence) | JSON/source32k throughput is 0.0491x/0.0347x reference; compressed size is 0.9661x/1.0042x reference | Intel i7-10700K, ReleaseFast, reported libbrotli version `1000009`, two fixed small inputs, best of five interleaved rounds. This historical smoke identifies an encoding cost to remeasure; later source changes prevent presenting it as the current encoder ranking. |
 | [Zstd JSON decode reference audit, 2026-10-13](data/zstd-reference-audit-x86-20261013.json) | Large JSON is 0.9188x reference throughput; the longer small-JSON control is 1.0139x | Intel i7-10700K, ReleaseFast, pinned libzstd 1.6.0-dev (`01b7154f`). A small-input lead does not close the large-input gap. |
 | [XZ lazy encoding, 2026-10-13](xz-lazy-parser-x86.md) | Synthetic JSON is 10.70% smaller than reference at 0.812x reference throughput | Intel i7-10700K, ReleaseFast, liblzma 5.2.5 preset 1. This demonstrates a size/speed tradeoff, not all-preset superiority. |
 | [LZ4HC frame encoding, 2026-10-12/13](lz4-hc-frame-baseline-x86.md) | Frames match reference bytes. Initial six-row throughput was 0.2502x...0.7408x; subsequent dictionary preparation improved its target by 1.6641x versus Vort baseline | Intel i7-10700K, ReleaseFast, liblz4 1.9.3. The initial ratios must not be presented as current results after the follow-up. |
@@ -78,39 +79,40 @@ memory comparison.
 
 ## Next work, functionality first
 
-1. Address the remaining documented physical API boundaries and broader
-   compatibility cases. [Standalone Brotli stored resource controls](../formats/brotli-stored-memory.md)
-   now cover caller-buffer, allocating, reusable and incremental paths with
-   exact requested-heap accounting. Zstd optimal HQ
-   exposes [whole-block, complete-length and price controls](../formats/zstd-hq-search-controls.md)
-   with explicit wire safeguards. Finite beam and matcher limits still constrain
-   quality; these controls do not establish global optimality or competitor
-   performance parity. The [stream-count increment](../formats/stream-counts.md) uses
-   wide cumulative bytes, pledges, offsets and history positions on 32-bit
-   targets, a full-length streaming XXH64 state and bounded atomic file I/O.
-   The [wide-bit increment](wide-bit-addressing-functional-baseline.md) also
-   removes the former 32-bit bit-reader boundary, with real mappings beyond
-   512 MiB. Physical allocation limits remain separate API boundaries.
-   Formal native/x86 count gates pass 142/142; long-stream and full
-   family/platform evidence is recorded in the corresponding functional report.
-2. Extend the remaining HQ/quality models. LZMA custom dictionary/chunk range
-   now covers 1.5 GiB dictionaries and 2 MiB compressed plaintext groups.
-   [XZ/LZMA preset and match-finder controls](lzma-xz-encode-controls-functional-baseline.md)
-   are implemented with actual mode decisions and public/streaming propagation.
-   FastCover selection, optimization and full standard dictionaries are now
-   implemented; the large post-selection finalization cost remains a subsequent
-   profiling and performance target. Zstd signed levels and five explicit strategy controls
-   are now implemented and recorded in the
-   [encoding-control baseline](zstd-encode-controls-functional-baseline.md).
-   Improving Brotli HQ models and global cost planning across large streams
-   is subsequent quality/performance work. API numbering alone must not imply
-   equivalent competitor ratio or speed.
-3. Rebenchmark current public APIs against versioned competitors on shared
-   text/JSON/source/log/binary/small/already-compressed corpora. Record ratio,
-   encode/decode throughput, requested peak memory and RSS, cold/warm behavior,
-   build/CPU provenance and weakest cases on x86-64 and ARM64. Use independent
-   parallel work for implementation and verification; keep timed measurements
-   free of competing build load.
+The latest read-only audit did not identify another reproducible gap in the
+common general decoders after these increments. This is not a proof of complete
+format parity. It does mean that more configuration fields are not a substitute
+for the missing current competitor measurements.
+
+1. Measure current public APIs against versioned competitors on shared
+   text/JSON/source/log/binary/small/already-compressed corpora, beginning with
+   x86-64 one-shot and incremental calls at 64 KiB and 1 MiB, then ARM64.
+   Record compression ratio, encode/decode throughput, requested peak memory
+   and RSS, cold/warm behavior, build/CPU provenance and weakest cases. Finish
+   builds before timed runs. Implementation and independent verification can
+   proceed in parallel; timed measurements must run without competing builds.
+2. Profile and improve standard Zstd dictionary finalization, then use the
+   weakest measured encoder/decoder rows to prioritize quality and throughput
+   work. FastCover selection and full dictionaries are implemented, but its
+   historical post-selection latency and charged-output losses need current
+   confirmation. Finite HQ beams and entropy models remain quality constraints;
+   API numbering alone does not imply equivalent competitor ratio or speed.
+3. Continue compatibility and physical-boundary audits using reproducible
+   independent fixtures. A low-priority legacy LZMA1 case is `lc + lp > 4`:
+   the common property parser rejects it, while the liblzma documentation
+   acknowledges old LZMA1 streams outside its own supported range. Tiny SDK
+   fixtures must establish the actual wire case before implementation; XZ/LZMA2
+   property limits must remain distinct. This legacy case should not delay the
+   current performance matrix.
+
+Recent functional baselines preserve actual ownership and default output:
+[stored resources](../formats/brotli-stored-memory.md),
+[HQ search controls](../formats/zstd-hq-search-controls.md),
+[wide stream counts](../formats/stream-counts.md), and
+[wide bit addresses](wide-bit-addressing-functional-baseline.md). LZMA/XZ
+custom dictionaries, match-finder controls, larger chunks and FastCover training
+also have separate functional evidence above. Physical allocation boundaries,
+finite search states and full current competitor rankings remain unresolved.
 
 The preceding Bzip2/Snappy increment passed the 46-test contract aggregate in
 Debug and ReleaseFast, independent Bzip2 92-case and Snappy 255-run reference

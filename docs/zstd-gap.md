@@ -134,8 +134,10 @@ Current interpretation:
   [history/resource increment](performance/zstd-large-history-functional-baseline.md)
   verifies an actual distance 64 MiB+8 and shared total requested-heap quotas;
   all nine canonical strategy families are available through native engines.
-  Broader algorithm/quality parity, 32-bit cumulative stream coordinates,
-  corpus throughput/ratio/memory dashboards and repeatable current-source
+  The subsequent [stream-count increment](performance/stream-counts-functional-baseline.md)
+  widens cumulative coordinates and the full-length XXH64 state on 32-bit
+  targets; physical allocation and one-shot boundaries remain separate.
+  Broader algorithm/quality parity, corpus throughput/ratio/memory dashboards and repeatable current-source
   comparisons against zstd CLI/library modes remain open.
 - The native encoder now exposes an explicit `fast_compressed` selection for
   callers that need compressed output with less arbitration latency than the
