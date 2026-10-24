@@ -2051,11 +2051,22 @@ pub fn build(b: *std.Build) void {
     zstd_hq_cli_gate.addArtifactArg(zstd_hq_cli_probe);
     if (b.args) |args| zstd_hq_cli_gate.addArgs(args);
     const zstd_hq_cli_step = b.step("test-zstd-hq-cli", "Validate Zstd HQ CLI flags, defaults and failed-output preservation");
+    const zstd_cli_controls_tests = b.addTest(.{
+        .name = "vort-zstd-cli-controls-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/cli/zstd_controls_tests.zig"),
+            .target = target,
+            .optimize = .Debug,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    zstd_hq_cli_step.dependOn(&b.addRunArtifact(zstd_cli_controls_tests).step);
     const zstd_window_memory_cli_gate = b.addSystemCommand(&.{ "python3", "tools/zstd/window_memory_cli_gate.py", "--cli" });
     zstd_window_memory_cli_gate.addArtifactArg(zstd_hq_cli_probe);
     if (b.args) |args| zstd_window_memory_cli_gate.addArgs(args);
     const zstd_window_memory_cli_step = b.step("test-zstd-window-memory-cli", "Validate Zstd history windows and whole-encoder memory CLI controls");
     zstd_window_memory_cli_step.dependOn(&zstd_window_memory_cli_gate.step);
+    zstd_window_memory_cli_step.dependOn(&b.addRunArtifact(zstd_cli_controls_tests).step);
     zstd_hq_cli_step.dependOn(&zstd_hq_cli_gate.step);
     const zstd_large_history_probe = b.addExecutable(.{
         .name = "vort-zstd-large-history-probe",
@@ -6821,6 +6832,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&br_hq_probe.step);
     check_step.dependOn(&br_hq_cli_probe.step);
     check_step.dependOn(&br_hq_cli_tests.step);
+    check_step.dependOn(&zstd_cli_controls_tests.step);
     check_step.dependOn(&fast_cover_probe.step);
     check_step.dependOn(&lzma_encode_controls_probe.step);
     check_step.dependOn(&lzma_controls_cli_probe.step);
