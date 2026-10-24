@@ -1,0 +1,11 @@
+{
+  "schema": "vort-large-raw-extra-report-correction-v1",
+  "original_artifact_path": "/tmp/vort-br-large-raw-extra/artifact.json",
+  "original_artifact_sha256": "593ed8d5aed25469ced5c96e7723147c66d37cd0896609fd7ea88a01ac509ad6",
+  "corrected_artifact_path": "/tmp/vort-br-large-raw-extra/artifact-corrected.json",
+  "reason": "The temporary Zig report used a narrow log2 result in the symbol expression, wrapping expected symbol 64 to 0. The actual public wire was correct. The original report remains unchanged.",
+  "public_encode_rerun": false,
+  "proof": "Independent Python arbitrary-precision LSB-first parser reads actual distance symbol 64 at bit 77 over 8 bits and distance extra 60 at bit 89 over 25 bits.",
+  "actualwire_path": "/tmp/vort-br-large-raw-extra/actual-wire.json",
+  "corrected_artifact_sha256": "116d17423d86c54bb4ff624bfc5bf97343fa88e82b609a52d8231c08fbfed897"
+}

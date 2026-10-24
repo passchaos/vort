@@ -1,0 +1,120 @@
+{
+  "phase": "formal-final-br-large-window-cli-corrected",
+  "time_before_utc": "2026-10-24T10:07:53.709873+00:00",
+  "git_head": "aa9f6c234b68449fbde869960d46f91ad3de0eac",
+  "source_files_before": 1693,
+  "source_before_sha256": "493084f5134179111d686d01b3de377eb25e78a8fc82b62ef54a3cbd6553e2da",
+  "gate_sha256": "66117d4b4f1d858d77ddfeca7d71a968e6a73143cc10c02b39aab363cc57e890",
+  "original_failure_manifest": "/tmp/vort-br-large-final-20261024-_su6uuhi/cli/manifest.json",
+  "gate_correction_record": "/tmp/vort-br-large-final-20261024-_su6uuhi/cli-corrected/gate-correction.json",
+  "command": [
+    "zig",
+    "build",
+    "-fno-incremental",
+    "test-br-large-window-cli",
+    "-Doptimize=Debug",
+    "--summary",
+    "all"
+  ],
+  "expected": {
+    "round_trips": 38,
+    "extension_prefix_checks": 30,
+    "strict_decoder_rejections": 30,
+    "profile_wire_checks": 12,
+    "standard_profile_wire_checks": 4,
+    "exact_cap_checks": 4,
+    "one_below_checks": 4,
+    "rejected_output_preserved": 22,
+    "same_path_checks": 4
+  },
+  "status": "passed-corrected-final",
+  "time_after_utc": "2026-10-24T10:09:11.617396+00:00",
+  "source_files_after": 1693,
+  "source_equal": true,
+  "delta": {
+    "changed": {},
+    "added": {},
+    "removed": {}
+  },
+  "build_exit_code": 0,
+  "parser_tests_passed": 10,
+  "gate_report": {
+    "round_trips": 38,
+    "extension_prefix_checks": 30,
+    "strict_decoder_rejections": 30,
+    "profile_wire_checks": 12,
+    "exact_cap_checks": 4,
+    "one_below_checks": 4,
+    "rejected_output_preserved": 22,
+    "same_path_checks": 4,
+    "standard_profile_wire_checks": 4,
+    "measurements": [
+      {
+        "command": "encode-br-file",
+        "quality": 10,
+        "width": 25,
+        "peak_requested_bytes": 8801881
+      },
+      {
+        "command": "encode-br-file",
+        "quality": 11,
+        "width": 25,
+        "peak_requested_bytes": 8943103
+      },
+      {
+        "command": "encode-br-stream-file",
+        "quality": 10,
+        "width": 25,
+        "peak_requested_bytes": 8801698
+      },
+      {
+        "command": "encode-br-stream-file",
+        "quality": 11,
+        "width": 25,
+        "peak_requested_bytes": 8942873
+      }
+    ],
+    "reference_brotli_version": 16777225
+  },
+  "gate_expected_matches": true,
+  "observed_gate_command": "3944016 3944007 00:30 python3 tools/br/large_window_cli_gate.py --cli ./.zig-cache/o/79bfcff874d153283be7bc8e898fd8c7/vort-br-hq-cli-probe",
+  "binary": {
+    "executed_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/79bfcff874d153283be7bc8e898fd8c7/vort-br-hq-cli-probe",
+    "archive_path": "/tmp/vort-br-large-final-20261024-_su6uuhi/cli-corrected/vort-br-hq-cli-probe",
+    "sha256": "125b77f3bd5b5e6f1d9d9ef9238f53c537ffa9f2211a755bbdb2065600f640ec"
+  },
+  "compile_manifest": ".zig-cache/h/fdca596c70fbb49d05725c19120bdb50.txt",
+  "binary_cache_note": "The gate process was directly observed executing this artifact. The build reports it as cached; binding is proven by actual compile input content digests, not mtime.",
+  "compile_binding": {
+    "records": 1893,
+    "unique_inputs": 1891,
+    "prefix_counts": {
+      "0": 1076,
+      "1": 813,
+      "2": 2
+    },
+    "mismatches": [],
+    "uncovered": [],
+    "method": "Actual executed artifact compiler manifest SipHash128 content digests match the same bytes hashed with SHA256, including project and vail contents in both snapshots and stdlib/objects."
+  },
+  "source_diff_from_failed_run": [
+    "/home/passchaos/project-z/vort-stream-contracts/tools/br/large_window_cli_gate.py"
+  ],
+  "strict_binary_source_binding": true,
+  "same_binary_as_original_failed_run": true,
+  "report_files_sha256": {
+    "source-before.json": "493084f5134179111d686d01b3de377eb25e78a8fc82b62ef54a3cbd6553e2da",
+    "source-after.json": "493084f5134179111d686d01b3de377eb25e78a8fc82b62ef54a3cbd6553e2da",
+    "source-before.zip": "cb64efcc0968c96008bbd121eb80b341aa6bed747c3c919f59d93843d05559d0",
+    "source-after.zip": "cb64efcc0968c96008bbd121eb80b341aa6bed747c3c919f59d93843d05559d0",
+    "source-delta.json": "6e6c1716a2c4d92cdd27b27267c90b5e4457ba85cf08f05b77d1435c9432e149",
+    "compile-inputs.txt": "c97933653468a5b6b98053e8f8162d05f7ffb59373fc2ed824833fe7fe5a633e",
+    "compile-input-digest-check.tsv": "b080427c4503c3c7b326ba20b35d527d4a2c07547a634934d5d84343ee6e24ae",
+    "compiled-inputs-all.json": "bd65f8e30edd6784f28ca59ab5556b7ce739ddf66396ac909af74bc330891aa6",
+    "compiled-input-bytes.zip": "1d98a5ede48e6b242bf7c35e54bbf7bcafdd30c654343d64802affe87a8c3748",
+    "gate-report.json": "ca4931c8d5ffc14f6b023464265de25104ceb3f6b6b2ea7b98c9f63a30ea9fdc",
+    "gate-correction.json": "6dfade59fbef5416cc78e2475c43f5ad9b931e778349dd30dd7fcd673c1423a8",
+    "build.stdout": "6762e89d3978761499b845314dc15aad994635c652df492be5cc60d0730b1720",
+    "build.stderr": "52f39c3ee9928ba60b5254dcc5f2b6cf7606bf72eee1ae1ac73043e7f1d077bd"
+  }
+}

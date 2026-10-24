@@ -1,0 +1,204 @@
+{
+  "schema": "vort-br-large-artifact-reference-consumption-v1",
+  "status": "ok",
+  "scope": "one-way decode of existing actual public encoder wire; no encode, compile or bidirectional large-corpus claim",
+  "kind": "far",
+  "input_bytes": 17827897,
+  "wire_bytes": 67634,
+  "dictionary_bytes": 0,
+  "input_sha256": "2061cd37311a2d104f6ca2b72daebf79128b6de332a8b563ae50b734d3849ddf",
+  "wire_sha256": "cb58745e7a86bd4cbd90225d6c4b7b961b20802d01baeeec6e298c44f5e9176d",
+  "dictionary_sha256": null,
+  "producer_metadata_sha256": "406523c67a8c74bc8f53354774f0a0c1b25265fb92efe2cff62c47d9b2045bb8",
+  "header": {
+    "window_bits": 30,
+    "large_window": true,
+    "header_bits": 14
+  },
+  "requested_parameters": {
+    "quality": 10,
+    "search_depth": 1,
+    "nice_len": 128,
+    "beam_width": 1,
+    "iterations": 1,
+    "max_working_memory": 8589934592,
+    "block_len": 16777216,
+    "distance_parameters": {
+      "npostfix": 0,
+      "ndirect_high": 0
+    },
+    "format": "large_window"
+  },
+  "actual_emitted_max_distance": 17825849,
+  "producer_executable": "/tmp/vort-br-large-public-far/far-probe",
+  "producer_executable_sha256": "5aacb48a22646f02e77e025f3ea91fb56fffd1e4b4b7c3cefb6671add2d4f2c2",
+  "producer_source": "/tmp/vort-br-large-public-far/br_large_window_far.zig",
+  "producer_source_sha256": "cb44cd6b643ede3f5db81423ce71c90bfe3e6a7d839f7e1ca560e786f79f7422",
+  "producer_snapshot_index": [
+    {
+      "path": "/tmp/vort-br-large-public-far/br_large_window_far.zig",
+      "archive_path": "br_large_window_far.zig",
+      "sha256": "cb44cd6b643ede3f5db81423ce71c90bfe3e6a7d839f7e1ca560e786f79f7422"
+    },
+    {
+      "path": "/tmp/vort-br-large-public-far/build-command.txt",
+      "archive_path": "build-command.txt",
+      "sha256": "7ed565e440ee67d23cf0c7a98cc6784fa1ec48f22b2f983c1763b3c26323794b"
+    },
+    {
+      "path": "/tmp/vort-br-large-public-far/build-environment.json",
+      "archive_path": "build-environment.json",
+      "sha256": "4635ab43cc6a84d8a033ab24bd2f6b902760ee6e565099ee99d033c530b838b0"
+    },
+    {
+      "path": "/tmp/vort-br-large-public-far/far-probe",
+      "archive_path": "far-probe",
+      "sha256": "5aacb48a22646f02e77e025f3ea91fb56fffd1e4b4b7c3cefb6671add2d4f2c2"
+    },
+    {
+      "path": "/tmp/vort-br-large-public-far/producer-run.txt",
+      "archive_path": "producer-run.txt",
+      "sha256": "663e901ffc23e49368773768e75b6f80e5d9dff23468294bff084ac89cb230ab"
+    },
+    {
+      "path": "/tmp/vort-br-large-public-far/record.o",
+      "archive_path": "record.o",
+      "sha256": "db83a7f76f618b26a919b898ee75f1de60fa342e9c3326d1c742d50d57d91d19"
+    },
+    {
+      "path": "/tmp/vort-br-large-public-far/result.json",
+      "archive_path": "result.json",
+      "sha256": "19f05fbaeae54722fb89055021e2c661a7bffa322dc7a74f47a0026666080f53"
+    },
+    {
+      "path": "/tmp/vort-br-large-public-far/source-before.json",
+      "archive_path": "source-before.json",
+      "sha256": "e22d66bc724ff7c10e510049837aa2ca55abfffcdefb1502cc20cd5074b73ad3"
+    },
+    {
+      "path": "/tmp/vort-br-large-public-far/source-big-after.json",
+      "archive_path": "source-big-after.json",
+      "sha256": "2da74a1d2f37eb461ba29d6a203f7d0cef33d55b509ed66d1da0ef6e19e8dfa1"
+    },
+    {
+      "path": "/tmp/vort-br-large-public-far/source-big-before.json",
+      "archive_path": "source-big-before.json",
+      "sha256": "2da74a1d2f37eb461ba29d6a203f7d0cef33d55b509ed66d1da0ef6e19e8dfa1"
+    },
+    {
+      "path": "/tmp/vort-br-large-public-far/zstd.o",
+      "archive_path": "zstd.o",
+      "sha256": "e0af36355cdc79da3e403f2d331ccaa7c1753a336266ea85e7964be1cfd3e76d"
+    }
+  ],
+  "producer_snapshot_zip_sha256": "19e896415f84cb511ffb35da606d823278103d0ab57bf69638dfeba4a6980791",
+  "decoder_results": [
+    {
+      "layer": "modern",
+      "status": "ok",
+      "opt_in_decoder": {
+        "status": 0,
+        "decoder_error": 1,
+        "input_read": 67634,
+        "output_written": 17827897
+      },
+      "strict_decoder": {
+        "status": 6,
+        "decoder_error": -13,
+        "input_read": 1,
+        "output_written": 0
+      },
+      "dictionary_attached": false
+    },
+    {
+      "layer": "system",
+      "status": "ok",
+      "opt_in_decoder": {
+        "status": 0,
+        "decoder_error": 1,
+        "input_read": 67634,
+        "output_written": 17827897
+      },
+      "strict_decoder": {
+        "status": 6,
+        "decoder_error": -13,
+        "input_read": 1,
+        "output_written": 0
+      },
+      "dictionary_attached": false
+    }
+  ],
+  "references": {
+    "modern": {
+      "header_version": "0x1002000",
+      "header_version_note": "matching source common/version.h",
+      "encoder_version": "0x1002000",
+      "decoder_version": "0x1002000",
+      "helper_sha256": "704bb17c43738cc1cdc53aabd0821d854add2ab774eb9ea4149132e66d8525ec",
+      "libraries": {
+        "encoder": {
+          "path": "/tmp/vort-brotli-shared-build/libbrotlienc.so.1.2.0",
+          "sha256": "413f83e8a5915edd7994d77e5d42ed5d520ae6950ac11ed20d8e1b765fcd75ef"
+        },
+        "decoder": {
+          "path": "/tmp/vort-brotli-shared-build/libbrotlidec.so.1.2.0",
+          "sha256": "c36742c69834733645a22501d5001756f75ff7737a7894b8cdd6db2fda6c1fe2"
+        },
+        "common": {
+          "path": "/tmp/vort-brotli-shared-build/libbrotlicommon.so.1.2.0",
+          "sha256": "3e05a68ce8782d4b7bc6137d5e89cae758fa9c0a1e139075e29c91b3c4307739"
+        }
+      },
+      "raw_dictionary_api": true,
+      "serialized_dictionary_public_api": false,
+      "header_source_revision": "558fc647cdaf391228d614ca85f711e02e4e583b",
+      "existing_runtime_source_revision": "not independently reconstructed"
+    },
+    "system": {
+      "header_version": null,
+      "header_version_note": "system public headers expose no package-version macro",
+      "encoder_version": "0x1000009",
+      "decoder_version": "0x1000009",
+      "helper_sha256": "da34753f37f4e8c96316a07ada28c1a35e16794e2f28d7704bc6cf9eec18ceaa",
+      "libraries": {
+        "encoder": {
+          "path": "/usr/lib/x86_64-linux-gnu/libbrotlienc.so.1.0.9",
+          "sha256": "b88bfc462f83859a0324e2035f10bfd277e6073bb211b8ca29d95d2a5be8290d"
+        },
+        "decoder": {
+          "path": "/usr/lib/x86_64-linux-gnu/libbrotlidec.so.1.0.9",
+          "sha256": "db9dbda709a46c3ae124433f47c4db71167db8aaba4eafdfd99c8a3a14584463"
+        },
+        "common": {
+          "path": "/usr/lib/x86_64-linux-gnu/libbrotlicommon.so.1.0.9",
+          "sha256": "abf86ae9362dbb413c740a55b194c74adb09a7bd92d8fbd96a293c797a4a6d08"
+        }
+      },
+      "raw_dictionary_api": false,
+      "serialized_dictionary_public_api": false,
+      "header_source_revision": null,
+      "existing_runtime_source_revision": "not independently reconstructed"
+    }
+  },
+  "extra_symbol_evidence": null,
+  "producer_source_window": {
+    "manifest": "/tmp/vort-br-large-public-far/source-big-before.json",
+    "manifest_sha256": "2da74a1d2f37eb461ba29d6a203f7d0cef33d55b509ed66d1da0ef6e19e8dfa1",
+    "records": 145,
+    "all_listed_current_contents_verified": true,
+    "before_after_equal": true,
+    "archive": "producer-source-window.zip",
+    "archive_sha256": "1ffb12979427dd6335a2a019b16936fe47e06892c5dc97b0e709e86dba577c3d",
+    "scope": "listed producer module source snapshot, not a full Zig dependency manifest"
+  },
+  "producer_full_compiler_input_manifest": {
+    "status": "not available",
+    "reason": "read-only search of existing local/global Zig cache .h files did not locate either standalone producer source path; no reconstruction via new compilation performed"
+  },
+  "reference_consumer_sources": {
+    "large_window_reference.c": "3617717df81206ec733411ec849f3e263e70090f06dec0d446b39262c9821075",
+    "hq_controls_reference.c": "35e8779293b889928f76f0bd69dc6978a51c54739c7540534a9821ea0d73adae",
+    "large_window_diff.py": "5c38a578041d671f397d03547693a699cfcab768b845d116ba5ecee38a60f882",
+    "hq_controls_diff.py": "cbe6a8c9fc299c7d1ce33660dde450b048bf6339c8c91db217efba739ad25e7c"
+  }
+}

@@ -33,8 +33,9 @@ Generic and text modes default to distance shape `(0, 0)`. Font mode defaults
 to `(1, 6)`, which means twelve direct distances, because the wire's four-bit
 `ndirect_high` field is shifted by `npostfix`. The standard alphabet has at most
 520 symbols; prices are indexed by symbols and do not allocate one entry for
-every possible history distance. Large Window encoding is a separate extension
-and is outside this standard-window parser contract.
+every possible history distance. The subsequent
+[Large Window extension](brotli-large-window-hq.md) selects a separate explicit
+format, with a 62-bit wire alphabet and a safe active capacity through 544.
 
 ## Exact command and distance choices
 

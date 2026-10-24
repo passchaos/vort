@@ -1,0 +1,126 @@
+{
+  "status": "ok",
+  "scope": "two existing actual public encoder artifacts, one-way reference decode only; no re-encode, compile, or repeated small campaign",
+  "rows": [
+    {
+      "kind": "far",
+      "report": "/tmp/vort-br-large-final-20261024-_su6uuhi/far-reference/consumption-report.json",
+      "report_sha256": "47feb9418fdefea3a940e1be0961e7f9d46f418efa7aa43fde7d6231de7c0b31",
+      "input_bytes": 17827897,
+      "wire_bytes": 67634,
+      "dictionary_bytes": 0,
+      "input_sha256": "2061cd37311a2d104f6ca2b72daebf79128b6de332a8b563ae50b734d3849ddf",
+      "wire_sha256": "cb58745e7a86bd4cbd90225d6c4b7b961b20802d01baeeec6e298c44f5e9176d",
+      "dictionary_sha256": null,
+      "producer_executable_sha256": "5aacb48a22646f02e77e025f3ea91fb56fffd1e4b4b7c3cefb6671add2d4f2c2",
+      "producer_source_sha256": "cb44cd6b643ede3f5db81423ce71c90bfe3e6a7d839f7e1ca560e786f79f7422",
+      "actual_emitted_max_distance": 17825849,
+      "source_window_records": 145,
+      "decoder_results": [
+        {
+          "layer": "modern",
+          "status": "ok",
+          "opt_in_decoder": {
+            "status": 0,
+            "decoder_error": 1,
+            "input_read": 67634,
+            "output_written": 17827897
+          },
+          "strict_decoder": {
+            "status": 6,
+            "decoder_error": -13,
+            "input_read": 1,
+            "output_written": 0
+          },
+          "dictionary_attached": false
+        },
+        {
+          "layer": "system",
+          "status": "ok",
+          "opt_in_decoder": {
+            "status": 0,
+            "decoder_error": 1,
+            "input_read": 67634,
+            "output_written": 17827897
+          },
+          "strict_decoder": {
+            "status": 6,
+            "decoder_error": -13,
+            "input_read": 1,
+            "output_written": 0
+          },
+          "dictionary_attached": false
+        }
+      ],
+      "extra_symbol_evidence": null
+    },
+    {
+      "kind": "extra",
+      "report": "/tmp/vort-br-large-final-20261024-_su6uuhi/extra-reference/consumption-report.json",
+      "report_sha256": "f0138e8a73740ae5809569f753dd07dadb50b645a924548456a75c88efdc8f9b",
+      "input_bytes": 48,
+      "wire_bytes": 15,
+      "dictionary_bytes": 67108921,
+      "input_sha256": "3c656fb71e110f5cface48c584e162b72449813ace71437b1b94bc5157353ad4",
+      "wire_sha256": "b16b4aa30c7f0fe0b5f19207d4f388baa9f9e05c9c39e682fa5d96eddc22d477",
+      "dictionary_sha256": "79559dc48f4a5271c0f5a6c1c60facf8ff588fd9a426c288c23890693be9550b",
+      "producer_executable_sha256": "a0afb18f1973e030342ec84250812398e507e30683c38ed5ccd01e9bd53786a8",
+      "producer_source_sha256": "a6444e347003990f2b6866092715f5f2204ee05ca5d50ee6dff3250dbdec6308",
+      "actual_emitted_max_distance": 67108921,
+      "source_window_records": 7,
+      "decoder_results": [
+        {
+          "layer": "modern",
+          "status": "ok",
+          "opt_in_decoder": {
+            "status": 0,
+            "decoder_error": 1,
+            "input_read": 15,
+            "output_written": 48
+          },
+          "strict_decoder": {
+            "status": 6,
+            "decoder_error": -13,
+            "input_read": 1,
+            "output_written": 0
+          },
+          "dictionary_attached": true
+        },
+        {
+          "layer": "system",
+          "status": "skipped",
+          "reason": "system Brotli 1.0.9 does not provide the prepared-encoder / attach-decoder shared dictionary API"
+        }
+      ],
+      "extra_symbol_evidence": {
+        "status": "verified from same consumed wire, no repeated decode or encode",
+        "source": "actual-wire.json",
+        "source_sha256": "2decf8f3d23fc5aeefe29f4ca08cac8de47f9cd09a5d5100e92ce46758088b82",
+        "command_symbol": 198,
+        "distance_symbol": 64,
+        "symbol_bit_offset": 77,
+        "simple_symbol_bits": 8,
+        "distance_extra_bits": 25,
+        "extra_bit_offset": 89,
+        "extra_value": 60,
+        "decoded_physical_distance": 67108921,
+        "standard_maximum_distance": 67108860,
+        "all_bitfield_reads_verified": true,
+        "formula": "((2 + ((symbol - 16) & 1)) << (1 + ((symbol - 16) >> 1))) - 4 + extra + 1; arbitrary precision integer"
+      }
+    }
+  ],
+  "successful_opt_in_decodes": 3,
+  "strict_decoder_rejections": 3,
+  "known_skips": [
+    {
+      "layer": "system",
+      "status": "skipped",
+      "reason": "system Brotli 1.0.9 does not provide the prepared-encoder / attach-decoder shared dictionary API"
+    }
+  ],
+  "producer_full_compiler_manifest_scope": "not found for standalone producers; verified source-window manifests, commands, object/executable hashes and outside snapshots are preserved without claiming full compiler-input binding",
+  "small_final_report_sha256_unchanged": "0861535baace790398496d3cf1317709fffd97f601e29ed12bb767c2d921f399",
+  "repo_code_modified": false,
+  "producer_recompiled_or_reencoded": false
+}

@@ -1,0 +1,20 @@
+{
+  "command": [
+    "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "build",
+    "-fno-incremental",
+    "test-br-large-window",
+    "-Doptimize=Debug",
+    "--summary",
+    "all"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 256.2992131419014,
+  "utc": "2026-10-24T10:06:33.972900+00:00",
+  "changed_sources": [
+    "/home/passchaos/project-z/vort-stream-contracts/tools/br/large_window_cli_gate.py"
+  ],
+  "source_sha256": "9ce6a16da6fbed3fe4b1cf7c6f7cb3e2c9866d67d3745830f7252e660f6cbb2d",
+  "log": "/tmp/vort-br-large-final-20261024-_su6uuhi/large-debug.log",
+  "scope": "functional validation; duration and requested allocations are not competitor performance evidence"
+}

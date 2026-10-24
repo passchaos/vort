@@ -1,0 +1,37 @@
+{
+  "build_exit_code": 1,
+  "parser_tests_passed": 10,
+  "gate_completed": false,
+  "case": {
+    "quality": 10,
+    "window_bits": 16,
+    "large_window": true,
+    "command": "encode-br-file",
+    "profile": true
+  },
+  "assertion": "tree_nodes > 0 for each profiled case",
+  "metadata": {
+    "effective": true,
+    "quality": 10,
+    "depth": 8,
+    "nice_len": 128,
+    "beam_width": 2,
+    "iterations": 1,
+    "block_len": 32,
+    "npostfix": 0,
+    "ndirect_high": 0,
+    "memory": 18446744073709551615,
+    "tree_nodes": 0,
+    "states": 126,
+    "transitions": 67669,
+    "price_evaluations": 67669,
+    "passes": 2,
+    "refinement_passes": 0,
+    "peak_working_memory": 8801137,
+    "emitted_metablocks": 2,
+    "emitted_commands": 1,
+    "emitted_copy_bytes": 32
+  },
+  "decode_and_prefix_checks_before_assertion_passed": true,
+  "actual_executed_command": "python3 tools/br/large_window_cli_gate.py --cli ./.zig-cache/o/79bfcff874d153283be7bc8e898fd8c7/vort-br-hq-cli-probe"
+}

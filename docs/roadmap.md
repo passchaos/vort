@@ -96,8 +96,13 @@ HQ, including retained buffers, dictionaries, aliases and complete candidate
 streams. Independent backing ledgers validate precise limits and ownership
 transfer without changing the older null/default wires.
 
-Remaining priorities include Brotli Large Window HQ encoding, global quality
-planning, lower-peak whole-stream comparison, standard dictionary finalization
+The [Large Window HQ milestone](performance/brotli-large-window-functional-baseline.md)
+extends explicit encoding through window 30, with safe distance groups, exact
+wire symbols and caller budgets. Independent tests cover real far-history
+copies, 25-bit distance extras, opt-in reference decoding and WebAssembly.
+
+Remaining priorities include global Brotli quality planning, lower-peak
+whole-stream comparison, standard dictionary finalization
 performance, and current-source real-corpus speed/ratio/memory leadership
 evidence across platforms.
 

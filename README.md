@@ -2188,6 +2188,12 @@ memory or process RSS. See the [HQ contract](docs/formats/brotli-hq-command-pars
 for block precedence, exact encodings, ownership and the remaining native search
 limitations. Quality numbers do not establish reference ratio or speed parity.
 
+HQ q10/q11 can also explicitly set `large_window = true` for window bits
+10...30. This writes the Large Window extension even at smaller windows;
+decoding requires opt-in. Ordinary defaults remain standard Brotli. The
+[Large Window contract](docs/formats/brotli-large-window-hq.md) explains wire
+alphabets, safe distances, cross-block history and dedicated large-data checks.
+
 All planned encoding levels and qualities also accept
 `max_total_working_memory` and a caller-owned `BrotliEncodeMemoryProfile`.
 This separate total cap includes buffers, retained history, dictionary/parser

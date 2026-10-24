@@ -1,0 +1,206 @@
+{
+  "schema": "vort-br-large-artifact-reference-consumption-v1",
+  "status": "ok",
+  "scope": "one-way decode of existing actual public encoder wire; no encode, compile or bidirectional large-corpus claim",
+  "kind": "extra",
+  "input_bytes": 48,
+  "wire_bytes": 15,
+  "dictionary_bytes": 67108921,
+  "input_sha256": "3c656fb71e110f5cface48c584e162b72449813ace71437b1b94bc5157353ad4",
+  "wire_sha256": "b16b4aa30c7f0fe0b5f19207d4f388baa9f9e05c9c39e682fa5d96eddc22d477",
+  "dictionary_sha256": "79559dc48f4a5271c0f5a6c1c60facf8ff588fd9a426c288c23890693be9550b",
+  "producer_metadata_sha256": "593ed8d5aed25469ced5c96e7723147c66d37cd0896609fd7ea88a01ac509ad6",
+  "header": {
+    "window_bits": 30,
+    "large_window": true,
+    "header_bits": 14
+  },
+  "requested_parameters": {
+    "quality": 10,
+    "large_window": true,
+    "window_bits": 30,
+    "beam_width": 1,
+    "search_depth": 1,
+    "iterations": 1,
+    "npostfix": 0,
+    "ndirect_high": 0,
+    "max_working_memory": 67108864,
+    "max_total_working_memory": 67108864
+  },
+  "actual_emitted_max_distance": 67108921,
+  "producer_executable": "/tmp/vort-br-large-raw-extra/encode",
+  "producer_executable_sha256": "a0afb18f1973e030342ec84250812398e507e30683c38ed5ccd01e9bd53786a8",
+  "producer_source": "/tmp/vort-br-large-raw-extra/encode.zig",
+  "producer_source_sha256": "a6444e347003990f2b6866092715f5f2204ee05ca5d50ee6dff3250dbdec6308",
+  "producer_snapshot_index": [
+    {
+      "path": "/tmp/vort-br-large-raw-extra/actual-wire.json",
+      "archive_path": "actual-wire.json",
+      "sha256": "2decf8f3d23fc5aeefe29f4ca08cac8de47f9cd09a5d5100e92ce46758088b82"
+    },
+    {
+      "path": "/tmp/vort-br-large-raw-extra/artifact-corrected.json",
+      "archive_path": "artifact-corrected.json",
+      "sha256": "116d17423d86c54bb4ff624bfc5bf97343fa88e82b609a52d8231c08fbfed897"
+    },
+    {
+      "path": "/tmp/vort-br-large-raw-extra/artifact.json",
+      "archive_path": "artifact.json",
+      "sha256": "593ed8d5aed25469ced5c96e7723147c66d37cd0896609fd7ea88a01ac509ad6"
+    },
+    {
+      "path": "/tmp/vort-br-large-raw-extra/br_large_window_extra.zig",
+      "archive_path": "br_large_window_extra.zig",
+      "sha256": "3f68da0ccbac7a6597b376bb37b7cf4f5f52e7a52db2998131fbd6ce1a1b1136"
+    },
+    {
+      "path": "/tmp/vort-br-large-raw-extra/compile.log",
+      "archive_path": "compile.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/tmp/vort-br-large-raw-extra/correction.json",
+      "archive_path": "correction.json",
+      "sha256": "d5cd78cc929778318995db070a33260be7eb1251aa74bba6bf5aa690ffb5ccda"
+    },
+    {
+      "path": "/tmp/vort-br-large-raw-extra/encode",
+      "archive_path": "encode",
+      "sha256": "a0afb18f1973e030342ec84250812398e507e30683c38ed5ccd01e9bd53786a8"
+    },
+    {
+      "path": "/tmp/vort-br-large-raw-extra/encode.log",
+      "archive_path": "encode.log",
+      "sha256": "d8bb4d05b5c40df8fc3934fba5c29601685b5bd291c8585540efdc4165081e12"
+    },
+    {
+      "path": "/tmp/vort-br-large-raw-extra/encode.zig",
+      "archive_path": "encode.zig",
+      "sha256": "a6444e347003990f2b6866092715f5f2204ee05ca5d50ee6dff3250dbdec6308"
+    },
+    {
+      "path": "/tmp/vort-br-large-raw-extra/run-status.json",
+      "archive_path": "run-status.json",
+      "sha256": "bae59a71ee35776a5ea7f2c1187a78b597a832b69d28e385e2e105bc3856bfc9"
+    },
+    {
+      "path": "/tmp/vort-br-large-raw-extra/source-sha256.json",
+      "archive_path": "source-sha256.json",
+      "sha256": "c6494e4886c35a6d166ee6e3666fe484f46d3978d3a7f97022a3aa87183ce563"
+    }
+  ],
+  "producer_snapshot_zip_sha256": "0f3612710fb4f7c1760448bbb5bc6238c135de24117490518628731792ff5cba",
+  "decoder_results": [
+    {
+      "layer": "modern",
+      "status": "ok",
+      "opt_in_decoder": {
+        "status": 0,
+        "decoder_error": 1,
+        "input_read": 15,
+        "output_written": 48
+      },
+      "strict_decoder": {
+        "status": 6,
+        "decoder_error": -13,
+        "input_read": 1,
+        "output_written": 0
+      },
+      "dictionary_attached": true
+    },
+    {
+      "layer": "system",
+      "status": "skipped",
+      "reason": "system Brotli 1.0.9 does not provide the prepared-encoder / attach-decoder shared dictionary API"
+    }
+  ],
+  "references": {
+    "modern": {
+      "header_version": "0x1002000",
+      "header_version_note": "matching source common/version.h",
+      "encoder_version": "0x1002000",
+      "decoder_version": "0x1002000",
+      "helper_sha256": "704bb17c43738cc1cdc53aabd0821d854add2ab774eb9ea4149132e66d8525ec",
+      "libraries": {
+        "encoder": {
+          "path": "/tmp/vort-brotli-shared-build/libbrotlienc.so.1.2.0",
+          "sha256": "413f83e8a5915edd7994d77e5d42ed5d520ae6950ac11ed20d8e1b765fcd75ef"
+        },
+        "decoder": {
+          "path": "/tmp/vort-brotli-shared-build/libbrotlidec.so.1.2.0",
+          "sha256": "c36742c69834733645a22501d5001756f75ff7737a7894b8cdd6db2fda6c1fe2"
+        },
+        "common": {
+          "path": "/tmp/vort-brotli-shared-build/libbrotlicommon.so.1.2.0",
+          "sha256": "3e05a68ce8782d4b7bc6137d5e89cae758fa9c0a1e139075e29c91b3c4307739"
+        }
+      },
+      "raw_dictionary_api": true,
+      "serialized_dictionary_public_api": false,
+      "header_source_revision": "558fc647cdaf391228d614ca85f711e02e4e583b",
+      "existing_runtime_source_revision": "not independently reconstructed"
+    },
+    "system": {
+      "header_version": null,
+      "header_version_note": "system public headers expose no package-version macro",
+      "encoder_version": "0x1000009",
+      "decoder_version": "0x1000009",
+      "helper_sha256": "da34753f37f4e8c96316a07ada28c1a35e16794e2f28d7704bc6cf9eec18ceaa",
+      "libraries": {
+        "encoder": {
+          "path": "/usr/lib/x86_64-linux-gnu/libbrotlienc.so.1.0.9",
+          "sha256": "b88bfc462f83859a0324e2035f10bfd277e6073bb211b8ca29d95d2a5be8290d"
+        },
+        "decoder": {
+          "path": "/usr/lib/x86_64-linux-gnu/libbrotlidec.so.1.0.9",
+          "sha256": "db9dbda709a46c3ae124433f47c4db71167db8aaba4eafdfd99c8a3a14584463"
+        },
+        "common": {
+          "path": "/usr/lib/x86_64-linux-gnu/libbrotlicommon.so.1.0.9",
+          "sha256": "abf86ae9362dbb413c740a55b194c74adb09a7bd92d8fbd96a293c797a4a6d08"
+        }
+      },
+      "raw_dictionary_api": false,
+      "serialized_dictionary_public_api": false,
+      "header_source_revision": null,
+      "existing_runtime_source_revision": "not independently reconstructed"
+    }
+  },
+  "extra_symbol_evidence": {
+    "status": "verified from same consumed wire, no repeated decode or encode",
+    "source": "actual-wire.json",
+    "source_sha256": "2decf8f3d23fc5aeefe29f4ca08cac8de47f9cd09a5d5100e92ce46758088b82",
+    "command_symbol": 198,
+    "distance_symbol": 64,
+    "symbol_bit_offset": 77,
+    "simple_symbol_bits": 8,
+    "distance_extra_bits": 25,
+    "extra_bit_offset": 89,
+    "extra_value": 60,
+    "decoded_physical_distance": 67108921,
+    "standard_maximum_distance": 67108860,
+    "all_bitfield_reads_verified": true,
+    "formula": "((2 + ((symbol - 16) & 1)) << (1 + ((symbol - 16) >> 1))) - 4 + extra + 1; arbitrary precision integer"
+  },
+  "corrected_producer_metadata_sha256": "116d17423d86c54bb4ff624bfc5bf97343fa88e82b609a52d8231c08fbfed897",
+  "producer_source_window": {
+    "manifest": "/tmp/vort-br-large-raw-extra/source-sha256.json",
+    "manifest_sha256": "c6494e4886c35a6d166ee6e3666fe484f46d3978d3a7f97022a3aa87183ce563",
+    "records": 7,
+    "all_listed_current_contents_verified": true,
+    "before_after_equal": null,
+    "archive": "producer-source-window.zip",
+    "archive_sha256": "b8e37f6058202dbda8a9a7f619e01852a644cfc500dcf021ee50494d21b76828",
+    "scope": "listed producer module source snapshot, not a full Zig dependency manifest"
+  },
+  "producer_full_compiler_input_manifest": {
+    "status": "not available",
+    "reason": "read-only search of existing local/global Zig cache .h files did not locate either standalone producer source path; no reconstruction via new compilation performed"
+  },
+  "reference_consumer_sources": {
+    "large_window_reference.c": "3617717df81206ec733411ec849f3e263e70090f06dec0d446b39262c9821075",
+    "hq_controls_reference.c": "35e8779293b889928f76f0bd69dc6978a51c54739c7540534a9821ea0d73adae",
+    "large_window_diff.py": "5c38a578041d671f397d03547693a699cfcab768b845d116ba5ecee38a60f882",
+    "hq_controls_diff.py": "cbe6a8c9fc299c7d1ce33660dde450b048bf6339c8c91db217efba739ad25e7c"
+  }
+}

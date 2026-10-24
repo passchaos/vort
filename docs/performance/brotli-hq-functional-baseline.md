@@ -162,10 +162,11 @@ bounds. The subsequent [total-memory milestone](brotli-total-memory-functional-b
 adds a separate quota covering these outer allocations and HQ workspaces.
 Lower-peak complete-stream comparison remains unfinished.
 
-Large Window HQ encoding, broader current-reference compression-ratio and
-encode/decode-throughput measurements, total-allocation/RSS evidence, and global
-HQ parity remain outside this completed functional slice. This milestone keeps
-the long-term industry-best objective active.
+The subsequent [Large Window milestone](brotli-large-window-functional-baseline.md)
+adds explicit extended-format HQ encoding. Broader current-reference ratio and
+encode/decode-throughput measurements, total-allocation/RSS evidence and global
+HQ parity remain outside this completed standard-window slice. This milestone
+keeps the long-term industry-best objective active.
 
 ## Recorded reproduction commands
 
