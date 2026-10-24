@@ -48,8 +48,22 @@ all seven matched-capacity output losses and substantial complete-training
 latency gaps. This milestone closes FastCover functionality, not the overall
 industry-best objective.
 
-Remaining priorities include richer XZ/LZMA encoder presets and match-finder
-controls, Brotli/Zstd HQ model coverage, then standard dictionary finalization
+The [LZMA/XZ encoder-control milestone](performance/lzma-xz-encode-controls-functional-baseline.md)
+now adds all twenty concrete presets, five HC/BT matchers, next-position fast
+parsing, 4096-position/8-state normal costs, short rep and two-byte matches,
+explicit working budgets, public/streaming option propagation and CLI controls.
+Legacy null wires, including noncanonical narrow Alone dictionaries, remain
+locked. Failed header/prefix/finish transactions and raw stored append aliases
+have independent regression coverage. Final Debug/ReleaseFast controls each
+pass 100 tests (87 named), family/consumer checks pass 443 and CLI checks pass
+99 round-trips, 97 output-preservation cases, five ordering checks and twenty
+profile byte comparisons. These establish functional and parameter contracts,
+not broad competitor speed or quality parity.
+The independent liblzma 5.8.4 campaign passes 1277 groups with 956 stable
+source/tool hashes; all 140 build-check steps also pass.
+
+Remaining priorities include fuller Brotli/Zstd HQ models, LZMA custom dictionary
+and 2 MiB compressed-chunk coverage, then standard dictionary finalization
 performance and current-source real-corpus speed/ratio/memory leadership
 evidence across platforms.
 

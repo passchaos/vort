@@ -4,6 +4,12 @@ Vort does not yet claim compression performance wins. This document records the
 benchmark protocol and the current bootstrap benchmark surface so future claims
 can be tied to reproducible evidence.
 
+[LZMA/XZ encoder controls](performance/lzma-xz-encode-controls-functional-baseline.md)
+records the implemented standard/extreme preset table, real HC/BT and parse
+modes, bounded state/resource contracts, final 100-test gates and independent
+CLI evidence. It preserves the distinction between these functional milestones
+and competitor encoder throughput, ratio and RSS measurements.
+
 Recent decoder evidence: [Zstd sequence field grouping](performance/zstd-sequence-fields.md)
 records a bounded all-FSE reader optimization, generic-reference safety checks,
 and paired comparison with libzstd 1.5.7 on Apple M1 Pro.
