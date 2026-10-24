@@ -37,6 +37,8 @@ pub const HqProfile = struct {
     compound_probes: u64 = 0,
     static_candidates: u64 = 0,
     compound_candidates: u64 = 0,
+    /// Requested HQ-managed heap peak; excludes generic I/O buffers, retained
+    /// plaintext history, complete frame output and the whole-q10 wire guard.
     peak_working_memory: usize = 0,
     emitted_metablocks: u64 = 0,
     emitted_commands: u64 = 0,
@@ -97,6 +99,10 @@ pub const HqOptions = struct {
     nice_len: u32 = 128,
     beam_width: u8 = 0,
     iterations: u8 = 0,
+    /// Limit for HQ-managed dictionaries, models, matchers, parser workspaces,
+    /// plans, candidate artifacts and explicitly charged alias snapshots.
+    /// Generic stream I/O/history and complete-frame comparison/output storage
+    /// use the supplied backing allocator outside this limit.
     max_working_memory: usize = std.math.maxInt(usize),
     block_len: usize = 256 * 1024,
     distance_parameters: ?distance.Parameters = null,
