@@ -27,6 +27,7 @@ const huffman_tree_cache = @import("zstd/literals/tree_cache.zig");
 const literal_copy = @import("zstd/literals/copy.zig");
 const seekable = @import("zstd/seekable.zig");
 const dictionary_format = @import("zstd/dictionary_format.zig");
+const fast_cover_standard = @import("zstd/dictionary/fast_cover.zig");
 const incremental_encoder = @import("zstd/incremental/encoder/frame.zig");
 const incremental_block_emitter = @import("zstd/incremental/encoder/block_emitter.zig");
 const incremental_history_match = @import("zstd/incremental/encoder/history_match.zig");
@@ -690,6 +691,7 @@ test {
     _ = @import("zstd/match/controlled_fast_tests.zig");
     _ = @import("zstd/encode/controls_tests.zig");
     _ = @import("zstd/encode/controls_resource_tests.zig");
+    _ = @import("zstd/dictionary/fast_cover_tests.zig");
 }
 
 pub const StandardDictionaryView = dictionary_format.View;
@@ -856,6 +858,63 @@ pub const CoverDictionaryCodecOptimizeOptions = struct {
     /// exhaustive search dominates training time.
     candidate_repcodes: bool = false,
 };
+
+// FastCover owns selection and held-out search; the existing codec owns the
+// standard serializer, trained entropy tables, repcodes and dictionary views.
+const FastCoverStandardCodec = struct {
+    pub const Error = zstd.Error;
+    pub const OwnedDictionary = zstd.OwnedStandardDictionary;
+    pub const DictionaryView = zstd.StandardDictionaryView;
+    pub const NativeDictionary = zstd.NativeDictionary;
+    pub const FinalizerProfile = zstd.StandardDictionaryTrainingProfile;
+    pub const FrameEncoder = zstd.NativeFrameEncoder;
+
+    pub fn initFrameEncoder(allocator: std.mem.Allocator) FastCoverStandardCodec.FrameEncoder {
+        var encoder = NativeFrameEncoder.init(allocator);
+        // The existing serial selector preserves mixed-candidate wire while
+        // keeping all trainer work on its bounded operation allocator.
+        encoder.block_scratch.force_serial_mixed = true;
+        return encoder;
+    }
+    pub fn validateLevel(level: c_int) zstd.Error!void {
+        _ = try resolveFrameOptionsForLevel(level, .{});
+    }
+    pub fn finalize(allocator: std.mem.Allocator, content: []const u8, samples: []const []const u8, dictionary_id: u32, io: ?std.Io, profile: ?*FastCoverStandardCodec.FinalizerProfile, train_repcodes: bool) zstd.Error!zstd.OwnedStandardDictionary {
+        var context: StandardDictionaryProfileContext = undefined;
+        const profile_context: ?*const StandardDictionaryProfileContext = if (profile) |p| blk: {
+            context = .{ .io = io.?, .profile = p };
+            break :blk &context;
+        } else null;
+        return standardDictionaryFromSelectedContentAndSamplesProfiledAlloc(allocator, content, samples, dictionary_id, profile_context, train_repcodes);
+    }
+    pub fn frameSize(encoder: *FastCoverStandardCodec.FrameEncoder, input: []const u8, dictionary: FastCoverStandardCodec.NativeDictionary, level: c_int) zstd.Error!usize {
+        return (try encoder.encodeScratchWithDictionary(input, try resolveFrameOptionsForLevel(level, .{}), dictionary)).frame.len;
+    }
+};
+const FastCoverStandardTrainer = fast_cover_standard.Trainer(FastCoverStandardCodec);
+pub const FastCoverDictionaryTrainOptions = fast_cover_standard.TrainOptions;
+pub const FastCoverDictionaryOptimizeOptions = fast_cover_standard.OptimizeOptions;
+pub const FastCoverDictionaryCodecOptimizeOptions = fast_cover_standard.CodecOptimizeOptions;
+pub const OwnedOptimizedFastCoverStandardDictionary = FastCoverStandardTrainer.OwnedOptimizedDictionary;
+pub const FastCoverStandardDictionaryTrainingProfile = FastCoverStandardTrainer.TrainingProfile;
+pub const FastCoverCodecSearchProfile = FastCoverStandardTrainer.CodecSearchProfile;
+
+/// Train complete standard entropy tables around FastCover-selected history.
+/// The acceleration percentage selects a strict prefix of training samples;
+/// zero selected samples use complete prior tables, and validation never enters
+/// entropy finalization. The history target excludes the standard header;
+/// training must select at least eight history bytes, including on underfill.
+pub const validateFastCoverStandardDictionaryTrainOptions = FastCoverStandardTrainer.validateTrainOptions;
+pub const validateFastCoverStandardDictionaryOptimizeOptions = FastCoverStandardTrainer.validateOptimizeOptions;
+pub const validateFastCoverStandardDictionaryCodecOptimizeOptions = FastCoverStandardTrainer.validateCodecOptimizeOptions;
+pub const trainFastCoverStandardDictionaryAlloc = FastCoverStandardTrainer.trainAlloc;
+pub const trainOptimizedFastCoverStandardDictionaryAlloc = FastCoverStandardTrainer.trainOptimizedAlloc;
+pub const trainCodecOptimizedFastCoverStandardDictionaryAlloc = FastCoverStandardTrainer.trainCodecOptimizedAlloc;
+/// Diagnostic variants accumulate caller-owned statistics and stage times,
+/// preserve production dictionary bytes, and return the same ownership types.
+pub const profileFastCoverStandardDictionaryAlloc = FastCoverStandardTrainer.profileTrainAlloc;
+pub const profileOptimizedFastCoverStandardDictionaryAlloc = FastCoverStandardTrainer.profileOptimizedAlloc;
+pub const profileCodecOptimizedFastCoverStandardDictionaryAlloc = FastCoverStandardTrainer.profileCodecOptimizedAlloc;
 
 /// Fixed bytes added before the caller-selected history by Vort's baseline
 /// standard Zstandard dictionary generator.
@@ -16912,6 +16971,7 @@ fn emitLiteralOnlyCompressedBlockWithHistoryAndScratch(
 }
 
 const NativeBlockEncodeScratch = struct {
+    force_serial_mixed: bool = false,
     candidate: std.ArrayList(u8) = .empty,
     best: std.ArrayList(u8) = .empty,
     match_candidate: std.ArrayList(u8) = .empty,
@@ -17054,7 +17114,10 @@ fn emitLiteralOnlyCompressedBlockWithHistoryAndScratchImpl(
         candidate.clearRetainingCapacity();
         var match_state_applied = false;
         const match_ok = if (shouldProbeDecisiveWideMatch(block, match_search_budget, true)) blk: {
-            break :blk try emitNativeMatchCompressedBlockWithWideProbeForFrame(allocator, candidate, block, last, match_search_budget, rep_beam_scratch, &state.sequence_state, &match_state_applied, large_sequence_scratch);
+            break :blk if (scratch.force_serial_mixed)
+                try emitNativeMatchCompressedBlockWithWideProbeForFrameAndScratch(allocator, candidate, block, last, match_search_budget, rep_beam_scratch, &state.sequence_state, &match_state_applied, large_sequence_scratch, scratch)
+            else
+                try emitNativeMatchCompressedBlockWithWideProbeForFrame(allocator, candidate, block, last, match_search_budget, rep_beam_scratch, &state.sequence_state, &match_state_applied, large_sequence_scratch);
         } else try emitNativeMatchCompressedBlockWithScratch(allocator, candidate, block, last, match_search_budget, true, rep_beam_scratch, large_sequence_scratch, scratch);
         const match_ready = match_ok and (match_state_applied or try prepareSequenceCandidateForFrameWithScratch(allocator, candidate, block, last, &state.sequence_state, large_sequence_scratch));
         match_tested = true;
@@ -17325,6 +17388,10 @@ fn emitNativeMatchCompressedBlockImpl(
             }
         }
     }
+    if (block_scratch) |scratch| {
+        if (scratch.force_serial_mixed)
+            return try emitNativeMatchCompressedBlockSerialWithBeamDispatch(has_precomputed_rep_beam, false, allocator, out, block, last, match_search_budget, rep_beam_search, rep_beam_scratch, null, precomputed_rep_beam_stats, large_sequence_scratch, block_scratch);
+    }
     if (match_search_budget >= mixed_match_min_search_budget) {
         if (rep_beam_search and block.len >= serial_mixed_input_min and preferSerialMixedSearch(block)) {
             // Low-alphabet structured blocks make the repeat beam decisive in
@@ -17482,7 +17549,7 @@ noinline fn emitNativeMatchCompressedBlockWithWideProbe(
     match_search_budget: usize,
     rep_beam_scratch: ?*lz77.RepBeamScratch,
 ) Error!bool {
-    return try emitNativeMatchCompressedBlockWithWideProbeInternal(allocator, out, block, last, match_search_budget, rep_beam_scratch, null, null, null);
+    return try emitNativeMatchCompressedBlockWithWideProbeInternal(allocator, out, block, last, match_search_budget, rep_beam_scratch, null, null, null, null);
 }
 
 noinline fn emitNativeMatchCompressedBlockWithWideProbeForFrame(
@@ -17497,7 +17564,23 @@ noinline fn emitNativeMatchCompressedBlockWithWideProbeForFrame(
     large_sequence_scratch: ?*LargeSequenceScratch,
 ) Error!bool {
     state_applied.* = false;
-    return try emitNativeMatchCompressedBlockWithWideProbeInternal(allocator, out, block, last, match_search_budget, rep_beam_scratch, sequence_state, state_applied, large_sequence_scratch);
+    return try emitNativeMatchCompressedBlockWithWideProbeInternal(allocator, out, block, last, match_search_budget, rep_beam_scratch, sequence_state, state_applied, large_sequence_scratch, null);
+}
+
+noinline fn emitNativeMatchCompressedBlockWithWideProbeForFrameAndScratch(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    match_search_budget: usize,
+    rep_beam_scratch: ?*lz77.RepBeamScratch,
+    sequence_state: *const SequenceEncoderState,
+    state_applied: *bool,
+    large_sequence_scratch: ?*LargeSequenceScratch,
+    block_scratch: *NativeBlockEncodeScratch,
+) Error!bool {
+    state_applied.* = false;
+    return try emitNativeMatchCompressedBlockWithWideProbeInternal(allocator, out, block, last, match_search_budget, rep_beam_scratch, sequence_state, state_applied, large_sequence_scratch, block_scratch);
 }
 
 noinline fn emitNativeMatchCompressedBlockWithWideProbeInternal(
@@ -17510,6 +17593,7 @@ noinline fn emitNativeMatchCompressedBlockWithWideProbeInternal(
     sequence_state: ?*const SequenceEncoderState,
     state_applied: ?*bool,
     large_sequence_scratch: ?*LargeSequenceScratch,
+    block_scratch: ?*NativeBlockEncodeScratch,
 ) Error!bool {
     var local_rep_beam: lz77.RepBeamScratch = .{};
     defer if (rep_beam_scratch == null) local_rep_beam.deinit(allocator);
@@ -17534,8 +17618,8 @@ noinline fn emitNativeMatchCompressedBlockWithWideProbeInternal(
         large_sequence_scratch,
     )) return true;
     if (rep_beam_stats) |stats|
-        return try emitNativeMatchCompressedBlockImpl(true, allocator, out, block, last, match_search_budget, true, beam_scratch, stats, large_sequence_scratch, null);
-    return try emitNativeMatchCompressedBlockWithSequenceScratch(allocator, out, block, last, match_search_budget, true, rep_beam_scratch, large_sequence_scratch);
+        return try emitNativeMatchCompressedBlockImpl(true, allocator, out, block, last, match_search_budget, true, beam_scratch, stats, large_sequence_scratch, block_scratch);
+    return try emitNativeMatchCompressedBlockWithScratch(allocator, out, block, last, match_search_budget, true, rep_beam_scratch, large_sequence_scratch, block_scratch);
 }
 
 noinline fn emitDecisiveWideMatchCompressedBlock(
