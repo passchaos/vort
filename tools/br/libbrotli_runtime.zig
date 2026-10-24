@@ -94,10 +94,27 @@ const max_raw_dictionaries = 15;
 const raw_shared_dictionary_type = 0;
 const serialized_shared_dictionary_type = 1;
 
+/// File names passed to the dynamic loader. Their storage must outlive Runtime.
+/// Canonical absolute paths avoid SONAME lookup when exact files are required.
+pub const Paths = struct {
+    encoder: []const u8,
+    decoder: []const u8,
+    common: []const u8,
+
+    pub fn validate(self: Paths) !void {
+        for ([_][]const u8{ self.encoder, self.decoder, self.common }) |path| {
+            if (path.len == 0 or std.mem.indexOfScalar(u8, path, 0) != null)
+                return error.InvalidReferencePaths;
+        }
+    }
+};
+
 pub const Runtime = struct {
     encoder: std.DynLib,
     decoder: std.DynLib,
     common: std.DynLib,
+    /// Successful open arguments, not proof of the loader's dependency graph.
+    opened_names: Paths,
     max_compressed_size: MaxCompressedSizeFn,
     compress: CompressFn,
     decompress: DecompressFn,
@@ -122,31 +139,58 @@ pub const Runtime = struct {
     transform_dictionary_word: TransformDictionaryWordFn,
 
     pub fn open() !Runtime {
-        var encoder = try openLibrary(&.{
+        var encoder = try openNamedLibrary(&.{
             "libbrotlienc.so.1",
             "/lib/x86_64-linux-gnu/libbrotlienc.so.1",
             "/usr/lib/x86_64-linux-gnu/libbrotlienc.so.1",
             "libbrotlienc.dylib",
         });
-        errdefer encoder.close();
-        var decoder = try openLibrary(&.{
+        errdefer encoder.library.close();
+        var decoder = try openNamedLibrary(&.{
             "libbrotlidec.so.1",
             "/lib/x86_64-linux-gnu/libbrotlidec.so.1",
             "/usr/lib/x86_64-linux-gnu/libbrotlidec.so.1",
             "libbrotlidec.dylib",
         });
-        errdefer decoder.close();
-        var common = try openLibrary(&.{
+        errdefer decoder.library.close();
+        var common = try openNamedLibrary(&.{
             "libbrotlicommon.so.1",
             "/lib/x86_64-linux-gnu/libbrotlicommon.so.1",
             "/usr/lib/x86_64-linux-gnu/libbrotlicommon.so.1",
             "libbrotlicommon.dylib",
         });
+        errdefer common.library.close();
+        return bind(encoder.library, decoder.library, common.library, .{
+            .encoder = encoder.name,
+            .decoder = decoder.name,
+            .common = common.name,
+        });
+    }
+
+    /// Open each supplied library without trying another file on failure.
+    /// Callers wanting exact file identity should provide canonical paths;
+    /// neither this method nor version symbols prove transitive dependencies.
+    pub fn openPaths(paths: Paths) !Runtime {
+        try paths.validate();
+        var encoder = try std.DynLib.open(paths.encoder);
+        errdefer encoder.close();
+        var decoder = try std.DynLib.open(paths.decoder);
+        errdefer decoder.close();
+        var common = try std.DynLib.open(paths.common);
         errdefer common.close();
+        return bind(encoder, decoder, common, paths);
+    }
+
+    fn bind(encoder_library: std.DynLib, decoder_library: std.DynLib, common_library: std.DynLib, opened_names: Paths) !Runtime {
+        // DynLib.lookup takes a mutable handle even for symbol-only lookup.
+        var encoder = encoder_library;
+        var decoder = decoder_library;
+        var common = common_library;
         return .{
             .encoder = encoder,
             .decoder = decoder,
             .common = common,
+            .opened_names = opened_names,
             .max_compressed_size = encoder.lookup(MaxCompressedSizeFn, "BrotliEncoderMaxCompressedSize") orelse return error.ReferenceUnavailable,
             .compress = encoder.lookup(CompressFn, "BrotliEncoderCompress") orelse return error.ReferenceUnavailable,
             .decompress = decoder.lookup(DecompressFn, "BrotliDecoderDecompress") orelse return error.ReferenceUnavailable,
@@ -612,9 +656,17 @@ pub const Runtime = struct {
     }
 };
 
-fn openLibrary(names: []const [:0]const u8) !std.DynLib {
+const NamedLibrary = struct { library: std.DynLib, name: []const u8 };
+
+fn openNamedLibrary(names: []const [:0]const u8) !NamedLibrary {
     for (names) |name| {
-        if (std.DynLib.openZ(name.ptr)) |library| return library else |_| {}
+        if (std.DynLib.openZ(name.ptr)) |library| return .{ .library = library, .name = name } else |_| {}
     }
     return error.ReferenceUnavailable;
+}
+
+test "libbrotli explicit paths reject empty and embedded NUL names before loading" {
+    try std.testing.expectError(error.InvalidReferencePaths, Runtime.openPaths(.{ .encoder = "", .decoder = "decoder", .common = "common" }));
+    try std.testing.expectError(error.InvalidReferencePaths, Runtime.openPaths(.{ .encoder = "encoder", .decoder = "decoder\x00suffix", .common = "common" }));
+    try (Paths{ .encoder = "encoder", .decoder = "decoder", .common = "common" }).validate();
 }

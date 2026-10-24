@@ -20,6 +20,13 @@ encoder、decoder 与 common 文件。
 Brotli q8 与 Zstd level 3。相同级别编号是产品策略比较，不证明两库内部
 搜索算法和有效窗口相同；设置与实际 wire 信息必须保留。
 
+Brotli 的 `vort_window_bits=null` 表示公开默认窗口，另用
+`vort_default_window_bits` 记录其默认值。command-state 值 255 是保留质量
+策略的 sentinel，不能解释为 255 KiB 的实际搜索范围；q10/q11 当前默认
+上限为 8 KiB。`vort_hq_enabled` 描述显式 HQ 选项是否启用，不替代质量
+策略内部规划的说明。Zstd 的 `resolved_primary` 仅描述公开级别解析器的
+主配置，自动策略还会仲裁其他候选；报告保留这一范围及实际帧头。
+
 ```sh
 vort-br-planned-encode-bench --path INPUT --limit 65536 --iterations 1 \
   --planned-quality 8 --quality 8 --planned-mode generic \
