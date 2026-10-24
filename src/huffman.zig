@@ -1041,7 +1041,7 @@ test "mapped packed lookups preserve fixed-width symbols and slots" {
     const single = try PackedLookup(10).initSingleMapped(7, markPackedLookupSlot);
     var empty_reader = FastReader.initFrom(bitstream.BitReader.init(&.{}));
     try std.testing.expectEqual(@as(?u16, 0x8080), try single.decodePackedValueFast10(&empty_reader));
-    try std.testing.expectEqual(@as(usize, 0), empty_reader.bitPosition());
+    try std.testing.expectEqual(@as(@TypeOf(empty_reader.bitPosition()), 0), empty_reader.bitPosition());
 }
 
 pub const CodeLengthTable = HuffmanTable(19);
@@ -2373,7 +2373,7 @@ test "external packed lookup covers dense tables and long-code fallback" {
     const single_lookup = try PackedLookup(10).initSingle(211);
     var empty_reader = bitstream.BitReader.init(&.{});
     try std.testing.expectEqual(@as(?u16, 211), try single_lookup.decodeValueFast(&empty_reader));
-    try std.testing.expectEqual(@as(usize, 0), empty_reader.bitPosition());
+    try std.testing.expectEqual(@as(@TypeOf(empty_reader.bitPosition()), 0), empty_reader.bitPosition());
 
     const dense_lengths = [_]u4{8} ** 256;
     const dense_table = try HuffmanTable(256).init(&dense_lengths);
@@ -3047,7 +3047,7 @@ test "fast decoder sparse-clears long prefixes" {
 
         var reader = bitstream.BitReader.init(bytes);
         try std.testing.expectEqual(@as(u16, @intCast(symbol)), try decoder.decodeValue(&reader));
-        try std.testing.expectEqual(@as(usize, bits), reader.bitPosition());
+        try std.testing.expectEqual(@as(@TypeOf(reader.bitPosition()), bits), reader.bitPosition());
     }
 }
 

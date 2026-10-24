@@ -1,28 +1,31 @@
 const std = @import("std");
 const core = @import("core.zig");
+pub const bit_count = @import("io/bit_count.zig");
+pub const BitCount = bit_count.BitCount;
+const wide_fields = @import("bitstream/wide_fields.zig");
 
 pub const Error = core.Error;
 
 pub const BitReader = struct {
     input: []const u8,
-    bit_len: usize,
+    bit_len: BitCount,
     byte_index: usize = 0,
     bit_index: u3 = 0,
 
     pub fn init(input: []const u8) BitReader {
-        return .{ .input = input, .bit_len = input.len * 8 };
+        return .{ .input = input, .bit_len = bit_count.fromBytesAssumeBounded(input.len) };
     }
 
     /// Initialize over a prefix whose final byte may contain synthetic high
     /// padding. Reads remain bounded to `bit_len`, so parsers can distinguish
     /// retained partial-byte input from a complete zero-padded byte.
-    pub fn initBitLength(input: []const u8, bit_len: usize) BitReader {
-        std.debug.assert(bit_len <= input.len * 8);
+    pub fn initBitLength(input: []const u8, bit_len: BitCount) BitReader {
+        std.debug.assert(bit_len <= bit_count.fromBytesAssumeBounded(input.len));
         return .{ .input = input, .bit_len = bit_len };
     }
 
-    pub fn bitPosition(self: BitReader) usize {
-        return self.byte_index * 8 + self.bit_index;
+    pub fn bitPosition(self: BitReader) BitCount {
+        return bit_count.positionAssumeBounded(self.byte_index, self.bit_index);
     }
 
     pub fn byteOffset(self: BitReader) usize {
@@ -32,7 +35,9 @@ pub const BitReader = struct {
     pub fn readBits(self: *BitReader, comptime T: type, count: u6) Error!T {
         if (count > @bitSizeOf(T)) return error.CorruptFrame;
         if (!self.hasBits(count)) return error.TruncatedFrame;
-        const result = self.peekBitsPadded(T, count);
+        // Availability already excludes synthetic padding. Keep checked reads
+        // on the original byte-window path without a second tail-geometry test.
+        const result = self.peekBitsPaddedWindow(T, count);
         self.advanceBitsAssumeAvailable(count);
         return result;
     }
@@ -50,7 +55,7 @@ pub const BitReader = struct {
 
     pub fn hasBits(self: BitReader, count: u6) bool {
         const position = self.bitPosition();
-        return position <= self.bit_len and @as(usize, count) <= self.bit_len - position;
+        return position <= self.bit_len and @as(BitCount, count) <= self.bit_len - position;
     }
 
     pub fn hasStagedBits(self: BitReader, count: u6) bool {
@@ -70,6 +75,16 @@ pub const BitReader = struct {
     pub fn peekBitsPadded(self: BitReader, comptime T: type, count: u6) T {
         std.debug.assert(count <= @bitSizeOf(T));
         if (count == 0 or self.byte_index >= self.input.len) return 0;
+        if (self.bit_len != bit_count.fromBytesAssumeBounded(self.input.len)) {
+            const available = self.bit_len -| self.bitPosition();
+            const valid: u6 = @intCast(bit_count.bounded(available, count));
+            return self.peekBitsPaddedWindow(T, valid);
+        }
+        return self.peekBitsPaddedWindow(T, count);
+    }
+
+    fn peekBitsPaddedWindow(self: BitReader, comptime T: type, count: u6) T {
+        if (count == 0) return 0;
 
         // Deflate stores bits LSB-first, so a little-endian byte window shifted
         // by bit_index yields the requested bit sequence directly. Missing
@@ -136,18 +151,19 @@ pub const BufferedBitReader = struct {
     /// decode hot paths.
     bit_buffer: u64 = 0,
     bit_count: usize = 0,
-    consumed_bits: usize = 0,
+    consumed_bits: BitCount = 0,
 
     pub fn init(input: []const u8) BufferedBitReader {
+        _ = bit_count.fromBytesAssumeBounded(input.len);
         return .{ .input = input };
     }
 
-    pub fn bitPosition(self: BufferedBitReader) usize {
+    pub fn bitPosition(self: BufferedBitReader) BitCount {
         return self.consumed_bits;
     }
 
     pub fn byteOffset(self: BufferedBitReader) usize {
-        return (self.consumed_bits + 7) / 8;
+        return bit_count.ceilBytes(self.consumed_bits) catch unreachable;
     }
 
     pub fn readBits(self: *BufferedBitReader, comptime T: type, count: u6) Error!T {
@@ -170,12 +186,14 @@ pub const BufferedBitReader = struct {
     }
 
     pub fn hasBits(self: BufferedBitReader, count: u6) bool {
-        const remaining_staged = self.bit_count;
+        if (@as(usize, count) <= self.bit_count) return true;
         const remaining_input_bits = if (self.byte_index <= self.input.len)
-            (self.input.len - self.byte_index) * 8
+            bit_count.fromBytesAssumeBounded(self.input.len - self.byte_index)
         else
             0;
-        return @as(usize, count) <= remaining_staged + remaining_input_bits;
+        // The staged reservoir and remaining source need not be added: a
+        // local request is at most 63 bits, so subtract its staged part first.
+        return @as(BitCount, @as(usize, count) - self.bit_count) <= remaining_input_bits;
     }
 
     pub inline fn hasStagedBits(self: BufferedBitReader, count: u6) bool {
@@ -183,6 +201,7 @@ pub const BufferedBitReader = struct {
     }
 
     pub fn advanceBitsAssumeAvailable(self: *BufferedBitReader, count: u6) void {
+        if (count > 56) return wide_fields.advance(self, count);
         self.fill(count);
         self.advanceBitsStagedAssumeAvailable(count);
     }
@@ -192,6 +211,7 @@ pub const BufferedBitReader = struct {
     /// symbol; using this helper avoids a second no-op fill in the hottest
     /// literal/distance path while preserving the checked public advance above.
     pub fn advanceBitsStagedAssumeAvailable(self: *BufferedBitReader, count: u6) void {
+        if (count > 56 and self.bit_count < count) return wide_fields.advance(self, count);
         std.debug.assert(self.bit_count >= count);
         self.bit_buffer >>= @intCast(count);
         self.bit_count -= count;
@@ -201,6 +221,7 @@ pub const BufferedBitReader = struct {
     pub inline fn peekBitsPadded(self: *BufferedBitReader, comptime T: type, count: u6) T {
         std.debug.assert(count <= @bitSizeOf(T));
         if (count == 0) return 0;
+        if (count > 56) return wide_fields.peekPadded(self.*, T, count);
         self.fill(count);
         const mask = (@as(u64, 1) << @intCast(count)) - 1;
         return @intCast(self.bit_buffer & mask);
@@ -229,7 +250,7 @@ pub const BufferedBitReader = struct {
         const offset = self.byteOffset();
         if (offset > self.input.len or self.input.len - offset < output.len) return error.TruncatedFrame;
         @memcpy(output, self.input[offset..][0..output.len]);
-        self.consumed_bits += output.len * 8;
+        self.consumed_bits += bit_count.fromBytesAssumeBounded(output.len);
         self.byte_index = offset + output.len;
         self.bit_buffer = 0;
         self.bit_count = 0;
@@ -304,6 +325,7 @@ pub const ChunkedBitReader = struct {
 
     pub fn initAtKnownTotal(chunks: []const []const u8, byte_offset: usize, total_len: usize) Error!ChunkedBitReader {
         if (byte_offset > total_len) return error.TruncatedFrame;
+        _ = try bit_count.fromBytes(total_len);
         var reader = ChunkedBitReader{
             .chunks = chunks,
             .byte_index = byte_offset,
@@ -315,8 +337,8 @@ pub const ChunkedBitReader = struct {
         return reader;
     }
 
-    pub fn bitPosition(self: ChunkedBitReader) usize {
-        return self.byte_index * 8 + self.bit_index;
+    pub fn bitPosition(self: ChunkedBitReader) BitCount {
+        return bit_count.positionAssumeBounded(self.byte_index, self.bit_index);
     }
 
     pub fn byteOffset(self: ChunkedBitReader) usize {
@@ -337,17 +359,16 @@ pub const ChunkedBitReader = struct {
     }
 
     pub fn skipBits(self: *ChunkedBitReader, count: u6) Error!void {
-        if (self.byte_index > self.total_len) return error.TruncatedFrame;
-        const remaining_bits = (self.total_len - self.byte_index) * 8 - @as(usize, self.bit_index);
-        if (@as(usize, count) > remaining_bits) return error.TruncatedFrame;
+        if (!self.hasBits(count)) return error.TruncatedFrame;
 
         self.advanceBitsAssumeAvailable(count);
     }
 
     pub fn hasBits(self: ChunkedBitReader, count: u6) bool {
         if (self.byte_index > self.total_len) return false;
-        const remaining_bits = (self.total_len - self.byte_index) * 8 - @as(usize, self.bit_index);
-        return @as(usize, count) <= remaining_bits;
+        const byte_bits = bit_count.fromBytesAssumeBounded(self.total_len - self.byte_index);
+        if (self.bit_index > byte_bits) return false;
+        return @as(BitCount, count) <= byte_bits - self.bit_index;
     }
 
     pub fn hasStagedBits(self: ChunkedBitReader, count: u6) bool {
@@ -355,6 +376,7 @@ pub const ChunkedBitReader = struct {
     }
 
     pub fn advanceBitsAssumeAvailable(self: *ChunkedBitReader, count: u6) void {
+        if (count > 56) return wide_fields.advance(self, count);
         self.fill(count);
         self.advanceBitsStagedAssumeAvailable(count);
     }
@@ -363,6 +385,7 @@ pub const ChunkedBitReader = struct {
     /// buffered reader helper and avoids re-entering chunk cursor fill logic for
     /// every Huffman symbol decoded from PNG-style split zlib chunks.
     pub fn advanceBitsStagedAssumeAvailable(self: *ChunkedBitReader, count: u6) void {
+        if (count > 56 and self.bit_count < count) return wide_fields.advance(self, count);
         std.debug.assert(self.bit_count >= count);
         self.bit_buffer >>= @intCast(count);
         self.bit_count -= count;
@@ -377,6 +400,7 @@ pub const ChunkedBitReader = struct {
     pub fn peekBitsPadded(self: *ChunkedBitReader, comptime T: type, count: u6) T {
         std.debug.assert(count <= @bitSizeOf(T));
         if (count == 0 or self.byte_index >= self.total_len) return 0;
+        if (count > 56) return wide_fields.peekPadded(self.*, T, count);
         self.fill(count);
 
         const mask = (@as(u64, 1) << @intCast(count)) - 1;
@@ -549,6 +573,7 @@ pub const ChunkedSpanBitReader = struct {
 
     pub fn initAtKnownTotal(chunks: []const []const u8, byte_offset: usize, total_len: usize) Error!ChunkedSpanBitReader {
         if (byte_offset > total_len) return error.TruncatedFrame;
+        _ = try bit_count.fromBytes(total_len);
         var reader = ChunkedSpanBitReader{
             .chunks = chunks,
             .byte_index = byte_offset,
@@ -559,8 +584,8 @@ pub const ChunkedSpanBitReader = struct {
         return reader;
     }
 
-    pub fn bitPosition(self: ChunkedSpanBitReader) usize {
-        return self.byte_index * 8 + self.bit_index;
+    pub fn bitPosition(self: ChunkedSpanBitReader) BitCount {
+        return bit_count.positionAssumeBounded(self.byte_index, self.bit_index);
     }
 
     pub fn byteOffset(self: ChunkedSpanBitReader) usize {
@@ -587,8 +612,9 @@ pub const ChunkedSpanBitReader = struct {
 
     pub fn hasBits(self: ChunkedSpanBitReader, count: u6) bool {
         if (self.byte_index > self.total_len) return false;
-        const remaining_bits = (self.total_len - self.byte_index) * 8 - @as(usize, self.bit_index);
-        return @as(usize, count) <= remaining_bits;
+        const byte_bits = bit_count.fromBytesAssumeBounded(self.total_len - self.byte_index);
+        if (self.bit_index > byte_bits) return false;
+        return @as(BitCount, count) <= byte_bits - self.bit_index;
     }
 
     pub fn hasStagedBits(self: ChunkedSpanBitReader, count: u6) bool {
@@ -596,11 +622,13 @@ pub const ChunkedSpanBitReader = struct {
     }
 
     pub fn advanceBitsAssumeAvailable(self: *ChunkedSpanBitReader, count: u6) void {
+        if (count > 56) return wide_fields.advance(self, count);
         self.fill(count);
         self.advanceBitsStagedAssumeAvailable(count);
     }
 
     pub fn advanceBitsStagedAssumeAvailable(self: *ChunkedSpanBitReader, count: u6) void {
+        if (count > 56 and self.bit_count < count) return wide_fields.advance(self, count);
         std.debug.assert(self.bit_count >= count);
         self.bit_buffer >>= @intCast(count);
         self.bit_count -= count;
@@ -613,6 +641,7 @@ pub const ChunkedSpanBitReader = struct {
     pub fn peekBitsPadded(self: *ChunkedSpanBitReader, comptime T: type, count: u6) T {
         std.debug.assert(count <= @bitSizeOf(T));
         if (count == 0 or self.byte_index >= self.total_len) return 0;
+        if (count > 56) return wide_fields.peekPadded(self.*, T, count);
         self.fill(count);
 
         const mask = (@as(u64, 1) << @intCast(count)) - 1;
@@ -771,7 +800,7 @@ test "buffered bit reader word prefetch preserves logical offsets and tail reads
     );
     try std.testing.expectEqual(@as(usize, 7), buffered.byte_index);
     try std.testing.expectEqual(@as(usize, 56), buffered.bit_count);
-    try std.testing.expectEqual(@as(usize, 0), buffered.bitPosition());
+    try std.testing.expectEqual(@as(BitCount, 0), buffered.bitPosition());
     try std.testing.expectEqual(@as(usize, 0), buffered.byteOffset());
 
     // Cross the first prefetched word and finish through the byte-at-a-time
@@ -784,7 +813,7 @@ test "buffered bit reader word prefetch preserves logical offsets and tail reads
         try std.testing.expectEqual(scalar.bitPosition(), buffered.bitPosition());
         try std.testing.expectEqual(scalar.byteOffset(), buffered.byteOffset());
     }
-    try std.testing.expectEqual(@as(usize, 68), buffered.bitPosition());
+    try std.testing.expectEqual(@as(BitCount, 68), buffered.bitPosition());
     try std.testing.expectEqual(try scalar.readBits(u4, 4), try buffered.readBits(u4, 4));
     try std.testing.expectError(error.TruncatedFrame, buffered.readBits(u1, 1));
 }
@@ -900,7 +929,7 @@ test "BitReader consumes LSB-first deflate bits" {
     try std.testing.expectEqual(@as(u3, 0b101), try reader.readBits(u3, 3));
     try std.testing.expectEqual(@as(u5, 0b10101), try reader.readBits(u5, 5));
     try std.testing.expectEqual(@as(u2, 0b11), try reader.readBits(u2, 2));
-    try std.testing.expectEqual(@as(usize, 10), reader.bitPosition());
+    try std.testing.expectEqual(@as(BitCount, 10), reader.bitPosition());
     reader.alignToByte();
     try std.testing.expectEqual(@as(usize, 2), reader.byteOffset());
 }
@@ -910,7 +939,7 @@ test "BitReader exact bit length rejects high padding bits" {
     var reader = BitReader.initBitLength(&bytes, 11);
     try std.testing.expectEqual(@as(u8, 0b101), try reader.readBits(u8, 3));
     try std.testing.expectEqual(@as(u8, 0b1111_1101), try reader.readBits(u8, 8));
-    try std.testing.expectEqual(@as(usize, 11), reader.bitPosition());
+    try std.testing.expectEqual(@as(BitCount, 11), reader.bitPosition());
     try std.testing.expect(!reader.hasBits(1));
     try std.testing.expectError(error.TruncatedFrame, reader.readBits(u1, 1));
 }
@@ -1038,12 +1067,12 @@ test "BitWriter reserved-capacity packing matches checked packing" {
 test "BitReader skipBits advances without reading values" {
     var reader = BitReader.init(&.{ 0b1010_1101, 0b0000_0011 });
     try reader.skipBits(3);
-    try std.testing.expectEqual(@as(usize, 3), reader.bitPosition());
+    try std.testing.expectEqual(@as(BitCount, 3), reader.bitPosition());
     try std.testing.expectEqual(@as(u5, 0b10101), try reader.readBits(u5, 5));
     try reader.skipBits(2);
-    try std.testing.expectEqual(@as(usize, 10), reader.bitPosition());
+    try std.testing.expectEqual(@as(BitCount, 10), reader.bitPosition());
     try reader.skipBits(6);
-    try std.testing.expectEqual(@as(usize, 16), reader.bitPosition());
+    try std.testing.expectEqual(@as(BitCount, 16), reader.bitPosition());
     try std.testing.expectError(error.TruncatedFrame, reader.skipBits(1));
 }
 
@@ -1051,7 +1080,7 @@ test "BitReader hasBits and unchecked advance match skipBits" {
     var reader = BitReader.init(&.{ 0b1010_1101, 0b0000_0011 });
     try std.testing.expect(reader.hasBits(10));
     reader.advanceBitsAssumeAvailable(10);
-    try std.testing.expectEqual(@as(usize, 10), reader.bitPosition());
+    try std.testing.expectEqual(@as(BitCount, 10), reader.bitPosition());
     try std.testing.expect(reader.hasBits(6));
     try std.testing.expect(!reader.hasBits(7));
 }
@@ -1096,7 +1125,7 @@ test "ChunkedBitReader matches contiguous bit and aligned-byte reads" {
     try std.testing.expectEqual(@as(u3, 0b101), try chunked.readBits(u3, 3));
     try std.testing.expectEqual(@as(u5, 0b10101), try chunked.readBits(u5, 5));
     try std.testing.expectEqual(@as(u2, 0b11), try chunked.readBits(u2, 2));
-    try std.testing.expectEqual(@as(usize, 10), chunked.bitPosition());
+    try std.testing.expectEqual(@as(BitCount, 10), chunked.bitPosition());
     chunked.alignToByte();
     try std.testing.expectEqual(@as(usize, 2), chunked.byteOffset());
     try std.testing.expectEqual(@as(u16, 0x1234), try chunked.readAlignedInt(u16, .little));
@@ -1167,7 +1196,7 @@ test "ChunkedBitReader hasBits and unchecked advance match skipBits" {
     var reader = try ChunkedBitReader.init(&chunks);
     try std.testing.expect(reader.hasBits(10));
     reader.advanceBitsAssumeAvailable(10);
-    try std.testing.expectEqual(@as(usize, 10), reader.bitPosition());
+    try std.testing.expectEqual(@as(BitCount, 10), reader.bitPosition());
     try std.testing.expect(reader.hasBits(6));
     try std.testing.expect(!reader.hasBits(7));
 }
@@ -1181,4 +1210,8 @@ test "BitWriter emits LSB-first bytes readable by BitReader" {
     const bytes = try writer.toOwnedSlice(std.testing.allocator);
     defer std.testing.allocator.free(bytes);
     try std.testing.expectEqualSlices(u8, &.{ 0b1010_1101, 0b0000_0011 }, bytes);
+}
+
+test {
+    _ = @import("bitstream/wide_reader_tests.zig");
 }

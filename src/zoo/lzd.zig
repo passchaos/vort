@@ -1,5 +1,6 @@
 const std = @import("std");
 const bitstream = @import("../bitstream.zig");
+const bit_count = @import("../io/bit_count.zig");
 const core = @import("../core.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error || error{
@@ -196,13 +197,14 @@ pub fn encodeInto(
 
 fn finishReader(reader: bitstream.BitReader) Error!void {
     const position = reader.bitPosition();
-    const total_bits = std.math.mul(usize, reader.input.len, 8) catch
-        return error.IntegerOverflow;
+    const total_bits = try bit_count.fromBytes(reader.input.len);
+    if (position > total_bits) return error.IntegerOverflow;
     const remaining = total_bits - position;
     if (remaining >= 8) return error.TrailingData;
     var bit = position;
     while (bit < total_bits) : (bit += 1) {
-        if ((reader.input[bit / 8] >> @intCast(bit % 8)) & 1 != 0)
+        const byte_index = try bit_count.floorBytes(bit);
+        if ((reader.input[byte_index] >> @intCast(bit % 8)) & 1 != 0)
             return error.TrailingData;
     }
 }

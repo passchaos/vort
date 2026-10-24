@@ -32,6 +32,7 @@ pub const snappy_framing = @import("snappy_framing.zig");
 pub const hadoop_lz4 = @import("hadoop_lz4.zig");
 pub const hadoop_lzo_index = @import("hadoop_lzo_index.zig");
 pub const bitstream = @import("bitstream.zig");
+pub const BitCount = @import("io/bit_count.zig").BitCount;
 pub const huffman = @import("huffman.zig");
 pub const lz77 = @import("lz77.zig");
 pub const dictionary = @import("dictionary.zig");

@@ -2,6 +2,8 @@ const std = @import("std");
 const builtin = @import("builtin");
 const checksum = @import("checksum.zig");
 const bitstream = @import("bitstream.zig");
+const bit_geometry = @import("io/bit_count.zig");
+const BitCount = bit_geometry.BitCount;
 const huffman = @import("huffman.zig");
 const lz77 = @import("lz77.zig");
 const core = @import("core.zig");
@@ -4203,7 +4205,9 @@ pub fn parseRawDeflateHeaderInfo(input: []const u8) Error!RawDeflateHeaderInfo {
         2 => .dynamic,
         else => return error.InvalidDeflateBlockType,
     };
-    const data_bit_offset = reader.bitPosition();
+    // This inspector reports only the first bounded format header; retain its
+    // physical metadata types while refusing an unrepresentable bit offset.
+    const data_bit_offset = try bit_geometry.toLocal(reader.bitPosition());
     const data_byte_offset = reader.byteOffset();
     var stored_len: ?u16 = null;
     var stored_nlen: ?u16 = null;
@@ -4275,10 +4279,10 @@ pub fn parseRawDeflateHeaderInfo(input: []const u8) Error!RawDeflateHeaderInfo {
         dynamic_distance_zero = hdist - dist_nonzero;
         dynamic_distance_max_bits = parsed.distance_max_bits;
         dynamic_has_eob = parsed.literal_lengths[256] != 0;
-        dynamic_lengths_bit_offset = reader.bitPosition();
+        dynamic_lengths_bit_offset = try bit_geometry.toLocal(reader.bitPosition());
         dynamic_lengths_byte_offset = reader.byteOffset();
     }
-    const header_bits_consumed = reader.bitPosition();
+    const header_bits_consumed = try bit_geometry.toLocal(reader.bitPosition());
     const header_bytes_consumed = reader.byteOffset();
     return .{
         .final = final,
@@ -6902,7 +6906,7 @@ inline fn storeFusedReaderState(
     bit_buffer: u64,
     bit_count: usize,
     byte_index: usize,
-    consumed_bits: usize,
+    consumed_bits: BitCount,
 ) void {
     reader.bit_buffer = bit_buffer;
     reader.bit_count = bit_count;
@@ -6912,18 +6916,38 @@ inline fn storeFusedReaderState(
 
 inline fn semanticConsumedBits(
     comptime derive_from_reservoir: bool,
-    tracked: usize,
+    tracked: BitCount,
     byte_index: usize,
     bit_count: usize,
-) usize {
+) BitCount {
     if (comptime derive_from_reservoir) {
         // BufferedBitReader stages complete bytes and keeps every unread bit in
         // the low end of the reservoir, so its logical position is recoverable
         // without carrying another dependency through every semantic token.
-        std.debug.assert(bit_count <= byte_index * 8);
-        return byte_index * 8 - bit_count;
+        const staged_position = bit_geometry.fromBytesAssumeBounded(byte_index);
+        std.debug.assert(@as(BitCount, bit_count) <= staged_position);
+        return staged_position - @as(BitCount, bit_count);
     }
     return tracked;
+}
+
+test "deflate fused reader metadata keeps wide bits and local reservoir offsets" {
+    // Metadata-only geometry: no backing bytes are dereferenced. This models
+    // a physically addressable byte index beyond the 32-bit bit boundary.
+    const byte_index: usize = (1 << 29) + 9;
+    const staged: usize = 13;
+    const expected: BitCount = (@as(BitCount, 1) << 32) + 72 - staged;
+    try std.testing.expectEqual(expected, semanticConsumedBits(true, 0, byte_index, staged));
+    try std.testing.expectEqual(expected, semanticConsumedBits(false, expected, 0, 0));
+    const bytes: [*]const u8 = @ptrFromInt(1);
+    var reader = bitstream.BufferedBitReader.init(bytes[0..byte_index]);
+    storeFusedReaderState(&reader, 0x19, staged, byte_index, expected);
+    try std.testing.expectEqual(expected, reader.consumed_bits);
+    try std.testing.expectEqual(expected, reader.bitPosition());
+    try std.testing.expectEqual(byte_index - 1, reader.byteOffset());
+    try std.testing.expectEqual(usize, @TypeOf(reader.byte_index));
+    try std.testing.expectEqual(usize, @TypeOf(reader.bit_count));
+    try std.testing.expectEqual(BitCount, @TypeOf(reader.consumed_bits));
 }
 
 inline fn emitFusedLiteralAt(output: []u8, out_pos: *usize, entry: u32) void {
