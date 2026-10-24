@@ -181,7 +181,11 @@ pub fn Encoder(comptime Codec: type) type {
                     if (output_written == output.len and output.len != 0) return result(input_read, output_written, .need_output);
                 }
                 if (!self.prefix_written) {
-                    try Codec.writePrefix(self.allocator, &self.pending, &self.codec_state, self.options.stream);
+                    if (@hasDecl(Codec, "writePrefixWithBlockLen")) {
+                        try Codec.writePrefixWithBlockLen(self.allocator, &self.pending, &self.codec_state, self.options.stream, block_len);
+                    } else {
+                        try Codec.writePrefix(self.allocator, &self.pending, &self.codec_state, self.options.stream);
+                    }
                     self.prefix_written = true;
                     continue;
                 }
@@ -263,4 +267,5 @@ pub fn Encoder(comptime Codec: type) type {
 test {
     _ = @import("encoder_tests.zig");
     _ = @import("encoder_counter_tests.zig");
+    _ = @import("encoder_block_options_tests.zig");
 }
