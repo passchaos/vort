@@ -19,7 +19,6 @@ pub const ExternalReservation = struct {
             if (!s.allow(bytes)) return error.WorkingMemoryLimitExceeded;
             s.reserved += bytes;
             s.references = refs;
-            s.last_failure_was_limit = false;
         }
         return .{ .state = state, .bytes = bytes };
     }

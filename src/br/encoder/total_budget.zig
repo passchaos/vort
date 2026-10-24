@@ -32,12 +32,19 @@ fn sameBacking(left: std.mem.Allocator, right: std.mem.Allocator) bool {
 /// One ownership reference to a stable total-requested-heap allocator. The
 /// default null-limit/null-profile path is exactly the original allocator and
 /// allocates no control. Finite limits or instrumentation create counted state.
+/// A single coordinating owner configures the shared policy and starts error
+/// intervals; retained descendants only borrow that authority. Sharing does not
+/// synchronize allocator requests or lease lifetimes between threads.
+/// After the last lease closes, outstanding buffers may still be freed or
+/// shrunk, but their allocator cannot acquire a new lease or grow the ledger.
 pub const Lease = struct {
     backing: std.mem.Allocator,
     state: ?*State = null,
+    coordinator: bool = true,
 
     pub fn init(backing: std.mem.Allocator, limit: ?usize, profile: ?*EncodeMemoryProfile, seed_existing: usize) Error!Lease {
         if (State.fromAllocator(backing)) |state| {
+            if (state.references == 0) return error.InvalidBlockPlan;
             // A nested encoder inherits the outer policy and bytes already
             // charged there. It must not re-seed or silently install a new cap.
             if (seed_existing != 0 or (limit != null and limit != state.limit)) return error.InvalidBlockPlan;
@@ -46,7 +53,7 @@ pub const Lease = struct {
                 if (state.profile != p) return error.InvalidBlockPlan;
             }
             state.references = references;
-            return .{ .backing = state.backing, .state = state };
+            return .{ .backing = state.backing, .state = state, .coordinator = false };
         }
         if (limit == null and profile == null) return .{ .backing = backing };
         if (profile) |p| p.record(seed_existing, limit);
@@ -62,21 +69,26 @@ pub const Lease = struct {
     }
     pub fn retain(self: Lease) Error!Lease {
         if (self.state) |state| {
-            std.debug.assert(state.references != 0);
+            if (state.references == 0) return error.InvalidBlockPlan;
             state.references = std.math.add(usize, state.references, 1) catch return error.IntegerOverflow;
         }
-        return self;
+        var child = self;
+        child.coordinator = false;
+        return child;
     }
     pub fn fromAllocator(a: std.mem.Allocator) Error!?Lease {
         const state = State.fromAllocator(a) orelse return null;
-        const lease: Lease = .{ .backing = state.backing, .state = state };
+        const lease: Lease = .{ .backing = state.backing, .state = state, .coordinator = false };
         return try lease.retain();
     }
     pub fn snapshot(self: Lease) Snapshot {
         return if (self.state) |state| state.snapshot() else .{};
     }
-    /// Start one error-classification interval without erasing historical work.
+    /// Only the coordinating owner starts a fresh error-classification interval.
+    /// A quota refusal remains sticky through descendant calls and subsequent
+    /// backing requests until the owner classifies it and begins the next call.
     pub fn beginOperation(self: Lease) void {
+        if (!self.coordinator) return;
         if (self.state) |state| state.last_failure_was_limit = false;
     }
     pub fn isSameAllocator(self: Lease, a: std.mem.Allocator) bool {
@@ -84,6 +96,10 @@ pub const Lease = struct {
         return State.fromAllocator(a) == state;
     }
     pub fn setLimit(self: Lease, limit: ?usize) Error!void {
+        if (!self.coordinator) {
+            if (limit != self.snapshot().limit) return error.InvalidBlockPlan;
+            return;
+        }
         const state = self.state orelse {
             if (limit != null) return error.InvalidBlockPlan;
             return;
@@ -95,11 +111,15 @@ pub const Lease = struct {
             return error.WorkingMemoryLimitExceeded;
         }
         state.limit = limit;
-        state.last_failure_was_limit = false;
         state.report();
     }
     /// A call-scoped profile must be detached before its storage expires.
     pub fn setProfile(self: Lease, profile: ?*EncodeMemoryProfile) Error!void {
+        if (!self.coordinator) {
+            const current = if (self.state) |state| state.profile else null;
+            if (profile != current) return error.InvalidBlockPlan;
+            return;
+        }
         if (self.state) |state| {
             state.profile = profile;
             state.report();
@@ -116,7 +136,6 @@ pub const Lease = struct {
             const occupied = std.math.add(usize, state.live, state.reserved) catch return error.IntegerOverflow;
             _ = std.math.add(usize, occupied, bytes) catch return error.IntegerOverflow;
             if (!state.allow(bytes)) return error.WorkingMemoryLimitExceeded;
-            state.last_failure_was_limit = false;
             state.changed(0, bytes);
         }
     }

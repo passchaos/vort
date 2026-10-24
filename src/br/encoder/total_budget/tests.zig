@@ -125,18 +125,24 @@ test "Brotli total budget resize remap and fallback realloc charge actual live b
     a.free(in_place);
 }
 
-test "Brotli total budget backing failures clear the last budget-denial classification" {
+test "Brotli total budget owner begins a fresh backing-failure classification" {
     var failing = std.testing.FailingAllocator.init(allocator, .{});
     var lease = try total.Lease.init(failing.allocator(), total.control_bytes + 32, null, 0);
     defer lease.deinit();
     const a = lease.allocator();
     try std.testing.expectError(error.OutOfMemory, a.alloc(u8, 33));
     try std.testing.expect(lease.snapshot().last_failure_was_limit);
+    try std.testing.expectEqual(error.WorkingMemoryLimitExceeded, lease.translateError(error.OutOfMemory));
+    lease.beginOperation();
     failing.fail_index = failing.alloc_index;
     try std.testing.expectError(error.OutOfMemory, a.alloc(u8, 16));
     try std.testing.expect(!lease.snapshot().last_failure_was_limit);
     try std.testing.expectEqual(error.OutOfMemory, lease.translateError(error.OutOfMemory));
     try std.testing.expectEqual(total.control_bytes, lease.snapshot().live_requested_bytes);
+}
+
+test {
+    _ = @import("sticky_tests.zig");
 }
 
 test "Brotli total budget profiles reset at current live bytes and merge ordered snapshots" {

@@ -9,6 +9,7 @@ pub const Snapshot = struct {
     reserved_bytes: usize = 0,
     limit: ?usize = null,
     hit_limit: bool = false,
+    /// Operation-wide refusal, cleared only by the coordinating Lease owner.
     last_failure_was_limit: bool = false,
 };
 
@@ -22,6 +23,7 @@ pub const State = struct {
     reserved: usize = 0,
     references: usize = 1,
     hit_limit: bool = false,
+    /// Operation-wide refusal, cleared only by the coordinating Lease owner.
     last_failure_was_limit: bool = false,
 
     pub fn allocator(self: *State) std.mem.Allocator {
@@ -65,7 +67,6 @@ pub const State = struct {
     fn alloc(raw: *anyopaque, len: usize, alignment: std.mem.Alignment, ret: usize) ?[*]u8 {
         const self: *State = @ptrCast(@alignCast(raw));
         if (self.references == 0 or !self.allow(len)) return null;
-        self.last_failure_was_limit = false;
         const memory = self.backing.rawAlloc(len, alignment, ret) orelse return null;
         self.changed(0, len);
         return memory;
@@ -73,7 +74,6 @@ pub const State = struct {
     fn resize(raw: *anyopaque, memory: []u8, alignment: std.mem.Alignment, len: usize, ret: usize) bool {
         const self: *State = @ptrCast(@alignCast(raw));
         if (len > memory.len and (self.references == 0 or !self.allow(len - memory.len))) return false;
-        self.last_failure_was_limit = false;
         if (!self.backing.rawResize(memory, alignment, len, ret)) return false;
         self.changed(memory.len, len);
         return true;
@@ -81,7 +81,6 @@ pub const State = struct {
     fn remap(raw: *anyopaque, memory: []u8, alignment: std.mem.Alignment, len: usize, ret: usize) ?[*]u8 {
         const self: *State = @ptrCast(@alignCast(raw));
         if (len > memory.len and (self.references == 0 or !self.allow(len - memory.len))) return null;
-        self.last_failure_was_limit = false;
         const memory_new = self.backing.rawRemap(memory, alignment, len, ret) orelse return null;
         self.changed(memory.len, len);
         return memory_new;
