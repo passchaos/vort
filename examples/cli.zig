@@ -17,6 +17,8 @@ const lznt1_cli = @import("cli/lznt1.zig");
 const xpress_cli = @import("cli/xpress.zig");
 const lzms_cli = @import("cli/lzms.zig");
 const microlzma_cli = @import("cli/microlzma.zig");
+const lzma_cli = @import("cli/lzma.zig");
+const xz_cli = @import("cli/xz.zig");
 const wof_cli = @import("cli/wof.zig");
 const lzfse_cli = @import("cli/lzfse.zig");
 const decmpfs_cli = @import("cli/decmpfs.zig");
@@ -671,20 +673,7 @@ pub fn main(init: std.process.Init) !void {
     } else if (std.mem.eql(u8, command, "extract-7z-volumes")) {
         try seven_zip_cli.extractVolumes(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "encode-lzma-file")) {
-        const input_path = args.next() orelse return error.MissingCorpusPath;
-        const output_path = args.next() orelse return error.MissingCorpusPath;
-        const size_mode = try parseLzmaSizeMode(args.next());
-        const input = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
-        defer init.gpa.free(input);
-        const encoded = try vort.encodeLzmaAlloc(init.gpa, input, .{ .size_mode = size_mode });
-        defer init.gpa.free(encoded);
-        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
-        try stdout.print("lzma_size_mode={s} input_bytes={d} compressed_bytes={d} path={s}\n", .{
-            @tagName(size_mode),
-            input.len,
-            encoded.len,
-            output_path,
-        });
+        try lzma_cli.encode(init, &args, stdout);
     } else if (std.mem.eql(u8, command, "decode-lzma-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -718,9 +707,9 @@ pub fn main(init: std.process.Init) !void {
             try vort.lzmaDecodedSize(init.gpa, compressed);
         try stdout.print("lzma_compressed_bytes={d} decoded_bytes={d}\n", .{ compressed.len, decoded_len });
     } else if (std.mem.eql(u8, command, "encode-xz-file")) {
-        try encodeXzFile(init, &args, stdout, false);
+        try xz_cli.encode(init, &args, stdout, false);
     } else if (std.mem.eql(u8, command, "encode-xz-stored-file")) {
-        try encodeXzFile(init, &args, stdout, true);
+        try xz_cli.encode(init, &args, stdout, true);
     } else if (std.mem.eql(u8, command, "decode-xz-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -2926,24 +2915,31 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  list-7z-volumes <password|-> <ordered-part>...
         \\  extract-7z-volumes <entry> <out> [max_output] [max_dictionary] [max_folder] <password|-> <ordered-part>...
         \\                              Extract a common-codec, Delta, or BCJ-filtered 7z entry
-        \\  encode-lzma-file <in> <out> [end-marker|known]
+        \\  encode-lzma-file <in> <out> [end-marker|known] [LZMA options]
         \\                              Encode deterministic LZMA-Alone data
         \\  decode-lzma-file <in> <out> [max_output] [max_dictionary]
         \\                              Decode an LZMA-Alone stream with explicit limits
-        \\  encode-microlzma-file <in> <out> [dictionary] [lc] [lp] [pb] [greedy|lazy|literal-only]
+        \\  encode-microlzma-file <in> <out> [dictionary] [lc] [lp] [pb] [greedy|lazy|literal-only] [LZMA options]
         \\                              Encode a complete raw MicroLZMA stream
-        \\  encode-microlzma-prefix-file <in> <out> <capacity> [dictionary] [lc] [lp] [pb] [greedy|lazy|literal-only]
+        \\  encode-microlzma-prefix-file <in> <out> <capacity> [dictionary] [lc] [lp] [pb] [greedy|lazy|literal-only] [LZMA options]
         \\                              Encode a terminated source prefix within capacity
-        \\  encode-microlzma-aligned-prefix-file <in> <out> <capacity> <alignment> [dictionary] [lc] [lp] [pb] [greedy|lazy|literal-only]
+        \\  encode-microlzma-aligned-prefix-file <in> <out> <capacity> <alignment> [dictionary] [lc] [lp] [pb] [greedy|lazy|literal-only] [LZMA options]
         \\                              Align partial input consumption to a caller-selected boundary
         \\  decode-microlzma-file <in> <out> <decoded_size> [dictionary]
         \\                              Decode an exact-size raw MicroLZMA stream
         \\  size-lzma-file <path> [max_output]
         \\                              Decode and report an LZMA-Alone stream's size
-        \\  encode-xz-stored-file <in> <out> [none|crc32|crc64|sha256] [block_size] [filters] [dictionary_size] [greedy|lazy]
+        \\  encode-xz-stored-file <in> <out> [none|crc32|crc64|sha256] [block_size] [filters] [dictionary_size] [greedy|lazy] [LZMA options]
         \\                              Encode deterministic XZ with uncompressed LZMA2 chunks
-        \\  encode-xz-file <in> <out> [none|crc32|crc64|sha256] [block_size] [filters] [dictionary_size] [greedy|lazy]
+        \\  encode-xz-file <in> <out> [none|crc32|crc64|sha256] [block_size] [filters] [dictionary_size] [greedy|lazy] [LZMA options]
         \\                              Encode deterministic XZ with compressed-or-stored LZMA2 chunks
+        \\  LZMA options (after positionals): --preset=0...9 [--extreme]
+        \\    --match-finder=hc3|hc4|bt2|bt3|bt4 --nice-len=2...273 --depth=u32
+        \\    --dict-size=4096...67108864 --mode=fast|normal|greedy|lazy|literal-only
+        \\    --lc=0...4 --lp=0...4 --pb=0...4 --match-memory=bytes --profile
+        \\                              lc+lp must be <=4; --extreme requires --preset
+        \\                              Explicit options override the preset regardless of flag order
+        \\                              --profile requires a preset, matcher option, or fast/normal mode
         \\  decode-xz-file <in> <out> [max_output]
         \\                              Decode one XZ/LZMA2 stream with check validation
         \\  decode-xz-concat-file <in> <out> [max_output]
@@ -3929,70 +3925,6 @@ fn parseBlockLen(text: ?[]const u8, default: usize) !usize {
     const parsed = try std.fmt.parseInt(usize, value, 10);
     if (parsed == 0) return error.InvalidBlockPlan;
     return parsed;
-}
-
-fn encodeXzFile(
-    init: std.process.Init,
-    args: *std.process.Args.Iterator,
-    stdout: *std.Io.Writer,
-    stored_only: bool,
-) !void {
-    const input_path = args.next() orelse return error.MissingCorpusPath;
-    const output_path = args.next() orelse return error.MissingCorpusPath;
-    const check = try parseXzCheck(args.next());
-    const block_size = try parseBlockLen(args.next(), 1024 * 1024);
-    var filter_storage: [3]vort.XzFilter = undefined;
-    const xz_filters = try filters_cli.parse(args.next(), &filter_storage);
-    const dictionary_size = try parseBlockLen(args.next(), 4096);
-    const parser = try parseXzParser(args.next());
-    const input = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(512 * 1024 * 1024));
-    defer init.gpa.free(input);
-    const options = vort.XzEncodeOptions{
-        .check = check,
-        .block_size = block_size,
-        .dictionary_size = dictionary_size,
-        .filters = xz_filters,
-    };
-    const encoded = if (stored_only)
-        try vort.encodeXzStoredAlloc(init.gpa, input, options)
-    else switch (parser) {
-        .greedy => try vort.encodeXzAlloc(init.gpa, input, options),
-        .lazy => try vort.encodeXzLazyAlloc(init.gpa, input, options),
-    };
-    defer init.gpa.free(encoded);
-    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
-    try stdout.print("xz_mode={s} input_bytes={d} compressed_bytes={d} blocks={d} dictionary={d} parser={s} path={s}\n", .{
-        if (stored_only) "stored" else "compressed",
-        input.len,
-        encoded.len,
-        if (input.len == 0) 0 else 1 + (input.len - 1) / block_size,
-        dictionary_size,
-        @tagName(parser),
-        output_path,
-    });
-}
-
-fn parseXzCheck(text: ?[]const u8) !vort.XzCheck {
-    const value = text orelse return .crc64;
-    if (std.mem.eql(u8, value, "none")) return .none;
-    if (std.mem.eql(u8, value, "crc32")) return .crc32;
-    if (std.mem.eql(u8, value, "crc64")) return .crc64;
-    if (std.mem.eql(u8, value, "sha256")) return .sha256;
-    return error.InvalidChecksumMode;
-}
-
-fn parseXzParser(text: ?[]const u8) !vort.XzEncodeParser {
-    const value = text orelse return .greedy;
-    if (std.mem.eql(u8, value, "greedy")) return .greedy;
-    if (std.mem.eql(u8, value, "lazy")) return .lazy;
-    return error.InvalidParserMode;
-}
-
-fn parseLzmaSizeMode(text: ?[]const u8) !vort.LzmaSizeMode {
-    const value = text orelse return .end_marker;
-    if (std.mem.eql(u8, value, "end-marker") or std.mem.eql(u8, value, "unknown")) return .end_marker;
-    if (std.mem.eql(u8, value, "known")) return .known;
-    return error.InvalidLzmaSizeMode;
 }
 
 fn parseTarCompression(text: ?[]const u8) !vort.TarCompression {
