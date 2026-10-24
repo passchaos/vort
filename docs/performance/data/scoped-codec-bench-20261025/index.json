@@ -288,6 +288,23 @@
     ],
     "source_directory": "/tmp/vort-scoped-codec-bench-20261025/cache-isolation"
   },
+  "final-check": {
+    "bundle": "final-check.tar.gz",
+    "bundle_sha256": "3e3dc98eb64e8764af3bb3e5d896f8c4612cfb4b3f8b9b11ef1a82307e9b2b58",
+    "files": [
+      {
+        "bytes": 1271,
+        "path": "cli-help.json",
+        "sha256": "9417b775b64265baece2525016141618243770a607777109b3b1964431eba5fd"
+      },
+      {
+        "bytes": 42982,
+        "path": "cli-help.log",
+        "sha256": "0c507dc1a540dbc7ab4e20eee3d228e9c6128affe6c5c08906de26af837a3b36"
+      }
+    ],
+    "source_directory": "/tmp/vort-scoped-codec-bench-20261025/final-check"
+  },
   "zstd-build": {
     "bundle": "zstd-build.tar.gz",
     "bundle_sha256": "588212017676366e220d46f137b9420f33fe1b58b697dc682824ba68cdc2bcc5",

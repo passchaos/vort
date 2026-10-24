@@ -1,0 +1,32 @@
+{
+  "scope": "post-rebase broad CLI smoke for private benchmark build graph",
+  "command": [
+    "taskset",
+    "-c",
+    "2-7,10-15",
+    "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "build",
+    "run",
+    "-j2",
+    "--summary",
+    "all",
+    "--",
+    "--help"
+  ],
+  "exit_code": 0,
+  "start_utc": "2026-10-24T20:14:21.756159+00:00",
+  "end_utc": "2026-10-24T20:14:30.074046+00:00",
+  "source_before": {
+    "build.zig": "5365855cdb51d11ab144198939d3ea67e9e36409adfecc16255aee56e779e87d",
+    "tools/br/planned_encode_bench.zig": "945f4cf531d91334e692dc620d49cb92a788614431b52785800815a249070517",
+    "tools/zstd/encode_bench.zig": "6d0b3b318027f0c597fbd92f75181426d43ed160b5334d6ffe041bc220f9e8ec",
+    "tools/zstd/encode_samples.zig": "3d95a2a9737069faad4da8d49398687008315efe4b3ab4df1ddf29005ed6eeeb"
+  },
+  "source_after": {
+    "build.zig": "5365855cdb51d11ab144198939d3ea67e9e36409adfecc16255aee56e779e87d",
+    "tools/br/planned_encode_bench.zig": "945f4cf531d91334e692dc620d49cb92a788614431b52785800815a249070517",
+    "tools/zstd/encode_bench.zig": "6d0b3b318027f0c597fbd92f75181426d43ed160b5334d6ffe041bc220f9e8ec",
+    "tools/zstd/encode_samples.zig": "3d95a2a9737069faad4da8d49398687008315efe4b3ab4df1ddf29005ed6eeeb"
+  },
+  "changed": []
+}

@@ -45,3 +45,8 @@ Zstd 在新模块图下的三个辅助测试，native Debug/x86 ReleaseFast各3/
 [证据索引](data/scoped-codec-bench-20261025/index.json)保存完整命令、日志、
 源码与实际缓存输入绑定、wire对照、产物和临时改动恢复记录。这里的门禁
 证明模块路由和依赖范围，压缩性能继续由独立安静测量提供证据。
+
+交付前已`git pull --rebase origin main`整合当前编码基线文档。随后实际
+构建并运行完整原生CLI的`--help`成功，四个改动源码SHA前后相同。
+[最终检查](data/scoped-codec-bench-20261025/final-check.json)另保存该阶段，
+没有用旧基准的构建结果代替当前整合后的CLI行为。
