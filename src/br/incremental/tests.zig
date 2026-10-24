@@ -92,7 +92,7 @@ test "Brotli incremental decoder auto completes pledged compressed input" {
         try std.testing.expect(result.status == .need_output or result.status == .done);
     }
     try std.testing.expectEqualSlices(u8, payload, &output);
-    try std.testing.expectEqual(@as(?usize, encoded.len), decoder.snapshot().expected_compressed_len);
+    try std.testing.expectEqual(@as(?br.Counter, encoded.len), decoder.snapshot().expected_compressed_len);
 
     var short = br.IncrementalStreamDecoder.initExactCompressedSize(std.testing.allocator, .{}, encoded.len);
     defer short.deinit();

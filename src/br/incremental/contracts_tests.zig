@@ -17,11 +17,14 @@ fn drain(decoder: anytype, wire: []const u8, output: []u8, input_chunk: usize, o
     try std.testing.expectEqual(output.len, written);
 }
 
-fn expectFailedProgress(decoder: anytype, read: usize, written: usize) !void {
+fn expectFailedProgress(decoder: anytype, read: br.Counter, written: usize) !void {
     const snap = decoder.snapshot();
-    try std.testing.expectEqualDeep(core.Progress{ .input_read = read, .output_written = written }, snap.last_step_progress);
-    try std.testing.expectEqual(@as(?usize, snap.total_compressed), snap.error_input_offset);
-    try std.testing.expectEqual(@as(?usize, snap.total_output), snap.error_output_offset);
+    // These fixtures compare one failed call's bounded input prefix with a
+    // cumulative counter. Only that local expected progress is narrowed.
+    const local_read = try core.stream_count.toLocal(read);
+    try std.testing.expectEqualDeep(core.Progress{ .input_read = local_read, .output_written = written }, snap.last_step_progress);
+    try std.testing.expectEqual(@as(?br.Counter, snap.total_compressed), snap.error_input_offset);
+    try std.testing.expectEqual(@as(?br.Counter, snap.total_output), snap.error_output_offset);
     const diagnostic = decoder.diagnostics();
     try std.testing.expectEqualDeep(snap.last_step_progress, diagnostic.last_step_progress.?);
     try std.testing.expectEqual(snap.error_input_offset, diagnostic.error_input_offset);
@@ -89,7 +92,7 @@ test "Brotli stream contracts fatal errors publish consumed output prefix and st
         try std.testing.expectEqual(failed.total_output, decoder.snapshot().total_output);
         try std.testing.expectError(error.TrailingData, decoder.finish());
         decoder.reset();
-        try std.testing.expectEqual(@as(?usize, null), decoder.snapshot().error_input_offset);
+        try std.testing.expectEqual(@as(?br.Counter, null), decoder.snapshot().error_input_offset);
         try drain(&decoder, wire, output[1 .. output.len - 1], 1, 3);
     }
 }
@@ -355,7 +358,8 @@ test "Brotli stream contracts caller header exhaustion can grow and retry withou
     defer std.testing.allocator.free(scratch);
     try decoder.replaceCompressedHeaderScratch(scratch);
     try std.testing.expectEqualStrings("", decoder.snapshot().last_error_name);
-    try drain(&decoder, wire[failed.total_compressed..], &output, 257, 1);
+    const local_consumed = try core.stream_count.toLocal(failed.total_compressed);
+    try drain(&decoder, wire[local_consumed..], &output, 257, 1);
     try std.testing.expectEqualSlices(u8, "x", &output);
     try std.testing.expectEqual(wire.len, decoder.snapshot().total_compressed);
     decoder.resetWithOptions(.{ .expected_output_len = 1 });
