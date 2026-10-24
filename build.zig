@@ -250,6 +250,13 @@ pub fn build(b: *std.Build) void {
     });
     const zstd_controls_test_step = b.step("test-zstd-encode-controls", "Run signed Zstd level, strategy, profile and matcher contracts");
     zstd_controls_test_step.dependOn(&b.addRunArtifact(zstd_controls_tests).step);
+    const zstd_hq_tests = b.addTest(.{
+        .name = "vort-zstd-hq-tests",
+        .root_module = zstd_tests_mod,
+        .filters = &.{ "Zstd HQ", "Zstd lazy2", "Zstd canonical presets" },
+    });
+    const zstd_hq_test_step = b.step("test-zstd-hq", "Run Zstd HQ strategies, binary tree, entropy prices and resource contracts");
+    zstd_hq_test_step.dependOn(&b.addRunArtifact(zstd_hq_tests).step);
     const fast_cover_dictionary_mod = b.createModule(.{ .root_source_file = b.path("src/dictionary.zig"), .target = target, .optimize = optimize });
     const fast_cover_dictionary_tests = b.addTest(.{ .name = "vort-fast-cover-dictionary-tests", .root_module = fast_cover_dictionary_mod, .filters = &.{ "FastCover", "fast cover" } });
     const fast_cover_zstd_tests = b.addTest(.{ .name = "vort-fast-cover-zstd-tests", .root_module = zstd_tests_mod, .filters = &.{ "FastCover", "fast cover" } });
@@ -1677,6 +1684,34 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| zstd_controls_diff.addArgs(args);
     const zstd_controls_diff_step = b.step("run-zstd-controls-diff", "Validate signed levels and explicit Zstd match strategies against independent references");
     zstd_controls_diff_step.dependOn(&zstd_controls_diff.step);
+    const zstd_hq_probe = b.addExecutable(.{
+        .name = "vort-zstd-hq-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/hq_controls_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const zstd_hq_diff = b.addSystemCommand(&.{ "python3", "tools/zstd/hq_controls_diff.py", "--probe" });
+    zstd_hq_diff.addArtifactArg(zstd_hq_probe);
+    if (b.args) |args| zstd_hq_diff.addArgs(args);
+    const zstd_hq_diff_step = b.step("run-zstd-hq-diff", "Validate Zstd HQ output and controls against versioned references");
+    zstd_hq_diff_step.dependOn(&zstd_hq_diff.step);
+    const zstd_hq_cli_probe = b.addExecutable(.{
+        .name = "vort-zstd-hq-cli-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/zstd_cli_probe.zig"),
+            .target = target,
+            .optimize = .Debug,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const zstd_hq_cli_gate = b.addSystemCommand(&.{ "python3", "tools/zstd/hq_controls_cli_gate.py", "--cli" });
+    zstd_hq_cli_gate.addArtifactArg(zstd_hq_cli_probe);
+    if (b.args) |args| zstd_hq_cli_gate.addArgs(args);
+    const zstd_hq_cli_step = b.step("test-zstd-hq-cli", "Validate Zstd HQ CLI flags, defaults and failed-output preservation");
+    zstd_hq_cli_step.dependOn(&zstd_hq_cli_gate.step);
 
     const fast_cover_probe = b.addExecutable(.{ .name = "vort-fast-cover-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/zstd/fast_cover_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "vort", .module = vort_mod }} }) });
     const fast_cover_diff = b.addSystemCommand(&.{ "python3", "tools/zstd/fast_cover_diff.py", "--probe" });
@@ -6333,6 +6368,8 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zlib_dictionary_resume_probe.step);
     check_step.dependOn(&zstd_dictionary_resume_probe.step);
     check_step.dependOn(&zstd_controls_probe.step);
+    check_step.dependOn(&zstd_hq_probe.step);
+    check_step.dependOn(&zstd_hq_cli_probe.step);
     check_step.dependOn(&fast_cover_probe.step);
     check_step.dependOn(&lzma_encode_controls_probe.step);
     check_step.dependOn(&lzma_controls_cli_probe.step);

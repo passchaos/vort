@@ -2990,8 +2990,13 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Encode file bytes as dependency-free native-subset Zstandard hex
         \\  encode-zstd-native-file <in> <out> [auto|raw_or_rle|literal_only|fast_compressed] [checksum] [content_size] [zstd_options]
         \\    zstd_options: --level=N | --level N (-131072..22)
-        \\                  --strategy=auto|fast|double_fast|greedy|lazy|optimal
+        \\                  --strategy=auto|fast|double_fast|greedy|lazy|optimal|lazy2|btlazy2|btopt|btultra|btultra2
         \\                  --fast-acceleration=N (1..131072; fast or double_fast)
+        \\                  HQ strategies: --hq-depth=1..65536 --hq-nice-len=3..131072
+        \\                  --hq-min-match=3..7 --hq-memory=bytes
+        \\                  HQ flags require an HQ strategy and a positive level; nice_len >= min_match
+        \\                  Native controls specify local effort, not reference compressor speed parity
+        \\                  --profile shows optional encoder work counters
         \\    Negative level -N selects fast acceleration N. New controls default to level 1.
         \\  train-zstd-fastcover-dictionary <out> <history_bytes> <dict_id> <sample_files...> [fastcover_options]
         \\  optimize-zstd-fastcover-dictionary <out> <history_bytes> <dict_id> <sample_files...> [fastcover_options] [optimize_options]
