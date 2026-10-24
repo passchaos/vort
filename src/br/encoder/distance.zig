@@ -26,8 +26,10 @@ pub const Parameters = struct {
     }
 
     pub fn maximumDistance(self: Parameters) usize {
-        const shift: u6 = 26 + @as(u6, self.npostfix);
-        return @as(usize, self.ndirect()) + (@as(usize, 1) << shift) - (@as(usize, 1) << @as(u6, 2 + @as(u3, self.npostfix)));
+        const Shift = std.math.Log2Int(usize);
+        const shift: Shift = 26 + @as(Shift, self.npostfix);
+        const adjustment: Shift = 2 + @as(Shift, self.npostfix);
+        return @as(usize, self.ndirect()) + (@as(usize, 1) << shift) - (@as(usize, 1) << adjustment);
     }
 };
 

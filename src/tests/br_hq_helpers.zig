@@ -38,7 +38,7 @@ pub fn afterDistance(cache: [4]usize, code: usize, distance: usize, static_dicti
 pub const Distance = struct { symbol: u16, extra_bits: u8, extra: usize };
 
 pub fn alphabetSize(postfix: u2, direct: u16) usize {
-    return 16 + @as(usize, direct) + (@as(usize, 48) << @as(u6, postfix));
+    return 16 + @as(usize, direct) + (@as(usize, 48) << postfix);
 }
 
 pub fn distanceEncoding(distance: usize, postfix: u2, direct: u16) Distance {
@@ -48,7 +48,7 @@ pub fn distanceEncoding(distance: usize, postfix: u2, direct: u16) Distance {
     const value = distance - direct - 1;
     const low = value & low_mask;
     const high = (value >> postfix) + 4;
-    const bits = std.math.log2_int(usize, high) - 1;
+    const bits: usize = std.math.log2_int(usize, high) - 1;
     const prefix = (high >> @intCast(bits)) & 1;
     const extra = high - ((2 + prefix) << @intCast(bits));
     const symbol = 16 + @as(usize, direct) + ((2 * (bits - 1) + prefix) << postfix) + low;
@@ -199,7 +199,10 @@ pub fn drive(allocator: std.mem.Allocator, encoder: anytype, input: []const u8, 
     var output: std.ArrayList(u8) = .empty;
     errdefer output.deinit(allocator);
     const initial = encoder.snapshot();
-    var offset = initial.input_read;
+    // This helper owns a complete input slice. Bound the public stream counter
+    // before converting it to a host-sized index; the public counter stays u64.
+    try std.testing.expect(initial.input_read <= input.len);
+    var offset = std.math.cast(usize, initial.input_read) orelse return error.TestUnexpectedResult;
     var finished = initial.finishing;
     var incoming: [257]u8 = undefined;
     var outgoing: [31]u8 = undefined;
