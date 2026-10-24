@@ -341,11 +341,13 @@ test "Zstd reverse reader five-symbol Huffman peek matches checked prefix" {
         var reader = try Reader.init(&bytes);
         if (prefix_bits != 0) try reader.skip(@intCast(prefix_bits));
         var width: u4 = 1;
-        while (width <= 11 and @as(usize, width) * 5 <= reader.available()) : (width += 1)
-            try std.testing.expectEqual(
-                @as(u64, @intCast(try reader.peek(@as(u8, width) * 5))),
-                reader.peekBulkHuffmanFive(width),
-            );
+        while (width <= 11 and @as(usize, width) * 5 <= reader.available()) : (width += 1) {
+            var reference = reader;
+            var expected: u64 = 0;
+            for (0..5) |_| expected = (expected << width) | @as(u64, try reference.read(width));
+            try std.testing.expectEqual(expected, reader.peekBulkHuffmanFive(width));
+            try std.testing.expectEqual(reader.available(), reference.available() + @as(usize, width) * 5);
+        }
     }
 }
 

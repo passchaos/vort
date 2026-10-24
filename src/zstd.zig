@@ -6,6 +6,7 @@ const stream_count = core.stream_count;
 const incremental_counts = @import("zstd/incremental/counts.zig");
 const StreamingXxHash64 = @import("checksum/xxh64_stream.zig").XxHash64;
 const total_budget = @import("zstd/encode/total_budget.zig");
+const allocation_test_oracle = if (builtin.is_test) @import("zstd/encode/allocation_test_oracle.zig") else struct {};
 const lz77 = @import("lz77.zig");
 const checksum_mod = @import("checksum.zig");
 const dictionary_mod = @import("dictionary.zig");
@@ -937,6 +938,7 @@ test "Zstd HQ incremental header allocation failure retains no partial magic bef
 }
 
 test {
+    _ = allocation_test_oracle;
     _ = double_fast_match;
     _ = @import("tests/zstd_stream_counter_contracts.zig");
     _ = @import("tests/zstd_stream_counter_resources.zig");
@@ -5279,10 +5281,8 @@ pub const NativeIncrementalFrameDecoder = struct {
         if (self.phase == .done) {
             if (self.options.stop_after_first_frame) return .{ .status = .done };
             if (input.len == 0) return .{ .status = .done };
-            if (self.options.expected_output_len != null) {
-                self.recordError(.frame, error.SizeMismatch);
-                return error.SizeMismatch;
-            }
+            // Output pledges constrain data emitted by subsequent members;
+            // metadata and empty members may still follow a completed frame.
             // Fresh bytes after a completed frame are interpreted as the next
             // member of the same caller-driven concatenated stream.  Keep the
             // cumulative counters intact; `reset()` starts a new logical stream.
@@ -11112,13 +11112,15 @@ fn parseHuffmanLiteralsHeader(
             const byte3 = block[offset.* + 2];
             const byte4 = block[offset.* + 3];
             offset.* += 4;
-            const value = @as(usize, byte0 >> 4) |
-                (@as(usize, byte1) << 4) |
-                (@as(usize, byte2) << 12) |
-                (@as(usize, byte3) << 20) |
-                (@as(usize, byte4) << 28);
-            const regenerated_size = value & 0x3ffff;
-            const compressed_size = (value >> 18) & 0x3ffff;
+            // Two eighteen-bit fields share a 36-bit wire value, independent
+            // of the local pointer width. Narrow only the extracted sizes.
+            const value = @as(u64, byte0 >> 4) |
+                (@as(u64, byte1) << 4) |
+                (@as(u64, byte2) << 12) |
+                (@as(u64, byte3) << 20) |
+                (@as(u64, byte4) << 28);
+            const regenerated_size: usize = @intCast(value & 0x3ffff);
+            const compressed_size: usize = @intCast((value >> 18) & 0x3ffff);
             if (compressed_size < 10) return error.CorruptFrame;
             break :blk .{ .kind = kind, .size_format = size_format, .regenerated_size = regenerated_size, .compressed_size = compressed_size };
         },
@@ -20264,7 +20266,8 @@ test "zstd dynamic hash emitter reuses sequence tables across wide blocks" {
     try std.testing.expectEqualSlices(u8, rewritten_second.items, direct_second.items);
     try frame.appendSlice(std.testing.allocator, direct_second.items);
 
-    var reference_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var reference_ledger = allocation_test_oracle.Ledger.init(std.testing.allocator);
+    var reference_allocator = std.testing.FailingAllocator.init(reference_ledger.allocator(), .{});
     var reference_scratch: LargeSequenceScratch = .{};
     defer reference_scratch.deinit(reference_allocator.allocator());
     var reference_second: std.ArrayList(u8) = .empty;
@@ -20278,6 +20281,11 @@ test "zstd dynamic hash emitter reuses sequence tables across wide blocks" {
         stats,
         &reference_scratch,
     ));
+    // The eliminated phase emits a no-previous-table candidate. Rewriting it
+    // then performs the same cold previous-table emission as the direct path.
+    const initial_phase_calls = reference_ledger.alloc_attempts;
+    const initial_phase_bytes = reference_ledger.allocated_bytes;
+    try std.testing.expect(reference_second.capacity >= direct_second.items.len);
     try std.testing.expect(try prepareSequenceCandidateForFrame(
         reference_allocator.allocator(),
         &reference_second,
@@ -20285,7 +20293,8 @@ test "zstd dynamic hash emitter reuses sequence tables across wide blocks" {
         true,
         &sequence_state,
     ));
-    var direct_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var direct_ledger = allocation_test_oracle.Ledger.init(std.testing.allocator);
+    var direct_allocator = std.testing.FailingAllocator.init(direct_ledger.allocator(), .{});
     var direct_scratch: LargeSequenceScratch = .{};
     defer direct_scratch.deinit(direct_allocator.allocator());
     var measured_direct: std.ArrayList(u8) = .empty;
@@ -20301,8 +20310,18 @@ test "zstd dynamic hash emitter reuses sequence tables across wide blocks" {
         &sequence_state,
     ));
     try std.testing.expectEqualSlices(u8, reference_second.items, measured_direct.items);
-    try std.testing.expectEqual(reference_allocator.allocations - 16, direct_allocator.allocations);
-    try std.testing.expectEqual(reference_allocator.allocated_bytes - 237_173, direct_allocator.allocated_bytes);
+    try std.testing.expectEqual(reference_allocator.allocations, reference_ledger.alloc_attempts);
+    try std.testing.expectEqual(reference_allocator.allocated_bytes, reference_ledger.allocated_bytes);
+    try std.testing.expectEqual(direct_allocator.allocations, direct_ledger.alloc_attempts);
+    try std.testing.expectEqual(direct_allocator.allocated_bytes, direct_ledger.allocated_bytes);
+    try std.testing.expectEqual(reference_ledger.alloc_attempts - initial_phase_calls, direct_ledger.alloc_attempts);
+    try std.testing.expectEqual(reference_ledger.allocated_bytes - initial_phase_bytes, direct_ledger.allocated_bytes);
+    try std.testing.expectEqual(try ownedArrayListBytes(&reference_scratch) + reference_second.capacity, reference_ledger.live);
+    try std.testing.expectEqual(try ownedArrayListBytes(&direct_scratch) + measured_direct.capacity, direct_ledger.live);
+    if (allocation_test_oracle.sameNativeAuditGeometry()) {
+        try std.testing.expectEqual(reference_allocator.allocations - 16, direct_allocator.allocations);
+        try std.testing.expectEqual(reference_allocator.allocated_bytes - 237_173, direct_allocator.allocated_bytes);
+    }
     const expected_repeat_mask_words = @max(
         try repeatSequenceMaskWordCount(previousSequenceTable(previous_tables, .literal)),
         @max(
@@ -31807,13 +31826,40 @@ fn emitHuffmanLiteralsHeader(
         try out.append(allocator, @truncate(value >> 12));
         try out.append(allocator, @truncate(value >> 20));
     } else if (regenerated_size <= 0x3ffff and compressed_size <= 0x3ffff) {
-        const value = regenerated_size | (compressed_size << 18);
+        const value = @as(u64, regenerated_size) | (@as(u64, compressed_size) << 18);
         try out.append(allocator, kind_bits | (3 << 2) | (@as(u8, @intCast(value & 0x0f)) << 4));
         try out.append(allocator, @truncate(value >> 4));
         try out.append(allocator, @truncate(value >> 12));
         try out.append(allocator, @truncate(value >> 20));
         try out.append(allocator, @truncate(value >> 28));
     } else return null;
+}
+
+test "zstd Huffman literal header preserves both eighteen-bit sizes" {
+    // Independent format vectors: low descriptor nibble, then two adjacent
+    // eighteen-bit sizes in little-endian bit order across five wire bytes.
+    const Vector = struct { regenerated: usize, compressed: usize, header: [5]u8 };
+    const vectors = [_]Vector{
+        .{ .regenerated = 0x4000, .compressed = 0x4000, .header = .{ 0x0e, 0x00, 0x04, 0x00, 0x10 } },
+        .{ .regenerated = 0x12345, .compressed = 0x14001, .header = .{ 0x5e, 0x34, 0x52, 0x00, 0x50 } },
+        .{ .regenerated = 0x23456, .compressed = 0x34567, .header = .{ 0x6e, 0x45, 0xe3, 0x59, 0xd1 } },
+        .{ .regenerated = 0x3ffff, .compressed = 0x3ffff, .header = .{ 0xfe, 0xff, 0xff, 0xff, 0xff } },
+    };
+    for (vectors) |vector| {
+        for ([_]bool{ false, true }) |treeless| {
+            var expected = vector.header;
+            expected[0] |= @intFromBool(treeless);
+            var encoded: std.ArrayList(u8) = .empty;
+            defer encoded.deinit(std.testing.allocator);
+            try std.testing.expect((try emitHuffmanLiteralsHeader(std.testing.allocator, &encoded, vector.regenerated, vector.compressed, treeless)) != null);
+            try std.testing.expectEqualSlices(u8, &expected, encoded.items);
+            var offset: usize = 1;
+            const parsed = try parseHuffmanLiteralsHeader(&expected, &offset, expected[0], 3, if (treeless) .treeless else .compressed);
+            try std.testing.expectEqual(@as(usize, 5), offset);
+            try std.testing.expectEqual(vector.regenerated, parsed.regenerated_size);
+            try std.testing.expectEqual(vector.compressed, parsed.compressed_size);
+        }
+    }
 }
 
 fn emitCompressedLiteralsHeader(
@@ -33329,7 +33375,8 @@ test "zstd reusable seekable encoder retains frame and table scratch" {
         .frame_options = .{ .selection = .literal_only, .content_checksum = true },
         .seek_checksums = true,
     };
-    var counting = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var ledger = allocation_test_oracle.Ledger.init(std.testing.allocator);
+    var counting = std.testing.FailingAllocator.init(ledger.allocator(), .{});
     var encoder = NativeSeekableStreamEncoder.init(counting.allocator());
     var encoder_live = true;
     defer if (encoder_live) encoder.deinit();
@@ -33338,6 +33385,10 @@ test "zstd reusable seekable encoder retains frame and table scratch" {
     const expected = try std.testing.allocator.dupe(u8, first);
     defer std.testing.allocator.free(expected);
     const first_allocations = counting.allocations;
+    const first_live = ledger.live;
+    try std.testing.expectEqual(try encoder.retainedRequestedBytes(), first_live);
+    try std.testing.expectEqual(counting.allocations, ledger.alloc_attempts);
+    try std.testing.expectEqual(counting.allocated_bytes, ledger.allocated_bytes);
     const entry_capacity = encoder.entries.capacity;
     const output_capacity = encoder.output_scratch.capacity;
     const frame_capacity = encoder.frame_encoder.output_scratch.capacity;
@@ -33385,7 +33436,13 @@ test "zstd reusable seekable encoder retains frame and table scratch" {
     try std.testing.expectEqual(single_literals_capacity, encoder.frame_encoder.block_scratch.single_sequence_emit.literals_prefix.capacity);
     try std.testing.expectEqual(single_payload_capacity, encoder.frame_encoder.block_scratch.single_sequence_emit.payload.capacity);
     try std.testing.expectEqual(single_bits_capacity, encoder.frame_encoder.block_scratch.single_sequence_emit.sequence_bits.capacity);
-    try std.testing.expectEqual(first_allocations - 17, second_allocations);
+    // Cold ArrayList growth uses target cache-line/type geometry; retain the
+    // original native audit while every target verifies exact retained heap.
+    if (allocation_test_oracle.sameNativeAuditGeometry()) try std.testing.expectEqual(first_allocations - 17, second_allocations);
+    try std.testing.expectEqual(first_live, ledger.live);
+    try std.testing.expectEqual(try encoder.retainedRequestedBytes(), ledger.live);
+    try std.testing.expectEqual(counting.allocations, ledger.alloc_attempts);
+    try std.testing.expectEqual(counting.allocated_bytes, ledger.allocated_bytes);
     try std.testing.expectEqual(@as(usize, 0), second_allocations);
     try std.testing.expectEqual(second_allocations, second_deallocations);
     try std.testing.expectEqual(second_allocated_bytes, second_freed_bytes);
@@ -33414,6 +33471,8 @@ test "zstd reusable seekable encoder retains frame and table scratch" {
     try std.testing.expectEqualSlices(u8, expected, recovered);
     encoder.deinit();
     encoder_live = false;
+    try std.testing.expectEqual(@as(usize, 0), ledger.live);
+    try std.testing.expectEqual(ledger.allocated_bytes, ledger.freed_bytes);
     try std.testing.expectEqual(counting.allocated_bytes, counting.freed_bytes);
 }
 
@@ -35575,6 +35634,13 @@ test "zstd native decoder reads mixed FSE tables in serialized order" {
     const decoded = try decodeNativeFrameAllocLimited(std.testing.allocator, encoded, payload.items.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload.items, decoded);
+    var reference_input: std.Io.Reader = .fixed(encoded);
+    var reference_output: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer reference_output.deinit();
+    const header = try inspectNativeFrameHeader(encoded);
+    var reference: std.compress.zstd.Decompress = .init(&reference_input, &.{}, .{ .window_len = @intCast(header.window_size) });
+    _ = try reference.reader.streamRemaining(&reference_output.writer);
+    try std.testing.expectEqualSlices(u8, payload.items, reference_output.written());
 }
 
 test "zstd pure Zig facade generated corpus shapes" {
@@ -36017,7 +36083,8 @@ test "zstd precomputed beam skips only provably dominated greedy wires" {
         );
         try measured_payload.appendSlice(std.testing.allocator, formatted);
     }
-    var reference_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var reference_ledger = allocation_test_oracle.Ledger.init(std.testing.allocator);
+    var reference_allocator = std.testing.FailingAllocator.init(reference_ledger.allocator(), .{});
     var reference: std.ArrayList(u8) = .empty;
     defer reference.deinit(reference_allocator.allocator());
     test_disable_precomputed_beam_greedy_prune = true;
@@ -36033,7 +36100,8 @@ test "zstd precomputed beam skips only provably dominated greedy wires" {
     ));
     test_disable_precomputed_beam_greedy_prune = false;
 
-    var pruned_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var pruned_ledger = allocation_test_oracle.Ledger.init(std.testing.allocator);
+    var pruned_allocator = std.testing.FailingAllocator.init(pruned_ledger.allocator(), .{});
     var pruned: std.ArrayList(u8) = .empty;
     defer pruned.deinit(pruned_allocator.allocator());
     try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(
@@ -36047,8 +36115,22 @@ test "zstd precomputed beam skips only provably dominated greedy wires" {
         null,
     ));
     try std.testing.expectEqualSlices(u8, reference.items, pruned.items);
-    try std.testing.expectEqual(reference_allocator.allocations - 16, pruned_allocator.allocations);
-    try std.testing.expectEqual(reference_allocator.allocated_bytes - 8_741, pruned_allocator.allocated_bytes);
+    try std.testing.expectEqual(reference_allocator.allocations, reference_ledger.alloc_attempts);
+    try std.testing.expectEqual(reference_allocator.allocated_bytes, reference_ledger.allocated_bytes);
+    try std.testing.expectEqual(pruned_allocator.allocations, pruned_ledger.alloc_attempts);
+    try std.testing.expectEqual(pruned_allocator.allocated_bytes, pruned_ledger.allocated_bytes);
+    try std.testing.expectEqual(reference.capacity, reference_ledger.live);
+    try std.testing.expectEqual(pruned.capacity, pruned_ledger.live);
+    try std.testing.expect(pruned_ledger.allocated_bytes < reference_ledger.allocated_bytes);
+    // Recorded dacd500a fixtures use different ArrayList cold capacities on
+    // Linux x86/x86_64; the dominance and byte-equality oracle above is shared.
+    if (allocation_test_oracle.sameNativeAuditGeometry()) {
+        try std.testing.expectEqual(reference_allocator.allocations - 16, pruned_allocator.allocations);
+        try std.testing.expectEqual(reference_allocator.allocated_bytes - 8_741, pruned_allocator.allocated_bytes);
+    } else if (allocation_test_oracle.sameX86AuditGeometry()) {
+        try std.testing.expectEqual(reference_allocator.allocations - 16, pruned_allocator.allocations);
+        try std.testing.expectEqual(reference_allocator.allocated_bytes - 7_255, pruned_allocator.allocated_bytes);
+    }
 
     const AllocationFailureTest = struct {
         fn run(allocator: std.mem.Allocator, payload: []const u8) !void {
@@ -36272,7 +36354,8 @@ test "zstd precomputed beam skips only dominated repeated-pattern candidates" {
     }
     try std.testing.expect(try Oracle.compare(measured_payload.items));
 
-    var reference_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var reference_ledger = allocation_test_oracle.Ledger.init(std.testing.allocator);
+    var reference_allocator = std.testing.FailingAllocator.init(reference_ledger.allocator(), .{});
     var reference: std.ArrayList(u8) = .empty;
     defer reference.deinit(reference_allocator.allocator());
     test_disable_precomputed_beam_repeated_prune = true;
@@ -36288,7 +36371,8 @@ test "zstd precomputed beam skips only dominated repeated-pattern candidates" {
     ));
     test_disable_precomputed_beam_repeated_prune = false;
 
-    var pruned_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var pruned_ledger = allocation_test_oracle.Ledger.init(std.testing.allocator);
+    var pruned_allocator = std.testing.FailingAllocator.init(pruned_ledger.allocator(), .{});
     var pruned: std.ArrayList(u8) = .empty;
     defer pruned.deinit(pruned_allocator.allocator());
     try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(
@@ -36302,8 +36386,20 @@ test "zstd precomputed beam skips only dominated repeated-pattern candidates" {
         null,
     ));
     try std.testing.expectEqualSlices(u8, reference.items, pruned.items);
-    try std.testing.expectEqual(reference_allocator.allocations - 18, pruned_allocator.allocations);
-    try std.testing.expectEqual(reference_allocator.allocated_bytes - 235_092, pruned_allocator.allocated_bytes);
+    try std.testing.expectEqual(reference_allocator.allocations, reference_ledger.alloc_attempts);
+    try std.testing.expectEqual(reference_allocator.allocated_bytes, reference_ledger.allocated_bytes);
+    try std.testing.expectEqual(pruned_allocator.allocations, pruned_ledger.alloc_attempts);
+    try std.testing.expectEqual(pruned_allocator.allocated_bytes, pruned_ledger.allocated_bytes);
+    try std.testing.expectEqual(reference.capacity, reference_ledger.live);
+    try std.testing.expectEqual(pruned.capacity, pruned_ledger.live);
+    try std.testing.expect(pruned_ledger.allocated_bytes < reference_ledger.allocated_bytes);
+    if (allocation_test_oracle.sameNativeAuditGeometry()) {
+        try std.testing.expectEqual(reference_allocator.allocations - 18, pruned_allocator.allocations);
+        try std.testing.expectEqual(reference_allocator.allocated_bytes - 235_092, pruned_allocator.allocated_bytes);
+    } else if (allocation_test_oracle.sameX86AuditGeometry()) {
+        try std.testing.expectEqual(reference_allocator.allocations - 18, pruned_allocator.allocations);
+        try std.testing.expectEqual(reference_allocator.allocated_bytes - 233_940, pruned_allocator.allocated_bytes);
+    }
 
     var greedy_tokens: std.ArrayList(lz77.Token) = .empty;
     defer greedy_tokens.deinit(std.testing.allocator);
@@ -37585,7 +37681,8 @@ test "zstd reusable encoder retains wide sequence scratch" {
         .match_search_budget = 16,
         .rep_beam_search = true,
     };
-    var counting = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var ledger = allocation_test_oracle.Ledger.init(std.testing.allocator);
+    var counting = std.testing.FailingAllocator.init(ledger.allocator(), .{});
     var encoder = NativeFrameEncoder.init(counting.allocator());
     var encoder_live = true;
     defer if (encoder_live) encoder.deinit();
@@ -37593,6 +37690,10 @@ test "zstd reusable encoder retains wide sequence scratch" {
     const expected = try std.testing.allocator.dupe(u8, first.frame);
     defer std.testing.allocator.free(expected);
     const first_allocations = counting.allocations;
+    const first_live = ledger.live;
+    try std.testing.expectEqual(try encoder.retainedRequestedBytes(), first_live);
+    try std.testing.expectEqual(counting.allocations, ledger.alloc_attempts);
+    try std.testing.expectEqual(counting.allocated_bytes, ledger.allocated_bytes);
     const capacities = .{
         encoder.large_sequence_scratch.values.capacity,
         encoder.large_sequence_scratch.states.capacity,
@@ -37632,7 +37733,12 @@ test "zstd reusable encoder retains wide sequence scratch" {
         encoder.block_scratch.optimal.compact_prev.capacity,
         encoder.block_scratch.optimal.tokens.capacity,
     });
-    try std.testing.expectEqual(first_allocations - 22, second_allocations);
+    if (allocation_test_oracle.sameNativeAuditGeometry()) try std.testing.expectEqual(first_allocations - 22, second_allocations);
+    try std.testing.expect(first_allocations > second_allocations);
+    try std.testing.expectEqual(first_live, ledger.live);
+    try std.testing.expectEqual(try encoder.retainedRequestedBytes(), ledger.live);
+    try std.testing.expectEqual(counting.allocations, ledger.alloc_attempts);
+    try std.testing.expectEqual(counting.allocated_bytes, ledger.allocated_bytes);
 
     counting.fail_index = counting.alloc_index;
     try std.testing.expectError(error.OutOfMemory, encoder.encodeScratch(&payload, options));
@@ -37642,6 +37748,8 @@ test "zstd reusable encoder retains wide sequence scratch" {
     try std.testing.expectEqualSlices(u8, expected, recovered.frame);
     encoder.deinit();
     encoder_live = false;
+    try std.testing.expectEqual(@as(usize, 0), ledger.live);
+    try std.testing.expectEqual(ledger.allocated_bytes, ledger.freed_bytes);
     try std.testing.expectEqual(counting.allocated_bytes, counting.freed_bytes);
 }
 
@@ -37665,7 +37773,8 @@ test "zstd frame-level wide sequence scratch removes repeated allocations" {
         .rep_beam_search = true,
     };
 
-    var reference_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var reference_ledger = allocation_test_oracle.Ledger.init(std.testing.allocator);
+    var reference_allocator = std.testing.FailingAllocator.init(reference_ledger.allocator(), .{});
     var reference_output: std.ArrayList(u8) = .empty;
     defer reference_output.deinit(reference_allocator.allocator());
     var reference_beam: lz77.RepBeamScratch = .{};
@@ -37681,7 +37790,8 @@ test "zstd frame-level wide sequence scratch removes repeated allocations" {
         null,
     );
 
-    var reuse_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var reuse_ledger = allocation_test_oracle.Ledger.init(std.testing.allocator);
+    var reuse_allocator = std.testing.FailingAllocator.init(reuse_ledger.allocator(), .{});
     var reuse_output: std.ArrayList(u8) = .empty;
     defer reuse_output.deinit(reuse_allocator.allocator());
     var reuse_beam: lz77.RepBeamScratch = .{};
@@ -37700,8 +37810,20 @@ test "zstd frame-level wide sequence scratch removes repeated allocations" {
     );
 
     try std.testing.expectEqualSlices(u8, reference_output.items, reuse_output.items);
-    try std.testing.expectEqual(reference_allocator.allocations - 13, reuse_allocator.allocations);
-    try std.testing.expectEqual(reference_allocator.allocated_bytes - 76_482, reuse_allocator.allocated_bytes);
+    try std.testing.expectEqual(reference_allocator.allocations, reference_ledger.alloc_attempts);
+    try std.testing.expectEqual(reference_allocator.allocated_bytes, reference_ledger.allocated_bytes);
+    try std.testing.expectEqual(reuse_allocator.allocations, reuse_ledger.alloc_attempts);
+    try std.testing.expectEqual(reuse_allocator.allocated_bytes, reuse_ledger.allocated_bytes);
+    try std.testing.expectEqual(reference_output.capacity + try ownedArrayListBytes(&reference_beam), reference_ledger.live);
+    try std.testing.expectEqual(reuse_output.capacity + try ownedArrayListBytes(&reuse_beam) + try ownedArrayListBytes(&sequence_scratch), reuse_ledger.live);
+    try std.testing.expect(reuse_ledger.allocated_bytes < reference_ledger.allocated_bytes);
+    if (allocation_test_oracle.sameNativeAuditGeometry()) {
+        try std.testing.expectEqual(reference_allocator.allocations - 13, reuse_allocator.allocations);
+        try std.testing.expectEqual(reference_allocator.allocated_bytes - 76_482, reuse_allocator.allocated_bytes);
+    } else if (allocation_test_oracle.sameX86AuditGeometry()) {
+        try std.testing.expectEqual(reference_allocator.allocations - 14, reuse_allocator.allocations);
+        try std.testing.expectEqual(reference_allocator.allocated_bytes - 60_084, reuse_allocator.allocated_bytes);
+    }
 }
 
 test "zstd wide double fast disagreement is isolated to fastest policy" {
@@ -37849,7 +37971,8 @@ test "zstd wide consensus fallback reuses repeat beam scratch" {
 
     try std.testing.expectEqualSlices(u8, reference_output.items, reuse_output.items);
     try std.testing.expectEqual(reference_allocator.allocations - 4, reuse_allocator.allocations);
-    try std.testing.expectEqual(reference_allocator.allocated_bytes - 897_583, reuse_allocator.allocated_bytes);
+    const eliminated_probe_bytes = try allocation_test_oracle.redundantRepeatBeamProbeBytes(payload.len);
+    try std.testing.expectEqual(reference_allocator.allocated_bytes - eliminated_probe_bytes, reuse_allocator.allocated_bytes);
 }
 
 test "zstd fastest wide policy pins worst audited double fast tradeoff" {

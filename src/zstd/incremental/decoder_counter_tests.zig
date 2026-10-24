@@ -82,3 +82,91 @@ test "Zstd incremental decoder counters wide preflight preserves absent sizes li
     try std.testing.expectEqual(@as(usize, 0), wrong_size.snapshot().last_step_progress.output_written);
     try std.testing.expectEqual(@as(usize, 0), wrong_size.decodedBufferCapacity());
 }
+
+const first_skip = [_]u8{ 0x50, 0x2a, 0x4d, 0x18, 3, 0, 0, 0, 'a', 'b', 'c' };
+const second_skip = [_]u8{ 0x51, 0x2a, 0x4d, 0x18, 2, 0, 0, 0, 'd', 'e' };
+
+test "Zstd incremental decoder counters zero output pledge permits split metadata after done" {
+    for ([_]core.CompressedInputPolicy{ .block_stream, .prevalidated_frame }) |policy| {
+        var capture: [5]u8 = undefined;
+        var events: [2]zstd.NativeIncrementalFrameDecoder.SkippableEvent = undefined;
+        var decoder = zstd.NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+            .input_policy = policy,
+            .expected_output_len = 0,
+            .max_output_len = 0,
+            .max_compressed_buffer_len = 8,
+            .skippable_output = &capture,
+            .skippable_events = &events,
+        });
+        defer decoder.deinit();
+        const first = try decoder.step(&first_skip, &.{});
+        try std.testing.expectEqual(.done, first.status);
+        try std.testing.expectEqual(core.Progress{ .input_read = first_skip.len }, first.progress);
+        const prefix = try decoder.step(second_skip[0..4], &.{});
+        try std.testing.expectEqual(.need_input, prefix.status);
+        try std.testing.expectEqual(core.Progress{ .input_read = 4 }, prefix.progress);
+        const tail = try decoder.step(second_skip[4..], &.{});
+        try std.testing.expectEqual(.done, tail.status);
+        try std.testing.expectEqual(core.Progress{ .input_read = second_skip.len - 4 }, tail.progress);
+        try decoder.finish();
+        try std.testing.expectEqualSlices(u8, "abcde", &capture);
+        try std.testing.expectEqual(@as(Count, 5), decoder.snapshot().skippable_total);
+        try std.testing.expectEqual(@as(Count, 2), decoder.snapshot().skippable_event_count);
+        try std.testing.expectEqual(@as(Count, first_skip.len + second_skip.len), decoder.snapshot().input_received);
+        try std.testing.expectEqual(@as(Count, 0), decoder.snapshot().output_written);
+        try std.testing.expectEqual(@as(Count, 0), decoder.snapshot().data_frame_count);
+        try std.testing.expectEqual(@as(usize, 3), events[0].payload_len);
+        try std.testing.expectEqual(@as(usize, 2), events[1].payload_len);
+    }
+}
+
+test "Zstd incremental decoder counters fulfilled pledge rejects later data before output with sticky progress" {
+    const frame = try zstd.encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, "x", .{ .content_checksum = false });
+    defer std.testing.allocator.free(frame);
+    const empty = try zstd.encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, "", .{ .content_checksum = false });
+    defer std.testing.allocator.free(empty);
+    for ([_]core.CompressedInputPolicy{ .block_stream, .prevalidated_frame }) |policy| {
+        var decoder = zstd.NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+            .input_policy = policy,
+            .expected_output_len = 0,
+        });
+        defer decoder.deinit();
+        try std.testing.expectEqual(.done, (try decoder.step(&first_skip, &.{})).status);
+        try std.testing.expectEqual(.done, (try decoder.step(empty, &.{})).status);
+        try std.testing.expectEqual(@as(Count, 1), decoder.snapshot().data_frame_count);
+        const before = decoder.snapshot();
+        var output: [8]u8 = @splat(0xa5);
+        try std.testing.expectError(error.SizeMismatch, decoder.step(frame, &output));
+        const failed = decoder.snapshot();
+        try std.testing.expectEqualSlices(u8, &([_]u8{0xa5} ** 8), &output);
+        try std.testing.expectEqual(@as(Count, 0), failed.output_written);
+        try std.testing.expectEqual(@as(usize, 0), failed.last_step_progress.output_written);
+        try std.testing.expectEqual(failed.input_received - before.input_received, @as(Count, failed.last_step_progress.input_read));
+        try std.testing.expectEqual(@as(?Count, failed.input_received), failed.error_input_offset);
+        try std.testing.expectEqual(@as(?Count, 0), failed.error_output_offset);
+        try std.testing.expect(failed.last_step_progress.input_read != 0);
+        try std.testing.expectError(error.SizeMismatch, decoder.step(&second_skip, &output));
+        try std.testing.expectEqual(failed.input_received, decoder.snapshot().input_received);
+        try std.testing.expectEqualSlices(u8, &([_]u8{0xa5} ** 8), &output);
+    }
+}
+
+test "Zstd incremental decoder counters stopped empty member keeps explicit done behavior" {
+    const frame = try zstd.encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, "", .{ .content_checksum = false });
+    defer std.testing.allocator.free(frame);
+    for ([_]core.CompressedInputPolicy{ .block_stream, .prevalidated_frame }) |policy| {
+        var decoder = zstd.NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+            .input_policy = policy,
+            .expected_output_len = 0,
+            .stop_after_first_frame = true,
+        });
+        defer decoder.deinit();
+        try std.testing.expectEqual(.done, (try decoder.step(frame, &.{})).status);
+        const before = decoder.snapshot();
+        const stopped = try decoder.step(&first_skip, &.{});
+        try std.testing.expectEqual(.done, stopped.status);
+        try std.testing.expectEqual(core.Progress{}, stopped.progress);
+        try std.testing.expectEqual(before.input_received, decoder.snapshot().input_received);
+        try std.testing.expectEqual(@as(Count, 1), decoder.snapshot().data_frame_count);
+    }
+}
