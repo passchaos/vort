@@ -36,9 +36,22 @@ and signed CHD/OpenZFS FAST writers. Evidence passes 431 independent cases,
 contracts, 117 CLI checks and all 137 build-check steps. The
 [profile tooling change](performance/deflate-profile-runtime-inputs.md) also
 removes large compile-time sample generation while preserving CSV data.
-Remaining priorities include FastCover training, richer XZ/LZMA encoder
-presets and Brotli/Zstd HQ model coverage, then current-source real-corpus
-speed/ratio/memory leadership evidence across platforms.
+The [FastCover milestone](performance/fast-cover-training-x86.md) now adds
+sampled history selection, reusable preparation, bounded deterministic
+serial/parallel optimization and shrinking, complete standard-dictionary
+training and CLI workflows. The standard finalizer uses only the selected
+training prefix, and managed codec scoring charges the same serialized winner
+and repcode policy. Evidence passes 45 contracts in Debug and ReleaseFast,
+822 Zstd ReleaseFast tests, 402 independent functional groups, final CLI gates
+and all 138 build-check steps. Quiet measurements against libzstd 1.4.8 retain
+all seven matched-capacity output losses and substantial complete-training
+latency gaps. This milestone closes FastCover functionality, not the overall
+industry-best objective.
+
+Remaining priorities include richer XZ/LZMA encoder presets and match-finder
+controls, Brotli/Zstd HQ model coverage, then standard dictionary finalization
+performance and current-source real-corpus speed/ratio/memory leadership
+evidence across platforms.
 
 ### Earlier detailed completion audit (started 2026-09-11)
 

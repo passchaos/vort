@@ -1,6 +1,6 @@
 # Mainstream codec and industry gap audit
 
-Date: 2026-10-24. Source and tools revision: `4f6d5b97`.
+Date: 2026-10-24. Source and tools revision: `a11bfd6c`.
 
 Vort has broad Zig-native format coverage and some measured performance wins.
 The objective of exceeding the best competing libraries in both functionality
@@ -12,7 +12,7 @@ encoder quality and throughput are separate claims.
 | Family | Implemented public functionality | Remaining gap |
 | --- | --- | --- |
 | DEFLATE / zlib / gzip | Stored/fixed/dynamic/best encoding, full block decoding, dictionaries, incremental I/O, block/partial flush, runtime parameter changes and full-flush recovery | Full zlib API equivalence is not established. The project does not offer a `z_stream`/`gzFile` drop-in C ABI; that ABI is outside the active roadmap. Broader ratio/throughput evidence is still needed. |
-| Zstandard | Raw/RLE/Huffman/FSE sequence frames, dictionary sets and recovery, incremental encoding/decoding, signed levels -131072...22, five explicit dictionary/history-aware match strategies, work profiles, window logs 10...41, COVER-class training and seekable streams | Full libzstd binary-tree/HQ models and strategy/quality parity remain open. Internal match history is bounded through 64 MiB. Complete FastCover training and broad encoder quality/speed parity remain open. |
+| Zstandard | Raw/RLE/Huffman/FSE sequence frames, dictionary sets and recovery, incremental encoding/decoding, signed levels -131072...22, five explicit dictionary/history-aware match strategies, work profiles, window logs 10...41, COVER-class and complete FastCover training/optimization, and seekable streams | Full libzstd binary-tree/HQ models and strategy/quality parity remain open. Internal match history is bounded through 64 MiB. Standard dictionary finalization latency and broad encoder quality/speed parity remain open. |
 | LZ4 | Block/frame/legacy formats, linked blocks, dictionaries, incremental fast/HC encoding and bounded decoding; HC levels 1...12 with byte-exact liblz4 1.9.3 reference gates | No equivalent public fast-acceleration knob. Full corpus/platform performance leadership is unproven. |
 | Snappy | Raw/native framed/Xerial/Hadoop encoding and decoding, CRC32C, incremental I/O, COPY4, validated replay, work/output budgets and exact failed-call progress | Raw decoder benchmark wins do not establish framed/incremental encoder and decoder leadership across real corpora. |
 | Brotli | RFC decoding, all 256 entropy block types, static/shared dictionaries, opt-in Large Window extension, incremental I/O and Vort-native q0...q11 generic/text/font presets | q10/q11 remain bounded Vort search rather than complete libbrotli HQ/Zopfli parity. Quality numbers do not imply matching libbrotli ratio or speed. Global/HQ cost planning across large streams and worst-case decode performance remain open; bounded arbitrary-size multi-meta-block encoding is already implemented. |
@@ -32,6 +32,11 @@ The [native status](../native-lz4-zstd-status.md),
 [dictionary/resource baseline](dictionary-memory-contracts-functional-baseline.md)
 and [Bzip2/Snappy baseline](bzip2-snappy-streaming-functional-baseline.md)
 describe the supported behavior and validation boundaries in more detail.
+The [FastCover contract](../formats/fast-cover-training.md) and
+[functional/measurement baseline](fast-cover-training-x86.md) cover the newly
+completed selector, preparation, bounded optimizer, full standard dictionaries,
+training-only finalization and CLI. This closes the earlier FastCover functional
+gap while preserving explicit differences from libzstd dictionary bytes.
 
 ## Performance evidence and its limits
 
@@ -46,6 +51,7 @@ Vort executable is not a speedup over a competing library.
 | [Zstd JSON decode reference audit, 2026-10-13](data/zstd-reference-audit-x86-20261013.json) | Large JSON is 0.9188x reference throughput; the longer small-JSON control is 1.0139x | Intel i7-10700K, ReleaseFast, pinned libzstd 1.6.0-dev (`01b7154f`). A small-input lead does not close the large-input gap. |
 | [XZ lazy encoding, 2026-10-13](xz-lazy-parser-x86.md) | Synthetic JSON is 10.70% smaller than reference at 0.812x reference throughput | Intel i7-10700K, ReleaseFast, liblzma 5.2.5 preset 1. This demonstrates a size/speed tradeoff, not all-preset superiority. |
 | [LZ4HC frame encoding, 2026-10-12/13](lz4-hc-frame-baseline-x86.md) | Frames match reference bytes. Initial six-row throughput was 0.2502x...0.7408x; subsequent dictionary preparation improved its target by 1.6641x versus Vort baseline | Intel i7-10700K, ReleaseFast, liblz4 1.9.3. The initial ratios must not be presented as current results after the follow-up. |
+| [FastCover complete training/output, 2026-10-24](fast-cover-training-x86.md) | All seven matched-serialized-capacity rows have higher charged Vort output. At a shared 1024-byte ceiling, JSON/small improve 6.25%/23.11%, while five families lose. Repetitive complete training is 8868.699661 ms versus 0.253797 ms | Intel i7-10700K, Zig 0.16.0 ReleaseFast, libzstd 1.4.8, seven synthetic families, quiet runs with all duration samples retained. Charged output couples each dictionary to its own library encoder; raw/prepared selection is not comparable to upstream full training. |
 
 Zstd still needs a comprehensive current-reference matrix for both compression
 and decompression; [the comparison gap](../zstd-gap.md) records historical
@@ -63,8 +69,10 @@ memory comparison.
 
 ## Next work, functionality first
 
-1. Add XZ/LZMA preset/match-finder controls and FastCover training as separately
-   validated increments. Zstd signed levels and five explicit strategy controls
+1. Add XZ/LZMA preset/match-finder controls as a separately validated increment.
+   FastCover selection, optimization and full standard dictionaries are now
+   implemented; the large post-selection finalization cost remains a subsequent
+   profiling and performance target. Zstd signed levels and five explicit strategy controls
    are now implemented and recorded in the
    [encoding-control baseline](zstd-encode-controls-functional-baseline.md).
    Improving Brotli HQ models and global cost planning across large streams
@@ -88,3 +96,8 @@ The subsequent Zstd controls increment separately passes 431 independent
 cases, exact legacy wire comparisons, 1146 ReleaseFast test executions, final
 CLI and control contracts, and all 137 build-check steps. These are functional
 and parameter-effect milestones, not a broad competitor throughput ranking.
+The subsequent FastCover increment separately passes 45 contracts in Debug
+and ReleaseFast, 822 complete Zstd ReleaseFast tests, 402 independent functional
+groups, final CLI checks and all 138 build-check steps. It includes separate
+quiet measurements rather than treating instrumented validation times as a
+performance ranking. The long-term objective remains incomplete.

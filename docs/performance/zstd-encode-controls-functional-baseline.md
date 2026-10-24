@@ -106,6 +106,8 @@ zig build check --summary all
 The separate [profile-tool compile improvement](deflate-profile-runtime-inputs.md)
 removes 459008 compile-time sample assignments while preserving all CSV
 deterministic fields. It improves development tooling rather than codec
-throughput. Remaining function priorities include complete FastCover training
-and richer encoder presets/HQ strategy models, followed by current-source
-real-corpus speed/ratio/memory comparisons across platforms.
+throughput. The subsequent [FastCover increment](fast-cover-training-x86.md)
+completes selection, optimization and full standard-dictionary functionality.
+Remaining priorities include richer encoder presets/HQ strategy models,
+standard finalization performance and current-source real-corpus
+speed/ratio/memory comparisons across platforms.

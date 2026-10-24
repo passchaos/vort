@@ -18,6 +18,11 @@ controls, and the binary-history training gain on the same host.
 records four held-out corpus families, three compression levels, dictionary
 sizes, training latency, and bidirectional interoperability against the local
 zstd 1.4.8 CLI.
+[The implemented FastCover baseline](performance/fast-cover-training-x86.md)
+records the subsequent Zig-native selector, optimizer, standard-dictionary and
+CLI contracts, independent 402-group campaign, and separate quiet measurements
+against libzstd 1.4.8. It preserves all seven matched-capacity output losses,
+two fixed-budget wins and substantial full-training latency gaps.
 [Zstd x86-64 full raw-block copying](performance/zstd-raw-copy-x86.md)
 records the ERMSB-gated 128 KiB path and paired comparison with the local
 libzstd 1.6.0-dev checkout on Intel Comet Lake.
