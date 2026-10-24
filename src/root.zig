@@ -4020,7 +4020,11 @@ test "root 7z exports compressed archive writing" {
 }
 
 test "root XZ exports compressed LZMA2 writing" {
-    try std.testing.expectEqual(@as(usize, 64 * 1024 * 1024), xzMaxEncodeDictionarySize);
+    try std.testing.expectEqual(@as(usize, 1610612736), xzMaxEncodeDictionarySize);
+    try std.testing.expectEqual(xzMaxEncodeDictionarySize, lzmaMaxEncodeDictionarySize);
+    try std.testing.expectEqual(@as(usize, 2097152), lzma2MaxCompressedPlainSize);
+    try std.testing.expectEqual(@as(usize, 65536), lzma2MaxCompressedPayloadSize);
+    try std.testing.expectEqual(@as(usize, 65536), lzma2MaxStoredChunkSize);
     const payload = "root XZ compressed writer\n" ** 256;
     const encoded = try encodeXzAlloc(std.testing.allocator, payload, .{ .check = .crc32 });
     defer std.testing.allocator.free(encoded);
