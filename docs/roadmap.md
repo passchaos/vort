@@ -25,10 +25,16 @@ two libzstd versions confirm an actual 64 MiB+8-byte copy, including exact
 budget, D−1, double-fast and borrowed RAW dictionary controls. Legal history
 configurations reach 4,294,836,222 bytes, while actual search retains its
 strategy limits. Huge declared windows remain distinct from actual matching.
-The next functionality-first work is consistent u64 cumulative stream counters
-and pledges on 32-bit platforms, followed by bounded Zstd HQ search-control and
-Brotli stored-resource API increments. Full competitor ratio, throughput and
-memory leadership remains unproven.
+The subsequent [stream-count contract](formats/stream-counts.md) extends
+Brotli/Zstd cumulative bytes, pledges, offsets and history positions to a
+64-bit domain on 32-bit targets, preserves native public types, and adds a
+length-safe streaming XXH64 implementation. Both Zstd decoder policies use
+wide preflight totals; file encoders use bounded atomic I/O. Formal count gates
+pass 142/142 in native Debug, native ReleaseFast and actual x86 ReleaseFast.
+Real long-stream and final family/platform evidence are recorded separately.
+Bounded Zstd HQ search-control and Brotli stored-resource API increments remain
+the next functionality-first priorities. Full competitor ratio, throughput
+and memory leadership remains unproven.
 
 The long-term objective remains incomplete. The current
 [mainstream codec and industry gap audit](performance/industry-gap-audit.md)

@@ -1,0 +1,701 @@
+{
+  "schema": "vort-stream-counters-real-v1",
+  "status": "ok",
+  "utc": "2026-10-24T15:27:59.725018+00:00",
+  "long": false,
+  "rows": [
+    {
+      "name": "zstd-rle",
+      "command": [
+        "/tmp/vort-stream-zstd-probe",
+        "/tmp/vort-stream-counter-smoke-locked/zstd-rle.config.json"
+      ],
+      "exit_code": 0,
+      "probe_sha256": "b65bfc8a74085a49aec55f2a4e13332a7df7a6f6ff89009c166d4ebf2e5e53d0",
+      "report": {
+        "operation": "decode_rle",
+        "count": 262145,
+        "policies": [
+          {
+            "policy": "block_stream",
+            "progress": {
+              "input_read": 30,
+              "output_written": 262145,
+              "steps": 5,
+              "completed": true
+            },
+            "snapshot": {
+              "phase": "done",
+              "input_received": 30,
+              "output_written": 262145,
+              "decoded_len": 0,
+              "decoded_remaining": 0,
+              "skippable_written": 0,
+              "skippable_total": 0,
+              "skippable_truncated": false,
+              "skippable_event_count": 0,
+              "skippable_events_captured": 0,
+              "data_frame_count": 1,
+              "trailing_input_bytes": 0,
+              "last_error_name": "",
+              "last_error_phase": null,
+              "working_bytes": 294948,
+              "peak_working_bytes": 294948,
+              "error_input_offset": null,
+              "error_output_offset": null,
+              "last_step_progress": {
+                "input_read": 4,
+                "output_written": 1
+              },
+              "required_dictionary_id": null
+            },
+            "allocation_peak": 294948
+          },
+          {
+            "policy": "prevalidated_frame",
+            "progress": {
+              "input_read": 30,
+              "output_written": 262145,
+              "steps": 5,
+              "completed": true
+            },
+            "snapshot": {
+              "phase": "done",
+              "input_received": 30,
+              "output_written": 262145,
+              "decoded_len": 0,
+              "decoded_remaining": 0,
+              "skippable_written": 0,
+              "skippable_total": 0,
+              "skippable_truncated": false,
+              "skippable_event_count": 0,
+              "skippable_events_captured": 0,
+              "data_frame_count": 1,
+              "trailing_input_bytes": 0,
+              "last_error_name": "",
+              "last_error_phase": null,
+              "working_bytes": 262177,
+              "peak_working_bytes": 262177,
+              "error_input_offset": null,
+              "error_output_offset": null,
+              "last_step_progress": {
+                "input_read": 0,
+                "output_written": 1
+              },
+              "required_dictionary_id": null
+            },
+            "allocation_peak": 294948
+          }
+        ],
+        "allocation_live_after_deinit": 0,
+        "build_mode": "ReleaseFast",
+        "pointer_bits": 64
+      }
+    },
+    {
+      "name": "zstd-skip",
+      "command": [
+        "/tmp/vort-stream-zstd-probe",
+        "/tmp/vort-stream-counter-smoke-locked/zstd-skip.config.json"
+      ],
+      "exit_code": 0,
+      "probe_sha256": "b65bfc8a74085a49aec55f2a4e13332a7df7a6f6ff89009c166d4ebf2e5e53d0",
+      "report": {
+        "operation": "decode_skip",
+        "count": 262145,
+        "policies": [
+          {
+            "policy": "block_stream",
+            "progress": {
+              "input_read": 262153,
+              "output_written": 0,
+              "steps": 6,
+              "completed": true
+            },
+            "snapshot": {
+              "phase": "done",
+              "input_received": 262153,
+              "output_written": 0,
+              "decoded_len": 0,
+              "decoded_remaining": 0,
+              "skippable_written": 0,
+              "skippable_total": 262145,
+              "skippable_truncated": true,
+              "skippable_event_count": 1,
+              "skippable_events_captured": 0,
+              "data_frame_count": 0,
+              "trailing_input_bytes": 0,
+              "last_error_name": "",
+              "last_error_phase": null,
+              "working_bytes": 16,
+              "peak_working_bytes": 16,
+              "error_input_offset": null,
+              "error_output_offset": null,
+              "last_step_progress": {
+                "input_read": 1,
+                "output_written": 0
+              },
+              "required_dictionary_id": null
+            },
+            "allocation_peak": 16
+          },
+          {
+            "policy": "prevalidated_frame",
+            "progress": {
+              "input_read": 262153,
+              "output_written": 0,
+              "steps": 6,
+              "completed": true
+            },
+            "snapshot": {
+              "phase": "done",
+              "input_received": 262153,
+              "output_written": 0,
+              "decoded_len": 0,
+              "decoded_remaining": 0,
+              "skippable_written": 0,
+              "skippable_total": 262145,
+              "skippable_truncated": true,
+              "skippable_event_count": 1,
+              "skippable_events_captured": 0,
+              "data_frame_count": 0,
+              "trailing_input_bytes": 0,
+              "last_error_name": "",
+              "last_error_phase": null,
+              "working_bytes": 16,
+              "peak_working_bytes": 16,
+              "error_input_offset": null,
+              "error_output_offset": null,
+              "last_step_progress": {
+                "input_read": 1,
+                "output_written": 0
+              },
+              "required_dictionary_id": null
+            },
+            "allocation_peak": 16
+          }
+        ],
+        "allocation_live_after_deinit": 0,
+        "build_mode": "ReleaseFast",
+        "pointer_bits": 64
+      }
+    },
+    {
+      "name": "zstd-encode",
+      "command": [
+        "/tmp/vort-stream-zstd-probe",
+        "/tmp/vort-stream-counter-smoke-locked/zstd-encode.config.json"
+      ],
+      "exit_code": 0,
+      "probe_sha256": "b65bfc8a74085a49aec55f2a4e13332a7df7a6f6ff89009c166d4ebf2e5e53d0",
+      "report": {
+        "operation": "encode",
+        "count": 262161,
+        "progress": {
+          "input_read": 262161,
+          "output_written": 41,
+          "steps": 6,
+          "completed": true
+        },
+        "snapshot": {
+          "input_read": 262161,
+          "output_written": 41,
+          "frame_input": 262161,
+          "frame_output": 41,
+          "buffered_input": 0,
+          "pending_output": 0,
+          "frame_count": 1,
+          "frame_index": 0,
+          "finishing": true,
+          "done": true
+        },
+        "total_memory_profile": {
+          "available": true,
+          "peak_requested_bytes": 196950,
+          "live_requested_bytes": 0,
+          "limit": 8388608
+        },
+        "content_xxh64": 10546902051628696369,
+        "allocation_peak": 196950,
+        "allocation_live_after_deinit": 0,
+        "wire_bytes": 41,
+        "build_mode": "ReleaseFast",
+        "pointer_bits": 64
+      }
+    },
+    {
+      "name": "br-metadata",
+      "command": [
+        "/tmp/vort-stream-br-probe",
+        "/tmp/vort-stream-counter-smoke-locked/br-metadata.config.json"
+      ],
+      "exit_code": 0,
+      "probe_sha256": "265b93d8934eef04f9e7259a015347d696008d33e335605cf047dc4193685e24",
+      "report": {
+        "operation": "metadata",
+        "count": 262145,
+        "consumers": [
+          {
+            "consumer": "copy_caller_history",
+            "progress": {
+              "input_read": 262160,
+              "output_written": 0,
+              "steps": 11,
+              "completed": true
+            },
+            "metadata_total": 262145,
+            "metadata_blocks": 5,
+            "metadata_captured": 19,
+            "metadata_truncated": true,
+            "captured_lengths": [
+              65536,
+              65536
+            ],
+            "compressed_header_capacity": 16384,
+            "history_bytes": 65535,
+            "last_copy_distance": 0
+          },
+          {
+            "consumer": "owned_general",
+            "progress": {
+              "input_read": 262160,
+              "output_written": 0,
+              "steps": 11,
+              "completed": true
+            },
+            "metadata_total": 262145,
+            "metadata_blocks": 5,
+            "metadata_captured": 19,
+            "metadata_truncated": true,
+            "captured_lengths": [
+              65536,
+              65536
+            ],
+            "compressed_header_capacity": 16384,
+            "history_bytes": 0,
+            "last_copy_distance": 0
+          },
+          {
+            "consumer": "stored_subset",
+            "progress": {
+              "input_read": 262160,
+              "output_written": 0,
+              "steps": 11,
+              "completed": true
+            },
+            "metadata_total": 262145,
+            "metadata_blocks": 5,
+            "metadata_captured": 19,
+            "metadata_truncated": true,
+            "captured_lengths": [
+              65536,
+              65536
+            ],
+            "compressed_header_capacity": 0,
+            "history_bytes": 0,
+            "last_copy_distance": null
+          }
+        ],
+        "tail_wire_bytes": 0,
+        "tail_normal_distance": null,
+        "allocation_peak": 65520,
+        "allocation_live_after_deinit": 0,
+        "caller_history_bytes": 65535,
+        "source_buffer_bytes": 65536,
+        "output_buffer_bytes": 65536,
+        "build_mode": "ReleaseFast",
+        "pointer_bits": 64
+      }
+    },
+    {
+      "name": "br-stored-copy",
+      "command": [
+        "/tmp/vort-stream-br-probe",
+        "/tmp/vort-stream-counter-smoke-locked/br-stored-copy.config.json"
+      ],
+      "exit_code": 0,
+      "probe_sha256": "265b93d8934eef04f9e7259a015347d696008d33e335605cf047dc4193685e24",
+      "report": {
+        "operation": "stored_copy",
+        "count": 262144,
+        "consumers": [
+          {
+            "consumer": "copy_caller_history",
+            "progress": {
+              "input_read": 262168,
+              "output_written": 264192,
+              "steps": 9,
+              "completed": true
+            },
+            "metadata_total": 0,
+            "metadata_blocks": 0,
+            "metadata_captured": 0,
+            "metadata_truncated": false,
+            "captured_lengths": [
+              0,
+              0
+            ],
+            "compressed_header_capacity": 16384,
+            "history_bytes": 65535,
+            "last_copy_distance": 2048
+          },
+          {
+            "consumer": "owned_general",
+            "progress": {
+              "input_read": 262168,
+              "output_written": 264192,
+              "steps": 9,
+              "completed": true
+            },
+            "metadata_total": 0,
+            "metadata_blocks": 0,
+            "metadata_captured": 0,
+            "metadata_truncated": false,
+            "captured_lengths": [
+              0,
+              0
+            ],
+            "compressed_header_capacity": 16384,
+            "history_bytes": 65520,
+            "last_copy_distance": 2048
+          }
+        ],
+        "tail_wire_bytes": 12,
+        "tail_normal_distance": 2048,
+        "allocation_peak": 65520,
+        "allocation_live_after_deinit": 0,
+        "caller_history_bytes": 65535,
+        "source_buffer_bytes": 65536,
+        "output_buffer_bytes": 65536,
+        "build_mode": "ReleaseFast",
+        "pointer_bits": 64
+      }
+    },
+    {
+      "name": "br-stored-subset",
+      "command": [
+        "/tmp/vort-stream-br-probe",
+        "/tmp/vort-stream-counter-smoke-locked/br-stored-subset.config.json"
+      ],
+      "exit_code": 0,
+      "probe_sha256": "265b93d8934eef04f9e7259a015347d696008d33e335605cf047dc4193685e24",
+      "report": {
+        "operation": "stored",
+        "count": 262145,
+        "consumers": [
+          {
+            "consumer": "copy_caller_history",
+            "progress": {
+              "input_read": 262161,
+              "output_written": 262145,
+              "steps": 11,
+              "completed": true
+            },
+            "metadata_total": 0,
+            "metadata_blocks": 0,
+            "metadata_captured": 0,
+            "metadata_truncated": false,
+            "captured_lengths": [
+              0,
+              0
+            ],
+            "compressed_header_capacity": 16384,
+            "history_bytes": 65535,
+            "last_copy_distance": 0
+          },
+          {
+            "consumer": "owned_general",
+            "progress": {
+              "input_read": 262161,
+              "output_written": 262145,
+              "steps": 11,
+              "completed": true
+            },
+            "metadata_total": 0,
+            "metadata_blocks": 0,
+            "metadata_captured": 0,
+            "metadata_truncated": false,
+            "captured_lengths": [
+              0,
+              0
+            ],
+            "compressed_header_capacity": 16384,
+            "history_bytes": 65520,
+            "last_copy_distance": 0
+          },
+          {
+            "consumer": "stored_subset",
+            "progress": {
+              "input_read": 262161,
+              "output_written": 262145,
+              "steps": 11,
+              "completed": true
+            },
+            "metadata_total": 0,
+            "metadata_blocks": 0,
+            "metadata_captured": 0,
+            "metadata_truncated": false,
+            "captured_lengths": [
+              0,
+              0
+            ],
+            "compressed_header_capacity": 0,
+            "history_bytes": 0,
+            "last_copy_distance": null
+          }
+        ],
+        "tail_wire_bytes": 0,
+        "tail_normal_distance": null,
+        "allocation_peak": 65520,
+        "allocation_live_after_deinit": 0,
+        "caller_history_bytes": 65535,
+        "source_buffer_bytes": 65536,
+        "output_buffer_bytes": 65536,
+        "build_mode": "ReleaseFast",
+        "pointer_bits": 64
+      }
+    },
+    {
+      "name": "br-encode",
+      "command": [
+        "/tmp/vort-stream-br-probe",
+        "/tmp/vort-stream-counter-smoke-locked/br-encode.config.json"
+      ],
+      "exit_code": 0,
+      "probe_sha256": "265b93d8934eef04f9e7259a015347d696008d33e335605cf047dc4193685e24",
+      "report": {
+        "operation": "encode",
+        "count": 262145,
+        "progress": {
+          "input_read": 262145,
+          "output_written": 262161,
+          "steps": 6,
+          "completed": true
+        },
+        "allocation_peak": 196997,
+        "allocation_live_after_deinit": 0,
+        "build_mode": "ReleaseFast",
+        "pointer_bits": 64
+      },
+      "wire_sha256": "f54a0e67a5d5b71470dda5b09820a4e9a1a424dc5f4a7e8a6303fc99cfe3834a",
+      "wire_bytes": 262161
+    }
+  ],
+  "reference_rows": {
+    "zstd-rle": [
+      {
+        "input_read": 30,
+        "output_written": 262145,
+        "calls": 5,
+        "content_checks": 5,
+        "xxh64": 12258955161067437347,
+        "done": 1,
+        "failed": 0
+      },
+      {
+        "input_read": 30,
+        "output_written": 262145,
+        "calls": 5,
+        "content_checks": 5,
+        "xxh64": 12258955161067437347,
+        "done": 1,
+        "failed": 0
+      }
+    ],
+    "zstd-skip": [
+      {
+        "input_read": 262153,
+        "output_written": 0,
+        "calls": 6,
+        "content_checks": 6,
+        "xxh64": 17241709254077376921,
+        "done": 1,
+        "failed": 0
+      },
+      {
+        "input_read": 262153,
+        "output_written": 0,
+        "calls": 6,
+        "content_checks": 6,
+        "xxh64": 17241709254077376921,
+        "done": 1,
+        "failed": 0
+      }
+    ],
+    "zstd-encode": [
+      {
+        "input_read": 41,
+        "output_written": 262161,
+        "calls": 5,
+        "content_checks": 5,
+        "xxh64": 10546902051628696369,
+        "done": 1,
+        "failed": 0
+      },
+      {
+        "input_read": 41,
+        "output_written": 262161,
+        "calls": 5,
+        "content_checks": 5,
+        "xxh64": 10546902051628696369,
+        "done": 1,
+        "failed": 0
+      }
+    ],
+    "br-metadata": [
+      {
+        "input_read": 262160,
+        "output_written": 0,
+        "calls": 11,
+        "content_checks": 11,
+        "xxh64": 17241709254077376921,
+        "done": 1,
+        "failed": 0
+      },
+      {
+        "input_read": 262160,
+        "output_written": 0,
+        "calls": 11,
+        "content_checks": 11,
+        "xxh64": 17241709254077376921,
+        "done": 1,
+        "failed": 0
+      }
+    ],
+    "br-stored-copy": [
+      {
+        "input_read": 262168,
+        "output_written": 264192,
+        "calls": 13,
+        "content_checks": 13,
+        "xxh64": 16565407593777268946,
+        "done": 1,
+        "failed": 0
+      },
+      {
+        "input_read": 262168,
+        "output_written": 264192,
+        "calls": 13,
+        "content_checks": 13,
+        "xxh64": 16565407593777268946,
+        "done": 1,
+        "failed": 0
+      }
+    ],
+    "br-stored-subset": [
+      {
+        "input_read": 262161,
+        "output_written": 262145,
+        "calls": 15,
+        "content_checks": 15,
+        "xxh64": 7400872701691226332,
+        "done": 1,
+        "failed": 0
+      },
+      {
+        "input_read": 262161,
+        "output_written": 262145,
+        "calls": 15,
+        "content_checks": 15,
+        "xxh64": 7400872701691226332,
+        "done": 1,
+        "failed": 0
+      }
+    ],
+    "br-encode": [
+      {
+        "input_read": 262161,
+        "output_written": 262145,
+        "calls": 5,
+        "content_checks": 5,
+        "xxh64": 7400872701691226332,
+        "done": 1,
+        "failed": 0
+      },
+      {
+        "input_read": 262161,
+        "output_written": 262145,
+        "calls": 5,
+        "content_checks": 5,
+        "xxh64": 7400872701691226332,
+        "done": 1,
+        "failed": 0
+      }
+    ]
+  },
+  "reference_provenance": [
+    {
+      "helper": "/tmp/vort-stream-reference-modern.so",
+      "helper_sha256": "3e05323137352362dfd22ab775dd7404410c21caab669195bd0ed55d3c6502b3",
+      "zstd_header": 10600,
+      "zstd_runtime": 10600,
+      "br_runtime": "0x1002000",
+      "libraries": [
+        {
+          "path": "/home/passchaos/Work/zstd/lib/obj/conf_5c583a1f84006a106cd7292ce5d65f11/dynamic/libzstd.so.1.6.0",
+          "sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e"
+        },
+        {
+          "path": "/tmp/vort-brotli-shared-build/libbrotlidec.so.1.2.0",
+          "sha256": "c36742c69834733645a22501d5001756f75ff7737a7894b8cdd6db2fda6c1fe2"
+        }
+      ]
+    },
+    {
+      "helper": "/tmp/vort-stream-reference-system.so",
+      "helper_sha256": "23777e2065c5f920f4396302bead82ec4a889c27c7f54a850866635e6afcb7ba",
+      "zstd_header": 10408,
+      "zstd_runtime": 10408,
+      "br_runtime": "0x1000009",
+      "libraries": [
+        {
+          "path": "/usr/lib/x86_64-linux-gnu/libzstd.so.1.4.8",
+          "sha256": "5df4f4df42d76270bb6981fabc7c1fdccd8ad28a23d84d67f73203fb3f537667"
+        },
+        {
+          "path": "/usr/lib/x86_64-linux-gnu/libbrotlidec.so.1.0.9",
+          "sha256": "db9dbda709a46c3ae124433f47c4db71167db8aaba4eafdfd99c8a3a14584463"
+        }
+      ]
+    }
+  ],
+  "reference_reused_from": null,
+  "rle_fixture_path": "/tmp/vort-stream-counter-smoke-locked/zstd-rle.bin",
+  "rle_fixture_sha256": "73b802913ba55dec729b48a72f2c6eb8ec19c795cf9e3925c2a4e9313b7ca4dc",
+  "rle_checksum": 12258955161067437347,
+  "zstd_encoder_wire_sha256": "15969d64aa7ee292df5995219bfd6c641ddd63e7bf85858f80f62d5f1a64780a",
+  "br_copy_tail_sha256": "50418c1609ef9813daf754cdaeae135b1177fabd5b5304465711ebe774249c12",
+  "br_encoder_wire_sha256": "f54a0e67a5d5b71470dda5b09820a4e9a1a424dc5f4a7e8a6303fc99cfe3834a",
+  "scope": "actual accepted/emitted bytes through public streaming APIs, bounded source/output buffers; no seed, sparse-file or declared-size substitute",
+  "reference_reused_report_sha256": null,
+  "normal_history_copy_tail_fixture": {
+    "wire_sha256": "6fedb69065065ba4c9fb2a06b27312ecdbd33474ffa3400c660fd7dee26ec622",
+    "decoded_bytes": 4096,
+    "distance": 2048,
+    "reference_receipts": [
+      {
+        "input_read": 2063,
+        "output_written": 4096,
+        "calls": 1,
+        "content_checks": 1,
+        "xxh64": 977924185182043916,
+        "done": 1,
+        "failed": 0
+      },
+      {
+        "input_read": 2063,
+        "output_written": 4096,
+        "calls": 1,
+        "content_checks": 1,
+        "xxh64": 977924185182043916,
+        "done": 1,
+        "failed": 0
+      }
+    ]
+  },
+  "source_pattern": {
+    "size": 65536,
+    "sha256": "81cfcdf14e15be62a7eaae834f3b476b74d8c42237afb57914c5ba6ea8bf2130",
+    "generator": "xorshift32 seed0x51a7c0de; fixed64KiB repeated by absolute phase"
+  }
+}

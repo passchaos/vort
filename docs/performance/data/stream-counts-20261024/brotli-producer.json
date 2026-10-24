@@ -1,0 +1,16 @@
+{
+  "status": "source_ready",
+  "scope": "Brotli streaming production plus bounded internal tests; shared Core and independent QA are parent/other-owner sources",
+  "counter": "core.StreamCount",
+  "bit_phase": "coded alignment/checkpoint phase keeps usize with wrapping advance; not an absolute bit offset",
+  "narrow_checks": [
+    "copy native/x86 11 seed26/26 plus existing copy decoder fixtures",
+    "owned native/x86 8 seed10/10 isolated",
+    "subset native/x86 with diagnostics 25/25",
+    "encode private wide contexts native/x8621/21",
+    "generic encoder counter x8620/20",
+    "wasm encode counters compile",
+    "local physical facade diagnostics x86compile"
+  ],
+  "tests_with_actual_4GiB": "not run; parent schedules explicit large operation gate"
+}

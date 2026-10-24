@@ -1,0 +1,241 @@
+{
+  "scope": "legacy StreamingDiagnostics optional-local to StreamCount adapters only; no legacy long-stream claim",
+  "utc": "2026-10-24T15:00:34.973046+00:00",
+  "files": [
+    "src/bzip2/incremental/contracts_tests.zig",
+    "src/bzip2/incremental_decoder.zig",
+    "src/compress_z/incremental_decoder.zig",
+    "src/deflate.zig",
+    "src/deflate/incremental/decoder/fixed_literals.zig",
+    "src/deflate/incremental/decoder/gzip.zig",
+    "src/deflate/incremental/decoder/stored.zig",
+    "src/deflate/incremental/decoder/zlib.zig",
+    "src/deflate/incremental/decoder/zlib_dictionary_tests.zig",
+    "src/deflate/incremental/tests/sync_recovery.zig",
+    "src/lz4.zig",
+    "src/lz4/incremental/limits_tests.zig",
+    "src/lz4_legacy/incremental_decoder.zig",
+    "src/lzf/incremental_decoder.zig",
+    "src/lzfse/incremental_decoder.zig",
+    "src/lzip/incremental_decoder.zig",
+    "src/lzma/incremental/contracts_tests.zig",
+    "src/lzma/incremental_decoder.zig",
+    "src/lzop/incremental_decoder.zig",
+    "src/ppmd8/incremental_decoder.zig",
+    "src/snappy/incremental/frame_decoder.zig",
+    "src/snappy_framing/incremental/contracts_tests.zig",
+    "src/snappy_framing/incremental_decoder.zig",
+    "src/store.zig",
+    "src/xz/incremental/progressive_tests.zig",
+    "src/xz/incremental_decoder.zig",
+    "src/xz/lzma2_incremental_decoder.zig",
+    "src/zip/dcl_implode.zig",
+    "src/zip/implode/incremental_decoder.zig",
+    "src/zip/reduce/incremental_decoder.zig",
+    "src/zip/shrink.zig"
+  ],
+  "file_count": 31,
+  "production_optional_bridges": 44,
+  "diagnostic_test_expected_conversions": 19,
+  "physical_index_test": "src/deflate/incremental/tests/sync_recovery.zig uses checked StreamCount.toLocal for a caller slice index",
+  "excluded_ownership_preserved": [
+    "src/br.zig",
+    "src/br/**",
+    "src/zstd.zig",
+    "src/zstd/**",
+    "src/core.zig",
+    "src/io/stream_count.zig",
+    "src/root.zig",
+    "src/checksum/**",
+    "src/tests/br_stream_counter*",
+    "src/tests/zstd_stream_counter*"
+  ],
+  "validation": {
+    "provider_consumer": {
+      "types": 37,
+      "target": "x86-linux-musl",
+      "mode": "Debug",
+      "exit": 0,
+      "object": "/tmp/vort-legacy-diagnostics-20261024/consumer.o",
+      "source": "/tmp/vort-legacy-diagnostics-20261024/consumer.zig"
+    },
+    "existing_store_snapshot": {
+      "passed": 1,
+      "total": 1,
+      "target": "x86-linux-musl"
+    },
+    "existing_lz4_diagnostic_pledge": {
+      "passed": 4,
+      "total": 4,
+      "target": "x86-linux-musl",
+      "named": 1
+    },
+    "existing_deflate_external_sync": {
+      "passed": 4,
+      "total": 4,
+      "target": "x86-linux-musl",
+      "named": 1
+    },
+    "fmt": {
+      "files": 31,
+      "exit": 0
+    }
+  },
+  "numstat": [
+    {
+      "added": 2,
+      "deleted": 2,
+      "path": "src/bzip2/incremental/contracts_tests.zig"
+    },
+    {
+      "added": 3,
+      "deleted": 3,
+      "path": "src/bzip2/incremental_decoder.zig"
+    },
+    {
+      "added": 1,
+      "deleted": 1,
+      "path": "src/compress_z/incremental_decoder.zig"
+    },
+    {
+      "added": 3,
+      "deleted": 3,
+      "path": "src/deflate.zig"
+    },
+    {
+      "added": 1,
+      "deleted": 1,
+      "path": "src/deflate/incremental/decoder/fixed_literals.zig"
+    },
+    {
+      "added": 1,
+      "deleted": 1,
+      "path": "src/deflate/incremental/decoder/gzip.zig"
+    },
+    {
+      "added": 1,
+      "deleted": 1,
+      "path": "src/deflate/incremental/decoder/stored.zig"
+    },
+    {
+      "added": 3,
+      "deleted": 3,
+      "path": "src/deflate/incremental/decoder/zlib.zig"
+    },
+    {
+      "added": 3,
+      "deleted": 3,
+      "path": "src/deflate/incremental/decoder/zlib_dictionary_tests.zig"
+    },
+    {
+      "added": 2,
+      "deleted": 1,
+      "path": "src/deflate/incremental/tests/sync_recovery.zig"
+    },
+    {
+      "added": 3,
+      "deleted": 3,
+      "path": "src/lz4.zig"
+    },
+    {
+      "added": 4,
+      "deleted": 4,
+      "path": "src/lz4/incremental/limits_tests.zig"
+    },
+    {
+      "added": 1,
+      "deleted": 1,
+      "path": "src/lz4_legacy/incremental_decoder.zig"
+    },
+    {
+      "added": 1,
+      "deleted": 1,
+      "path": "src/lzf/incremental_decoder.zig"
+    },
+    {
+      "added": 3,
+      "deleted": 3,
+      "path": "src/lzfse/incremental_decoder.zig"
+    },
+    {
+      "added": 1,
+      "deleted": 1,
+      "path": "src/lzip/incremental_decoder.zig"
+    },
+    {
+      "added": 2,
+      "deleted": 2,
+      "path": "src/lzma/incremental/contracts_tests.zig"
+    },
+    {
+      "added": 3,
+      "deleted": 3,
+      "path": "src/lzma/incremental_decoder.zig"
+    },
+    {
+      "added": 1,
+      "deleted": 1,
+      "path": "src/lzop/incremental_decoder.zig"
+    },
+    {
+      "added": 1,
+      "deleted": 1,
+      "path": "src/ppmd8/incremental_decoder.zig"
+    },
+    {
+      "added": 3,
+      "deleted": 3,
+      "path": "src/snappy/incremental/frame_decoder.zig"
+    },
+    {
+      "added": 3,
+      "deleted": 3,
+      "path": "src/snappy_framing/incremental/contracts_tests.zig"
+    },
+    {
+      "added": 3,
+      "deleted": 3,
+      "path": "src/snappy_framing/incremental_decoder.zig"
+    },
+    {
+      "added": 4,
+      "deleted": 4,
+      "path": "src/store.zig"
+    },
+    {
+      "added": 2,
+      "deleted": 2,
+      "path": "src/xz/incremental/progressive_tests.zig"
+    },
+    {
+      "added": 3,
+      "deleted": 3,
+      "path": "src/xz/incremental_decoder.zig"
+    },
+    {
+      "added": 3,
+      "deleted": 3,
+      "path": "src/xz/lzma2_incremental_decoder.zig"
+    },
+    {
+      "added": 1,
+      "deleted": 1,
+      "path": "src/zip/dcl_implode.zig"
+    },
+    {
+      "added": 1,
+      "deleted": 1,
+      "path": "src/zip/implode/incremental_decoder.zig"
+    },
+    {
+      "added": 1,
+      "deleted": 1,
+      "path": "src/zip/reduce/incremental_decoder.zig"
+    },
+    {
+      "added": 1,
+      "deleted": 1,
+      "path": "src/zip/shrink.zig"
+    }
+  ]
+}

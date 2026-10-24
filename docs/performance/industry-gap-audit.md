@@ -1,8 +1,9 @@
 # Mainstream codec and industry gap audit
 
-Date: 2026-10-24. The latest window/resource increment starts at `fa35a843`;
-its Brotli and Zstd functional baselines are linked below. Performance rows
-retain their own dated source and competitor provenance.
+Date: 2026-10-24. The window/resource increment starts at `fa35a843`; the
+subsequent [stream-count increment](stream-counts-functional-baseline.md) starts
+at `dacd500a`. Their functional evidence is separate from the dated performance
+rows and competitor provenance below.
 
 Vort has broad Zig-native format coverage and some measured performance wins.
 The objective of exceeding the best competing libraries in both functionality
@@ -14,7 +15,7 @@ encoder quality and throughput are separate claims.
 | Family | Implemented public functionality | Remaining gap |
 | --- | --- | --- |
 | DEFLATE / zlib / gzip | Stored/fixed/dynamic/best encoding, full block decoding, dictionaries, incremental I/O, block/partial flush, runtime parameter changes and full-flush recovery | Full zlib API equivalence is not established. The project does not offer a `z_stream`/`gzFile` drop-in C ABI; that ABI is outside the active roadmap. Broader ratio/throughput evidence is still needed. |
-| Zstandard | Raw/RLE/Huffman/FSE frames, dictionary sets/recovery, incremental encoding/decoding, signed levels -131072...22, all nine canonical strategy families plus legacy optimal, full-prefix BT and conditional two-pass costs, exact offset emission, work/resource profiles and canonical parameter queries, windows 10...41, explicit history up to the checked 4,294,836,222-byte coordinate ceiling, shared whole-encoder requested-heap quotas, COVER/FastCover training and seekable streams | Reference algorithm, quality and throughput parity remains unproven. Native HQ uses bounded 8/16-state searches and its own priors; canonical hash/chain logs are query metadata. Actual distance 64 MiB+8 is verified, while a maximum legal configuration is not a maximum-size matching benchmark. 32-bit cumulative stream coordinates, standard dictionary finalization latency and broad encoder ratio/speed/memory parity remain open. |
+| Zstandard | Raw/RLE/Huffman/FSE frames, dictionary sets/recovery, incremental encoding/decoding, signed levels -131072...22, all nine canonical strategy families plus legacy optimal, full-prefix BT and conditional two-pass costs, exact offset emission, work/resource profiles and canonical parameter queries, windows 10...41, explicit history up to the checked 4,294,836,222-byte coordinate ceiling, shared whole-encoder requested-heap quotas, COVER/FastCover training and seekable streams | Reference algorithm, quality and throughput parity remains unproven. Native HQ uses bounded 8/16-state searches and its own priors; canonical hash/chain logs are query metadata. Actual distance 64 MiB+8 is verified, while a maximum legal configuration is not a maximum-size matching benchmark. Wide cumulative stream coordinates and a full-length XXH64 state are implemented on 32-bit targets; physical allocation/one-shot boundaries remain. Standard dictionary finalization latency and broad encoder ratio/speed/memory parity remain open. |
 | LZ4 | Block/frame/legacy formats, linked blocks, dictionaries, incremental fast/HC encoding and bounded decoding; signed native acceleration, independent chain depth and actual work profiles; HC levels 1...12 with byte-exact liblz4 1.9.3 reference gates | Native chain/lazy defaults and accelerated search differ from liblz4's single-hash fast parser. Empty raw input retains the legacy API-only empty-slice convention. Full corpus/platform fast/HC ratio, throughput and memory leadership is unproven. |
 | Snappy | Raw/native framed/Xerial/Hadoop encoding and decoding, CRC32C, incremental I/O, COPY4, validated replay, work/output budgets and exact failed-call progress | Raw decoder benchmark wins do not establish framed/incremental encoder and decoder leadership across real corpora. |
 | Brotli | RFC decoding, all 256 entropy block types, static/shared dictionaries, opt-in Large Window through window30 across q0...q11, legacy and stored/chunked/reusable/incremental encoding, incremental I/O, persistent BT/exact commands, optional whole-meta-block positions and complete copy lengths, per-plan command-price limits, growable commands and a whole-encoder requested-heap cap | Full reference HQ/Zopfli algorithm and quality parity remain open. q0/q1 matching is fragment-local; general non-HQ retained history is at most 65535 bytes, with separate input/history-bounded ratio candidates. Complete lengths remove sampling gaps within each admitted match candidate; finite beam, matcher candidates and entropy models can still miss globally lower costs. Lowering complete-stream comparison peaks and current ratio/speed/memory leadership remain work. |
@@ -77,15 +78,15 @@ memory comparison.
 
 ## Next work, functionality first
 
-1. Extend cumulative streaming counters, pledges and diagnostic offsets on
-   32-bit platforms. Zstd incremental encoding and absolute history positions
-   still use `usize`; Brotli incremental decode totals do too. Keep local
-   buffer lengths and physical distances bounded, and test boundary crossings
-   using seeded counters and small input rather than multi-GiB allocations.
-   Further API slices include explicit whole-block/complete-length and pricing
-   controls for Zstd HQ, and consistent total-heap controls for standalone
-   Brotli stored convenience APIs. These are additional controls, not missing
-   supported-format decoding.
+1. Extend explicit whole-block/complete-length and pricing controls for Zstd
+   HQ, then consistent total-heap controls for standalone Brotli stored
+   convenience APIs. These are additional controls, not missing supported-format
+   decoding. The [stream-count increment](../formats/stream-counts.md) now uses
+   wide cumulative bytes, pledges, offsets and history positions on 32-bit
+   targets, a full-length streaming XXH64 state and bounded atomic file I/O.
+   Physical allocation and contiguous bit-reader limits remain separate API
+   boundaries. Formal native/x86 count gates pass 142/142; long-stream and full
+   family/platform evidence is recorded in the corresponding functional report.
 2. Extend the remaining HQ/quality models. LZMA custom dictionary/chunk range
    now covers 1.5 GiB dictionaries and 2 MiB compressed plaintext groups.
    [XZ/LZMA preset and match-finder controls](lzma-xz-encode-controls-functional-baseline.md)

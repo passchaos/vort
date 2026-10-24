@@ -1,0 +1,89 @@
+{
+  "time_utc": "2026-10-24T15:08:21.027307+00:00",
+  "phase": "br-zstd-wide-stream-cli-source-ready",
+  "sources": {
+    "examples/cli.zig": "7bad8afe12a3cfbe1508ce141e64b52aa1a944ae0593fb224be20a8384dae725",
+    "examples/cli/brotli.zig": "51dc5223243295e73723e71ef76210585318c9c5b8f3820fea7c64a151c928c7",
+    "examples/cli/brotli_controls.zig": "9386d481f86d5ea4bb27be40173a370529cc43b428877523e25a01d3be7aeee8",
+    "examples/cli/brotli_controls_tests.zig": "2123d7941aadad14078ca6e967d3d3dcf7cb8cd6710904337ccee7283e20fa6a",
+    "examples/cli/zstd_controls.zig": "2c7479dfd861ffac00b15180931933dcfcac6c87fca7e1385bac87688af6fc15",
+    "examples/cli/zstd_controls_tests.zig": "c70394edd44bcda05b5054d9470d39867811a40377acfe638c8274661f4d4897",
+    "examples/cli/stream_files.zig": "4714aa4740690d2701873ba345f718d64d606cfdf3b7f41aee507fad261cad9b"
+  },
+  "public_parser_tests": {
+    "brotli_native": 20,
+    "zstd_native": 14,
+    "brotli_x86_wide_narrow": 3,
+    "zstd_x86_wide_narrow": 3
+  },
+  "bounded_runtime_smoke": {
+    "round_trips": 8,
+    "old_stream_wire_checks": 4,
+    "large_logical_limit_checks": 4,
+    "input_cap_rejections": 4,
+    "output_cap_rejections": 8,
+    "same_path_checks": 4,
+    "non_stream_rejections": 2,
+    "rows": [
+      {
+        "codec": "br",
+        "flags": [],
+        "input_bytes": 88000,
+        "encoded_bytes": 160,
+        "wire_sha256": "5d0f53a82abdd0a2dfad0a09cc966b56d07cf32b55a36d8eb0317fe4baf8b335"
+      },
+      {
+        "codec": "br",
+        "flags": [
+          "--quality=0",
+          "--metadata=metadata-smoke"
+        ],
+        "input_bytes": 88000,
+        "encoded_bytes": 569,
+        "wire_sha256": "addb934657c5b88d7b9bdbc5521a9e3d4ce14c4e56295ccc153d8d59b4af0049"
+      },
+      {
+        "codec": "zstd",
+        "flags": [],
+        "input_bytes": 88000,
+        "encoded_bytes": 70,
+        "wire_sha256": "0e0ad82d8a13d12514faf08cb83ef6b0e99e46e6fcb33840fb5550accc863b1d"
+      },
+      {
+        "codec": "zstd",
+        "flags": [
+          "--strategy=fast",
+          "--window-log=10",
+          "--max-match-history-len=1024"
+        ],
+        "input_bytes": 88000,
+        "encoded_bytes": 754,
+        "wire_sha256": "67e6d932c7cfa32a5d56fe346198ea05e632ebe5e667eb3c76adaa2dabc5f13f"
+      }
+    ],
+    "sparse_4GiB_run": false,
+    "physical_IO_chunk": 32768
+  },
+  "post_source_close_runtime_smoke": [
+    {
+      "codec": "br",
+      "successful_samepath": true,
+      "rejected_samepath_preserved": true
+    },
+    {
+      "codec": "zstd",
+      "successful_samepath": true,
+      "rejected_samepath_preserved": true
+    }
+  ],
+  "current_binary_hashes": {
+    "brotli": "e3107da78ea0ec4fb8a3ccfb45efd09cea319c77411d593600950442be008f01",
+    "zstd": "dd4b7f75490fd6da18a3c0dfa206511b171c9efd6d51e63bc1c8b9964eb683fe"
+  },
+  "physical_chunk_bytes": 32768,
+  "logical_counters": "vort.StreamCount:32-bit u64,64-bit usize",
+  "file_size_source": "std.Io.File.Stat.size u64 -> checked StreamCount cast; no usize narrowing",
+  "original_one_shot_limits_unchanged": true,
+  "sparse_4GiB_run": false,
+  "ownership_note": "Only 7 CLI modules/files modified, shared stream_files IO helper added. No production/root/build/docs/Git edits. Legacy wire comparison uses frozen HEAD CLI with current library to isolate IO glue changes."
+}

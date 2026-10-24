@@ -1,0 +1,463 @@
+{
+  "count_note": "142 is the sum of TestFn entries executed across four artifacts. Shared core diagnostics occur in Brotli, Zstd and dedicated core artifacts; the four XXH64 tests occur in both Zstd and standalone XXH64. The count is not 142 unique behaviors or 142 new public QA names.",
+  "current_source_changes": {
+    "build.zig": {
+      "current_sha256": "36444193cafeb1861a72983f84ebb7c0556b3029ca6736b13ff71718b8a2652d",
+      "run_after_sha256": "d63efbf7975c5960c2ee30bd1005d2af903378155a68663fc17ef403e21b2534",
+      "run_before_sha256": "d63efbf7975c5960c2ee30bd1005d2af903378155a68663fc17ef403e21b2534"
+    },
+    "src/br/incremental/contracts_tests.zig": {
+      "current_sha256": "c2bb2b700bf0b34549c8afc164f07acd331448a2c9285955839be7db64773c3e",
+      "run_after_sha256": "fb43767013f7418092c1acbc3cf16a0e8423ad42d4a89c150605d42604874dba",
+      "run_before_sha256": "fb43767013f7418092c1acbc3cf16a0e8423ad42d4a89c150605d42604874dba"
+    },
+    "src/br/incremental/tests.zig": {
+      "current_sha256": "67fa0e2c9fffb923148ac5728585b814068ee1a85859e2cdaadf0a177069637c",
+      "run_after_sha256": "5d9068b2c66ddf5c130c39aa930833a2f0f1e2614ccaa4a7e31e2eb60eecbf84",
+      "run_before_sha256": "5d9068b2c66ddf5c130c39aa930833a2f0f1e2614ccaa4a7e31e2eb60eecbf84"
+    },
+    "src/zstd.zig": {
+      "current_sha256": "51dd5c0d8a481c0e0377832881731c1bde500bcb5e7351749a1979d309731ff2",
+      "run_after_sha256": "408224d4f9beb1fec1afd1445b9b9dff4595081906bb12adf423b090b03d4f6e",
+      "run_before_sha256": "408224d4f9beb1fec1afd1445b9b9dff4595081906bb12adf423b090b03d4f6e"
+    }
+  },
+  "execution_counts_are_per_artifact": true,
+  "groups": {
+    "native-debug": {
+      "core_tests": 5,
+      "families": {
+        "brotli": {
+          "binary_sha256": "f05cd067154568ca40aaf27282f5c18c2fcdc683deef26da86f9eab64f6426f2",
+          "compiler_binding": {
+            "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+            "compiled_source_changes_during_original_run": [],
+            "compiler_input_archive": "compiled-input-bytes.zip",
+            "computed_artifact_key": "279304bee413404530839ddd51d17f53",
+            "content_siphash_mismatches": 0,
+            "input_records": 1028,
+            "manifest_archive": "manifest-3f2fd636700a692868ea227f824fc364.txt",
+            "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/3f2fd636700a692868ea227f824fc364.txt",
+            "manifest_sha256": "394b3f2d944e4fdf3222e8024e62b32a35f2c79f8dde9a9707c9821637ac2930",
+            "missing_inputs": 0,
+            "restored_input_records": 2
+          },
+          "elf_class": 64,
+          "module_entries": 19,
+          "named_count": 58,
+          "test_count": 77
+        },
+        "core": {
+          "binary_sha256": "3d61173f69d1a7688815e4c1a3cdbed35b6f5ac48cfef0bba50542bdd1ae04fb",
+          "compiler_binding": {
+            "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+            "compiled_source_changes_during_original_run": [],
+            "compiler_input_archive": "compiled-input-bytes.zip",
+            "computed_artifact_key": "c70a1911ad6662571c62b3c99637ddc7",
+            "content_siphash_mismatches": 0,
+            "input_records": 817,
+            "manifest_archive": "manifest-c526d57b32ee1219d1d5b72d6050dc4b.txt",
+            "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/c526d57b32ee1219d1d5b72d6050dc4b.txt",
+            "manifest_sha256": "2eef2ca068b38734cee94a784144ec8843e591a8bdfba9b63d7c43a13589ba34",
+            "missing_inputs": 0,
+            "restored_input_records": 0
+          },
+          "elf_class": 64,
+          "module_entries": 0,
+          "named_count": 5,
+          "test_count": 5
+        },
+        "xxh64": {
+          "binary_sha256": "1013267311540ffa7d31ce19c715d8bd7c8bfa7622532d6fe0110898be289c8c",
+          "compiler_binding": {
+            "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+            "compiled_source_changes_during_original_run": [],
+            "compiler_input_archive": "compiled-input-bytes.zip",
+            "computed_artifact_key": "4b0fa9fd282932bbc2edd9d4af090123",
+            "content_siphash_mismatches": 0,
+            "input_records": 818,
+            "manifest_archive": "manifest-88f76d86df0b5afe849e740b7c7df719.txt",
+            "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/88f76d86df0b5afe849e740b7c7df719.txt",
+            "manifest_sha256": "f531151e345a6fc13943c94faf8ccda91c0455aeeddb5c78ad8b862ea6f79910",
+            "missing_inputs": 0,
+            "restored_input_records": 0
+          },
+          "elf_class": 64,
+          "module_entries": 1,
+          "named_count": 4,
+          "test_count": 5
+        },
+        "zstd": {
+          "binary_sha256": "1e54acda29e8086ad0ab6fb81ce584d1f13ff7c37881ef606f78fef0625714d2",
+          "compiler_binding": {
+            "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+            "compiled_source_changes_during_original_run": [],
+            "compiler_input_archive": "compiled-input-bytes.zip",
+            "computed_artifact_key": "94747f6d5e29865cba8236506c819d8e",
+            "content_siphash_mismatches": 0,
+            "input_records": 959,
+            "manifest_archive": "manifest-1f5c0a62c6c5a8540505c38044f30d89.txt",
+            "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/1f5c0a62c6c5a8540505c38044f30d89.txt",
+            "manifest_sha256": "f6652e3ef3894aa3492e8b9ead259456a28d80ef3991d1e95498c6586cfc5aa2",
+            "missing_inputs": 0,
+            "restored_input_records": 2
+          },
+          "elf_class": 64,
+          "module_entries": 15,
+          "named_count": 40,
+          "test_count": 55
+        }
+      },
+      "new_brotli_public_qa": 18,
+      "new_zstd_public_qa": 17,
+      "passed": 142,
+      "skipped": 0,
+      "status": "bound_passed",
+      "total": 142,
+      "xxh64_tests": 5
+    },
+    "native-releasefast": {
+      "core_tests": 5,
+      "families": {
+        "brotli": {
+          "binary_sha256": "4e0ea5aa5e92b0716c55f597b171d7df46948dd49861a96e94a837dbd7044817",
+          "compiler_binding": {
+            "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+            "compiled_source_changes_during_original_run": [],
+            "compiler_input_archive": "compiled-input-bytes.zip",
+            "computed_artifact_key": "4127d548971205f4b17207241bd8be4c",
+            "content_siphash_mismatches": 0,
+            "input_records": 1027,
+            "manifest_archive": "manifest-99d02ce052dea89417a200f2a4e2933d.txt",
+            "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/99d02ce052dea89417a200f2a4e2933d.txt",
+            "manifest_sha256": "b8e760cd42003f61ebe00c63c854064ac6d0090fed586b6adda31a918299fefc",
+            "missing_inputs": 0,
+            "restored_input_records": 2
+          },
+          "elf_class": 64,
+          "module_entries": 19,
+          "named_count": 58,
+          "test_count": 77
+        },
+        "core": {
+          "binary_sha256": "c451690b371de6ee725950577c66f2ccc2fb2797d5da7c6bca58e78fbf4b5f2e",
+          "compiler_binding": {
+            "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+            "compiled_source_changes_during_original_run": [],
+            "compiler_input_archive": "compiled-input-bytes.zip",
+            "computed_artifact_key": "32c3a537ebe8fc1579bf03392568d103",
+            "content_siphash_mismatches": 0,
+            "input_records": 816,
+            "manifest_archive": "manifest-53c4255fef81f1c49fd06144765f133a.txt",
+            "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/53c4255fef81f1c49fd06144765f133a.txt",
+            "manifest_sha256": "4138207db05728f31b9926aac72b4a1470834d0b6e7fd8f635fbca7df9a98505",
+            "missing_inputs": 0,
+            "restored_input_records": 0
+          },
+          "elf_class": 64,
+          "module_entries": 0,
+          "named_count": 5,
+          "test_count": 5
+        },
+        "xxh64": {
+          "binary_sha256": "3d4af9c7af18b97199d6756840904e5653a00bf6989fb7a596cac0cb6c5b98fe",
+          "compiler_binding": {
+            "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+            "compiled_source_changes_during_original_run": [],
+            "compiler_input_archive": "compiled-input-bytes.zip",
+            "computed_artifact_key": "2131f7748bd266021a1f48c63a691a15",
+            "content_siphash_mismatches": 0,
+            "input_records": 817,
+            "manifest_archive": "manifest-ddadebd4bca6a427ebdda6d8d5dddc1e.txt",
+            "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/ddadebd4bca6a427ebdda6d8d5dddc1e.txt",
+            "manifest_sha256": "6df57e8c4c8b2d91872815d6b99bfef17ff90e38d72414b13e5fb579d371b7aa",
+            "missing_inputs": 0,
+            "restored_input_records": 0
+          },
+          "elf_class": 64,
+          "module_entries": 1,
+          "named_count": 4,
+          "test_count": 5
+        },
+        "zstd": {
+          "binary_sha256": "656a06bd041eb0d1c35c9ba6595f33fe4f79235b9d36dd19656ba98b9782669d",
+          "compiler_binding": {
+            "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+            "compiled_source_changes_during_original_run": [],
+            "compiler_input_archive": "compiled-input-bytes.zip",
+            "computed_artifact_key": "6a1c8d938be1300219dc1516327bddac",
+            "content_siphash_mismatches": 0,
+            "input_records": 958,
+            "manifest_archive": "manifest-7362ca06b23db91858739d7c481951dc.txt",
+            "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/7362ca06b23db91858739d7c481951dc.txt",
+            "manifest_sha256": "622d02c97ec3a8ee5b31597d987ab3b852a554393648449124c39109e93c44f9",
+            "missing_inputs": 0,
+            "restored_input_records": 2
+          },
+          "elf_class": 64,
+          "module_entries": 15,
+          "named_count": 40,
+          "test_count": 55
+        }
+      },
+      "new_brotli_public_qa": 18,
+      "new_zstd_public_qa": 17,
+      "passed": 142,
+      "skipped": 0,
+      "status": "bound_passed",
+      "total": 142,
+      "xxh64_tests": 5
+    },
+    "x86-releasefast": {
+      "core_tests": 5,
+      "families": {
+        "brotli": {
+          "binary_sha256": "d21d61b4788296de88def2e6636fb06d9bdb252c34ebcfedc68ad49285aac6d5",
+          "compiler_binding": {
+            "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+            "compiled_source_changes_during_original_run": [],
+            "compiler_input_archive": "compiled-input-bytes.zip",
+            "computed_artifact_key": "a5ae207fc03d7cda2f2f87ef2e3953d1",
+            "content_siphash_mismatches": 0,
+            "input_records": 1027,
+            "manifest_archive": "manifest-da2793911788fef19b8d2357aaa2ef12.txt",
+            "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/da2793911788fef19b8d2357aaa2ef12.txt",
+            "manifest_sha256": "d1cdab5dcca21dd5cb2fb6a1a73763955152b32f1601fe30fde28af74769d55a",
+            "missing_inputs": 0,
+            "restored_input_records": 2
+          },
+          "elf_class": 32,
+          "module_entries": 19,
+          "named_count": 58,
+          "test_count": 77
+        },
+        "core": {
+          "binary_sha256": "109170a0290696f287c1d4a220f049958e70cbbc3c41020929d5e14bd16b44ec",
+          "compiler_binding": {
+            "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+            "compiled_source_changes_during_original_run": [],
+            "compiler_input_archive": "compiled-input-bytes.zip",
+            "computed_artifact_key": "29995d99fcee9e0a0e733890899dd92d",
+            "content_siphash_mismatches": 0,
+            "input_records": 816,
+            "manifest_archive": "manifest-608c8a8ad79d72e817a53635f6b5787f.txt",
+            "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/608c8a8ad79d72e817a53635f6b5787f.txt",
+            "manifest_sha256": "4138207db05728f31b9926aac72b4a1470834d0b6e7fd8f635fbca7df9a98505",
+            "missing_inputs": 0,
+            "restored_input_records": 0
+          },
+          "elf_class": 32,
+          "module_entries": 0,
+          "named_count": 5,
+          "test_count": 5
+        },
+        "xxh64": {
+          "binary_sha256": "a5618393fc7fc0509dde318a7e7358989170fa2511c875f8f72dd3d5eb05d267",
+          "compiler_binding": {
+            "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+            "compiled_source_changes_during_original_run": [],
+            "compiler_input_archive": "compiled-input-bytes.zip",
+            "computed_artifact_key": "37f8702b2b60379789add84d2b0db6e8",
+            "content_siphash_mismatches": 0,
+            "input_records": 817,
+            "manifest_archive": "manifest-2cf713a99936150b071c9eff809a1a8a.txt",
+            "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/2cf713a99936150b071c9eff809a1a8a.txt",
+            "manifest_sha256": "6df57e8c4c8b2d91872815d6b99bfef17ff90e38d72414b13e5fb579d371b7aa",
+            "missing_inputs": 0,
+            "restored_input_records": 0
+          },
+          "elf_class": 32,
+          "module_entries": 1,
+          "named_count": 4,
+          "test_count": 5
+        },
+        "zstd": {
+          "binary_sha256": "ccb81d9fe0422a79d6be16df041a4d82a34e66570e77bed1180e0107e5fa1284",
+          "compiler_binding": {
+            "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+            "compiled_source_changes_during_original_run": [],
+            "compiler_input_archive": "compiled-input-bytes.zip",
+            "computed_artifact_key": "e7933377c9b1431e282140efcd48018f",
+            "content_siphash_mismatches": 0,
+            "input_records": 958,
+            "manifest_archive": "manifest-06c2cbb85ba2d2b6954fc67ffd0bf7bc.txt",
+            "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/06c2cbb85ba2d2b6954fc67ffd0bf7bc.txt",
+            "manifest_sha256": "2f963fb27975915332c068d5600c846299ca0f068fb52defa34ac421bd8c2c56",
+            "missing_inputs": 0,
+            "restored_input_records": 2
+          },
+          "elf_class": 32,
+          "module_entries": 15,
+          "named_count": 40,
+          "test_count": 55
+        }
+      },
+      "new_brotli_public_qa": 18,
+      "new_zstd_public_qa": 17,
+      "passed": 142,
+      "skipped": 0,
+      "status": "bound_passed",
+      "total": 142,
+      "xxh64_tests": 5
+    }
+  },
+  "groups_logical_order": [
+    "native-debug",
+    "native-releasefast",
+    "x86-releasefast"
+  ],
+  "limitations": [
+    "Original compiler/test wire protocol was not captured by this audit. Per-entry pass follows from the original all-pass aggregate and independently extracted TestFn list; no extra test run is inferred.",
+    "The original Zstd log contains stderr text rendered by the build runner as failed command even though its step and aggregate pass. That text is archived verbatim and matches the frozen public QA print; success is based on original exit code plus all-pass summary.",
+    "Build-driver source is recorded by the original before/after SHA snapshots; test/object compiler manifests bind codec inputs and do not independently prove the parent build-driver artifact."
+  ],
+  "no_tests_reexecuted": true,
+  "object_bindings": {
+    "01608a6a49641bb635ec8065548b965d": {
+      "artifact_key": "01608a6a49641bb635ec8065548b965d",
+      "compiler_binding": {
+        "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+        "compiled_source_changes_during_original_run": [],
+        "compiler_input_archive": "compiled-input-bytes.zip",
+        "computed_artifact_key": "01608a6a49641bb635ec8065548b965d",
+        "content_siphash_mismatches": 0,
+        "input_records": 551,
+        "manifest_archive": "manifest-7d076fea874e5fe2dbc3db27fd342918.txt",
+        "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/7d076fea874e5fe2dbc3db27fd342918.txt",
+        "manifest_sha256": "11ab34a505d2f7261da1a6a585d53c91fd6932a6f924017f8006d552f3b299b0",
+        "missing_inputs": 0,
+        "restored_input_records": 0
+      },
+      "name": "vort-zstd-huffman-x2.o",
+      "sha256": "dea7b78dca6b25e38bc2747d31e317f24ae90cfa4d4419523517ce861035c010"
+    },
+    "17ba7d6d840dc8d13c7ed814b6d9c8e2": {
+      "artifact_key": "17ba7d6d840dc8d13c7ed814b6d9c8e2",
+      "compiler_binding": {
+        "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+        "compiled_source_changes_during_original_run": [],
+        "compiler_input_archive": "compiled-input-bytes.zip",
+        "computed_artifact_key": "17ba7d6d840dc8d13c7ed814b6d9c8e2",
+        "content_siphash_mismatches": 0,
+        "input_records": 551,
+        "manifest_archive": "manifest-e924ab373055c8b59144abd857c98527.txt",
+        "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/e924ab373055c8b59144abd857c98527.txt",
+        "manifest_sha256": "11ab34a505d2f7261da1a6a585d53c91fd6932a6f924017f8006d552f3b299b0",
+        "missing_inputs": 0,
+        "restored_input_records": 0
+      },
+      "name": "vort-zstd-huffman-x2.o",
+      "sha256": "cd1211a4a3de0b8a73cf50a5f2e3547113fef817f755e6248ee5ce4aa2dee03d"
+    },
+    "7960a9e44560a2f132911be94cf53cac": {
+      "artifact_key": "7960a9e44560a2f132911be94cf53cac",
+      "compiler_binding": {
+        "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+        "compiled_source_changes_during_original_run": [],
+        "compiler_input_archive": "compiled-input-bytes.zip",
+        "computed_artifact_key": "7960a9e44560a2f132911be94cf53cac",
+        "content_siphash_mismatches": 0,
+        "input_records": 549,
+        "manifest_archive": "manifest-aa36c233555aea2218600fac55e5f20b.txt",
+        "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/aa36c233555aea2218600fac55e5f20b.txt",
+        "manifest_sha256": "db7d9b220adf6328c5d3a42e36d0da596c4aea0d40d7068f2cbebb3b36da0d52",
+        "missing_inputs": 0,
+        "restored_input_records": 0
+      },
+      "name": "vort-br-record-optimal.o",
+      "sha256": "70aeead567f4b55522b9e63f0eb50d899d52b12ce823d40dea071c89593f1d97"
+    },
+    "a975e198daf1c08dc02b311878b81563": {
+      "artifact_key": "a975e198daf1c08dc02b311878b81563",
+      "compiler_binding": {
+        "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+        "compiled_source_changes_during_original_run": [],
+        "compiler_input_archive": "compiled-input-bytes.zip",
+        "computed_artifact_key": "a975e198daf1c08dc02b311878b81563",
+        "content_siphash_mismatches": 0,
+        "input_records": 549,
+        "manifest_archive": "manifest-84572f524bab129a45e7a0b3964794ea.txt",
+        "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/84572f524bab129a45e7a0b3964794ea.txt",
+        "manifest_sha256": "db7d9b220adf6328c5d3a42e36d0da596c4aea0d40d7068f2cbebb3b36da0d52",
+        "missing_inputs": 0,
+        "restored_input_records": 0
+      },
+      "name": "vort-br-record-optimal.o",
+      "sha256": "fff97c75a532a116927b19344ad98e698e7f04584c17611f72cb68f6beba247d"
+    },
+    "b0d047ba2b114a510a29fad6255d7eaf": {
+      "artifact_key": "b0d047ba2b114a510a29fad6255d7eaf",
+      "compiler_binding": {
+        "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+        "compiled_source_changes_during_original_run": [],
+        "compiler_input_archive": "compiled-input-bytes.zip",
+        "computed_artifact_key": "b0d047ba2b114a510a29fad6255d7eaf",
+        "content_siphash_mismatches": 0,
+        "input_records": 549,
+        "manifest_archive": "manifest-f0e989d2962fadc71fdc1b311f7b87b0.txt",
+        "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/f0e989d2962fadc71fdc1b311f7b87b0.txt",
+        "manifest_sha256": "db7d9b220adf6328c5d3a42e36d0da596c4aea0d40d7068f2cbebb3b36da0d52",
+        "missing_inputs": 0,
+        "restored_input_records": 0
+      },
+      "name": "vort-br-record-optimal.o",
+      "sha256": "016f50b7b6a6748daecdb3ae56c89c1bfa527f02123c80a6601dd10a158a8def"
+    },
+    "ff73a3e98d3bd346f40ab758e02f8735": {
+      "artifact_key": "ff73a3e98d3bd346f40ab758e02f8735",
+      "compiler_binding": {
+        "algorithm": "Zig std.Build.Cache.hasher_init SipHash128(1,3), including manifest initial key and every exact input digest",
+        "compiled_source_changes_during_original_run": [],
+        "compiler_input_archive": "compiled-input-bytes.zip",
+        "computed_artifact_key": "ff73a3e98d3bd346f40ab758e02f8735",
+        "content_siphash_mismatches": 0,
+        "input_records": 551,
+        "manifest_archive": "manifest-8df7618d81fd77abb251939784541e52.txt",
+        "manifest_path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/h/8df7618d81fd77abb251939784541e52.txt",
+        "manifest_sha256": "11ab34a505d2f7261da1a6a585d53c91fd6932a6f924017f8006d552f3b299b0",
+        "missing_inputs": 0,
+        "restored_input_records": 0
+      },
+      "name": "vort-zstd-huffman-x2.o",
+      "sha256": "bec37f166acfd38aa0a3879cc90da1f56da95922de2e2d824e23848bb9c75849"
+    }
+  },
+  "original_source_after_sha256": "6befd7e4de6b6945c92aa832f91ccd9b6ed908e07400b0f6407dc289af9aea06",
+  "original_source_before_sha256": "6befd7e4de6b6945c92aa832f91ccd9b6ed908e07400b0f6407dc289af9aea06",
+  "restored_source_provenance": [
+    {
+      "current_sha256": "51dd5c0d8a481c0e0377832881731c1bde500bcb5e7351749a1979d309731ff2",
+      "git_blob_oid": "eb047ca4b04f615fcc87d2e405bebef68aef6c52",
+      "git_ref": "1cfd65c9",
+      "kind": "git_blob_matches_run_before_sha256",
+      "original_path": "/home/passchaos/project-z/vort-stream-contracts/src/zstd.zig",
+      "project_path": "src/zstd.zig",
+      "restored_path": "/tmp/vort-stream-counter-final-20261024/aggregate-binding/restored-source/src/zstd.zig",
+      "run_before_sha256": "408224d4f9beb1fec1afd1445b9b9dff4595081906bb12adf423b090b03d4f6e"
+    },
+    {
+      "current_sha256": "67fa0e2c9fffb923148ac5728585b814068ee1a85859e2cdaadf0a177069637c",
+      "git_blob_oid": "0868771fa593afba510ee6ea483baf26a0dc128c",
+      "git_ref": "1cfd65c9",
+      "kind": "git_blob_matches_run_before_sha256",
+      "original_path": "/home/passchaos/project-z/vort-stream-contracts/src/br/incremental/tests.zig",
+      "project_path": "src/br/incremental/tests.zig",
+      "restored_path": "/tmp/vort-stream-counter-final-20261024/aggregate-binding/restored-source/src/br/incremental/tests.zig",
+      "run_before_sha256": "5d9068b2c66ddf5c130c39aa930833a2f0f1e2614ccaa4a7e31e2eb60eecbf84"
+    },
+    {
+      "current_sha256": "c2bb2b700bf0b34549c8afc164f07acd331448a2c9285955839be7db64773c3e",
+      "git_blob_oid": "63aabfb9bae25f4fa897a22f86b7389943330a33",
+      "git_ref": "1cfd65c9",
+      "kind": "git_blob_matches_run_before_sha256",
+      "original_path": "/home/passchaos/project-z/vort-stream-contracts/src/br/incremental/contracts_tests.zig",
+      "project_path": "src/br/incremental/contracts_tests.zig",
+      "restored_path": "/tmp/vort-stream-counter-final-20261024/aggregate-binding/restored-source/src/br/incremental/contracts_tests.zig",
+      "run_before_sha256": "fb43767013f7418092c1acbc3cf16a0e8423ad42d4a89c150605d42604874dba"
+    }
+  ],
+  "scope": "Only the original 142-test aggregate logs and their 12 actual runtime ELF artifacts are audited. Named tests, module entries and exact compiler-input hashes are bound; later current-source edits are shown separately. Other failures/family gates are outside this audit.",
+  "source_unchanged_during_original_run": true,
+  "status": "bound_passed",
+  "utc": "2026-10-24T15:32:06.221293+00:00"
+}

@@ -644,6 +644,15 @@ performance. The [current industry gap audit](docs/performance/industry-gap-audi
 records the remaining API/encoder capabilities, dated competitor evidence and
 next functionality-first priorities.
 
+Brotli and Zstd incremental APIs use `StreamCount` for cumulative bytes,
+pledges and diagnostic offsets: `u64` on 32-bit targets, with native 64-bit
+public types preserved. Local buffers and `StepResult.progress` retain
+`usize`. Zstd history positions and streaming XXH64 also retain full length
+information; both decoder input policies preflight logical output in the wide
+domain. Their `stream-file` commands use bounded 32 KiB file I/O and atomic
+output publication. See the [stream-count contract](docs/formats/stream-counts.md)
+for physical limits, cyclic coded-bit positions and verification scope.
+
 Brotli HQ also exposes independent
 [complete copy lengths and per-plan pricing limits](docs/formats/brotli-complete-copy-lengths.md).
 The default remains sampled. Complete search retains exact command selectors

@@ -1,0 +1,22 @@
+{
+  "final_report": "/tmp/vort-stream-counter-final-20261024/cli-large-file/final-report.json",
+  "final_report_sha256": "84567c65fb89648e2f2e9cea8235c7ada80d5a6764ecffda28f50adc2e381953",
+  "evidence_archive": "/tmp/vort-stream-counter-final-20261024/cli-large-file/evidence-without-sparse-source.zip",
+  "evidence_archive_sha256": "b646777d1d8ded1bead3d68ecb355ad7947a8298fb8d5bee4f6f6867400b8bae",
+  "tool_frozen_sha256": "ca9cb05ec597c5170f8823a4e01fbbf3357a76ea620157db5ea80775acbfe002",
+  "logical_source_bytes": 4294967313,
+  "allocated_source_bytes": 4096,
+  "corrected_brotli_wire_bytes": 13205545,
+  "explicit_zstd_wire_bytes": 16777254,
+  "decoded_all_refs_sha256": "31193f7cfaeafc0300f827ba141d122e680b490584644208035a1547e2a37747",
+  "actual_32bit": true,
+  "attempts": {
+    "brotli": 2,
+    "zstd": 2
+  },
+  "current_production_source_identity_claimed": false,
+  "final_report_updated_outside_original_archive": true,
+  "closed_utc": "2026-10-24T15:40:27.650269+00:00",
+  "finalized_evidence_archive": "/tmp/vort-stream-counter-final-20261024/cli-large-file/finalized-evidence-without-sparse-source.zip",
+  "finalized_evidence_archive_sha256": "40eaa13e26f40b5a111e7b241ca0b81e02334907dd59b89c7af4e2a80becb5f8"
+}

@@ -1,0 +1,910 @@
+{
+  "completed_utc": "2026-10-24T15:51:41.861744+00:00",
+  "counts": {
+    "actual_reference_encode_calls": 2,
+    "actual_upstream_decode_calls": 4,
+    "actual_vort_encode_runs": 2,
+    "actual_vort_public_decoder_runs": 8
+  },
+  "fixture": {
+    "alphabet_size": 64,
+    "bytes": 131072,
+    "generator": "independent Python xorshift32 seed=0x9e3779b9; shifts 13,17,5; emit high 6 bits",
+    "maximum_symbol": 63,
+    "minimum_symbol": 0,
+    "sha256": "d21bfb6251b9996d5a0012c77d0e30c610644dbfd43ed2a8f51b2436e4294556"
+  },
+  "native_x86_wire_byte_equal": true,
+  "scope": "one 128KiB six-bit-alphabet corpus; public APIs; no benchmark or large-stream loop",
+  "source_delta": {},
+  "source_window_equal": true,
+  "started_utc": "2026-10-24T15:49:57.255454+00:00",
+  "status": "PASS",
+  "targets": {
+    "native64": {
+      "elf": {
+        "build_mode": "ReleaseFast",
+        "bytes": 8326960,
+        "elf_class_bits": 64,
+        "elf_machine": 62,
+        "linked_object": {
+          "bytes": 159232,
+          "path": "/tmp/vort-stream-counter-final-20261024/huffman-portability/native64/lib/huffman-x2-native64.o",
+          "sha256": "b9598ecf9e252cd6d5e1f4b419b60206e0e1683396bb5e5dd5350e66ddeea9e7"
+        },
+        "path": "/tmp/vort-stream-counter-final-20261024/huffman-portability/native64/bin/huffman-public-native64",
+        "sha256": "1ebd5a313ad75acacd20e6f9fb7f188437eaeed56160835e4d71c75be65e7799",
+        "target": "x86_64-linux-musl"
+      },
+      "encode": {
+        "input_bytes": 131072,
+        "mode": "encode",
+        "public_api": "vort.zstd.encodeLiteralOnlyFrameAlloc",
+        "usize_bits": 64,
+        "wire_bytes": 98369
+      },
+      "shape": {
+        "block_count": 1,
+        "blocks": [
+          {
+            "declared_block_size": 98353,
+            "header_offset": 9,
+            "last": true,
+            "literals": {
+              "compressed_size": 98347,
+              "compressed_size_high14": 6,
+              "field_bits": 18,
+              "header_bytes": 5,
+              "header_hex": "0e00e00a60",
+              "header_high32": 96,
+              "header_integer": 412499312654,
+              "kind": 2,
+              "regenerated_size": 131072,
+              "sequence_count": 0,
+              "size_format": 3
+            },
+            "payload_offset": 12,
+            "physical_payload_size": 98353,
+            "type": 2
+          }
+        ],
+        "checksum": true,
+        "content_size": 131072,
+        "dictionary_id": 0,
+        "frame_descriptor": 164,
+        "single_segment": true,
+        "window_descriptor": null,
+        "wire_bytes": 98369,
+        "wire_sha256": "bc99474c50e0ad426c91a4bea3f1f1753bb624d5b37d36fc45eab3ae1578ee80"
+      },
+      "source_binding": {
+        "actual_inputs_before_after_current_equal": true,
+        "actual_repository_dependency_probe_input_count": 1149,
+        "actual_unique_input_count": 1985,
+        "compiler_manifest_count": 4,
+        "derived_cache_elf_matches_emitted_elf": [
+          {
+            "bytes": 8326960,
+            "path": "/tmp/vort-stream-counter-final-20261024/huffman-portability/native64/cache/o/7ee992a7b6d670808ebca1b0fd342085/huffman-public-native64",
+            "sha256": "1ebd5a313ad75acacd20e6f9fb7f188437eaeed56160835e4d71c75be65e7799"
+          }
+        ],
+        "derived_cache_object_matches_linked_object": [
+          {
+            "bytes": 159232,
+            "path": "/tmp/vort-stream-counter-final-20261024/huffman-portability/native64/cache/o/a5203831ede04a48664e9866c759190b/huffman-x2-native64.o",
+            "sha256": "b9598ecf9e252cd6d5e1f4b419b60206e0e1683396bb5e5dd5350e66ddeea9e7"
+          }
+        ],
+        "input_report": "native64-compiler-inputs.json",
+        "input_report_sha256": "8bbcd9c3dc6cfcf70bc399da9f71c385915e99397daaaf44e35afb712e8ad81a",
+        "method": "explicit compile/link argv + direct emitted ELF/object hashes + before/after source hashes + verified compiler manifest SipHash input contents"
+      }
+    },
+    "x86": {
+      "elf": {
+        "build_mode": "ReleaseFast",
+        "bytes": 6720996,
+        "elf_class_bits": 32,
+        "elf_machine": 3,
+        "linked_object": {
+          "bytes": 97740,
+          "path": "/tmp/vort-stream-counter-final-20261024/huffman-portability/x86/lib/huffman-x2-x86.o",
+          "sha256": "56e66e6280b1cd5b94d48facf2051e99026b0d6e89bbc66b9b6354b32b530bf0"
+        },
+        "path": "/tmp/vort-stream-counter-final-20261024/huffman-portability/x86/bin/huffman-public-x86",
+        "sha256": "a0a04090fb94c8e113af56d257dd224d432293dfa21a2d9aceb2a4f84d8c35b0",
+        "target": "x86-linux-musl"
+      },
+      "encode": {
+        "input_bytes": 131072,
+        "mode": "encode",
+        "public_api": "vort.zstd.encodeLiteralOnlyFrameAlloc",
+        "usize_bits": 32,
+        "wire_bytes": 98369
+      },
+      "shape": {
+        "block_count": 1,
+        "blocks": [
+          {
+            "declared_block_size": 98353,
+            "header_offset": 9,
+            "last": true,
+            "literals": {
+              "compressed_size": 98347,
+              "compressed_size_high14": 6,
+              "field_bits": 18,
+              "header_bytes": 5,
+              "header_hex": "0e00e00a60",
+              "header_high32": 96,
+              "header_integer": 412499312654,
+              "kind": 2,
+              "regenerated_size": 131072,
+              "sequence_count": 0,
+              "size_format": 3
+            },
+            "payload_offset": 12,
+            "physical_payload_size": 98353,
+            "type": 2
+          }
+        ],
+        "checksum": true,
+        "content_size": 131072,
+        "dictionary_id": 0,
+        "frame_descriptor": 164,
+        "single_segment": true,
+        "window_descriptor": null,
+        "wire_bytes": 98369,
+        "wire_sha256": "bc99474c50e0ad426c91a4bea3f1f1753bb624d5b37d36fc45eab3ae1578ee80"
+      },
+      "source_binding": {
+        "actual_inputs_before_after_current_equal": true,
+        "actual_repository_dependency_probe_input_count": 1149,
+        "actual_unique_input_count": 1985,
+        "compiler_manifest_count": 4,
+        "derived_cache_elf_matches_emitted_elf": [
+          {
+            "bytes": 6720996,
+            "path": "/tmp/vort-stream-counter-final-20261024/huffman-portability/x86/cache/o/ed6f2ef67fb9285b34c1ec39ba2a4f75/huffman-public-x86",
+            "sha256": "a0a04090fb94c8e113af56d257dd224d432293dfa21a2d9aceb2a4f84d8c35b0"
+          }
+        ],
+        "derived_cache_object_matches_linked_object": [
+          {
+            "bytes": 97740,
+            "path": "/tmp/vort-stream-counter-final-20261024/huffman-portability/x86/cache/o/05bf0bdfb132eb7032479376ae06e78c/huffman-x2-x86.o",
+            "sha256": "56e66e6280b1cd5b94d48facf2051e99026b0d6e89bbc66b9b6354b32b530bf0"
+          }
+        ],
+        "input_report": "x86-compiler-inputs.json",
+        "input_report_sha256": "e699dea083c90a42ffa3ae27fc0d5bf5653d0a76d19e21b7df4b9a00a39bd86b",
+        "method": "explicit compile/link argv + direct emitted ELF/object hashes + before/after source hashes + verified compiler manifest SipHash input contents"
+      }
+    }
+  },
+  "upstream_decodes": [
+    {
+      "byte_equal_independent_oracle": true,
+      "input_wire_sha256": "bc99474c50e0ad426c91a4bea3f1f1753bb624d5b37d36fc45eab3ae1578ee80",
+      "output_bytes": 131072,
+      "output_path": "/tmp/vort-stream-counter-final-20261024/huffman-portability/libzstd-1.6.0-native64-decoded.bin",
+      "output_sha256": "d21bfb6251b9996d5a0012c77d0e30c610644dbfd43ed2a8f51b2436e4294556",
+      "reference": "libzstd-1.6.0",
+      "runtime": {
+        "api": [
+          "ZSTD_compress(level=1)",
+          "ZSTD_decompress"
+        ],
+        "runtime_path": "/home/passchaos/Work/zstd/lib/obj/conf_5c583a1f84006a106cd7292ce5d65f11/dynamic/libzstd.so.1.6.0",
+        "runtime_sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e",
+        "runtime_version_number": 10600,
+        "runtime_version_string": "1.6.0"
+      },
+      "target_wire": "native64"
+    },
+    {
+      "byte_equal_independent_oracle": true,
+      "input_wire_sha256": "bc99474c50e0ad426c91a4bea3f1f1753bb624d5b37d36fc45eab3ae1578ee80",
+      "output_bytes": 131072,
+      "output_path": "/tmp/vort-stream-counter-final-20261024/huffman-portability/libzstd-1.6.0-x86-decoded.bin",
+      "output_sha256": "d21bfb6251b9996d5a0012c77d0e30c610644dbfd43ed2a8f51b2436e4294556",
+      "reference": "libzstd-1.6.0",
+      "runtime": {
+        "api": [
+          "ZSTD_compress(level=1)",
+          "ZSTD_decompress"
+        ],
+        "runtime_path": "/home/passchaos/Work/zstd/lib/obj/conf_5c583a1f84006a106cd7292ce5d65f11/dynamic/libzstd.so.1.6.0",
+        "runtime_sha256": "c76f4c4457df67a5e0c7bb6bb4f58b9857cf4f2cdd7925bfb9345daac4e6b83e",
+        "runtime_version_number": 10600,
+        "runtime_version_string": "1.6.0"
+      },
+      "target_wire": "x86"
+    },
+    {
+      "byte_equal_independent_oracle": true,
+      "input_wire_sha256": "bc99474c50e0ad426c91a4bea3f1f1753bb624d5b37d36fc45eab3ae1578ee80",
+      "output_bytes": 131072,
+      "output_path": "/tmp/vort-stream-counter-final-20261024/huffman-portability/libzstd-1.4.8-native64-decoded.bin",
+      "output_sha256": "d21bfb6251b9996d5a0012c77d0e30c610644dbfd43ed2a8f51b2436e4294556",
+      "reference": "libzstd-1.4.8",
+      "runtime": {
+        "api": [
+          "ZSTD_compress(level=1)",
+          "ZSTD_decompress"
+        ],
+        "runtime_path": "/usr/lib/x86_64-linux-gnu/libzstd.so.1.4.8",
+        "runtime_sha256": "5df4f4df42d76270bb6981fabc7c1fdccd8ad28a23d84d67f73203fb3f537667",
+        "runtime_version_number": 10408,
+        "runtime_version_string": "1.4.8"
+      },
+      "target_wire": "native64"
+    },
+    {
+      "byte_equal_independent_oracle": true,
+      "input_wire_sha256": "bc99474c50e0ad426c91a4bea3f1f1753bb624d5b37d36fc45eab3ae1578ee80",
+      "output_bytes": 131072,
+      "output_path": "/tmp/vort-stream-counter-final-20261024/huffman-portability/libzstd-1.4.8-x86-decoded.bin",
+      "output_sha256": "d21bfb6251b9996d5a0012c77d0e30c610644dbfd43ed2a8f51b2436e4294556",
+      "reference": "libzstd-1.4.8",
+      "runtime": {
+        "api": [
+          "ZSTD_compress(level=1)",
+          "ZSTD_decompress"
+        ],
+        "runtime_path": "/usr/lib/x86_64-linux-gnu/libzstd.so.1.4.8",
+        "runtime_sha256": "5df4f4df42d76270bb6981fabc7c1fdccd8ad28a23d84d67f73203fb3f537667",
+        "runtime_version_number": 10408,
+        "runtime_version_string": "1.4.8"
+      },
+      "target_wire": "x86"
+    }
+  ],
+  "vort_decodes": [
+    {
+      "byte_equal_independent_oracle": true,
+      "input_wire_sha256": "fff94125338956fd7be0e00800b0c62ab57c1fe84278cc7848ecb30ba8cd1766",
+      "output_bytes": 131072,
+      "output_sha256": "d21bfb6251b9996d5a0012c77d0e30c610644dbfd43ed2a8f51b2436e4294556",
+      "policy": "block_stream",
+      "reference_shape": {
+        "block_count": 1,
+        "blocks": [
+          {
+            "declared_block_size": 98353,
+            "header_offset": 9,
+            "last": true,
+            "literals": {
+              "compressed_size": 98347,
+              "compressed_size_high14": 6,
+              "field_bits": 18,
+              "header_bytes": 5,
+              "header_hex": "0e00e00a60",
+              "header_high32": 96,
+              "header_integer": 412499312654,
+              "kind": 2,
+              "regenerated_size": 131072,
+              "sequence_count": 0,
+              "size_format": 3
+            },
+            "payload_offset": 12,
+            "physical_payload_size": 98353,
+            "type": 2
+          }
+        ],
+        "checksum": false,
+        "content_size": 131072,
+        "dictionary_id": 0,
+        "frame_descriptor": 160,
+        "single_segment": true,
+        "window_descriptor": null,
+        "wire_bytes": 98365,
+        "wire_sha256": "fff94125338956fd7be0e00800b0c62ab57c1fe84278cc7848ecb30ba8cd1766"
+      },
+      "reference_wire": "libzstd-1.6.0",
+      "result": {
+        "calls": 41,
+        "input_consumed": 98365,
+        "mode": "decode",
+        "oracle_equal": true,
+        "output_bytes": 131072,
+        "policy": "block_stream",
+        "public_api": "vort.ZstdNativeIncrementalFrameDecoder",
+        "saw_block_stream": true,
+        "snapshot": {
+          "data_frame_count": 1,
+          "decoded_len": 0,
+          "decoded_remaining": 0,
+          "error_input_offset": null,
+          "error_output_offset": null,
+          "input_received": 98365,
+          "last_error_name": "",
+          "last_error_phase": null,
+          "last_step_progress": {
+            "input_read": 0,
+            "output_written": 16
+          },
+          "output_written": 131072,
+          "peak_working_bytes": 261856,
+          "phase": "done",
+          "required_dictionary_id": null,
+          "skippable_event_count": 0,
+          "skippable_events_captured": 0,
+          "skippable_total": 0,
+          "skippable_truncated": false,
+          "skippable_written": 0,
+          "trailing_input_bytes": 0,
+          "working_bytes": 261856
+        },
+        "usize_bits": 64,
+        "wire_bytes": 98365
+      },
+      "target": "native64"
+    },
+    {
+      "byte_equal_independent_oracle": true,
+      "input_wire_sha256": "fff94125338956fd7be0e00800b0c62ab57c1fe84278cc7848ecb30ba8cd1766",
+      "output_bytes": 131072,
+      "output_sha256": "d21bfb6251b9996d5a0012c77d0e30c610644dbfd43ed2a8f51b2436e4294556",
+      "policy": "prevalidated_frame",
+      "reference_shape": {
+        "block_count": 1,
+        "blocks": [
+          {
+            "declared_block_size": 98353,
+            "header_offset": 9,
+            "last": true,
+            "literals": {
+              "compressed_size": 98347,
+              "compressed_size_high14": 6,
+              "field_bits": 18,
+              "header_bytes": 5,
+              "header_hex": "0e00e00a60",
+              "header_high32": 96,
+              "header_integer": 412499312654,
+              "kind": 2,
+              "regenerated_size": 131072,
+              "sequence_count": 0,
+              "size_format": 3
+            },
+            "payload_offset": 12,
+            "physical_payload_size": 98353,
+            "type": 2
+          }
+        ],
+        "checksum": false,
+        "content_size": 131072,
+        "dictionary_id": 0,
+        "frame_descriptor": 160,
+        "single_segment": true,
+        "window_descriptor": null,
+        "wire_bytes": 98365,
+        "wire_sha256": "fff94125338956fd7be0e00800b0c62ab57c1fe84278cc7848ecb30ba8cd1766"
+      },
+      "reference_wire": "libzstd-1.6.0",
+      "result": {
+        "calls": 41,
+        "input_consumed": 98365,
+        "mode": "decode",
+        "oracle_equal": true,
+        "output_bytes": 131072,
+        "policy": "prevalidated_frame",
+        "public_api": "vort.ZstdNativeIncrementalFrameDecoder",
+        "saw_block_stream": true,
+        "snapshot": {
+          "data_frame_count": 1,
+          "decoded_len": 0,
+          "decoded_remaining": 0,
+          "error_input_offset": null,
+          "error_output_offset": null,
+          "input_received": 98365,
+          "last_error_name": "",
+          "last_error_phase": null,
+          "last_step_progress": {
+            "input_read": 0,
+            "output_written": 16
+          },
+          "output_written": 131072,
+          "peak_working_bytes": 262048,
+          "phase": "done",
+          "required_dictionary_id": null,
+          "skippable_event_count": 0,
+          "skippable_events_captured": 0,
+          "skippable_total": 0,
+          "skippable_truncated": false,
+          "skippable_written": 0,
+          "trailing_input_bytes": 0,
+          "working_bytes": 262048
+        },
+        "usize_bits": 64,
+        "wire_bytes": 98365
+      },
+      "target": "native64"
+    },
+    {
+      "byte_equal_independent_oracle": true,
+      "input_wire_sha256": "fff94125338956fd7be0e00800b0c62ab57c1fe84278cc7848ecb30ba8cd1766",
+      "output_bytes": 131072,
+      "output_sha256": "d21bfb6251b9996d5a0012c77d0e30c610644dbfd43ed2a8f51b2436e4294556",
+      "policy": "block_stream",
+      "reference_shape": {
+        "block_count": 1,
+        "blocks": [
+          {
+            "declared_block_size": 98353,
+            "header_offset": 9,
+            "last": true,
+            "literals": {
+              "compressed_size": 98347,
+              "compressed_size_high14": 6,
+              "field_bits": 18,
+              "header_bytes": 5,
+              "header_hex": "0e00e00a60",
+              "header_high32": 96,
+              "header_integer": 412499312654,
+              "kind": 2,
+              "regenerated_size": 131072,
+              "sequence_count": 0,
+              "size_format": 3
+            },
+            "payload_offset": 12,
+            "physical_payload_size": 98353,
+            "type": 2
+          }
+        ],
+        "checksum": false,
+        "content_size": 131072,
+        "dictionary_id": 0,
+        "frame_descriptor": 160,
+        "single_segment": true,
+        "window_descriptor": null,
+        "wire_bytes": 98365,
+        "wire_sha256": "fff94125338956fd7be0e00800b0c62ab57c1fe84278cc7848ecb30ba8cd1766"
+      },
+      "reference_wire": "libzstd-1.6.0",
+      "result": {
+        "calls": 41,
+        "input_consumed": 98365,
+        "mode": "decode",
+        "oracle_equal": true,
+        "output_bytes": 131072,
+        "policy": "block_stream",
+        "public_api": "vort.ZstdNativeIncrementalFrameDecoder",
+        "saw_block_stream": true,
+        "snapshot": {
+          "data_frame_count": 1,
+          "decoded_len": 0,
+          "decoded_remaining": 0,
+          "error_input_offset": null,
+          "error_output_offset": null,
+          "input_received": 98365,
+          "last_error_name": "",
+          "last_error_phase": null,
+          "last_step_progress": {
+            "input_read": 0,
+            "output_written": 16
+          },
+          "output_written": 131072,
+          "peak_working_bytes": 261856,
+          "phase": "done",
+          "required_dictionary_id": null,
+          "skippable_event_count": 0,
+          "skippable_events_captured": 0,
+          "skippable_total": 0,
+          "skippable_truncated": false,
+          "skippable_written": 0,
+          "trailing_input_bytes": 0,
+          "working_bytes": 261856
+        },
+        "usize_bits": 32,
+        "wire_bytes": 98365
+      },
+      "target": "x86"
+    },
+    {
+      "byte_equal_independent_oracle": true,
+      "input_wire_sha256": "fff94125338956fd7be0e00800b0c62ab57c1fe84278cc7848ecb30ba8cd1766",
+      "output_bytes": 131072,
+      "output_sha256": "d21bfb6251b9996d5a0012c77d0e30c610644dbfd43ed2a8f51b2436e4294556",
+      "policy": "prevalidated_frame",
+      "reference_shape": {
+        "block_count": 1,
+        "blocks": [
+          {
+            "declared_block_size": 98353,
+            "header_offset": 9,
+            "last": true,
+            "literals": {
+              "compressed_size": 98347,
+              "compressed_size_high14": 6,
+              "field_bits": 18,
+              "header_bytes": 5,
+              "header_hex": "0e00e00a60",
+              "header_high32": 96,
+              "header_integer": 412499312654,
+              "kind": 2,
+              "regenerated_size": 131072,
+              "sequence_count": 0,
+              "size_format": 3
+            },
+            "payload_offset": 12,
+            "physical_payload_size": 98353,
+            "type": 2
+          }
+        ],
+        "checksum": false,
+        "content_size": 131072,
+        "dictionary_id": 0,
+        "frame_descriptor": 160,
+        "single_segment": true,
+        "window_descriptor": null,
+        "wire_bytes": 98365,
+        "wire_sha256": "fff94125338956fd7be0e00800b0c62ab57c1fe84278cc7848ecb30ba8cd1766"
+      },
+      "reference_wire": "libzstd-1.6.0",
+      "result": {
+        "calls": 41,
+        "input_consumed": 98365,
+        "mode": "decode",
+        "oracle_equal": true,
+        "output_bytes": 131072,
+        "policy": "prevalidated_frame",
+        "public_api": "vort.ZstdNativeIncrementalFrameDecoder",
+        "saw_block_stream": true,
+        "snapshot": {
+          "data_frame_count": 1,
+          "decoded_len": 0,
+          "decoded_remaining": 0,
+          "error_input_offset": null,
+          "error_output_offset": null,
+          "input_received": 98365,
+          "last_error_name": "",
+          "last_error_phase": null,
+          "last_step_progress": {
+            "input_read": 0,
+            "output_written": 16
+          },
+          "output_written": 131072,
+          "peak_working_bytes": 262048,
+          "phase": "done",
+          "required_dictionary_id": null,
+          "skippable_event_count": 0,
+          "skippable_events_captured": 0,
+          "skippable_total": 0,
+          "skippable_truncated": false,
+          "skippable_written": 0,
+          "trailing_input_bytes": 0,
+          "working_bytes": 262048
+        },
+        "usize_bits": 32,
+        "wire_bytes": 98365
+      },
+      "target": "x86"
+    },
+    {
+      "byte_equal_independent_oracle": true,
+      "input_wire_sha256": "fff94125338956fd7be0e00800b0c62ab57c1fe84278cc7848ecb30ba8cd1766",
+      "output_bytes": 131072,
+      "output_sha256": "d21bfb6251b9996d5a0012c77d0e30c610644dbfd43ed2a8f51b2436e4294556",
+      "policy": "block_stream",
+      "reference_shape": {
+        "block_count": 1,
+        "blocks": [
+          {
+            "declared_block_size": 98353,
+            "header_offset": 9,
+            "last": true,
+            "literals": {
+              "compressed_size": 98347,
+              "compressed_size_high14": 6,
+              "field_bits": 18,
+              "header_bytes": 5,
+              "header_hex": "0e00e00a60",
+              "header_high32": 96,
+              "header_integer": 412499312654,
+              "kind": 2,
+              "regenerated_size": 131072,
+              "sequence_count": 0,
+              "size_format": 3
+            },
+            "payload_offset": 12,
+            "physical_payload_size": 98353,
+            "type": 2
+          }
+        ],
+        "checksum": false,
+        "content_size": 131072,
+        "dictionary_id": 0,
+        "frame_descriptor": 160,
+        "single_segment": true,
+        "window_descriptor": null,
+        "wire_bytes": 98365,
+        "wire_sha256": "fff94125338956fd7be0e00800b0c62ab57c1fe84278cc7848ecb30ba8cd1766"
+      },
+      "reference_wire": "libzstd-1.4.8",
+      "result": {
+        "calls": 41,
+        "input_consumed": 98365,
+        "mode": "decode",
+        "oracle_equal": true,
+        "output_bytes": 131072,
+        "policy": "block_stream",
+        "public_api": "vort.ZstdNativeIncrementalFrameDecoder",
+        "saw_block_stream": true,
+        "snapshot": {
+          "data_frame_count": 1,
+          "decoded_len": 0,
+          "decoded_remaining": 0,
+          "error_input_offset": null,
+          "error_output_offset": null,
+          "input_received": 98365,
+          "last_error_name": "",
+          "last_error_phase": null,
+          "last_step_progress": {
+            "input_read": 0,
+            "output_written": 16
+          },
+          "output_written": 131072,
+          "peak_working_bytes": 261856,
+          "phase": "done",
+          "required_dictionary_id": null,
+          "skippable_event_count": 0,
+          "skippable_events_captured": 0,
+          "skippable_total": 0,
+          "skippable_truncated": false,
+          "skippable_written": 0,
+          "trailing_input_bytes": 0,
+          "working_bytes": 261856
+        },
+        "usize_bits": 64,
+        "wire_bytes": 98365
+      },
+      "target": "native64"
+    },
+    {
+      "byte_equal_independent_oracle": true,
+      "input_wire_sha256": "fff94125338956fd7be0e00800b0c62ab57c1fe84278cc7848ecb30ba8cd1766",
+      "output_bytes": 131072,
+      "output_sha256": "d21bfb6251b9996d5a0012c77d0e30c610644dbfd43ed2a8f51b2436e4294556",
+      "policy": "prevalidated_frame",
+      "reference_shape": {
+        "block_count": 1,
+        "blocks": [
+          {
+            "declared_block_size": 98353,
+            "header_offset": 9,
+            "last": true,
+            "literals": {
+              "compressed_size": 98347,
+              "compressed_size_high14": 6,
+              "field_bits": 18,
+              "header_bytes": 5,
+              "header_hex": "0e00e00a60",
+              "header_high32": 96,
+              "header_integer": 412499312654,
+              "kind": 2,
+              "regenerated_size": 131072,
+              "sequence_count": 0,
+              "size_format": 3
+            },
+            "payload_offset": 12,
+            "physical_payload_size": 98353,
+            "type": 2
+          }
+        ],
+        "checksum": false,
+        "content_size": 131072,
+        "dictionary_id": 0,
+        "frame_descriptor": 160,
+        "single_segment": true,
+        "window_descriptor": null,
+        "wire_bytes": 98365,
+        "wire_sha256": "fff94125338956fd7be0e00800b0c62ab57c1fe84278cc7848ecb30ba8cd1766"
+      },
+      "reference_wire": "libzstd-1.4.8",
+      "result": {
+        "calls": 41,
+        "input_consumed": 98365,
+        "mode": "decode",
+        "oracle_equal": true,
+        "output_bytes": 131072,
+        "policy": "prevalidated_frame",
+        "public_api": "vort.ZstdNativeIncrementalFrameDecoder",
+        "saw_block_stream": true,
+        "snapshot": {
+          "data_frame_count": 1,
+          "decoded_len": 0,
+          "decoded_remaining": 0,
+          "error_input_offset": null,
+          "error_output_offset": null,
+          "input_received": 98365,
+          "last_error_name": "",
+          "last_error_phase": null,
+          "last_step_progress": {
+            "input_read": 0,
+            "output_written": 16
+          },
+          "output_written": 131072,
+          "peak_working_bytes": 262048,
+          "phase": "done",
+          "required_dictionary_id": null,
+          "skippable_event_count": 0,
+          "skippable_events_captured": 0,
+          "skippable_total": 0,
+          "skippable_truncated": false,
+          "skippable_written": 0,
+          "trailing_input_bytes": 0,
+          "working_bytes": 262048
+        },
+        "usize_bits": 64,
+        "wire_bytes": 98365
+      },
+      "target": "native64"
+    },
+    {
+      "byte_equal_independent_oracle": true,
+      "input_wire_sha256": "fff94125338956fd7be0e00800b0c62ab57c1fe84278cc7848ecb30ba8cd1766",
+      "output_bytes": 131072,
+      "output_sha256": "d21bfb6251b9996d5a0012c77d0e30c610644dbfd43ed2a8f51b2436e4294556",
+      "policy": "block_stream",
+      "reference_shape": {
+        "block_count": 1,
+        "blocks": [
+          {
+            "declared_block_size": 98353,
+            "header_offset": 9,
+            "last": true,
+            "literals": {
+              "compressed_size": 98347,
+              "compressed_size_high14": 6,
+              "field_bits": 18,
+              "header_bytes": 5,
+              "header_hex": "0e00e00a60",
+              "header_high32": 96,
+              "header_integer": 412499312654,
+              "kind": 2,
+              "regenerated_size": 131072,
+              "sequence_count": 0,
+              "size_format": 3
+            },
+            "payload_offset": 12,
+            "physical_payload_size": 98353,
+            "type": 2
+          }
+        ],
+        "checksum": false,
+        "content_size": 131072,
+        "dictionary_id": 0,
+        "frame_descriptor": 160,
+        "single_segment": true,
+        "window_descriptor": null,
+        "wire_bytes": 98365,
+        "wire_sha256": "fff94125338956fd7be0e00800b0c62ab57c1fe84278cc7848ecb30ba8cd1766"
+      },
+      "reference_wire": "libzstd-1.4.8",
+      "result": {
+        "calls": 41,
+        "input_consumed": 98365,
+        "mode": "decode",
+        "oracle_equal": true,
+        "output_bytes": 131072,
+        "policy": "block_stream",
+        "public_api": "vort.ZstdNativeIncrementalFrameDecoder",
+        "saw_block_stream": true,
+        "snapshot": {
+          "data_frame_count": 1,
+          "decoded_len": 0,
+          "decoded_remaining": 0,
+          "error_input_offset": null,
+          "error_output_offset": null,
+          "input_received": 98365,
+          "last_error_name": "",
+          "last_error_phase": null,
+          "last_step_progress": {
+            "input_read": 0,
+            "output_written": 16
+          },
+          "output_written": 131072,
+          "peak_working_bytes": 261856,
+          "phase": "done",
+          "required_dictionary_id": null,
+          "skippable_event_count": 0,
+          "skippable_events_captured": 0,
+          "skippable_total": 0,
+          "skippable_truncated": false,
+          "skippable_written": 0,
+          "trailing_input_bytes": 0,
+          "working_bytes": 261856
+        },
+        "usize_bits": 32,
+        "wire_bytes": 98365
+      },
+      "target": "x86"
+    },
+    {
+      "byte_equal_independent_oracle": true,
+      "input_wire_sha256": "fff94125338956fd7be0e00800b0c62ab57c1fe84278cc7848ecb30ba8cd1766",
+      "output_bytes": 131072,
+      "output_sha256": "d21bfb6251b9996d5a0012c77d0e30c610644dbfd43ed2a8f51b2436e4294556",
+      "policy": "prevalidated_frame",
+      "reference_shape": {
+        "block_count": 1,
+        "blocks": [
+          {
+            "declared_block_size": 98353,
+            "header_offset": 9,
+            "last": true,
+            "literals": {
+              "compressed_size": 98347,
+              "compressed_size_high14": 6,
+              "field_bits": 18,
+              "header_bytes": 5,
+              "header_hex": "0e00e00a60",
+              "header_high32": 96,
+              "header_integer": 412499312654,
+              "kind": 2,
+              "regenerated_size": 131072,
+              "sequence_count": 0,
+              "size_format": 3
+            },
+            "payload_offset": 12,
+            "physical_payload_size": 98353,
+            "type": 2
+          }
+        ],
+        "checksum": false,
+        "content_size": 131072,
+        "dictionary_id": 0,
+        "frame_descriptor": 160,
+        "single_segment": true,
+        "window_descriptor": null,
+        "wire_bytes": 98365,
+        "wire_sha256": "fff94125338956fd7be0e00800b0c62ab57c1fe84278cc7848ecb30ba8cd1766"
+      },
+      "reference_wire": "libzstd-1.4.8",
+      "result": {
+        "calls": 41,
+        "input_consumed": 98365,
+        "mode": "decode",
+        "oracle_equal": true,
+        "output_bytes": 131072,
+        "policy": "prevalidated_frame",
+        "public_api": "vort.ZstdNativeIncrementalFrameDecoder",
+        "saw_block_stream": true,
+        "snapshot": {
+          "data_frame_count": 1,
+          "decoded_len": 0,
+          "decoded_remaining": 0,
+          "error_input_offset": null,
+          "error_output_offset": null,
+          "input_received": 98365,
+          "last_error_name": "",
+          "last_error_phase": null,
+          "last_step_progress": {
+            "input_read": 0,
+            "output_written": 16
+          },
+          "output_written": 131072,
+          "peak_working_bytes": 262048,
+          "phase": "done",
+          "required_dictionary_id": null,
+          "skippable_event_count": 0,
+          "skippable_events_captured": 0,
+          "skippable_total": 0,
+          "skippable_truncated": false,
+          "skippable_written": 0,
+          "trailing_input_bytes": 0,
+          "working_bytes": 262048
+        },
+        "usize_bits": 32,
+        "wire_bytes": 98365
+      },
+      "target": "x86"
+    }
+  ],
+  "zig": {
+    "path": "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "sha256": "2317bbb91798556d9d0f38aabdac23db83f0979b25f767259ae474546724087c",
+    "version": "0.16.0"
+  }
+}

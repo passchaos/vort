@@ -1,0 +1,16 @@
+{
+  "command": [
+    "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+    "build",
+    "test-zstd-stream-counters",
+    "test-stream-counters-wasm",
+    "-Doptimize=ReleaseFast",
+    "-j4",
+    "--summary",
+    "all"
+  ],
+  "exit_code": 0,
+  "seconds": 41.99592694314197,
+  "source_delta": [],
+  "utc": "2026-10-24T15:53:42.024545+00:00"
+}

@@ -1,0 +1,112 @@
+{
+  "generated_utc": "2026-10-24T15:09:38.685545+00:00",
+  "base_revision": "dacd500a10e68a9dcbd93ab46a301fcbdc4a3e91",
+  "owned_named_test_count": 17,
+  "named_tests": [
+    "Zstd stream counters ordinary frames retain all independently archived small wires",
+    "Zstd stream counters wide public types preserve local progress and allocation accounting",
+    "Zstd stream counters completed checksum frames continue past four GiB with consistent cumulative counts",
+    "Zstd stream counters both decoder policies retain wide continuation and dictionary state",
+    "Zstd stream counters rolling absolute index stores real candidates on both sides of four GiB",
+    "Zstd stream counters large pledge metadata crosses four GiB without allocating corresponding content",
+    "Zstd stream counters validated repeated RLE prefix keeps within frame history and pledge consistent past four GiB",
+    "Zstd stream counters widened history entry heap is exact and enforced by the shared quota",
+    "Zstd stream counters per frame byte budgets stay physical across repeated member accounting",
+    "Zstd stream counters checked cumulative encoder overflow preserves valid repeated frame state",
+    "Zstd stream counters output overflow preserves copied prefix progress without wrapping",
+    "Zstd stream counters both policies report wide output limit diagnostics and local error progress",
+    "Zstd stream counters empty completed decoder frames expose input overflow before accepting bytes",
+    "Zstd stream counters independent tracker observes in place growth shrink and overlapping live requests",
+    "Zstd stream counters independent tracker charges old and new buffers during moving fallback growth",
+    "Zstd stream counters independent failed allocation resize and remap preserve live bytes and old content",
+    "Zstd stream counters independent tracker excludes one borrowed identity but counts its moving replacement"
+  ],
+  "owned_source_sha256": {
+    "src/tests/zstd_stream_counter_contracts.zig": "b048c064e485410ca38d5b82dabe1c65b59f26807eb87c98fe8b356f1670c411",
+    "src/tests/zstd_stream_counter_resources.zig": "05405cb55268a77f712331870ad2389540d1ea2c166345f2910a8a1e52309b7c",
+    "src/tests/zstd_stream_counter_transactions.zig": "6e122a3f09643b60d02a7eb4c8c063fe0f854272e4d53ae5b8a968447587adc1",
+    "src/tests/zstd_stream_counter_helpers.zig": "dd17a57ee7705bccee8e6889baf202ea041bb1e2a8803422c3528824a84f4cfa"
+  },
+  "final_native_and_actual_x86_debug": [
+    {
+      "directory": "/tmp/vort-zstd-stream-counter-final-native-qftbfmek",
+      "result": {
+        "command": [
+          "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+          "test",
+          "src/zstd.zig",
+          "/tmp/vort-zstd-stream-counter-baseline-dacd500a/huffman-x2.o",
+          "-O",
+          "Debug",
+          "-femit-bin=/tmp/vort-zstd-stream-counter-final-native-qftbfmek/tests",
+          "--test-filter",
+          "Zstd stream counters"
+        ],
+        "exit_code": 0,
+        "started_utc": "2026-10-24T15:07:52.754880+00:00",
+        "finished_utc": "2026-10-24T15:07:54.956136+00:00",
+        "changed_sources": [],
+        "source_consistent": true,
+        "scope": "narrow functional validation only; production still being edited",
+        "requested_named_filters_present": true,
+        "missing_named_filters": []
+      },
+      "binary_sha256": "2ab7063081799da93c0f8bc86f764ca4cb86856c93509b03b304ccce4b2f9fbe",
+      "log_sha256": "3f54192842f6772c7df594ddfa94212f359cceeb508d21dc6060525a4c9bd285",
+      "named_tests": 17,
+      "anonymous_import_tests": 15,
+      "total_tests": 32
+    },
+    {
+      "directory": "/tmp/vort-zstd-stream-counter-final-x86-4ae8ngrv",
+      "result": {
+        "command": [
+          "/home/passchaos/Temp/zig-x86_64-linux-0.16.0/zig",
+          "test",
+          "src/zstd.zig",
+          "/tmp/vort-zstd-stream-counter-baseline-dacd500a/huffman-x2-x86-debug.o",
+          "-O",
+          "Debug",
+          "-femit-bin=/tmp/vort-zstd-stream-counter-final-x86-4ae8ngrv/tests",
+          "-target",
+          "x86-linux-musl",
+          "--test-filter",
+          "Zstd stream counters"
+        ],
+        "exit_code": 0,
+        "started_utc": "2026-10-24T15:07:52.790187+00:00",
+        "finished_utc": "2026-10-24T15:08:00.395365+00:00",
+        "changed_sources": [],
+        "source_consistent": true,
+        "scope": "narrow functional validation only; production still being edited",
+        "requested_named_filters_present": true,
+        "missing_named_filters": []
+      },
+      "binary_sha256": "36cc7ae82ec8a1d5394957b3035e393096a8dfad91ef9123a4a13f95b92c929c",
+      "log_sha256": "3f54192842f6772c7df594ddfa94212f359cceeb508d21dc6060525a4c9bd285",
+      "named_tests": 17,
+      "anonymous_import_tests": 15,
+      "total_tests": 32
+    }
+  ],
+  "fmt_check_passed": true,
+  "baseline_provenance_path": "/tmp/vort-zstd-stream-counter-baseline-dacd500a/provenance.json",
+  "baseline_provenance_sha256": "9cfbfe09cd510abd2ecd2496cbfb5fa63022ba5619281612138802ee6eb4bcf5",
+  "frozen_wire_count": 6,
+  "separate_checksum_wire_count": 1,
+  "baseline_capture_binary_sha256": "da527a30fe005b0c2b096500e67588856c58b4aebb95edbe08dcbe79e0826f80",
+  "baseline_wire_manifest_sha256": "b8462241f4455454b8149c97e660f98579d720dca8356ac8ed229c9f77873529",
+  "checksum_capture": {
+    "wire_hex": "28b52ffd64000103100052e02deac3",
+    "wire_size": 15,
+    "capture_binary_sha256": "e582045156e963b64fc670f9d84ad958b4a98713d075e0db9c6cf6dc2273bd69",
+    "capture_harness_sha256": "251f6553a2c058d287b9877d8e34b0e0cc3c0373ee353af0c46de495cf0ec867",
+    "original_six_wire_manifest_unchanged": true
+  },
+  "preserved_prior_stage_reports": [
+    "/tmp/vort-zstd-stream-counter-qa-5cdkq7p9",
+    "/tmp/vort-zstd-stream-counter-qa-j_20rjfx"
+  ],
+  "checkpoint_scope": "The helper validates one physically encoded and flushed128KiB RLE block,14-byte header and empty retained matching history. It derives32768 identical completed blocks as a legal counter-state model, then really consumes7 final bytes and checks the4-byte finalRLEwire and pledgedCount. It does not claim the model4GiB input was physically streamed.",
+  "scope": "Independent publicCount/schema, real small wire, completed-frame continuation, validated within-frame counter model, overflow/progress, wide historyindex and heapquota QA. Actual >4GiB bounded-memory streaming is separately validated by the parent toolgate. No production/Core/root/build/CLI/tools/Git modifications."
+}

@@ -1,0 +1,48 @@
+{
+  "round_trips": 8,
+  "old_stream_wire_checks": 4,
+  "large_logical_limit_checks": 4,
+  "input_cap_rejections": 4,
+  "output_cap_rejections": 8,
+  "same_path_checks": 4,
+  "non_stream_rejections": 2,
+  "rows": [
+    {
+      "codec": "br",
+      "flags": [],
+      "input_bytes": 88000,
+      "encoded_bytes": 160,
+      "wire_sha256": "5d0f53a82abdd0a2dfad0a09cc966b56d07cf32b55a36d8eb0317fe4baf8b335"
+    },
+    {
+      "codec": "br",
+      "flags": [
+        "--quality=0",
+        "--metadata=metadata-smoke"
+      ],
+      "input_bytes": 88000,
+      "encoded_bytes": 569,
+      "wire_sha256": "addb934657c5b88d7b9bdbc5521a9e3d4ce14c4e56295ccc153d8d59b4af0049"
+    },
+    {
+      "codec": "zstd",
+      "flags": [],
+      "input_bytes": 88000,
+      "encoded_bytes": 70,
+      "wire_sha256": "0e0ad82d8a13d12514faf08cb83ef6b0e99e46e6fcb33840fb5550accc863b1d"
+    },
+    {
+      "codec": "zstd",
+      "flags": [
+        "--strategy=fast",
+        "--window-log=10",
+        "--max-match-history-len=1024"
+      ],
+      "input_bytes": 88000,
+      "encoded_bytes": 754,
+      "wire_sha256": "67e6d932c7cfa32a5d56fe346198ea05e632ebe5e667eb3c76adaa2dabc5f13f"
+    }
+  ],
+  "sparse_4GiB_run": false,
+  "physical_IO_chunk": 32768
+}

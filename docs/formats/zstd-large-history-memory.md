@@ -94,7 +94,8 @@ from its explicit `--run-far` campaign. A real input repeats an anchor at
 Exact/below budgets and old-window comparisons use the same input and settings.
 Declared huge-window metadata is not treated as proof of a huge actual match.
 
-32-bit cumulative streaming counters and absolute history positions retain
-their current representation limits. Checked source geometry does not by
-itself establish unlimited stream length on a smaller address space. Current
-scope and future counter work must be documented separately.
+The subsequent [stream-count increment](stream-counts.md) extends cumulative
+byte counts, pledges and absolute history positions to a 64-bit domain on
+32-bit targets. Local matcher geometry and physical allocation limits remain
+unchanged. Full-sized configuration metadata and tiny-input preflight tests
+remain distinct from actual long-stream runtime evidence.

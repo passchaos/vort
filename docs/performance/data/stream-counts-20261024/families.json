@@ -1,0 +1,145 @@
+{
+  "all_commands_job_limit": 2,
+  "all_indexed_results_observed_directly": true,
+  "end_utc": "2026-10-24T15:57:54.260809+00:00",
+  "evidence": "Each compiled test runner emitted metadata and indexed TestResults over fd1. strace observed the one original execution; saved protocol includes flags, log errors and leak counts. Process exit status and actual ELF/linked-object SHA independently verified. Source content is bound by actual compiler file_system_inputs protocol and recomputed Zig cache SipHash128(1,3) digest matches.",
+  "failure_history_preserved": [
+    "br-x86-releasefast/result.json",
+    "br-x86-releasefast/new-final/result.json",
+    "zstd-x86-releasefast/result.json",
+    "zstd-x86-releasefast/new-final/result.json"
+  ],
+  "git_modified_by_agent": false,
+  "live_family_sessions": [],
+  "no_far_or_4gib_runtime_tools": true,
+  "no_root_full_library_releasefast_build": true,
+  "repository_files_modified_by_agent": false,
+  "selected_final_stages": [
+    {
+      "actual_test_count": 1329,
+      "artifact": {
+        "elf_class": 64,
+        "path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/99ada8fd017c4d8d33ccd4a25eebd59a/vort-br-tests",
+        "sha256": "aa126cb26e3aa6406ae327b1ec304b4ede605215a416f72ecb80aa9c35a0a6ff"
+      },
+      "compiled_cache_content_binding_complete": true,
+      "compiled_inputs_changed_during_run": {
+        "src/br/incremental/contracts_tests.zig": {
+          "current_sha256": "c2bb2b700bf0b34549c8afc164f07acd331448a2c9285955839be7db64773c3e",
+          "sha256_after": "c2bb2b700bf0b34549c8afc164f07acd331448a2c9285955839be7db64773c3e",
+          "sha256_before": "fb43767013f7418092c1acbc3cf16a0e8423ad42d4a89c150605d42604874dba"
+        },
+        "src/br/incremental/tests.zig": {
+          "current_sha256": "67fa0e2c9fffb923148ac5728585b814068ee1a85859e2cdaadf0a177069637c",
+          "sha256_after": "67fa0e2c9fffb923148ac5728585b814068ee1a85859e2cdaadf0a177069637c",
+          "sha256_before": "5d9068b2c66ddf5c130c39aa930833a2f0f1e2614ccaa4a7e31e2eb60eecbf84"
+        }
+      },
+      "compiled_repo_input_count": 214,
+      "counts": {
+        "fail": 0,
+        "invalid": 0,
+        "pass": 1328,
+        "pending": 0,
+        "skip": 1
+      },
+      "directory": "/tmp/vort-stream-counter-final-20261024/families/br-native-releasefast",
+      "elapsed_seconds": 602.523537497,
+      "group": "br-native-releasefast",
+      "head_at_start": "1cfd65c92449398685f795c97457b0eacbd42f2e",
+      "non_input_changed_paths": [
+        "build.zig",
+        "src/tests/stream_counter_wasm.zig",
+        "src/zstd.zig"
+      ],
+      "result_report": "/tmp/vort-stream-counter-final-20261024/families/br-native-releasefast/result.json",
+      "source_root_sha256": "bf13b156296877c047901665be8d2aa4777aeefcf860a5995813e58521a47aec"
+    },
+    {
+      "actual_test_count": 1329,
+      "artifact": {
+        "elf_class": 32,
+        "path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/35367ec828ba22c684f51b068a350cc0/vort-br-tests",
+        "sha256": "4947f0830f25782087ca5c6b6f13686aba0bf11a8673e320cda63738ca7e7600"
+      },
+      "compiled_cache_content_binding_complete": true,
+      "compiled_inputs_changed_during_run": {},
+      "compiled_repo_input_count": 214,
+      "counts": {
+        "fail": 0,
+        "invalid": 0,
+        "pass": 1329,
+        "pending": 0,
+        "skip": 0
+      },
+      "directory": "/tmp/vort-stream-counter-final-20261024/families/br-x86-releasefast/new-layout-final",
+      "elapsed_seconds": 522.222549206,
+      "group": "br-x86-releasefast",
+      "head_at_start": "0ba306ce6325a5a7da3d7cabc17436f725072200",
+      "non_input_changed_paths": [
+        "build.zig",
+        "src/zstd.zig",
+        "src/zstd/encode/allocation_test_oracle.zig",
+        "src/zstd/incremental/decoder_counter_tests.zig",
+        "src/zstd/sequence/bit_reader.zig"
+      ],
+      "result_report": "/tmp/vort-stream-counter-final-20261024/families/br-x86-releasefast/new-layout-final/result.json",
+      "source_root_sha256": "bf13b156296877c047901665be8d2aa4777aeefcf860a5995813e58521a47aec"
+    },
+    {
+      "actual_test_count": 1003,
+      "artifact": {
+        "elf_class": 64,
+        "path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/cda4f51064c9e36829f2d962ac84bb4e/vort-zstd-tests",
+        "sha256": "aa1386179457e9807189a7d71554b8e6a0d40bffd0e21e3a2bb1a800bd951760"
+      },
+      "compiled_cache_content_binding_complete": true,
+      "compiled_inputs_changed_during_run": {},
+      "compiled_repo_input_count": 152,
+      "counts": {
+        "fail": 0,
+        "invalid": 0,
+        "pass": 1003,
+        "pending": 0,
+        "skip": 0
+      },
+      "directory": "/tmp/vort-stream-counter-final-20261024/families/zstd-native-releasefast/new-final",
+      "elapsed_seconds": 221.412687874,
+      "group": "zstd-native-releasefast",
+      "head_at_start": "ef11316825306b5d78c9430126ada11dfbbd26ac",
+      "non_input_changed_paths": [],
+      "result_report": "/tmp/vort-stream-counter-final-20261024/families/zstd-native-releasefast/new-final/result.json",
+      "source_root_sha256": "d49ee6e5ae89b65107ad8f8af90daf37ed4cb131c587192881a9a564367d1e40"
+    },
+    {
+      "actual_test_count": 1003,
+      "artifact": {
+        "elf_class": 32,
+        "path": "/home/passchaos/project-z/vort-stream-contracts/.zig-cache/o/7635fb79477e5e6b361e2a87205d7ccd/vort-zstd-tests",
+        "sha256": "82db1788da0874c27ab0dbaa136623aa37da692846085b5118a2f9384d33d478"
+      },
+      "compiled_cache_content_binding_complete": true,
+      "compiled_inputs_changed_during_run": {},
+      "compiled_repo_input_count": 152,
+      "counts": {
+        "fail": 0,
+        "invalid": 0,
+        "pass": 1003,
+        "pending": 0,
+        "skip": 0
+      },
+      "directory": "/tmp/vort-stream-counter-final-20261024/families/zstd-x86-releasefast/new-portability-final",
+      "elapsed_seconds": 337.981529951,
+      "group": "zstd-x86-releasefast",
+      "head_at_start": "1e38661381a13cefb74800ea6e2f387df2a9687f",
+      "non_input_changed_paths": [],
+      "result_report": "/tmp/vort-stream-counter-final-20261024/families/zstd-x86-releasefast/new-portability-final/result.json",
+      "source_root_sha256": "d49ee6e5ae89b65107ad8f8af90daf37ed4cb131c587192881a9a564367d1e40"
+    }
+  ],
+  "source_policy": "Brotli successful native stage remains bound to its original compiled test bodies; subsequent test-only type/layout adaptations have independent narrow verification and final x86 full coverage. Zstd old native997 success is retained as history, while actual production portability fixes have new native/x861003 full stages.",
+  "status": "passed",
+  "total_failed": 0,
+  "total_passed": 4663,
+  "total_skipped": 1
+}
