@@ -127,6 +127,23 @@ pub fn build(b: *std.Build) void {
     lz4_fast_wasm_run.addArtifactArg(lz4_fast_wasm);
     const lz4_fast_wasm_step = b.step("test-lz4-fast-controls-wasm", "Execute public LZ4 acceleration and profile contracts in WebAssembly");
     lz4_fast_wasm_step.dependOn(&lz4_fast_wasm_run.step);
+    const br_zstd_window_wasm = b.addExecutable(.{
+        .name = "vort-br-zstd-window-wasm",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests/br_zstd_window_wasm.zig"),
+            .target = wasm_target,
+            .optimize = optimize,
+            .single_threaded = true,
+            .imports = &.{.{ .name = "vort", .module = wasm_mod }},
+        }),
+    });
+    br_zstd_window_wasm.entry = .disabled;
+    br_zstd_window_wasm.rdynamic = true;
+    br_zstd_window_wasm.stack_size = 8 * 1024 * 1024;
+    const br_zstd_window_wasm_run = b.addSystemCommand(&.{ "node", "tools/window_wasm_gate.js" });
+    br_zstd_window_wasm_run.addArtifactArg(br_zstd_window_wasm);
+    const br_zstd_window_wasm_step = b.step("test-br-zstd-window-wasm", "Execute real Brotli and Zstd window/resource APIs in WebAssembly");
+    br_zstd_window_wasm_step.dependOn(&br_zstd_window_wasm_run.step);
     const br_large_wasm = b.addExecutable(.{
         .name = "vort-br-large-window-wasm",
         .root_module = b.createModule(.{
@@ -320,6 +337,13 @@ pub fn build(b: *std.Build) void {
     });
     const br_complete_length_step = b.step("test-br-complete-lengths", "Run complete Brotli copy-length choice and evaluation-limit contracts");
     br_complete_length_step.dependOn(&b.addRunArtifact(br_complete_length_tests).step);
+    const br_general_large_tests = b.addTest(.{
+        .name = "vort-br-general-large-window-tests",
+        .root_module = br_tests_mod,
+        .filters = &.{ "Brotli general large window", "Br general large window" },
+    });
+    const br_general_large_step = b.step("test-br-general-large-window", "Run non-HQ Brotli Large Window format, ownership and resource contracts");
+    br_general_large_step.dependOn(&b.addRunArtifact(br_general_large_tests).step);
     const br_large_tree_tests = b.addTest(.{
         .name = "vort-br-large-tree-tests",
         .root_module = b.createModule(.{
@@ -373,6 +397,23 @@ pub fn build(b: *std.Build) void {
     const run_zstd_tests = b.addRunArtifact(zstd_tests);
     const zstd_test_step = b.step("test-zstd", "Run focused Zstandard codec tests");
     zstd_test_step.dependOn(&run_zstd_tests.step);
+    const zstd_large_history_tests = b.addTest(.{
+        .name = "vort-zstd-large-history-tests",
+        .root_module = zstd_tests_mod,
+        .filters = &.{ "Zstd large history", "Zstd total memory", "Zstd total budget", "Zstd incremental total budget", "Zstd frame publication", "requested heap budget" },
+    });
+    const zstd_large_history_step = b.step("test-zstd-large-history", "Run larger Zstd history and whole-encoder memory contracts");
+    zstd_large_history_step.dependOn(&b.addRunArtifact(zstd_large_history_tests).step);
+    const requested_heap_tests = b.addTest(.{
+        .name = "vort-requested-heap-budget-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/io/requested_heap_budget.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const requested_heap_step = b.step("test-requested-heap-budget", "Run shared requested-heap allocator accounting and concurrency contracts");
+    requested_heap_step.dependOn(&b.addRunArtifact(requested_heap_tests).step);
     const zstd_controls_tests = b.addTest(.{
         .name = "vort-zstd-encode-controls-tests",
         .root_module = zstd_tests_mod,
@@ -1926,6 +1967,26 @@ pub fn build(b: *std.Build) void {
     const br_hq_tools_step = b.step("build-br-hq-tools", "Compile Brotli HQ public API and CLI probes");
     br_hq_tools_step.dependOn(&br_hq_probe.step);
     br_hq_tools_step.dependOn(&br_hq_cli_probe.step);
+    const br_general_large_probe = b.addExecutable(.{
+        .name = "vort-br-general-large-window-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/general_large_window_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const br_general_large_diff = b.addSystemCommand(&.{ "python3", "tools/br/general_large_window_diff.py", "--probe" });
+    br_general_large_diff.addArtifactArg(br_general_large_probe);
+    if (b.args) |args| br_general_large_diff.addArgs(args);
+    const br_general_large_diff_step = b.step("run-br-general-large-window-diff", "Validate all-quality Brotli Large Window public APIs against versioned references");
+    br_general_large_diff_step.dependOn(&br_general_large_diff.step);
+    const br_general_window_cli_gate = b.addSystemCommand(&.{ "python3", "tools/br/general_window_cli_gate.py", "--cli" });
+    br_general_window_cli_gate.addArtifactArg(br_hq_cli_probe);
+    if (b.args) |args| br_general_window_cli_gate.addArgs(args);
+    const br_general_window_cli_step = b.step("test-br-general-window-cli", "Validate all-quality and stored Brotli Large Window CLI controls");
+    br_general_window_cli_step.dependOn(&br_general_window_cli_gate.step);
+    br_general_window_cli_step.dependOn(&b.addRunArtifact(br_hq_cli_tests).step);
     const zstd_hq_cli_probe = b.addExecutable(.{
         .name = "vort-zstd-hq-cli-probe",
         .root_module = b.createModule(.{
@@ -1939,7 +2000,42 @@ pub fn build(b: *std.Build) void {
     zstd_hq_cli_gate.addArtifactArg(zstd_hq_cli_probe);
     if (b.args) |args| zstd_hq_cli_gate.addArgs(args);
     const zstd_hq_cli_step = b.step("test-zstd-hq-cli", "Validate Zstd HQ CLI flags, defaults and failed-output preservation");
+    const zstd_window_memory_cli_gate = b.addSystemCommand(&.{ "python3", "tools/zstd/window_memory_cli_gate.py", "--cli" });
+    zstd_window_memory_cli_gate.addArtifactArg(zstd_hq_cli_probe);
+    if (b.args) |args| zstd_window_memory_cli_gate.addArgs(args);
+    const zstd_window_memory_cli_step = b.step("test-zstd-window-memory-cli", "Validate Zstd history windows and whole-encoder memory CLI controls");
+    zstd_window_memory_cli_step.dependOn(&zstd_window_memory_cli_gate.step);
     zstd_hq_cli_step.dependOn(&zstd_hq_cli_gate.step);
+    const zstd_large_history_probe = b.addExecutable(.{
+        .name = "vort-zstd-large-history-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/large_history_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "vort", .module = vort_mod }},
+        }),
+    });
+    const zstd_far_history_generator = b.addExecutable(.{
+        .name = "vort-zstd-far-history-generator",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/far_history_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+        }),
+    });
+    const zstd_large_history_diff = b.addSystemCommand(&.{ "python3", "tools/zstd/large_history_diff.py", "--probe" });
+    zstd_large_history_diff.addArtifactArg(zstd_large_history_probe);
+    zstd_large_history_diff.addArg("--far-generator");
+    zstd_large_history_diff.addArtifactArg(zstd_far_history_generator);
+    if (b.args) |args| zstd_large_history_diff.addArgs(args);
+    const zstd_large_history_diff_step = b.step("run-zstd-large-history-diff", "Validate Zstd large history, requested heap and explicit far-copy interoperability");
+    zstd_large_history_diff_step.dependOn(&zstd_large_history_diff.step);
+    const window_tools_step = b.step("build-br-zstd-window-tools", "Compile public Brotli and Zstd window API/CLI consumers");
+    window_tools_step.dependOn(&br_general_large_probe.step);
+    window_tools_step.dependOn(&br_hq_cli_probe.step);
+    window_tools_step.dependOn(&zstd_large_history_probe.step);
+    window_tools_step.dependOn(&zstd_hq_cli_probe.step);
+    window_tools_step.dependOn(&zstd_far_history_generator.step);
 
     const fast_cover_probe = b.addExecutable(.{ .name = "vort-fast-cover-probe", .root_module = b.createModule(.{ .root_source_file = b.path("tools/zstd/fast_cover_probe.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "vort", .module = vort_mod }} }) });
     const fast_cover_diff = b.addSystemCommand(&.{ "python3", "tools/zstd/fast_cover_diff.py", "--probe" });
@@ -6643,6 +6739,10 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_controls_probe.step);
     check_step.dependOn(&zstd_hq_probe.step);
     check_step.dependOn(&zstd_hq_cli_probe.step);
+    check_step.dependOn(&br_general_large_probe.step);
+    check_step.dependOn(&zstd_large_history_probe.step);
+    check_step.dependOn(&zstd_far_history_generator.step);
+    check_step.dependOn(&br_zstd_window_wasm.step);
     check_step.dependOn(&br_hq_probe.step);
     check_step.dependOn(&br_hq_cli_probe.step);
     check_step.dependOn(&br_hq_cli_tests.step);
